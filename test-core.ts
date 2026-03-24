@@ -129,8 +129,19 @@ const fengYiSe: Tile[] = [
 const fengTypes = detectHandTypes(fengYiSe, [fengExposedMeld2], true, 0, null);
 test('风一色检测(含门口牌)', fengTypes.includes(HandType.ALL_WIND));
 
-// 风碰需要门口牌配合(4种风牌无法单独组成4刻子1对子)，跳过此测试
-// test('风碰检测', fengTypes.includes(HandType.FENG_PENG));
+// 风碰: 全部风牌+箭牌 + 碰碰胡
+// 东东东 南南南 西西西 中中中 北北 = 3+3+3+3+2=14 ✅
+const fengPengHand: Tile[] = [
+  makeTile(TileSuit.WIND, 1), makeTile(TileSuit.WIND, 1), makeTile(TileSuit.WIND, 1),
+  makeTile(TileSuit.WIND, 2), makeTile(TileSuit.WIND, 2), makeTile(TileSuit.WIND, 2),
+  makeTile(TileSuit.WIND, 3), makeTile(TileSuit.WIND, 3), makeTile(TileSuit.WIND, 3),
+  makeTile(TileSuit.DRAGON, 1), makeTile(TileSuit.DRAGON, 1), makeTile(TileSuit.DRAGON, 1),
+  makeTile(TileSuit.WIND, 4), makeTile(TileSuit.WIND, 4),
+];
+const fengPengTypes = detectHandTypes(fengPengHand, [], true, 0, null);
+test('风碰检测(风+箭)', fengPengTypes.includes(HandType.FENG_PENG));
+test('风碰含碰碰胡', fengPengTypes.includes(HandType.ALL_TRIPLETS));
+test('风碰含风一色(广义)', fengPengTypes.includes(HandType.ALL_WIND));
 
 // 混一色: 123万 456万 东东东 22333万 (14张)
 const hunYiSe: Tile[] = [

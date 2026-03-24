@@ -165,11 +165,12 @@ function isHalfFlushHand(tiles: Tile[]): boolean {
 }
 
 /**
- * Check if all tiles are wind tiles (风一色)
+ * Check if all tiles are wind or dragon tiles (风一色/风碰)
+ * 风碰允许风牌+箭牌混合
  */
 function isAllWindHand(tiles: Tile[]): boolean {
   const nonFlowerTiles = tiles.filter(t => !isFlower(t));
-  return nonFlowerTiles.every(t => t.suit === TileSuit.WIND);
+  return nonFlowerTiles.every(t => t.suit === TileSuit.WIND || t.suit === TileSuit.DRAGON);
 }
 
 /**
