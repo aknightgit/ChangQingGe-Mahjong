@@ -13,8 +13,8 @@ import {
   GameEndReason
 } from '../types/game';
 import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isFivePoison } from './tiles';
-import { canWin, isTing, detectHandTypes } from './handValidator';
-import { calculateScore, calculateRoundMultiplier } from './scoring';
+import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType } from './handValidator';
+import { calculateScore, calculateRoundMultiplier, calculateGameResult } from './scoring';
 import { randomUUID } from 'crypto';
 import { saveGameState, loadGameState, loadAllGameStates, deleteGameState } from './gamePersistence';
 import { MatchHistoryService } from '../services/matchHistoryService';
@@ -135,10 +135,6 @@ class GameManager {
     return undefined;
   }
 
-  setWebSocketManager(manager: any) {
-    this.wsManager = manager;
-  }
-
   private async hydrateFromDatabase() {
     if (this.isHydrated) return;
     const persistedGames = await loadAllGameStates();
@@ -236,6 +232,8 @@ class GameManager {
       customScoringMode: null,
       finalScores: undefined,
       pendingActions: [],
+      pendingKongClaim: undefined,
+      multiHuStarterIndex: undefined,
       freezeDurationMs: options?.freezeDurationMs ?? 1000,
       diceRollCount: options?.diceRollCount ?? 2
     };
@@ -442,6 +440,8 @@ class GameManager {
     const actions: ActionType[] = [];
     const currentPlayer = game.players[game.currentPlayerIndex];
 
+    const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
+
     if (!currentPlayer) {
       // Game might still be in setup; no actions available yet
       return actions;
@@ -496,7 +496,7 @@ class GameManager {
         }
 
         // Check if can win
-        const winCheck = canWin(player.hand.concealedTiles, player.hand.exposedMelds.length);
+        const winCheck = canWin(player.hand.concealedTiles, player.hand.exposedMelds.length, isWildTile);
         if (winCheck.canWin) {
           actions.push(ActionType.HU);
         }
@@ -599,7 +599,8 @@ class GameManager {
     }
 
     // Check for ting status
-    player.isTing = isTing(player.hand.concealedTiles, player.hand.exposedMelds.length);
+    const wildForTing = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
+    player.isTing = isTing(player.hand.concealedTiles, player.hand.exposedMelds.length, wildForTing);
 
     // 百搭打出 → 触发冷冻（一圈内不能吃/碰/捉冲）
     if (this.isWildTile(game, tile)) {
@@ -608,6 +609,14 @@ class GameManager {
       this.moveToNextPlayer(game);
       return;
     }
+
+    // 一炮多响：记录从第一个胡家右手继续
+    if (!isSelfDrawn && game.multiHuStarterIndex === undefined) {
+      const winnerIndex = game.players.findIndex(p => p.id === player.id);
+      game.multiHuStarterIndex = winnerIndex;
+    }
+
+    game.multiHuStarterIndex = undefined;
 
     // Check if other players can peng, kong, or hu
     this.checkPendingActions(game, tile);
@@ -834,8 +843,62 @@ class GameManager {
     );
     if (tripletIndex === -1) return;
 
+    // 抢杠检查：仅补杠可被抢
+    const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
+    const robbers: PendingAction[] = [];
+
+    for (const candidate of game.players) {
+      if (candidate.id === player.id) continue;
+      if (candidate.status !== PlayerStatus.PLAYING) continue;
+
+      const testHand = [...candidate.hand.concealedTiles, tile];
+      const winCheck = canWin(testHand, candidate.hand.exposedMelds.length, isWildTile);
+      if (!winCheck.canWin) continue;
+
+      // 规则：若抢杠牌型为碰碰胡/混一色，门口必须有花牌
+      const flowerCount = candidate.hand.exposedMelds
+        .flatMap(m => m.tiles)
+        .filter(t => isFlower(t)).length;
+      const handTypes = detectHandTypes(
+        testHand,
+        candidate.hand.exposedMelds,
+        false,
+        flowerCount,
+        game.customScoringMode || null,
+        game.wildTileGroup
+      );
+
+      const requiresFlowerGate = handTypes.includes(HandType.ALL_TRIPLETS) || handTypes.includes(HandType.HALF_FLUSH);
+      const hasFlowerAtDoor = flowerCount > 0;
+      if (requiresFlowerGate && !hasFlowerAtDoor) continue;
+
+      robbers.push({
+        playerId: candidate.id,
+        availableActions: [ActionType.HU, ActionType.PASS],
+        tile,
+        expiresAt: Date.now() + 30000
+      });
+    }
+
+    if (robbers.length > 0) {
+      game.pendingKongClaim = { playerId: player.id, tile };
+      game.pendingActions = robbers;
+      return;
+    }
+
+    // 无人抢杠，正常补杠
+    this.completeExtendedKong(game, player, tile);
+  }
+
+  private completeExtendedKong(game: GameState, player: Player, tile: Tile): void {
     // Remove tile from hand
-    player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tileId);
+    player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile.id);
+
+    // Find matching exposed triplet again (state might have changed)
+    const tripletIndex = player.hand.exposedMelds.findIndex(
+      m => m.type === MeldType.TRIPLET && tilesEqual(m.tiles[0], tile)
+    );
+    if (tripletIndex === -1) return;
 
     // Convert triplet to kong
     player.hand.exposedMelds[tripletIndex].type = MeldType.KONG;
@@ -847,6 +910,22 @@ class GameManager {
 
     // Draw supplement tile
     this.handleDraw(game, player);
+  }
+
+  private resolveRobKongIfNeeded(game: GameState): boolean {
+    const pendingClaim = game.pendingKongClaim;
+    if (!pendingClaim) return false;
+
+    // 仍有玩家等待响应，先不继续
+    if (game.pendingActions.length > 0) return true;
+
+    const kongPlayer = game.players.find(p => p.id === pendingClaim.playerId);
+    if (kongPlayer && kongPlayer.status === PlayerStatus.PLAYING) {
+      this.completeExtendedKong(game, kongPlayer, pendingClaim.tile);
+    }
+
+    game.pendingKongClaim = undefined;
+    return true;
   }
 
   private handleHu(game: GameState, player: Player): void {
@@ -868,8 +947,11 @@ class GameManager {
       }
     }
 
-    // Hu resolves all pending reactions to the discard
-    game.pendingActions = [];
+    // Hu resolves current player's pending reaction.
+    // 一炮多响仅保留其他“可胡”响应，吃/碰/杠在有人胡牌后无效。
+    game.pendingActions = game.pendingActions.filter(pa =>
+      pa.playerId !== player.id && pa.availableActions.includes(ActionType.HU)
+    );
 
     player.status = PlayerStatus.WON;
     player.winOrder = game.winnersCount + 1;
@@ -878,13 +960,16 @@ class GameManager {
     game.winnersCount++;
 
     const existingMelds = player.hand.exposedMelds.length;
-    const winCheck = canWin(player.hand.concealedTiles, existingMelds);
+    const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
+    const winCheck = canWin(player.hand.concealedTiles, existingMelds, isWildTile);
     if (!winCheck.canWin) {
       throw new Error('Invalid Hu declaration');
     }
 
     const isSelfDrawn = !pendingAction;
     const isKongFlower = false; // TODO: track if won after kong draw
+    const isRobbingKong = !!pendingAction?.tile && !!game.pendingKongClaim;
+
     
     // 收集花牌
     const flowerTiles = player.hand.exposedMelds
@@ -897,7 +982,8 @@ class GameManager {
       player.hand.exposedMelds,
       isSelfDrawn,
       flowerTiles.length,
-      game.customScoringMode // 百搭牌标识
+      game.customScoringMode, // 百搭牌标识
+      game.wildTileGroup
     );
     
     // 门清检测
@@ -905,6 +991,11 @@ class GameManager {
       m.type !== MeldType.TRIPLET && m.type !== MeldType.SEQUENCE
     );
     
+    // 百搭参数
+    const wildParts = game.customScoringMode?.split('-');
+    const wildSuit = wildParts && wildParts[0] ? wildParts[0] as TileSuit : undefined;
+    const wildValue = wildParts && wildParts[1] ? parseInt(wildParts[1], 10) : undefined;
+
     // 计算番数
     const scoreResult = calculateScore({
       handTiles: player.hand.concealedTiles,
@@ -913,8 +1004,11 @@ class GameManager {
       handTypes,
       isSelfDrawn,
       isKongFlower,
-      isRobbingKong: false,
+      isRobbingKong,
       isMenQing,
+      wildTileSuit: wildSuit,
+      wildTileValue: wildValue,
+      wildTileGroup: game.wildTileGroup,
       roundMultiplier: 1, // TODO: 从骰子获取
       globalMultiplier: 1  // TODO: 从游戏状态获取
     });
@@ -927,7 +1021,31 @@ class GameManager {
       return;
     }
 
+    // 一炮多响 / 抢杠多响：若还有同张牌可胡玩家，等待其继续响应
+    if (!isSelfDrawn && game.pendingActions.length > 0) {
+      return;
+    }
+
+    // 抢杠：若有人胡牌则补杠作废；否则恢复补杠
+    if (isRobbingKong) {
+      game.pendingKongClaim = undefined;
+    } else if (this.resolveRobKongIfNeeded(game)) {
+      return;
+    }
+
     // Continue playing
+    if (!isSelfDrawn && game.multiHuStarterIndex !== undefined) {
+      const starter = game.multiHuStarterIndex;
+      game.multiHuStarterIndex = undefined;
+      const next = this.getNextActivePlayer(game, starter);
+      if (next) {
+        game.currentPlayerIndex = game.players.findIndex(p => p.id === next.id);
+        this.replaceFlowers(game, next);
+        this.handleDraw(game, next);
+        return;
+      }
+    }
+
     this.moveToNextPlayer(game);
   }
 
@@ -988,7 +1106,26 @@ class GameManager {
     // Remove player's pending action
     game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
 
-    // If no more pending actions, move to next player
+    // 抢杠场景：所有候选都过了，补杠继续
+    if (game.pendingActions.length === 0 && game.pendingKongClaim) {
+      this.resolveRobKongIfNeeded(game);
+      return;
+    }
+
+    // 一炮多响场景：所有候选响应结束，从首胡玩家右手继续
+    if (game.pendingActions.length === 0 && game.multiHuStarterIndex !== undefined) {
+      const starter = game.multiHuStarterIndex;
+      game.multiHuStarterIndex = undefined;
+      const next = this.getNextActivePlayer(game, starter);
+      if (next) {
+        game.currentPlayerIndex = game.players.findIndex(p => p.id === next.id);
+        this.replaceFlowers(game, next);
+        this.handleDraw(game, next);
+      }
+      return;
+    }
+
+    // 普通场景
     if (game.pendingActions.length === 0) {
       this.moveToNextPlayer(game);
     }
@@ -996,6 +1133,8 @@ class GameManager {
 
   private checkPendingActions(game: GameState, discardedTile: Tile): void {
     game.pendingActions = [];
+
+    const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
 
     for (const player of game.players) {
       if (player.status !== PlayerStatus.PLAYING) continue;
@@ -1016,7 +1155,7 @@ class GameManager {
 
       // Check for hu
       const testHand = [...player.hand.concealedTiles, discardedTile];
-      if (canWin(testHand, player.hand.exposedMelds.length).canWin) {
+      if (canWin(testHand, player.hand.exposedMelds.length, isWildTile).canWin) {
         actions.push(ActionType.HU);
       }
 

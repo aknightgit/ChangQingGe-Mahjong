@@ -33,68 +33,86 @@ export const HAND_TYPE_PRIORITY: Record<HandType, number> = {
  * Returns array of detected types sorted by priority (highest first)
  * Note: 七对/普通胡 不作为独立牌型，只用于基础胡牌验证
  */
+export type WildTileChecker = (tile: Tile) => boolean;
+
+export function buildWildTileChecker(wildTileId: string | null, wildTileGroup?: string[]): WildTileChecker {
+  if (!wildTileId) return () => false;
+  const parts = wildTileId.split('-');
+  if (parts.length < 2) return () => false;
+  const wildSuit = parts[0] as TileSuit;
+  const wildValue = parseInt(parts[1], 10);
+
+  return (tile: Tile) => {
+    if (tile.suit === wildSuit && tile.value === wildValue) return true;
+    if (wildSuit === TileSuit.FLOWER && tile.suit === TileSuit.FLOWER && wildTileGroup) {
+      return wildTileGroup.includes(String(tile.value));
+    }
+    return false;
+  };
+}
+
 export function detectHandTypes(
   handTiles: Tile[],
   exposedMelds: Meld[],
   isSelfDrawn: boolean,
   flowerCount: number,
-  wildTileId: string | null
+  wildTileId: string | null,
+  wildTileGroup?: string[]
 ): HandType[] {
   const types: HandType[] = [];
-  
+  const isWildTile = buildWildTileChecker(wildTileId, wildTileGroup);
+
   // Combine hand tiles + exposed meld tiles for analysis
   const allTiles = [
     ...handTiles,
     ...exposedMelds.flatMap(m => m.tiles)
   ];
   const nonFlowerTiles = allTiles.filter(t => !isFlower(t));
-  
+
   // Check if standard win first (4面子1雀头 or 七对)
-  const winResult = canWin(handTiles, exposedMelds.length);
+  const winResult = canWin(handTiles, exposedMelds.length, isWildTile);
   if (!winResult.canWin) return []; // Not a winning hand at all
-  
+
   // Check for all triplets (碰碰胡)
   if (isAllTripletsHand(handTiles, exposedMelds)) {
     types.push(HandType.ALL_TRIPLETS);
   }
-  
+
   // Check for all honor tiles (风一色) — 包括风牌+箭牌+百搭
-  // 风碰也基于此检测
-  // 风一色: 全是风牌或箭牌
-  const isWindOrDragon = isAllWindOrDragon(nonFlowerTiles, wildTileId);
-  
+  const isWindOrDragon = isAllWindOrDragon(nonFlowerTiles, isWildTile);
+
   if (isWindOrDragon) {
     types.push(HandType.ALL_WIND);
     if (types.includes(HandType.ALL_TRIPLETS)) {
       types.push(HandType.FENG_PENG);
     }
   }
-  
+
   // Check for full flush (清一色) - all same number suit
   if (!types.includes(HandType.ALL_WIND) && isFullFlushHand(nonFlowerTiles)) {
     types.push(HandType.FULL_FLUSH);
-    
+
     // 清碰 = 清一色 + 碰碰胡
     if (types.includes(HandType.ALL_TRIPLETS)) {
       types.push(HandType.QING_PENG);
     }
   }
-  
+
   // Check for half flush (混一色)
   if (!types.includes(HandType.FULL_FLUSH) && !types.includes(HandType.ALL_WIND) && isHalfFlushHand(nonFlowerTiles)) {
     types.push(HandType.HALF_FLUSH);
   }
-  
+
   // Eight flowers (八花自摸)
   if (isSelfDrawn && flowerCount >= 8) {
     types.push(HandType.EIGHT_FLOWERS);
   }
-  
+
   // Four wild tiles (四百搭)
-  if (wildTileId && countWildTiles(handTiles, wildTileId) >= 4) {
+  if (wildTileId && countWildTiles(handTiles, isWildTile) >= 4) {
     types.push(HandType.FOUR_WILD);
   }
-  
+
   // Sort by priority
   return types.sort((a, b) => HAND_TYPE_PRIORITY[b] - HAND_TYPE_PRIORITY[a]);
 }
@@ -189,20 +207,11 @@ function isAllWindOnly(tiles: Tile[], wildTileId: string | null): boolean {
 /**
  * 风碰范围: 风牌+箭牌+百搭
  */
-function isAllWindOrDragon(tiles: Tile[], wildTileId: string | null): boolean {
-  let wildSuit: TileSuit | null = null;
-  let wildValue: number | null = null;
-  if (wildTileId) {
-    const parts = wildTileId.split('-');
-    if (parts.length >= 2) {
-      wildSuit = parts[0] as TileSuit;
-      wildValue = parseInt(parts[1]);
-    }
-  }
+function isAllWindOrDragon(tiles: Tile[], isWildTile: WildTileChecker): boolean {
   return tiles.every(t => {
     if (t.suit === TileSuit.WIND) return true;
     if (t.suit === TileSuit.DRAGON) return true;
-    if (wildSuit && t.suit === wildSuit && t.value === wildValue) return true;
+    if (isWildTile(t)) return true;
     return false;
   });
 }
@@ -210,144 +219,204 @@ function isAllWindOrDragon(tiles: Tile[], wildTileId: string | null): boolean {
 /**
  * Count wild tiles in hand
  */
-function countWildTiles(tiles: Tile[], wildTileId: string): number {
-  if (!wildTileId) return 0;
-  const [suit, value] = wildTileId.split('-');
-  return tiles.filter(t => 
-    t.suit === suit && t.value === parseInt(value)
-  ).length;
+function countWildTiles(tiles: Tile[], isWildTile: WildTileChecker): number {
+  return tiles.filter(t => isWildTile(t)).length;
 }
 
 /**
  * Check if a hand can win with standard pattern (4 melds + 1 pair)
  */
-export function canWinStandard(tiles: Tile[], existingMelds = 0): boolean {
+export function canWinStandard(tiles: Tile[], existingMelds = 0, isWildTile: WildTileChecker = () => false): boolean {
   const requiredMelds = Math.max(0, 4 - existingMelds);
-  
-  // Try each possible pair as the eyes
-  const groups = groupTiles(tiles);
-  
-  for (const [key, groupTiles] of groups) {
-    if (groupTiles.length >= 2) {
-      // Try using this as the pair
-      const remainingTiles = [...tiles];
-      const pairTile1 = groupTiles[0];
-      const pairTile2 = groupTiles[1];
-      
-      // Remove the pair
+  const nonFlowerTiles = tiles.filter(t => !isFlower(t));
+
+  // Try each possible pair as the eyes (including 1 wild + 1 natural)
+  const groups = groupTiles(nonFlowerTiles.filter(t => !isWildTile(t)));
+  const wildTiles = nonFlowerTiles.filter(t => isWildTile(t));
+
+  for (const [, candidateGroup] of groups) {
+    if (candidateGroup.length >= 2) {
+      const remainingTiles = [...nonFlowerTiles];
+      const pairTile1 = candidateGroup[0];
+      const pairTile2 = candidateGroup[1];
+
       const idx1 = remainingTiles.findIndex(t => t.id === pairTile1.id);
-      remainingTiles.splice(idx1, 1);
+      if (idx1 >= 0) remainingTiles.splice(idx1, 1);
       const idx2 = remainingTiles.findIndex(t => t.id === pairTile2.id);
-      remainingTiles.splice(idx2, 1);
-      
-      // Check if remaining 12 tiles form 4 melds
-      if (canFormMelds(remainingTiles, requiredMelds)) {
+      if (idx2 >= 0) remainingTiles.splice(idx2, 1);
+
+      if (canFormMelds(remainingTiles, requiredMelds, isWildTile)) {
+        return true;
+      }
+    }
+
+    // 1 natural + 1 wild as pair
+    if (candidateGroup.length >= 1 && wildTiles.length >= 1) {
+      const remainingTiles = [...nonFlowerTiles];
+      const natural = candidateGroup[0];
+      const wild = wildTiles[0];
+
+      const idxN = remainingTiles.findIndex(t => t.id === natural.id);
+      if (idxN >= 0) remainingTiles.splice(idxN, 1);
+      const idxW = remainingTiles.findIndex(t => t.id === wild.id);
+      if (idxW >= 0) remainingTiles.splice(idxW, 1);
+
+      if (canFormMelds(remainingTiles, requiredMelds, isWildTile)) {
         return true;
       }
     }
   }
-  
+
+  // pair entirely from wilds
+  if (wildTiles.length >= 2) {
+    const remainingTiles = [...nonFlowerTiles];
+    const idxW1 = remainingTiles.findIndex(t => t.id === wildTiles[0].id);
+    if (idxW1 >= 0) remainingTiles.splice(idxW1, 1);
+    const idxW2 = remainingTiles.findIndex(t => t.id === wildTiles[1].id);
+    if (idxW2 >= 0) remainingTiles.splice(idxW2, 1);
+
+    if (canFormMelds(remainingTiles, requiredMelds, isWildTile)) {
+      return true;
+    }
+  }
+
   return false;
 }
 
 /**
  * Check if tiles can form exactly n melds (sequences or triplets)
  */
-function canFormMelds(tiles: Tile[], n: number): boolean {
+function canFormMelds(tiles: Tile[], n: number, isWildTile: WildTileChecker): boolean {
   if (n === 0) {
     return tiles.length === 0;
   }
-  
+
   if (tiles.length < n * 3) {
     return false;
   }
-  
+
   const sorted = sortTiles(tiles);
-  const firstTile = sorted[0];
-  
-  // Try forming a triplet with the first tile
-  const tripletTiles = sorted.filter(t => tilesEqual(t, firstTile));
-  if (tripletTiles.length >= 3) {
+  const wildTiles = sorted.filter(t => isWildTile(t));
+  const nonWildTiles = sorted.filter(t => !isWildTile(t));
+
+  // 如果剩下的全部是百搭，必然可组成面子
+  if (nonWildTiles.length === 0) {
+    return wildTiles.length === n * 3;
+  }
+
+  const firstTile = nonWildTiles[0];
+
+  // Try forming a triplet with first tile + wildcards
+  const sameTiles = nonWildTiles.filter(t => tilesEqual(t, firstTile));
+  const needForTriplet = 3 - sameTiles.length;
+  if (needForTriplet <= wildTiles.length) {
     const remaining = [...sorted];
-    for (let i = 0; i < 3; i++) {
-      const idx = remaining.findIndex(t => t.id === tripletTiles[i].id);
-      remaining.splice(idx, 1);
+
+    // remove natural same tiles (up to 3)
+    for (let i = 0; i < Math.min(3, sameTiles.length); i++) {
+      const idx = remaining.findIndex(t => t.id === sameTiles[i].id);
+      if (idx >= 0) remaining.splice(idx, 1);
     }
-    if (canFormMelds(remaining, n - 1)) {
+
+    // remove wild tiles to fill
+    for (let i = 0; i < Math.max(0, needForTriplet); i++) {
+      const idx = remaining.findIndex(t => isWildTile(t));
+      if (idx >= 0) remaining.splice(idx, 1);
+    }
+
+    if (canFormMelds(remaining, n - 1, isWildTile)) {
       return true;
     }
   }
-  
-  // Try forming a sequence with the first tile
-  // Sequences only valid for number suits (筒万条), not wind/dragon
+
+  // Try forming a sequence with first tile + wildcards (only number suits)
   const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
   if (numberSuits.includes(firstTile.suit)) {
-    const nextValue = firstTile.value + 1;
-    const nextNextValue = firstTile.value + 2;
-    
-    if (nextValue <= 9 && nextNextValue <= 9) {
-      const secondTile = sorted.find(t => t.suit === firstTile.suit && t.value === nextValue);
-      const thirdTile = sorted.find(t => t.suit === firstTile.suit && t.value === nextNextValue);
-      
-      if (secondTile && thirdTile) {
+    const neededValues = [firstTile.value + 1, firstTile.value + 2];
+    if (neededValues[1] <= 9) {
+      const secondTile = nonWildTiles.find(t => t.suit === firstTile.suit && t.value === neededValues[0]);
+      const thirdTile = nonWildTiles.find(t => t.suit === firstTile.suit && t.value === neededValues[1]);
+
+      const missing = [secondTile, thirdTile].filter(t => !t).length;
+      if (missing <= wildTiles.length) {
         const remaining = [...sorted];
         const idx1 = remaining.findIndex(t => t.id === firstTile.id);
-        remaining.splice(idx1, 1);
-        const idx2 = remaining.findIndex(t => t.id === secondTile.id);
-        remaining.splice(idx2, 1);
-        const idx3 = remaining.findIndex(t => t.id === thirdTile.id);
-        remaining.splice(idx3, 1);
-        
-        if (canFormMelds(remaining, n - 1)) {
+        if (idx1 >= 0) remaining.splice(idx1, 1);
+
+        if (secondTile) {
+          const idx2 = remaining.findIndex(t => t.id === secondTile.id);
+          if (idx2 >= 0) remaining.splice(idx2, 1);
+        }
+
+        if (thirdTile) {
+          const idx3 = remaining.findIndex(t => t.id === thirdTile.id);
+          if (idx3 >= 0) remaining.splice(idx3, 1);
+        }
+
+        for (let i = 0; i < missing; i++) {
+          const idxW = remaining.findIndex(t => isWildTile(t));
+          if (idxW >= 0) remaining.splice(idxW, 1);
+        }
+
+        if (canFormMelds(remaining, n - 1, isWildTile)) {
           return true;
         }
       }
     }
   }
-  
+
   return false;
 }
 
 /**
  * Check if a hand can win with seven pairs (七对)
  */
-export function canWinSevenPairs(tiles: Tile[], existingMelds = 0): boolean {
+export function canWinSevenPairs(tiles: Tile[], existingMelds = 0, isWildTile: WildTileChecker = () => false): boolean {
   if (existingMelds > 0) return false;
   if (tiles.length !== 14) return false;
-  
-  const groups = groupTiles(tiles);
-  
-  // Must have exactly 7 groups, each with exactly 2 tiles
-  if (groups.size !== 7) return false;
-  
+
+  const nonFlowerTiles = tiles.filter(t => !isFlower(t));
+  const wildCount = nonFlowerTiles.filter(t => isWildTile(t)).length;
+  const normalTiles = nonFlowerTiles.filter(t => !isWildTile(t));
+
+  const groups = groupTiles(normalTiles);
+  let pairs = 0;
+  let singles = 0;
+
   for (const group of groups.values()) {
-    if (group.length !== 2) {
-      return false;
-    }
+    pairs += Math.floor(group.length / 2);
+    singles += group.length % 2;
   }
-  
-  return true;
+
+  // singles each need one wild to pair
+  if (singles > wildCount) return false;
+  let remainingWild = wildCount - singles;
+
+  pairs += singles;
+  pairs += Math.floor(remainingWild / 2);
+
+  return pairs >= 7;
 }
 
 /**
  * Check if hand can win (either standard or seven pairs)
  */
-export function canWin(tiles: Tile[], existingMelds = 0): { canWin: boolean; winType: WinType | null } {
-  if (canWinStandard(tiles, existingMelds)) {
+export function canWin(tiles: Tile[], existingMelds = 0, isWildTile: WildTileChecker = () => false): { canWin: boolean; winType: WinType | null } {
+  if (canWinStandard(tiles, existingMelds, isWildTile)) {
     return { canWin: true, winType: WinType.STANDARD };
   }
-  
-  if (canWinSevenPairs(tiles, existingMelds)) {
+
+  if (canWinSevenPairs(tiles, existingMelds, isWildTile)) {
     return { canWin: true, winType: WinType.SEVEN_PAIRS };
   }
-  
+
   return { canWin: false, winType: null };
 }
 
 /**
  * Get all tiles that would complete a winning hand (listening tiles)
  */
-export function getListeningTiles(tiles: Tile[], existingMelds = 0): Tile[] {
+export function getListeningTiles(tiles: Tile[], existingMelds = 0, isWildTile: WildTileChecker = () => false): Tile[] {
   const expectedTileCount = 13 - existingMelds * 3;
   if (tiles.length !== expectedTileCount) return [];
   
@@ -377,7 +446,7 @@ export function getListeningTiles(tiles: Tile[], existingMelds = 0): Tile[] {
     const testTile: Tile = { suit, value, id: 'test', isFlower: false };
     const testHand = [...tiles, testTile];
     
-    if (canWin(testHand, existingMelds).canWin) {
+    if (canWin(testHand, existingMelds, isWildTile).canWin) {
       if (!listeningTiles.some(t => t.suit === suit && t.value === value)) {
         listeningTiles.push(testTile);
       }
@@ -390,8 +459,8 @@ export function getListeningTiles(tiles: Tile[], existingMelds = 0): Tile[] {
 /**
  * Check if a player is in "Ting" (listening/ready to win)
  */
-export function isTing(tiles: Tile[], existingMelds = 0): boolean {
-  return getListeningTiles(tiles, existingMelds).length > 0;
+export function isTing(tiles: Tile[], existingMelds = 0, isWildTile: WildTileChecker = () => false): boolean {
+  return getListeningTiles(tiles, existingMelds, isWildTile).length > 0;
 }
 
 /**

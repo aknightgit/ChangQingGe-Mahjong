@@ -145,6 +145,11 @@ export enum GameEndReason {
   EMPTY_ROOM = 'empty_room'
 }
 
+export interface PendingKongClaim {
+  playerId: string;
+  tile: Tile;
+}
+
 export interface GameState {
   gameId: string;
   phase: GamePhase;
@@ -162,6 +167,8 @@ export interface GameState {
   endedAt?: number;
   finalScores?: Record<string, number>;
   pendingActions: PendingAction[];
+  pendingKongClaim?: PendingKongClaim;
+  multiHuStarterIndex?: number;
   customScoringMode?: string;
   wildTileGroup?: string[];
   freezeRound?: number;

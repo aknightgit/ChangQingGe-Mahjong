@@ -6,7 +6,7 @@
  * 2. 公式计算牌型（碰碰胡/混一色）
  */
 
-import { Tile, Meld, MeldType, TileSuit } from '../types/game';
+import { Tile, Meld, MeldType, TileSuit, Player } from '../types/game';
 import { isFlower, isWind, isDragon, groupTiles, tilesEqual } from './tiles';
 import { HandType, HAND_TYPE_PRIORITY } from './handValidator';
 
@@ -447,4 +447,33 @@ export function calculateGlobalMultiplier(
 ): number {
   const newMultiplier = currentMultiplier * 2;
   return Math.min(newMultiplier, 8); // 上限×8
+}
+
+/**
+ * 计算整局分数（简化版）
+ * - 每个赢家按 wonFan 向所有非赢家收分
+ * - 支持一炮多响（多个赢家独立结算）
+ */
+export function calculateGameResult(players: Player[], winners: Player[]): Record<string, number> {
+  const scores: Record<string, number> = {};
+  for (const p of players) {
+    scores[p.id] = 0;
+  }
+
+  if (!winners.length) {
+    return scores;
+  }
+
+  const winnerIds = new Set(winners.map(w => w.id));
+  const losers = players.filter(p => !winnerIds.has(p.id));
+
+  for (const winner of winners) {
+    const winFan = Math.max(1, winner.wonFan || 1);
+    for (const loser of losers) {
+      scores[loser.id] -= winFan;
+      scores[winner.id] += winFan;
+    }
+  }
+
+  return scores;
 }
