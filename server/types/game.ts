@@ -101,7 +101,8 @@ export enum ActionType {
   CONCEALED_KONG = 'concealed_kong',
   HU = 'hu',
   PASS = 'pass',
-  CHEAT_HU = 'cheat_hu'
+  CHEAT_HU = 'cheat_hu',
+  REBEL = 'rebel'  // 造反
 }
 
 export interface GameAction {

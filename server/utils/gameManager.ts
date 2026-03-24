@@ -12,7 +12,7 @@ import {
   TileSuit,
   GameEndReason
 } from '../types/game';
-import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower } from './tiles';
+import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isFivePoison } from './tiles';
 import { canWin, isTing, detectHandTypes } from './handValidator';
 import { calculateScore, calculateRoundMultiplier } from './scoring';
 import { randomUUID } from 'crypto';
@@ -446,6 +446,14 @@ class GameManager {
 
     // If it's the player's turn and no one else has pending reactions, allow turn actions
     if (currentPlayer.id === playerId && game.pendingActions.length === 0) {
+      // 检查造反（五毒散）
+      const wildParts = game.customScoringMode?.split('-');
+      const wildSuit = wildParts ? wildParts[0] as TileSuit : undefined;
+      const wildValue = wildParts && wildParts[1] ? parseInt(wildParts[1]) : undefined;
+      if (isFivePoison(player.hand.concealedTiles, wildSuit, wildValue)) {
+        actions.push(ActionType.REBEL);
+      }
+
       if (player.hand.concealedTiles.length > 0) {
         actions.push(ActionType.DISCARD);
       }
@@ -535,6 +543,10 @@ class GameManager {
 
       case ActionType.CHEAT_HU:
         this.handleCheatHu(game, player);
+        break;
+
+      case ActionType.REBEL:
+        this.handleRebel(game, player);
         break;
 
       case ActionType.PASS:
@@ -813,6 +825,41 @@ class GameManager {
     this.moveToNextPlayer(game);
   }
 
+    this.endRound(game, GameEndReason.LAST_PLAYER);
+  }
+
+  /**
+   * 造反处理
+   * 触发条件: 五毒散（见 isFivePoison）
+   * 效果: 本局结束，下局倍数×2，造反者成为庄家
+   */
+  private handleRebel(game: GameState, player: Player): void {
+    // 验证是否满足五毒散
+    const wildParts = game.customScoringMode?.split('-');
+    const wildSuit = wildParts ? wildParts[0] as TileSuit : undefined;
+    const wildValue = wildParts && wildParts[1] ? parseInt(wildParts[1]) : undefined;
+    
+    if (!isFivePoison(player.hand.concealedTiles, wildSuit, wildValue)) {
+      throw new Error('Not eligible for rebel (五毒散 condition not met)');
+    }
+
+    // 本局直接结束
+    game.phase = GamePhase.ENDED;
+    game.endReason = GameEndReason.LAST_PLAYER;
+    game.endedAt = Date.now();
+
+    // 记录造反事件（下局倍数×2）
+    // 存入 game 的自定义字段供下局使用
+    (game as any).rebelEvent = {
+      playerId: player.id,
+      playerName: player.name,
+      newDealerIndex: player.position
+    };
+
+    // 造反者成为庄家
+    game.dealerIndex = player.position;
+  }
+
   private handleCheatHu(game: GameState, player: Player): void {
     const currentPlayer = game.players[game.currentPlayerIndex];
     if (!currentPlayer || currentPlayer.id !== player.id) {
@@ -820,19 +867,17 @@ class GameManager {
     }
 
     if (player.status !== PlayerStatus.PLAYING) {
-      return; // ignore if already resolved
+      return;
     }
 
     game.pendingActions = [];
-
     player.status = PlayerStatus.WON;
     player.winOrder = game.winnersCount + 1;
     player.winRound = game.roundNumber;
     player.winTimestamp = Date.now();
-    player.wonFan = 1; // Testing shortcut awards 1 fan (score +1)
+    player.wonFan = 1;
     game.winnersCount++;
     game.customScoringMode = 'cheat';
-
     this.endRound(game, GameEndReason.LAST_PLAYER);
   }
 

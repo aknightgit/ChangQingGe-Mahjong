@@ -112,15 +112,22 @@ test('清碰含碰碰胡', qingPengTypes.includes(HandType.ALL_TRIPLETS));
 // 正确14张: 东东东 南南南 西西西 北北北 北 (东3+南3+西3+北3+北1=13，但北1不是对子)
 // 正确: 东东东 南南南 西西西 北 北北 (东3+南3+西3+北1+北2=12...)
 // 最简单: 东东东 南南南 西西西 北北北 北北 = 3+3+3+3+2=14
+// 风一色: 纯风牌14张（检测"全是风牌"条件，不要求能胡）
+// 注意: 4种风牌×3+1张 = 13张不够14张，4种风牌×4 = 16张超了
+// 用门口牌配合: 手牌11张 + 门口3张 = 14张
+const fengExposedMeld2: Meld = {
+  type: MeldType.TRIPLET,
+  tiles: [makeTile(TileSuit.WIND, 4), makeTile(TileSuit.WIND, 4), makeTile(TileSuit.WIND, 4)],
+  isConcealed: false
+};
 const fengYiSe: Tile[] = [
   makeTile(TileSuit.WIND, 1), makeTile(TileSuit.WIND, 1), makeTile(TileSuit.WIND, 1),
   makeTile(TileSuit.WIND, 2), makeTile(TileSuit.WIND, 2), makeTile(TileSuit.WIND, 2),
   makeTile(TileSuit.WIND, 3), makeTile(TileSuit.WIND, 3), makeTile(TileSuit.WIND, 3),
-  makeTile(TileSuit.WIND, 4), makeTile(TileSuit.WIND, 4), makeTile(TileSuit.WIND, 4),
   makeTile(TileSuit.WIND, 4), makeTile(TileSuit.WIND, 4),
 ];
-const fengTypes = detectHandTypes(fengYiSe, [], true, 0, null);
-test('风一色检测', fengTypes.includes(HandType.ALL_WIND));
+const fengTypes = detectHandTypes(fengYiSe, [fengExposedMeld2], true, 0, null);
+test('风一色检测(含门口牌)', fengTypes.includes(HandType.ALL_WIND));
 
 // 风碰需要门口牌配合(4种风牌无法单独组成4刻子1对子)，跳过此测试
 // test('风碰检测', fengTypes.includes(HandType.FENG_PENG));
@@ -213,6 +220,21 @@ test('箭牌不能组顺子', !isSequence(dragonSeq));
 
 const wanSeq = [makeTile(TileSuit.CHARACTERS, 1), makeTile(TileSuit.CHARACTERS, 2), makeTile(TileSuit.CHARACTERS, 3)];
 test('万子可以组顺子', isSequence(wanSeq));
+
+// ===== 测试7: 牌数约束 =====
+console.log('\n=== 牌数约束测试 ===');
+test('每种牌最多4张', deck.every(t => {
+  const count = deck.filter(d => d.suit === t.suit && d.value === t.value).length;
+  return count <= 4;
+}));
+// 验证测试数据中没有超过4张的牌
+const allTestHands = [standardWin, notWin, pengPengHu, qingYiSe, hunYiSe, fengYiSe];
+for (const hand of allTestHands) {
+  const groups = groupTiles(hand);
+  for (const [key, group] of groups) {
+    test(`${key}不超过4张(手牌)`, group.length <= 4);
+  }
+}
 
 // ===== 结果 =====
 console.log(`\n=============================`);

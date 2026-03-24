@@ -286,6 +286,68 @@ export function getFlowerName(value: number): string {
 }
 
 /**
+ * 检查是否满足五毒散（造反条件）
+ * 
+ * 五毒散 = 手牌同时满足:
+ * - 筒子、万子、条子 三门都有（每门≥1张）
+ * - 有风牌
+ * - 有箭牌
+ * - 无花牌
+ * - 无百搭
+ * - 无对子或刻子（全是搭子/散牌）
+ */
+export function isFivePoison(tiles: Tile[], wildTileSuit?: TileSuit, wildTileValue?: number): boolean {
+  // 过滤花牌
+  const nonFlowerTiles = tiles.filter(t => !isFlower(t));
+  if (nonFlowerTiles.length !== tiles.length) return false; // 有花牌
+  
+  // 检查三门花色都有
+  const suits = getSuits(nonFlowerTiles);
+  const hasDots = suits.has(TileSuit.DOTS);
+  const hasWan = suits.has(TileSuit.CHARACTERS);
+  const hasTiao = suits.has(TileSuit.BAMBOOS);
+  if (!hasDots || !hasWan || !hasTiao) return false;
+  
+  // 检查有风牌
+  const hasWind = nonFlowerTiles.some(t => t.suit === TileSuit.WIND);
+  if (!hasWind) return false;
+  
+  // 检查有箭牌
+  const hasDragon = nonFlowerTiles.some(t => t.suit === TileSuit.DRAGON);
+  if (!hasDragon) return false;
+  
+  // 检查无百搭
+  if (wildTileSuit !== undefined && wildTileValue !== undefined) {
+    const hasWild = nonFlowerTiles.some(t => t.suit === wildTileSuit && t.value === wildTileValue);
+    if (hasWild) return false;
+  }
+  
+  // 检查无对子或刻子（全是搭子/散牌）
+  const groups = groupTiles(nonFlowerTiles);
+  for (const [, group] of groups) {
+    if (group.length >= 2) return false; // 有对子或刻子
+  }
+  
+  return true;
+}
+
+/**
+ * 验证手牌合法性：每种牌最多4张
+ * @throws Error 如果发现超过4张相同的牌
+ */
+export function validateHand(tiles: Tile[]): void {
+  const counts = new Map<string, number>();
+  for (const tile of tiles) {
+    const key = `${tile.suit}-${tile.value}`;
+    const count = (counts.get(key) || 0) + 1;
+    if (count > 4) {
+      throw new Error(`非法手牌: ${getTileDisplayName(tile)} 出现 ${count} 次（最多4张）`);
+    }
+    counts.set(key, count);
+  }
+}
+
+/**
  * Get tile display name in Chinese
  */
 export function getTileDisplayName(tile: Tile): string {
