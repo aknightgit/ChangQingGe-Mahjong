@@ -653,12 +653,7 @@ class GameManager {
       return;
     }
 
-    // 一炮多响：记录从第一个胡家右手继续
-    if (!isSelfDrawn && game.multiHuStarterIndex === undefined) {
-      const winnerIndex = game.players.findIndex(p => p.id === player.id);
-      game.multiHuStarterIndex = winnerIndex;
-    }
-
+    // 新弃牌产生新的响应窗口，重置一炮多响起点（由首个HU时再设置）
     game.multiHuStarterIndex = undefined;
 
     // Check if other players can peng, kong, or hu
