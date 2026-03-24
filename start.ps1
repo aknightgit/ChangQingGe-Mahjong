@@ -65,7 +65,7 @@ if (-not (Test-Path ".env")) {
     Warn "未找到 .env，正在自动创建..."
     $envContent = @"
 MONGODB_URI=mongodb://192.168.3.241:27017
-MONGODB_DB=blood_on_mahjong
+MONGODB_DB=changqingge
 REDIS_URL=redis://192.168.3.241:6379
 "@
     $envContent | Out-File -FilePath ".env" -Encoding utf8

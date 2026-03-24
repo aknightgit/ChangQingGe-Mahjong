@@ -861,7 +861,7 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
   const selfDrawCount = winners.filter(w => w.winMode === '自摸').length;
   const selfDrawRate = winners.length ? selfDrawCount / winners.length : 0;
 
-  const bigHandNames = new Set(['清碰', '风碰', '风一色', '清一色', '八花自摸', '四百搭']);
+  const bigHandNames = new Set(['清碰', '混碰', '风碰', '风一色', '清一色', '八花自摸', '四百搭']);
   const bigHandCount = winners.filter(w => bigHandNames.has(w.handType)).length;
   const bigHandRate = winners.length ? bigHandCount / winners.length : 0;
 

@@ -1,6 +1,6 @@
 # 长清阁麻将 ChangQingGe-Mahjong
 
-四川血战到底多人在线麻将游戏
+上海麻将 × 四川麻将 · 多人在线
 
 ## 项目来源
 
@@ -17,7 +17,7 @@ Forked from [Blood-On-Mahjong](https://github.com/quiet98k/Blood-On-Mahjong)
 
 ## 已实现功能
 
-- ✅ 四人血战到底基本流程
+- ✅ 四人长清阁基本流程
 - ✅ WebSocket 实时多人对战
 - ✅ 摸牌/打牌/碰/杠/胡
 - ✅ 胡牌判断（标准胡+七对）

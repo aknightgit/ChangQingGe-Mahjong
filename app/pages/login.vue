@@ -2,8 +2,8 @@
 <template>
   <div class="mahjong-page">
     <div class="mahjong-card">
-      <h1 class="mahjong-title">Mahjong Online</h1>
-      <p class="mahjong-subtitle">血战到底 · 四川麻将</p>
+      <h1 class="mahjong-title">长清阁麻将</h1>
+      <p class="mahjong-subtitle">上海麻将 × 四川麻将</p>
 
       <p class="mahjong-text">
         Sign in with your account from the database or through Google OAuth:

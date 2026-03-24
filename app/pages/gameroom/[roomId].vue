@@ -6,7 +6,7 @@
         <div class="room-info">
           <h1 class="mahjong-title">Mahjong Room</h1>
           <p class="mahjong-subtitle">
-            血战到底 · Room #{{ roomId }}
+            长清阁麻将 · Room #{{ roomId }}
           </p>
         </div>
 

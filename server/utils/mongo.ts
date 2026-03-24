@@ -23,7 +23,7 @@ function getMongoUri(): string {
 }
 
 function getDefaultDbName(): string {
-	return process.env.MONGODB_DB || 'app'
+	return process.env.MONGODB_DB || 'changqingge'
 }
 
 export async function getMongoClient(): Promise<MongoClient> {
