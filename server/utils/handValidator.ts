@@ -60,19 +60,14 @@ export function detectHandTypes(
   
   // Check for all honor tiles (风一色) — 包括风牌+箭牌+百搭
   // 风碰也基于此检测
-  // 风一色: 全是风牌（不含箭牌）
-  const isPureWind = isAllWindOnly(nonFlowerTiles, wildTileId);
-  // 风碰范围: 风牌+箭牌（含暗杠）
-  const isAllHonor = isAllWindOrDragon(nonFlowerTiles, wildTileId);
+  // 风一色: 全是风牌或箭牌
+  const isWindOrDragon = isAllWindOrDragon(nonFlowerTiles, wildTileId);
   
-  if (isPureWind) {
+  if (isWindOrDragon) {
     types.push(HandType.ALL_WIND);
     if (types.includes(HandType.ALL_TRIPLETS)) {
       types.push(HandType.FENG_PENG);
     }
-  } else if (isAllHonor && types.includes(HandType.ALL_TRIPLETS)) {
-    // 纯箭牌/风牌混搭+碰碰胡 = 风碰（但不算风一色）
-    types.push(HandType.FENG_PENG);
   }
   
   // Check for full flush (清一色) - all same number suit
