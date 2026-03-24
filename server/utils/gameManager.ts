@@ -12,9 +12,9 @@ import {
   TileSuit,
   GameEndReason
 } from '../types/game';
-import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit } from './tiles';
-import { canWin, isTing } from './handValidator';
-import { calculateFan, calculateWinningScore, calculateKongScore, calculateGameResult } from './scoring';
+import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower } from './tiles';
+import { canWin, isTing, detectHandTypes } from './handValidator';
+import { calculateScore, calculateRoundMultiplier } from './scoring';
 import { randomUUID } from 'crypto';
 import { saveGameState, loadGameState, loadAllGameStates, deleteGameState } from './gamePersistence';
 import { MatchHistoryService } from '../services/matchHistoryService';
@@ -221,22 +221,26 @@ class GameManager {
     const deck = createDeck();
     game.wall = shuffleTiles(deck);
 
-    // Deal tiles to players (each gets 13 tiles)
+    // 随机选择百搭牌（不从牌墙移除）
+    if (game.wall.length > 0) {
+      const wildIndex = Math.floor(Math.random() * game.wall.length);
+      game.customScoringMode = `${game.wall[wildIndex].suit}-${game.wall[wildIndex].value}`;
+    }
+
+    // Deal tiles to players (each gets 13 tiles, flowers auto-replaced)
     for (const player of game.players) {
       player.hand.concealedTiles = [];
+      player.hand.exposedMelds = []; // 清空门口牌（花牌会放这里）
       for (let i = 0; i < 13; i++) {
-        const tile = game.wall.pop()!;
-        player.hand.concealedTiles.push(tile);
+        this.handleDraw(game, player); // 使用 handleDraw 自动处理花牌
       }
       player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
       player.status = PlayerStatus.PLAYING;
       player.score = 0;
     }
 
-    // Dealer draws first tile
-    const firstTile = game.wall.pop()!;
-    game.players[game.dealerIndex].hand.concealedTiles.push(firstTile);
-    game.players[game.dealerIndex].hand.concealedTiles = sortTiles(game.players[game.dealerIndex].hand.concealedTiles);
+    // Dealer draws first tile (also handles flowers)
+    this.handleDraw(game, game.players[game.dealerIndex]);
 
     for (const player of game.players) {
       player.winOrder = null;
@@ -440,6 +444,19 @@ class GameManager {
     }
 
     const tile = game.wall.pop()!;
+    
+    // 花牌自动补牌
+    if (isFlower(tile)) {
+      player.hand.exposedMelds.push({
+        type: MeldType.TRIPLET, // 花牌放到门口
+        tiles: [tile],
+        isConcealed: false
+      });
+      // 从牌墙尾补牌
+      this.handleDraw(game, player); // 递归补牌
+      return;
+    }
+    
     player.hand.concealedTiles.push(tile);
     player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
   }
@@ -601,19 +618,40 @@ class GameManager {
     const isSelfDrawn = !pendingAction;
     const isKongFlower = false; // TODO: track if won after kong draw
     
-    const fan = calculateFan(
+    // 收集花牌
+    const flowerTiles = player.hand.exposedMelds
+      .flatMap(m => m.tiles)
+      .filter(t => isFlower(t));
+    
+    // 检测牌型
+    const handTypes = detectHandTypes(
       player.hand.concealedTiles,
       player.hand.exposedMelds,
-      winCheck.winType!,
+      isSelfDrawn,
+      flowerTiles.length,
+      game.customScoringMode // 百搭牌标识
+    );
+    
+    // 门清检测
+    const isMenQing = player.hand.exposedMelds.every(m => 
+      m.type !== MeldType.TRIPLET && m.type !== MeldType.SEQUENCE
+    );
+    
+    // 计算番数
+    const scoreResult = calculateScore({
+      handTiles: player.hand.concealedTiles,
+      exposedMelds: player.hand.exposedMelds,
+      flowerTiles,
+      handTypes,
       isSelfDrawn,
       isKongFlower,
-      false,
-      false,
-      false,
-      false
-    );
+      isRobbingKong: false,
+      isMenQing,
+      roundMultiplier: 1, // TODO: 从骰子获取
+      globalMultiplier: 1  // TODO: 从游戏状态获取
+    });
 
-    player.wonFan = fan.totalFan;
+    player.wonFan = scoreResult.baseFan;
 
     const remainingActive = game.players.filter(p => p.status === PlayerStatus.PLAYING).length;
     if (remainingActive <= 1) {
