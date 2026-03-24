@@ -119,6 +119,9 @@ interface RoundMetrics {
   lastPlayerRate: number;
   avgRounds: number;
   avgPot: number;
+  selfDrawRate: number;
+  bigHandRate: number;
+  avgWinnerPoints: number;
   fitness: number;
   biggest: GameRecord;
 }
@@ -823,8 +826,27 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
   const avgRounds = all.reduce((s, g) => s + g.rounds, 0) / games;
   const avgPot = all.reduce((s, g) => s + g.totalPot, 0) / games;
 
-  // 目标: 胡牌率↑, 流局率↓, 血战到最后一家的概率↑, 积分博弈强度↑
-  const fitness = huRate * 120 - drawRate * 120 + lastPlayerRate * 140 + (avgPot / 100);
+  const winners = all.flatMap(g => g.winners);
+  const selfDrawCount = winners.filter(w => w.winMode === '自摸').length;
+  const selfDrawRate = winners.length ? selfDrawCount / winners.length : 0;
+
+  const bigHandNames = new Set(['清碰', '风碰', '风一色', '清一色', '八花自摸', '四百搭']);
+  const bigHandCount = winners.filter(w => bigHandNames.has(w.handType)).length;
+  const bigHandRate = winners.length ? bigHandCount / winners.length : 0;
+
+  const avgWinnerPoints = winners.length
+    ? winners.reduce((s, w) => s + w.finalPoints, 0) / winners.length
+    : 0;
+
+  // 目标: 胡牌率↑, 流局率↓, 最后一人↑, 自摸↑, 大牌↑, 赢家点数↑
+  const fitness =
+    huRate * 90 -
+    drawRate * 120 +
+    lastPlayerRate * 150 +
+    selfDrawRate * 80 +
+    bigHandRate * 110 +
+    avgWinnerPoints * 0.9 +
+    avgPot / 120;
 
   const biggest = [...all].sort((a, b) => b.totalPot - a.totalPot)[0]!;
 
@@ -840,6 +862,9 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
     lastPlayerRate,
     avgRounds,
     avgPot,
+    selfDrawRate,
+    bigHandRate,
+    avgWinnerPoints,
     fitness,
     biggest
   };
@@ -860,6 +885,9 @@ function appendRoundDoc(metrics: RoundMetrics) {
   lines.push(`- 血战到最后一人: ${metrics.lastPlayerGames} (${(metrics.lastPlayerRate * 100).toFixed(2)}%)`);
   lines.push(`- 平均回合: ${metrics.avgRounds.toFixed(2)}`);
   lines.push(`- 平均总筹码: ${metrics.avgPot.toFixed(2)}`);
+  lines.push(`- 自摸率(胡牌中): ${(metrics.selfDrawRate * 100).toFixed(2)}%`);
+  lines.push(`- 大牌率(胡牌中): ${(metrics.bigHandRate * 100).toFixed(2)}%`);
+  lines.push(`- 胜者平均最终点: ${metrics.avgWinnerPoints.toFixed(2)}`);
   lines.push(`- Fitness: ${metrics.fitness.toFixed(4)}`);
 
   lines.push('');
@@ -933,7 +961,10 @@ function savePolicySnapshot(round: number, policy: Policy, metrics?: RoundMetric
           drawRate: metrics.drawRate,
           lastPlayerRate: metrics.lastPlayerRate,
           avgRounds: metrics.avgRounds,
-          avgPot: metrics.avgPot
+          avgPot: metrics.avgPot,
+          selfDrawRate: metrics.selfDrawRate,
+          bigHandRate: metrics.bigHandRate,
+          avgWinnerPoints: metrics.avgWinnerPoints
         }
       : null,
     policy
