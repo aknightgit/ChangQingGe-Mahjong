@@ -129,29 +129,33 @@ const fengYiSe: Tile[] = [
 const fengTypes = detectHandTypes(fengYiSe, [fengExposedMeld2], true, 0, null);
 test('风一色检测(含门口牌)', fengTypes.includes(HandType.ALL_WIND));
 
-// 风一色含箭牌: 中中中 发发发 白白白 北北 东东东 (门口牌)
-const fengYiSe2: Tile[] = [
+// 风一色不含箭牌测试: 全是箭牌应该不算风一色
+const allDragon: Tile[] = [
   makeTile(TileSuit.DRAGON, 1), makeTile(TileSuit.DRAGON, 1), makeTile(TileSuit.DRAGON, 1),
   makeTile(TileSuit.DRAGON, 2), makeTile(TileSuit.DRAGON, 2), makeTile(TileSuit.DRAGON, 2),
   makeTile(TileSuit.DRAGON, 3), makeTile(TileSuit.DRAGON, 3), makeTile(TileSuit.DRAGON, 3),
   makeTile(TileSuit.WIND, 4), makeTile(TileSuit.WIND, 4),
 ];
-const fengTypes2 = detectHandTypes(fengYiSe2, [fengExposedMeld2], true, 0, null);
-test('风一色含箭牌', fengTypes2.includes(HandType.ALL_WIND));
+const allDragonTypes = detectHandTypes(allDragon, [fengExposedMeld2], true, 0, null);
+test('纯箭牌不算风一色', !allDragonTypes.includes(HandType.ALL_WIND));
 
-// 风碰: 全部风牌+箭牌 + 碰碰胡
-// 东东东 南南南 西西西 中中中 北北 = 3+3+3+3+2=14 ✅
+// 风碰: 全部风牌 + 碰碰胡 (需要门口牌配合)
+// 手牌: 东东东 南南南 西西西 北北 (11张) + 门口: 北北北 (3张) = 14张
+const fengPengExposedMeld: Meld = {
+  type: MeldType.TRIPLET,
+  tiles: [makeTile(TileSuit.WIND, 4), makeTile(TileSuit.WIND, 4), makeTile(TileSuit.WIND, 4)],
+  isConcealed: false
+};
 const fengPengHand: Tile[] = [
   makeTile(TileSuit.WIND, 1), makeTile(TileSuit.WIND, 1), makeTile(TileSuit.WIND, 1),
   makeTile(TileSuit.WIND, 2), makeTile(TileSuit.WIND, 2), makeTile(TileSuit.WIND, 2),
   makeTile(TileSuit.WIND, 3), makeTile(TileSuit.WIND, 3), makeTile(TileSuit.WIND, 3),
-  makeTile(TileSuit.DRAGON, 1), makeTile(TileSuit.DRAGON, 1), makeTile(TileSuit.DRAGON, 1),
   makeTile(TileSuit.WIND, 4), makeTile(TileSuit.WIND, 4),
 ];
-const fengPengTypes = detectHandTypes(fengPengHand, [], true, 0, null);
-test('风碰检测(风+箭)', fengPengTypes.includes(HandType.FENG_PENG));
+const fengPengTypes = detectHandTypes(fengPengHand, [fengPengExposedMeld], true, 0, null);
+test('风碰检测(纯风牌+门口牌)', fengPengTypes.includes(HandType.FENG_PENG));
 test('风碰含碰碰胡', fengPengTypes.includes(HandType.ALL_TRIPLETS));
-test('风碰含风一色(广义)', fengPengTypes.includes(HandType.ALL_WIND));
+test('风碰含风一色', fengPengTypes.includes(HandType.ALL_WIND));
 
 // 混一色: 123万 456万 东东东 22333万 (14张)
 const hunYiSe: Tile[] = [
@@ -223,9 +227,9 @@ const pengScoreBoth = calculateScore({
 });
 test('无百搭+门清=×4', pengScoreBoth.extraMultipliers === 4);
 
-// 百搭是风牌+风一色=可算无百搭
+// 百搭是风牌+风碰=可算无百搭 (纯风牌+门口牌)
 const windWithWildScore = calculateScore({
-  handTiles: fengPengHand, exposedMelds: [], flowerTiles: [],
+  handTiles: fengPengHand, exposedMelds: [fengPengExposedMeld], flowerTiles: [],
   handTypes: [HandType.FENG_PENG, HandType.ALL_WIND, HandType.ALL_TRIPLETS],
   isSelfDrawn: true, isKongFlower: false, isRobbingKong: false, isMenQing: false,
   wildTileSuit: TileSuit.WIND, wildTileValue: 1, // 百搭=东(风牌)

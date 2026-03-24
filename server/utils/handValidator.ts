@@ -166,8 +166,8 @@ function isHalfFlushHand(tiles: Tile[]): boolean {
 }
 
 /**
- * Check if all tiles are honor tiles (风一色/风碰)
- * 包括: 风牌 + 箭牌 + 百搭
+ * Check if all tiles are wind tiles ONLY (风一色/风碰)
+ * 注意: 不包括箭牌，只包括东南西北
  */
 function isAllHonorHand(tiles: Tile[], wildTileId: string | null): boolean {
   // 解析百搭牌信息
@@ -182,9 +182,9 @@ function isAllHonorHand(tiles: Tile[], wildTileId: string | null): boolean {
   }
   
   return tiles.every(t => {
-    if (t.suit === TileSuit.WIND) return true;
-    if (t.suit === TileSuit.DRAGON) return true;
-    if (wildSuit && t.suit === wildSuit && t.value === wildValue) return true;
+    if (t.suit === TileSuit.WIND) return true; // 风牌 ✅
+    // 箭牌 ❌ — 根据规则文档，风一色只含风牌
+    if (wildSuit && t.suit === wildSuit && t.value === wildValue) return true; // 百搭 ✅
     return false;
   });
 }

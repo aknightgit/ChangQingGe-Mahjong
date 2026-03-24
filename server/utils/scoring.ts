@@ -135,15 +135,15 @@ export function calculateScore(params: {
   if (wildTileSuit !== undefined && wildTileValue !== undefined) {
     const wildCount = countWildTiles(handTiles, wildTileSuit, wildTileValue, wildTileGroup);
     
-    // 特殊规则: 百搭是风牌/箭牌时，风一色/风碰可算无百搭
-    const isHonorWild = wildTileSuit === TileSuit.WIND || wildTileSuit === TileSuit.DRAGON;
+    // 特殊规则: 百搭是风牌时，风一色/风碰可算无百搭（箭牌不适用）
+    const isWindWild = wildTileSuit === TileSuit.WIND;
     const isWindHand = handTypes.includes(HandType.ALL_WIND) || handTypes.includes(HandType.FENG_PENG);
     
     if (wildCount === 0) {
       // 手牌无百搭
       extraMultipliers *= 2;
       details.push('无百搭 ×2');
-    } else if (isHonorWild && isWindHand) {
+    } else if (isWindWild && isWindHand) {
       // 百搭是风/箭 + 风一色/风碰 → 可算无百搭
       // 风碰还需验证: 去掉百搭功能后牌面仍满足碰碰胡
       if (handTypes.includes(HandType.FENG_PENG)) {
