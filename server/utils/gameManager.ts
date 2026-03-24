@@ -175,6 +175,28 @@ class GameManager {
     return undefined;
   }
 
+  /**
+   * 检测杠上开花：自摸且最近的非DRAW动作是杠牌
+   * 流程：杠 → 自动补牌(可能补花再DRAW) → 玩家回合胡牌
+   */
+  private isWinAfterKong(game: GameState, playerId: string): boolean {
+    const kongTypes = new Set([
+      ActionType.KONG,
+      ActionType.CONCEALED_KONG,
+      ActionType.EXTENDED_KONG
+    ]);
+
+    // 从 actionHistory 末尾向前找，找到该玩家最近的非DRAW动作
+    for (let i = game.actionHistory.length - 1; i >= 0; i--) {
+      const action = game.actionHistory[i];
+      if (action.playerId !== playerId) continue;
+      if (action.type === ActionType.DRAW) continue; // 跳过自动补牌
+      // 第一个非DRAW动作
+      return kongTypes.has(action.type);
+    }
+    return false;
+  }
+
   private async hydrateFromDatabase() {
     if (this.isHydrated) return;
     const persistedGames = await loadAllGameStates();
@@ -1026,7 +1048,7 @@ class GameManager {
     }
 
     const isSelfDrawn = !pendingAction;
-    const isKongFlower = false; // TODO: track if won after kong draw
+    const isKongFlower = this.isWinAfterKong(game, player.id);
     const isRobbingKong = !!pendingAction?.tile && !!game.pendingKongClaim;
 
     
