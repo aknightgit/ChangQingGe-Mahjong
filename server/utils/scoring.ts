@@ -22,8 +22,8 @@ const FIXED_FAN: Record<string, number> = {
   '四百搭': 10     // 手牌有4张百搭
 };
 
-// 番数上限
-const MAX_FAN = 10;
+// 番数上限（仅用于公式计算）
+const MAX_FORMULA_FAN = 10;
 
 // ===== 主计算函数 =====
 
@@ -124,8 +124,8 @@ export function calculateScore(params: {
     details.push(...formulaResult.details);
   }
 
-  // 7. 番数上限
-  baseFan = Math.min(baseFan, MAX_FAN);
+  // 7. 番数上限（仅公式计算受上限，固定番数不受限）
+  // baseFan 可能 > 10（如风碰=40），这是允许的
 
   // 8. 额外翻倍
   let extraMultipliers = 1;
@@ -235,8 +235,8 @@ function calculateFormulaFan(
   // 基础番数 = 2 + 花牌数 + 组合牌点数
   let fan = 2 + flowerCount + comboPoints;
   
-  // 上限
-  fan = Math.min(fan, MAX_FAN);
+  // 上限10
+  fan = Math.min(fan, MAX_FORMULA_FAN);
 
   details.unshift(`公式: 2 + ${flowerCount}花 + ${comboPoints}组合 = ${fan}番`);
 
