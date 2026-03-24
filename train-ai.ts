@@ -3,7 +3,7 @@ import path from 'path';
 
 import { createDeck, shuffleTiles, sortTiles, isFlower, tilesEqual, getTileDisplayName } from './server/utils/tiles';
 import { canWin, detectHandTypes, buildWildTileChecker } from './server/utils/handValidator';
-import { calculateScore, calculateRoundMultiplier, calculateGlobalMultiplier } from './server/utils/scoring';
+import { calculateScore, calculateRoundMultiplier } from './server/utils/scoring';
 import { Tile, TileSuit, Meld, MeldType } from './server/types/game';
 
 const ROUNDS = parseInt(process.argv[2] || '20', 10);
@@ -102,6 +102,7 @@ interface GameRecord {
   dice1: number;
   dice2: number;
   roundMultiplier: number;
+  globalRawCarryAtStart: number;
   globalMultiplierAtStart: number;
   prevRoundWasDraw: boolean;
   prevRoundHadRebel: boolean;
@@ -134,7 +135,7 @@ interface RoundMetrics {
 interface TrainingContext {
   prevRoundWasDraw: boolean;
   prevRoundHadRebel: boolean;
-  globalMultiplier: number;
+  globalMultiplierRawCarry: number; // 不封顶原始继承倍数，用于“8倍封顶但翻倍因子继续传递”
 }
 
 function rnd(min: number, max: number) {
@@ -514,7 +515,8 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
   const dice1 = Math.floor(Math.random() * 6) + 1;
   const dice2 = Math.floor(Math.random() * 6) + 1;
   const roundMultiplier = calculateRoundMultiplier(dice1, dice2);
-  const globalMultiplierAtStart = Math.max(1, Math.min(ctx.globalMultiplier, 8));
+  const globalRawCarryAtStart = Math.max(1, ctx.globalMultiplierRawCarry);
+  const globalMultiplierAtStart = Math.min(globalRawCarryAtStart, 8);
 
   const bailout = new Map<string, Map<string, number>>();
   const settlementDetails: string[] = [];
@@ -570,7 +572,7 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
         wildSuit,
         wildValue,
         roundMultiplier,
-        globalMultiplierAtStart
+        globalRawCarryAtStart
       );
       if (built) {
         const { detail, points } = built;
@@ -657,7 +659,7 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
           wildSuit,
           wildValue,
           roundMultiplier,
-          globalMultiplierAtStart,
+          globalRawCarryAtStart,
           player.name
         );
         if (built) {
@@ -791,6 +793,7 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
     dice1,
     dice2,
     roundMultiplier,
+    globalRawCarryAtStart,
     globalMultiplierAtStart,
     prevRoundWasDraw: ctx.prevRoundWasDraw,
     prevRoundHadRebel: ctx.prevRoundHadRebel,
@@ -807,7 +810,7 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
   let ctx: TrainingContext = {
     prevRoundWasDraw: false,
     prevRoundHadRebel: false,
-    globalMultiplier: 1
+    globalMultiplierRawCarry: 1
   };
 
   for (let i = 1; i <= games; i++) {
@@ -817,19 +820,19 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
     const isDraw = g.reason.includes('流局');
     const hadRebel = false; // 当前训练器未启用造反动作
 
-    let nextGlobal = ctx.globalMultiplier;
+    let nextGlobalRaw = ctx.globalMultiplierRawCarry;
     if (isDraw) {
-      nextGlobal = calculateGlobalMultiplier(nextGlobal, '流局');
+      nextGlobalRaw *= 2;
     } else if (hadRebel) {
-      nextGlobal = calculateGlobalMultiplier(nextGlobal, '造反');
+      nextGlobalRaw *= 2;
     } else {
-      nextGlobal = 1;
+      nextGlobalRaw = 1;
     }
 
     ctx = {
       prevRoundWasDraw: isDraw,
       prevRoundHadRebel: hadRebel,
-      globalMultiplier: nextGlobal
+      globalMultiplierRawCarry: nextGlobalRaw
     };
   }
 
@@ -927,10 +930,13 @@ function appendRoundDoc(metrics: RoundMetrics) {
   lines.push(`- 回合: ${b.rounds}`);
   lines.push(`- 总筹码: ${b.totalPot}`);
   lines.push(`- 百搭: ${b.wildTile}${b.wildGroup ? ` (组: ${b.wildGroup.join('/')})` : ''}`);
-  lines.push(`- 回合倍数信息:`);
+  const combinedGlobal = Math.min(8, b.globalRawCarryAtStart * b.roundMultiplier);
+  lines.push(`- 回合/全局倍数信息:`);
   lines.push(`  - 骰子点数: ${b.dice1} + ${b.dice2}`);
-  lines.push(`  - 本局回合倍数: x${b.roundMultiplier}`);
-  lines.push(`  - 本局开始全局倍数: x${b.globalMultiplierAtStart}`);
+  lines.push(`  - 本局回合倍数(骰子): x${b.roundMultiplier}`);
+  lines.push(`  - 本局开始全局原始继承倍数(未封顶): x${b.globalRawCarryAtStart}`);
+  lines.push(`  - 本局开始全局显示倍数(封顶): x${b.globalMultiplierAtStart}`);
+  lines.push(`  - 综合全局倍数 = min(8, 回合倍数 × 继承倍数) = x${combinedGlobal}`);
   lines.push(`  - 上一局是否流局: ${b.prevRoundWasDraw ? '是' : '否'}`);
   lines.push(`  - 上一局是否造反: ${b.prevRoundHadRebel ? '是' : '否'}`);
 

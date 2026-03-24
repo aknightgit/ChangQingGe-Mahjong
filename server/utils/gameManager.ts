@@ -1010,7 +1010,8 @@ class GameManager {
       wildTileValue: wildValue,
       wildTileGroup: game.wildTileGroup,
       roundMultiplier: 1, // TODO: 从骰子获取
-      globalMultiplier: 1  // TODO: 从游戏状态获取
+      globalMultiplier: 1,  // TODO: 从游戏状态获取
+      globalIncludesRound: true
     });
 
     player.wonFan = scoreResult.baseFan;

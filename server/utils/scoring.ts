@@ -52,13 +52,15 @@ export function calculateScore(params: {
   wildTileSuit?: TileSuit;     // 百搭牌的花色
   wildTileValue?: number;      // 百搭牌的数值
   wildTileGroup?: string[];    // 花牌百搭组
-  roundMultiplier: number;     // 回合倍数
-  globalMultiplier: number;    // 全局倍数
+  roundMultiplier: number;     // 回合倍数（骰子）
+  globalMultiplier: number;    // 全局倍数（流局/造反继承）
+  globalIncludesRound?: boolean; // 是否把回合倍数并入全局倍数（默认true）
 }): ScoreResult {
   const {
     handTiles, exposedMelds, flowerTiles, handTypes,
     isSelfDrawn, isKongFlower, isRobbingKong, isMenQing,
-    wildTileSuit, wildTileValue, wildTileGroup, roundMultiplier, globalMultiplier
+    wildTileSuit, wildTileValue, wildTileGroup, roundMultiplier, globalMultiplier,
+    globalIncludesRound = true
   } = params;
 
   const details: string[] = [];
@@ -168,10 +170,24 @@ export function calculateScore(params: {
 
   // 9. 最终点数
   const effectiveRoundMultiplier = Math.max(1, roundMultiplier);
-  const effectiveGlobalMultiplier = Math.max(1, Math.min(globalMultiplier, 8));
-  const finalPoints = baseFan * extraMultipliers * effectiveRoundMultiplier * effectiveGlobalMultiplier;
+  const baseGlobal = Math.max(1, globalMultiplier);
 
-  details.push(`最终 = ${baseFan} × ${extraMultipliers} × ${effectiveRoundMultiplier} × ${effectiveGlobalMultiplier} = ${finalPoints}`);
+  // 新口径：若全局已包含回合倍数，则综合倍数= min(8, 回合 × 全局)
+  // 否则沿用旧口径（回合倍数与全局倍数分乘）
+  const effectiveGlobalMultiplier = globalIncludesRound
+    ? Math.max(1, Math.min(baseGlobal * effectiveRoundMultiplier, 8))
+    : Math.max(1, Math.min(baseGlobal, 8));
+
+  const finalPoints = globalIncludesRound
+    ? baseFan * extraMultipliers * effectiveGlobalMultiplier
+    : baseFan * extraMultipliers * effectiveRoundMultiplier * effectiveGlobalMultiplier;
+
+  if (globalIncludesRound) {
+    details.push(`综合倍数 = min(8, 回合${effectiveRoundMultiplier} × 全局${baseGlobal}) = ${effectiveGlobalMultiplier}`);
+    details.push(`最终 = ${baseFan} × ${extraMultipliers} × ${effectiveGlobalMultiplier} = ${finalPoints}`);
+  } else {
+    details.push(`最终 = ${baseFan} × ${extraMultipliers} × ${effectiveRoundMultiplier} × ${effectiveGlobalMultiplier} = ${finalPoints}`);
+  }
 
   return {
     baseFan,
