@@ -161,7 +161,9 @@ export interface GameState {
   endedAt?: number;
   finalScores?: Record<string, number>;
   pendingActions: PendingAction[]; // Actions waiting for player response
-  customScoringMode?: 'cheat' | null;
+  customScoringMode?: string; // 百搭牌标识 "suit-value"
+  wildTileGroup?: string[];   // 花牌百搭组 ["梅","兰","竹","菊"] 等
+  freezeRound?: number;       // 冷冻回合数（百搭打出后的冻结）
 }
 
 export interface PendingAction {

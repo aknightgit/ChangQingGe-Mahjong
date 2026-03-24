@@ -330,20 +330,27 @@ class GameManager {
 
     // 从全部144种牌型中随机选百搭
     const allTileTypes: Array<{ suit: TileSuit; value: number }> = [];
-    // 筒万条
     for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
       for (let v = 1; v <= 9; v++) allTileTypes.push({ suit, value: v });
     }
-    // 风牌
     for (let v = 1; v <= 4; v++) allTileTypes.push({ suit: TileSuit.WIND, value: v });
-    // 箭牌
     for (let v = 1; v <= 3; v++) allTileTypes.push({ suit: TileSuit.DRAGON, value: v });
-    // 花牌
     for (let v = 1; v <= 8; v++) allTileTypes.push({ suit: TileSuit.FLOWER, value: v });
     
     const wildIndex = Math.floor(Math.random() * allTileTypes.length);
     const wildType = allTileTypes[wildIndex];
     game.customScoringMode = `${wildType.suit}-${wildType.value}`;
+    
+    // 花牌百搭: 一组花牌(春夏秋冬或梅兰竹菊)全部为百搭
+    if (wildType.suit === TileSuit.FLOWER) {
+      if (wildType.value <= 4) {
+        // 春夏秋冬组
+        game.wildTileGroup = ['1', '2', '3', '4'];
+      } else {
+        // 梅兰竹菊组
+        game.wildTileGroup = ['5', '6', '7', '8'];
+      }
+    }
 
     // 发牌（花牌不补花，放到门口等待回合补花）
     for (const player of game.players) {
@@ -441,6 +448,10 @@ class GameManager {
     // Check pending actions (peng, kong, hu from another player's discard)
     const pendingAction = game.pendingActions.find(pa => pa.playerId === playerId);
     if (pendingAction) {
+      // 冷冻期间不响应
+      if (game.freezeRound && game.roundNumber <= game.freezeRound) {
+        return [];
+      }
       return pendingAction.availableActions;
     }
 
@@ -582,6 +593,14 @@ class GameManager {
     // Check for ting status
     player.isTing = isTing(player.hand.concealedTiles, player.hand.exposedMelds.length);
 
+    // 百搭打出 → 触发冷冻（一圈内不能吃/碰/捉冲）
+    if (this.isWildTile(game, tile)) {
+      game.freezeRound = game.roundNumber;
+      game.pendingActions = []; // 清空所有待响应
+      this.moveToNextPlayer(game);
+      return;
+    }
+
     // Check if other players can peng, kong, or hu
     this.checkPendingActions(game, tile);
 
@@ -599,20 +618,50 @@ class GameManager {
 
     const tile = game.wall.pop()!;
     
-    // 花牌自动补牌
+    // 花牌处理
     if (isFlower(tile)) {
-      player.hand.exposedMelds.push({
-        type: MeldType.TRIPLET, // 花牌放到门口
-        tiles: [tile],
-        isConcealed: false
-      });
-      // 从牌墙尾补牌
-      this.handleDraw(game, player); // 递归补牌
+      // 检查是否是百搭花牌
+      const isWildFlower = this.isWildTile(game, tile);
+      
+      if (isWildFlower) {
+        // 百搭花牌 → 进入手牌，不补花
+        player.hand.concealedTiles.push(tile);
+        player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
+      } else {
+        // 普通花牌 → 放门口，递归补花
+        player.hand.exposedMelds.push({
+          type: MeldType.TRIPLET,
+          tiles: [tile],
+          isConcealed: false
+        });
+        this.handleDraw(game, player); // 递归补花
+      }
       return;
     }
     
     player.hand.concealedTiles.push(tile);
     player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
+  }
+
+  /**
+   * 检查牌是否是百搭
+   */
+  private isWildTile(game: GameState, tile: Tile): boolean {
+    if (!game.customScoringMode) return false;
+    const parts = game.customScoringMode.split('-');
+    if (parts.length < 2) return false;
+    const wildSuit = parts[0] as TileSuit;
+    const wildValue = parseInt(parts[1]);
+    
+    // 普通百搭
+    if (tile.suit === wildSuit && tile.value === wildValue) return true;
+    
+    // 花牌百搭: 一组花牌全部为百搭
+    if (tile.suit === TileSuit.FLOWER && wildSuit === TileSuit.FLOWER && game.wildTileGroup) {
+      return game.wildTileGroup.includes(String(tile.value));
+    }
+    
+    return false;
   }
 
   private handlePeng(game: GameState, player: Player): void {
@@ -823,9 +872,6 @@ class GameManager {
 
     // Continue playing
     this.moveToNextPlayer(game);
-  }
-
-    this.endRound(game, GameEndReason.LAST_PLAYER);
   }
 
   /**

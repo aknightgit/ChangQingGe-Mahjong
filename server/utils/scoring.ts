@@ -51,13 +51,14 @@ export function calculateScore(params: {
   isMenQing: boolean;          // 是否门清
   wildTileSuit?: TileSuit;     // 百搭牌的花色
   wildTileValue?: number;      // 百搭牌的数值
+  wildTileGroup?: string[];    // 花牌百搭组
   roundMultiplier: number;     // 回合倍数
   globalMultiplier: number;    // 全局倍数
 }): ScoreResult {
   const {
     handTiles, exposedMelds, flowerTiles, handTypes,
     isSelfDrawn, isKongFlower, isRobbingKong, isMenQing,
-    wildTileSuit, wildTileValue, roundMultiplier, globalMultiplier
+    wildTileSuit, wildTileValue, wildTileGroup, roundMultiplier, globalMultiplier
   } = params;
 
   const details: string[] = [];
@@ -110,7 +111,7 @@ export function calculateScore(params: {
 
   // 5. 四百搭
   if (wildTileSuit !== undefined && wildTileValue !== undefined) {
-    const wildCount = countWildTiles(handTiles, wildTileSuit, wildTileValue);
+    const wildCount = countWildTiles(handTiles, wildTileSuit, wildTileValue, wildTileGroup);
     if (wildCount >= 4) {
       baseFan = Math.max(baseFan, 10);
       details.push('四百搭 = 10番');
@@ -132,7 +133,7 @@ export function calculateScore(params: {
   
   // 无百搭翻倍
   if (wildTileSuit !== undefined && wildTileValue !== undefined) {
-    const wildCount = countWildTiles(handTiles, wildTileSuit, wildTileValue);
+    const wildCount = countWildTiles(handTiles, wildTileSuit, wildTileValue, wildTileGroup);
     
     // 特殊规则: 百搭是风牌/箭牌时，风一色/风碰可算无百搭
     const isHonorWild = wildTileSuit === TileSuit.WIND || wildTileSuit === TileSuit.DRAGON;
@@ -308,8 +309,15 @@ function hasWindMelds(exposedMelds: Meld[], handTiles: Tile[]): boolean {
   return false;
 }
 
-function countWildTiles(tiles: Tile[], wildSuit: TileSuit, wildValue: number): number {
-  return tiles.filter(t => t.suit === wildSuit && t.value === wildValue).length;
+function countWildTiles(tiles: Tile[], wildSuit: TileSuit, wildValue: number, wildGroup?: string[]): number {
+  return tiles.filter(t => {
+    if (t.suit === wildSuit && t.value === wildValue) return true;
+    // 花牌百搭组
+    if (wildSuit === TileSuit.FLOWER && t.suit === TileSuit.FLOWER && wildGroup) {
+      return wildGroup.includes(String(t.value));
+    }
+    return false;
+  }).length;
 }
 
 /**
