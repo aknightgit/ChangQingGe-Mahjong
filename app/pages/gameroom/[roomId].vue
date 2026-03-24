@@ -210,6 +210,23 @@
                 Pass (过)
               </button>
             </div>
+            <!-- 造反按钮 (五毒散) -->
+            <div v-if="showRebel">
+              <button 
+                class="mahjong-button panel-button rebel-button" 
+                @click="onRebel" 
+                :disabled="isInteractionLocked"
+              >
+                🚨 我要造反!
+              </button>
+              <button 
+                class="mahjong-button panel-button small" 
+                @click="onPass" 
+                :disabled="isInteractionLocked"
+              >
+                不造反
+              </button>
+            </div>
 
             <div class="cheat-actions" v-if="isAdminUser">
               <button 
@@ -501,6 +518,7 @@ const showPeng = computed(() => availableActions.value.includes(ActionType.PENG)
 const showKong = computed(() => availableActions.value.includes(ActionType.KONG))
 const showHu = computed(() => availableActions.value.includes(ActionType.HU))
 const showPass = computed(() => availableActions.value.includes(ActionType.PASS))
+const showRebel = computed(() => availableActions.value.includes(ActionType.REBEL))
 const isMyTurn = computed(() => currentTurnPlayer.value?.id === currentPlayer.value?.id)
 const canCheatHu = computed(
   () => isAdminUser.value && isMyTurn.value && gameState.value?.phase === GamePhase.PLAYING
@@ -510,6 +528,7 @@ const onPeng = () => executeAction(ActionType.PENG)
 const onKong = () => executeAction(ActionType.KONG)
 const onHu = () => executeAction(ActionType.HU)
 const onPass = () => executeAction(ActionType.PASS)
+const onRebel = () => executeAction(ActionType.REBEL)
 const onCheatHu = () => executeAction(ActionType.CHEAT_HU)
 
 // For self-drawn Kong (Concealed or Extended)
@@ -1118,5 +1137,24 @@ const forceDiscard = async (p: Player) => {
 .result-round {
   font-size: 0.8rem;
   color: #9ed3b4;
+}
+
+/* 造反按钮心跳动画 */
+.rebel-button {
+  background: linear-gradient(135deg, #dc2626, #b91c1c) !important;
+  color: white !important;
+  font-weight: 900 !important;
+  font-size: 1.1rem !important;
+  animation: heartbeat 1.2s ease-in-out infinite;
+  box-shadow: 0 0 20px rgba(220, 38, 38, 0.6) !important;
+  border: 2px solid #ffd700 !important;
+}
+
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  15% { transform: scale(1.08); }
+  30% { transform: scale(1); }
+  45% { transform: scale(1.05); }
+  60% { transform: scale(1); }
 }
 </style>

@@ -2,13 +2,18 @@
 export enum TileSuit {
   DOTS = 'dots',      // 筒
   CHARACTERS = 'wan', // 万
-  BAMBOOS = 'tiao'    // 条
+  BAMBOOS = 'tiao',   // 条
+  WIND = 'feng',      // 风牌
+  DRAGON = 'jian',    // 箭牌
+  FLOWER = 'hua'      // 花牌
 }
 
 export interface Tile {
   suit: TileSuit;
-  value: number; // 1-9
+  value: number; // 1-9 for suits, wind/dragon/flower values
   id: string; // Unique identifier for each physical tile
+  isFlower?: boolean; // 花牌标记
+  isWild?: boolean;   // 百搭标记
 }
 
 // Meld types
@@ -69,7 +74,8 @@ export enum ActionType {
   CONCEALED_KONG = 'concealed_kong',
   HU = 'hu',
   PASS = 'pass',
-  CHEAT_HU = 'cheat_hu'
+  CHEAT_HU = 'cheat_hu',
+  REBEL = 'rebel'  // 造反
 }
 
 export interface GameAction {
@@ -128,7 +134,9 @@ export interface GameState {
   endedAt?: number;
   finalScores?: Record<string, number>;
   pendingActions: PendingAction[];
-  customScoringMode?: 'cheat' | null;
+  customScoringMode?: string; // 百搭牌标识
+  wildTileGroup?: string[];   // 花牌百搭组
+  freezeRound?: number;       // 冷冻回合数
 }
 
 export interface PendingAction {
