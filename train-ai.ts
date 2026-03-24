@@ -101,7 +101,9 @@ interface GameRecord {
   reason: string;
   dice1: number;
   dice2: number;
-  roundMultiplier: number;
+  diceMultiplier: number;
+  flowMultiplier: number;      // 流局倍数（造反也算）
+  inheritMultiplier: number;   // 继承倍数（上把全局倍数，含封顶后台继承因子）
   globalRawCarryAtStart: number;
   globalMultiplierAtStart: number;
   prevRoundWasDraw: boolean;
@@ -446,7 +448,7 @@ function buildWinDetail(
   wildGroup: string[] | null,
   wildSuit: TileSuit,
   wildValue: number,
-  roundMultiplier: number,
+  diceMultiplier: number,
   globalMultiplier: number,
   from?: string
 ): { detail: WinDetail; points: number } | null {
@@ -473,7 +475,7 @@ function buildWinDetail(
     wildTileSuit: wildSuit,
     wildTileValue: wildValue,
     wildTileGroup: wildGroup || undefined,
-    roundMultiplier,
+    roundMultiplier: diceMultiplier,
     globalMultiplier
   });
 
@@ -514,9 +516,17 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
   // 本局倍数上下文
   const dice1 = Math.floor(Math.random() * 6) + 1;
   const dice2 = Math.floor(Math.random() * 6) + 1;
-  const roundMultiplier = calculateRoundMultiplier(dice1, dice2);
+  const diceMultiplier = calculateRoundMultiplier(dice1, dice2);
+
+  // 命名统一：
+  // 全局倍数 = min(8, 骰子倍数 × 流局倍数(造反也算) × 继承倍数)
+  const flowMultiplier = (ctx.prevRoundWasDraw || ctx.prevRoundHadRebel) ? 2 : 1;
   const globalRawCarryAtStart = Math.max(1, ctx.globalMultiplierRawCarry);
-  const globalMultiplierAtStart = Math.min(globalRawCarryAtStart, 8);
+  const inheritMultiplier = Math.max(1, Math.floor(globalRawCarryAtStart / flowMultiplier));
+  const globalMultiplierAtStart = Math.min(8, diceMultiplier * flowMultiplier * inheritMultiplier);
+
+  // 传给计分器：回合=骰子倍数；全局=流局倍数*继承倍数
+  const globalBaseForScore = flowMultiplier * inheritMultiplier;
 
   const bailout = new Map<string, Map<string, number>>();
   const settlementDetails: string[] = [];
@@ -571,8 +581,8 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
         wildGroup,
         wildSuit,
         wildValue,
-        roundMultiplier,
-        globalRawCarryAtStart
+        diceMultiplier,
+        globalBaseForScore
       );
       if (built) {
         const { detail, points } = built;
@@ -658,8 +668,8 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
           wildGroup,
           wildSuit,
           wildValue,
-          roundMultiplier,
-          globalRawCarryAtStart,
+          diceMultiplier,
+          globalBaseForScore,
           player.name
         );
         if (built) {
@@ -792,7 +802,9 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
     reason,
     dice1,
     dice2,
-    roundMultiplier,
+    diceMultiplier,
+    flowMultiplier,
+    inheritMultiplier,
     globalRawCarryAtStart,
     globalMultiplierAtStart,
     prevRoundWasDraw: ctx.prevRoundWasDraw,
@@ -930,13 +942,15 @@ function appendRoundDoc(metrics: RoundMetrics) {
   lines.push(`- 回合: ${b.rounds}`);
   lines.push(`- 总筹码: ${b.totalPot}`);
   lines.push(`- 百搭: ${b.wildTile}${b.wildGroup ? ` (组: ${b.wildGroup.join('/')})` : ''}`);
-  const combinedGlobal = Math.min(8, b.globalRawCarryAtStart * b.roundMultiplier);
+  const combinedGlobal = Math.min(8, b.diceMultiplier * b.flowMultiplier * b.inheritMultiplier);
   lines.push(`- 回合/全局倍数信息:`);
   lines.push(`  - 骰子点数: ${b.dice1} + ${b.dice2}`);
-  lines.push(`  - 本局回合倍数(骰子): x${b.roundMultiplier}`);
+  lines.push(`  - 骰子倍数（清晰明了）: x${b.diceMultiplier}`);
+  lines.push(`  - 流局倍数（造反也算）: x${b.flowMultiplier}`);
+  lines.push(`  - 继承倍数（上把的全局倍数）: x${b.inheritMultiplier}`);
+  lines.push(`  - 全局倍数 = min(8, 骰子倍数（清晰明了） × 流局倍数（造反也算） × 继承倍数（上把的全局倍数）) = x${combinedGlobal}`);
   lines.push(`  - 本局开始全局原始继承倍数(未封顶): x${b.globalRawCarryAtStart}`);
   lines.push(`  - 本局开始全局显示倍数(封顶): x${b.globalMultiplierAtStart}`);
-  lines.push(`  - 综合全局倍数 = min(8, 回合倍数 × 继承倍数) = x${combinedGlobal}`);
   lines.push(`  - 上一局是否流局: ${b.prevRoundWasDraw ? '是' : '否'}`);
   lines.push(`  - 上一局是否造反: ${b.prevRoundHadRebel ? '是' : '否'}`);
 
