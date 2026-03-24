@@ -137,25 +137,21 @@ const allDragon: Tile[] = [
   makeTile(TileSuit.WIND, 4), makeTile(TileSuit.WIND, 4),
 ];
 const allDragonTypes = detectHandTypes(allDragon, [fengExposedMeld2], true, 0, null);
-test('纯箭牌不算风一色', !allDragonTypes.includes(HandType.ALL_WIND));
+test('纯箭牌不算风一色(但可参与风碰)', !allDragonTypes.includes(HandType.ALL_WIND));
 
-// 风碰: 全部风牌 + 碰碰胡 (需要门口牌配合)
-// 手牌: 东东东 南南南 西西西 北北 (11张) + 门口: 北北北 (3张) = 14张
-const fengPengExposedMeld: Meld = {
-  type: MeldType.TRIPLET,
-  tiles: [makeTile(TileSuit.WIND, 4), makeTile(TileSuit.WIND, 4), makeTile(TileSuit.WIND, 4)],
-  isConcealed: false
-};
+// 风碰: 风牌+箭牌 + 碰碰胡
+// 东东东 南南南 西西西 中中中 北北 = 3+3+3+3+2=14 ✅
 const fengPengHand: Tile[] = [
   makeTile(TileSuit.WIND, 1), makeTile(TileSuit.WIND, 1), makeTile(TileSuit.WIND, 1),
   makeTile(TileSuit.WIND, 2), makeTile(TileSuit.WIND, 2), makeTile(TileSuit.WIND, 2),
   makeTile(TileSuit.WIND, 3), makeTile(TileSuit.WIND, 3), makeTile(TileSuit.WIND, 3),
+  makeTile(TileSuit.DRAGON, 1), makeTile(TileSuit.DRAGON, 1), makeTile(TileSuit.DRAGON, 1), // 中中中(箭牌暗杠)
   makeTile(TileSuit.WIND, 4), makeTile(TileSuit.WIND, 4),
 ];
-const fengPengTypes = detectHandTypes(fengPengHand, [fengPengExposedMeld], true, 0, null);
-test('风碰检测(纯风牌+门口牌)', fengPengTypes.includes(HandType.FENG_PENG));
+const fengPengTypes = detectHandTypes(fengPengHand, [], true, 0, null);
+test('风碰检测(风+箭)', fengPengTypes.includes(HandType.FENG_PENG));
 test('风碰含碰碰胡', fengPengTypes.includes(HandType.ALL_TRIPLETS));
-test('风碰含风一色', fengPengTypes.includes(HandType.ALL_WIND));
+test('含箭牌的风碰不含风一色', !fengPengTypes.includes(HandType.ALL_WIND));
 
 // 混一色: 123万 456万 东东东 22333万 (14张)
 const hunYiSe: Tile[] = [
@@ -229,7 +225,7 @@ test('无百搭+门清=×4', pengScoreBoth.extraMultipliers === 4);
 
 // 百搭是风牌+风碰=可算无百搭 (纯风牌+门口牌)
 const windWithWildScore = calculateScore({
-  handTiles: fengPengHand, exposedMelds: [fengPengExposedMeld], flowerTiles: [],
+  handTiles: fengPengHand, exposedMelds: [], flowerTiles: [],
   handTypes: [HandType.FENG_PENG, HandType.ALL_WIND, HandType.ALL_TRIPLETS],
   isSelfDrawn: true, isKongFlower: false, isRobbingKong: false, isMenQing: false,
   wildTileSuit: TileSuit.WIND, wildTileValue: 1, // 百搭=东(风牌)

@@ -60,13 +60,19 @@ export function detectHandTypes(
   
   // Check for all honor tiles (风一色) — 包括风牌+箭牌+百搭
   // 风碰也基于此检测
-  if (isAllHonorHand(nonFlowerTiles, wildTileId)) {
+  // 风一色: 全是风牌（不含箭牌）
+  const isPureWind = isAllWindOnly(nonFlowerTiles, wildTileId);
+  // 风碰范围: 风牌+箭牌（含暗杠）
+  const isAllHonor = isAllWindOrDragon(nonFlowerTiles, wildTileId);
+  
+  if (isPureWind) {
     types.push(HandType.ALL_WIND);
-    
-    // 风碰 = 风一色 + 碰碰胡
     if (types.includes(HandType.ALL_TRIPLETS)) {
       types.push(HandType.FENG_PENG);
     }
+  } else if (isAllHonor && types.includes(HandType.ALL_TRIPLETS)) {
+    // 纯箭牌/风牌混搭+碰碰胡 = 风碰（但不算风一色）
+    types.push(HandType.FENG_PENG);
   }
   
   // Check for full flush (清一色) - all same number suit
@@ -166,11 +172,9 @@ function isHalfFlushHand(tiles: Tile[]): boolean {
 }
 
 /**
- * Check if all tiles are wind tiles ONLY (风一色/风碰)
- * 注意: 不包括箭牌，只包括东南西北
+ * 风一色: 纯风牌（不含箭牌）
  */
-function isAllHonorHand(tiles: Tile[], wildTileId: string | null): boolean {
-  // 解析百搭牌信息
+function isAllWindOnly(tiles: Tile[], wildTileId: string | null): boolean {
   let wildSuit: TileSuit | null = null;
   let wildValue: number | null = null;
   if (wildTileId) {
@@ -180,11 +184,30 @@ function isAllHonorHand(tiles: Tile[], wildTileId: string | null): boolean {
       wildValue = parseInt(parts[1]);
     }
   }
-  
   return tiles.every(t => {
-    if (t.suit === TileSuit.WIND) return true; // 风牌 ✅
-    // 箭牌 ❌ — 根据规则文档，风一色只含风牌
-    if (wildSuit && t.suit === wildSuit && t.value === wildValue) return true; // 百搭 ✅
+    if (t.suit === TileSuit.WIND) return true;
+    if (wildSuit && t.suit === wildSuit && t.value === wildValue) return true;
+    return false;
+  });
+}
+
+/**
+ * 风碰范围: 风牌+箭牌+百搭
+ */
+function isAllWindOrDragon(tiles: Tile[], wildTileId: string | null): boolean {
+  let wildSuit: TileSuit | null = null;
+  let wildValue: number | null = null;
+  if (wildTileId) {
+    const parts = wildTileId.split('-');
+    if (parts.length >= 2) {
+      wildSuit = parts[0] as TileSuit;
+      wildValue = parseInt(parts[1]);
+    }
+  }
+  return tiles.every(t => {
+    if (t.suit === TileSuit.WIND) return true;
+    if (t.suit === TileSuit.DRAGON) return true;
+    if (wildSuit && t.suit === wildSuit && t.value === wildValue) return true;
     return false;
   });
 }
