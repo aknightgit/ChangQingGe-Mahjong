@@ -6,26 +6,10 @@
       <p class="mahjong-subtitle">上海麻将 × 四川麻将</p>
 
       <p class="mahjong-text">
-        Sign in with your account from the database or through Google OAuth:
+        Select a player to sign in:
       </p>
 
       <div class="login-buttons">
-        <div class="section">
-          <div class="section-header">
-            <span>Google OAuth</span>
-          </div>
-          <button
-            class="mahjong-button oauth-btn"
-            type="button"
-            @click="handleGoogleOAuth"
-            :disabled="isRedirecting"
-          >
-            <span v-if="!isRedirecting">Continue with Google</span>
-            <span v-else>Redirecting…</span>
-          </button>
-          <p v-if="oauthError" class="status-text error">{{ oauthError }}</p>
-        </div>
-
         <div class="section">
           <div class="section-header">
             <span>Players</span>
@@ -73,29 +57,11 @@
 <script setup>
 const { data: usersData, pending: usersPending, error: usersError, refresh } = await useFetch('/api/auth/users')
 
-const handleGoogleOAuth = async () => {
-  if (isRedirecting.value) return
-  oauthError.value = ''
-  isRedirecting.value = true
-
-  try {
-    const response = await $fetch('/api/auth/google/login')
-    if (!response?.authUrl) throw new Error('Missing Google auth URL')
-    window.location.href = response.authUrl
-  } catch (error) {
-    console.error('Failed to start Google OAuth', error)
-    oauthError.value = error?.data?.message || error?.message || 'Unable to start Google login.'
-    isRedirecting.value = false
-  }
-}
-
 const playerUsers = computed(() => (usersData.value?.users || []).filter((u) => !u.isAdmin))
 const adminUsers = computed(() => (usersData.value?.users || []).filter((u) => u.isAdmin))
 
 const isSubmitting = ref(false)
 const loginError = ref('')
-const oauthError = ref('')
-const isRedirecting = ref(false)
 
 const refreshUsers = () => {
   loginError.value = ''
