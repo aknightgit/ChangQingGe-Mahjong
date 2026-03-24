@@ -3,7 +3,7 @@ import path from 'path';
 
 import { createDeck, shuffleTiles, sortTiles, isFlower, tilesEqual, getTileDisplayName } from './server/utils/tiles';
 import { canWin, detectHandTypes, buildWildTileChecker } from './server/utils/handValidator';
-import { calculateScore } from './server/utils/scoring';
+import { calculateScore, calculateRoundMultiplier, calculateGlobalMultiplier } from './server/utils/scoring';
 import { Tile, TileSuit, Meld, MeldType } from './server/types/game';
 
 const ROUNDS = parseInt(process.argv[2] || '20', 10);
@@ -67,6 +67,12 @@ interface GameRecord {
   wildGroup: string[] | null;
   rounds: number;
   reason: string;
+  dice1: number;
+  dice2: number;
+  roundMultiplier: number;
+  globalMultiplierAtStart: number;
+  prevRoundWasDraw: boolean;
+  prevRoundHadRebel: boolean;
   winners: WinDetail[];
   losers: Array<{ name: string; score: number }>;
   relations: Relation[];
@@ -88,6 +94,12 @@ interface RoundMetrics {
   avgPot: number;
   fitness: number;
   biggest: GameRecord;
+}
+
+interface TrainingContext {
+  prevRoundWasDraw: boolean;
+  prevRoundHadRebel: boolean;
+  globalMultiplier: number;
 }
 
 function rnd(min: number, max: number) {
@@ -315,6 +327,8 @@ function buildWinDetail(
   wildGroup: string[] | null,
   wildSuit: TileSuit,
   wildValue: number,
+  roundMultiplier: number,
+  globalMultiplier: number,
   from?: string
 ): { detail: WinDetail; points: number } | null {
   const handTypes = detectHandTypes(
@@ -343,8 +357,8 @@ function buildWinDetail(
     wildTileSuit: wildSuit,
     wildTileValue: wildValue,
     wildTileGroup: wildGroup || undefined,
-    roundMultiplier: 1,
-    globalMultiplier: 1
+    roundMultiplier,
+    globalMultiplier
   });
 
   return {
@@ -363,7 +377,7 @@ function buildWinDetail(
   };
 }
 
-function simulateOne(gameNum: number, policy: Policy): GameRecord {
+function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): GameRecord {
   const wall = shuffleTiles(createDeck());
   const players: PlayerState[] = PLAYER_NAMES.map((name, i) => ({
     index: i,
@@ -377,6 +391,12 @@ function simulateOne(gameNum: number, policy: Policy): GameRecord {
 
   const { wildTileId, wildGroup, wildSuit, wildValue } = pickWild();
   const isWild = buildWildTileChecker(wildTileId, wildGroup || undefined);
+
+  // 本局倍数上下文
+  const dice1 = Math.floor(Math.random() * 6) + 1;
+  const dice2 = Math.floor(Math.random() * 6) + 1;
+  const roundMultiplier = calculateRoundMultiplier(dice1, dice2);
+  const globalMultiplierAtStart = Math.max(1, Math.min(ctx.globalMultiplier, 8));
 
   const bailout = new Map<string, Map<string, number>>();
   const settlementDetails: string[] = [];
@@ -415,7 +435,17 @@ function simulateOne(gameNum: number, policy: Policy): GameRecord {
 
     const selfWin = canWin(player.hand, player.melds.length, isWild);
     if (selfWin.canWin && Math.random() < policy.selfWinChance) {
-      const built = buildWinDetail(player, '自摸', [...player.hand], wildTileId, wildGroup, wildSuit, wildValue);
+      const built = buildWinDetail(
+        player,
+        '自摸',
+        [...player.hand],
+        wildTileId,
+        wildGroup,
+        wildSuit,
+        wildValue,
+        roundMultiplier,
+        globalMultiplierAtStart
+      );
       if (built) {
         const { detail, points } = built;
         player.winDetail = detail;
@@ -473,7 +503,18 @@ function simulateOne(gameNum: number, policy: Policy): GameRecord {
       if (!can.canWin) continue;
 
       if (Math.random() < policy.discardHuChance) {
-        const built = buildWinDetail(other, '放冲', testHand, wildTileId, wildGroup, wildSuit, wildValue, player.name);
+        const built = buildWinDetail(
+          other,
+          '放冲',
+          testHand,
+          wildTileId,
+          wildGroup,
+          wildSuit,
+          wildValue,
+          roundMultiplier,
+          globalMultiplierAtStart,
+          player.name
+        );
         if (built) {
           huCandidates.push({ idx: i, points: built.points, detail: built.detail });
         }
@@ -582,6 +623,12 @@ function simulateOne(gameNum: number, policy: Policy): GameRecord {
     wildGroup,
     rounds,
     reason,
+    dice1,
+    dice2,
+    roundMultiplier,
+    globalMultiplierAtStart,
+    prevRoundWasDraw: ctx.prevRoundWasDraw,
+    prevRoundHadRebel: ctx.prevRoundHadRebel,
     winners,
     losers,
     relations: getRelations(bailout),
@@ -592,8 +639,33 @@ function simulateOne(gameNum: number, policy: Policy): GameRecord {
 
 function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
   const all: GameRecord[] = [];
+  let ctx: TrainingContext = {
+    prevRoundWasDraw: false,
+    prevRoundHadRebel: false,
+    globalMultiplier: 1
+  };
+
   for (let i = 1; i <= games; i++) {
-    all.push(simulateOne(i, policy));
+    const g = simulateOne(i, policy, ctx);
+    all.push(g);
+
+    const isDraw = g.reason.includes('流局');
+    const hadRebel = false; // 当前训练器未启用造反动作
+
+    let nextGlobal = ctx.globalMultiplier;
+    if (isDraw) {
+      nextGlobal = calculateGlobalMultiplier(nextGlobal, '流局');
+    } else if (hadRebel) {
+      nextGlobal = calculateGlobalMultiplier(nextGlobal, '造反');
+    } else {
+      nextGlobal = 1;
+    }
+
+    ctx = {
+      prevRoundWasDraw: isDraw,
+      prevRoundHadRebel: hadRebel,
+      globalMultiplier: nextGlobal
+    };
   }
 
   const huGames = all.filter(g => g.winners.length > 0).length;
@@ -657,6 +729,12 @@ function appendRoundDoc(metrics: RoundMetrics) {
   lines.push(`- 回合: ${b.rounds}`);
   lines.push(`- 总筹码: ${b.totalPot}`);
   lines.push(`- 百搭: ${b.wildTile}${b.wildGroup ? ` (组: ${b.wildGroup.join('/')})` : ''}`);
+  lines.push(`- 回合倍数信息:`);
+  lines.push(`  - 骰子点数: ${b.dice1} + ${b.dice2}`);
+  lines.push(`  - 本局回合倍数: x${b.roundMultiplier}`);
+  lines.push(`  - 本局开始全局倍数: x${b.globalMultiplierAtStart}`);
+  lines.push(`  - 上一局是否流局: ${b.prevRoundWasDraw ? '是' : '否'}`);
+  lines.push(`  - 上一局是否造反: ${b.prevRoundHadRebel ? '是' : '否'}`);
 
   lines.push('');
   lines.push('- 输出该局所有胡牌玩家明细');
