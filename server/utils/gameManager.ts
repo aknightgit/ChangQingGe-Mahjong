@@ -190,7 +190,7 @@ class GameManager {
   /**
    * Create a new game
    */
-  async createGame(playerName: string): Promise<{ gameId: string; playerId: string }> {
+  async createGame(playerName: string, options?: { freezeDurationMs?: number; diceRollCount?: number }): Promise<{ gameId: string; playerId: string }> {
     await this.hydrateFromDatabase();
 
     const gameId = randomUUID();
@@ -235,7 +235,9 @@ class GameManager {
       endedAt: undefined,
       customScoringMode: null,
       finalScores: undefined,
-      pendingActions: []
+      pendingActions: [],
+      freezeDurationMs: options?.freezeDurationMs ?? 1000,
+      diceRollCount: options?.diceRollCount ?? 2
     };
 
     this.games.set(gameId, game);

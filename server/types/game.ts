@@ -161,10 +161,13 @@ export interface GameState {
   lastActionTime: number;
   endedAt?: number;
   finalScores?: Record<string, number>;
-  pendingActions: PendingAction[]; // Actions waiting for player response
-  customScoringMode?: string; // 百搭牌标识 "suit-value"
-  wildTileGroup?: string[];   // 花牌百搭组 ["梅","兰","竹","菊"] 等
-  freezeRound?: number;       // 冷冻回合数（百搭打出后的冻结）
+  pendingActions: PendingAction[];
+  customScoringMode?: string;
+  wildTileGroup?: string[];
+  freezeRound?: number;
+  // 可配置参数
+  freezeDurationMs?: number;  // 冻结时长（毫秒），默认1000
+  diceRollCount?: number;     // 掷骰次数，默认2
 }
 
 export interface PendingAction {
