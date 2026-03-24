@@ -9,9 +9,11 @@ import { Tile, TileSuit, Meld, MeldType } from './server/types/game';
 const ROUNDS = parseInt(process.argv[2] || '20', 10);
 const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000', 10);
 const OUT_DIR = '/data/training';
-const OUT_FILE = path.join(OUT_DIR, 'ai-training-log.md');
-const POLICY_DIR = path.join(OUT_DIR, 'policies');
-const BEST_POLICY_FILE = path.join(OUT_DIR, 'best-policy.json');
+const RUN_TAG = new Date().toISOString().replace(/[:.]/g, '-');
+const OUT_FILE = path.join(OUT_DIR, `ai-training-log-${RUN_TAG}.md`);
+const POLICY_DIR = path.join(OUT_DIR, 'policies', RUN_TAG);
+const BEST_POLICY_FILE = path.join(OUT_DIR, `best-policy-${RUN_TAG}.json`);
+const BEST_POLICY_LATEST = path.join(OUT_DIR, 'best-policy.json');
 
 const PLAYER_NAMES = ['K哥', 'AI东', 'AI西', 'AI北'];
 
@@ -36,6 +38,14 @@ interface Policy {
   pengWildBoost: number;
   kongWildBoost: number;
   chowWildPenalty: number;
+
+  // 百搭多时更积极建立三口/四口（偏向吃碰，不急着胡）
+  bailoutBuildWildBoost: number;
+  bailoutHuPenaltyPerMeld: number;
+
+  // 起手风箭多时倾向做风一色
+  honorRushThreshold: number;
+  honorRushBoost: number;
 
   // 出牌策略（做大牌）
   pairWeight: number;
@@ -66,6 +76,7 @@ interface PlayerState {
   flowers: Tile[];
   status: PlayerStatus;
   score: number;
+  initialHonorCount: number; // 起手风向箭牌数
   winDetail?: WinDetail;
 }
 
@@ -143,6 +154,12 @@ function makePolicy(seed = 'base'): Policy {
     kongWildBoost: 0.2,
     chowWildPenalty: 0.12,
 
+    bailoutBuildWildBoost: 0.18,
+    bailoutHuPenaltyPerMeld: 0.08,
+
+    honorRushThreshold: 5,
+    honorRushBoost: 0.2,
+
     pairWeight: 4,
     nearWeight: 2,
     honorPairBonus: 2,
@@ -169,6 +186,12 @@ function mutate(base: Policy, idx: number): Policy {
     pengWildBoost: clamp(base.pengWildBoost + rnd(-0.08, 0.08), 0, 0.35),
     kongWildBoost: clamp(base.kongWildBoost + rnd(-0.08, 0.08), 0, 0.4),
     chowWildPenalty: clamp(base.chowWildPenalty + rnd(-0.06, 0.06), 0, 0.3),
+
+    bailoutBuildWildBoost: clamp(base.bailoutBuildWildBoost + rnd(-0.08, 0.08), 0, 0.45),
+    bailoutHuPenaltyPerMeld: clamp(base.bailoutHuPenaltyPerMeld + rnd(-0.05, 0.05), 0, 0.3),
+
+    honorRushThreshold: Math.round(clamp(base.honorRushThreshold + rnd(-1, 1), 2, 8)),
+    honorRushBoost: clamp(base.honorRushBoost + rnd(-0.08, 0.08), 0, 0.45),
 
     pairWeight: clamp(base.pairWeight + rnd(-1.2, 1.2), 1, 9),
     nearWeight: clamp(base.nearWeight + rnd(-1, 1), 0.1, 5),
@@ -294,7 +317,7 @@ function removeTile(hand: Tile[], tile: Tile) {
   if (idx >= 0) hand.splice(idx, 1);
 }
 
-function keepScore(hand: Tile[], tile: Tile, isWild: (t: Tile) => boolean, policy: Policy): number {
+function keepScore(hand: Tile[], tile: Tile, isWild: (t: Tile) => boolean, policy: Policy, honorRush = false): number {
   if (isWild(tile)) return policy.wildKeepPenalty;
 
   const wildCount = hand.filter(t => isWild(t)).length;
@@ -307,6 +330,16 @@ function keepScore(hand: Tile[], tile: Tile, isWild: (t: Tile) => boolean, polic
   // 偏向保留刻子胚
   if (same >= 3) {
     score += policy.tripletKeepBonus * attackScale;
+  }
+
+  // 起手风箭多时，倾向做风一色：强留风箭，弱留数牌
+  const isHonor = tile.suit === TileSuit.WIND || tile.suit === TileSuit.DRAGON;
+  if (honorRush) {
+    if (isHonor) {
+      score += policy.honorRushBoost * 10;
+    } else {
+      score -= policy.honorRushBoost * 6;
+    }
   }
 
   // 偏向单花色（冲清一色/清碰）
@@ -341,11 +374,11 @@ function keepScore(hand: Tile[], tile: Tile, isWild: (t: Tile) => boolean, polic
   return score;
 }
 
-function pickDiscard(hand: Tile[], isWild: (t: Tile) => boolean, policy: Policy): Tile {
+function pickDiscard(hand: Tile[], isWild: (t: Tile) => boolean, policy: Policy, honorRush = false): Tile {
   let best = hand[0]!;
   let bestScore = Number.POSITIVE_INFINITY;
   for (const t of hand) {
-    const s = keepScore(hand, t, isWild, policy);
+    const s = keepScore(hand, t, isWild, policy, honorRush);
     if (s < bestScore) {
       bestScore = s;
       best = t;
@@ -451,7 +484,8 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
     melds: [],
     flowers: [],
     status: 'playing',
-    score: 0
+    score: 0,
+    initialHonorCount: 0
   }));
 
   const { wildTileId, wildGroup, wildSuit, wildValue } = pickWild();
@@ -470,6 +504,11 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
     for (let p = 0; p < 4; p++) drawTile(players[p]!, wall, isWild);
   }
   drawTile(players[0]!, wall, isWild);
+
+  // 记录起手风/箭数量
+  for (const p of players) {
+    p.initialHonorCount = p.hand.filter(t => t.suit === TileSuit.WIND || t.suit === TileSuit.DRAGON).length;
+  }
 
   let current = 0;
   let rounds = 0;
@@ -500,6 +539,7 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
 
     const selfWin = canWin(player.hand, player.melds.length, isWild);
     const wildCountNow = player.hand.filter(t => isWild(t)).length;
+    const honorRush = player.initialHonorCount >= policy.honorRushThreshold;
     const selfWinChanceNow = clamp(policy.selfWinChance + wildCountNow * policy.selfWinWildBoost, 0.65, 0.999);
     if (selfWin.canWin && Math.random() < selfWinChanceNow) {
       const built = buildWinDetail(
@@ -556,7 +596,7 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
       }
     }
 
-    const discard = pickDiscard(player.hand, isWild, policy);
+    const discard = pickDiscard(player.hand, isWild, policy, honorRush);
     removeTile(player.hand, discard);
 
     const huCandidates: Array<{ idx: number; points: number; detail: WinDetail }> = [];
@@ -569,12 +609,23 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
       const can = canWin(testHand, other.melds.length, isWild);
       if (!can.canWin) continue;
 
-      // 策略：偏向自摸不捉冲；百搭越多越贪大牌
+      // 策略：偏向自摸不捉冲；百搭越多越贪大牌；为三口/四口构建让路
       const otherWildCount = other.hand.filter(t => isWild(t)).length;
       const hasOpenMeld = other.melds.some(m => m.type === MeldType.SEQUENCE || m.type === MeldType.TRIPLET);
       let huOnDiscardChance = policy.discardHuChance;
       huOnDiscardChance -= otherWildCount * policy.discardHuWildPenalty;
       if (!hasOpenMeld) huOnDiscardChance -= policy.discardHuMenQingPenalty;
+
+      // 已有副露越多，越倾向继续做三口/四口，不急着捉冲
+      const bailoutBuildPressure = other.melds.length * policy.bailoutHuPenaltyPerMeld;
+      huOnDiscardChance -= bailoutBuildPressure;
+
+      // 起手风箭多：更倾向风一色，自摸优先，降低捉冲
+      const honorRushOther = other.initialHonorCount >= policy.honorRushThreshold;
+      if (honorRushOther) {
+        huOnDiscardChance -= policy.honorRushBoost * 0.6;
+      }
+
       huOnDiscardChance = clamp(huOnDiscardChance, 0.05, 0.95);
 
       if (Math.random() < huOnDiscardChance) {
@@ -639,8 +690,18 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
       const same = other.hand.filter(t => tilesEqual(t, discard));
 
       const otherWildCount = other.hand.filter(t => isWild(t)).length;
-      const kongChanceNow = clamp(policy.kongChance + otherWildCount * policy.kongWildBoost, 0.02, 0.95);
-      const pengChanceNow = clamp(policy.pengChance + otherWildCount * policy.pengWildBoost, 0.02, 0.95);
+      const honorRushOther = other.initialHonorCount >= policy.honorRushThreshold;
+
+      // 百搭越多，越积极吃碰杠建立三口/四口关系
+      const bailoutBoost = otherWildCount * policy.bailoutBuildWildBoost;
+      let kongChanceNow = clamp(policy.kongChance + otherWildCount * policy.kongWildBoost + bailoutBoost, 0.02, 0.97);
+      let pengChanceNow = clamp(policy.pengChance + otherWildCount * policy.pengWildBoost + bailoutBoost, 0.02, 0.97);
+
+      // 风箭开局时减少吃，强化碰杠（冲风一色）
+      if (honorRushOther) {
+        kongChanceNow = clamp(kongChanceNow + policy.honorRushBoost * 0.4, 0.02, 0.97);
+        pengChanceNow = clamp(pengChanceNow + policy.honorRushBoost * 0.6, 0.02, 0.97);
+      }
 
       if (same.length >= 3 && Math.random() < kongChanceNow) {
         const use = same.slice(0, 3);
@@ -674,7 +735,11 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
     if (downPlayer.status === 'playing') {
       const seqs = findChowSequences(downPlayer.hand, discard);
       const downWildCount = downPlayer.hand.filter(t => isWild(t)).length;
-      const chowChanceNow = clamp(policy.chowChance - downWildCount * policy.chowWildPenalty, 0.01, 0.9);
+      const honorRushDown = downPlayer.initialHonorCount >= policy.honorRushThreshold;
+      let chowChanceNow = clamp(policy.chowChance - downWildCount * policy.chowWildPenalty, 0.01, 0.9);
+      if (honorRushDown) {
+        chowChanceNow = clamp(chowChanceNow - policy.honorRushBoost * 0.8, 0.01, 0.9);
+      }
       if (seqs.length > 0 && Math.random() < chowChanceNow) {
         const seq = seqs[0]!;
         const inHand = seq.filter(t => t.id !== discard.id);
@@ -799,6 +864,8 @@ function appendRoundDoc(metrics: RoundMetrics) {
 
   lines.push('');
   lines.push('### 本轮最佳策略参数');
+  lines.push(`- 参数快照: ${path.join(POLICY_DIR, `round-${String(metrics.round).padStart(3, '0')}.json`)}`);
+  lines.push(`- 最新参数: ${BEST_POLICY_LATEST}`);
   lines.push('```json');
   lines.push(JSON.stringify(p, null, 2));
   lines.push('```');
@@ -873,6 +940,7 @@ function savePolicySnapshot(round: number, policy: Policy, metrics?: RoundMetric
   };
 
   fs.writeFileSync(BEST_POLICY_FILE, JSON.stringify(payload, null, 2), 'utf8');
+  fs.writeFileSync(BEST_POLICY_LATEST, JSON.stringify(payload, null, 2), 'utf8');
 
   const roundFile = path.join(POLICY_DIR, `round-${String(round).padStart(3, '0')}.json`);
   fs.writeFileSync(roundFile, JSON.stringify(payload, null, 2), 'utf8');
@@ -895,6 +963,23 @@ function ensureDoc() {
   }
 }
 
+function loadSeedPolicy(): Policy | null {
+  if (!fs.existsSync(BEST_POLICY_LATEST)) return null;
+  try {
+    const raw = fs.readFileSync(BEST_POLICY_LATEST, 'utf8');
+    const parsed = JSON.parse(raw);
+    const p = parsed?.policy;
+    if (!p || typeof p !== 'object') return null;
+    return {
+      ...makePolicy('seed-from-latest'),
+      ...p,
+      id: 'seed-from-latest'
+    } as Policy;
+  } catch {
+    return null;
+  }
+}
+
 async function main() {
   ensureDoc();
 
@@ -902,7 +987,8 @@ async function main() {
   console.log(`📝 训练日志输出: ${OUT_FILE}`);
   console.log(`🧩 参数输出: ${BEST_POLICY_FILE}`);
 
-  let champion = makePolicy('champion-r0');
+  let champion = loadSeedPolicy() || makePolicy('champion-r0');
+  console.log(`🌱 初始策略来源: ${champion.id}`);
 
   for (let round = 1; round <= ROUNDS; round++) {
     const candidates: Policy[] = [
