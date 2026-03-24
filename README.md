@@ -1,128 +1,84 @@
-# Blood on Mahjong
+# 长清阁麻将 ChangQingGe-Mahjong
 
-A real-time multiplayer Sichuan Mahjong (血战到底) web application with WebSocket-based gameplay, Google OAuth authentication, and Kubernetes deployment.
+四川血战到底多人在线麻将游戏
 
----
+## 项目来源
 
-## Demo
+Forked from [Blood-On-Mahjong](https://github.com/quiet98k/Blood-On-Mahjong)
 
-![Waiting Room](screenshots/waiting-room.png)
-![Game Room](screenshots/game.png)
-![Results](screenshots/result.png)
+## 技术栈
 
----
+- **前端**: Nuxt 4 (Vue 3) + Nuxt UI 3
+- **后端**: Nitro (Nuxt Server)
+- **实时通信**: Socket.IO + Redis Adapter
+- **数据库**: MongoDB
+- **认证**: Google OAuth 2.0
+- **部署**: Docker + Kubernetes
 
-## Features
+## 已实现功能
 
-- **Real-Time Multiplayer** — WebSocket (Socket.IO) with Redis adapter for horizontal scaling across multiple server instances
-- **Sichuan Mahjong Rules** — Full implementation of 血战到底 (Blood Fight) variant including Kong scoring, missing-suit declaration, and multi-winner support
-- **Authentication** — Google OAuth 2.0 with session management; mock login for development/testing
-- **Game State Persistence** — MongoDB-backed game state with automatic hydration on server restart
-- **Match History** — Persistent game records with player scores, win/loss tracking, and round details
-- **Room Management** — Create, join, and spectate game rooms with real-time player count updates
-- **Automated Testing** — Playwright E2E tests integrated into CI/CD pipeline
-- **Container-Native Deployment** — Docker multi-stage builds, Helm charts, and Kubernetes manifests via Werf
+- ✅ 四人血战到底基本流程
+- ✅ WebSocket 实时多人对战
+- ✅ 摸牌/打牌/碰/杠/胡
+- ✅ 胡牌判断（标准胡+七对）
+- ✅ 番数计算
+- ✅ Google OAuth 登录
+- ✅ MongoDB 持久化
+- ✅ Docker 容器化部署
 
----
+## 待开发功能（长清阁特有规则）
 
-## Tech Stack
+- [ ] 风牌/箭牌/花牌
+- [ ] 百搭牌系统
+- [ ] 碰碰胡/混一色/清碰
+- [ ] 互包(包三/包四)规则
+- [ ] 造反功能
+- [ ] 五毒散检测
+- [ ] 自定义番数计算
 
-| Layer | Technologies |
-|-------|--------------|
-| **Frontend** | Vue 3, Nuxt 4, Nuxt UI, TypeScript |
-| **Backend** | Nuxt Server (Nitro), Socket.IO, Node.js |
-| **Database** | MongoDB Atlas |
-| **Cache / Pub-Sub** | Redis (Socket.IO adapter) |
-| **Auth** | Google OAuth 2.0, Session cookies |
-| **Infrastructure** | Docker, Kubernetes, Helm, Werf |
-| **CI/CD** | GitHub Actions, Playwright |
-
----
-
-## Installation
-
-### Prerequisites
-
-- Node.js 20+
-- MongoDB instance (local or Atlas)
-- Redis (optional, for multi-instance scaling)
-
-### Setup
+## 快速开始
 
 ```bash
-# Clone the repository
-git clone https://github.com/Justin6Liu/blood-on-mahjong.git
-cd blood-on-mahjong
-
-# Install dependencies
+# 安装依赖
 npm install
+
+# 启动开发服务器
+npm run dev
+
+# 构建生产版本
+npm run build
 ```
 
-Create `.env` with your credentials:
+## 环境变量
 
 ```env
-MONGODB_URI=mongodb://localhost:27017
-MONGODB_DB=blood_on_mahjong
+MONGODB_URI=mongodb://localhost:27017/changqingge-mahjong
 REDIS_URL=redis://localhost:6379
-GOOGLE_CLIENT_ID=your-client-id
-GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
 ```
 
----
-
-## Usage
-
-### Development
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000).
-
-### Production Build
-
-```bash
-npm run build
-npm run start
-```
-
-### Run Tests
-
-```bash
-# E2E tests with Playwright
-npm test
-
-# With custom base URL
-BASE_URL=http://localhost:3000 npm test
-```
-
----
-
-## Project Structure
+## 项目结构
 
 ```
-blood-on-mahjong/
-├── app/                    # Frontend (Nuxt)
-│   ├── components/         # Vue components (MahjongTile, PlayerArea, etc.)
-│   ├── composables/        # Composition API hooks (useGame)
-│   ├── pages/              # Route pages (login, gameroom, history)
-│   └── middleware/         # Auth guards
-├── server/                 # Backend (Nitro)
-│   ├── api/                # REST endpoints (auth, game, rooms, history)
-│   ├── services/           # Business logic (AuthService, GameService)
-│   ├── utils/              # Core utilities (gameManager, socket, tiles)
-│   └── types/              # TypeScript definitions
-├── tests/                  # Playwright E2E tests
-├── .github/workflows/      # CI/CD pipeline
-├── .helm/                  # Kubernetes Helm charts
-├── Dockerfile              # Multi-stage container build
-└── werf.yaml               # Werf deployment config
+├── app/                    # 前端代码
+│   ├── components/         # Vue组件
+│   ├── pages/              # 页面
+│   └── composables/        # 组合式API
+├── server/                 # 后端代码
+│   ├── api/                # API端点
+│   ├── services/           # 业务逻辑
+│   ├── utils/              # 工具函数（核心游戏逻辑）
+│   └── types/              # TypeScript类型定义
+├── tests/                  # E2E测试
+├── Dockerfile              # Docker配置
+└── werf.yaml               # Kubernetes部署
 ```
 
----
-
-## License
+## 许可证
 
 MIT
+
+## 开发进度
+
+详见 [blood-mahjong-analysis.md](../blood-mahjong-analysis.md) 和 [blood-mahjong-rule-diff.md](../blood-mahjong-rule-diff.md)
