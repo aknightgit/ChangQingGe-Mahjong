@@ -2,13 +2,45 @@
 export enum TileSuit {
   DOTS = 'dots',      // 筒
   CHARACTERS = 'wan', // 万
-  BAMBOOS = 'tiao'    // 条
+  BAMBOOS = 'tiao',   // 条
+  WIND = 'feng',      // 风牌
+  DRAGON = 'jian',    // 箭牌
+  FLOWER = 'hua'      // 花牌
+}
+
+// Wind tile values
+export enum WindValue {
+  EAST = 1,   // 东
+  SOUTH = 2,  // 南
+  WEST = 3,   // 西
+  NORTH = 4   // 北
+}
+
+// Dragon tile values
+export enum DragonValue {
+  RED = 1,    // 红中
+  GREEN = 2,  // 发财
+  WHITE = 3   // 白板
+}
+
+// Flower tile values
+export enum FlowerValue {
+  SPRING = 1,  // 春
+  SUMMER = 2,  // 夏
+  AUTUMN = 3,  // 秋
+  WINTER = 4,  // 冬
+  PLUM = 5,    // 梅
+  ORCHID = 6,  // 兰
+  BAMBOO_F = 7, // 竹 (花牌)
+  CHRYSANTHEMUM = 8 // 菊
 }
 
 export interface Tile {
   suit: TileSuit;
-  value: number; // 1-9
+  value: number; // 1-9 for suits, WindValue/DragonValue/FlowerValue for others
   id: string; // Unique identifier for each physical tile
+  isFlower?: boolean; // 花牌标记
+  isWild?: boolean;   // 百搭标记 (runtime set)
 }
 
 // Meld types

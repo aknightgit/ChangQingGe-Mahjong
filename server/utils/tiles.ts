@@ -1,25 +1,73 @@
-import { Tile, TileSuit } from '../types/game';
+import { Tile, TileSuit, WindValue, DragonValue, FlowerValue } from '../types/game';
 
 /**
- * Create a full deck of Sichuan Mahjong tiles (108 tiles)
- * 3 suits × 9 values × 4 copies = 108 tiles
+ * Create a full deck of ChangQingGe Mahjong tiles (144 tiles)
+ * - 3 suits × 9 values × 4 copies = 108 tiles
+ * - Wind tiles: 4 winds × 4 copies = 16 tiles
+ * - Dragon tiles: 3 dragons × 4 copies = 12 tiles
+ * - Flower tiles: 8 flowers × 1 copy = 8 tiles
+ * Total: 144 tiles
  */
 export function createDeck(): Tile[] {
   const tiles: Tile[] = [];
-  const suits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-  
-  for (const suit of suits) {
+  let id = 0;
+
+  // Number suits: 筒万条
+  const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+  for (const suit of numberSuits) {
     for (let value = 1; value <= 9; value++) {
       for (let copy = 0; copy < 4; copy++) {
         tiles.push({
           suit,
           value,
-          id: `${suit}-${value}-${copy}`
+          id: `${suit}-${value}-${copy}`,
+          isFlower: false
         });
+        id++;
       }
     }
   }
-  
+
+  // Wind tiles: 东南西北
+  const windNames = ['dong', 'nan', 'xi', 'bei'];
+  for (let w = 1; w <= 4; w++) {
+    for (let copy = 0; copy < 4; copy++) {
+      tiles.push({
+        suit: TileSuit.WIND,
+        value: w,
+        id: `feng-${windNames[w - 1]}-${copy}`,
+        isFlower: false
+      });
+      id++;
+    }
+  }
+
+  // Dragon tiles: 中发白
+  const dragonNames = ['zhong', 'fa', 'bai'];
+  for (let d = 1; d <= 3; d++) {
+    for (let copy = 0; copy < 4; copy++) {
+      tiles.push({
+        suit: TileSuit.DRAGON,
+        value: d,
+        id: `jian-${dragonNames[d - 1]}-${copy}`,
+        isFlower: false
+      });
+      id++;
+    }
+  }
+
+  // Flower tiles: 春夏秋冬梅兰竹菊
+  const flowerNames = ['chun', 'xia', 'qiu', 'dong', 'mei', 'lan', 'zhu', 'ju'];
+  for (let f = 1; f <= 8; f++) {
+    tiles.push({
+      suit: TileSuit.FLOWER,
+      value: f,
+      id: `hua-${flowerNames[f - 1]}`,
+      isFlower: true
+    });
+    id++;
+  }
+
   return tiles;
 }
 
@@ -58,9 +106,17 @@ export function removeTile(tiles: Tile[], tileId: string): Tile[] {
 
 /**
  * Sort tiles by suit and value
+ * Order: 筒 < 万 < 条 < 风 < 箭 < 花
  */
 export function sortTiles(tiles: Tile[]): Tile[] {
-  const suitOrder = { [TileSuit.DOTS]: 0, [TileSuit.CHARACTERS]: 1, [TileSuit.BAMBOOS]: 2 };
+  const suitOrder: Record<TileSuit, number> = {
+    [TileSuit.DOTS]: 0,
+    [TileSuit.CHARACTERS]: 1,
+    [TileSuit.BAMBOOS]: 2,
+    [TileSuit.WIND]: 3,
+    [TileSuit.DRAGON]: 4,
+    [TileSuit.FLOWER]: 5
+  };
   return [...tiles].sort((a, b) => {
     if (a.suit !== b.suit) {
       return suitOrder[a.suit] - suitOrder[b.suit];
@@ -110,11 +166,141 @@ export function isMissingOneSuit(tiles: Tile[]): { missing: boolean; missingSuit
 }
 
 /**
+ * Check if tile is a wind tile
+ */
+export function isWind(tile: Tile): boolean {
+  return tile.suit === TileSuit.WIND;
+}
+
+/**
+ * Check if tile is a dragon tile
+ */
+export function isDragon(tile: Tile): boolean {
+  return tile.suit === TileSuit.DRAGON;
+}
+
+/**
+ * Check if tile is a flower tile
+ */
+export function isFlower(tile: Tile): boolean {
+  return tile.suit === TileSuit.FLOWER || tile.isFlower === true;
+}
+
+/**
+ * Check if tile is a honor tile (wind or dragon)
+ */
+export function isHonor(tile: Tile): boolean {
+  return tile.suit === TileSuit.WIND || tile.suit === TileSuit.DRAGON;
+}
+
+/**
  * Check if all tiles are from one suit (清一色)
+ * Honor tiles count as separate suits
  */
 export function isFullFlush(tiles: Tile[]): boolean {
   const suits = getSuits(tiles);
   return suits.size === 1;
+}
+
+/**
+ * Check if tiles are mixed one suit (混一色)
+ * One number suit + honors only
+ */
+export function isHalfFlush(tiles: Tile[]): boolean {
+  const suits = getSuits(tiles);
+  const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+  const honorSuits = [TileSuit.WIND, TileSuit.DRAGON];
+  
+  // Filter out flowers
+  const nonFlowerTiles = tiles.filter(t => !isFlower(t));
+  const nonFlowerSuits = getSuits(nonFlowerTiles);
+  
+  // Must have exactly one number suit and possibly honors
+  let hasNumberSuit = false;
+  let hasHonor = false;
+  
+  for (const suit of nonFlowerSuits) {
+    if (numberSuits.includes(suit)) {
+      if (hasNumberSuit) return false; // More than one number suit
+      hasNumberSuit = true;
+    } else if (honorSuits.includes(suit)) {
+      hasHonor = true;
+    } else {
+      return false; // Flower suit shouldn't be here after filtering
+    }
+  }
+  
+  return hasNumberSuit && hasHonor;
+}
+
+/**
+ * Check if all tiles are wind tiles (风一色)
+ */
+export function isAllWind(tiles: Tile[]): boolean {
+  return tiles.every(t => t.suit === TileSuit.WIND || isFlower(t));
+}
+
+/**
+ * Check if hand is all triplets/pairs (碰碰胡)
+ */
+export function isAllTriplets(tiles: Tile[], meldCount: number = 0): boolean {
+  // This is a simplified check - full check is in handValidator
+  const nonFlowerTiles = tiles.filter(t => !isFlower(t));
+  const groups = groupTiles(nonFlowerTiles);
+  
+  let tripletCount = 0;
+  let pairCount = 0;
+  
+  for (const [, group] of groups) {
+    if (group.length === 3) tripletCount++;
+    else if (group.length === 2) pairCount++;
+    else if (group.length === 4) tripletCount++; // Kong counts as triplet
+    else return false; // Can't form all triplets with 1 of a kind
+  }
+  
+  return tripletCount + meldCount === 4 && pairCount === 1;
+}
+
+/**
+ * Get wind name in Chinese
+ */
+export function getWindName(value: number): string {
+  const names = ['东', '南', '西', '北'];
+  return names[value - 1] || '?';
+}
+
+/**
+ * Get dragon name in Chinese
+ */
+export function getDragonName(value: number): string {
+  const names = ['中', '发', '白'];
+  return names[value - 1] || '?';
+}
+
+/**
+ * Get flower name in Chinese
+ */
+export function getFlowerName(value: number): string {
+  const names = ['春', '夏', '秋', '冬', '梅', '兰', '竹', '菊'];
+  return names[value - 1] || '?';
+}
+
+/**
+ * Get tile display name in Chinese
+ */
+export function getTileDisplayName(tile: Tile): string {
+  if (tile.suit === TileSuit.WIND) return getWindName(tile.value);
+  if (tile.suit === TileSuit.DRAGON) return getDragonName(tile.value);
+  if (tile.suit === TileSuit.FLOWER) return getFlowerName(tile.value);
+  
+  const suitNames: Record<string, string> = {
+    [TileSuit.DOTS]: '筒',
+    [TileSuit.CHARACTERS]: '万',
+    [TileSuit.BAMBOOS]: '条'
+  };
+  
+  const numNames = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
+  return `${numNames[tile.value - 1]}${suitNames[tile.suit]}`;
 }
 
 /**
@@ -153,10 +339,15 @@ export function getTileKey(tile: Tile): string {
 }
 
 /**
- * Check if three tiles form a sequence
+ * Check if three tiles form a sequence (顺子)
+ * Only valid for number suits (筒万条), not wind/dragon/flower
  */
 export function isSequence(tiles: Tile[]): boolean {
   if (tiles.length !== 3) return false;
+  
+  // Sequences only valid for number suits
+  const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+  if (!numberSuits.includes(tiles[0].suit)) return false;
   
   const sorted = sortTiles(tiles);
   return sorted[0].suit === sorted[1].suit &&
