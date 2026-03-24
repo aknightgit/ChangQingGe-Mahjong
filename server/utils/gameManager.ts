@@ -27,6 +27,113 @@ class GameManager {
   private playerToGame: Map<string, string> = new Map();
   private wsManager: any = null;
   private isHydrated = false;
+  
+  // 互包跟踪: gameId -> Map<playerId, Map<partnerId, count>>
+  // 记录每个玩家从另一个玩家吃/碰/杠了多少口
+  private mutualBailout: Map<string, Map<string, Map<string, number>>> = new Map();
+
+  setWebSocketManager(manager: any) {
+    this.wsManager = manager;
+  }
+
+  /**
+   * 记录吃/碰来源，检测互包关系
+   */
+  private recordBailoutAction(
+    gameId: string, 
+    playerId: string, 
+    sourcePlayerId: string | undefined,
+    meldType: MeldType
+  ): void {
+    if (!sourcePlayerId) return;
+    if (meldType !== MeldType.TRIPLET && meldType !== MeldType.SEQUENCE && meldType !== MeldType.KONG) return;
+    
+    if (!this.mutualBailout.has(gameId)) {
+      this.mutualBailout.set(gameId, new Map());
+    }
+    const gameBailout = this.mutualBailout.get(gameId)!;
+    
+    if (!gameBailout.has(playerId)) {
+      gameBailout.set(playerId, new Map());
+    }
+    const playerBailout = gameBailout.get(playerId)!;
+    
+    const currentCount = playerBailout.get(sourcePlayerId) || 0;
+    playerBailout.set(sourcePlayerId, currentCount + 1);
+  }
+
+  /**
+   * 获取互包关系
+   * @returns 三口/四口关系列表
+   */
+  getMutualBailoutRelations(gameId: string): Array<{
+    player1: string;
+    player2: string;
+    type: '三口' | '四口';
+  }> {
+    const relations: Array<{ player1: string; player2: string; type: '三口' | '四口' }> = [];
+    const gameBailout = this.mutualBailout.get(gameId);
+    if (!gameBailout) return relations;
+    
+    const checked = new Set<string>();
+    
+    for (const [playerId, partnerCounts] of gameBailout) {
+      for (const [partnerId, count] of partnerCounts) {
+        const key = [playerId, partnerId].sort().join('-');
+        if (checked.has(key)) continue;
+        checked.add(key);
+        
+        // 检查双方互相的口数
+        const countAtoB = gameBailout.get(playerId)?.get(partnerId) || 0;
+        const countBtoA = gameBailout.get(partnerId)?.get(playerId) || 0;
+        
+        // 互包定义：单向三口或四口
+        if (countAtoB >= 4 || countBtoA >= 4) {
+          relations.push({ player1: playerId, player2: partnerId, type: '四口' });
+        } else if (countAtoB >= 3 || countBtoA >= 3) {
+          relations.push({ player1: playerId, player2: partnerId, type: '三口' });
+        }
+      }
+    }
+    
+    return relations;
+  }
+
+  /**
+   * 检查两个玩家之间是否有互包关系
+   */
+  getBailoutMultiplier(
+    gameId: string,
+    payerId: string,
+    winnerId: string
+  ): { multiplier: number; type: string | null } {
+    const relations = this.getMutualBailoutRelations(gameId);
+    
+    for (const rel of relations) {
+      if ((rel.player1 === payerId && rel.player2 === winnerId) ||
+          (rel.player1 === winnerId && rel.player2 === payerId)) {
+        return {
+          multiplier: rel.type === '四口' ? 5 : 3,
+          type: rel.type
+        };
+      }
+    }
+    
+    return { multiplier: 1, type: null };
+  }
+
+  /**
+   * 获取最后一张弃牌的玩家ID
+   */
+  private getLastDiscardPlayerId(game: GameState): string | undefined {
+    // 从 action history 中找到最近一次 DISCARD 操作
+    for (let i = game.actionHistory.length - 1; i >= 0; i--) {
+      if (game.actionHistory[i].type === ActionType.DISCARD) {
+        return game.actionHistory[i].playerId;
+      }
+    }
+    return undefined;
+  }
 
   setWebSocketManager(manager: any) {
     this.wsManager = manager;
@@ -469,6 +576,10 @@ class GameManager {
     const matchingTiles = player.hand.concealedTiles.filter(t => tilesEqual(t, lastDiscard));
     if (matchingTiles.length < 2) return;
 
+    // 记录互包来源（碰的是谁的牌）
+    const sourcePlayerId = this.getLastDiscardPlayerId(game);
+    this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.TRIPLET);
+
     // Remove tiles from hand
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[0].id);
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[1].id);
@@ -498,6 +609,10 @@ class GameManager {
     // Find matching tiles in hand
     const matchingTiles = player.hand.concealedTiles.filter(t => tilesEqual(t, lastDiscard));
     if (matchingTiles.length < 3) return;
+
+    // 记录互包来源（杠的是谁的牌）
+    const sourcePlayerId = this.getLastDiscardPlayerId(game);
+    this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.KONG);
 
     // Remove tiles from hand
     for (let i = 0; i < 3; i++) {
