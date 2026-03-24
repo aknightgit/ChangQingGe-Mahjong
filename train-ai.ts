@@ -316,7 +316,7 @@ function buildWinDetail(
   wildSuit: TileSuit,
   wildValue: number,
   from?: string
-): { detail: WinDetail; points: number } {
+): { detail: WinDetail; points: number } | null {
   const handTypes = detectHandTypes(
     handForCalc,
     player.melds,
@@ -325,6 +325,11 @@ function buildWinDetail(
     wildTileId,
     wildGroup || undefined
   );
+
+  // 规则约束：仅允许8种结算牌型；普通胡/七对不参与结算展示
+  if (handTypes.length === 0) {
+    return null;
+  }
 
   const score = calculateScore({
     handTiles: handForCalc,
@@ -410,45 +415,48 @@ function simulateOne(gameNum: number, policy: Policy): GameRecord {
 
     const selfWin = canWin(player.hand, player.melds.length, isWild);
     if (selfWin.canWin && Math.random() < policy.selfWinChance) {
-      const { detail, points } = buildWinDetail(player, '自摸', [...player.hand], wildTileId, wildGroup, wildSuit, wildValue);
-      player.winDetail = detail;
-      player.status = 'won';
+      const built = buildWinDetail(player, '自摸', [...player.hand], wildTileId, wildGroup, wildSuit, wildValue);
+      if (built) {
+        const { detail, points } = built;
+        player.winDetail = detail;
+        player.status = 'won';
 
-      const others = players.filter(p => p.status === 'playing' && p.index !== player.index);
-      const fourPartners = others.filter(o => relationBetween(bailout, o.index, player.index) === '四口');
-      const threePartners = others.filter(o => relationBetween(bailout, o.index, player.index) === '三口');
+        const others = players.filter(p => p.status === 'playing' && p.index !== player.index);
+        const fourPartners = others.filter(o => relationBetween(bailout, o.index, player.index) === '四口');
+        const threePartners = others.filter(o => relationBetween(bailout, o.index, player.index) === '三口');
 
-      if (fourPartners.length > 0) {
-        for (const o of others) {
-          if (fourPartners.some(fp => fp.index === o.index)) {
-            const pay = points * 5;
+        if (fourPartners.length > 0) {
+          for (const o of others) {
+            if (fourPartners.some(fp => fp.index === o.index)) {
+              const pay = points * 5;
+              o.score -= pay;
+              player.score += pay;
+              settlementDetails.push(`[自摸-四口] ${o.name} -> ${player.name} : ${pay} (${points}x5)`);
+            } else {
+              settlementDetails.push(`[自摸-四口] ${o.name} -> ${player.name} : 0 (四口他家不赔)`);
+            }
+          }
+        } else if (threePartners.length > 0) {
+          for (const o of others) {
+            const mult = threePartners.some(tp => tp.index === o.index) ? 3 : 1;
+            const pay = points * mult;
             o.score -= pay;
             player.score += pay;
-            settlementDetails.push(`[自摸-四口] ${o.name} -> ${player.name} : ${pay} (${points}x5)`);
-          } else {
-            settlementDetails.push(`[自摸-四口] ${o.name} -> ${player.name} : 0 (四口他家不赔)`);
+            settlementDetails.push(`[自摸-三口] ${o.name} -> ${player.name} : ${pay} (${points}x${mult})`);
+          }
+        } else {
+          for (const o of others) {
+            const pay = points;
+            o.score -= pay;
+            player.score += pay;
+            settlementDetails.push(`[自摸] ${o.name} -> ${player.name} : ${pay}`);
           }
         }
-      } else if (threePartners.length > 0) {
-        for (const o of others) {
-          const mult = threePartners.some(tp => tp.index === o.index) ? 3 : 1;
-          const pay = points * mult;
-          o.score -= pay;
-          player.score += pay;
-          settlementDetails.push(`[自摸-三口] ${o.name} -> ${player.name} : ${pay} (${points}x${mult})`);
-        }
-      } else {
-        for (const o of others) {
-          const pay = points;
-          o.score -= pay;
-          player.score += pay;
-          settlementDetails.push(`[自摸] ${o.name} -> ${player.name} : ${pay}`);
-        }
-      }
 
-      current = nextPlaying(players, player.index);
-      rounds++;
-      continue;
+        current = nextPlaying(players, player.index);
+        rounds++;
+        continue;
+      }
     }
 
     const discard = pickDiscard(player.hand, isWild, policy);
@@ -466,7 +474,9 @@ function simulateOne(gameNum: number, policy: Policy): GameRecord {
 
       if (Math.random() < policy.discardHuChance) {
         const built = buildWinDetail(other, '放冲', testHand, wildTileId, wildGroup, wildSuit, wildValue, player.name);
-        huCandidates.push({ idx: i, points: built.points, detail: built.detail });
+        if (built) {
+          huCandidates.push({ idx: i, points: built.points, detail: built.detail });
+        }
       }
     }
 
