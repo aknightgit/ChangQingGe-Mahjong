@@ -15,7 +15,12 @@ const POLICY_DIR = path.join(OUT_DIR, 'policies', RUN_TAG);
 const BEST_POLICY_FILE = path.join(OUT_DIR, `best-policy-${RUN_TAG}.json`);
 const BEST_POLICY_LATEST = path.join(OUT_DIR, 'best-policy.json');
 
-const PLAYER_NAMES = ['K哥', 'AI东', 'AI西', 'AI北'];
+// 同步保存到项目目录（用于真实策略读取）
+const PROJECT_TRAINING_DIR = path.join(process.cwd(), 'training');
+const PROJECT_BEST_POLICY_FILE = path.join(PROJECT_TRAINING_DIR, `best-policy-${RUN_TAG}.json`);
+const PROJECT_BEST_POLICY_LATEST = path.join(PROJECT_TRAINING_DIR, 'best-policy.json');
+
+const PLAYER_NAMES = ['K哥', '小胖', '老赵', '阿水'];
 
 type PlayerStatus = 'playing' | 'won';
 type WinMode = '自摸' | '放冲';
@@ -143,22 +148,23 @@ function clamp(v: number, min: number, max: number) {
 function makePolicy(seed = 'base'): Policy {
   return {
     id: seed,
-    selfWinChance: 0.9,
-    selfWinWildBoost: 0.05,
+    selfWinChance: 0.96,
+    selfWinWildBoost: 0.06,
 
-    discardHuChance: 0.75,
-    discardHuWildPenalty: 0.22,
-    discardHuMenQingPenalty: 0.08,
+    // 降低放冲胡惩罚幅度，避免“该胡不胡”导致高流局
+    discardHuChance: 0.9,
+    discardHuWildPenalty: 0.08,
+    discardHuMenQingPenalty: 0.02,
 
-    pengChance: 0.42,
-    kongChance: 0.18,
-    chowChance: 0.28,
-    pengWildBoost: 0.15,
-    kongWildBoost: 0.2,
-    chowWildPenalty: 0.12,
+    pengChance: 0.5,
+    kongChance: 0.24,
+    chowChance: 0.3,
+    pengWildBoost: 0.2,
+    kongWildBoost: 0.24,
+    chowWildPenalty: 0.08,
 
-    bailoutBuildWildBoost: 0.18,
-    bailoutHuPenaltyPerMeld: 0.08,
+    bailoutBuildWildBoost: 0.12,
+    bailoutHuPenaltyPerMeld: 0.02,
 
     honorRushThreshold: 5,
     honorRushBoost: 0.2,
@@ -420,6 +426,17 @@ function toMeldText(m: Meld) {
   return `${type}:${m.tiles.map(getTileDisplayName).join(' ')}`;
 }
 
+function mapDisplayHandType(rawName: string, handTypes: string[]): string {
+  if (rawName === '普通胡') {
+    // 仅内部验证牌型，不显示“普通胡”文案
+    if (handTypes.length > 0) {
+      return handTypes[0];
+    }
+    return '基础胡(内部验证)';
+  }
+  return rawName;
+}
+
 function buildWinDetail(
   player: PlayerState,
   winMode: WinMode,
@@ -441,10 +458,7 @@ function buildWinDetail(
     wildGroup || undefined
   );
 
-  // 规则约束：仅允许8种结算牌型；普通胡/七对不参与结算展示
-  if (handTypes.length === 0) {
-    return null;
-  }
+  // 规则约束：普通胡/七对属于内部验证，不再以“普通胡”文案展示
 
   const score = calculateScore({
     handTiles: handForCalc,
@@ -462,11 +476,13 @@ function buildWinDetail(
     globalMultiplier
   });
 
+  const displayHandType = mapDisplayHandType(score.handTypeName, handTypes as unknown as string[]);
+
   return {
     detail: {
       name: player.name,
       winMode,
-      handType: score.handTypeName,
+      handType: displayHandType,
       baseFan: score.baseFan,
       finalPoints: score.finalPoints,
       handTiles: sortTiles([...handForCalc]).map(getTileDisplayName),
@@ -838,14 +854,20 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
     ? winners.reduce((s, w) => s + w.finalPoints, 0) / winners.length
     : 0;
 
+  // 目标: 流局率 <=10%（硬约束倾向）
+  const drawOverTarget = Math.max(0, drawRate - 0.1);
+  const drawUnderTarget = Math.max(0, 0.1 - drawRate);
+
   // 目标: 胡牌率↑, 流局率↓, 最后一人↑, 自摸↑, 大牌↑, 赢家点数↑
   const fitness =
-    huRate * 90 -
-    drawRate * 120 +
+    huRate * 110 -
+    drawRate * 180 -
+    drawOverTarget * 1200 +
+    drawUnderTarget * 160 +
     lastPlayerRate * 150 +
-    selfDrawRate * 80 +
-    bigHandRate * 110 +
-    avgWinnerPoints * 0.9 +
+    selfDrawRate * 90 +
+    bigHandRate * 120 +
+    avgWinnerPoints * 1.0 +
     avgPot / 120;
 
   const biggest = [...all].sort((a, b) => b.totalPot - a.totalPot)[0]!;
@@ -950,6 +972,7 @@ function appendRoundDoc(metrics: RoundMetrics) {
 
 function savePolicySnapshot(round: number, policy: Policy, metrics?: RoundMetrics) {
   fs.mkdirSync(POLICY_DIR, { recursive: true });
+  fs.mkdirSync(PROJECT_TRAINING_DIR, { recursive: true });
 
   const payload = {
     savedAt: new Date().toISOString(),
@@ -970,11 +993,15 @@ function savePolicySnapshot(round: number, policy: Policy, metrics?: RoundMetric
     policy
   };
 
+  // /data/training
   fs.writeFileSync(BEST_POLICY_FILE, JSON.stringify(payload, null, 2), 'utf8');
   fs.writeFileSync(BEST_POLICY_LATEST, JSON.stringify(payload, null, 2), 'utf8');
-
   const roundFile = path.join(POLICY_DIR, `round-${String(round).padStart(3, '0')}.json`);
   fs.writeFileSync(roundFile, JSON.stringify(payload, null, 2), 'utf8');
+
+  // 项目目录（真实策略读取）
+  fs.writeFileSync(PROJECT_BEST_POLICY_FILE, JSON.stringify(payload, null, 2), 'utf8');
+  fs.writeFileSync(PROJECT_BEST_POLICY_LATEST, JSON.stringify(payload, null, 2), 'utf8');
 }
 
 function ensureDoc() {
@@ -995,20 +1022,26 @@ function ensureDoc() {
 }
 
 function loadSeedPolicy(): Policy | null {
-  if (!fs.existsSync(BEST_POLICY_LATEST)) return null;
-  try {
-    const raw = fs.readFileSync(BEST_POLICY_LATEST, 'utf8');
-    const parsed = JSON.parse(raw);
-    const p = parsed?.policy;
-    if (!p || typeof p !== 'object') return null;
-    return {
-      ...makePolicy('seed-from-latest'),
-      ...p,
-      id: 'seed-from-latest'
-    } as Policy;
-  } catch {
-    return null;
+  const candidates = [PROJECT_BEST_POLICY_LATEST, BEST_POLICY_LATEST];
+
+  for (const file of candidates) {
+    if (!fs.existsSync(file)) continue;
+    try {
+      const raw = fs.readFileSync(file, 'utf8');
+      const parsed = JSON.parse(raw);
+      const p = parsed?.policy;
+      if (!p || typeof p !== 'object') continue;
+      return {
+        ...makePolicy('seed-from-latest'),
+        ...p,
+        id: `seed-from-${path.basename(file)}`
+      } as Policy;
+    } catch {
+      // try next
+    }
   }
+
+  return null;
 }
 
 async function main() {
@@ -1016,7 +1049,8 @@ async function main() {
 
   console.log(`🧠 开始AI训练: rounds=${ROUNDS}, games/round=${GAMES_PER_ROUND}`);
   console.log(`📝 训练日志输出: ${OUT_FILE}`);
-  console.log(`🧩 参数输出: ${BEST_POLICY_FILE}`);
+  console.log(`🧩 参数输出(/data): ${BEST_POLICY_FILE}`);
+  console.log(`🧩 参数输出(项目): ${PROJECT_BEST_POLICY_FILE}`);
 
   let champion = loadSeedPolicy() || makePolicy('champion-r0');
   console.log(`🌱 初始策略来源: ${champion.id}`);
@@ -1052,7 +1086,8 @@ async function main() {
 
   console.log('✅ 训练完成');
   console.log(`📄 文档已写入: ${OUT_FILE}`);
-  console.log(`🧩 当前最优参数: ${BEST_POLICY_FILE}`);
+  console.log(`🧩 当前最优参数(/data): ${BEST_POLICY_FILE}`);
+  console.log(`🧩 当前最优参数(项目): ${PROJECT_BEST_POLICY_FILE}`);
   console.log(`🗂️ 每轮参数快照目录: ${POLICY_DIR}`);
 }
 
