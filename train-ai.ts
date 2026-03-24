@@ -10,6 +10,8 @@ const ROUNDS = parseInt(process.argv[2] || '20', 10);
 const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000', 10);
 const OUT_DIR = '/data/training';
 const OUT_FILE = path.join(OUT_DIR, 'ai-training-log.md');
+const POLICY_DIR = path.join(OUT_DIR, 'policies');
+const BEST_POLICY_FILE = path.join(OUT_DIR, 'best-policy.json');
 
 const PLAYER_NAMES = ['K哥', 'AI东', 'AI西', 'AI北'];
 
@@ -20,14 +22,28 @@ type RelationType = '三口' | '四口';
 interface Policy {
   id: string;
   selfWinChance: number;
+  selfWinWildBoost: number;
+
+  // 偏向自摸不捉冲
   discardHuChance: number;
+  discardHuWildPenalty: number;
+  discardHuMenQingPenalty: number;
+
+  // 进攻动作
   pengChance: number;
   kongChance: number;
   chowChance: number;
+  pengWildBoost: number;
+  kongWildBoost: number;
+  chowWildPenalty: number;
+
+  // 出牌策略（做大牌）
   pairWeight: number;
   nearWeight: number;
   honorPairBonus: number;
   wildKeepPenalty: number;
+  dominantSuitBonus: number;
+  tripletKeepBonus: number;
 }
 
 interface WinDetail {
@@ -114,14 +130,25 @@ function makePolicy(seed = 'base'): Policy {
   return {
     id: seed,
     selfWinChance: 0.9,
-    discardHuChance: 0.92,
+    selfWinWildBoost: 0.05,
+
+    discardHuChance: 0.75,
+    discardHuWildPenalty: 0.22,
+    discardHuMenQingPenalty: 0.08,
+
     pengChance: 0.42,
     kongChance: 0.18,
-    chowChance: 0.33,
+    chowChance: 0.28,
+    pengWildBoost: 0.15,
+    kongWildBoost: 0.2,
+    chowWildPenalty: 0.12,
+
     pairWeight: 4,
     nearWeight: 2,
     honorPairBonus: 2,
-    wildKeepPenalty: 999
+    wildKeepPenalty: 1300,
+    dominantSuitBonus: 2.2,
+    tripletKeepBonus: 2.6
   };
 }
 
@@ -130,14 +157,25 @@ function mutate(base: Policy, idx: number): Policy {
     ...base,
     id: `${base.id}-m${idx}`,
     selfWinChance: clamp(base.selfWinChance + rnd(-0.08, 0.08), 0.65, 0.99),
-    discardHuChance: clamp(base.discardHuChance + rnd(-0.08, 0.08), 0.65, 0.99),
-    pengChance: clamp(base.pengChance + rnd(-0.12, 0.12), 0.05, 0.85),
-    kongChance: clamp(base.kongChance + rnd(-0.08, 0.08), 0.02, 0.5),
-    chowChance: clamp(base.chowChance + rnd(-0.12, 0.12), 0.05, 0.75),
-    pairWeight: clamp(base.pairWeight + rnd(-1.2, 1.2), 1, 8),
-    nearWeight: clamp(base.nearWeight + rnd(-1, 1), 0.2, 5),
-    honorPairBonus: clamp(base.honorPairBonus + rnd(-1, 1), 0, 5),
-    wildKeepPenalty: clamp(base.wildKeepPenalty + rnd(-250, 250), 200, 2000)
+    selfWinWildBoost: clamp(base.selfWinWildBoost + rnd(-0.05, 0.05), 0, 0.25),
+
+    discardHuChance: clamp(base.discardHuChance + rnd(-0.1, 0.1), 0.2, 0.95),
+    discardHuWildPenalty: clamp(base.discardHuWildPenalty + rnd(-0.08, 0.08), 0, 0.45),
+    discardHuMenQingPenalty: clamp(base.discardHuMenQingPenalty + rnd(-0.06, 0.06), 0, 0.25),
+
+    pengChance: clamp(base.pengChance + rnd(-0.12, 0.12), 0.05, 0.9),
+    kongChance: clamp(base.kongChance + rnd(-0.08, 0.08), 0.02, 0.6),
+    chowChance: clamp(base.chowChance + rnd(-0.1, 0.1), 0.01, 0.7),
+    pengWildBoost: clamp(base.pengWildBoost + rnd(-0.08, 0.08), 0, 0.35),
+    kongWildBoost: clamp(base.kongWildBoost + rnd(-0.08, 0.08), 0, 0.4),
+    chowWildPenalty: clamp(base.chowWildPenalty + rnd(-0.06, 0.06), 0, 0.3),
+
+    pairWeight: clamp(base.pairWeight + rnd(-1.2, 1.2), 1, 9),
+    nearWeight: clamp(base.nearWeight + rnd(-1, 1), 0.1, 5),
+    honorPairBonus: clamp(base.honorPairBonus + rnd(-1, 1), 0, 6),
+    wildKeepPenalty: clamp(base.wildKeepPenalty + rnd(-280, 280), 400, 2500),
+    dominantSuitBonus: clamp(base.dominantSuitBonus + rnd(-0.8, 0.8), 0, 6),
+    tripletKeepBonus: clamp(base.tripletKeepBonus + rnd(-0.8, 0.8), 0, 6)
   };
 }
 
@@ -259,11 +297,38 @@ function removeTile(hand: Tile[], tile: Tile) {
 function keepScore(hand: Tile[], tile: Tile, isWild: (t: Tile) => boolean, policy: Policy): number {
   if (isWild(tile)) return policy.wildKeepPenalty;
 
+  const wildCount = hand.filter(t => isWild(t)).length;
+  const attackScale = 1 + wildCount * 0.22; // 百搭越多越激进做大牌
+
   let score = 0;
   const same = hand.filter(t => t.suit === tile.suit && t.value === tile.value).length;
   score += same * policy.pairWeight;
 
-  const isNum = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS].includes(tile.suit);
+  // 偏向保留刻子胚
+  if (same >= 3) {
+    score += policy.tripletKeepBonus * attackScale;
+  }
+
+  // 偏向单花色（冲清一色/清碰）
+  const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+  const suitCount = new Map<TileSuit, number>();
+  for (const t of hand) {
+    if (!numberSuits.includes(t.suit)) continue;
+    suitCount.set(t.suit, (suitCount.get(t.suit) || 0) + 1);
+  }
+  let dominantSuit: TileSuit | null = null;
+  let dominant = 0;
+  for (const [s, c] of suitCount) {
+    if (c > dominant) {
+      dominant = c;
+      dominantSuit = s;
+    }
+  }
+  if (dominantSuit && tile.suit === dominantSuit) {
+    score += policy.dominantSuitBonus * attackScale;
+  }
+
+  const isNum = numberSuits.includes(tile.suit);
   if (isNum) {
     const near = hand.filter(t =>
       t.suit === tile.suit && Math.abs(t.value - tile.value) <= 2 && t.id !== tile.id
@@ -434,7 +499,9 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
     }
 
     const selfWin = canWin(player.hand, player.melds.length, isWild);
-    if (selfWin.canWin && Math.random() < policy.selfWinChance) {
+    const wildCountNow = player.hand.filter(t => isWild(t)).length;
+    const selfWinChanceNow = clamp(policy.selfWinChance + wildCountNow * policy.selfWinWildBoost, 0.65, 0.999);
+    if (selfWin.canWin && Math.random() < selfWinChanceNow) {
       const built = buildWinDetail(
         player,
         '自摸',
@@ -502,7 +569,15 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
       const can = canWin(testHand, other.melds.length, isWild);
       if (!can.canWin) continue;
 
-      if (Math.random() < policy.discardHuChance) {
+      // 策略：偏向自摸不捉冲；百搭越多越贪大牌
+      const otherWildCount = other.hand.filter(t => isWild(t)).length;
+      const hasOpenMeld = other.melds.some(m => m.type === MeldType.SEQUENCE || m.type === MeldType.TRIPLET);
+      let huOnDiscardChance = policy.discardHuChance;
+      huOnDiscardChance -= otherWildCount * policy.discardHuWildPenalty;
+      if (!hasOpenMeld) huOnDiscardChance -= policy.discardHuMenQingPenalty;
+      huOnDiscardChance = clamp(huOnDiscardChance, 0.05, 0.95);
+
+      if (Math.random() < huOnDiscardChance) {
         const built = buildWinDetail(
           other,
           '放冲',
@@ -563,7 +638,11 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
 
       const same = other.hand.filter(t => tilesEqual(t, discard));
 
-      if (same.length >= 3 && Math.random() < policy.kongChance) {
+      const otherWildCount = other.hand.filter(t => isWild(t)).length;
+      const kongChanceNow = clamp(policy.kongChance + otherWildCount * policy.kongWildBoost, 0.02, 0.95);
+      const pengChanceNow = clamp(policy.pengChance + otherWildCount * policy.pengWildBoost, 0.02, 0.95);
+
+      if (same.length >= 3 && Math.random() < kongChanceNow) {
         const use = same.slice(0, 3);
         for (const t of use) removeTile(other.hand, t);
         other.melds.push({ type: MeldType.KONG, tiles: [discard, ...use], isConcealed: false });
@@ -574,7 +653,7 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
         break;
       }
 
-      if (same.length >= 2 && Math.random() < policy.pengChance) {
+      if (same.length >= 2 && Math.random() < pengChanceNow) {
         const use = same.slice(0, 2);
         for (const t of use) removeTile(other.hand, t);
         other.melds.push({ type: MeldType.TRIPLET, tiles: [discard, ...use], isConcealed: false });
@@ -594,7 +673,9 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
     const downPlayer = players[down]!;
     if (downPlayer.status === 'playing') {
       const seqs = findChowSequences(downPlayer.hand, discard);
-      if (seqs.length > 0 && Math.random() < policy.chowChance) {
+      const downWildCount = downPlayer.hand.filter(t => isWild(t)).length;
+      const chowChanceNow = clamp(policy.chowChance - downWildCount * policy.chowWildPenalty, 0.01, 0.9);
+      if (seqs.length > 0 && Math.random() < chowChanceNow) {
         const seq = seqs[0]!;
         const inHand = seq.filter(t => t.id !== discard.id);
         for (const t of inHand) removeTile(downPlayer.hand, t);
@@ -772,8 +853,34 @@ function appendRoundDoc(metrics: RoundMetrics) {
   fs.appendFileSync(OUT_FILE, lines.join('\n') + '\n', 'utf8');
 }
 
+function savePolicySnapshot(round: number, policy: Policy, metrics?: RoundMetrics) {
+  fs.mkdirSync(POLICY_DIR, { recursive: true });
+
+  const payload = {
+    savedAt: new Date().toISOString(),
+    round,
+    metrics: metrics
+      ? {
+          fitness: metrics.fitness,
+          huRate: metrics.huRate,
+          drawRate: metrics.drawRate,
+          lastPlayerRate: metrics.lastPlayerRate,
+          avgRounds: metrics.avgRounds,
+          avgPot: metrics.avgPot
+        }
+      : null,
+    policy
+  };
+
+  fs.writeFileSync(BEST_POLICY_FILE, JSON.stringify(payload, null, 2), 'utf8');
+
+  const roundFile = path.join(POLICY_DIR, `round-${String(round).padStart(3, '0')}.json`);
+  fs.writeFileSync(roundFile, JSON.stringify(payload, null, 2), 'utf8');
+}
+
 function ensureDoc() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
+  fs.mkdirSync(POLICY_DIR, { recursive: true });
   if (!fs.existsSync(OUT_FILE)) {
     const header = [
       '# 长清阁麻将 AI 训练日志',
@@ -793,6 +900,7 @@ async function main() {
 
   console.log(`🧠 开始AI训练: rounds=${ROUNDS}, games/round=${GAMES_PER_ROUND}`);
   console.log(`📝 训练日志输出: ${OUT_FILE}`);
+  console.log(`🧩 参数输出: ${BEST_POLICY_FILE}`);
 
   let champion = makePolicy('champion-r0');
 
@@ -818,6 +926,7 @@ async function main() {
     appendRoundDoc(full);
 
     champion = { ...bestCandidate, id: `champion-r${round}` };
+    savePolicySnapshot(round, champion, full);
 
     console.log(
       `Round ${round}/${ROUNDS} | hu=${(full.huRate * 100).toFixed(1)}% | draw=${(full.drawRate * 100).toFixed(1)}% | last=${(full.lastPlayerRate * 100).toFixed(1)}% | fit=${full.fitness.toFixed(2)}`
@@ -826,6 +935,8 @@ async function main() {
 
   console.log('✅ 训练完成');
   console.log(`📄 文档已写入: ${OUT_FILE}`);
+  console.log(`🧩 当前最优参数: ${BEST_POLICY_FILE}`);
+  console.log(`🗂️ 每轮参数快照目录: ${POLICY_DIR}`);
 }
 
 main().catch((e) => {
