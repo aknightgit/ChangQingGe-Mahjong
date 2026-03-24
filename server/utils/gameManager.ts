@@ -328,26 +328,61 @@ class GameManager {
     const deck = createDeck();
     game.wall = shuffleTiles(deck);
 
-    // 随机选择百搭牌（不从牌墙移除）
-    if (game.wall.length > 0) {
-      const wildIndex = Math.floor(Math.random() * game.wall.length);
-      game.customScoringMode = `${game.wall[wildIndex].suit}-${game.wall[wildIndex].value}`;
+    // 从全部144种牌型中随机选百搭
+    const allTileTypes: Array<{ suit: TileSuit; value: number }> = [];
+    // 筒万条
+    for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+      for (let v = 1; v <= 9; v++) allTileTypes.push({ suit, value: v });
     }
+    // 风牌
+    for (let v = 1; v <= 4; v++) allTileTypes.push({ suit: TileSuit.WIND, value: v });
+    // 箭牌
+    for (let v = 1; v <= 3; v++) allTileTypes.push({ suit: TileSuit.DRAGON, value: v });
+    // 花牌
+    for (let v = 1; v <= 8; v++) allTileTypes.push({ suit: TileSuit.FLOWER, value: v });
+    
+    const wildIndex = Math.floor(Math.random() * allTileTypes.length);
+    const wildType = allTileTypes[wildIndex];
+    game.customScoringMode = `${wildType.suit}-${wildType.value}`;
 
-    // Deal tiles to players (each gets 13 tiles, flowers auto-replaced)
+    // 发牌（花牌不补花，放到门口等待回合补花）
     for (const player of game.players) {
       player.hand.concealedTiles = [];
-      player.hand.exposedMelds = []; // 清空门口牌（花牌会放这里）
+      player.hand.exposedMelds = [];
       for (let i = 0; i < 13; i++) {
-        this.handleDraw(game, player); // 使用 handleDraw 自动处理花牌
+        const tile = game.wall.pop()!;
+        if (isFlower(tile)) {
+          // 花牌放到门口，不补花（等自己回合再补）
+          player.hand.exposedMelds.push({
+            type: MeldType.TRIPLET,
+            tiles: [tile],
+            isConcealed: false
+          });
+        } else {
+          player.hand.concealedTiles.push(tile);
+        }
       }
       player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
       player.status = PlayerStatus.PLAYING;
       player.score = 0;
     }
 
-    // Dealer draws first tile (also handles flowers)
-    this.handleDraw(game, game.players[game.dealerIndex]);
+    // 庄家摸牌（也处理花牌：放门口不补花）
+    {
+      const tile = game.wall.pop()!;
+      if (isFlower(tile)) {
+        game.players[game.dealerIndex].hand.exposedMelds.push({
+          type: MeldType.TRIPLET,
+          tiles: [tile],
+          isConcealed: false
+        });
+      } else {
+        game.players[game.dealerIndex].hand.concealedTiles.push(tile);
+      }
+      game.players[game.dealerIndex].hand.concealedTiles = sortTiles(
+        game.players[game.dealerIndex].hand.concealedTiles
+      );
+    }
 
     for (const player of game.players) {
       player.winOrder = null;
@@ -867,9 +902,44 @@ class GameManager {
       }
     } while (game.players[game.currentPlayerIndex].status !== PlayerStatus.PLAYING);
 
-    // Draw tile for next player once we have a valid target
     const nextPlayer = game.players[game.currentPlayerIndex];
+    
+    // 回合开始时补花：门口有花牌就从牌墙补牌
+    this.replaceFlowers(game, nextPlayer);
+    
+    // 然后正常摸牌
     this.handleDraw(game, nextPlayer);
+  }
+
+  /**
+   * 补花：门口有花牌时，从牌墙补牌到手牌
+   */
+  private replaceFlowers(game: GameState, player: Player): void {
+    // 找到门口的花牌meld（只有1张牌的meld就是花牌）
+    const flowerMelds = player.hand.exposedMelds.filter(
+      m => m.tiles.length === 1 && isFlower(m.tiles[0])
+    );
+    
+    for (const meld of flowerMelds) {
+      if (game.wall.length === 0) break;
+      
+      // 从牌墙补一张牌
+      const replacement = game.wall.pop()!;
+      
+      if (isFlower(replacement)) {
+        // 补到的还是花牌，加到门口继续补
+        player.hand.exposedMelds.push({
+          type: MeldType.TRIPLET,
+          tiles: [replacement],
+          isConcealed: false
+        });
+      } else {
+        // 补到普通牌，加入手牌
+        player.hand.concealedTiles.push(replacement);
+      }
+    }
+    
+    player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
   }
 
   private updateRoundNumber(game: GameState): void {
