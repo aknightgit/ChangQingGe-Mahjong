@@ -8,6 +8,7 @@ import { sortTiles, groupTiles, isSequence, isTriplet, isPair, tilesEqual,
 export enum HandType {
   ALL_TRIPLETS = 'all_triplets',   // 碰碰胡
   HALF_FLUSH = 'half_flush',       // 混一色
+  HUN_PENG = 'hun_peng',           // 混碰 (混一色+碰碰胡)
   FULL_FLUSH = 'full_flush',       // 清一色
   QING_PENG = 'qing_peng',         // 清碰 (清一色+碰碰胡)
   ALL_WIND = 'all_wind',           // 风一色
@@ -21,6 +22,7 @@ export const HAND_TYPE_PRIORITY: Record<HandType, number> = {
   [HandType.FENG_PENG]: 100,
   [HandType.ALL_WIND]: 90,
   [HandType.QING_PENG]: 80,
+  [HandType.HUN_PENG]: 75,
   [HandType.EIGHT_FLOWERS]: 70,
   [HandType.FULL_FLUSH]: 60,
   [HandType.FOUR_WILD]: 50,
@@ -101,6 +103,11 @@ export function detectHandTypes(
   // Check for half flush (混一色)
   if (!types.includes(HandType.FULL_FLUSH) && !types.includes(HandType.ALL_WIND) && isHalfFlushHand(nonFlowerTiles)) {
     types.push(HandType.HALF_FLUSH);
+
+    // 混碰 = 混一色 + 碰碰胡
+    if (types.includes(HandType.ALL_TRIPLETS)) {
+      types.push(HandType.HUN_PENG);
+    }
   }
 
   // Eight flowers (八花自摸)
