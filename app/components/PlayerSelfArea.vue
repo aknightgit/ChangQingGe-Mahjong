@@ -11,7 +11,7 @@
       </div>
     </div>
 
-    <!-- Melds (Pung / Kong) -->
+    <!-- Melds (Pung / Kong) with source dots -->
     <div class="player-melds" v-if="melds.length">
       <div
         v-for="(meld, i) in melds"
@@ -26,7 +26,23 @@
           :small="true"
           :dimmed="isWinner"
         />
+        <!-- 来源颜色圆点 -->
+        <span
+          v-if="meld.sourceIndex !== undefined"
+          class="meld-source"
+          :style="{ background: colors[meld.sourceIndex] }"
+        />
       </div>
+    </div>
+
+    <!-- 互包警告 -->
+    <div v-if="bailoutCounts && Object.keys(bailoutCounts).length" class="bailout-warning">
+      ⚠️ 互包:
+      <span v-for="(count, playerId) in bailoutCounts" :key="playerId">
+        <span class="player-dot" :style="{ background: colors[getPlayerIndex(playerId)] }" />
+        ×{{ count }}
+        <span v-if="count >= 3">🔥</span>
+      </span>
     </div>
 
     <!-- Discards moved above hand (closer to table center) -->
@@ -91,6 +107,15 @@ const props = defineProps<{
   showClaimOptions?: boolean
   claimType?: MeldType | null
 }>()
+
+const colors = computed(() => props.playerColors || ['#e53935', '#43a047', '#1e88e5', '#fb8c00'])
+function getPlayerIndex(playerId: string): number {
+  let hash = 0
+  for (let i = 0; i < playerId.length; i++) {
+    hash = ((hash << 5) - hash) + playerId.charCodeAt(i)
+  }
+  return Math.abs(hash) % 4
+}
 
 const emit = defineEmits<{
   (e: 'tileClick', tile: Tile): void
@@ -237,5 +262,45 @@ const onTileClick = (tile: Tile) => {
 .claim-button.primary {
   background: linear-gradient(135deg, #1f8a52, #46c574);
   color: #03100a;
+}
+/* 玩家颜色圆点 */
+.player-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid white;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+/* 副露来源标记 */
+.meld-source {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: 2px;
+  vertical-align: super;
+  border: 1px solid rgba(255,255,255,0.5);
+}
+
+/* 互包警告 */
+.bailout-warning {
+  background: rgba(255, 152, 0, 0.2);
+  border: 1px solid #ff9800;
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: 4px 0;
+  font-size: 0.75rem;
+  color: #ffb74d;
+  text-align: center;
+}
+
+/* 口数显示 */
+.bailout-count {
+  font-size: 0.7rem;
+  color: #ffb74d;
+  margin-left: 4px;
 }
 </style>
