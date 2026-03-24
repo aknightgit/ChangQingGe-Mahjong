@@ -174,6 +174,7 @@
 
           <div class="test-controls" v-if="isConnected">
             <h2 class="panel-title">Game Actions</h2>
+            <p v-if="actionWindowText" class="panel-subtitle action-window-text">{{ actionWindowText }}</p>
             
             <div v-if="showChow">
               <button class="mahjong-button panel-button" @click="onChow" :disabled="isInteractionLocked">
@@ -211,9 +212,9 @@
               </button>
             </div>
 
-            <div v-if="showPass">
-              <button class="mahjong-button panel-button danger" @click="onPass" :disabled="isInteractionLocked">
-                Pass (过)
+            <div v-if="showPass && hasPriorityActions">
+              <button class="mahjong-button panel-button danger small" @click="onPass" :disabled="isInteractionLocked">
+                Skip (过)
               </button>
             </div>
             <!-- 造反按钮 (五毒散) -->
@@ -294,6 +295,8 @@ const showAllCards = ref(false)
 const shouldRevealOpponents = computed(() => isAdminUser.value && showAllCards.value)
 const isMobilePortrait = ref(false)
 const shouldRotateView = computed(() => isMobilePortrait.value)
+const nowTs = ref(Date.now())
+let actionWindowTimer: ReturnType<typeof setInterval> | null = null
 
 watch(isAdminUser, (next) => {
   if (!next && showAllCards.value) {
@@ -326,6 +329,9 @@ onMounted(() => {
     evaluateViewport()
     window.addEventListener('resize', evaluateViewport)
     window.addEventListener('orientationchange', evaluateViewport)
+    actionWindowTimer = setInterval(() => {
+      nowTs.value = Date.now()
+    }, 100)
   }
 })
 
@@ -335,6 +341,10 @@ onUnmounted(() => {
   if (process.client) {
     window.removeEventListener('resize', evaluateViewport)
     window.removeEventListener('orientationchange', evaluateViewport)
+    if (actionWindowTimer) {
+      clearInterval(actionWindowTimer)
+      actionWindowTimer = null
+    }
   }
 })
 
@@ -551,6 +561,20 @@ const hasPriorityActions = computed(
     showConcealedKong.value ||
     showExtendedKong.value
 )
+
+const myPendingAction = computed(() => {
+  if (!gameState.value || !currentPlayer.value) return null
+  return gameState.value.pendingActions.find(pa => pa.playerId === currentPlayer.value!.id) || null
+})
+
+const actionWindowText = computed(() => {
+  if (!hasPriorityActions.value) return ''
+  const pending = myPendingAction.value
+  if (!pending?.expiresAt) return '响应窗口：1.0s（超时自动过）'
+  const leftMs = Math.max(0, pending.expiresAt - nowTs.value)
+  return `响应窗口：${(leftMs / 1000).toFixed(1)}s（超时自动过）`
+})
+
 const showMobileActionNotice = computed(() => shouldRotateView.value && hasPriorityActions.value)
 
 const onConcealedKong = () => {
@@ -847,6 +871,11 @@ const forceDiscard = async (p: Player) => {
   font-size: 0.85rem;
   margin-bottom: 6px;
   opacity: 0.9;
+}
+
+.action-window-text {
+  color: #ffd36a;
+  font-weight: 700;
 }
 
 .mahjong-button {

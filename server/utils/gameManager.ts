@@ -32,8 +32,48 @@ class GameManager {
   // 记录每个玩家从另一个玩家吃/碰/杠了多少口
   private mutualBailout: Map<string, Map<string, Map<string, number>>> = new Map();
 
+  // Pending action超时处理（自动推进）
+  private pendingActionTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
   setWebSocketManager(manager: any) {
     this.wsManager = manager;
+  }
+
+  private clearPendingActionTimer(gameId: string): void {
+    const timer = this.pendingActionTimers.get(gameId);
+    if (timer) {
+      clearTimeout(timer);
+      this.pendingActionTimers.delete(gameId);
+    }
+  }
+
+  private schedulePendingActionTimeout(gameId: string): void {
+    this.clearPendingActionTimer(gameId);
+
+    const timer = setTimeout(async () => {
+      try {
+        const game = await this.getGame(gameId);
+        if (!game || game.phase !== GamePhase.PLAYING) return;
+        if (!game.pendingActions.length) return;
+
+        // 自动让所有待响应玩家 PASS，推动流程
+        const pending = [...game.pendingActions];
+        for (const pa of pending) {
+          const player = game.players.find(p => p.id === pa.playerId);
+          if (!player || player.status !== PlayerStatus.PLAYING) continue;
+          this.handlePass(game, player);
+        }
+
+        await this.persistGame(game);
+        this.broadcastGameState(gameId);
+      } catch (err) {
+        console.error('Failed to auto-resolve pending actions:', err);
+      } finally {
+        this.pendingActionTimers.delete(gameId);
+      }
+    }, 1000); // 1秒窗口
+
+    this.pendingActionTimers.set(gameId, timer);
   }
 
   /**
@@ -520,6 +560,9 @@ class GameManager {
     const player = game.players.find(p => p.id === playerId);
     if (!player) throw new Error('Player not found');
 
+    // 玩家已响应，取消当前自动超时推进
+    this.clearPendingActionTimer(gameId);
+
     const gameAction: GameAction = {
       playerId,
       type: action,
@@ -876,13 +919,14 @@ class GameManager {
         playerId: candidate.id,
         availableActions: [ActionType.HU, ActionType.PASS],
         tile,
-        expiresAt: Date.now() + 30000
+        expiresAt: Date.now() + 1000
       });
     }
 
     if (robbers.length > 0) {
       game.pendingKongClaim = { playerId: player.id, tile };
       game.pendingActions = robbers;
+      this.schedulePendingActionTimeout(game.gameId);
       return;
     }
 
@@ -1166,7 +1210,7 @@ class GameManager {
           playerId: player.id,
           availableActions: actions,
           tile: discardedTile,
-          expiresAt: Date.now() + 30000 // 30 seconds to respond
+          expiresAt: Date.now() + 1000 // 1 second response window
         });
       }
     }
@@ -1182,10 +1226,16 @@ class GameManager {
             playerId: chowPlayer.id,
             availableActions: [ActionType.CHOW, ActionType.PASS],
             tile: discardedTile,
-            expiresAt: Date.now() + 30000
+            expiresAt: Date.now() + 1000
           });
         }
       }
+    }
+
+    if (game.pendingActions.length > 0) {
+      this.schedulePendingActionTimeout(game.gameId);
+    } else {
+      this.clearPendingActionTimer(game.gameId);
     }
   }
 
@@ -1325,6 +1375,7 @@ class GameManager {
   }
 
   private endRound(game: GameState, reason: GameEndReason): void {
+    this.clearPendingActionTimer(game.gameId);
     game.phase = GamePhase.CHA_JIAO;
 
     // Calculate final scores
