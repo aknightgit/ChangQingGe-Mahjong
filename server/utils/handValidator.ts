@@ -58,8 +58,9 @@ export function detectHandTypes(
     types.push(HandType.ALL_TRIPLETS);
   }
   
-  // Check for all wind (风一色) - checked before full flush
-  if (isAllWindHand(nonFlowerTiles)) {
+  // Check for all honor tiles (风一色) — 包括风牌+箭牌+百搭
+  // 风碰也基于此检测
+  if (isAllHonorHand(nonFlowerTiles, wildTileId)) {
     types.push(HandType.ALL_WIND);
     
     // 风碰 = 风一色 + 碰碰胡
@@ -165,12 +166,27 @@ function isHalfFlushHand(tiles: Tile[]): boolean {
 }
 
 /**
- * Check if all tiles are wind or dragon tiles (风一色/风碰)
- * 风碰允许风牌+箭牌混合
+ * Check if all tiles are honor tiles (风一色/风碰)
+ * 包括: 风牌 + 箭牌 + 百搭
  */
-function isAllWindHand(tiles: Tile[]): boolean {
-  const nonFlowerTiles = tiles.filter(t => !isFlower(t));
-  return nonFlowerTiles.every(t => t.suit === TileSuit.WIND || t.suit === TileSuit.DRAGON);
+function isAllHonorHand(tiles: Tile[], wildTileId: string | null): boolean {
+  // 解析百搭牌信息
+  let wildSuit: TileSuit | null = null;
+  let wildValue: number | null = null;
+  if (wildTileId) {
+    const parts = wildTileId.split('-');
+    if (parts.length >= 2) {
+      wildSuit = parts[0] as TileSuit;
+      wildValue = parseInt(parts[1]);
+    }
+  }
+  
+  return tiles.every(t => {
+    if (t.suit === TileSuit.WIND) return true;
+    if (t.suit === TileSuit.DRAGON) return true;
+    if (wildSuit && t.suit === wildSuit && t.value === wildValue) return true;
+    return false;
+  });
 }
 
 /**

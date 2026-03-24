@@ -129,6 +129,16 @@ const fengYiSe: Tile[] = [
 const fengTypes = detectHandTypes(fengYiSe, [fengExposedMeld2], true, 0, null);
 test('风一色检测(含门口牌)', fengTypes.includes(HandType.ALL_WIND));
 
+// 风一色含箭牌: 中中中 发发发 白白白 北北 东东东 (门口牌)
+const fengYiSe2: Tile[] = [
+  makeTile(TileSuit.DRAGON, 1), makeTile(TileSuit.DRAGON, 1), makeTile(TileSuit.DRAGON, 1),
+  makeTile(TileSuit.DRAGON, 2), makeTile(TileSuit.DRAGON, 2), makeTile(TileSuit.DRAGON, 2),
+  makeTile(TileSuit.DRAGON, 3), makeTile(TileSuit.DRAGON, 3), makeTile(TileSuit.DRAGON, 3),
+  makeTile(TileSuit.WIND, 4), makeTile(TileSuit.WIND, 4),
+];
+const fengTypes2 = detectHandTypes(fengYiSe2, [fengExposedMeld2], true, 0, null);
+test('风一色含箭牌', fengTypes2.includes(HandType.ALL_WIND));
+
 // 风碰: 全部风牌+箭牌 + 碰碰胡
 // 东东东 南南南 西西西 中中中 北北 = 3+3+3+3+2=14 ✅
 const fengPengHand: Tile[] = [
