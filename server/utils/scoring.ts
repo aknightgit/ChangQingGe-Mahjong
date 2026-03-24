@@ -1,318 +1,383 @@
-import { Tile, Meld, MeldType, WinType, FanCalculation, Player } from '../types/game';
-import { isFullFlush, isTerminal, isJiangValue, getSuits } from './tiles';
-import { countRoots, extractMelds } from './handValidator';
-
 /**
- * Calculate fan for a winning hand
+ * 长清阁麻将 - 番数计算系统
+ * 
+ * 两种计算方式:
+ * 1. 固定番数牌型（优先级最高，直接使用固定值）
+ * 2. 公式计算牌型（碰碰胡/混一色）
  */
-export function calculateFan(
-  tiles: Tile[],
-  exposedMelds: Meld[],
-  winType: WinType,
-  isSelfDrawn: boolean,
-  isKongFlower: boolean,
-  isRobbingKong: boolean,
-  isKongDiscard: boolean,
-  isHeaven: boolean,
-  isEarth: boolean
-): FanCalculation {
-  let baseFan = 0;
-  const additionalFans: string[] = [];
-  let handTypeFan: string | null = null;
 
-  // Base fan: must be missing one suit (缺门)
-  baseFan = 1;
+import { Tile, Meld, MeldType, TileSuit } from '../types/game';
+import { isFlower, isWind, isDragon, groupTiles, tilesEqual } from './tiles';
+import { HandType, HAND_TYPE_PRIORITY } from './handValidator';
 
-  // Additional fans
-  const roots = countRoots(tiles, exposedMelds);
-  if (roots > 0) {
-    for (let i = 0; i < roots; i++) {
-      additionalFans.push('Root (有根)');
-    }
-    baseFan += roots;
-  }
+// ===== 固定番数牌型 =====
+const FIXED_FAN: Record<string, number> = {
+  '风碰': 40,      // 风一色 + 碰碰胡
+  '风一色': 20,    // 全部风牌
+  '清碰': 20,      // 清一色 + 碰碰胡
+  '清一色': 10,    // 全部一门花色
+  '无花自摸': 10,  // 碰碰胡/混一色，门口无花，自摸
+  '杠开': 10,      // 杠牌/杠花后补牌自摸
+  '八花自摸': 10,  // 手牌+副露共8花，自摸
+  '四百搭': 10     // 手牌有4张百搭
+};
 
-  if (isRobbingKong) {
-    additionalFans.push('Robbing the Kong (抢杠)');
-    baseFan += 1;
-  }
+// 番数上限
+const MAX_FAN = 10;
 
-  if (isKongDiscard) {
-    additionalFans.push('Kong Discard (杠上炮)');
-    baseFan += 1;
-  }
+// ===== 主计算函数 =====
 
-  if (isKongFlower) {
-    additionalFans.push('Kong Flower (杠上花)');
-    baseFan += 1;
-  }
-
-  if (isHeaven) {
-    additionalFans.push('Heaven Win (天和)');
-    baseFan += 4;
-  }
-
-  if (isEarth) {
-    additionalFans.push('Earth Win (地和)');
-    baseFan += 4;
-  }
-
-  // Hand-type fans
-  const allTiles = [...tiles];
-  for (const meld of exposedMelds) {
-    allTiles.push(...meld.tiles);
-  }
-
-  // Check for various hand patterns
-  const isFlush = isFullFlush(allTiles);
-  const hasSequence = checkHasSequence(tiles, exposedMelds);
-  const allTerminals = checkAllTerminals(tiles, exposedMelds);
-  const allJiang = checkAllJiang(tiles, exposedMelds);
-
-  // Highest fan patterns
-  if (isFlush && winType === WinType.SEVEN_PAIRS) {
-    handTypeFan = 'Pure Seven Pairs (清七对)';
-    baseFan += 4;
-  } else if (isFlush && !hasSequence && winType === WinType.STANDARD) {
-    handTypeFan = 'Pure Pungs (清对)';
-    baseFan += 4;
-  } else if (isFlush && allTerminals) {
-    handTypeFan = 'Pure Terminals (清带幺)';
-    baseFan += 4;
-  } else if (allJiang && !hasSequence) {
-    handTypeFan = 'Jiang Pungs (将对)';
-    baseFan += 4;
-  } else if (isFlush) {
-    handTypeFan = 'Full Flush (清一色)';
-    baseFan += 3;
-  } else if (winType === WinType.SEVEN_PAIRS) {
-    handTypeFan = 'Seven Pairs (暗七对)';
-    baseFan += 3;
-  } else if (allTerminals) {
-    handTypeFan = 'All Terminals (全带幺)';
-    baseFan += 3;
-  } else if (!hasSequence) {
-    handTypeFan = 'All Pungs (对对和)';
-    baseFan += 2;
-  } else {
-    handTypeFan = 'Pure Win (素番)';
-    // baseFan already 1
-  }
-
-  // Cap at maximum 5 fan (Extreme)
-  const totalFan = Math.min(baseFan, 5);
-  const fanName = getFanName(totalFan);
-
-  return {
-    baseFan,
-    additionalFans,
-    handTypeFan,
-    totalFan,
-    fanName
-  };
+export interface ScoreResult {
+  baseFan: number;           // 基础番数
+  extraMultipliers: number;  // 额外翻倍（无百搭×2 + 门清×2）
+  roundMultiplier: number;   // 回合倍数（骰子决定）
+  globalMultiplier: number;  // 全局倍数（流局/造反叠加）
+  finalPoints: number;       // 最终点数
+  handTypeName: string;      // 牌型名称
+  details: string[];         // 计算明细
 }
 
 /**
- * Check if hand has any sequences
+ * 计算胡牌点数
  */
-function checkHasSequence(tiles: Tile[], exposedMelds: Meld[]): boolean {
-  // Check exposed melds
-  for (const meld of exposedMelds) {
-    if (meld.type === MeldType.SEQUENCE) {
-      return true;
+export function calculateScore(params: {
+  handTiles: Tile[];           // 手牌（胡牌时）
+  exposedMelds: Meld[];        // 门口牌（吃/碰/杠）
+  flowerTiles: Tile[];         // 花牌
+  handTypes: HandType[];       // 检测到的牌型
+  isSelfDrawn: boolean;        // 是否自摸
+  isKongFlower: boolean;       // 是否杠上花
+  isRobbingKong: boolean;      // 是否抢杠
+  isMenQing: boolean;          // 是否门清
+  wildTileSuit?: TileSuit;     // 百搭牌的花色
+  wildTileValue?: number;      // 百搭牌的数值
+  roundMultiplier: number;     // 回合倍数
+  globalMultiplier: number;    // 全局倍数
+}): ScoreResult {
+  const {
+    handTiles, exposedMelds, flowerTiles, handTypes,
+    isSelfDrawn, isKongFlower, isRobbingKong, isMenQing,
+    wildTileSuit, wildTileValue, roundMultiplier, globalMultiplier
+  } = params;
+
+  const details: string[] = [];
+  let handTypeName = '普通胡';
+  let baseFan = 0;
+
+  // 1. 确定最高优先级牌型
+  if (handTypes.length > 0) {
+    const topType = handTypes[0];
+    handTypeName = getHandTypeDisplayName(topType);
+
+    // 检查是否为固定番数牌型
+    const fixedName = getFixedFanName(topType, isSelfDrawn, isKongFlower);
+    if (fixedName && FIXED_FAN[fixedName]) {
+      baseFan = FIXED_FAN[fixedName];
+      details.push(`${fixedName} = ${baseFan}番`);
     }
   }
 
-  // Check concealed tiles
-  const melds = extractMelds(tiles);
-  if (melds) {
-    for (const meld of melds) {
-      if (meld.type === MeldType.SEQUENCE) {
-        return true;
+  // 2. 如果没有固定番数，用公式计算（碰碰胡/混一色）
+  if (baseFan === 0) {
+    const formulaResult = calculateFormulaFan(handTiles, exposedMelds, flowerTiles);
+    baseFan = formulaResult.fan;
+    details.push(...formulaResult.details);
+  }
+
+  // 3. 检查无花自摸（碰碰胡/混一色 + 自摸 + 门口无花 + 无风向刻杠）
+  if (baseFan === 0 || baseFan < 10) {
+    if (isSelfDrawn && !isKongFlower) {
+      const hasNoFlowers = flowerTiles.length === 0 && 
+        exposedMelds.every(m => m.tiles.every(t => !isFlower(t)));
+      const hasNoWindMelds = !hasWindMelds(exposedMelds, handTiles);
+      
+      if (hasNoFlowers && hasNoWindMelds) {
+        const isPengOrHun = handTypes.includes(HandType.ALL_TRIPLETS) || 
+                            handTypes.includes(HandType.HALF_FLUSH);
+        if (isPengOrHun) {
+          baseFan = Math.max(baseFan, 10);
+          details.push('无花自摸 = 10番');
+        }
       }
     }
   }
 
+  // 4. 杠开（杠牌/杠花后补牌自摸）
+  if (isSelfDrawn && isKongFlower) {
+    baseFan = Math.max(baseFan, 10);
+    details.push('杠开 = 10番');
+  }
+
+  // 5. 四百搭
+  if (wildTileSuit !== undefined && wildTileValue !== undefined) {
+    const wildCount = countWildTiles(handTiles, wildTileSuit, wildTileValue);
+    if (wildCount >= 4) {
+      baseFan = Math.max(baseFan, 10);
+      details.push('四百搭 = 10番');
+    }
+  }
+
+  // 6. 如果仍然是0（无特殊牌型），使用基础公式
+  if (baseFan === 0) {
+    const formulaResult = calculateFormulaFan(handTiles, exposedMelds, flowerTiles);
+    baseFan = formulaResult.fan;
+    details.push(...formulaResult.details);
+  }
+
+  // 7. 番数上限
+  baseFan = Math.min(baseFan, MAX_FAN);
+
+  // 8. 额外翻倍
+  let extraMultipliers = 1;
+  
+  // 无百搭翻倍
+  if (wildTileSuit !== undefined && wildTileValue !== undefined) {
+    const wildCount = countWildTiles(handTiles, wildTileSuit, wildTileValue);
+    if (wildCount === 0) {
+      extraMultipliers *= 2;
+      details.push('无百搭 ×2');
+    }
+  }
+
+  // 门清翻倍
+  if (isMenQing) {
+    extraMultipliers *= 2;
+    details.push('门清 ×2');
+  }
+
+  // 9. 最终点数
+  const effectiveRoundMultiplier = Math.max(1, roundMultiplier);
+  const effectiveGlobalMultiplier = Math.max(1, Math.min(globalMultiplier, 8));
+  const finalPoints = baseFan * extraMultipliers * effectiveRoundMultiplier * effectiveGlobalMultiplier;
+
+  details.push(`最终 = ${baseFan} × ${extraMultipliers} × ${effectiveRoundMultiplier} × ${effectiveGlobalMultiplier} = ${finalPoints}`);
+
+  return {
+    baseFan,
+    extraMultipliers,
+    roundMultiplier: effectiveRoundMultiplier,
+    globalMultiplier: effectiveGlobalMultiplier,
+    finalPoints,
+    handTypeName,
+    details
+  };
+}
+
+// ===== 公式计算（碰碰胡/混一色）=====
+
+interface FormulaResult {
+  fan: number;
+  details: string[];
+}
+
+function calculateFormulaFan(
+  handTiles: Tile[],
+  exposedMelds: Meld[],
+  flowerTiles: Tile[]
+): FormulaResult {
+  const details: string[] = [];
+  let comboPoints = 0;
+
+  // 花牌数
+  const flowerCount = flowerTiles.length;
+
+  // 计算组合牌点数
+  const allMelds = [...exposedMelds];
+  
+  // 从手牌中提取暗杠
+  const groups = groupTiles(handTiles);
+  for (const [, group] of groups) {
+    if (group.length === 4) {
+      allMelds.push({
+        type: MeldType.CONCEALED_KONG,
+        tiles: group,
+        isConcealed: true
+      });
+    }
+  }
+
+  for (const meld of allMelds) {
+    const isKong = meld.type === MeldType.KONG || meld.type === MeldType.CONCEALED_KONG;
+    const isConcealed = meld.type === MeldType.CONCEALED_KONG;
+    const firstTile = meld.tiles[0];
+
+    if (isWind(firstTile)) {
+      if (isKong) {
+        let points = 2;
+        if (isConcealed) points += 1;
+        comboPoints += points;
+        details.push(`风牌杠${isConcealed ? '(暗)' : ''} = ${points}点`);
+      } else if (meld.type === MeldType.TRIPLET) {
+        comboPoints += 1;
+        details.push('风牌刻子 = 1点');
+      }
+    } else if (isDragon(firstTile)) {
+      if (isKong) {
+        let points = 3;
+        if (isConcealed) points += 1;
+        comboPoints += points;
+        details.push(`箭牌杠${isConcealed ? '(暗)' : ''} = ${points}点`);
+      } else if (meld.type === MeldType.TRIPLET) {
+        comboPoints += 2;
+        details.push('箭牌刻子 = 2点');
+      }
+    } else {
+      // 其他牌杠
+      if (isKong) {
+        let points = 1;
+        if (isConcealed) points += 1;
+        comboPoints += points;
+        details.push(`其他牌杠${isConcealed ? '(暗)' : ''} = ${points}点`);
+      }
+    }
+  }
+
+  // 基础番数 = 2 + 花牌数 + 组合牌点数
+  let fan = 2 + flowerCount + comboPoints;
+  
+  // 上限
+  fan = Math.min(fan, MAX_FAN);
+
+  details.unshift(`公式: 2 + ${flowerCount}花 + ${comboPoints}组合 = ${fan}番`);
+
+  return { fan, details };
+}
+
+// ===== 辅助函数 =====
+
+function getHandTypeDisplayName(type: HandType): string {
+  const names: Record<HandType, string> = {
+    [HandType.FENG_PENG]: '风碰',
+    [HandType.ALL_WIND]: '风一色',
+    [HandType.QING_PENG]: '清碰',
+    [HandType.EIGHT_FLOWERS]: '八花自摸',
+    [HandType.FULL_FLUSH]: '清一色',
+    [HandType.FOUR_WILD]: '四百搭',
+    [HandType.HALF_FLUSH]: '混一色',
+    [HandType.ALL_TRIPLETS]: '碰碰胡'
+  };
+  return names[type] || '普通胡';
+}
+
+function getFixedFanName(type: HandType, isSelfDrawn: boolean, isKongFlower: boolean): string | null {
+  switch (type) {
+    case HandType.FENG_PENG: return '风碰';
+    case HandType.ALL_WIND: return '风一色';
+    case HandType.QING_PENG: return '清碰';
+    case HandType.FULL_FLUSH: return '清一色';
+    case HandType.EIGHT_FLOWERS: return isSelfDrawn ? '八花自摸' : null;
+    case HandType.FOUR_WILD: return '四百搭';
+    default: return null;
+  }
+}
+
+function hasWindMelds(exposedMelds: Meld[], handTiles: Tile[]): boolean {
+  // 检查门口是否有风牌刻子/杠
+  for (const meld of exposedMelds) {
+    if (meld.tiles.length > 0 && isWind(meld.tiles[0])) {
+      return true;
+    }
+  }
+  // 检查手牌中的风牌刻子
+  const groups = groupTiles(handTiles);
+  for (const [key, group] of groups) {
+    if (group.length >= 3 && isWind(group[0])) {
+      return true;
+    }
+  }
   return false;
 }
 
+function countWildTiles(tiles: Tile[], wildSuit: TileSuit, wildValue: number): number {
+  return tiles.filter(t => t.suit === wildSuit && t.value === wildValue).length;
+}
+
+// ===== 结算函数 =====
+
 /**
- * Check if all melds contain terminals (1 or 9)
+ * 计算最终结算
+ * @param winnerScore 赢家得分
+ * @param isSelfDrawn 是否自摸
+ * @param winnerIndex 赢家位置
+ * @param allPlayerIndices 所有存活玩家位置
+ * @param mutualBailout 互包关系 Map<playerIndex, {partnerIndex, type: '三口'|'四口'}>
  */
-function checkAllTerminals(tiles: Tile[], exposedMelds: Meld[]): boolean {
-  const melds = extractMelds(tiles);
-  if (!melds) return false;
+export function calculateSettlement(
+  winnerScore: number,
+  isSelfDrawn: boolean,
+  winnerIndex: number,
+  allPlayerIndices: number[],
+  mutualBailout?: Map<number, { partnerIndex: number; type: '三口' | '四口' }>
+): Map<number, number> {
+  const deltas = new Map<number, number>();
+  
+  // 初始化所有玩家为0
+  for (const idx of allPlayerIndices) {
+    deltas.set(idx, 0);
+  }
 
-  const allMelds = [...melds, ...exposedMelds];
-
-  for (const meld of allMelds) {
-    if (meld.type === MeldType.PAIR) continue; // Pairs can be anything
-
-    const hasTerminal = meld.tiles.some(t => isTerminal(t));
-    if (!hasTerminal) {
-      return false;
+  if (isSelfDrawn) {
+    // 自摸：每个未胡玩家向赢家赔付
+    for (const idx of allPlayerIndices) {
+      if (idx === winnerIndex) continue;
+      
+      let multiplier = 1;
+      
+      // 检查互包
+      const bailout = mutualBailout?.get(idx);
+      if (bailout && bailout.partnerIndex === winnerIndex) {
+        multiplier = bailout.type === '四口' ? 5 : 3;
+      }
+      
+      const pay = winnerScore * multiplier;
+      deltas.set(idx, (deltas.get(idx) || 0) - pay);
+      deltas.set(winnerIndex, (deltas.get(winnerIndex) || 0) + pay);
+    }
+  } else {
+    // 放冲：放冲者全额赔付，互包方也赔付
+    // 需要外部指定谁放冲
+    // 这里简化为所有未胡玩家均分
+    for (const idx of allPlayerIndices) {
+      if (idx === winnerIndex) continue;
+      
+      let multiplier = 1;
+      
+      const bailout = mutualBailout?.get(idx);
+      if (bailout && bailout.partnerIndex === winnerIndex) {
+        // 互包双方互相放冲 = ×2
+        multiplier = 2;
+      }
+      
+      const pay = winnerScore * multiplier;
+      deltas.set(idx, (deltas.get(idx) || 0) - pay);
+      deltas.set(winnerIndex, (deltas.get(winnerIndex) || 0) + pay);
     }
   }
 
-  return true;
+  return deltas;
 }
 
 /**
- * Check if all sets use 2, 5, or 8
+ * 计算回合倍数
  */
-function checkAllJiang(tiles: Tile[], exposedMelds: Meld[]): boolean {
-  const melds = extractMelds(tiles);
-  if (!melds) return false;
+export function calculateRoundMultiplier(dice1: number, dice2: number): number {
+  const sum = dice1 + dice2;
+  const isDouble = dice1 === dice2;
 
-  const allMelds = [...melds, ...exposedMelds];
-
-  for (const meld of allMelds) {
-    // All tiles in meld must be Jiang values
-    const allJiangValues = meld.tiles.every(t => isJiangValue(t));
-    if (!allJiangValues) {
-      return false;
-    }
+  if (isDouble) {
+    if (dice1 === 1 || dice1 === 4) return 4; // 1+1=×4, 4+4=×4
+    return 2; // 其他对子=×2
   }
-
-  return true;
+  return 1; // 非对子=×1
 }
 
 /**
- * Get fan name based on count
+ * 计算全局倍数（流局/造反叠加）
  */
-function getFanName(fan: number): string {
-  switch (fan) {
-    case 1: return 'One-Fan Win (一番和)';
-    case 2: return 'Two-Fan Win (两番和)';
-    case 3: return 'Small Grand Slam (小满贯)';
-    case 4: return 'Big Grand Slam (大满贯)';
-    case 5: return 'Extreme (极品)';
-    default: return 'One-Fan Win (一番和)';
-  }
-}
-
-/**
- * Calculate winning score based on fan count
- * Formula: Base × 2^(FanCount - 1)
- */
-export function calculateWinningScore(fan: number): number {
-  return Math.pow(2, fan - 1);
-}
-
-/**
- * Calculate kong scores
- */
-export function calculateKongScore(
-  kongType: 'direct' | 'extended' | 'concealed',
-  numNonWinners: number
+export function calculateGlobalMultiplier(
+  currentMultiplier: number,
+  event: '流局' | '造反'
 ): number {
-  switch (kongType) {
-    case 'direct': // 点杠 - discarder pays
-      return 2;
-    case 'extended': // 续明杠 - each non-winner pays 1
-      return numNonWinners * 1;
-    case 'concealed': // 暗杠 - each non-winner pays 2
-      return numNonWinners * 2;
-    default:
-      return 0;
-  }
-}
-
-/**
- * Calculate Cha Jiao penalties
- * Returns penalties for flower pigs and non-ting players
- */
-export function calculateChaJiaoPenalties(
-  players: Player[],
-  winners: Player[]
-): Record<string, number> {
-  const penalties: Record<string, number> = {};
-  const nonWinners = players.filter(p => !winners.find(w => w.id === p.id));
-
-  // Find flower pigs (持三门 - holding all three suits)
-  const flowerPigs = nonWinners.filter(p => {
-    const allTiles = [...p.hand.concealedTiles];
-    for (const meld of p.hand.exposedMelds) {
-      allTiles.push(...meld.tiles);
-    }
-    const suits = getSuits(allTiles);
-    return suits.size === 3; // Has all three suits
-  });
-
-  // Find non-ting players
-  const nonTingPlayers = nonWinners.filter(p => !p.isTing);
-
-  // Flower pig penalties - pays Extreme level (5 fan) to all non-flower-pig players
-  const extremeScore = calculateWinningScore(5); // 16 points
-  for (const pig of flowerPigs) {
-    let totalPenalty = 0;
-    const nonPigPlayers = players.filter(p => p.id !== pig.id && !flowerPigs.find(fp => fp.id === p.id));
-    totalPenalty = nonPigPlayers.length * extremeScore;
-    penalties[pig.id] = (penalties[pig.id] || 0) - totalPenalty;
-
-    // Distribute to non-pig players
-    for (const player of nonPigPlayers) {
-      penalties[player.id] = (penalties[player.id] || 0) + extremeScore;
-    }
-  }
-
-  // Non-ting penalties - compensate ting players (包大)
-  for (const nonTing of nonTingPlayers) {
-    if (flowerPigs.find(p => p.id === nonTing.id)) continue; // Already penalized as flower pig
-
-    const tingPlayers = players.filter(p => p.isTing || winners.find(w => w.id === p.id));
-    for (const tingPlayer of tingPlayers) {
-      if (tingPlayer.id === nonTing.id) continue;
-
-      // Full liability - pays as if the ting player won
-      const fanScore = tingPlayer.wonFan > 0 ? calculateWinningScore(tingPlayer.wonFan) : 1;
-      penalties[nonTing.id] = (penalties[nonTing.id] || 0) - fanScore;
-      penalties[tingPlayer.id] = (penalties[tingPlayer.id] || 0) + fanScore;
-    }
-
-    // Invalidate kong scores for non-ting players
-    penalties[nonTing.id] = (penalties[nonTing.id] || 0) - nonTing.windScore - nonTing.rainScore;
-  }
-
-  return penalties;
-}
-
-/**
- * Calculate total game result including all scores and penalties
- */
-export function calculateGameResult(
-  players: Player[],
-  winners: Player[]
-): Record<string, number> {
-  const finalScores: Record<string, number> = {};
-
-  // Initialize all scores
-  for (const player of players) {
-    finalScores[player.id] = 0;
-  }
-
-  // Add winning scores
-  for (const winner of winners) {
-    const winScore = calculateWinningScore(winner.wonFan);
-    finalScores[winner.id] += winScore;
-
-    // Deduct from non-winners (self-drawn means all pay)
-    const nonWinners = players.filter(p => !winners.find(w => w.id === p.id));
-    for (const nonWinner of nonWinners) {
-      finalScores[nonWinner.id] -= winScore;
-    }
-  }
-
-  // Add kong scores
-  for (const player of players) {
-    finalScores[player.id] += player.windScore + player.rainScore;
-  }
-
-  // Apply Cha Jiao penalties
-  const chaJiaoPenalties = calculateChaJiaoPenalties(players, winners);
-  for (const [playerId, penalty] of Object.entries(chaJiaoPenalties)) {
-    finalScores[playerId] += penalty;
-  }
-
-  return finalScores;
+  const newMultiplier = currentMultiplier * 2;
+  return Math.min(newMultiplier, 8); // 上限×8
 }
