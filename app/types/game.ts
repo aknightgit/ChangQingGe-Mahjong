@@ -68,6 +68,7 @@ export interface Player {
 export enum ActionType {
   DRAW = 'draw',
   DISCARD = 'discard',
+  CHOW = 'chow',
   PENG = 'peng',
   KONG = 'kong',
   EXTENDED_KONG = 'extended_kong', // 续杠

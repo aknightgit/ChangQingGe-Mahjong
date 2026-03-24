@@ -53,7 +53,7 @@
                 <span v-else>{{ turnMessage }}</span>
               </p>
               <p class="hint">
-                Click tiles to select; click again to discard. Draws happen automatically after each discard.
+                Click tiles to select; click again to discard. Action buttons appear based on server-validated rules.
               </p>
             </div>
             <!-- Top player -->
@@ -175,6 +175,12 @@
           <div class="test-controls" v-if="isConnected">
             <h2 class="panel-title">Game Actions</h2>
             
+            <div v-if="showChow">
+              <button class="mahjong-button panel-button" @click="onChow" :disabled="isInteractionLocked">
+                Chow (吃)
+              </button>
+            </div>
+
             <div v-if="showPeng">
               <button class="mahjong-button panel-button" @click="onPeng" :disabled="isInteractionLocked">
                 Pung (碰)
@@ -241,7 +247,7 @@
               </p>
             </div>
 
-            <div v-if="!showPeng && !showKong && !showHu && !showPass && !showConcealedKong && !showExtendedKong">
+            <div v-if="!showChow && !showPeng && !showKong && !showHu && !showPass && !showConcealedKong && !showExtendedKong">
               <p class="panel-subtitle">Waiting for others...</p>
             </div>
           </div>
@@ -514,6 +520,7 @@ const handleTileClick = (tile: Tile) => {
 // The backend `executeAction` for PENG doesn't require tileId if it's obvious, 
 // but `gameManager.ts` implementation of `handlePeng` finds matching tiles automatically.
 
+const showChow = computed(() => availableActions.value.includes(ActionType.CHOW))
 const showPeng = computed(() => availableActions.value.includes(ActionType.PENG))
 const showKong = computed(() => availableActions.value.includes(ActionType.KONG))
 const showHu = computed(() => availableActions.value.includes(ActionType.HU))
@@ -524,6 +531,7 @@ const canCheatHu = computed(
   () => isAdminUser.value && isMyTurn.value && gameState.value?.phase === GamePhase.PLAYING
 )
 
+const onChow = () => executeAction(ActionType.CHOW)
 const onPeng = () => executeAction(ActionType.PENG)
 const onKong = () => executeAction(ActionType.KONG)
 const onHu = () => executeAction(ActionType.HU)
@@ -536,6 +544,7 @@ const showConcealedKong = computed(() => availableActions.value.includes(ActionT
 const showExtendedKong = computed(() => availableActions.value.includes(ActionType.EXTENDED_KONG))
 const hasPriorityActions = computed(
   () =>
+    showChow.value ||
     showPeng.value ||
     showKong.value ||
     showHu.value ||

@@ -5,7 +5,8 @@ import { requireAdminUser } from '../../utils/session';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
-  const { gameId, playerId, action, tileId, tileIds } = body;
+  const { gameId, playerId, action: rawAction, type, tileId, tileIds } = body;
+  const action = rawAction || type;
 
   if (!gameId || !playerId || !action) {
     throw createError({

@@ -147,32 +147,15 @@ export const useGame = () => {
     if (isActionPending.value) return
     isActionPending.value = true
 
-    // Optimistic update or just send to server
-    // We can use socket to send action for faster response
-    if (socket.value && isConnected.value) {
-      socket.value.emit('game:action', {
-        gameId: gameId.value,
-        playerId: playerId.value,
-        type: action,
-        tileId,
-        tileIds
-      })
-    }
-
-    // Also call API as backup or primary (depending on backend logic)
-    // Since socket.ts seems to just broadcast, we might still need the API 
-    // to actually update the game state in GameManager.
-    // However, the user asked to use socket.ts functions.
-    // If socket.ts only broadcasts, it doesn't update state.
-    // So we MUST call the API to update state, and let the API (or socket) broadcast the update.
-    
+    // 单通道执行：统一走 API，避免 Socket + API 重复执行
     try {
       const { data, error: apiError } = await useFetch('/api/game/action', {
         method: 'POST',
         body: {
           gameId: gameId.value,
           playerId: playerId.value,
-          type: action,
+          action,
+          type: action, // 兼容旧字段
           tileId,
           tileIds
         }
