@@ -448,7 +448,8 @@ class GameManager {
     // Check pending actions (peng, kong, hu from another player's discard)
     const pendingAction = game.pendingActions.find(pa => pa.playerId === playerId);
     if (pendingAction) {
-      // 冷冻期间不响应
+      // 冷冻期间不响应其他玩家的弃牌（吃/碰/杠/胡），但自摸胡不受影响
+      // 自摸胡在玩家自己的回合通过 turn actions 处理
       if (game.freezeRound && game.roundNumber <= game.freezeRound) {
         return [];
       }
@@ -456,12 +457,13 @@ class GameManager {
     }
 
     // If it's the player's turn and no one else has pending reactions, allow turn actions
+    // Note: freeze does NOT block the player's own draw+discard cycle
     if (currentPlayer.id === playerId && game.pendingActions.length === 0) {
-      // 检查造反（五毒散）
+      // 检查造反（五毒散）- 仅第一圈有效
       const wildParts = game.customScoringMode?.split('-');
       const wildSuit = wildParts ? wildParts[0] as TileSuit : undefined;
       const wildValue = wildParts && wildParts[1] ? parseInt(wildParts[1]) : undefined;
-      if (isFivePoison(player.hand.concealedTiles, wildSuit, wildValue)) {
+      if (game.roundNumber <= 1 && isFivePoison(player.hand.concealedTiles, wildSuit, wildValue)) {
         actions.push(ActionType.REBEL);
       }
 
@@ -534,6 +536,10 @@ class GameManager {
 
       case ActionType.PENG:
         this.handlePeng(game, player);
+        break;
+
+      case ActionType.CHOW:
+        this.handleChow(game, player);
         break;
 
       case ActionType.KONG:
@@ -662,6 +668,55 @@ class GameManager {
     }
     
     return false;
+  }
+
+  private handleChow(game: GameState, player: Player): void {
+    const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
+    if (!pendingAction || !pendingAction.tile) return;
+
+    const discardedTile = pendingAction.tile;
+
+    // Verify the discarder is the previous active player (上家)
+    const prevPlayer = this.getPreviousActivePlayer(game, game.currentPlayerIndex);
+    if (!prevPlayer || prevPlayer.id !== player.id) {
+      throw new Error('Can only chow from the previous player (上家)');
+    }
+
+    // Find all possible sequences
+    const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile);
+    if (sequences.length === 0) {
+      throw new Error('No valid sequence found for chow');
+    }
+
+    // Use the first valid sequence (client can specify which one via tileIds in future)
+    const sequence = sequences[0];
+    const handTiles = sequence.filter(t => t.id !== discardedTile.id);
+
+    // Record bailout action
+    const sourcePlayerId = this.getLastDiscardPlayerId(game);
+    this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.SEQUENCE);
+
+    // Remove tiles from hand
+    for (const tile of handTiles) {
+      player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile.id);
+    }
+
+    // Create exposed meld
+    const meld: Meld = {
+      type: MeldType.SEQUENCE,
+      tiles: sequence,
+      isConcealed: false
+    };
+    player.hand.exposedMelds.push(meld);
+
+    // Remove from discard pile
+    game.discardPile.pop();
+
+    // Clear pending actions
+    game.pendingActions = [];
+
+    // Set current player to the chow player - they must discard
+    game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
   }
 
   private handlePeng(game: GameState, player: Player): void {
@@ -973,6 +1028,93 @@ class GameManager {
         });
       }
     }
+
+    // Check for CHOW (吃) - only the next active player (下家) can chow
+    // Chow has lowest priority: only check if no one else claimed the discard
+    if (game.pendingActions.length === 0) {
+      const chowPlayer = this.getNextActivePlayer(game, game.currentPlayerIndex);
+      if (chowPlayer) {
+        const sequences = this.findChowSequences(chowPlayer.hand.concealedTiles, discardedTile);
+        if (sequences.length > 0) {
+          game.pendingActions.push({
+            playerId: chowPlayer.id,
+            availableActions: [ActionType.CHOW, ActionType.PASS],
+            tile: discardedTile,
+            expiresAt: Date.now() + 30000
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * Get the next active (PLAYING) player after the given index, skipping WON/LOST players
+   */
+  private getNextActivePlayer(game: GameState, afterIndex: number): Player | undefined {
+    const count = game.players.length;
+    for (let i = 1; i <= count; i++) {
+      const idx = (afterIndex + i) % count;
+      if (game.players[idx].status === PlayerStatus.PLAYING) {
+        return game.players[idx];
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Get the previous active (PLAYING) player before the given index, skipping WON/LOST players
+   */
+  private getPreviousActivePlayer(game: GameState, beforeIndex: number): Player | undefined {
+    const count = game.players.length;
+    for (let i = 1; i <= count; i++) {
+      const idx = (beforeIndex - i + count) % count;
+      if (game.players[idx].status === PlayerStatus.PLAYING) {
+        return game.players[idx];
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Find all possible sequence combinations in hand that include the given tile
+   * Only works for number suits (筒万条)
+   */
+  private findChowSequences(hand: Tile[], discardedTile: Tile): Tile[][] {
+    const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+    if (!numberSuits.includes(discardedTile.suit)) return [];
+
+    const sequences: Tile[][] = [];
+    const v = discardedTile.value;
+    const suit = discardedTile.suit;
+
+    // Case 1: discarded tile is the smallest (e.g. 5, need 6+7)
+    if (v <= 7) {
+      const t2 = hand.find(t => t.suit === suit && t.value === v + 1);
+      const t3 = hand.find(t => t.suit === suit && t.value === v + 2);
+      if (t2 && t3) {
+        sequences.push([discardedTile, t2, t3]);
+      }
+    }
+
+    // Case 2: discarded tile is the middle (e.g. 5, need 4+6)
+    if (v >= 2 && v <= 8) {
+      const t1 = hand.find(t => t.suit === suit && t.value === v - 1);
+      const t3 = hand.find(t => t.suit === suit && t.value === v + 1);
+      if (t1 && t3) {
+        sequences.push([t1, discardedTile, t3]);
+      }
+    }
+
+    // Case 3: discarded tile is the largest (e.g. 5, need 3+4)
+    if (v >= 3) {
+      const t1 = hand.find(t => t.suit === suit && t.value === v - 2);
+      const t2 = hand.find(t => t.suit === suit && t.value === v - 1);
+      if (t1 && t2) {
+        sequences.push([t1, t2, discardedTile]);
+      }
+    }
+
+    return sequences;
   }
 
   private moveToNextPlayer(game: GameState): void {
