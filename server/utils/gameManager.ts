@@ -14,7 +14,7 @@ import {
 } from '../types/game';
 import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isFivePoison } from './tiles';
 import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType } from './handValidator';
-import { calculateScore, calculateRoundMultiplier, calculateGameResult } from './scoring';
+import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier } from './scoring';
 import { randomUUID } from 'crypto';
 import { saveGameState, loadGameState, loadAllGameStates, deleteGameState } from './gamePersistence';
 import { MatchHistoryService } from '../services/matchHistoryService';
@@ -274,6 +274,11 @@ class GameManager {
       pendingActions: [],
       pendingKongClaim: undefined,
       multiHuStarterIndex: undefined,
+      dice: undefined,
+      roundMultiplier: undefined,
+      globalMultiplier: undefined,
+      inheritedGlobalMultiplier: undefined,
+      rebelEvent: undefined,
       freezeDurationMs: options?.freezeDurationMs ?? 1000,
       diceRollCount: options?.diceRollCount ?? 2
     };
@@ -438,6 +443,21 @@ class GameManager {
       player.wonFan = 0;
       player.score = 0;
     }
+
+    // 掷骰初始化倍数
+    const d1 = Math.floor(Math.random() * 6) + 1;
+    const d2 = Math.floor(Math.random() * 6) + 1;
+    game.dice = [d1, d2];
+    game.roundMultiplier = calculateRoundMultiplier(d1, d2);
+    // 继承上局全局倍数（或从造反事件继承）
+    const prevGlobal = game.inheritedGlobalMultiplier ?? 1;
+    if (game.rebelEvent) {
+      game.globalMultiplier = calculateGlobalMultiplier(prevGlobal, '造反');
+      game.rebelEvent = undefined;
+    } else {
+      game.globalMultiplier = prevGlobal;
+    }
+    game.inheritedGlobalMultiplier = undefined;
 
     game.currentPlayerIndex = game.dealerIndex;
     game.phase = GamePhase.PLAYING;
@@ -1048,8 +1068,8 @@ class GameManager {
       wildTileSuit: wildSuit,
       wildTileValue: wildValue,
       wildTileGroup: game.wildTileGroup,
-      roundMultiplier: 1, // TODO: 从骰子获取
-      globalMultiplier: 1,  // TODO: 从游戏状态获取
+      roundMultiplier: game.roundMultiplier ?? 1,
+      globalMultiplier: game.globalMultiplier ?? 1,
       globalIncludesRound: true
     });
 
@@ -1110,12 +1130,14 @@ class GameManager {
     game.endedAt = Date.now();
 
     // 记录造反事件（下局倍数×2）
-    // 存入 game 的自定义字段供下局使用
-    (game as any).rebelEvent = {
+    game.rebelEvent = {
       playerId: player.id,
       playerName: player.name,
       newDealerIndex: player.position
     };
+    // 造反：下局全局倍数 ×2（由 startGame 消费）
+    const currentGlobal = game.globalMultiplier ?? 1;
+    game.inheritedGlobalMultiplier = calculateGlobalMultiplier(currentGlobal, '造反');
 
     // 造反者成为庄家
     game.dealerIndex = player.position;
@@ -1398,7 +1420,15 @@ class GameManager {
       player.score = finalScores[player.id] ?? 0;
     }
 
-    // TODO: Store results and prepare for next round
+    // 倍数继承链：流局/造反 → ×2 → 下局; 正常结局 → 重置×1
+    if (reason === GameEndReason.WALL_EXHAUSTED) {
+      // 流局：下局全局倍数 ×2，封顶 8
+      const currentGlobal = game.globalMultiplier ?? 1;
+      game.inheritedGlobalMultiplier = calculateGlobalMultiplier(currentGlobal, '流局');
+    } else {
+      // 正常结算（有人胡了）或 OWNER_LEFT：倍数重置
+      game.inheritedGlobalMultiplier = 1;
+    }
 
     const endedAt = Date.now();
     game.phase = GamePhase.ENDED;

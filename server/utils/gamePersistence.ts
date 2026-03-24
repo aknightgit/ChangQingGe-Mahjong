@@ -18,7 +18,16 @@ import {
 
 const COLLECTION_NAME = 'mahjongGames'
 
-type PersistedMahjongGame = MahjongGame & { pendingActions?: PendingAction[] }
+type PersistedMahjongGame = MahjongGame & {
+  pendingActions?: PendingAction[]
+  dice?: [number, number]
+  roundMultiplier?: number
+  globalMultiplier?: number
+  inheritedGlobalMultiplier?: number
+  rebelEvent?: { playerId: string; playerName: string; newDealerIndex: number }
+  freezeDurationMs?: number
+  diceRollCount?: number
+}
 
 const tileToStored = (tile: Tile): StoredTile => ({
   suit: tile.suit,
@@ -123,7 +132,14 @@ const gameStateToDocument = (game: GameState): PersistedMahjongGame => ({
   endedAt: game.endedAt ? new Date(game.endedAt) : undefined,
   finalScores: game.finalScores,
   customScoringMode: game.customScoringMode ?? null,
-  pendingActions: game.pendingActions
+  pendingActions: game.pendingActions,
+  dice: game.dice,
+  roundMultiplier: game.roundMultiplier,
+  globalMultiplier: game.globalMultiplier,
+  inheritedGlobalMultiplier: game.inheritedGlobalMultiplier,
+  rebelEvent: game.rebelEvent,
+  freezeDurationMs: game.freezeDurationMs,
+  diceRollCount: game.diceRollCount
 })
 
 const documentToGameState = (doc: PersistedMahjongGame): GameState => ({
@@ -143,7 +159,14 @@ const documentToGameState = (doc: PersistedMahjongGame): GameState => ({
   endedAt: doc.endedAt ? doc.endedAt.getTime() : undefined,
   finalScores: doc.finalScores,
   customScoringMode: (doc.customScoringMode ?? null) as GameState['customScoringMode'],
-  pendingActions: doc.pendingActions ?? []
+  pendingActions: doc.pendingActions ?? [],
+  dice: doc.dice,
+  roundMultiplier: doc.roundMultiplier,
+  globalMultiplier: doc.globalMultiplier,
+  inheritedGlobalMultiplier: doc.inheritedGlobalMultiplier,
+  rebelEvent: doc.rebelEvent,
+  freezeDurationMs: doc.freezeDurationMs,
+  diceRollCount: doc.diceRollCount
 })
 
 export const saveGameState = async (game: GameState): Promise<void> => {

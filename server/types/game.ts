@@ -150,6 +150,12 @@ export interface PendingKongClaim {
   tile: Tile;
 }
 
+export interface RebelEvent {
+  playerId: string;
+  playerName: string;
+  newDealerIndex: number;
+}
+
 export interface GameState {
   gameId: string;
   phase: GamePhase;
@@ -172,6 +178,12 @@ export interface GameState {
   customScoringMode?: string;
   wildTileGroup?: string[];
   freezeRound?: number;
+  // 倍数/继承状态
+  dice?: [number, number];
+  roundMultiplier?: number;
+  globalMultiplier?: number;
+  inheritedGlobalMultiplier?: number;
+  rebelEvent?: RebelEvent;
   // 可配置参数
   freezeDurationMs?: number;  // 冻结时长（毫秒），默认1000
   diceRollCount?: number;     // 掷骰次数，默认2
