@@ -133,9 +133,29 @@ export function calculateScore(params: {
   // 无百搭翻倍
   if (wildTileSuit !== undefined && wildTileValue !== undefined) {
     const wildCount = countWildTiles(handTiles, wildTileSuit, wildTileValue);
+    
+    // 特殊规则: 百搭是风牌/箭牌时，风一色/风碰可算无百搭
+    const isHonorWild = wildTileSuit === TileSuit.WIND || wildTileSuit === TileSuit.DRAGON;
+    const isWindHand = handTypes.includes(HandType.ALL_WIND) || handTypes.includes(HandType.FENG_PENG);
+    
     if (wildCount === 0) {
+      // 手牌无百搭
       extraMultipliers *= 2;
       details.push('无百搭 ×2');
+    } else if (isHonorWild && isWindHand) {
+      // 百搭是风/箭 + 风一色/风碰 → 可算无百搭
+      // 风碰还需验证: 去掉百搭功能后牌面仍满足碰碰胡
+      if (handTypes.includes(HandType.FENG_PENG)) {
+        // 风碰: 检查去掉百搭后是否仍满足碰碰胡
+        if (checkAllTripletsWithoutWild(handTiles, exposedMelds, wildTileSuit, wildTileValue)) {
+          extraMultipliers *= 2;
+          details.push('无百搭(风碰,百搭归位) ×2');
+        }
+      } else {
+        // 风一色: 直接算无百搭
+        extraMultipliers *= 2;
+        details.push('无百搭(风一色,百搭归位) ×2');
+      }
     }
   }
 
@@ -290,6 +310,45 @@ function hasWindMelds(exposedMelds: Meld[], handTiles: Tile[]): boolean {
 
 function countWildTiles(tiles: Tile[], wildSuit: TileSuit, wildValue: number): number {
   return tiles.filter(t => t.suit === wildSuit && t.value === wildValue).length;
+}
+
+/**
+ * 检查去掉百搭功能后，牌面是否仍满足碰碰胡
+ * 百搭当作普通牌参与牌型判断
+ */
+function checkAllTripletsWithoutWild(
+  handTiles: Tile[],
+  exposedMelds: Meld[],
+  wildSuit: TileSuit,
+  wildValue: number
+): boolean {
+  // 将百搭标记移除（当作普通牌）
+  const normalizedTiles = handTiles.map(t => {
+    if (t.suit === wildSuit && t.value === wildValue) {
+      return { ...t, isWild: false };
+    }
+    return t;
+  });
+  
+  // 检查是否仍是碰碰胡
+  // 手牌中只有刻子+对子（不含顺子）
+  const groups = groupTiles(normalizedTiles);
+  let tripletCount = 0;
+  let pairCount = 0;
+  
+  for (const [, group] of groups) {
+    if (group.length >= 3) tripletCount++;
+    else if (group.length === 2) pairCount++;
+    else return false; // 有单牌
+  }
+  
+  // 门口不能有顺子
+  for (const meld of exposedMelds) {
+    if (meld.type === MeldType.SEQUENCE) return false;
+  }
+  
+  const expectedTriplets = 4 - exposedMelds.length;
+  return tripletCount === expectedTriplets && pairCount === 1;
 }
 
 // ===== 结算函数 =====

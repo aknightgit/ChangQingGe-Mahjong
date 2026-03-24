@@ -223,6 +223,16 @@ const pengScoreBoth = calculateScore({
 });
 test('无百搭+门清=×4', pengScoreBoth.extraMultipliers === 4);
 
+// 百搭是风牌+风一色=可算无百搭
+const windWithWildScore = calculateScore({
+  handTiles: fengPengHand, exposedMelds: [], flowerTiles: [],
+  handTypes: [HandType.FENG_PENG, HandType.ALL_WIND, HandType.ALL_TRIPLETS],
+  isSelfDrawn: true, isKongFlower: false, isRobbingKong: false, isMenQing: false,
+  wildTileSuit: TileSuit.WIND, wildTileValue: 1, // 百搭=东(风牌)
+  roundMultiplier: 1, globalMultiplier: 1
+});
+test('百搭是风牌+风碰=无百搭×2', windWithWildScore.extraMultipliers === 2);
+
 // ===== 测试5: 回合倍数 =====
 console.log('\n=== 回合倍数测试 ===');
 test('1+1=×4', calculateRoundMultiplier(1, 1) === 4);
