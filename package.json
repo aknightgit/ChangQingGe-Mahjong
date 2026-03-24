@@ -1,0 +1,38 @@
+{
+  "name": "changqingge-mahjong",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "setup": "dotenvx run -- tsx server/utils/setupMongo.ts",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "start": "nuxt start",
+    "test:mock": "node -e \"console.log('FIX ME: placeholder test - replace with real tests')\"",
+    "test": "playwright test --browser=chromium"
+  },
+  "dependencies": {
+    "@nuxt/icon": "^2.0.0",
+    "@nuxt/ui": "^3.3.3",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "google-auth-library": "^10.5.0",
+    "mongodb": "^6.21.0",
+    "nuxt": "^4.1.1",
+    "playwright": "1.48.2",
+    "redis": "^5.10.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "typescript": "^5.9.2",
+    "vue": "^3.5.21",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@dotenvx/dotenvx": "^1.51.0",
+    "@playwright/test": "1.48.2",
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6"
+  },
+  "description": "\u957f\u6e05\u9601\u9ebb\u5c06 - \u56db\u5ddd\u8840\u6218\u5230\u5e95\u591a\u4eba\u5728\u7ebf"
+}

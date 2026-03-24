@@ -1,0 +1,103 @@
+name: CI-CD
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+# on:
+#   push:
+#     branches: ["ci-cd"]
+#   pull_request:
+#     branches: ["ci-cd"]
+#   workflow_dispatch:
+
+jobs:
+  prod:
+    name: prod
+    runs-on: vcm
+
+    env:
+      WERF_BUILDAH_MODE: auto
+      WERF_KUBECONFIG_BASE64: ${{ secrets.KUBECONFIG_BASE64 }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install werf
+        uses: werf/actions/install@v2
+
+      - name: Deploy with werf
+        run: |
+          source "$(werf ci-env github --as-file)"
+
+          kubectl create secret generic mongodb-uri \
+            --from-literal=uri="${{ secrets.MONGODB_URI }}" \
+            --from-literal=db="${{ secrets.MONGODB_DB }}" \
+            -n blood-on-mahjong-prod \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create secret generic redis-uri \
+            --from-literal=uri="${{ secrets.REDIS_URI }}" \
+            -n blood-on-mahjong-prod \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create secret generic google-oauth \
+            --from-literal=client_id="${{ secrets.GOOGLE_CLIENT_ID }}" \
+            --from-literal=client_secret="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+            --from-literal=redirect_uri="${{ secrets.GOOGLE_REDIRECT_URI }}" \
+            -n blood-on-mahjong-prod \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # werf cr login -u ${{ github.repository_owner }} -p $WERF_REPO_GITHUB_TOKEN ghcr.io
+          werf converge
+        env:
+          WERF_ENV: prod
+          WERF_KUBECONFIG_BASE64: ${{ secrets.KUBECONFIG_BASE64 }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WERF_REPO_GITHUB_TOKEN: ${{ secrets.WERF_REPO_GITHUB_TOKEN }}
+          WERF_BUILDAH_MODE: auto
+
+  e2e-tests:
+    name: Playwright tests
+    needs: prod
+    runs-on: vcm
+    container:
+      image: mcr.microsoft.com/playwright:v1.48.2-jammy
+      options: --user 1578357:1003
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Node deps (browsers are already in the image)
+        run: |
+          npm ci
+
+      - name: Run tests
+        env:
+          BASE_URL: "http://vcm-51072.vm.duke.edu:31823"
+        run: |
+          npx playwright test
+
+      - name: Upload Playwright artifacts
+        if: failure() || success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+
