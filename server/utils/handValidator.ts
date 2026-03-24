@@ -4,15 +4,14 @@ import { sortTiles, groupTiles, isSequence, isTriplet, isPair, tilesEqual,
          getTileKey } from './tiles';
 
 // Hand type enum for ChangQingGe rules
+// 只保留有特殊点数的牌型
 export enum HandType {
-  STANDARD = 'standard',           // 普通胡
   ALL_TRIPLETS = 'all_triplets',   // 碰碰胡
   HALF_FLUSH = 'half_flush',       // 混一色
   FULL_FLUSH = 'full_flush',       // 清一色
   QING_PENG = 'qing_peng',         // 清碰 (清一色+碰碰胡)
   ALL_WIND = 'all_wind',           // 风一色
   FENG_PENG = 'feng_peng',         // 风碰 (风一色+碰碰胡)
-  SEVEN_PAIRS = 'seven_pairs',     // 七对
   EIGHT_FLOWERS = 'eight_flowers', // 八花自摸
   FOUR_WILD = 'four_wild'          // 四百搭
 }
@@ -26,14 +25,13 @@ export const HAND_TYPE_PRIORITY: Record<HandType, number> = {
   [HandType.FULL_FLUSH]: 60,
   [HandType.FOUR_WILD]: 50,
   [HandType.HALF_FLUSH]: 40,
-  [HandType.ALL_TRIPLETS]: 30,
-  [HandType.SEVEN_PAIRS]: 20,
-  [HandType.STANDARD]: 10
+  [HandType.ALL_TRIPLETS]: 30
 };
 
 /**
  * Detect all hand types for a winning hand
  * Returns array of detected types sorted by priority (highest first)
+ * Note: 七对/普通胡 不作为独立牌型，只用于基础胡牌验证
  */
 export function detectHandTypes(
   handTiles: Tile[],
@@ -51,22 +49,27 @@ export function detectHandTypes(
   ];
   const nonFlowerTiles = allTiles.filter(t => !isFlower(t));
   
-  // Check if standard win first
+  // Check if standard win first (4面子1雀头 or 七对)
   const winResult = canWin(handTiles, exposedMelds.length);
-  if (!winResult.canWin) return [];
-  
-  // Seven pairs
-  if (winResult.winType === WinType.SEVEN_PAIRS) {
-    types.push(HandType.SEVEN_PAIRS);
-  }
+  if (!winResult.canWin) return []; // Not a winning hand at all
   
   // Check for all triplets (碰碰胡)
   if (isAllTripletsHand(handTiles, exposedMelds)) {
     types.push(HandType.ALL_TRIPLETS);
   }
   
+  // Check for all wind (风一色) - checked before full flush
+  if (isAllWindHand(nonFlowerTiles)) {
+    types.push(HandType.ALL_WIND);
+    
+    // 风碰 = 风一色 + 碰碰胡
+    if (types.includes(HandType.ALL_TRIPLETS)) {
+      types.push(HandType.FENG_PENG);
+    }
+  }
+  
   // Check for full flush (清一色) - all same number suit
-  if (isFullFlushHand(nonFlowerTiles)) {
+  if (!types.includes(HandType.ALL_WIND) && isFullFlushHand(nonFlowerTiles)) {
     types.push(HandType.FULL_FLUSH);
     
     // 清碰 = 清一色 + 碰碰胡
@@ -76,18 +79,8 @@ export function detectHandTypes(
   }
   
   // Check for half flush (混一色)
-  if (!types.includes(HandType.FULL_FLUSH) && isHalfFlushHand(nonFlowerTiles)) {
+  if (!types.includes(HandType.FULL_FLUSH) && !types.includes(HandType.ALL_WIND) && isHalfFlushHand(nonFlowerTiles)) {
     types.push(HandType.HALF_FLUSH);
-  }
-  
-  // Check for all wind (风一色)
-  if (isAllWindHand(nonFlowerTiles)) {
-    types.push(HandType.ALL_WIND);
-    
-    // 风碰 = 风一色 + 碰碰胡
-    if (types.includes(HandType.ALL_TRIPLETS)) {
-      types.push(HandType.FENG_PENG);
-    }
   }
   
   // Eight flowers (八花自摸)
@@ -98,11 +91,6 @@ export function detectHandTypes(
   // Four wild tiles (四百搭)
   if (wildTileId && countWildTiles(handTiles, wildTileId) >= 4) {
     types.push(HandType.FOUR_WILD);
-  }
-  
-  // Always include standard if no special type
-  if (types.length === 0) {
-    types.push(HandType.STANDARD);
   }
   
   // Sort by priority
