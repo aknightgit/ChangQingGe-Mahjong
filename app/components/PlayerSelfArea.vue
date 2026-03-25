@@ -6,8 +6,8 @@
         <span v-if="isWinner" class="winner-tag">胡</span>
       </div>
       <div class="player-status">
-        <span v-if="isWinner">Game Over (You Won)</span>
-        <span v-else>Playing</span>
+        <span v-if="isWinner">游戏结束（你赢了）</span>
+        <span v-else>游戏中</span>
       </div>
     </div>
 
@@ -47,7 +47,7 @@
 
     <!-- Discards moved above hand (closer to table center) -->
     <div class="player-discards">
-      <div class="discards-label">Discards</div>
+      <div class="discards-label">出牌区</div>
       <div class="discards-row">
         <MahjongTile
           v-for="(tile, i) in discards"
@@ -76,14 +76,14 @@
 
       <div v-if="showClaimOptions && claimType" class="claim-actions">
         <span class="claim-label">
-          You can {{ claimType === 'pung' ? 'Pung (碰)' : 'Kong (杠)' }} this tile
+          可以{{ claimType === 'pung' ? '碰' : '杠' }}这张牌
         </span>
         <div class="claim-buttons">
           <button class="claim-button primary" @click="confirmClaim">
-            {{ claimType === 'pung' ? 'Pung' : 'Kong' }}
+            {{ claimType === 'pung' ? '碰' : '杠' }}
           </button>
           <button class="claim-button" @click="skipClaim">
-            Skip
+            过
           </button>
         </div>
       </div>
@@ -106,6 +106,8 @@ const props = defineProps<{
   claimCandidateIds?: string[]
   showClaimOptions?: boolean
   claimType?: MeldType | null
+  playerColors?: string[]
+  bailoutCounts?: Record<string, number>
 }>()
 
 const colors = computed(() => props.playerColors || ['#e53935', '#43a047', '#1e88e5', '#fb8c00'])

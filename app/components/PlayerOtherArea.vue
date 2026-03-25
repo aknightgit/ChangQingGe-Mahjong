@@ -58,7 +58,7 @@
         v-if="discards.length"
         class="player-other-discards player-other-discards--vertical"
       >
-        <div class="discards-label">Discards</div>
+        <div class="discards-label">出牌区</div>
         <div class="discards-row discards-row--vertical">
           <MahjongTile
             v-for="tile in discards"
@@ -86,7 +86,7 @@
       </div>
 
       <div v-if="discards.length" class="player-other-discards">
-        <div class="discards-label">Discards</div>
+        <div class="discards-label">出牌区</div>
         <div class="discards-row">
           <MahjongTile
             v-for="tile in discards"

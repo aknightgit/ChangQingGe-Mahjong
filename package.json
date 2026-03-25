@@ -8,7 +8,7 @@
     "setup": "dotenvx run -- tsx server/utils/setupMongo.ts",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare",
+    "postinstall": "nuxt prepare && node scripts/patch-fonts.mjs",
     "start": "nuxt start",
     "test:mock": "node -e \"console.log('FIX ME: placeholder test - replace with real tests')\"",
     "test": "playwright test --browser=chromium"

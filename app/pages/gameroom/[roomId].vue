@@ -49,7 +49,7 @@
                 有可用操作 — 请向下滚动查看按钮
               </p>
               <p class="status">
-                <span v-if="isWinner">You Won! 🎉</span>
+                <span v-if="isWinner">你赢了！🎉</span>
                 <span v-else>{{ turnMessage }}</span>
               </p>
               <p class="hint">
@@ -178,43 +178,43 @@
             
             <div v-if="showChow">
               <button class="mahjong-button panel-button" @click="onChow" :disabled="isInteractionLocked">
-                Chow (吃)
+                吃
               </button>
             </div>
 
             <div v-if="showPeng">
               <button class="mahjong-button panel-button" @click="onPeng" :disabled="isInteractionLocked">
-                Pung (碰)
+                碰
               </button>
             </div>
 
             <div v-if="showKong">
               <button class="mahjong-button panel-button" @click="onKong" :disabled="isInteractionLocked">
-                Kong (杠)
+                杠
               </button>
             </div>
 
             <div v-if="showConcealedKong">
               <button class="mahjong-button panel-button" @click="onConcealedKong" :disabled="isInteractionLocked">
-                Concealed Kong (暗杠)
+                暗杠
               </button>
             </div>
 
             <div v-if="showExtendedKong">
               <button class="mahjong-button panel-button" @click="onExtendedKong" :disabled="isInteractionLocked">
-                Extended Kong (续杠)
+                续杠
               </button>
             </div>
 
             <div v-if="showHu">
               <button class="mahjong-button panel-button" @click="onHu" :disabled="isInteractionLocked">
-                Hu (胡)
+                胡
               </button>
             </div>
 
             <div v-if="showPass && hasPriorityActions">
               <button class="mahjong-button panel-button danger small" @click="onPass" :disabled="isInteractionLocked">
-                Skip (过)
+                过
               </button>
             </div>
             <!-- 造反按钮 (五毒散) -->
@@ -394,14 +394,7 @@ const isInteractionLocked = computed(() => isOverlayVisible.value)
 
 const formatOrdinal = (value: number | null | undefined) => {
   if (!value) return null
-  const suffix = value % 10 === 1 && value % 100 !== 11
-    ? 'st'
-    : value % 10 === 2 && value % 100 !== 12
-      ? 'nd'
-      : value % 10 === 3 && value % 100 !== 13
-        ? 'rd'
-        : 'th'
-  return `${value}${suffix}`
+  return `第${value}名`
 }
 
 const formatScore = (value: number | null | undefined) => {
@@ -633,7 +626,7 @@ const setupTestGame = async () => {
   for (let i = currentCount + 1; i <= 4; i++) {
     await useFetch('/api/game/join', {
       method: 'POST',
-      body: { gameId: roomId.value, playerName: `Bot ${i}` }
+      body: { gameId: roomId.value, playerName: `电脑${i}` }
     })
   }
   

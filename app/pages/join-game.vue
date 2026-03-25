@@ -81,14 +81,14 @@ const fetchWaitingGames = async () => {
     })
 
     if (error.value) {
-      waitingGamesError.value = error.value.message || 'Failed to load games'
+      waitingGamesError.value = error.value.message || '加载房间列表失败'
       waitingGames.value = []
       return
     }
 
     waitingGames.value = data.value?.data?.games || []
   } catch (err) {
-    waitingGamesError.value = err instanceof Error ? err.message : 'Failed to load games'
+    waitingGamesError.value = err instanceof Error ? err.message : '加载房间列表失败'
     waitingGames.value = []
   } finally {
     isWaitingLoading.value = false

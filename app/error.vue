@@ -5,7 +5,7 @@
       <header class="room-header">
         <div class="room-info">
           <h1 class="mahjong-title">
-            {{ is404 ? 'Room / Page Not Found' : 'Something went wrong' }}
+            {{ is404 ? '房间 / 页面未找到' : '出了点问题' }}
           </h1>
           <p class="mahjong-subtitle">
             长清阁麻将
@@ -13,7 +13,7 @@
         </div>
 
         <button class="mahjong-button small" @click="goHome">
-          Back to Waiting Room
+          返回大厅
         </button>
       </header>
 
@@ -21,13 +21,13 @@
         <div class="mahjong-table not-found">
           <div class="center-message">
             <p class="status">
-              {{ is404 ? 'We can’t find the room / game you are looking for.' : 'Unexpected Error' }}
+              {{ is404 ? '找不到该房间或页面' : '出了点问题' }}
             </p>
             <p class="hint">
-              Please check the URL or return to the waiting room and try again.
+              请检查地址是否正确，或返回大厅重试。
             </p>
             <button class="mahjong-button" @click="goHome">
-              Go to Waiting Room
+              返回大厅
             </button>
           </div>
         </div>
