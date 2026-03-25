@@ -8,11 +8,8 @@ export default defineNuxtConfig({
   icon: {
     provider: 'none'
   },
-  hooks: {
-    'fonts:providers' (providers: any) {
-      delete providers.google
-      delete providers.googleicons
-    }
+  $development: {
+    fonts: false
   },
   nitro: {
     experimental: {
