@@ -3,27 +3,27 @@
     <div class="mahjong-card join-card">
       <header class="join-header">
         <div>
-          <h1 class="mahjong-title">Join a Game</h1>
-          <p class="mahjong-subtitle">Pick an open table below or enter a room ID manually.</p>
+          <h1 class="mahjong-title">加入牌局</h1>
+          <p class="mahjong-subtitle">输入房间号加入，或从下方列表选择空闲牌桌。</p>
         </div>
-        <button class="mahjong-button secondary" @click="backToLobby">Back</button>
+        <button class="mahjong-button secondary" @click="backToLobby">返回大厅</button>
       </header>
 
       <section class="manual-join">
-        <label for="manual-id">Enter Game ID</label>
+        <label for="manual-id">输入房间号</label>
         <div class="manual-controls">
           <input
             id="manual-id"
             v-model="manualGameId"
             type="text"
-            placeholder="e.g. 1234-5678"
+            placeholder="例如：abc123-def456"
           />
           <button
             class="mahjong-button primary"
             :disabled="isJoining || !manualGameId.trim()"
             @click="joinById"
           >
-            {{ isJoining ? 'Joining…' : 'Join' }}
+            {{ isJoining ? '加入中…' : '加入' }}
           </button>
         </div>
         <p v-if="joinError" class="available-error">{{ joinError }}</p>
@@ -31,25 +31,25 @@
 
       <section class="mahjong-available">
         <div class="available-header">
-          <h2>Open Tables</h2>
+          <h2>空闲牌桌</h2>
           <button class="mahjong-button small" :disabled="isWaitingLoading" @click="fetchWaitingGames">
-            {{ isWaitingLoading ? 'Loading…' : 'Refresh' }}
+            {{ isWaitingLoading ? '加载中…' : '刷新' }}
           </button>
         </div>
 
         <p v-if="waitingGamesError" class="available-error">{{ waitingGamesError }}</p>
         <p v-else-if="!isWaitingLoading && waitingGames.length === 0" class="available-empty">
-          No waiting games right now. Start one from the lobby!
+          暂无空闲牌桌，去大厅创建一个吧！
         </p>
 
         <ul v-else class="available-list">
           <li v-for="game in waitingGames" :key="game.gameId" class="available-item">
             <div class="available-details">
               <span class="available-id">{{ game.gameId }}</span>
-              <span class="available-meta">{{ game.playerCount }}/4 players · Dealer: {{ game.dealerName || 'TBD' }}</span>
+              <span class="available-meta">{{ game.playerCount }}/4 人 · 庄家: {{ game.dealerName || '待定' }}</span>
             </div>
             <button class="mahjong-button secondary join" @click="joinExistingGame(game.gameId)">
-              Join
+              加入
             </button>
           </li>
         </ul>
@@ -102,7 +102,7 @@ const joinExistingGame = (gameId: string) => {
 
 const joinById = () => {
   if (!manualGameId.value.trim()) {
-    joinError.value = 'Please enter a game ID'
+    joinError.value = '请输入房间号'
     return
   }
   joinGame(manualGameId.value.trim())
@@ -119,7 +119,7 @@ const joinGame = async (gameId: string) => {
 
     if (error.value) {
       console.error('Failed to join game:', error.value)
-      joinError.value = error.value.message || 'Failed to join game'
+      joinError.value = error.value.message || '加入失败'
       return
     }
 
@@ -127,11 +127,11 @@ const joinGame = async (gameId: string) => {
       const { playerId } = data.value.data
       await navigateTo(`/gameroom/${gameId}?playerId=${playerId}`)
     } else {
-      joinError.value = 'Unable to join game. Please try again.'
+      joinError.value = '无法加入牌局，请重试。'
     }
   } catch (err) {
     console.error('Error joining game:', err)
-    joinError.value = err instanceof Error ? err.message : 'Failed to join game'
+    joinError.value = err instanceof Error ? err.message : '加入失败，请重试'
   } finally {
     isJoining.value = false
   }

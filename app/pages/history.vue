@@ -2,39 +2,39 @@
   <div class="history-page">
     <div class="history-shell">
       <header class="history-header">
-        <button class="ghost-button" @click="goBack">← Back</button>
+        <button class="ghost-button" @click="goBack">← 返回</button>
         <div>
-          <h1>Match History</h1>
-          <p class="subtitle">Recent games across all rooms</p>
+          <h1>对局记录</h1>
+          <p class="subtitle">所有房间的近期对局</p>
         </div>
         <button class="ghost-button" @click="loadHistory" :disabled="isLoading">
-          Refresh
+          刷新
         </button>
       </header>
 
       <section class="filter-bar">
         <label class="toggle">
           <input type="checkbox" v-model="showOnlyMine" :disabled="!userIdCookie" />
-          <span>Show only my matches</span>
+          <span>只看我的对局</span>
         </label>
-        <span v-if="!userIdCookie" class="filter-hint">Log in to filter by your games.</span>
+        <span v-if="!userIdCookie" class="filter-hint">登录后可按玩家筛选。</span>
       </section>
 
       <section class="history-content">
         <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
-        <p v-else-if="isLoading" class="loading">Loading match history…</p>
-        <p v-else-if="!histories.length" class="empty">No matches recorded yet.</p>
+        <p v-else-if="isLoading" class="loading">加载对局记录中…</p>
+        <p v-else-if="!histories.length" class="empty">暂无对局记录。</p>
 
         <div v-else class="history-list">
           <article v-for="match in histories" :key="match.gameId" class="history-card">
             <div class="card-header">
               <div>
-                <p class="room-label">Room {{ match.roomId }}</p>
+                <p class="room-label">房间 {{ match.roomId }}</p>
                 <h2>{{ formatDate(match.completedAt) }}</h2>
               </div>
               <div class="meta">
-                <span class="badge">{{ match.winnersCount }} Winner{{ match.winnersCount === 1 ? '' : 's' }}</span>
-                <span class="badge subtle">Round {{ match.roundNumber }}</span>
+                <span class="badge">{{ match.winnersCount }} 位赢家</span>
+                <span class="badge subtle">第 {{ match.roundNumber }} 局</span>
               </div>
             </div>
 
@@ -47,7 +47,7 @@
                 <div>
                   <p class="player-name">{{ player.name }}</p>
                   <p class="player-meta">
-                    {{ player.status === 'won' ? 'Winner' : 'Participant' }} · Seat {{ player.position + 1 }}
+                    {{ player.status === 'won' ? '赢家' : '参与者' }} · 第 {{ player.position + 1 }} 位
                   </p>
                 </div>
                 <div class="player-score" :class="scoreClass(player.finalScore ?? match.finalScores?.[player.playerId] ?? 0)">
@@ -120,7 +120,7 @@ const loadHistory = async () => {
       throw new Error('Unable to fetch match history')
     }
   } catch (err: any) {
-    errorMessage.value = err?.message || 'Failed to load match history'
+    errorMessage.value = err?.message || '加载失败，请重试'
   } finally {
     isLoading.value = false
   }
