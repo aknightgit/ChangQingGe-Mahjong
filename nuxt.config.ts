@@ -4,7 +4,10 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   modules: ['@nuxt/ui'],
   css: ['~/main.css'],
-  // Disable Google Fonts to avoid 30s+ timeout on startup
+  // Disable Google Fonts/Icons to avoid 30s+ timeout on startup
+  icon: {
+    provider: 'none'
+  },
   fonts: {
     providers: {
       google: false,
