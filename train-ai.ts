@@ -978,13 +978,11 @@ function appendRoundDoc(metrics: RoundMetrics) {
 
   lines.push('');
   lines.push('### 最大单人亏损局明细（本轮）');
+  lines.push(`- 最大亏损: ${b.worstLoser ? b.worstLoser.name + ' ' + b.worstLoser.score + ' 点（绝对值 ' + Math.abs(b.worstLoser.score) + '）' : '(无)'}`);
   lines.push(`- 局号: ${b.gameNum}`);
   lines.push(`- 原因: ${b.reason}`);
   lines.push(`- 回合: ${b.rounds}`);
   lines.push(`- 总筹码: ${b.totalPot}`);
-  if (b.worstLoser) {
-    lines.push(`- 最大亏损玩家: ${b.worstLoser.name} (${b.worstLoser.score})`);
-  }
   lines.push(`- 百搭: ${b.wildTile}${b.wildGroup ? ` (组: ${b.wildGroup.join('/')})` : ''}`);
   const combinedGlobal = Math.min(8, b.diceMultiplier * b.flowMultiplier * b.inheritMultiplier);
   lines.push(`- 回合/全局倍数信息:`);
@@ -1079,7 +1077,7 @@ function ensureDoc() {
       `- 创建时间: ${new Date().toISOString()}`,
       `- 训练脚本: train-ai.ts`,
       '',
-      '> 每轮记录最大输赢局完整明细（所有胡牌玩家、百搭、三口/四口关系、结算逐笔）',
+      '> 每轮记录训练指标 + 策略参数 + 最大单人亏损局明细 + 全局最大亏损汇总',
       ''
     ].join('\n');
     fs.writeFileSync(OUT_FILE, header, 'utf8');
@@ -1120,6 +1118,10 @@ async function main() {
   let champion = loadSeedPolicy() || makePolicy('champion-r0');
   console.log(`🌱 初始策略来源: ${champion.id}`);
 
+  // 全局最大单人亏损追踪（跨所有轮次）
+  let globalWorstGame: GameRecord | null = null;
+  let globalWorstScore = 0; // 最负的 score
+
   for (let round = 1; round <= ROUNDS; round++) {
     const candidates: Policy[] = [
       { ...champion, id: `champion-r${round}` },
@@ -1141,12 +1143,46 @@ async function main() {
     const full = evaluate(bestCandidate, GAMES_PER_ROUND, round);
     appendRoundDoc(full);
 
+    // 追踪全局最大单人亏损（跨轮次）
+    if (full.worstGame && full.worstGame.worstLoser) {
+      const roundWorst = full.worstGame.worstLoser.score;
+      if (roundWorst < globalWorstScore) {
+        globalWorstScore = roundWorst;
+        globalWorstGame = full.worstGame;
+      }
+    }
+
     champion = { ...bestCandidate, id: `champion-r${round}` };
     savePolicySnapshot(round, champion, full);
 
     console.log(
-      `Round ${round}/${ROUNDS} | hu=${(full.huRate * 100).toFixed(1)}% | draw=${(full.drawRate * 100).toFixed(1)}% | last=${(full.lastPlayerRate * 100).toFixed(1)}% | fit=${full.fitness.toFixed(2)}`
+      `Round ${round}/${ROUNDS} | hu=${(full.huRate * 100).toFixed(1)}% | draw=${(full.drawRate * 100).toFixed(1)}% | last=${(full.lastPlayerRate * 100).toFixed(1)}% | selfDraw=${(full.selfDrawRate * 100).toFixed(1)}% | bigHand=${(full.bigHandRate * 100).toFixed(2)}% | menQing=${(full.menQingRate * 100).toFixed(1)}% | fit=${full.fitness.toFixed(2)}`
     );
+  }
+
+  // 输出全局最大单人亏损局
+  if (globalWorstGame && globalWorstGame.worstLoser) {
+    const g = globalWorstGame;
+    const wl = g.worstLoser;
+    const lines: string[] = [];
+    lines.push('\n\n---');
+    lines.push('');
+    lines.push('## 全局最大单人亏损局（跨所有轮次）');
+    lines.push(`- 最大亏损: ${wl.name} ${wl.score} 点（绝对值 ${Math.abs(wl.score)}）`);
+    lines.push(`- 局号: ${g.gameNum}`);
+    lines.push(`- 原因: ${g.reason}`);
+    lines.push(`- 回合: ${g.rounds}`);
+    lines.push(`- 总筹码: ${g.totalPot}`);
+    if (g.winners.length > 0) {
+      lines.push('- 胡牌玩家:');
+      for (const w of g.winners) {
+        lines.push(`  - ${w.name}: ${w.winMode} ${w.handType} ${w.finalPoints}点`);
+      }
+    }
+    lines.push('- 结算明细:');
+    for (const d of g.settlementDetails) lines.push(`  - ${d}`);
+    fs.appendFileSync(OUT_FILE, lines.join('\n') + '\n', 'utf8');
+    console.log(`\n🏆 全局最大单人亏损: ${wl.name} ${wl.score} 点（|${Math.abs(wl.score)}|）`);
   }
 
   console.log('✅ 训练完成');

@@ -1,0 +1,40 @@
+{
+  "savedAt": "2026-03-25T14:29:08.640Z",
+  "round": 4,
+  "metrics": {
+    "fitness": 184.34532342621262,
+    "huRate": 0.953,
+    "drawRate": 0.047,
+    "lastPlayerRate": 0.764,
+    "avgRounds": 73.903,
+    "avgPot": 93.832,
+    "selfDrawRate": 0.6811145510835913,
+    "bigHandRate": 0.0003869969040247678,
+    "menQingRate": 0.053405572755417956,
+    "avgWinnerPoints": 11.494195046439629
+  },
+  "policy": {
+    "id": "champion-r4",
+    "selfWinChance": 0.8253527378245809,
+    "selfWinWildBoost": 0.25,
+    "discardHuChance": 0.5326190182731315,
+    "discardHuWildPenalty": 0.07513239982575745,
+    "discardHuMenQingPenalty": 0.050894115702145803,
+    "pengChance": 0.850771492915662,
+    "kongChance": 0.5296067932489384,
+    "chowChance": 0.5918052460429619,
+    "pengWildBoost": 0.2215710442501388,
+    "kongWildBoost": 0.35847990523892515,
+    "chowWildPenalty": 0.1115576895073759,
+    "bailoutBuildWildBoost": 0.009146729030203353,
+    "bailoutHuPenaltyPerMeld": 0.02925959014384779,
+    "honorRushThreshold": 3,
+    "honorRushBoost": 0.05739089987916749,
+    "pairWeight": 4.054143403474007,
+    "nearWeight": 0.1,
+    "honorPairBonus": 3.1462257742796966,
+    "wildKeepPenalty": 1363.7543067140382,
+    "dominantSuitBonus": 2.2683862256669007,
+    "tripletKeepBonus": 1.23176717082481
+  }
+}

@@ -7,6 +7,16 @@ export default defineNuxtConfig({
   nitro: {
     experimental: {
       websocket: true
-    }
+    },
+    // Ensure Socket.IO can access the HTTP server
+    timing: false,
   },
+  // Socket.IO needs CORS for cross-origin dev
+  vite: {
+    server: {
+      hmr: {
+        overlay: false
+      }
+    }
+  }
 })
