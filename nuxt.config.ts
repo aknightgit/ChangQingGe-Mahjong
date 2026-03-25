@@ -8,11 +8,8 @@ export default defineNuxtConfig({
   icon: {
     provider: 'none'
   },
-  fonts: {
-    providers: {
-      google: false,
-      googleicons: false
-    }
+  unifont: {
+    providers: []
   },
   nitro: {
     experimental: {
