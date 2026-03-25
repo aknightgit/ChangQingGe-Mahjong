@@ -6,20 +6,20 @@
       <p class="mahjong-subtitle">上海麻将 × 四川麻将</p>
 
       <p class="mahjong-text">
-        Select a player to sign in:
+        选择一位玩家登录：
       </p>
 
       <div class="login-buttons">
         <div class="section">
           <div class="section-header">
-            <span>Players</span>
+            <span>玩家列表</span>
             <button class="link-btn" type="button" @click="refreshUsers" :disabled="usersPending">
-              Refresh
+              刷新
             </button>
           </div>
-          <div v-if="usersPending" class="status-text">Loading users…</div>
-          <div v-else-if="usersError" class="status-text error">Failed to load users. Try refreshing.</div>
-          <div v-else-if="playerUsers.length === 0" class="status-text">No players found.</div>
+          <div v-if="usersPending" class="status-text">加载中…</div>
+          <div v-else-if="usersError" class="status-text error">加载失败，请点击刷新重试。</div>
+          <div v-else-if="playerUsers.length === 0" class="status-text">暂无玩家，请先创建测试用户。</div>
           <div class="player-buttons">
             <button
               v-for="user in playerUsers"
@@ -35,7 +35,7 @@
 
         <div class="section" v-if="adminUsers.length">
           <div class="section-header">
-            <span>Admins</span>
+            <span>管理员</span>
           </div>
           <button
             v-for="user in adminUsers"
@@ -91,7 +91,7 @@ const handleLogin = async (user) => {
     await navigateTo('/')
   } catch (error) {
     console.error('Login failed', error)
-    loginError.value = error?.data?.message || error?.message || 'Failed to login. Please try again.'
+    loginError.value = error?.data?.message || error?.message || '登录失败，请重试。'
   } finally {
     isSubmitting.value = false
   }

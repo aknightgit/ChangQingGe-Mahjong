@@ -4,9 +4,9 @@
       <div class="room-container" :class="{ 'room-container--rotated': shouldRotateView }">
       <header class="room-header">
         <div class="room-info">
-          <h1 class="mahjong-title">Mahjong Room</h1>
+          <h1 class="mahjong-title">长清阁麻将</h1>
           <p class="mahjong-subtitle">
-            长清阁麻将 · Room #{{ roomId }}
+            Room #{{ roomId }}
           </p>
         </div>
 

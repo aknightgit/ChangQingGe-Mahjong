@@ -2,10 +2,10 @@
 <template>
   <div class="mahjong-page">
     <div class="mahjong-card">
-      <h1 class="mahjong-title">Waiting Room</h1>
+      <h1 class="mahjong-title">长清阁麻将</h1>
       <p class="mahjong-subtitle">
-        Welcome back, {{ userName || 'Player' }}.
-        <span v-if="isAdminUser" class="admin-badge">(Admin Mode)</span>
+        欢迎回来，{{ userName || '牌友' }}。
+        <span v-if="isAdminUser" class="admin-badge">(管理员模式)</span>
       </p>
 
       <div class="mahjong-actions">
@@ -14,7 +14,7 @@
           :disabled="isCreatingGame"
           @click="startNewGame"
         >
-          New Game
+          创建新局
         </button>
 
         <button
@@ -22,36 +22,36 @@
           class="mahjong-button secondary"
           @click="goToAdminSandbox"
         >
-          Admin Sandbox
+          管理员沙盒
         </button>
 
         <button class="mahjong-button secondary" @click="onJoinGame">
-          Join Game
+          加入牌局
         </button>
 
         <button class="mahjong-button secondary" @click="onMatchHistory">
-          Match History
+          对局记录
         </button>
 
         <button class="mahjong-button secondary" @click="openProfileModal">
-          User Profile
+          个人资料
         </button>
 
         <button class="mahjong-button danger" @click="logout">
-          Log Out
+          退出登录
         </button>
       </div>
 
       <p class="mahjong-hint">
-        New Game will temporarily send you to room <strong>#66666</strong>.
+        创建新局后，等待其他玩家加入即可开始。
       </p>
     </div>
 
     <!-- Proper Nuxt UI v4 modal usage -->
     <UModal
       v-model:open="isProfileModalOpen"
-      title="Player Profile"
-      description="Share your details so friends know who is at the table."
+      title="个人资料"
+      description="编辑你的个人信息，让牌友们认识你。"
       :close="{
         color: 'neutral',
         variant: 'ghost',
@@ -62,11 +62,11 @@
         <div class="profile-modal-shell">
           <div v-if="profileError">
             <UAlert color="red" variant="soft" icon="i-heroicons-exclamation-triangle">
-              {{ profileError?.data?.message || profileError?.message || 'Unable to load your profile.' }}
+              {{ profileError?.data?.message || profileError?.message || '无法加载个人资料，请重试。' }}
             </UAlert>
             <div class="profile-actions">
               <UButton color="emerald" variant="solid" @click="refreshProfile">
-                Retry
+                重试
               </UButton>
             </div>
           </div>
@@ -88,15 +88,15 @@
               @submit.prevent="saveProfile"
             >
               <div class="profile-grid">
-                <UFormField label="Full Name" name="name" required>
+                <UFormField label="姓名" name="name" required>
                   <UInput
                     v-model="profileForm.name"
                     :disabled="!isEditingProfile || profileSaving"
-                    placeholder="Enter your name"
+                    placeholder="请输入姓名"
                   />
                 </UFormField>
 
-                <UFormField label="Date of Birth" name="dateOfBirth">
+                <UFormField label="出生日期" name="dateOfBirth">
                   <UInput
                     v-model="profileForm.dateOfBirth"
                     type="date"
@@ -104,19 +104,19 @@
                   />
                 </UFormField>
 
-                <UFormField label="Gender" name="gender">
+                <UFormField label="性别" name="gender">
                   <UInput
                     v-model="profileForm.gender"
                     :disabled="!isEditingProfile || profileSaving"
-                    placeholder="Enter gender"
+                    placeholder="请输入性别"
                   />
                 </UFormField>
 
-                <UFormField label="Address" name="address" class="profile-full-row">
+                <UFormField label="地址" name="address" class="profile-full-row">
                   <UTextarea
                     v-model="profileForm.address"
                     :disabled="!isEditingProfile || profileSaving"
-                    placeholder="City, Country"
+                    placeholder="城市, 国家"
                     :rows="3"
                   />
                 </UFormField>
@@ -139,7 +139,7 @@
                   @click="startEditingProfile"
                   :disabled="profilePending || !profileHasLoaded"
                 >
-                  Edit Profile
+                  编辑资料
                 </UButton>
 
                 <template v-else>
@@ -149,7 +149,7 @@
                     icon="i-heroicons-check"
                     :loading="profileSaving"
                   >
-                    Save
+                    保存
                   </UButton>
                   <UButton
                     type="button"
@@ -159,7 +159,7 @@
                     @click="cancelEditingProfile"
                     :disabled="profileSaving"
                   >
-                    Cancel
+                    取消
                   </UButton>
                 </template>
               </div>
@@ -259,7 +259,7 @@ const saveProfile = async () => {
   if (!isEditingProfile.value || profileSaving.value) return
 
   if (!profileForm.name.trim()) {
-    setProfileStatus('error', 'Name is required.')
+    setProfileStatus('error', '姓名不能为空。')
     return
   }
 
@@ -284,10 +284,10 @@ const saveProfile = async () => {
       await refreshProfile()
     }
 
-    setProfileStatus('success', 'Profile updated successfully.')
+    setProfileStatus('success', '资料更新成功。')
     isEditingProfile.value = false
   } catch (error) {
-    setProfileStatus('error', error?.data?.message || error?.message || 'Failed to update profile.')
+    setProfileStatus('error', error?.data?.message || error?.message || '更新失败，请重试。')
   } finally {
     profileSaving.value = false
   }
