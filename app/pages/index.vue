@@ -18,6 +18,14 @@
         </button>
 
         <button
+          class="mahjong-button primary"
+          :disabled="isCreatingGame"
+          @click="startPvEGame"
+        >
+          人机大战
+        </button>
+
+        <button
           v-if="isAdminUser"
           class="mahjong-button secondary"
           @click="goToAdminSandbox"
@@ -310,6 +318,51 @@ const startNewGame = async () => {
     console.error('Unexpected response creating game:', response)
   } catch (e) {
     console.error('Error creating game:', e)
+  } finally {
+    isCreatingGame.value = false
+  }
+}
+
+const AI_BOT_NAMES = ['小胖', '老赵', '阿水']
+
+const startPvEGame = async () => {
+  if (isCreatingGame.value) return
+  isCreatingGame.value = true
+  try {
+    // 1. Create room
+    const response = await $fetch('/api/game/create', {
+      method: 'POST',
+      body: { playerName: userName.value || 'Player 1' },
+      headers: { 'Cache-Control': 'no-cache' }
+    })
+
+    if (!response || !response.success) {
+      console.error('Unexpected response creating game:', response)
+      return
+    }
+
+    const { gameId, playerId } = response.data || {}
+
+    // 2. Join 3 AI bots
+    for (const botName of AI_BOT_NAMES) {
+      await $fetch('/api/game/join', {
+        method: 'POST',
+        body: { gameId, playerName: botName },
+        headers: { 'Cache-Control': 'no-cache' }
+      })
+    }
+
+    // 3. Start game
+    await $fetch('/api/game/start', {
+      method: 'POST',
+      body: { gameId, playerId },
+      headers: { 'Cache-Control': 'no-cache' }
+    })
+
+    // 4. Navigate to game room
+    return navigateTo(`/gameroom/${gameId}?playerId=${playerId}`)
+  } catch (e) {
+    console.error('Error starting PvE game:', e)
   } finally {
     isCreatingGame.value = false
   }

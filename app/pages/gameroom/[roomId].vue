@@ -6,12 +6,12 @@
         <div class="room-info">
           <h1 class="mahjong-title">长清阁麻将</h1>
           <p class="mahjong-subtitle">
-            Room #{{ roomId }}
+            房间 #{{ roomId }}
           </p>
         </div>
 
         <button class="mahjong-button small" @click="backToLobby">
-          Back to Waiting Room
+          返回大厅
         </button>
       </header>
 
@@ -33,9 +33,9 @@
                 </div>
               </li>
             </ul>
-            <p v-else class="overlay-empty">Standings will appear once the server finalizes results.</p>
+            <p v-else class="overlay-empty">游戏结果将在服务端结算后显示。</p>
             <button class="mahjong-button primary overlay-button" @click="backToLobby">
-              Exit to Lobby
+              退出到大厅
             </button>
           </div>
         </div>
@@ -46,20 +46,20 @@
             <!-- Center status message -->
             <div class="table-center">
               <p v-if="showMobileActionNotice" class="mobile-scroll-notice">
-                Action available — scroll down for buttons
+                有可用操作 — 请向下滚动查看按钮
               </p>
               <p class="status">
                 <span v-if="isWinner">You Won! 🎉</span>
                 <span v-else>{{ turnMessage }}</span>
               </p>
               <p class="hint">
-                Click tiles to select; click again to discard. Action buttons appear based on server-validated rules.
+                点击选牌，再次点击出牌。操作按钮将根据规则自动显示。
               </p>
             </div>
             <!-- Top player -->
             <div class="seat seat-top" :class="{ 'seat-active': activePosition !== null && topPlayer?.position === activePosition }">
               <PlayerOtherArea
-                :name="topPlayer?.name || 'Player North'"
+                :name="topPlayer?.name || '北家'"
                 position="top"
                 :hand="northHand"
                 :melds="northMelds"
@@ -72,7 +72,7 @@
             <!-- Left player -->
             <div class="seat seat-left" :class="{ 'seat-active': activePosition !== null && leftPlayer?.position === activePosition }">
               <PlayerOtherArea
-                :name="leftPlayer?.name || 'Player West'"
+                :name="leftPlayer?.name || '西家'"
                 position="left"
                 :hand="westHand"
                 :melds="westMelds"
@@ -85,7 +85,7 @@
             <!-- Right player -->
             <div class="seat seat-right" :class="{ 'seat-active': activePosition !== null && rightPlayer?.position === activePosition }">
               <PlayerOtherArea
-                :name="rightPlayer?.name || 'Player East'"
+                :name="rightPlayer?.name || '东家'"
                 position="right"
                 :hand="eastHand"
                 :melds="eastMelds"
@@ -99,7 +99,7 @@
             <!-- Bottom (self) player -->
             <div class="seat seat-bottom" :class="{ 'seat-active': activePosition !== null && currentPlayer?.position === activePosition }">
               <PlayerSelfArea
-                name="You"
+                name="我"
                 :hand="playerHand"
                 :melds="playerMelds"
                 :discards="playerDiscards"
@@ -115,16 +115,16 @@
         <div class="side-panel">
           <!-- Admin / Dealer Controls -->
           <div class="test-controls" v-if="canStartGame">
-            <h2 class="panel-title">Room Controls</h2>
+            <h2 class="panel-title">房间控制</h2>
             <button class="mahjong-button panel-button" @click="startGame" :disabled="isInteractionLocked">
-              Start Game ({{ gameState?.players.length }}/4 Players)
+              开始游戏 ({{ gameState?.players.length }}/4 位玩家)
             </button>
           </div>
 
           <div class="test-controls" v-if="isAdminUser">
-            <h2 class="panel-title">Admin Debug</h2>
-            <p class="panel-subtitle">Game Phase: {{ gameState?.phase }}</p>
-            <p class="panel-subtitle">Players: {{ gameState?.players.length }}</p>
+            <h2 class="panel-title">调试面板</h2>
+            <p class="panel-subtitle">游戏阶段: {{ gameState?.phase }}</p>
+            <p class="panel-subtitle">玩家数量: {{ gameState?.players.length }}</p>
             
             <!-- Setup Test Game -->
             <div v-if="gameState?.phase === 'waiting'">
@@ -134,13 +134,13 @@
                 v-if="(gameState?.players.length || 0) < 4"
                 :disabled="isInteractionLocked"
               >
-                Add Bots & Start
+              添加机器人并开始
               </button>
             </div>
 
             <!-- Manual Refresh -->
             <button class="mahjong-button panel-button small" @click="refreshState" :disabled="isInteractionLocked">
-              Force Refresh State
+              刷新状态
             </button>
 
             <button
@@ -148,15 +148,15 @@
               @click="toggleShowAllCards"
               :disabled="isInteractionLocked"
             >
-              {{ shouldRevealOpponents ? 'Hide All Cards' : 'Show All Cards' }}
+              {{ shouldRevealOpponents ? '隐藏全部手牌' : '显示全部手牌' }}
             </button>
             <p class="panel-subtitle" style="margin-top: 4px; opacity: 0.7;">
-              Reveals opponents locally
+              本地查看对手手牌
             </p>
 
             <!-- Control Other Players -->
             <div v-if="gameState?.phase === 'playing'" style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
-              <p class="panel-subtitle">Control Others:</p>
+              <p class="panel-subtitle">操控其他玩家:</p>
               
               <div v-for="p in otherPlayers" :key="p.id" style="margin-bottom: 8px;">
                 <p style="font-size: 0.8rem; margin-bottom: 4px;">{{ p.name }} ({{ p.position }})</p>
@@ -166,14 +166,14 @@
                   :disabled="isInteractionLocked || gameState?.currentPlayerIndex !== p.position"
                   :style="gameState?.currentPlayerIndex !== p.position ? { opacity: 0.5 } : {}"
                 >
-                  Discard Random
+                  随机出牌
                 </button>
               </div>
             </div>
           </div>
 
           <div class="test-controls" v-if="isConnected">
-            <h2 class="panel-title">Game Actions</h2>
+            <h2 class="panel-title">游戏操作</h2>
             <p v-if="actionWindowText" class="panel-subtitle action-window-text">{{ actionWindowText }}</p>
             
             <div v-if="showChow">
@@ -241,19 +241,19 @@
                 @click="onCheatHu" 
                 :disabled="isInteractionLocked || !canCheatHu"
               >
-                Cheat Hu (+1)
+                测试胡牌 (+1)
               </button>
               <p class="panel-subtitle" style="margin-top: 4px; opacity: 0.65;">
-                Testing only · enabled on your turn
+                仅限测试 · 轮到你时可用
               </p>
             </div>
 
             <div v-if="!showChow && !showPeng && !showKong && !showHu && !showPass && !showConcealedKong && !showExtendedKong">
-              <p class="panel-subtitle">Waiting for others...</p>
+              <p class="panel-subtitle">等待其他玩家...</p>
             </div>
           </div>
           <div class="test-controls" v-else>
-             <p class="panel-subtitle">Connecting...</p>
+             <p class="panel-subtitle">连接中...</p>
              <p v-if="error" class="panel-subtitle" style="color: red">{{ error }}</p>
           </div>
         </div>
@@ -371,23 +371,23 @@ const overlayReason = computed(() => roomDismissedReason.value || gameState.valu
 const isOverlayVisible = computed(() => isGameEnded.value || !!roomDismissedReason.value)
 const overlayTitle = computed(() => {
   if (roomDismissedReason.value === GameEndReason.OWNER_LEFT) {
-    return 'Room Closed'
+    return '房间已关闭'
   }
-  return 'Game Over'
+  return '游戏结束'
 })
 const overlayMessage = computed(() => {
   const reason = overlayReason.value
   switch (reason) {
     case GameEndReason.WALL_EXHAUSTED:
-      return 'The wall is empty. No more tiles to draw.'
+      return '牌墙已空，无法继续摸牌。'
     case GameEndReason.LAST_PLAYER:
-      return 'Only one player remains. Round complete.'
+      return '只剩一名玩家，本轮结束。'
     case GameEndReason.OWNER_LEFT:
-      return 'The host left the room. This game has been dismissed.'
+      return '房主已离开房间，游戏已解散。'
     case GameEndReason.EMPTY_ROOM:
-      return 'All players left the room. This game has ended.'
+      return '所有玩家已离开，游戏结束。'
     default:
-      return 'This round has ended. Please exit to the lobby.'
+      return '本轮已结束，请退出到大厅。'
   }
 })
 const isInteractionLocked = computed(() => isOverlayVisible.value)
@@ -429,9 +429,9 @@ const playerResults = computed(() => {
         name: player.name,
         isWinner,
         winOrder: player.winOrder,
-        rankLabel: isWinner && player.winOrder ? formatOrdinal(player.winOrder) : 'Did not win',
-        statusLabel: isWinner ? 'Winner' : player.status === 'lost' ? 'Lost' : 'Not won',
-        winRoundLabel: isWinner && player.winRound ? `Round ${player.winRound}` : null,
+        rankLabel: isWinner && player.winOrder ? formatOrdinal(player.winOrder) : '未胡牌',
+        statusLabel: isWinner ? '赢家' : player.status === 'lost' ? '输了' : '未胡牌',
+        winRoundLabel: isWinner && player.winRound ? `第${player.winRound}轮` : null,
         scoreLabel: formatScore(finalScore),
         scoreClass: getScoreClass(finalScore)
       }
@@ -474,22 +474,22 @@ const currentTurnPlayer = computed(() => {
 
 const turnMessage = computed(() => {
   if (!gameState.value) {
-    return 'Loading room…'
+    return '正在加载房间…'
   }
 
   if (gameState.value.phase === 'waiting') {
-    return 'Waiting for players to start'
+    return '等待玩家加入开始'
   }
 
   const player = currentTurnPlayer.value
   if (player) {
     if (player.id === currentPlayer.value?.id) {
-      return 'Your turn'
+      return '轮到你了'
     }
-    return `${player.name}'s turn`
+    return `${player.name} 的回合`
   }
 
-  return 'Waiting for next turn'
+  return '等待其他玩家出牌'
 })
 
 const westHand = computed(() => leftPlayer.value?.hand.concealedTiles || [])
