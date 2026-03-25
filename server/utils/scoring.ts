@@ -16,6 +16,9 @@ const FIXED_FAN: Record<string, number> = {
   '风一色': 20,    // 全部风牌
   '清碰': 20,      // 清一色 + 碰碰胡
   '混碰': 10,      // 混一色 + 碰碰胡
+  '大吊碰碰胡': 10, // 碰碰胡 + 大吊
+  '大吊混一色': 10, // 混一色 + 大吊
+  '大吊': 10,      // 大吊（无特殊牌型组合）
   '清一色': 10,    // 全部一门花色
   '无花自摸': 10,  // 碰碰胡/混一色，门口无花，自摸
   '杠开': 10,      // 杠牌/杠花后补牌自摸
@@ -74,7 +77,7 @@ export function calculateScore(params: {
     handTypeName = getHandTypeDisplayName(topType);
 
     // 检查是否为固定番数牌型
-    const fixedName = getFixedFanName(topType, isSelfDrawn, isKongFlower);
+    const fixedName = getFixedFanName(topType, isSelfDrawn, isKongFlower, handTypes);
     if (fixedName && FIXED_FAN[fixedName]) {
       baseFan = FIXED_FAN[fixedName];
       details.push(`${fixedName} = ${baseFan}番`);
@@ -292,13 +295,14 @@ function getHandTypeDisplayName(type: HandType): string {
     [HandType.EIGHT_FLOWERS]: '八花自摸',
     [HandType.FULL_FLUSH]: '清一色',
     [HandType.FOUR_WILD]: '四百搭',
+    [HandType.DA_DIAO]: '大吊',
     [HandType.HALF_FLUSH]: '混一色',
     [HandType.ALL_TRIPLETS]: '碰碰胡'
   };
   return names[type] || '普通胡';
 }
 
-function getFixedFanName(type: HandType, isSelfDrawn: boolean, isKongFlower: boolean): string | null {
+function getFixedFanName(type: HandType, isSelfDrawn: boolean, isKongFlower: boolean, handTypes?: HandType[]): string | null {
   switch (type) {
     case HandType.FENG_PENG: return '风碰';
     case HandType.ALL_WIND: return '风一色';
@@ -307,6 +311,13 @@ function getFixedFanName(type: HandType, isSelfDrawn: boolean, isKongFlower: boo
     case HandType.FULL_FLUSH: return '清一色';
     case HandType.EIGHT_FLOWERS: return isSelfDrawn ? '八花自摸' : null;
     case HandType.FOUR_WILD: return '四百搭';
+    case HandType.DA_DIAO:
+      // 大吊组合牌型
+      if (handTypes) {
+        if (handTypes.includes(HandType.ALL_TRIPLETS)) return '大吊碰碰胡';
+        if (handTypes.includes(HandType.HALF_FLUSH)) return '大吊混一色';
+      }
+      return '大吊';
     default: return null;
   }
 }

@@ -948,7 +948,8 @@ class GameManager {
         game.wildTileGroup
       );
 
-      const requiresFlowerGate = handTypes.includes(HandType.ALL_TRIPLETS) || handTypes.includes(HandType.HALF_FLUSH);
+      const hasDaDiao = handTypes.includes(HandType.DA_DIAO);
+      const requiresFlowerGate = (handTypes.includes(HandType.ALL_TRIPLETS) || handTypes.includes(HandType.HALF_FLUSH)) && !hasDaDiao;
       const hasFlowerAtDoor = flowerCount > 0;
       if (requiresFlowerGate && !hasFlowerAtDoor) continue;
 
@@ -1239,8 +1240,29 @@ class GameManager {
 
       // Check for hu
       const testHand = [...player.hand.concealedTiles, discardedTile];
-      if (canWin(testHand, player.hand.exposedMelds.length, isWildTile).canWin) {
-        actions.push(ActionType.HU);
+      const winCheck = canWin(testHand, player.hand.exposedMelds.length, isWildTile);
+      if (winCheck.canWin) {
+        // 规则：碰碰胡/混一色捉冲需要门口有花；但"大吊"例外，可随时捉冲
+        const flowerCount = player.hand.exposedMelds
+          .flatMap(m => m.tiles)
+          .filter(t => isFlower(t)).length;
+
+        const handTypes = detectHandTypes(
+          testHand,
+          player.hand.exposedMelds,
+          false,
+          flowerCount,
+          game.customScoringMode || null,
+          game.wildTileGroup
+        );
+
+        const hasDaDiao = handTypes.includes(HandType.DA_DIAO);
+        const requiresFlowerGate = (handTypes.includes(HandType.ALL_TRIPLETS) || handTypes.includes(HandType.HALF_FLUSH)) && !hasDaDiao;
+        const hasFlowerAtDoor = flowerCount > 0;
+
+        if (!requiresFlowerGate || hasFlowerAtDoor) {
+          actions.push(ActionType.HU);
+        }
       }
 
       if (actions.length > 0) {

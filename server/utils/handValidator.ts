@@ -14,7 +14,8 @@ export enum HandType {
   ALL_WIND = 'all_wind',           // 风一色
   FENG_PENG = 'feng_peng',         // 风碰 (风一色+碰碰胡)
   EIGHT_FLOWERS = 'eight_flowers', // 八花自摸
-  FOUR_WILD = 'four_wild'          // 四百搭
+  FOUR_WILD = 'four_wild',         // 四百搭
+  DA_DIAO = 'da_diao'              // 大吊（手牌仅剩单张听牌）
 }
 
 // Hand type priority (higher = better, checked first)
@@ -26,6 +27,7 @@ export const HAND_TYPE_PRIORITY: Record<HandType, number> = {
   [HandType.EIGHT_FLOWERS]: 70,
   [HandType.FULL_FLUSH]: 60,
   [HandType.FOUR_WILD]: 50,
+  [HandType.DA_DIAO]: 85,   // 大吊优先级：仅低于风碰(100)和风一色(90)
   [HandType.HALF_FLUSH]: 40,
   [HandType.ALL_TRIPLETS]: 30
 };
@@ -118,6 +120,15 @@ export function detectHandTypes(
   // Four wild tiles (四百搭)
   if (wildTileId && countWildTiles(handTiles, isWildTile) >= 4) {
     types.push(HandType.FOUR_WILD);
+  }
+
+  // 大吊：手牌（不含门口）仅剩单张听牌
+  // 即 concealedTiles 在胡牌后为 14 张（4面子+1雀头=13张 + 胡牌1张=14张），
+  // 但胡牌前手牌只有 2 张（1张单听 + 1张胡来的牌），
+  // 更准确的判断：门口副露占了 3 组面子，手牌只剩 2 张（听牌+胡牌）= 大吊
+  // 或者：门口副露占了 4 组面子，手牌只剩 2 张（雀头，但只听其中一张）
+  if (isDaDiao(handTiles, exposedMelds)) {
+    types.push(HandType.DA_DIAO);
   }
 
   // Sort by priority
@@ -228,6 +239,19 @@ function isAllWindOrDragon(tiles: Tile[], isWildTile: WildTileChecker): boolean 
  */
 function countWildTiles(tiles: Tile[], isWildTile: WildTileChecker): number {
   return tiles.filter(t => isWildTile(t)).length;
+}
+
+/**
+ * 大吊判断：手牌（不含门口副露）仅剩单张听牌
+ * 
+ * 规则（长清阁）：
+ * 大吊 = 胡牌时，门口副露数 >= 3，且手牌（含胡牌）仅剩 2 张
+ * 即：胡牌前仅 1 张在手 = 单吊胡牌
+ */
+function isDaDiao(handTiles: Tile[], exposedMelds: Meld[]): boolean {
+  // 大吊条件：胡牌后手牌仅 2 张（胡牌前仅 1 张在手 = 单吊）
+  // 且至少有门口副露（避免把普通闭门手误判为大吊）
+  return exposedMelds.length >= 1 && handTiles.length === 2;
 }
 
 /**
