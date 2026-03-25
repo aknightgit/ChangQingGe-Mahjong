@@ -1,0 +1,39 @@
+{
+  "savedAt": "2026-03-24T19:43:13.337Z",
+  "round": 10,
+  "metrics": {
+    "fitness": 296.0354888068881,
+    "huRate": 0.924,
+    "drawRate": 0.076,
+    "lastPlayerRate": 0.699,
+    "avgRounds": 77.78,
+    "avgPot": 100.576,
+    "selfDrawRate": 0.9442394423944239,
+    "bigHandRate": 0.018040180401804017,
+    "avgWinnerPoints": 11.400984009840098
+  },
+  "policy": {
+    "id": "champion-r10",
+    "selfWinChance": 0.9364123124134047,
+    "selfWinWildBoost": 0.25,
+    "discardHuChance": 0.2,
+    "discardHuWildPenalty": 0.18538036576438643,
+    "discardHuMenQingPenalty": 0.030902469752470657,
+    "pengChance": 0.755211106589806,
+    "kongChance": 0.6,
+    "chowChance": 0.580982314676535,
+    "pengWildBoost": 0.16902337233519987,
+    "kongWildBoost": 0.31119477677597895,
+    "chowWildPenalty": 0.09057957617217635,
+    "bailoutBuildWildBoost": 0.05610063643681333,
+    "bailoutHuPenaltyPerMeld": 0.22132767399885067,
+    "honorRushThreshold": 4,
+    "honorRushBoost": 0.1171725504501981,
+    "pairWeight": 9,
+    "nearWeight": 0.7242582997996061,
+    "honorPairBonus": 1.3497563271995066,
+    "wildKeepPenalty": 1309.4482867201805,
+    "dominantSuitBonus": 2.423440262606036,
+    "tripletKeepBonus": 0.023425939397919426
+  }
+}

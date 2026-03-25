@@ -71,6 +71,7 @@ interface WinDetail {
   melds: string[];
   flowers: string[];
   from?: string;
+  isMenQing: boolean;
 }
 
 interface PlayerState {
@@ -113,6 +114,7 @@ interface GameRecord {
   relations: Relation[];
   settlementDetails: string[];
   totalPot: number;
+  worstLoser: { name: string; score: number } | null;
 }
 
 interface RoundMetrics {
@@ -130,8 +132,9 @@ interface RoundMetrics {
   selfDrawRate: number;
   bigHandRate: number;
   avgWinnerPoints: number;
+  menQingRate: number;
   fitness: number;
-  biggest: GameRecord;
+  worstGame: GameRecord;
 }
 
 interface TrainingContext {
@@ -481,6 +484,8 @@ function buildWinDetail(
 
   const displayHandType = mapDisplayHandType(score.handTypeName, handTypes as unknown as string[]);
 
+  const isMenQing = player.melds.every(m => m.type !== MeldType.SEQUENCE && m.type !== MeldType.TRIPLET);
+
   return {
     detail: {
       name: player.name,
@@ -491,7 +496,8 @@ function buildWinDetail(
       handTiles: sortTiles([...handForCalc]).map(getTileDisplayName),
       melds: player.melds.map(toMeldText),
       flowers: player.flowers.map(getTileDisplayName),
-      from
+      from,
+      isMenQing
     },
     points: score.finalPoints
   };
@@ -794,6 +800,12 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
   const losers = players.filter(p => p.status !== 'won').map(p => ({ name: p.name, score: p.score }));
   const totalPot = players.reduce((s, p) => s + Math.abs(p.score), 0);
 
+  // Find the worst loser (most negative score) across all players
+  const worstLoser = players.reduce((worst, p) => {
+    if (!worst || p.score < worst.score) return { name: p.name, score: p.score };
+    return worst;
+  }, null as { name: string; score: number } | null);
+
   return {
     gameNum,
     wildTile: wildTileId,
@@ -813,7 +825,8 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
     losers,
     relations: getRelations(bailout),
     settlementDetails,
-    totalPot
+    totalPot,
+    worstLoser
   };
 }
 
@@ -861,9 +874,13 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
   const selfDrawCount = winners.filter(w => w.winMode === '自摸').length;
   const selfDrawRate = winners.length ? selfDrawCount / winners.length : 0;
 
-  const bigHandNames = new Set(['清碰', '混碰', '风碰', '风一色', '清一色', '八花自摸', '四百搭']);
+  const bigHandNames = new Set(['风碰', '风一色', '清碰']);
   const bigHandCount = winners.filter(w => bigHandNames.has(w.handType)).length;
   const bigHandRate = winners.length ? bigHandCount / winners.length : 0;
+
+  // 门清胡牌率
+  const menQingCount = winners.filter(w => w.isMenQing).length;
+  const menQingRate = winners.length ? menQingCount / winners.length : 0;
 
   const avgWinnerPoints = winners.length
     ? winners.reduce((s, w) => s + w.finalPoints, 0) / winners.length
@@ -873,19 +890,41 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
   const drawOverTarget = Math.max(0, drawRate - 0.1);
   const drawUnderTarget = Math.max(0, 0.1 - drawRate);
 
-  // 目标: 胡牌率↑, 流局率↓, 最后一人↑, 自摸↑, 大牌↑, 赢家点数↑
+  // 自摸率惩罚: 目标 0.6-0.7，偏离则惩罚
+  const selfDrawTarget = 0.65;
+  const selfDrawPenalty = -Math.abs(selfDrawRate - selfDrawTarget) * 500;
+
+  // 大牌率（风碰+风一色+清碰）目标 4-8%，偏离惩罚
+  const bigHandTarget = 0.06;
+  const bigHandPenalty = -Math.abs(bigHandRate - bigHandTarget) * 400;
+
+  // 门清胡牌率目标 6-10%，偏离惩罚
+  const menQingTarget = 0.08;
+  const menQingPenalty = -Math.abs(menQingRate - menQingTarget) * 300;
+
+  // 目标: 胡牌率↑, 流局率↓, 最后一人↑, 自摸率0.65, 大牌率6%, 门清8%, 赢家点数↑
   const fitness =
     huRate * 110 -
     drawRate * 180 -
     drawOverTarget * 1200 +
     drawUnderTarget * 160 +
     lastPlayerRate * 150 +
-    selfDrawRate * 90 +
-    bigHandRate * 120 +
+    selfDrawPenalty +
+    bigHandPenalty +
+    menQingPenalty +
     avgWinnerPoints * 1.0 +
     avgPot / 120;
 
-  const biggest = [...all].sort((a, b) => b.totalPot - a.totalPot)[0]!;
+  // 找最大单人亏损局：每局中找score最低的玩家，然后找所有局中最负的那个
+  const worstGame = all.reduce((worst, g) => {
+    const gameWorstLoser = g.worstLoser;
+    if (!gameWorstLoser) return worst;
+    if (!worst || gameWorstLoser.score < worst.score) {
+      // Return the whole game record that has the worst loser
+      return g;
+    }
+    return worst;
+  }, null as GameRecord | null) || all[0];
 
   return {
     round,
@@ -901,16 +940,17 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
     avgPot,
     selfDrawRate,
     bigHandRate,
+    menQingRate,
     avgWinnerPoints,
     fitness,
-    biggest
+    worstGame: worstGame!
   };
 }
 
 function appendRoundDoc(metrics: RoundMetrics) {
   const now = new Date().toISOString();
   const p = metrics.policy;
-  const b = metrics.biggest;
+  const b = metrics.worstGame;
 
   const lines: string[] = [];
   lines.push(`\n\n## Round ${metrics.round} (${now})`);
@@ -924,6 +964,7 @@ function appendRoundDoc(metrics: RoundMetrics) {
   lines.push(`- 平均总筹码: ${metrics.avgPot.toFixed(2)}`);
   lines.push(`- 自摸率(胡牌中): ${(metrics.selfDrawRate * 100).toFixed(2)}%`);
   lines.push(`- 大牌率(胡牌中): ${(metrics.bigHandRate * 100).toFixed(2)}%`);
+  lines.push(`- 门清胡牌率(胡牌中): ${(metrics.menQingRate * 100).toFixed(2)}%`);
   lines.push(`- 胜者平均最终点: ${metrics.avgWinnerPoints.toFixed(2)}`);
   lines.push(`- Fitness: ${metrics.fitness.toFixed(4)}`);
 
@@ -936,11 +977,14 @@ function appendRoundDoc(metrics: RoundMetrics) {
   lines.push('```');
 
   lines.push('');
-  lines.push('### 最大输赢局明细（本轮）');
+  lines.push('### 最大单人亏损局明细（本轮）');
   lines.push(`- 局号: ${b.gameNum}`);
   lines.push(`- 原因: ${b.reason}`);
   lines.push(`- 回合: ${b.rounds}`);
   lines.push(`- 总筹码: ${b.totalPot}`);
+  if (b.worstLoser) {
+    lines.push(`- 最大亏损玩家: ${b.worstLoser.name} (${b.worstLoser.score})`);
+  }
   lines.push(`- 百搭: ${b.wildTile}${b.wildGroup ? ` (组: ${b.wildGroup.join('/')})` : ''}`);
   const combinedGlobal = Math.min(8, b.diceMultiplier * b.flowMultiplier * b.inheritMultiplier);
   lines.push(`- 回合/全局倍数信息:`);
@@ -1007,6 +1051,7 @@ function savePolicySnapshot(round: number, policy: Policy, metrics?: RoundMetric
           avgPot: metrics.avgPot,
           selfDrawRate: metrics.selfDrawRate,
           bigHandRate: metrics.bigHandRate,
+          menQingRate: metrics.menQingRate,
           avgWinnerPoints: metrics.avgWinnerPoints
         }
       : null,
