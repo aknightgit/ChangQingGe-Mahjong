@@ -8,15 +8,15 @@ import { Tile, TileSuit, Meld, MeldType } from './server/types/game';
 
 const ROUNDS = parseInt(process.argv[2] || '20', 10);
 const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000', 10);
-const OUT_DIR = '/data/training';
+const PROJECT_TRAINING_DIR = path.join(process.cwd(), 'training-output');
+const OUT_DIR = PROJECT_TRAINING_DIR;
 const RUN_TAG = new Date().toISOString().replace(/[:.]/g, '-');
 const OUT_FILE = path.join(OUT_DIR, `ai-training-log-${RUN_TAG}.md`);
 const POLICY_DIR = path.join(OUT_DIR, 'policies', RUN_TAG);
 const BEST_POLICY_FILE = path.join(OUT_DIR, `best-policy-${RUN_TAG}.json`);
 const BEST_POLICY_LATEST = path.join(OUT_DIR, 'best-policy.json');
 
-// 同步保存到项目目录（用于真实策略读取）
-const PROJECT_TRAINING_DIR = path.join(process.cwd(), 'training');
+// 同步保存到项目目录 training-output（用于审核）
 const PROJECT_BEST_POLICY_FILE = path.join(PROJECT_TRAINING_DIR, `best-policy-${RUN_TAG}.json`);
 const PROJECT_BEST_POLICY_LATEST = path.join(PROJECT_TRAINING_DIR, 'best-policy.json');
 
