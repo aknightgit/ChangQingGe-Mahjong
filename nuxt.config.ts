@@ -4,6 +4,13 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   modules: ['@nuxt/ui'],
   css: ['~/main.css'],
+  // Disable Google Fonts to avoid 30s+ timeout on startup
+  fonts: {
+    providers: {
+      google: false,
+      googleicons: false
+    }
+  },
   nitro: {
     experimental: {
       websocket: true
