@@ -47,9 +47,15 @@ export const useGame = () => {
       await fetchGameState(gId, pId)
 
       // Connect Socket.IO
-      // Use default transports (polling first) to avoid websocket connection errors in some envs
-      socket.value = io({
-        withCredentials: true
+      // Use WebSocket-first transport for faster, more reliable connections
+      const wsUrl = window.location.origin
+      socket.value = io(wsUrl, {
+        withCredentials: true,
+        transports: ['websocket', 'polling'],
+        timeout: 10000,
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000
       })
 
       socket.value.on('connect', () => {
