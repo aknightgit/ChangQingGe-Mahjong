@@ -184,6 +184,20 @@
             @spectate="handleSpectate"
           />
 
+          <!-- 功能菜单：桌面端显示在侧边栏 -->
+          <div class="ext-section" v-if="gameState?.phase === 'playing' && availableActions.length">
+            <h3 class="ext-title">操作</h3>
+            <CircularActionButtons
+              :available-actions="availableActions"
+              :is-connected="isConnected"
+              :is-interaction-locked="isInteractionLocked"
+              :last-state-change-at="lastStateChangeAt"
+              :now-ts="nowTs"
+              :highlight-delay-ms="ACTION_HIGHLIGHT_DELAY_MS"
+              @action="handleCircularAction"
+            />
+          </div>
+
           <!-- 房间控制 / 管理面板 -->
           <div class="ext-section" v-if="canStartGame">
             <h3 class="ext-title">房间控制</h3>

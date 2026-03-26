@@ -10,7 +10,10 @@
         v-for="(tile, ti) in row.tiles"
         :key="ti"
         class="wall-tile"
-        :class="{ 'wall-tile--dealing': dealingIndex === row.offset + ti }"
+        :class="{
+          'wall-tile--dealing': dealingIndex === row.offset + ti,
+          'wall-tile--vertical': row.side === 'left' || row.side === 'right'
+        }"
       >
         <div class="wall-tile-back" />
       </div>
@@ -20,8 +23,8 @@
 
 <script setup lang="ts">
 /**
- * 牌墙组件 - 一整排连续展示
- * 剩余牌数均分四边，每边一排（不分墩/网格）
+ * 牌墙组件 - 每边固定18剁（18组×2张=36张/边）
+ * 四边连续排布，不再按 remaining 均分
  */
 
 const props = defineProps<{
@@ -33,23 +36,16 @@ const layout = computed(() => props.layout || 'diamond')
 
 const dealingIndex = ref(-1)
 
+// 每边固定18剁
+const TOWERS_PER_SIDE = 18
+
 const wallRows = computed(() => {
   const sides = ['top', 'right', 'bottom', 'left'] as const
-  const total = Math.max(0, props.remaining)
-  const perSide = Math.floor(total / 4)
-  const extra = total % 4 // 余数加到第一边
-
-  let offset = 0
-  return sides.map((side, i) => {
-    const count = perSide + (i < extra ? 1 : 0)
-    const result = {
-      side,
-      tiles: Array.from({ length: count }, (_, j) => j),
-      offset
-    }
-    offset += count
-    return result
-  })
+  return sides.map((side, i) => ({
+    side,
+    tiles: Array.from({ length: TOWERS_PER_SIDE }, (_, j) => j),
+    offset: i * TOWERS_PER_SIDE
+  }))
 })
 </script>
 
@@ -58,17 +54,18 @@ const wallRows = computed(() => {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  overflow: hidden;
 }
 
 .wall-row {
   position: absolute;
   display: flex;
-  gap: 1px;
+  gap: 2px;
 }
 
 /* ===== 上下：水平一整排 ===== */
 .wall-row--top {
-  top: 16.5%;
+  top: 14%;
   left: 50%;
   transform: translateX(-50%);
   flex-direction: row;
@@ -76,7 +73,7 @@ const wallRows = computed(() => {
 }
 
 .wall-row--bottom {
-  bottom: 16.5%;
+  bottom: 13%;
   left: 50%;
   transform: translateX(-50%);
   flex-direction: row-reverse;
@@ -85,7 +82,7 @@ const wallRows = computed(() => {
 
 /* ===== 左右：垂直一整排 ===== */
 .wall-row--left {
-  left: 16.5%;
+  left: 14%;
   top: 50%;
   transform: translateY(-50%);
   flex-direction: column;
@@ -94,7 +91,7 @@ const wallRows = computed(() => {
 }
 
 .wall-row--right {
-  right: 16.5%;
+  right: 14%;
   top: 50%;
   transform: translateY(-50%);
   flex-direction: column;
@@ -102,9 +99,9 @@ const wallRows = computed(() => {
   align-items: center;
 }
 
-/* ===== 单张牌墙牌：紧凑小牌 ===== */
+/* ===== 单张牌墙牌 ===== */
 .wall-tile {
-  width: 18px;
+  width: 22px;
   height: 26px;
   border-radius: 2px;
   background: #1a6b3d;
@@ -114,6 +111,12 @@ const wallRows = computed(() => {
   position: relative;
   flex-shrink: 0;
   transition: opacity 0.3s ease;
+}
+
+/* 左右墙的牌：立起来，竖长横短 */
+.wall-tile--vertical {
+  width: 20px;
+  height: 28px;
 }
 
 .wall-tile--dealing {
