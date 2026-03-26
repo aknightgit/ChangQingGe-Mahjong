@@ -251,14 +251,16 @@
         @action="handleCircularAction"
       />
 
-      <!-- 骰子投掷动画 -->
-      <DiceAnimation
-        v-if="showDiceOverlay"
-        :dice1="diceValues[0]"
-        :dice2="diceValues[1]"
-        :dealer-name="dealerName"
-        @deal="onDealTiles"
-      />
+      <!-- 骰子投掷动画（Teleport到body避免被父级裁剪） -->
+      <Teleport to="body">
+        <DiceAnimation
+          v-if="showDiceOverlay"
+          :dice1="diceValues[0]"
+          :dice2="diceValues[1]"
+          :dealer-name="dealerName"
+          @deal="onDealTiles"
+        />
+      </Teleport>
       </div>
     </div>
   </div>
@@ -533,8 +535,18 @@ const turnMessage = computed(() => {
     return '正在加载房间…'
   }
 
-  if (gameState.value.phase === 'waiting') {
+  const phase = gameState.value.phase
+  // 如果牌已发（有人有手牌），即使 phase 还没更新也按 playing 处理
+  const hasDealtCards = (gameState.value.players || []).some(
+    (p: any) => (p.hand?.concealedTiles?.length || 0) > 0
+  )
+
+  if (phase === 'waiting' && !hasDealtCards) {
     return '等待玩家加入开始'
+  }
+
+  if (phase === 'waiting' && hasDealtCards) {
+    return '准备发牌…'
   }
 
   const player = currentTurnPlayer.value
