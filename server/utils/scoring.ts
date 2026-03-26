@@ -7,7 +7,7 @@
  */
 
 import { Tile, Meld, MeldType, TileSuit, Player } from '../types/game';
-import { isFlower, isWind, isDragon, groupTiles, tilesEqual } from './tiles';
+import { isFlower, isWind, isDragon, groupTiles, tilesEqual, getTileDisplayName } from './tiles';
 import { HandType, HAND_TYPE_PRIORITY } from './handValidator';
 
 // ===== 固定番数牌型 =====
@@ -226,46 +226,80 @@ function calculateFormulaFan(
 
   // 百搭虚拟分配：找最优组合（利益最大化）
   // 优先级：箭牌刻子(+2) > 风牌刻子(+1) > 其他
+  // 支持：3张百搭→刻子, 2百搭+1牌→刻子, 1百搭+2牌→刻子
   let virtualHand = [...handTiles];
   if (wildTileSuit !== undefined && wildTileValue !== undefined) {
     const wildTiles = handTiles.filter(t => t.suit === wildTileSuit && t.value === wildTileValue);
     if (wildTiles.length > 0) {
-      // 找所有非百搭牌，按优先级找最优匹配
       const nonWildTiles = handTiles.filter(t => !(t.suit === wildTileSuit && t.value === wildTileValue));
-      
+      let remainingWilds = wildTiles.length;
+      const virtualParts: Tile[] = [...nonWildTiles];
+
       // 1. 优先配箭牌刻子（中发白 triplet = +2）
-      const dragons = nonWildTiles.filter(t => isDragon(t));
-      for (const dragon of dragons) {
+      // 去重：每种箭牌只处理一次
+      const seenDragons = new Set<string>();
+      for (const dragon of nonWildTiles) {
+        if (!isDragon(dragon)) continue;
+        const dk = `${dragon.suit}-${dragon.value}`;
+        if (seenDragons.has(dk)) continue;
+        seenDragons.add(dk);
+
         const dragonCount = nonWildTiles.filter(t => t.suit === dragon.suit && t.value === dragon.value).length;
-        if (dragonCount === 2 && wildTiles.length >= 1) {
-          // 百搭 + 箭牌对 = 箭牌刻子 (+2)
-          virtualHand = nonWildTiles;
-          for (let i = 0; i < Math.min(wildTiles.length, 1); i++) {
-            virtualHand.push({ ...dragon, id: wildTiles[i].id, isWild: false });
+        if (remainingWilds >= 3) {
+          // 3百搭 → 箭牌刻子
+          for (let i = 0; i < 3; i++) {
+            virtualParts.push({ ...dragon, id: wildTiles[wildTiles.length - remainingWilds + i].id, isWild: false });
           }
-          details.push(`百搭→${dragon.suit}${dragon.value}(箭牌刻子) +2`);
-          break;
+          remainingWilds -= 3;
+          details.push(`百搭×3→${getTileDisplayName(dragon)}(箭牌刻子) +2`);
+        } else if (dragonCount >= 2 && remainingWilds >= 1) {
+          // 2箭牌+1百搭 → 箭牌刻子
+          virtualParts.push({ ...dragon, id: wildTiles[wildTiles.length - remainingWilds].id, isWild: false });
+          remainingWilds -= 1;
+          details.push(`百搭→${getTileDisplayName(dragon)}(箭牌刻子) +2`);
+        } else if (dragonCount >= 1 && remainingWilds >= 2) {
+          // 1箭牌+2百搭 → 箭牌刻子
+          for (let i = 0; i < 2; i++) {
+            virtualParts.push({ ...dragon, id: wildTiles[wildTiles.length - remainingWilds + i].id, isWild: false });
+          }
+          remainingWilds -= 2;
+          details.push(`百搭×2→${getTileDisplayName(dragon)}(箭牌刻子) +2`);
         }
+        if (remainingWilds <= 0) break;
       }
-      
+
       // 2. 配风牌刻子（东南西北 triplet = +1）
-      if (details.length === 0) {
-        const winds = nonWildTiles.filter(t => isWind(t));
-        for (const wind of winds) {
+      if (remainingWilds > 0) {
+        const seenWinds = new Set<string>();
+        for (const wind of nonWildTiles) {
+          if (!isWind(wind)) continue;
+          const wk = `${wind.suit}-${wind.value}`;
+          if (seenWinds.has(wk)) continue;
+          seenWinds.add(wk);
+
           const windCount = nonWildTiles.filter(t => t.suit === wind.suit && t.value === wind.value).length;
-          if (windCount === 2 && wildTiles.length >= 1) {
-            virtualHand = nonWildTiles;
-            virtualHand.push({ ...wind, id: wildTiles[0].id, isWild: false });
-            details.push(`百搭→${wind.suit}${wind.value}(风牌刻子) +1`);
-            break;
+          if (remainingWilds >= 3) {
+            for (let i = 0; i < 3; i++) {
+              virtualParts.push({ ...wind, id: wildTiles[wildTiles.length - remainingWilds + i].id, isWild: false });
+            }
+            remainingWilds -= 3;
+            details.push(`百搭×3→${getTileDisplayName(wind)}(风牌刻子) +1`);
+          } else if (windCount >= 2 && remainingWilds >= 1) {
+            virtualParts.push({ ...wind, id: wildTiles[wildTiles.length - remainingWilds].id, isWild: false });
+            remainingWilds -= 1;
+            details.push(`百搭→${getTileDisplayName(wind)}(风牌刻子) +1`);
+          } else if (windCount >= 1 && remainingWilds >= 2) {
+            for (let i = 0; i < 2; i++) {
+              virtualParts.push({ ...wind, id: wildTiles[wildTiles.length - remainingWilds + i].id, isWild: false });
+            }
+            remainingWilds -= 2;
+            details.push(`百搭×2→${getTileDisplayName(wind)}(风牌刻子) +1`);
           }
+          if (remainingWilds <= 0) break;
         }
       }
-      
-      // 3. 如果没有箭牌/风牌对，保持原样（百搭不贡献组合分）
-      if (details.length === 0) {
-        virtualHand = handTiles; // 保持原样
-      }
+
+      virtualHand = virtualParts;
     }
   }
 
