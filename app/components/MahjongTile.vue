@@ -43,9 +43,9 @@
       </template>
       <!-- 条子: CSS 竹节 -->
       <template v-else-if="tile.suit === 'tiao'">
-        <!-- 1条特殊: 麻雀 -->
+        <!-- 1条特殊: 小鸟 -->
         <template v-if="tile.value === 1">
-          <div class="tile-bird">雀</div>
+          <div class="tile-bird">🐦</div>
         </template>
         <template v-else>
           <div class="tile-bamboo-pattern" :class="`bamboo-count-${tile.value}`">
@@ -324,12 +324,10 @@ const chineseNum = computed(() => {
 .bamboo-count-8 .bamboo-stick { height: 10px; width: 4px; }
 .bamboo-count-9 .bamboo-stick { height: 9px; width: 4px; }
 
-/* 1条: 鸟 → 用文字代替emoji更清晰 */
+/* 1条: 小鸟图案 */
 .tile-bird {
-  font-size: 1.3rem;
+  font-size: 1.8rem;
   line-height: 1;
-  color: #2e7d32;
-  font-weight: 900;
 }
 
 /* ==================== 万子 (Characters) ==================== */
