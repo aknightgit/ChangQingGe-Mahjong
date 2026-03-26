@@ -415,6 +415,10 @@ const statsPlayers = computed(() => {
     losses: p.status === 'lost' ? 1 : 0,
     color: positionColors[p.position] || 'south',
     isMe: p.id === currentPlayer.value?.id,
+    // 累积/上局数据（暂无历史接口，先用占位）
+    totalWins: p.status === 'won' ? 1 : 0,
+    totalLosses: p.status === 'lost' ? 1 : 0,
+    lastRoundStatus: null as 'won' | 'lost' | 'none' | null,
   }))
 })
 

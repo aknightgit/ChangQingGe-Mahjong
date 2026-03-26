@@ -28,6 +28,19 @@
       </div>
     </div>
 
+    <!-- 累积胜负 + 上局状态 -->
+    <div class="stats-summary">
+      <div class="summary-row" v-for="player in rankedPlayers" :key="'sum-' + player.id">
+        <span class="summary-name" :class="{ 'summary-name--me': player.isMe }">{{ player.name }}</span>
+        <span class="summary-cumulative">
+          累积 <span class="sc-pos">{{ player.totalWins }}胜</span>/<span class="sc-neg">{{ player.totalLosses }}负</span>
+        </span>
+        <span class="summary-last" :class="lastRoundClass(player)">
+          {{ lastRoundLabel(player) }}
+        </span>
+      </div>
+    </div>
+
     <!-- 输赢盘数 -->
     <div class="stats-record">
       <div v-for="player in rankedPlayers" :key="'r-' + player.id" class="record-row">
@@ -67,6 +80,9 @@ interface PlayerStat {
   losses: number
   color: string
   isMe: boolean
+  totalWins?: number
+  totalLosses?: number
+  lastRoundStatus?: 'won' | 'lost' | 'none' | null
 }
 
 const props = defineProps<{
@@ -85,11 +101,25 @@ const winRate = (p: PlayerStat) => {
   const total = p.wins + p.losses
   return total > 0 ? (p.wins / total) * 100 : 0
 }
+
+const lastRoundLabel = (p: PlayerStat): string => {
+  if (p.lastRoundStatus === 'won') return '上局赢'
+  if (p.lastRoundStatus === 'lost') return '上局输'
+  return '首局'
+}
+
+const lastRoundClass = (p: PlayerStat): string => {
+  if (p.lastRoundStatus === 'won') return 'last-won'
+  if (p.lastRoundStatus === 'lost') return 'last-lost'
+  return 'last-none'
+}
 </script>
 
 <style scoped>
 .room-stats {
-  width: 100%;
+  width: 66%;
+  max-width: 100%;
+  margin: 0 auto;
   background: linear-gradient(180deg, #1a0a2e 0%, #0d1b3e 50%, #0a2020 100%);
   border-radius: 16px;
   border: 2px solid rgba(255, 215, 0, 0.2);
@@ -172,6 +202,58 @@ const winRate = (p: PlayerStat) => {
 .sc-pos { color: #66bb6a; }
 .sc-neg { color: #ef5350; }
 
+/* 累积胜负 + 上局状态 */
+.stats-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.summary-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  padding: 3px 0;
+}
+
+.summary-name {
+  width: 48px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.summary-name--me { color: #ffd700; }
+
+.summary-cumulative {
+  flex: 1;
+  opacity: 0.85;
+}
+
+.summary-last {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.last-won {
+  color: #66bb6a;
+  background: rgba(102, 187, 106, 0.15);
+}
+
+.last-lost {
+  color: #ef5350;
+  background: rgba(239, 83, 80, 0.15);
+}
+
+.last-none {
+  color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.05);
+}
+
 /* 输赢盘数 */
 .stats-record {
   display: flex;
@@ -220,5 +302,9 @@ const winRate = (p: PlayerStat) => {
   color: #ffd700;
 }
 
-/* width: 100% inherited, no fixed breakpoint needed */
+@media (max-width: 900px) {
+  .room-stats {
+    width: 100%;
+  }
+}
 </style>
