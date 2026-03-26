@@ -86,24 +86,6 @@
         </div>
       </div>
     </div>
-
-    <!-- 今日最大胡牌牌型 -->
-    <div class="today-best-hand" v-if="todayBestHand">
-      <div class="best-hand-label">
-        🏅 {{ todayBestHand.name }}
-      </div>
-      <div class="best-hand-tiles">
-        <MahjongTile
-          v-for="tile in todayBestHand.tiles"
-          :key="tile.id"
-          :tile="tile"
-          :small="true"
-        />
-      </div>
-    </div>
-    <div class="today-best-hand today-best-hand--empty" v-else>
-      <span class="best-hand-empty">今日未胡牌</span>
-    </div>
   </div>
 </template>
 
@@ -121,9 +103,7 @@ const props = defineProps<{
   claimCandidateIds?: string[]
   showClaimOptions?: boolean
   claimType?: MeldType | null
-  playerColors?: string[]
-  bailoutCounts?: Record<string, number>
-  todayBestHand?: { name: string; tiles: Tile[] } | null
+
 }>()
 
 const colors = computed(() => props.playerColors || ['#e53935', '#43a047', '#1e88e5', '#fb8c00'])
@@ -338,39 +318,5 @@ const onTileClick = (tile: Tile) => {
   margin-left: 4px;
 }
 
-/* 今日最大胡牌牌型 */
-.today-best-hand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: 10px;
-  background: rgba(255, 215, 0, 0.06);
-  border: 1px solid rgba(255, 215, 0, 0.15);
-  margin-top: 6px;
-}
 
-.today-best-hand--empty {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(255, 255, 255, 0.08);
-  justify-content: center;
-}
-
-.best-hand-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #ffd700;
-  white-space: nowrap;
-  text-shadow: 0 0 6px rgba(255, 215, 0, 0.3);
-}
-
-.best-hand-tiles {
-  display: flex;
-  gap: 2px;
-}
-
-.best-hand-empty {
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.35);
-}
 </style>

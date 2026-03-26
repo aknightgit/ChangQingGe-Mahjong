@@ -117,7 +117,7 @@ const lastRoundClass = (p: PlayerStat): string => {
 
 <style scoped>
 .room-stats {
-  width: 66%;
+  width: 73%;
   max-width: 100%;
   margin: 0 auto;
   background: linear-gradient(180deg, #1a0a2e 0%, #0d1b3e 50%, #0a2020 100%);
