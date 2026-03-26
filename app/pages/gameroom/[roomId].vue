@@ -747,6 +747,8 @@ const onDealTiles = async () => {
   if (!showDiceOverlay.value || isGameStarting) return
   isGameStarting = true
   showDiceOverlay.value = false
+  // 等 DiceAnimation 的 Leave 动画完成（约 300ms）再正式开始
+  await new Promise(resolve => setTimeout(resolve, 350))
   console.log('[onDealTiles] Calling startGame API...')
   try {
     await startGame()
