@@ -185,8 +185,8 @@
             @spectate="handleSpectate"
           />
 
-          <!-- 功能菜单：桌面端显示在侧边栏 -->
-          <div class="ext-section" v-if="gameState?.phase === 'playing' && availableActions.length">
+          <!-- 功能菜单：紧贴战绩榜下方 -->
+          <div class="ext-section ext-section--actions" v-if="gameState?.phase === 'playing' && availableActions.length">
             <h3 class="ext-title">操作</h3>
             <CircularActionButtons
               :available-actions="availableActions"
@@ -713,18 +713,21 @@ let isGameStarting = false
 
 const onStartGame = () => {
   if (isGameStarting) return
-  // 防止在游戏已开始时重复触发
   if (gameState.value?.phase === GamePhase.PLAYING) {
     console.warn('[onStartGame] Game already in PLAYING phase, skipping dice overlay')
     return
   }
   console.log('[onStartGame] Showing dice overlay, phase:', gameState.value?.phase)
-  // 生成随机骰子值用于动画展示
   diceValues.value = [
     Math.floor(Math.random() * 6) + 1,
     Math.floor(Math.random() * 6) + 1
   ]
-  showDiceOverlay.value = true
+  // 强制先关闭再打开，确保 DiceAnimation 组件重新 mount
+  showDiceOverlay.value = false
+  nextTick(() => {
+    showDiceOverlay.value = true
+    console.log('[onStartGame] showDiceOverlay set to true')
+  })
 }
 
 const onDealTiles = async () => {
@@ -935,6 +938,10 @@ const forceDiscard = async (p: Player) => {
   padding: 8px 10px 10px;
   border-radius: 14px;
   background: rgba(5, 14, 10, 0.9);
+}
+
+.ext-section--actions {
+  margin-top: -6px;
 }
 
 .ext-title {

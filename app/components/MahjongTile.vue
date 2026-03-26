@@ -145,8 +145,8 @@ const chineseNum = computed(() => {
 
 <style scoped>
 .tile {
-  width: 40px;
-  height: 56px;
+  width: 36px;
+  height: 50px;
   border-radius: 5px 5px 4px 4px;
   background: #faf6ee;
   border: 0.5px solid #e0d6c0;
