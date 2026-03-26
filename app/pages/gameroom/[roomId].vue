@@ -1110,14 +1110,14 @@ const forceDiscard = async (p: Player) => {
 
 .inline-action-btn--pass {
   background: rgba(60, 60, 60, 0.85);
-  color: #ccc;
+  color: #fff;
   border-color: rgba(255,255,255,0.1);
   font-size: 0.75rem;
 }
 
 .inline-action-btn--rebel {
   background: linear-gradient(135deg, #dc2626, #b91c1c);
-  color: #ffd700;
+  color: #fff;
   border-color: #ffd700;
   animation: heartbeat 1.2s ease-in-out infinite;
 }

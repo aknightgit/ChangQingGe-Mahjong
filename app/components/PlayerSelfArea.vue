@@ -270,12 +270,12 @@ const onTileClick = (tile: Tile) => {
   font-size: 0.8rem;
   cursor: pointer;
   background: rgba(12, 40, 30, 0.9);
-  color: #e0f2e9;
+  color: #fff;
 }
 
 .claim-button.primary {
   background: linear-gradient(135deg, #1f8a52, #46c574);
-  color: #03100a;
+  color: #fff;
 }
 /* 玩家颜色圆点 */
 .player-dot {
