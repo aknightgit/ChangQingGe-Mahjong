@@ -86,7 +86,7 @@ export function calculateScore(params: {
 
   // 2. 如果没有固定番数，用公式计算（碰碰胡/混一色）
   if (baseFan === 0) {
-    const formulaResult = calculateFormulaFan(handTiles, exposedMelds, flowerTiles);
+    const formulaResult = calculateFormulaFan(handTiles, exposedMelds, flowerTiles, wildTileSuit, wildTileValue);
     baseFan = formulaResult.fan;
     details.push(...formulaResult.details);
   }
@@ -126,7 +126,7 @@ export function calculateScore(params: {
 
   // 6. 如果仍然是0（无特殊牌型），使用基础公式
   if (baseFan === 0) {
-    const formulaResult = calculateFormulaFan(handTiles, exposedMelds, flowerTiles);
+    const formulaResult = calculateFormulaFan(handTiles, exposedMelds, flowerTiles, wildTileSuit, wildTileValue);
     baseFan = formulaResult.fan;
     details.push(...formulaResult.details);
   }
@@ -214,7 +214,9 @@ interface FormulaResult {
 function calculateFormulaFan(
   handTiles: Tile[],
   exposedMelds: Meld[],
-  flowerTiles: Tile[]
+  flowerTiles: Tile[],
+  wildTileSuit?: TileSuit,
+  wildTileValue?: number
 ): FormulaResult {
   const details: string[] = [];
   let comboPoints = 0;
@@ -222,11 +224,56 @@ function calculateFormulaFan(
   // 花牌数
   const flowerCount = flowerTiles.length;
 
-  // 计算组合牌点数
+  // 百搭虚拟分配：找最优组合（利益最大化）
+  // 优先级：箭牌刻子(+2) > 风牌刻子(+1) > 其他
+  let virtualHand = [...handTiles];
+  if (wildTileSuit !== undefined && wildTileValue !== undefined) {
+    const wildTiles = handTiles.filter(t => t.suit === wildTileSuit && t.value === wildTileValue);
+    if (wildTiles.length > 0) {
+      // 找所有非百搭牌，按优先级找最优匹配
+      const nonWildTiles = handTiles.filter(t => !(t.suit === wildTileSuit && t.value === wildTileValue));
+      
+      // 1. 优先配箭牌刻子（中发白 triplet = +2）
+      const dragons = nonWildTiles.filter(t => isDragon(t));
+      for (const dragon of dragons) {
+        const dragonCount = nonWildTiles.filter(t => t.suit === dragon.suit && t.value === dragon.value).length;
+        if (dragonCount === 2 && wildTiles.length >= 1) {
+          // 百搭 + 箭牌对 = 箭牌刻子 (+2)
+          virtualHand = nonWildTiles;
+          for (let i = 0; i < Math.min(wildTiles.length, 1); i++) {
+            virtualHand.push({ ...dragon, id: wildTiles[i].id, isWild: false });
+          }
+          details.push(`百搭→${dragon.suit}${dragon.value}(箭牌刻子) +2`);
+          break;
+        }
+      }
+      
+      // 2. 配风牌刻子（东南西北 triplet = +1）
+      if (details.length === 0) {
+        const winds = nonWildTiles.filter(t => isWind(t));
+        for (const wind of winds) {
+          const windCount = nonWildTiles.filter(t => t.suit === wind.suit && t.value === wind.value).length;
+          if (windCount === 2 && wildTiles.length >= 1) {
+            virtualHand = nonWildTiles;
+            virtualHand.push({ ...wind, id: wildTiles[0].id, isWild: false });
+            details.push(`百搭→${wind.suit}${wind.value}(风牌刻子) +1`);
+            break;
+          }
+        }
+      }
+      
+      // 3. 如果没有箭牌/风牌对，保持原样（百搭不贡献组合分）
+      if (details.length === 0) {
+        virtualHand = handTiles; // 保持原样
+      }
+    }
+  }
+
+  // 计算组合牌点数（使用虚拟分配后的手牌）
   const allMelds = [...exposedMelds];
   
-  // 从手牌中提取暗杠
-  const groups = groupTiles(handTiles);
+  // 从虚拟手牌中提取暗杠
+  const groups = groupTiles(virtualHand);
   for (const [, group] of groups) {
     if (group.length === 4) {
       allMelds.push({
