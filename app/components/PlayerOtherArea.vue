@@ -144,6 +144,17 @@ const props = defineProps<{
   color: #f5f5f5;
 }
 
+/* 各玩家牌面朝向自己 */
+.player-other--top {
+  transform: rotate(180deg);
+}
+.player-other--left {
+  transform: rotate(90deg);
+}
+.player-other--right {
+  transform: rotate(-90deg);
+}
+
 .player-other-header {
   display: flex;
   justify-content: center;

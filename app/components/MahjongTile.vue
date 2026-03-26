@@ -156,14 +156,14 @@ const chineseNum = computed(() => {
 
 /* ==================== 万子 ==================== */
 .tile-char-top {
-  font-size: 1.8rem;
+  font-size: 0.8rem;
   font-weight: 900;
   color: #1a1a1a;
   line-height: 1;
 }
 
 .tile-char-bottom {
-  font-size: 2rem;
+  font-size: 1.8rem;
   font-weight: 700;
   color: #c62828;
   line-height: 1;
