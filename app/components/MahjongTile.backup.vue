@@ -16,45 +16,57 @@
     @click="onClick"
   >
     <template v-if="!back">
-      <!-- 风牌: 优先用 PNG，fallback 到文字 -->
+      <!-- 风牌: 东南西北 -->
       <template v-if="tile.suit === 'feng'">
-        <img v-if="tileImageSrc" :src="tileImageSrc" class="tile-img" loading="lazy" />
-        <div v-else class="tile-wind">{{ windChar }}</div>
+        <div class="tile-wind">{{ windChar }}</div>
       </template>
-      <!-- 箭牌: 优先用 PNG，fallback 到文字 -->
+      <!-- 箭牌: 中发白 -->
       <template v-else-if="tile.suit === 'jian'">
-        <img v-if="tileImageSrc" :src="tileImageSrc" class="tile-img" loading="lazy" />
-        <div v-else class="tile-dragon" :class="`tile-dragon--${tile.value}`">
+        <div class="tile-dragon" :class="`tile-dragon--${tile.value}`">
           {{ dragonChar }}
         </div>
       </template>
-      <!-- 花牌: 优先用 PNG，fallback 到 emoji -->
+      <!-- 花牌 -->
       <template v-else-if="tile.suit === 'hua'">
-        <img v-if="tileImageSrc" :src="tileImageSrc" class="tile-img" loading="lazy" />
+        <div class="tile-flower-top">{{ flowerEmoji }}</div>
+        <div class="tile-flower-name">{{ flowerName }}</div>
+      </template>
+      <!-- 筒子: SVG 圆点图案 -->
+      <template v-else-if="tile.suit === 'dots'">
+        <svg class="tile-svg" viewBox="0 0 40 56" xmlns="http://www.w3.org/2000/svg">
+          <DotsPattern :value="tile.value" />
+        </svg>
+      </template>
+      <!-- 条子: SVG 竹节图案 -->
+      <template v-else-if="tile.suit === 'tiao'">
+        <template v-if="tile.value === 1">
+          <svg class="tile-svg" viewBox="0 0 40 56" xmlns="http://www.w3.org/2000/svg">
+            <BirdPattern />
+          </svg>
+        </template>
         <template v-else>
-          <div class="tile-flower-top">{{ flowerEmoji }}</div>
-          <div class="tile-flower-name">{{ flowerName }}</div>
+          <svg class="tile-svg" viewBox="0 0 40 56" xmlns="http://www.w3.org/2000/svg">
+            <BambooPattern :value="tile.value" />
+          </svg>
         </template>
       </template>
-      <!-- 筒子/条子/万子: 用 PNG 牌图 -->
-      <template v-else-if="tileImageSrc">
-        <img :src="tileImageSrc" class="tile-img" loading="lazy" />
-      </template>
-      <!-- Fallback: 万子用中文数字（无图片时） -->
+      <!-- 万子: 中文数字 -->
       <template v-else>
         <div class="tile-char-top">{{ chineseNum }}</div>
         <div class="tile-char-bottom">萬</div>
       </template>
     </template>
     <template v-else>
-      <!-- 牌背用 Back.png -->
-      <img src="/assets/tileset/pomax_hq/Back.png" class="tile-img" loading="lazy" />
+      <div class="tile-back-pattern" />
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { Tile } from '~/types/game'
+import DotsPattern from './tile-svg/DotsPattern.vue'
+import BambooPattern from './tile-svg/BambooPattern.vue'
+import BirdPattern from './tile-svg/BirdPattern.vue'
 
 const props = defineProps<{
   tile: Tile
@@ -74,43 +86,6 @@ const onClick = () => {
   emit('click', props.tile)
 }
 
-// ===== PNG 牌图映射 =====
-const tileImageSrc = computed(() => {
-  const { suit, value } = props.tile
-
-  // 数字牌
-  if (suit === 'man') return `/assets/tileset/pomax_hq/Man${value}.png`
-  if (suit === 'dots') return `/assets/tileset/pomax_hq/Pin${value}.png`
-  if (suit === 'tiao') return `/assets/tileset/pomax_hq/Sou${value}.png`
-
-  // 风牌
-  if (suit === 'feng') {
-    const windMap: Record<number, string> = { 1: 'Ton', 2: 'Nan', 3: 'Pei', 4: 'Shaa' }
-    const name = windMap[value]
-    return name ? `/assets/tileset/pomax_hq/${name}.png` : null
-  }
-
-  // 箭牌: 中发白
-  if (suit === 'jian') {
-    const dragonMap: Record<number, string> = { 1: 'Chun', 2: 'Hatsu', 3: 'Haku' }
-    const name = dragonMap[value]
-    return name ? `/assets/tileset/pomax_hq/${name}.png` : null
-  }
-
-  // 花牌
-  if (suit === 'hua') {
-    const flowerMap: Record<number, string> = {
-      1: 'Spring', 2: 'Summer', 3: 'Autumn', 4: 'Winter',
-      5: 'Orchid', 6: 'Plum', 7: 'Bamboo', 8: 'Chrysanthemum'
-    }
-    const name = flowerMap[value]
-    return name ? `/assets/tileset/pomax_hq/${name}.png` : null
-  }
-
-  return null
-})
-
-// ===== Fallback 文字渲染（保留） =====
 const windChar = computed(() => {
   const names: Record<number, string> = { 1: '東', 2: '南', 3: '西', 4: '北' }
   return names[props.tile.value] || '?'
@@ -182,15 +157,6 @@ const chineseNum = computed(() => {
   border-width: 0.5px;
 }
 
-/* ==================== PNG 牌图 ==================== */
-.tile-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  border-radius: 4px 4px 3px 3px;
-}
-
-/* SVG fallback 保留（兼容） */
 .tile-svg {
   width: 90%;
   height: 90%;
@@ -296,13 +262,25 @@ const chineseNum = computed(() => {
   cursor: default;
 }
 
-/* ==================== 牌背 ==================== */
-.tile:has(.tile-img[src*="Back"]) {
-  background: transparent;
+/* ==================== 牌背 - 全绿无白线 ==================== */
+/* 当 tile 有 back 模式时，外层 tile 也变成绿色，不留白边 */
+.tile:has(.tile-back-pattern) {
+  background: #1a6b3d;
+  border-color: #145a32;
+}
+
+.tile-back-pattern {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px 4px 3px 3px;
+  background: linear-gradient(155deg, #3da86a 0%, #2e8b57 30%, #1a6b3d 65%, #0d4a28 100%);
+  box-shadow:
+    inset 0 1px 2px rgba(255,255,255,0.25),
+    inset 0 -2px 3px rgba(0,0,0,0.3),
+    inset 2px 0 1px rgba(255,255,255,0.08);
 }
 
 /* ==================== Small tile adjustments ==================== */
-.tile--small .tile-img { width: 95%; height: 95%; }
 .tile--small .tile-svg { width: 85%; height: 85%; }
 .tile--small .tile-char-top { font-size: 0.8rem; }
 .tile--small .tile-char-bottom { font-size: 0.95rem; }
