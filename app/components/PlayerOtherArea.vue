@@ -11,37 +11,13 @@
       </span>
     </div>
 
-    <!-- Melds (Pung / Kong) -->
-    <div
-      class="player-other-melds"
-      :class="{
-        'player-other-melds--vertical': position === 'left' || position === 'right'
-      }"
-      v-if="melds.length"
-    >
-      <div
-        v-for="(meld, i) in melds"
-        :key="i"
-        class="other-meld"
-        :class="`other-meld--${meld.type}`"
-      >
-        <MahjongTile
-          v-for="tile in meld.tiles"
-          :key="tile.id"
-          :tile="tile"
-          :small="true"
-          :dimmed="isWinner"
-        />
-      </div>
-    </div>
-
-    <!-- SIDE PLAYERS (West/East): hand + vertical discards side-by-side -->
+    <!-- SIDE PLAYERS (West/East): melds + hand 垂直排列，melds 在下(靠中心侧) -->
     <div
       v-if="position === 'left' || position === 'right'"
       class="side-layout"
       :class="`side-layout--${position}`"
     >
-      <!-- Hand -->
+      <!-- Hand（靠边的牌） -->
       <div class="player-other-hand player-other-hand--vertical">
         <MahjongTile
           v-for="tile in hand"
@@ -53,13 +29,66 @@
         />
       </div>
 
-      <!-- Discards toward table center, stacked vertically -->
+      <!-- Melds（副露，在手牌向中心延伸方向） -->
       <div
-        v-if="discards.length"
-        class="player-other-discards player-other-discards--vertical"
+        class="player-other-melds player-other-melds--vertical"
+        v-if="melds.length"
       >
+        <div
+          v-for="(meld, i) in melds"
+          :key="i"
+          class="other-meld"
+          :class="`other-meld--${meld.type}`"
+        >
+          <MahjongTile
+            v-for="tile in meld.tiles"
+            :key="tile.id"
+            :tile="tile"
+            :small="true"
+            :dimmed="isWinner"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- TOP PLAYER: melds + hand 水平排列，melds 在左 -->
+    <template v-else>
+      <div class="top-hand-row">
+        <!-- Melds（副露，在手牌左侧延伸） -->
+        <div
+          class="player-other-melds"
+          v-if="melds.length"
+        >
+          <div
+            v-for="(meld, i) in melds"
+            :key="i"
+            class="other-meld"
+            :class="`other-meld--${meld.type}`"
+          >
+            <MahjongTile
+              v-for="tile in meld.tiles"
+              :key="tile.id"
+              :tile="tile"
+              :small="true"
+              :dimmed="isWinner"
+            />
+          </div>
+        </div>
+        <!-- Hand -->
+        <div class="player-other-hand">
+          <MahjongTile
+            v-for="tile in hand"
+            :key="tile.id"
+          :tile="tile"
+          :small="true"
+          :back="!revealHand"
+          :dimmed="isWinner"
+        />
+      </div>
+
+      <div v-if="discards.length" class="player-other-discards">
         <div class="discards-label">出牌区</div>
-        <div class="discards-row discards-row--vertical">
+        <div class="discards-row">
           <MahjongTile
             v-for="tile in discards"
             :key="tile.id"
@@ -69,22 +98,10 @@
             :claim-highlight="claimableDiscardTileId === tile.id"
           />
         </div>
-      </div>
-    </div>
-
-    <!-- TOP PLAYER: horizontal hand, horizontal discards below -->
-    <template v-else>
-      <div class="player-other-hand">
-        <MahjongTile
-          v-for="tile in hand"
-          :key="tile.id"
-          :tile="tile"
-          :small="true"
-          :back="!revealHand"
-          :dimmed="isWinner"
-        />
+        </div>
       </div>
 
+      <!-- Discards (center area) -->
       <div v-if="discards.length" class="player-other-discards">
         <div class="discards-label">出牌区</div>
         <div class="discards-row">
@@ -145,6 +162,13 @@ const props = defineProps<{
   background: #f44336;
   color: #fff;
   font-size: 0.7rem;
+}
+
+/* 北家：melds + hand 水平排列 */
+.top-hand-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* Melds */

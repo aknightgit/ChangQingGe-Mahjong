@@ -31,10 +31,6 @@
         <div class="tile-flower-top">{{ flowerEmoji }}</div>
         <div class="tile-flower-name">{{ flowerName }}</div>
       </template>
-      <!-- 百搭 -->
-      <template v-else-if="tile.isWild">
-        <div class="tile-wild-icon">★</div>
-      </template>
       <!-- 筒子: CSS 圆点 -->
       <template v-else-if="tile.suit === 'dots'">
         <div class="tile-dots-pattern">
@@ -47,9 +43,9 @@
       </template>
       <!-- 条子: CSS 竹节 -->
       <template v-else-if="tile.suit === 'tiao'">
-        <!-- 1条特殊: 鸟 -->
+        <!-- 1条特殊: 麻雀 -->
         <template v-if="tile.value === 1">
-          <div class="tile-bird">🐦</div>
+          <div class="tile-bird">雀</div>
         </template>
         <template v-else>
           <div class="tile-bamboo-pattern" :class="`bamboo-count-${tile.value}`">
@@ -132,17 +128,17 @@ const chineseNum = computed(() => {
 
 <style scoped>
 .tile {
-  width: 40px;
-  height: 60px;
-  border-radius: 6px;
-  background: #fdfaf3;
-  border: 1px solid #e1d4b8;
-  box-shadow: 0 3px 7px rgba(0, 0, 0, 0.35);
+  width: 44px;
+  height: 62px;
+  border-radius: 4px;
+  background: #faf6ee;
+  border: 1px solid #d4c5a0;
+  box-shadow: 2px 3px 0 #8a7a5a, 3px 4px 0 #6a5a3a, 0 2px 8px rgba(0, 0, 0, 0.35);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  margin: 0 1px;
+  margin: 0 -1px;
   cursor: pointer;
   transition:
     transform 0.12s ease,
@@ -157,8 +153,8 @@ const chineseNum = computed(() => {
 }
 
 .tile--small {
-  width: 32px;
-  height: 48px;
+  width: 34px;
+  height: 50px;
 }
 
 /* ==================== 筒子 (Dots) ==================== */
@@ -173,8 +169,8 @@ const chineseNum = computed(() => {
 }
 
 .dot {
-  width: 8px;
-  height: 8px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 35%, #ef5350, #c62828);
   box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.4), 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -185,106 +181,106 @@ const chineseNum = computed(() => {
   grid-template-columns: 1fr;
 }
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(1):nth-last-child(1)) .dot {
-  width: 14px;
-  height: 14px;
+  width: 24px;
+  height: 24px;
 }
 
 /* 2筒: 上下2个 */
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(2):nth-last-child(1)) {
   grid-template-columns: 1fr;
-  gap: 10px;
+  gap: 14px;
 }
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(2):nth-last-child(1)) .dot {
-  width: 10px;
-  height: 10px;
+  width: 18px;
+  height: 18px;
 }
 
 /* 3筒: 斜排3个 */
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(3):nth-last-child(1)) {
   grid-template-columns: 1fr;
-  gap: 2px;
+  gap: 3px;
 }
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(3):nth-last-child(1)) .dot {
-  width: 9px;
-  height: 9px;
+  width: 15px;
+  height: 15px;
 }
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(3):nth-last-child(1)) .dot:nth-child(1) {
-  margin-right: 10px;
+  margin-right: 14px;
 }
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(3):nth-last-child(1)) .dot:nth-child(2) {
   margin-right: 2px;
 }
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(3):nth-last-child(1)) .dot:nth-child(3) {
-  margin-left: 10px;
+  margin-left: 14px;
 }
 
 /* 4筒: 2x2 */
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(4):nth-last-child(1)) {
   grid-template-columns: 1fr 1fr;
-  gap: 6px 8px;
+  gap: 8px 10px;
 }
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(4):nth-last-child(1)) .dot {
-  width: 8px;
-  height: 8px;
+  width: 14px;
+  height: 14px;
 }
 
 /* 5筒: 2x2 + 中心 */
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(5):nth-last-child(1)) {
   grid-template-columns: 1fr 1fr;
-  gap: 4px 12px;
+  gap: 6px 16px;
 }
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(5):nth-last-child(1)) .dot {
-  width: 8px;
-  height: 8px;
+  width: 13px;
+  height: 13px;
 }
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(5):nth-last-child(1)) .dot:nth-child(5) {
   grid-column: 1 / -1;
-  width: 7px;
-  height: 7px;
+  width: 12px;
+  height: 12px;
 }
 
-/* 6筒: 3x2 (2列x3行) */
+/* 6筒: 2列x3行 */
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(6):nth-last-child(1)) {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: repeat(3, auto);
-  gap: 4px 10px;
+  gap: 5px 12px;
 }
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(6):nth-last-child(1)) .dot {
-  width: 8px;
-  height: 8px;
+  width: 12px;
+  height: 12px;
 }
 
-/* 7筒: 3x2 + 1 on top center */
+/* 7筒: 3列 */
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(7):nth-last-child(1)) {
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 3px 4px;
+  gap: 4px 5px;
 }
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(7):nth-last-child(1)) .dot {
-  width: 7px;
-  height: 7px;
+  width: 11px;
+  height: 11px;
 }
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(7):nth-last-child(1)) .dot:nth-child(7) {
   grid-column: 2;
 }
 
-/* 8筒: 3x2 + 上下各1 */
+/* 8筒: 3列 */
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(8):nth-last-child(1)) {
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 3px 4px;
+  gap: 4px 5px;
 }
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(8):nth-last-child(1)) .dot {
-  width: 7px;
-  height: 7px;
+  width: 11px;
+  height: 11px;
 }
 
 /* 9筒: 3x3 */
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(9):nth-last-child(1)) {
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 2px 3px;
+  gap: 3px 4px;
 }
 .tile--dots .tile-dots-pattern:has(.dot:nth-child(9):nth-last-child(1)) .dot {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 
 /* ==================== 条子 (Bamboo) ==================== */
@@ -328,39 +324,42 @@ const chineseNum = computed(() => {
 .bamboo-count-8 .bamboo-stick { height: 10px; width: 4px; }
 .bamboo-count-9 .bamboo-stick { height: 9px; width: 4px; }
 
-/* 1条: 鸟 */
+/* 1条: 鸟 → 用文字代替emoji更清晰 */
 .tile-bird {
-  font-size: 1.6rem;
+  font-size: 1.3rem;
   line-height: 1;
+  color: #2e7d32;
+  font-weight: 900;
 }
 
 /* ==================== 万子 (Characters) ==================== */
 .tile-char-top {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   font-weight: 900;
   color: #1a1a1a;
   line-height: 1;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.08);
 }
 
 .tile-char-bottom {
-  font-size: 0.75rem;
+  font-size: 1.5rem;
   font-weight: 700;
-  color: #d32f2f;
+  color: #c62828;
   line-height: 1;
   margin-top: 1px;
 }
 
 /* ==================== 风牌 ==================== */
 .tile-wind {
-  font-size: 1.4rem;
+  font-size: 2.2rem;
   font-weight: 900;
   color: #1a1a1a;
-  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.1);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
 }
 
 /* ==================== 箭牌 ==================== */
 .tile-dragon {
-  font-size: 1.4rem;
+  font-size: 2.2rem;
   font-weight: 900;
   display: flex;
   align-items: center;
@@ -411,15 +410,22 @@ const chineseNum = computed(() => {
   margin-top: 1px;
 }
 
-/* ==================== 百搭 ==================== */
+/* ==================== 百搭（真实牌面 + 金色高亮） ==================== */
 .tile--wild {
   border: 2px solid #ffd700 !important;
-  box-shadow: 0 0 8px rgba(255, 215, 0, 0.5) !important;
+  box-shadow: 2px 3px 0 #8a7a5a, 3px 4px 0 #6a5a3a, 0 0 10px rgba(255, 215, 0, 0.5) !important;
+  position: relative;
 }
-.tile-wild-icon {
-  font-size: 1.4rem;
-  color: #ffd700;
-  text-shadow: 0 0 6px rgba(255, 215, 0, 0.6);
+.tile--wild::after {
+  content: '百搭';
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  font-size: 0.4rem;
+  color: #d4a017;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0.8;
 }
 
 /* ==================== 交互状态 ==================== */
@@ -443,31 +449,32 @@ const chineseNum = computed(() => {
   cursor: default;
 }
 
-/* 牌背 */
+/* 牌背 - 深绿浮雕 */
 .tile-back-pattern {
-  width: 70%;
-  height: 70%;
-  border-radius: 4px;
-  background: repeating-linear-gradient(
-    45deg,
-    #00897b,
-    #00897b 4px,
-    #004d40 4px,
-    #004d40 8px
-  );
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.2);
+  width: 72%;
+  height: 72%;
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(
+      45deg,
+      #1a7a5a,
+      #1a7a5a 3px,
+      #0d5a3e 3px,
+      #0d5a3e 6px
+    );
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.15), inset 0 2px 4px rgba(0,0,0,0.2);
 }
 
 /* ==================== Small tile adjustments ==================== */
 .tile--small .tile-dots-pattern { gap: 1px; }
-.tile--small .dot { width: 5px !important; height: 5px !important; }
-.tile--small .tile-dots-pattern:has(.dot:nth-child(1):nth-last-child(1)) .dot { width: 10px !important; height: 10px !important; }
-.tile--small .tile-dots-pattern:has(.dot:nth-child(9):nth-last-child(1)) .dot { width: 4px !important; height: 4px !important; }
+.tile--small .dot { width: 8px !important; height: 8px !important; }
+.tile--small .tile-dots-pattern:has(.dot:nth-child(1):nth-last-child(1)) .dot { width: 16px !important; height: 16px !important; }
+.tile--small .tile-dots-pattern:has(.dot:nth-child(9):nth-last-child(1)) .dot { width: 6px !important; height: 6px !important; }
 .tile--small .bamboo-stick { width: 4px !important; }
-.tile--small .tile-char-top { font-size: 0.9rem; }
-.tile--small .tile-char-bottom { font-size: 0.6rem; }
-.tile--small .tile-wind, .tile--small .tile-dragon { font-size: 1rem; }
-.tile--small .tile-bird { font-size: 1.2rem; }
+.tile--small .tile-char-top { font-size: 0.8rem; }
+.tile--small .tile-char-bottom { font-size: 0.95rem; }
+.tile--small .tile-wind, .tile--small .tile-dragon { font-size: 1.4rem; }
+.tile--small .tile-bird { font-size: 1rem; }
 .tile--small .tile-flower-top { font-size: 0.8rem; }
 .tile--small .tile-flower-name { font-size: 0.7rem; }
 

@@ -43,19 +43,28 @@
         <!-- Big responsive table -->
         <div class="table-wrapper">
           <div class="mahjong-table">
-            <!-- Center status message -->
-            <div class="table-center">
-              <p v-if="showMobileActionNotice" class="mobile-scroll-notice">
-                有可用操作 — 请向下滚动查看按钮
-              </p>
-              <p class="status">
-                <span v-if="isWinner">你赢了！🎉</span>
-                <span v-else>{{ turnMessage }}</span>
-              </p>
-              <p class="hint">
-                点击选牌，再次点击出牌。操作按钮将根据规则自动显示。
-              </p>
+            <!-- 左上角: 轮次信息 -->
+            <div class="round-info" v-if="gameState?.phase === 'playing'">
+              第 {{ currentRound || 1 }} 轮
             </div>
+            <!-- 状态消息（非中心显示） -->
+            <div class="turn-indicator">
+              <span v-if="isWinner" class="turn-win">🎉 你赢了！</span>
+              <span v-else-if="showMobileActionNotice" class="turn-action">有可用操作</span>
+              <span v-else>{{ turnMessage }}</span>
+            </div>
+            <!-- 桌面中心: 弃牌池 + 牌墙 + 倍数 -->
+            <TableCenter
+              :discards="allDiscards"
+              :remaining-tiles="remainingTileCount"
+              :status-message="showMobileActionNotice ? '有可用操作 — 请向下滚动查看按钮' : turnMessage"
+              hint-message="点击选牌，再次点击出牌。操作按钮将根据规则自动显示。"
+              :is-winner="isWinner"
+              :round-multiplier="roundMultiplier"
+              :global-multiplier="globalMultiplier"
+              :wild-tile-label="wildTileLabel"
+              :claimable-id="claimableDiscardTileId"
+            />
             <!-- Top player -->
             <div class="seat seat-top" :class="{ 'seat-active': activePosition !== null && topPlayer?.position === activePosition }">
               <PlayerOtherArea
@@ -279,6 +288,9 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import PlayerSelfArea from '~/components/PlayerSelfArea.vue'
 import PlayerOtherArea from '~/components/PlayerOtherArea.vue'
 import CircularActionButtons from '~/components/CircularActionButtons.vue'
+import TableCenter from '~/components/TableCenter.vue'
+import DiceAnimation from '~/components/DiceAnimation.vue'
+import PlayerInfo from '~/components/PlayerInfo.vue'
 import { useGame, ACTION_HIGHLIGHT_DELAY_MS } from '~/composables/useGame'
 import { ActionType, GamePhase, GameEndReason, type Tile, type Meld, type Player } from '~/types/game'
 
@@ -378,6 +390,31 @@ const playerHand = computed(() => currentPlayer.value?.hand.concealedTiles || []
 const playerMelds = computed(() => currentPlayer.value?.hand.exposedMelds || [])
 const playerDiscards = computed(() => currentPlayer.value?.hand.discardedTiles || [])
 const isWinner = computed(() => currentPlayer.value?.status === 'won')
+
+// ---- Table Center Data ----
+const allDiscards = computed(() => {
+  if (!gameState.value) return []
+  const all: any[] = []
+  for (const p of gameState.value.players) {
+    all.push(...(p.hand.discardedTiles || []))
+  }
+  return all
+})
+const remainingTileCount = computed(() => gameState.value?.wallRemaining ?? 0)
+const currentRound = computed(() => gameState.value?.currentRound ?? 1)
+const roundMultiplier = computed(() => gameState.value?.roundMultiplier ?? 1)
+const globalMultiplier = computed(() => gameState.value?.globalMultiplier ?? 1)
+const wildTileLabel = computed(() => {
+  const w = gameState.value?.wildTile
+  if (!w) return null
+  const suitNames: Record<string, string> = { dots: '筒', tiao: '条', wan: '萬', feng: '风', jian: '箭' }
+  const numNames = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九']
+  const windNames = ['', '東', '南', '西', '北']
+  const dragonNames = ['', '中', '發', '白']
+  if (w.suit === 'feng') return windNames[w.value] || w.value
+  if (w.suit === 'jian') return dragonNames[w.value] || w.value
+  return `${numNames[w.value] || w.value}${suitNames[w.suit] || w.suit}`
+})
 const isDealer = computed(() => currentPlayer.value?.isDealer)
 const isGameEnded = computed(() => gameState.value?.phase === GamePhase.ENDED)
 const overlayReason = computed(() => roomDismissedReason.value || gameState.value?.endReason || null)
@@ -804,6 +841,52 @@ const forceDiscard = async (p: Player) => {
     0 12px 30px rgba(0, 0, 0, 0.8);
   padding: 14px;
   overflow: hidden;
+}
+
+/* 左上角轮次 */
+.round-info {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
+  z-index: 4;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+
+/* 状态提示（底部偏上） */
+.turn-indicator {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.8);
+  z-index: 4;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 3px 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.turn-win {
+  color: #ffd700;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+}
+
+.turn-action {
+  color: #ffd36a;
+  font-weight: 700;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 
 .table-center {
