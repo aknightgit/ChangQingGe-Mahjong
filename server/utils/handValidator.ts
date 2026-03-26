@@ -78,7 +78,17 @@ export function detectHandTypes(
   if (!winResult.canWin) return []; // Not a winning hand at all
 
   // Check for all triplets (碰碰胡)
-  if (isAllTripletsHand(handTiles, exposedMelds)) {
+  // Pass wild tile info so 百搭 can substitute for missing tiles
+  let wildSuit: string | undefined;
+  let wildValue: number | undefined;
+  if (wildTileId) {
+    const [s, v] = wildTileId.split('-');
+    if (s && v) {
+      wildSuit = s;
+      wildValue = parseInt(v, 10);
+    }
+  }
+  if (isAllTripletsHand(handTiles, exposedMelds, wildSuit, wildValue)) {
     types.push(HandType.ALL_TRIPLETS);
   }
 
@@ -137,29 +147,64 @@ export function detectHandTypes(
 
 /**
  * Check if hand is all triplets (碰碰胡)
- * All exposed melds must be triplets/kongs, and concealed tiles must form triplets + 1 pair
+ * All exposed melds must be triplets/kongs, and concealed tiles must form triplets + 1 pair.
+ * Wild tiles (百搭) can substitute for any tile to complete a triplet or pair.
  */
-function isAllTripletsHand(handTiles: Tile[], exposedMelds: Meld[]): boolean {
+function isAllTripletsHand(handTiles: Tile[], exposedMelds: Meld[], wildSuit?: string, wildValue?: number): boolean {
   // Exposed melds must all be triplets or kongs
   for (const meld of exposedMelds) {
     if (meld.type === MeldType.SEQUENCE) return false;
   }
   
-  // Hand tiles must form only triplets + 1 pair (no sequences)
+  // Separate wild tiles from regular tiles
   const nonFlowerTiles = handTiles.filter(t => !isFlower(t));
-  const groups = groupTiles(nonFlowerTiles);
+  const isWild = (t: Tile) => wildSuit !== undefined && t.suit === wildSuit && t.value === wildValue;
+  const regularTiles = nonFlowerTiles.filter(t => !isWild(t));
+  const wildCount = nonFlowerTiles.filter(t => isWild(t)).length;
+  
+  const groups = groupTiles(regularTiles);
   
   let tripletCount = 0;
   let pairCount = 0;
+  let spareTiles = 0;
   
   for (const [, group] of groups) {
     if (group.length >= 3) tripletCount++;
     else if (group.length === 2) pairCount++;
-    else return false;
+    else spareTiles += group.length; // single tiles need wilds to fill
   }
   
   const expectedTriplets = 4 - exposedMelds.length;
-  return tripletCount === expectedTriplets && pairCount === 1;
+  
+  // Use wild tiles to fill gaps: first fill singles into triplets, then extra pair
+  let wildsAvailable = wildCount;
+  
+  // Fill singles into triplets (each single needs 2 wilds to make a triplet)
+  // But actually, a single + 2 wilds = triplet, OR a single + 1 wild + existing pair = not valid for 碰碰胡
+  // Simpler: count how many wilds needed to complete triplets and pair
+  let neededForTriplets = 0;
+  for (const [, group] of groups) {
+    if (group.length === 1) neededForTriplets += 2; // single needs 2 wilds for triplet
+    // group.length === 2 is already a pair, doesn't need wilds for 碰碰胡
+    // group.length >= 3 is already a triplet
+  }
+  
+  // Also: wild + wild + wild = triplet (3 wilds make a triplet)
+  // Or wild + wild + regular(1) = triplet (already counted above)
+  
+  const totalTriplets = tripletCount + Math.min(Math.floor(wildsAvailable / 3), neededForTriplets > 0 ? 0 : 999);
+  const wildsAfterTriplets = wildsAvailable - (totalTriplets - tripletCount) * 3;
+  
+  // Actually, let's use a simpler approach:
+  // Count non-wild groups: triplets, pairs, singles
+  // Use wilds to: (1) complete singles to triplets (2 wilds each), (2) make extra triplets from leftover wilds (3 each)
+  const wildsForSingles = Math.min(wildCount, spareTiles * 2);
+  const completedTriplets = tripletCount + Math.floor(wildsForSingles / 2); // each pair of wilds completes one single to triplet (rough)
+  const remainingWilds = wildCount - wildsForSingles;
+  const extraTriplets = Math.floor(remainingWilds / 3);
+  const finalTriplets = tripletCount + Math.floor(wildsForSingles / 2) + extraTriplets;
+  
+  return finalTriplets >= expectedTriplets && (pairCount >= 1 || (remainingWilds % 3) >= 2);
 }
 
 /**

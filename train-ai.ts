@@ -10,7 +10,10 @@ const ROUNDS = parseInt(process.argv[2] || '20', 10);
 const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000', 10);
 const PROJECT_TRAINING_DIR = path.join(process.cwd(), 'training-output');
 const OUT_DIR = PROJECT_TRAINING_DIR;
-const RUN_TAG = new Date().toISOString().replace(/[:.]/g, '-');
+// UTC+8 timestamp for log file naming
+const BJ_TZ = 8 * 3600000;
+const nowBJ = new Date(Date.now() + BJ_TZ);
+const RUN_TAG = nowBJ.toISOString().replace(/[:.]/g, '-').replace('Z', '+8');
 const OUT_FILE = path.join(OUT_DIR, `ai-training-log-${RUN_TAG}.md`);
 const POLICY_DIR = path.join(OUT_DIR, 'policies', RUN_TAG);
 const BEST_POLICY_FILE = path.join(OUT_DIR, `best-policy-${RUN_TAG}.json`);
@@ -953,7 +956,8 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
   const selfDrawCount = winners.filter(w => w.winMode === '自摸').length;
   const selfDrawRate = winners.length ? selfDrawCount / winners.length : 0;
 
-  const bigHandNames = new Set(['风碰', '风一色', '清碰', '混碰', '清一色', '大吊碰碰胡', '大吊混一色', '大吊']);
+  // 大牌统计口径（审核重点）：风碰 / 风一色 / 清碰 / 混碰
+  const bigHandNames = new Set(['风碰', '风一色', '清碰', '混碰']);
   const bigHandCount = winners.filter(w => bigHandNames.has(w.handType)).length;
   const bigHandRate = winners.length ? bigHandCount / winners.length : 0;
 
@@ -973,11 +977,21 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
   const selfDrawTarget = 0.65;
   const selfDrawPenalty = -Math.abs(selfDrawRate - selfDrawTarget) * 500;
 
-  // 大牌率（风碰+风一色+清碰）目标 4-8%，偏离惩罚 + 额外正奖励
-  const bigHandTarget = 0.06;
-  const bigHandPenalty = -Math.abs(bigHandRate - bigHandTarget) * 800;
-  // 大牌正奖励：每1%大牌率给200分奖励，极大推动大牌出现
-  const bigHandBonus = bigHandRate * 3000;
+  // 大牌率（风碰+风一色+清碰+混碰）目标 4-8%，偏离惩罚 + 区间奖励
+  const bigHandLow = 0.04;
+  const bigHandHigh = 0.08;
+  let bigHandPenalty = 0;
+  if (bigHandRate < bigHandLow) {
+    bigHandPenalty = -(bigHandLow - bigHandRate) * 2200;
+  } else if (bigHandRate > bigHandHigh) {
+    bigHandPenalty = -(bigHandRate - bigHandHigh) * 1800;
+  }
+  // 大牌区间奖励：命中区间给稳定奖励，且越靠近中值0.06越好
+  const bigHandCenter = 0.06;
+  const bigHandRangeBonus =
+    bigHandRate >= bigHandLow && bigHandRate <= bigHandHigh
+      ? 120 + (1 - Math.abs(bigHandRate - bigHandCenter) / 0.02) * 80
+      : 0;
 
   // 门清胡牌率目标 6-10%，偏离惩罚
   const menQingTarget = 0.08;
@@ -992,7 +1006,7 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
     lastPlayerRate * 150 +
     selfDrawPenalty +
     bigHandPenalty +
-    bigHandBonus +
+    bigHandRangeBonus +
     menQingPenalty +
     avgWinnerPoints * 1.0 +
     avgPot / 120;
