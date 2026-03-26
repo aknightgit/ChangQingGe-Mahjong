@@ -1,19 +1,60 @@
 <template>
   <Transition name="dice-fade">
-    <div v-if="visible" class="dice-overlay" @click="skip">
+    <div v-if="visible" class="dice-overlay">
+      <!-- 粒子背景 -->
+      <div class="particles">
+        <span v-for="n in 30" :key="n" class="particle" :style="particleStyle(n)" />
+      </div>
+
       <div class="dice-container">
-        <div class="dice-row">
-          <div class="dice" :class="{ 'dice--rolling': isRolling }">
-            <span class="dice-face">{{ dice1Display }}</span>
+        <!-- 阶段1: 掷骰子 -->
+        <template v-if="phase === 'rolling'">
+          <div class="dice-row">
+            <div
+              class="dice"
+              :class="{ 'dice--rolling': isRolling, 'dice--landed': !isRolling }"
+            >
+              <span class="dice-face">{{ dice1Display }}</span>
+              <div class="dice-glow" />
+            </div>
+            <div
+              class="dice"
+              :class="{ 'dice--rolling': isRolling, 'dice--landed': !isRolling }"
+              style="animation-delay: 0.12s"
+            >
+              <span class="dice-face">{{ dice2Display }}</span>
+              <div class="dice-glow" />
+            </div>
           </div>
-          <div class="dice" :class="{ 'dice--rolling': isRolling }" style="animation-delay: 0.1s">
-            <span class="dice-face">{{ dice2Display }}</span>
+
+          <div class="dice-result" v-if="!isRolling">
+            <p class="dice-total">
+              <span class="dice-total-num">{{ dice1 + dice2 }}</span> 点
+            </p>
+            <p class="dice-hint">{{ dealerName ? `庄家: ${dealerName}` : '' }}</p>
           </div>
-        </div>
-        <p class="dice-label">
-          {{ isRolling ? '掷骰子...' : `${dice1 + dice2} 点` }}
-        </p>
-        <p v-if="!isRolling" class="dice-hint">庄家: {{ dealerName }}</p>
+          <p v-else class="dice-rolling-label">🎲 掷骰子...</p>
+        </template>
+
+        <!-- 阶段2: 发牌按钮 -->
+        <template v-if="phase === 'deal'">
+          <div class="deal-phase">
+            <div class="dice-final-row">
+              <div class="dice dice--final">
+                <span class="dice-face">{{ DICE_FACES[dice1] }}</span>
+              </div>
+              <div class="dice dice--final">
+                <span class="dice-face">{{ DICE_FACES[dice2] }}</span>
+              </div>
+            </div>
+            <p class="deal-total">{{ dice1 + dice2 }} 点</p>
+            <button class="deal-button" @click="onDeal">
+              <span class="deal-icon">🃏</span>
+              发牌
+            </button>
+            <p class="deal-hint">点击开始发牌</p>
+          </div>
+        </template>
       </div>
     </div>
   </Transition>
@@ -28,40 +69,55 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'done'): void
+  (e: 'deal'): void
 }>()
-
-const visible = ref(true)
-const isRolling = ref(true)
-const dice1Display = ref('🎲')
-const dice2Display = ref('🎲')
 
 const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
 
+const visible = ref(true)
+const isRolling = ref(true)
+const phase = ref<'rolling' | 'deal'>('rolling')
+const dice1Display = ref('🎲')
+const dice2Display = ref('🎲')
+
+// 粒子样式生成
+const particleStyle = (n: number) => {
+  const hue = 120 + Math.random() * 60 // green-gold range
+  return {
+    left: `${Math.random() * 100}%`,
+    top: `${Math.random() * 100}%`,
+    animationDelay: `${Math.random() * 3}s`,
+    animationDuration: `${2 + Math.random() * 3}s`,
+    background: `hsla(${hue}, 80%, 60%, 0.6)`,
+    width: `${3 + Math.random() * 5}px`,
+    height: `${3 + Math.random() * 5}px`,
+  }
+}
+
 onMounted(() => {
-  // Rolling animation: rapid random faces
+  // Phase 1: rolling animation
   const rollInterval = setInterval(() => {
     dice1Display.value = DICE_FACES[Math.floor(Math.random() * 6) + 1]
     dice2Display.value = DICE_FACES[Math.floor(Math.random() * 6) + 1]
-  }, 80)
+  }, 70)
 
-  // Show final result after 1.5s
+  // Stop rolling after 1.8s
   setTimeout(() => {
     clearInterval(rollInterval)
     dice1Display.value = DICE_FACES[props.dice1]
     dice2Display.value = DICE_FACES[props.dice2]
     isRolling.value = false
-  }, 1500)
+  }, 1800)
 
-  // Auto dismiss after 3s
+  // Transition to deal phase after 2.5s
   setTimeout(() => {
-    visible.value = false
-    emit('done')
-  }, 3000)
+    phase.value = 'deal'
+  }, 2500)
 })
 
-const skip = () => {
+const onDeal = () => {
   visible.value = false
-  emit('done')
+  emit('deal')
 }
 </script>
 
@@ -69,69 +125,252 @@ const skip = () => {
 .dice-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: radial-gradient(ellipse at center, rgba(10, 30, 20, 0.92), rgba(0, 0, 0, 0.95));
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
-  backdrop-filter: blur(3px);
-  cursor: pointer;
+  z-index: 200;
+  backdrop-filter: blur(6px);
 }
 
+/* ===== 粒子 ===== */
+.particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0;
+  animation: particle-float linear infinite;
+  box-shadow: 0 0 6px currentColor;
+}
+
+@keyframes particle-float {
+  0% { opacity: 0; transform: translateY(20px) scale(0); }
+  20% { opacity: 0.8; transform: translateY(0) scale(1); }
+  80% { opacity: 0.4; }
+  100% { opacity: 0; transform: translateY(-80px) scale(0.3); }
+}
+
+/* ===== 容器 ===== */
 .dice-container {
   text-align: center;
+  position: relative;
+  z-index: 1;
 }
 
+/* ===== 骰子 ===== */
 .dice-row {
   display: flex;
-  gap: 24px;
+  gap: 32px;
   justify-content: center;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 
 .dice {
-  width: 80px;
-  height: 80px;
-  background: #fff;
-  border-radius: 16px;
+  width: 90px;
+  height: 90px;
+  background: linear-gradient(145deg, #ffffff, #e8e8e8);
+  border-radius: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
-  transition: transform 0.3s ease;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    0 0 0 2px rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  position: relative;
+  overflow: hidden;
+}
+
+.dice-glow {
+  position: absolute;
+  inset: -4px;
+  border-radius: 22px;
+  background: conic-gradient(
+    from 0deg,
+    rgba(70, 197, 116, 0.6),
+    rgba(255, 215, 0, 0.6),
+    rgba(70, 197, 116, 0.6)
+  );
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.dice--rolling .dice-glow {
+  opacity: 1;
+  animation: glow-spin 0.8s linear infinite;
+}
+
+@keyframes glow-spin {
+  to { transform: rotate(360deg); }
 }
 
 .dice--rolling {
-  animation: shake 0.15s infinite;
+  animation: dice-shake 0.12s infinite;
 }
 
-@keyframes shake {
+@keyframes dice-shake {
   0%, 100% { transform: rotate(0deg) scale(1); }
-  25% { transform: rotate(-8deg) scale(1.05); }
-  75% { transform: rotate(8deg) scale(1.05); }
+  20% { transform: rotate(-12deg) scale(1.08); }
+  40% { transform: rotate(10deg) scale(1.05); }
+  60% { transform: rotate(-6deg) scale(1.03); }
+  80% { transform: rotate(8deg) scale(1.06); }
+}
+
+.dice--landed {
+  animation: dice-land 0.4s ease-out;
+}
+
+@keyframes dice-land {
+  0% { transform: scale(1.3) rotate(10deg); }
+  50% { transform: scale(0.9) rotate(-3deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.dice--final {
+  width: 70px;
+  height: 70px;
+  border-radius: 14px;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(70, 197, 116, 0.2);
 }
 
 .dice-face {
-  font-size: 3rem;
+  font-size: 3.2rem;
   line-height: 1;
+  position: relative;
+  z-index: 1;
 }
 
-.dice-label {
-  color: #fff;
-  font-size: 1.4rem;
+.dice--final .dice-face {
+  font-size: 2.5rem;
+}
+
+/* ===== 结果文字 ===== */
+.dice-rolling-label {
+  color: #ffd36a;
+  font-size: 1.2rem;
   font-weight: 700;
-  margin: 0 0 8px;
+  margin: 0;
+  animation: pulse-text 0.8s infinite;
+}
+
+@keyframes pulse-text {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.dice-result {
+  animation: result-in 0.5s ease-out;
+}
+
+@keyframes result-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dice-total {
+  color: #fff;
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.dice-total-num {
+  font-size: 2.2rem;
+  color: #ffd700;
+  text-shadow: 0 0 12px rgba(255, 215, 0, 0.5);
 }
 
 .dice-hint {
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.75);
   font-size: 0.95rem;
   margin: 0;
 }
 
-.dice-fade-enter-active,
+/* ===== 发牌阶段 ===== */
+.deal-phase {
+  animation: deal-phase-in 0.6s ease-out;
+}
+
+@keyframes deal-phase-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.dice-final-row {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.deal-total {
+  color: #ffd700;
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin: 0 0 20px;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
+}
+
+.deal-button {
+  padding: 16px 48px;
+  border-radius: 16px;
+  border: 2px solid rgba(70, 197, 116, 0.6);
+  background: linear-gradient(135deg, #1f8a52, #2eaa6a);
+  color: #fff;
+  font-size: 1.4rem;
+  font-weight: 800;
+  cursor: pointer;
+  letter-spacing: 0.1em;
+  box-shadow:
+    0 0 30px rgba(70, 197, 116, 0.35),
+    0 8px 24px rgba(0, 0, 0, 0.4);
+  transition: all 0.2s ease;
+  animation: deal-btn-pulse 2s infinite;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.deal-icon {
+  font-size: 1.6rem;
+}
+
+@keyframes deal-btn-pulse {
+  0%, 100% { box-shadow: 0 0 30px rgba(70, 197, 116, 0.35), 0 8px 24px rgba(0, 0, 0, 0.4); }
+  50% { box-shadow: 0 0 50px rgba(70, 197, 116, 0.55), 0 8px 32px rgba(0, 0, 0, 0.5); }
+}
+
+.deal-button:hover {
+  transform: translateY(-2px) scale(1.05);
+  background: linear-gradient(135deg, #2eaa6a, #46c574);
+}
+
+.deal-button:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.deal-hint {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.8rem;
+  margin: 12px 0 0;
+}
+
+/* ===== 过渡动画 ===== */
+.dice-fade-enter-active {
+  transition: opacity 0.3s ease;
+}
+
 .dice-fade-leave-active {
-  transition: opacity 0.4s ease;
+  transition: opacity 0.5s ease;
 }
 
 .dice-fade-enter-from,

@@ -187,8 +187,8 @@
           <!-- 房间控制 / 管理面板 -->
           <div class="ext-section" v-if="canStartGame">
             <h3 class="ext-title">房间控制</h3>
-            <button class="mahjong-button panel-button" @click="startGame" :disabled="isInteractionLocked">
-              开始游戏 ({{ gameState?.players.length }}/4)
+            <button class="mahjong-button panel-button" @click="onStartGame" :disabled="isInteractionLocked">
+              🎲 掷骰子开局 ({{ gameState?.players.length }}/4)
             </button>
           </div>
 
@@ -197,7 +197,7 @@
             <p class="ext-meta">阶段: {{ gameState?.phase }} · {{ gameState?.players.length }}人</p>
             <div v-if="gameState?.phase === 'waiting' && (gameState?.players.length || 0) < 4" style="margin-bottom:6px">
               <button class="mahjong-button panel-button small" @click="setupTestGame" :disabled="isInteractionLocked">
-                添加机器人并开始
+                添加机器人 → 掷骰子
               </button>
             </div>
             <button class="mahjong-button panel-button small" @click="refreshState" :disabled="isInteractionLocked">刷新</button>
@@ -234,6 +234,15 @@
         :now-ts="nowTs"
         :highlight-delay-ms="ACTION_HIGHLIGHT_DELAY_MS"
         @action="handleCircularAction"
+      />
+
+      <!-- 骰子投掷动画 -->
+      <DiceAnimation
+        v-if="showDiceOverlay"
+        :dice1="diceValues[0]"
+        :dice2="diceValues[1]"
+        :dealer-name="dealerName"
+        @deal="onDealTiles"
       />
       </div>
     </div>
@@ -280,6 +289,15 @@ const isMobilePortrait = ref(false)
 const shouldRotateView = computed(() => isMobilePortrait.value)
 const nowTs = ref(Date.now())
 let actionWindowTimer: ReturnType<typeof setInterval> | null = null
+
+// 骰子动画状态
+const showDiceOverlay = ref(false)
+const diceValues = ref<[number, number]>([1, 1])
+const dealerName = computed(() => {
+  if (!gameState.value) return ''
+  const dealer = gameState.value.players.find(p => p.isDealer)
+  return dealer?.name || '庄家'
+})
 
 watch(isAdminUser, (next) => {
   if (!next && showAllCards.value) {
@@ -668,6 +686,23 @@ const onExtendedKong = () => {
   }
 }
 
+// ---- 开局流程：掷骰子 → 发牌 ----
+const onStartGame = () => {
+  // 生成随机骰子值用于动画展示
+  diceValues.value = [
+    Math.floor(Math.random() * 6) + 1,
+    Math.floor(Math.random() * 6) + 1
+  ]
+  showDiceOverlay.value = true
+}
+
+const onDealTiles = async () => {
+  // 骰子动画结束，点击发牌 → 实际启动游戏
+  showDiceOverlay.value = false
+  await startGame()
+  await refreshState()
+}
+
 // ---- Admin / Debug Functions ----
 const otherPlayers = computed(() => {
   if (!gameState.value || !currentPlayer.value) return []
@@ -678,7 +713,6 @@ const setupTestGame = async () => {
   if (!roomId.value) return
   
   // Join 3 bots
-  // We need to know how many players are currently in
   const currentCount = gameState.value?.players.length || 1
   
   for (let i = currentCount + 1; i <= 4; i++) {
@@ -688,14 +722,10 @@ const setupTestGame = async () => {
     })
   }
   
-  // Refresh to see them
   await refreshState()
   
-  // Start Game
-  await startGame()
-  
-  // Refresh again
-  await refreshState()
+  // 进入骰子流程
+  onStartGame()
 }
 
 const forceDiscard = async (p: Player) => {
