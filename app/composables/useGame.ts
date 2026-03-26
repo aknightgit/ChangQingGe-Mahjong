@@ -3,6 +3,9 @@ import type { GameState, Player, ActionType, Tile } from '~/types/game'
 import { GamePhase } from '~/types/game'
 import { io, type Socket } from 'socket.io-client'
 
+// 延迟高亮配置（毫秒）
+export const ACTION_HIGHLIGHT_DELAY_MS = 2000
+
 export const useGame = () => {
   const gameState = ref<GameState | null>(null)
   const playerView = ref<any>(null) // Player's hand view
@@ -12,6 +15,8 @@ export const useGame = () => {
   const error = ref<string | null>(null)
   const isActionPending = ref(false)
   const roomDismissedReason = ref<string | null>(null)
+  // 延迟高亮：记录最后一次 state-changed 的时间戳
+  const lastStateChangeAt = ref<number>(0)
 
   const currentPlayer = computed(() => {
     if (!gameState.value || !playerId.value) return null
@@ -114,11 +119,13 @@ export const useGame = () => {
       // Game Events
       socket.value.on('game:state-changed', async (data) => {
         console.log('Game state update:', data)
+        lastStateChangeAt.value = Date.now()
         await refreshState()
       })
 
       socket.value.on('game:action-received', async (data) => {
         console.log('Action received:', data)
+        lastStateChangeAt.value = Date.now()
         await refreshState()
       })
 
@@ -214,6 +221,7 @@ export const useGame = () => {
     startGame,
     refreshState,
     isActionPending,
-    roomDismissedReason
+    roomDismissedReason,
+    lastStateChangeAt
   }
 }

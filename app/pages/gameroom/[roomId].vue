@@ -258,6 +258,17 @@
           </div>
         </div>
       </main>
+
+      <!-- 圆形操作按钮（右下角浮层） -->
+      <CircularActionButtons
+        :available-actions="availableActions"
+        :is-connected="isConnected"
+        :is-interaction-locked="isInteractionLocked"
+        :last-state-change-at="lastStateChangeAt"
+        :now-ts="nowTs"
+        :highlight-delay-ms="ACTION_HIGHLIGHT_DELAY_MS"
+        @action="handleCircularAction"
+      />
       </div>
     </div>
   </div>
@@ -267,7 +278,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import PlayerSelfArea from '~/components/PlayerSelfArea.vue'
 import PlayerOtherArea from '~/components/PlayerOtherArea.vue'
-import { useGame } from '~/composables/useGame'
+import CircularActionButtons from '~/components/CircularActionButtons.vue'
+import { useGame, ACTION_HIGHLIGHT_DELAY_MS } from '~/composables/useGame'
 import { ActionType, GamePhase, GameEndReason, type Tile, type Meld, type Player } from '~/types/game'
 
 const route = useRoute()
@@ -285,7 +297,8 @@ const {
   executeAction,
   startGame,
   refreshState,
-  roomDismissedReason
+  roomDismissedReason,
+  lastStateChangeAt
 } = useGame()
 
 const backToLobby = () => navigateTo('/')
@@ -541,6 +554,38 @@ const onHu = () => executeAction(ActionType.HU)
 const onPass = () => executeAction(ActionType.PASS)
 const onRebel = () => executeAction(ActionType.REBEL)
 const onCheatHu = () => executeAction(ActionType.CHEAT_HU)
+
+// 圆形操作按钮事件处理
+const handleCircularAction = (type: string) => {
+  switch (type) {
+    case 'draw':
+      // 摸牌通常由服务端自动触发，这里尝试执行 draw action
+      executeAction(ActionType.DRAW)
+      break
+    case 'chow':
+      onChow()
+      break
+    case 'peng':
+      onPeng()
+      break
+    case 'kong':
+      // 优先检测暗杠/续杠
+      if (showConcealedKong.value) {
+        onConcealedKong()
+      } else if (showExtendedKong.value) {
+        onExtendedKong()
+      } else {
+        onKong()
+      }
+      break
+    case 'hu':
+      onHu()
+      break
+    case 'pass':
+      onPass()
+      break
+  }
+}
 
 // For self-drawn Kong (Concealed or Extended)
 const showConcealedKong = computed(() => availableActions.value.includes(ActionType.CONCEALED_KONG))
