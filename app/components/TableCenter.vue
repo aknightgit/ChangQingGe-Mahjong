@@ -19,7 +19,7 @@
     <!-- 牌墙 -->
     <TileWall :remaining="remainingTiles" />
 
-    <!-- 中心信息：只显示倍数/百搭 -->
+    <!-- 中心信息：倍数 + 百搭小牌 -->
     <div class="center-info">
       <div class="center-badges">
         <span v-if="roundMultiplier > 1" class="multiplier-badge">
@@ -28,9 +28,11 @@
         <span v-if="globalMultiplier > 1" class="multiplier-badge multiplier-badge--global">
           📈 ×{{ globalMultiplier }}
         </span>
-        <span v-if="wildTileLabel" class="wild-badge">
-          百搭: {{ wildTileLabel }}
-        </span>
+      </div>
+      <!-- 百搭：缩小真实牌面 -->
+      <div v-if="wildTile" class="wild-tile-mini">
+        <MahjongTile :tile="wildTile" :small="true" />
+        <span class="wild-label">百搭</span>
       </div>
     </div>
   </div>
@@ -42,14 +44,14 @@ import TileWall from './TileWall.vue'
 import type { Tile } from '~/types/game'
 
 const props = defineProps<{
-  discards: Tile[] // 统一弃牌区
-  remainingTiles: number // 牌墙剩余
+  discards: Tile[]
+  remainingTiles: number
   statusMessage: string
   hintMessage?: string
   isWinner?: boolean
   roundMultiplier?: number
   globalMultiplier?: number
-  wildTileLabel?: string | null
+  wildTile?: Tile | null
   claimableId?: string | null
 }>()
 </script>
@@ -121,13 +123,19 @@ const props = defineProps<{
   box-shadow: 0 2px 6px rgba(233, 30, 99, 0.35);
 }
 
-.wild-badge {
-  font-size: 0.7rem;
+.wild-tile-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-top: 4px;
+  transform: scale(0.35);
+  transform-origin: center;
+}
+
+.wild-label {
+  font-size: 0.6rem;
   color: #ffd700;
   text-shadow: 0 0 4px rgba(255, 215, 0, 0.5);
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 215, 0, 0.3);
-  background: rgba(0, 0, 0, 0.3);
 }
 </style>

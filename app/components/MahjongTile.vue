@@ -124,7 +124,7 @@ const chineseNum = computed(() => {
   height: 56px;
   border-radius: 4px;
   background: #faf6ee;
-  border: 1px solid #d4c5a0;
+  border: 0.5px solid #e0d6c0;
   box-shadow: 2px 3px 0 #8a7a5a, 3px 4px 0 #6a5a3a, 0 2px 8px rgba(0, 0, 0, 0.35);
   display: flex;
   flex-direction: column;
@@ -147,6 +147,7 @@ const chineseNum = computed(() => {
 .tile--small {
   width: 34px;
   height: 50px;
+  border-width: 0.5px;
 }
 
 .tile-svg {

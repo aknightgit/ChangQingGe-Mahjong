@@ -5,6 +5,8 @@
     :class="[`player-other--${position}`, { 'player-other--winner': isWinner }]"
   >
     <div class="player-other-header">
+      <span class="position-dot" :class="`dot--${posColor}`"></span>
+      <span v-if="avatar" class="player-avatar">{{ avatar }}</span>
       <span class="player-other-name">
         {{ name }}
         <span v-if="isWinner" class="winner-tag">胡</span>
@@ -132,7 +134,13 @@ const props = defineProps<{
   isWinner?: boolean
   claimableDiscardTileId?: string | null
   revealHand?: boolean
+  avatar?: string
 }>()
+
+const posColor = computed(() => {
+  const c: Record<string, string> = { top: 'north', left: 'west', right: 'east' }
+  return c[props.position] || 'south'
+})
 </script>
 
 <style scoped>
@@ -158,7 +166,25 @@ const props = defineProps<{
 .player-other-header {
   display: flex;
   justify-content: center;
+  align-items: center;
+  gap: 4px;
   opacity: 0.9;
+}
+
+.position-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot--east { background: #f44336; box-shadow: 0 0 4px rgba(244,67,54,0.6); }
+.dot--south { background: #4caf50; box-shadow: 0 0 4px rgba(76,175,80,0.6); }
+.dot--west { background: #2196f3; box-shadow: 0 0 4px rgba(33,150,243,0.6); }
+.dot--north { background: #ffc107; box-shadow: 0 0 4px rgba(255,193,7,0.6); }
+
+.player-avatar {
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 .player-other-name {

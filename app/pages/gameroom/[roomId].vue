@@ -62,7 +62,7 @@
               :is-winner="isWinner"
               :round-multiplier="roundMultiplier"
               :global-multiplier="globalMultiplier"
-              :wild-tile-label="wildTileLabel"
+              :wild-tile="wildTile"
               :claimable-id="claimableDiscardTileId"
             />
             <!-- Top player -->
@@ -119,6 +119,14 @@
             </div>
           </div>
         </div>
+
+        <!-- 战绩统计面板 -->
+        <RoomStats
+          :players="statsPlayers"
+          :current-round="currentRound"
+          :spectating-id="spectatingId"
+          @spectate="handleSpectate"
+        />
 
         <!-- Side controls -->
         <div class="side-panel">
@@ -291,6 +299,7 @@ import CircularActionButtons from '~/components/CircularActionButtons.vue'
 import TableCenter from '~/components/TableCenter.vue'
 import DiceAnimation from '~/components/DiceAnimation.vue'
 import PlayerInfo from '~/components/PlayerInfo.vue'
+import RoomStats from '~/components/RoomStats.vue'
 import { useGame, ACTION_HIGHLIGHT_DELAY_MS } from '~/composables/useGame'
 import { ActionType, GamePhase, GameEndReason, type Tile, type Meld, type Player } from '~/types/game'
 
@@ -404,17 +413,33 @@ const remainingTileCount = computed(() => gameState.value?.wallRemaining ?? 0)
 const currentRound = computed(() => gameState.value?.currentRound ?? 1)
 const roundMultiplier = computed(() => gameState.value?.roundMultiplier ?? 1)
 const globalMultiplier = computed(() => gameState.value?.globalMultiplier ?? 1)
-const wildTileLabel = computed(() => {
+const wildTile = computed(() => {
   const w = gameState.value?.wildTile
   if (!w) return null
-  const suitNames: Record<string, string> = { dots: '筒', tiao: '条', wan: '萬', feng: '风', jian: '箭' }
-  const numNames = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九']
-  const windNames = ['', '東', '南', '西', '北']
-  const dragonNames = ['', '中', '發', '白']
-  if (w.suit === 'feng') return windNames[w.value] || w.value
-  if (w.suit === 'jian') return dragonNames[w.value] || w.value
-  return `${numNames[w.value] || w.value}${suitNames[w.suit] || w.suit}`
+  return { suit: w.suit, value: w.value, id: 'center-wild', isWild: true, isFlower: false } as any
 })
+
+// ---- Room Stats ----
+const spectatingId = ref<string | null>(null)
+const positionColors = ['east', 'south', 'west', 'north']
+const botAvatars = ['😎', '🤖', '🧠']
+
+const statsPlayers = computed(() => {
+  if (!gameState.value) return []
+  return gameState.value.players.map((p, i) => ({
+    id: p.id,
+    name: p.name,
+    score: p.score || 0,
+    wins: p.status === 'won' ? 1 : 0,
+    losses: p.status === 'lost' ? 1 : 0,
+    color: positionColors[p.position] || 'south',
+    isMe: p.id === currentPlayer.value?.id,
+  }))
+})
+
+const handleSpectate = (id: string) => {
+  spectatingId.value = spectatingId.value === id ? null : id
+}
 const isDealer = computed(() => currentPlayer.value?.isDealer)
 const isGameEnded = computed(() => gameState.value?.phase === GamePhase.ENDED)
 const overlayReason = computed(() => roomDismissedReason.value || gameState.value?.endReason || null)
@@ -818,6 +843,7 @@ const forceDiscard = async (p: Player) => {
   .room-main {
     flex-direction: row;
     align-items: stretch;
+    gap: 12px;
   }
 }
 
@@ -834,7 +860,10 @@ const forceDiscard = async (p: Player) => {
   max-height: 80vh;
   aspect-ratio: 4 / 3;
   border-radius: 20px;
-  background: linear-gradient(180deg, #9B3030 0%, #7A2020 15%, #8B5E3C 30%, #4A7A50 50%, #2D5A3D 70%, #1A3D28 90%);
+  background: #9B7B50;
+  background-image:
+    radial-gradient(ellipse at 30% 40%, rgba(155,123,80,0.7) 0%, transparent 70%),
+    radial-gradient(ellipse at 70% 60%, rgba(140,108,65,0.5) 0%, transparent 70%);
   border: 4px solid #A07830;
   box-shadow:
     inset 0 0 0 3px rgba(0, 0, 0, 0.2),
