@@ -7,7 +7,7 @@
       </div>
 
       <div class="dice-container">
-        <!-- 阶段1: 掷骰子 -->
+        <!-- 阶段1: 掷骰子动画 -->
         <template v-if="phase === 'rolling'">
           <div class="dice-row">
             <div
@@ -36,7 +36,7 @@
           <p v-else class="dice-rolling-label">🎲 掷骰子...</p>
         </template>
 
-        <!-- 阶段2: 发牌按钮 -->
+        <!-- 阶段2: 发牌确认按钮 -->
         <template v-if="phase === 'deal'">
           <div class="deal-phase">
             <div class="dice-final-row">
@@ -48,11 +48,14 @@
               </div>
             </div>
             <p class="deal-total">{{ dice1 + dice2 }} 点</p>
+            <p class="deal-hint-row">
+              {{ dealerName ? `庄家: ${dealerName}` : '' }}
+            </p>
             <button class="deal-button" @click="onDeal">
               <span class="deal-icon">🃏</span>
               发牌
             </button>
-            <p class="deal-hint">点击开始发牌</p>
+            <p class="deal-hint">点击开始正式发牌</p>
           </div>
         </template>
       </div>
@@ -74,6 +77,7 @@ const emit = defineEmits<{
 
 const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
 
+// 由父组件通过 v-if 控制显示/隐藏
 const visible = ref(true)
 const isRolling = ref(true)
 const phase = ref<'rolling' | 'deal'>('rolling')
@@ -82,7 +86,7 @@ const dice2Display = ref('🎲')
 
 // 粒子样式生成
 const particleStyle = (n: number) => {
-  const hue = 120 + Math.random() * 60 // green-gold range
+  const hue = 120 + Math.random() * 60
   return {
     left: `${Math.random() * 100}%`,
     top: `${Math.random() * 100}%`,
@@ -94,7 +98,19 @@ const particleStyle = (n: number) => {
   }
 }
 
-onMounted(() => {
+// 当组件显示时（父组件v-if重新为true），重置状态
+watch(() => visible.value, (val) => {
+  if (val) {
+    resetAnimation()
+  }
+})
+
+const resetAnimation = () => {
+  isRolling.value = true
+  phase.value = 'rolling'
+  dice1Display.value = '🎲'
+  dice2Display.value = '🎲'
+
   // Phase 1: rolling animation
   const rollInterval = setInterval(() => {
     dice1Display.value = DICE_FACES[Math.floor(Math.random() * 6) + 1]
@@ -109,10 +125,16 @@ onMounted(() => {
     isRolling.value = false
   }, 1800)
 
-  // Transition to deal phase after 2.5s
+  // Transition to deal phase after 2.8s (longer so user can see dice result)
   setTimeout(() => {
-    phase.value = 'deal'
-  }, 2500)
+    if (visible.value) {
+      phase.value = 'deal'
+    }
+  }, 2800)
+}
+
+onMounted(() => {
+  resetAnimation()
 })
 
 const onDeal = () => {
@@ -356,6 +378,12 @@ const onDeal = () => {
 
 .deal-button:active {
   transform: translateY(0) scale(0.98);
+}
+
+.deal-hint-row {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1rem;
+  margin: 0 0 16px;
 }
 
 .deal-hint {

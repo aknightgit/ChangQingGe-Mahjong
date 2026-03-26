@@ -1,16 +1,5 @@
 <template>
   <div class="player-area" :class="{ 'player-area--winner': isWinner }">
-    <div class="player-header">
-      <div class="player-name">
-        {{ name }}
-        <span v-if="isWinner" class="winner-tag">胡</span>
-      </div>
-      <div class="player-status">
-        <span v-if="isWinner">游戏结束（你赢了）</span>
-        <span v-else>游戏中</span>
-      </div>
-    </div>
-
     <!-- 互包警告 -->
     <div v-if="bailoutCounts && Object.keys(bailoutCounts).length" class="bailout-warning">
       ⚠️ 互包:
@@ -106,7 +95,6 @@ import MahjongTile from './MahjongTile.vue'
 import type { Tile, Meld, MeldType } from '~/types/game'
 
 const props = defineProps<{
-  name: string
   hand: Tile[]
   melds: Meld[]
   discards: Tile[]

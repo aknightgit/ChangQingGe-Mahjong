@@ -66,7 +66,7 @@
               :claimable-id="claimableDiscardTileId"
             />
             <!-- Top player -->
-            <div class="seat seat-top" :class="{ 'seat-active': activePosition !== null && topPlayer?.position === activePosition }" style="--name-rotate: 180deg">
+            <div class="seat seat-top" :class="{ 'seat-active': activePosition !== null && topPlayer?.position === activePosition }">
               <PlayerOtherArea
                 :name="topPlayer?.name || '北家'"
                 position="top"
@@ -79,7 +79,7 @@
             </div>
 
             <!-- Left player -->
-            <div class="seat seat-left" :class="{ 'seat-active': activePosition !== null && leftPlayer?.position === activePosition }" style="--name-rotate: -90deg">
+            <div class="seat seat-left" :class="{ 'seat-active': activePosition !== null && leftPlayer?.position === activePosition }">
               <PlayerOtherArea
                 :name="leftPlayer?.name || '西家'"
                 position="left"
@@ -92,7 +92,7 @@
             </div>
 
             <!-- Right player -->
-            <div class="seat seat-right" :class="{ 'seat-active': activePosition !== null && rightPlayer?.position === activePosition }" style="--name-rotate: 90deg">
+            <div class="seat seat-right" :class="{ 'seat-active': activePosition !== null && rightPlayer?.position === activePosition }">
               <PlayerOtherArea
                 :name="rightPlayer?.name || '东家'"
                 position="right"
@@ -701,7 +701,11 @@ const onExtendedKong = () => {
 }
 
 // ---- 开局流程：掷骰子 → 发牌 ----
+// 防重复点击标志
+let isGameStarting = false
+
 const onStartGame = () => {
+  if (isGameStarting) return
   // 生成随机骰子值用于动画展示
   diceValues.value = [
     Math.floor(Math.random() * 6) + 1,
@@ -711,10 +715,16 @@ const onStartGame = () => {
 }
 
 const onDealTiles = async () => {
-  // 骰子动画结束，点击发牌 → 实际启动游戏
+  // 防止重复调用：只有当 overlay 可见时才处理
+  if (!showDiceOverlay.value || isGameStarting) return
+  isGameStarting = true
   showDiceOverlay.value = false
-  await startGame()
-  await refreshState()
+  try {
+    await startGame()
+    await refreshState()
+  } finally {
+    isGameStarting = false
+  }
 }
 
 // ---- Admin / Debug Functions ----
@@ -937,29 +947,45 @@ const forceDiscard = async (p: Player) => {
   filter: drop-shadow(0 0 12px rgba(255, 234, 120, 0.8));
 }
 
+/* Counter-rotate names so they read upright despite seat rotation */
+.seat-top :deep(.player-other-name) {
+  display: inline-block;
+  transform: rotate(180deg);
+}
+
+.seat-left :deep(.player-other-name) {
+  display: inline-block;
+  transform: rotate(-90deg);
+}
+
+.seat-right :deep(.player-other-name) {
+  display: inline-block;
+  transform: rotate(-90deg);
+}
+
 .seat-top {
-  top: 14%;
+  top: 4%;
   left: 50%;
   transform: translateX(-50%) rotate(180deg);
   width: 60%;
 }
 
 .seat-bottom {
-  bottom: 6%;
+  bottom: 2%;
   left: 50%;
   transform: translateX(-50%);
   width: 85%;
 }
 
 .seat-left {
-  left: -10%;
+  left: 2%;
   top: 50%;
   transform: translateY(-50%) rotate(90deg);
   width: 60%;
 }
 
 .seat-right {
-  right: -10%;
+  right: 2%;
   top: 50%;
   transform: translateY(-50%) rotate(90deg);
   width: 60%;
