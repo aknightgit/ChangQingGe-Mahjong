@@ -166,13 +166,22 @@ class GameManager {
    * 获取最后一张弃牌的玩家ID
    */
   private getLastDiscardPlayerId(game: GameState): string | undefined {
-    // 从 action history 中找到最近一次 DISCARD 操作
     for (let i = game.actionHistory.length - 1; i >= 0; i--) {
       if (game.actionHistory[i].type === ActionType.DISCARD) {
         return game.actionHistory[i].playerId;
       }
     }
     return undefined;
+  }
+
+  private getPlayerPosition(game: GameState, playerId: string): number {
+    return game.players.find(p => p.id === playerId)?.position ?? 0;
+  }
+
+  private getLastDiscardPosition(game: GameState): number | undefined {
+    const id = this.getLastDiscardPlayerId(game);
+    if (!id) return undefined;
+    return this.getPlayerPosition(game, id);
   }
 
   /**
@@ -793,10 +802,12 @@ class GameManager {
     }
 
     // Create exposed meld
+    const sourcePos = this.getLastDiscardPosition(game);
     const meld: Meld = {
       type: MeldType.SEQUENCE,
       tiles: sequence,
-      isConcealed: false
+      isConcealed: false,
+      ...(sourcePos !== undefined && { sourcePosition: sourcePos })
     };
     player.hand.exposedMelds.push(meld);
 
@@ -827,10 +838,12 @@ class GameManager {
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[1].id);
 
     // Create exposed meld
+    const sourcePos = this.getLastDiscardPosition(game);
     const meld: Meld = {
       type: MeldType.TRIPLET,
       tiles: [lastDiscard, matchingTiles[0], matchingTiles[1]],
-      isConcealed: false
+      isConcealed: false,
+      ...(sourcePos !== undefined && { sourcePosition: sourcePos })
     };
     player.hand.exposedMelds.push(meld);
 
@@ -862,10 +875,12 @@ class GameManager {
     }
 
     // Create exposed kong
+    const sourcePos = this.getLastDiscardPosition(game);
     const meld: Meld = {
       type: MeldType.KONG,
       tiles: [lastDiscard, ...matchingTiles.slice(0, 3)],
-      isConcealed: false
+      isConcealed: false,
+      ...(sourcePos !== undefined && { sourcePosition: sourcePos })
     };
     player.hand.exposedMelds.push(meld);
 
