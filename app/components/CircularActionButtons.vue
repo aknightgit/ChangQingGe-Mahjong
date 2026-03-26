@@ -161,8 +161,9 @@ const isDelaying = computed(() => {
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.15);
   background: rgba(15, 35, 25, 0.85);
-  color: rgba(255, 255, 255, 0.35);
+  color: #fff;
   cursor: default;
+  z-index: 50;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -200,7 +201,7 @@ const isDelaying = computed(() => {
 /* 激活状态（可用但未高亮 / 延迟中） */
 .action-btn--active {
   border-color: rgba(255, 255, 255, 0.3);
-  color: rgba(255, 255, 255, 0.5);
+  color: #fff;
   cursor: pointer;
 }
 

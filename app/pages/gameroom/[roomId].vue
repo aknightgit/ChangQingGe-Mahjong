@@ -1029,7 +1029,7 @@ const forceDiscard = async (p: Player) => {
   border-radius: 8px;
   border: 1px solid rgba(255,255,255,0.15);
   background: rgba(15, 35, 25, 0.88);
-  color: #e0f2e9;
+  color: #fff;
   font-size: 0.8rem;
   font-weight: 700;
   cursor: pointer;
@@ -1052,7 +1052,7 @@ const forceDiscard = async (p: Player) => {
 
 .inline-action-btn--draw {
   background: linear-gradient(135deg, #1f8a52, #46c574);
-  color: #03100a;
+  color: #fff;
   border-color: rgba(70,197,116,0.5);
 }
 

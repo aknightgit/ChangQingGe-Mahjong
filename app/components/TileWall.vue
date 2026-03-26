@@ -22,8 +22,8 @@
 <script setup lang="ts">
 /**
  * 牌墙组件 - 每边固定18剁（18组×2张=36张/边）
- * 每剁(tower) = 2张牌竖叠，长边相连
- * 牌墙尺寸与手牌一致（34×50 small tile）
+ * 每剁(tower) = 2张牌竖叠（flex-direction: column），长边相连
+ * 所有4边用同一套逻辑，左/右墙的牌旋转90°
  */
 
 const props = defineProps<{
@@ -33,7 +33,6 @@ const props = defineProps<{
 
 const layout = computed(() => props.layout || 'diamond')
 
-// 每边固定18剁
 const TOWERS_PER_SIDE = 18
 
 const wallRows = computed(() => {
@@ -60,7 +59,7 @@ const wallRows = computed(() => {
   gap: 0;
 }
 
-/* ===== 上下墙：水平排列，tower 长边(宽度)相连 ===== */
+/* ===== 上下墙：towers 水平排列 ===== */
 .wall-row--top {
   top: 10%;
   left: 50%;
@@ -77,7 +76,7 @@ const wallRows = computed(() => {
   flex-wrap: nowrap;
 }
 
-/* ===== 左右墙：垂直排列 ===== */
+/* ===== 左右墙：towers 垂直排列 ===== */
 .wall-row--left {
   left: 10%;
   top: 50%;
@@ -96,25 +95,15 @@ const wallRows = computed(() => {
   align-items: center;
 }
 
-/* ===== 上下墙的 tower：2张牌竖叠(长边相接) ===== */
-.wall-tower--top,
-.wall-tower--bottom {
+/* ===== 所有 tower：统一 2张牌竖叠（column），gap: 0 ===== */
+.wall-tower {
   display: flex;
   flex-direction: column;
   gap: 0;
   flex-shrink: 0;
 }
 
-/* ===== 左右墙的 tower：2张牌横排(长边相接)，旋转90° ===== */
-.wall-tower--left,
-.wall-tower--right {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  flex-shrink: 0;
-}
-
-/* ===== 牌墙中的单张牌：与手牌 small 尺寸一致(34×50) ===== */
+/* ===== 单张牌：与手牌 small 尺寸一致 ===== */
 .tower-tile {
   width: 34px;
   height: 50px;
@@ -131,21 +120,22 @@ const wallRows = computed(() => {
   flex-shrink: 0;
 }
 
-/* 上下墙：tower内2张牌竖叠，长边相接 */
+/* ===== 上下墙：tower 内 2 张牌紧密叠放 ===== */
 .wall-tower--top .tower-tile + .tower-tile,
 .wall-tower--bottom .tower-tile + .tower-tile {
   margin-top: -1px;
 }
 
-/* 左右墙：每张牌旋转90°，使长边沿墙方向 */
+/* ===== 左右墙：每张牌旋转 90°，使长边沿墙方向 ===== */
+/* 34×50 旋转后视觉：50 宽 × 34 高。2张叠放需 margin 负值来无缝合并 */
 .wall-tower--left .tower-tile,
 .wall-tower--right .tower-tile {
   transform: rotate(90deg);
-  margin-bottom: -16px;
-  margin-top: -16px;
+  margin-top: -17px;
+  margin-bottom: -17px;
 }
 
-/* 响应式：缩小牌墙尺寸 */
+/* ===== 响应式 ===== */
 @media (max-width: 1300px) {
   .tower-tile {
     width: 25px;
@@ -153,8 +143,8 @@ const wallRows = computed(() => {
   }
   .wall-tower--left .tower-tile,
   .wall-tower--right .tower-tile {
-    margin-bottom: -10px;
-    margin-top: -10px;
+    margin-top: -12px;
+    margin-bottom: -12px;
   }
 }
 
@@ -165,8 +155,8 @@ const wallRows = computed(() => {
   }
   .wall-tower--left .tower-tile,
   .wall-tower--right .tower-tile {
-    margin-bottom: -8px;
-    margin-top: -8px;
+    margin-top: -9px;
+    margin-bottom: -9px;
   }
 }
 </style>
