@@ -1,8 +1,8 @@
 <template>
   <div class="tile-wall" :class="`tile-wall--${layout}`">
     <div
-      v-for="(row, ri) in wallRows"
-      :key="ri"
+      v-for="row in wallRows"
+      :key="row.side"
       class="wall-row"
       :class="`wall-row--${row.side}`"
     >
@@ -10,7 +10,7 @@
         v-for="(tile, ti) in row.tiles"
         :key="ti"
         class="wall-tile"
-        :class="{ 'wall-tile--dealing': dealingIndex === ri * row.tiles.length + ti }"
+        :class="{ 'wall-tile--dealing': dealingIndex === row.offset + ti }"
       >
         <div class="wall-tile-back" />
       </div>
@@ -20,28 +20,36 @@
 
 <script setup lang="ts">
 /**
- * 牌墙组件 - 显示剩余牌墙
- * 四边牌墙，每边若干墩（每墩2张牌）
+ * 牌墙组件 - 一整排连续展示
+ * 剩余牌数均分四边，每边一排（不分墩/网格）
  */
 
 const props = defineProps<{
-  remaining: number // 剩余牌数
-  layout?: 'diamond' | 'rect' // 牌墙布局风格
+  remaining: number
+  layout?: 'diamond' | 'rect'
 }>()
 
 const layout = computed(() => props.layout || 'diamond')
 
 const dealingIndex = ref(-1)
 
-// 牌墙分成4边，每边固定18墩(36张)
 const wallRows = computed(() => {
   const sides = ['top', 'right', 'bottom', 'left'] as const
-  const pairsPerSide = 18 // 每边18墩
+  const total = Math.max(0, props.remaining)
+  const perSide = Math.floor(total / 4)
+  const extra = total % 4 // 余数加到第一边
 
-  return sides.map((side) => ({
-    side,
-    tiles: Array.from({ length: pairsPerSide }, (_, j) => j)
-  }))
+  let offset = 0
+  return sides.map((side, i) => {
+    const count = perSide + (i < extra ? 1 : 0)
+    const result = {
+      side,
+      tiles: Array.from({ length: count }, (_, j) => j),
+      offset
+    }
+    offset += count
+    return result
+  })
 })
 </script>
 
@@ -58,46 +66,53 @@ const wallRows = computed(() => {
   gap: 1px;
 }
 
-/* 统一规则：所有牌墙离桌边约 1/6 */
+/* ===== 上下：水平一整排 ===== */
 .wall-row--top {
-  top: 16.666%;
+  top: 16.5%;
   left: 50%;
   transform: translateX(-50%);
   flex-direction: row;
+  flex-wrap: nowrap;
 }
 
 .wall-row--bottom {
-  bottom: 16.666%;
+  bottom: 16.5%;
   left: 50%;
   transform: translateX(-50%);
   flex-direction: row-reverse;
+  flex-wrap: nowrap;
 }
 
+/* ===== 左右：垂直一整排 ===== */
 .wall-row--left {
-  left: 16.666%;
+  left: 16.5%;
   top: 50%;
   transform: translateY(-50%);
   flex-direction: column;
+  flex-wrap: nowrap;
   align-items: center;
 }
 
 .wall-row--right {
-  right: 16.666%;
+  right: 16.5%;
   top: 50%;
   transform: translateY(-50%);
   flex-direction: column;
+  flex-wrap: nowrap;
   align-items: center;
 }
 
+/* ===== 单张牌墙牌：紧凑小牌 ===== */
 .wall-tile {
-  width: 22px;
-  height: 32px;
-  border-radius: 3px;
+  width: 18px;
+  height: 26px;
+  border-radius: 2px;
   background: #1a6b3d;
   border: 1px solid #145a32;
-  box-shadow: 1px 2px 0 #0d4a28, 0 1px 3px rgba(0, 0, 0, 0.3);
+  box-shadow: 1px 1px 0 #0d4a28, 0 1px 2px rgba(0, 0, 0, 0.25);
   overflow: hidden;
   position: relative;
+  flex-shrink: 0;
   transition: opacity 0.3s ease;
 }
 
@@ -118,17 +133,8 @@ const wallRows = computed(() => {
   position: absolute;
   top: 0;
   left: 0;
-  border-radius: 2px;
+  border-radius: 1px;
   background: linear-gradient(155deg, #3da86a 0%, #2e8b57 30%, #1a6b3d 65%, #0d4a28 100%);
-  box-shadow: inset 0 1px 2px rgba(255,255,255,0.2), inset 0 -1px 2px rgba(0,0,0,0.25);
-}
-
-/* 左/右牌墙保持纵向，高度按比例 */
-.wall-row--left,
-.wall-row--right {
-  flex-direction: column;
-  flex-wrap: nowrap;
-  justify-content: center;
-  max-height: 60%;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.18), inset 0 -1px 1px rgba(0,0,0,0.2);
 }
 </style>
