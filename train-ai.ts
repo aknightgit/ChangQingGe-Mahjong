@@ -6,14 +6,24 @@ import { canWin, detectHandTypes, buildWildTileChecker } from './server/utils/ha
 import { calculateScore, calculateRoundMultiplier } from './server/utils/scoring';
 import { Tile, TileSuit, Meld, MeldType } from './server/types/game';
 
-const ROUNDS = parseInt(process.argv[2] || '20', 10);
-const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000', 10);
+// Parse --rounds and --games flags
+const args = process.argv.slice(2);
+let roundsArg = '20';
+let gamesArg = '1000';
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--rounds' && args[i+1]) roundsArg = args[++i];
+  else if (args[i] === '--games' && args[i+1]) gamesArg = args[++i];
+  else if (!args[i].startsWith('--') && !roundsArg) roundsArg = args[i];
+  else if (!args[i].startsWith('--') && roundsArg && !gamesArg) gamesArg = args[i];
+}
+const ROUNDS = parseInt(roundsArg, 10) || 20;
+const GAMES_PER_ROUND = parseInt(gamesArg, 10) || 1000;
 const PROJECT_TRAINING_DIR = path.join(process.cwd(), 'training-output');
 const OUT_DIR = PROJECT_TRAINING_DIR;
 // UTC+8 timestamp for log file naming
 const BJ_TZ = 8 * 3600000;
 const nowBJ = new Date(Date.now() + BJ_TZ);
-const RUN_TAG = nowBJ.toISOString().replace(/[:.]/g, '-').replace('Z', '+8');
+const RUN_TAG = nowBJ.toISOString().replace(/[:.]/g, '-').replace('Z', '+08').replace('+', '-');
 const OUT_FILE = path.join(OUT_DIR, `ai-training-log-${RUN_TAG}.md`);
 const POLICY_DIR = path.join(OUT_DIR, 'policies', RUN_TAG);
 const BEST_POLICY_FILE = path.join(OUT_DIR, `best-policy-${RUN_TAG}.json`);
