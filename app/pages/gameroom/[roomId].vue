@@ -65,6 +65,20 @@
               :wild-tile="wildTile"
               :claimable-id="claimableDiscardTileId"
             />
+
+            <!-- 操作按钮：永远显示在桌面中央（playing阶段） -->
+            <div class="center-actions" v-if="gameState?.phase === 'playing' && availableActions.length">
+              <CircularActionButtons
+                :available-actions="availableActions"
+                :is-connected="isConnected"
+                :is-interaction-locked="isInteractionLocked"
+                :last-state-change-at="lastStateChangeAt"
+                :now-ts="nowTs"
+                :highlight-delay-ms="ACTION_HIGHLIGHT_DELAY_MS"
+                @action="handleCircularAction"
+              />
+            </div>
+
             <!-- Top player -->
             <div class="seat seat-top" :class="{ 'seat-active': activePosition !== null && topPlayer?.position === activePosition }">
               <PlayerOtherArea
@@ -907,6 +921,15 @@ const forceDiscard = async (p: Player) => {
     0 12px 30px rgba(0, 0, 0, 0.8);
   padding: 14px;
   overflow: hidden;
+}
+
+/* 操作按钮：固定在桌面正中央 */
+.center-actions {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
 }
 
 /* ===== 扩展信息区 ===== */
