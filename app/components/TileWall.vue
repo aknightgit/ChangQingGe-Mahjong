@@ -65,7 +65,7 @@ const wallRows = computed(() => {
 
 /* ===== 上下：水平一整排 ===== */
 .wall-row--top {
-  top: 14%;
+  top: 10%;
   left: 50%;
   transform: translateX(-50%);
   flex-direction: row;
@@ -73,7 +73,7 @@ const wallRows = computed(() => {
 }
 
 .wall-row--bottom {
-  bottom: 13%;
+  bottom: 9%;
   left: 50%;
   transform: translateX(-50%);
   flex-direction: row-reverse;
@@ -82,7 +82,7 @@ const wallRows = computed(() => {
 
 /* ===== 左右：垂直一整排 ===== */
 .wall-row--left {
-  left: 14%;
+  left: 10%;
   top: 50%;
   transform: translateY(-50%);
   flex-direction: column;
@@ -91,7 +91,7 @@ const wallRows = computed(() => {
 }
 
 .wall-row--right {
-  right: 14%;
+  right: 10%;
   top: 50%;
   transform: translateY(-50%);
   flex-direction: column;
@@ -101,8 +101,8 @@ const wallRows = computed(() => {
 
 /* ===== 单张牌墙牌 ===== */
 .wall-tile {
-  width: 22px;
-  height: 26px;
+  width: 18px;
+  height: 24px;
   border-radius: 2px;
   background: #1a6b3d;
   border: 1px solid #145a32;
@@ -115,8 +115,8 @@ const wallRows = computed(() => {
 
 /* 左右墙的牌：立起来，竖长横短 */
 .wall-tile--vertical {
-  width: 20px;
-  height: 28px;
+  width: 16px;
+  height: 26px;
 }
 
 .wall-tile--dealing {
