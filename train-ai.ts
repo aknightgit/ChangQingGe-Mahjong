@@ -1135,29 +1135,9 @@ function appendRoundDoc(metrics: RoundMetrics) {
     for (const d of b.settlementDetails) lines.push(`  - ${d}`);
   }
 
-  // 高倍数（骰子>=2倍）最大亏损局
+  // 高倍数统计（仅汇总，不输出明细）
   lines.push('');
-  lines.push(`### 高倍数最大亏损局明细（骰子倍数>=2，共 ${metrics.highMultGameCount} 局）`);
-  const hm = metrics.worstHighMultGame;
-  if (!hm) {
-    lines.push('- (本轮无骰子倍数>=2的局)');
-  } else {
-    lines.push(`- 最大亏损: ${hm.worstLoser ? hm.worstLoser.name + ' ' + hm.worstLoser.score + ' 点（绝对值 ' + Math.abs(hm.worstLoser.score) + '）' : '(无)'}`);
-    lines.push(`- 局号: ${hm.gameNum}`);
-    lines.push(`- 骰子点数: ${hm.dice1} + ${hm.dice2}`);
-    lines.push(`- 骰子倍数: x${hm.diceMultiplier}`);
-    const hmGlobal = Math.min(8, hm.diceMultiplier * hm.flowMultiplier * hm.inheritMultiplier);
-    lines.push(`- 综合全局倍数: x${hmGlobal}`);
-    lines.push(`- 总筹码: ${hm.totalPot}`);
-    if (hm.winners.length > 0) {
-      lines.push('- 胡牌玩家:');
-      for (const w of hm.winners) {
-        lines.push(`  - ${w.name}: ${w.winMode} ${w.handType} ${w.baseFan}番 ${w.finalPoints}点`);
-      }
-    }
-    lines.push('- 结算明细:');
-    for (const d of hm.settlementDetails) lines.push(`  - ${d}`);
-  }
+  lines.push(`- 高倍数局数(骰子>=2): ${metrics.highMultGameCount}`);
 
   fs.appendFileSync(OUT_FILE, lines.join('\n') + '\n', 'utf8');
 }
@@ -1328,33 +1308,10 @@ async function main() {
     if (globalWorstHighMultGame && globalWorstHighMultGame.worstLoser) {
       const hg = globalWorstHighMultGame;
       const hw = hg.worstLoser;
-      lines.push('');
-      lines.push('## 全局高倍数最大单人亏损局（骰子>=2倍，跨所有轮次）');
-      lines.push(`- 最大亏损: ${hw.name} ${hw.score} 点（绝对值 ${Math.abs(hw.score)}）`);
-      lines.push(`- 局号: ${hg.gameNum}`);
-      lines.push(`- 骰子: ${hg.dice1}+${hg.dice2} = x${hg.diceMultiplier}`);
-      const hgGlobal = Math.min(8, hg.diceMultiplier * hg.flowMultiplier * hg.inheritMultiplier);
-      lines.push(`- 综合全局倍数: x${hgGlobal}`);
-      lines.push(`- 总筹码: ${hg.totalPot}`);
-      if (hg.winners.length > 0) {
-        lines.push('- 胡牌玩家:');
-        for (const w of hg.winners) {
-          lines.push(`  - ${w.name}: ${w.winMode} ${w.handType} ${w.baseFan}番 ${w.finalPoints}点`);
-        }
-      }
-      lines.push('- 结算明细:');
-      for (const d of hg.settlementDetails) lines.push(`  - ${d}`);
-    } else {
-      lines.push('');
-      lines.push('## 全局高倍数最大单人亏损局');
-      lines.push('- (所有轮次中无骰子倍数>=2的亏损局记录)');
     }
 
     fs.appendFileSync(OUT_FILE, lines.join('\n') + '\n', 'utf8');
     console.log(`\n🏆 全局最大单人亏损: ${wl.name} ${wl.score} 点（|${Math.abs(wl.score)}|）`);
-    if (globalWorstHighMultGame?.worstLoser) {
-      console.log(`🏆 全局高倍数最大亏损: ${globalWorstHighMultGame.worstLoser.name} ${globalWorstHighMultGame.worstLoser.score} 点`);
-    }
   }
 
   console.log('✅ 训练完成');
