@@ -115,6 +115,7 @@
                   :discards="playerDiscards"
                   :selected-tile-id="selectedTileId"
                   :is-winner="isWinner"
+                  :today-best-hand="todayBestHand"
                   @tileClick="handleTileClick"
                 />
                 <!-- 动作按钮放在手牌右侧 -->
@@ -380,6 +381,23 @@ const playerHand = computed(() => currentPlayer.value?.hand.concealedTiles || []
 const playerMelds = computed(() => currentPlayer.value?.hand.exposedMelds || [])
 const playerDiscards = computed(() => currentPlayer.value?.hand.discardedTiles || [])
 const isWinner = computed(() => currentPlayer.value?.status === 'won')
+
+// ---- 今日最大胡牌牌型（暂无历史接口，先用占位） ----
+const todayBestHand = computed(() => {
+  // 如果 gameState 或 currentPlayer 有 todayBestHand 字段则用之
+  const player = currentPlayer.value as any
+  if (player?.todayBestHand) {
+    return player.todayBestHand as { name: string; tiles: Tile[] }
+  }
+  // 占位：已胡牌时显示当前胡牌信息
+  if (isWinner.value && currentPlayer.value) {
+    return {
+      name: '已胡牌',
+      tiles: currentPlayer.value.hand.concealedTiles.slice(0, 5),
+    }
+  }
+  return null
+})
 
 // ---- Table Center Data ----
 const allDiscards = computed(() => {
