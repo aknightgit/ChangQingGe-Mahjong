@@ -59,6 +59,12 @@ interface Policy {
   wildKeepPenalty: number;
   dominantSuitBonus: number;
   tripletKeepBonus: number;
+
+  // 大牌策略参数
+  honorTripletKeepBonus: number;   // 风箭刻子保留加成
+  windDragonPairKeepBonus: number; // 风箭对子保留加成
+  tripletComboBonus: number;       // 多刻子组合加成（冲碰碰胡）
+  flushChaseBonus: number;         // 同花色追击加成（冲清一色）
 }
 
 interface WinDetail {
@@ -135,6 +141,8 @@ interface RoundMetrics {
   menQingRate: number;
   fitness: number;
   worstGame: GameRecord;
+  worstHighMultGame: GameRecord | null; // 高倍数（>=2）最大亏损局
+  highMultGameCount: number;            // 倍数>=2的局数
 }
 
 interface TrainingContext {
@@ -172,15 +180,21 @@ function makePolicy(seed = 'base'): Policy {
     bailoutBuildWildBoost: 0.12,
     bailoutHuPenaltyPerMeld: 0.02,
 
-    honorRushThreshold: 5,
-    honorRushBoost: 0.2,
+    honorRushThreshold: 3,
+    honorRushBoost: 0.4,
 
     pairWeight: 4,
     nearWeight: 2,
     honorPairBonus: 2,
     wildKeepPenalty: 1300,
     dominantSuitBonus: 2.2,
-    tripletKeepBonus: 2.6
+    tripletKeepBonus: 2.6,
+
+    // 大牌策略初始值 —— 激进做大牌
+    honorTripletKeepBonus: 8,
+    windDragonPairKeepBonus: 5,
+    tripletComboBonus: 4,
+    flushChaseBonus: 3
   };
 }
 
@@ -205,15 +219,20 @@ function mutate(base: Policy, idx: number): Policy {
     bailoutBuildWildBoost: clamp(base.bailoutBuildWildBoost + rnd(-0.08, 0.08), 0, 0.45),
     bailoutHuPenaltyPerMeld: clamp(base.bailoutHuPenaltyPerMeld + rnd(-0.05, 0.05), 0, 0.3),
 
-    honorRushThreshold: Math.round(clamp(base.honorRushThreshold + rnd(-1, 1), 2, 8)),
-    honorRushBoost: clamp(base.honorRushBoost + rnd(-0.08, 0.08), 0, 0.45),
+    honorRushThreshold: Math.round(clamp(base.honorRushThreshold + rnd(-1, 1), 2, 6)),
+    honorRushBoost: clamp(base.honorRushBoost + rnd(-0.1, 0.1), 0.05, 0.6),
 
     pairWeight: clamp(base.pairWeight + rnd(-1.2, 1.2), 1, 9),
     nearWeight: clamp(base.nearWeight + rnd(-1, 1), 0.1, 5),
     honorPairBonus: clamp(base.honorPairBonus + rnd(-1, 1), 0, 6),
     wildKeepPenalty: clamp(base.wildKeepPenalty + rnd(-280, 280), 400, 2500),
     dominantSuitBonus: clamp(base.dominantSuitBonus + rnd(-0.8, 0.8), 0, 6),
-    tripletKeepBonus: clamp(base.tripletKeepBonus + rnd(-0.8, 0.8), 0, 6)
+    tripletKeepBonus: clamp(base.tripletKeepBonus + rnd(-0.8, 0.8), 0, 6),
+
+    honorTripletKeepBonus: clamp(base.honorTripletKeepBonus + rnd(-2, 2), 2, 18),
+    windDragonPairKeepBonus: clamp(base.windDragonPairKeepBonus + rnd(-1.5, 1.5), 1, 12),
+    tripletComboBonus: clamp(base.tripletComboBonus + rnd(-1.5, 1.5), 0.5, 10),
+    flushChaseBonus: clamp(base.flushChaseBonus + rnd(-1, 1), 0.5, 8)
   };
 }
 
@@ -332,7 +351,7 @@ function removeTile(hand: Tile[], tile: Tile) {
   if (idx >= 0) hand.splice(idx, 1);
 }
 
-function keepScore(hand: Tile[], tile: Tile, isWild: (t: Tile) => boolean, policy: Policy, honorRush = false): number {
+function keepScore(hand: Tile[], tile: Tile, isWild: (t: Tile) => boolean, policy: Policy, honorRush = false, meldCount = 0): number {
   if (isWild(tile)) return policy.wildKeepPenalty;
 
   const wildCount = hand.filter(t => isWild(t)).length;
@@ -342,23 +361,68 @@ function keepScore(hand: Tile[], tile: Tile, isWild: (t: Tile) => boolean, polic
   const same = hand.filter(t => t.suit === tile.suit && t.value === tile.value).length;
   score += same * policy.pairWeight;
 
-  // 偏向保留刻子胚
+  const isHonor = tile.suit === TileSuit.WIND || tile.suit === TileSuit.DRAGON;
+  const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+  const isNum = numberSuits.includes(tile.suit);
+
+  // === 大牌策略：强力保留刻子/对子/同花色 ===
+
+  // 保留刻子胚 (≥3同)
   if (same >= 3) {
     score += policy.tripletKeepBonus * attackScale;
+    // 风箭刻子额外加成（冲风碰/风一色）
+    if (isHonor) {
+      score += policy.honorTripletKeepBonus * attackScale;
+    }
   }
 
-  // 起手风箭多时，倾向做风一色：强留风箭，弱留数牌
-  const isHonor = tile.suit === TileSuit.WIND || tile.suit === TileSuit.DRAGON;
+  // 保留对子（尤其是风箭对子，冲碰碰胡/风一色）
+  if (same >= 2) {
+    if (isHonor) {
+      score += policy.windDragonPairKeepBonus * attackScale;
+    }
+  }
+
+  // 计算手牌中已有的刻子数量（包括已形成的刻子胚）
+  const handGroups = new Map<string, number>();
+  for (const t of hand) {
+    const k = `${t.suit}-${t.value}`;
+    handGroups.set(k, (handGroups.get(k) || 0) + 1);
+  }
+  let existingTriplets = 0;
+  let existingHonorTriplets = 0;
+  for (const [k, cnt] of handGroups) {
+    if (cnt >= 3) {
+      existingTriplets++;
+      const suit = k.split('-')[0];
+      if (suit === TileSuit.WIND || suit === TileSuit.DRAGON) {
+        existingHonorTriplets++;
+      }
+    }
+  }
+  // 考虑当前牌加入后的刻子数
+  let potentialTriplets = existingTriplets;
+  if (same === 2) potentialTriplets++; // 这张牌加入后形成刻子
+  const totalTripletsWithMelds = potentialTriplets + meldCount;
+
+  // 多刻子组合加成（冲碰碰胡：4刻1雀=5组，已有门口的也算）
+  if (totalTripletsWithMelds >= 2) {
+    score += policy.tripletComboBonus * totalTripletsWithMelds * attackScale;
+  }
+
+  // 风箭开局时，倾向做风一色：强留风箭，弱留数牌
   if (honorRush) {
     if (isHonor) {
-      score += policy.honorRushBoost * 10;
+      score += policy.honorRushBoost * 12 * attackScale;
+      // 额外：保留风箭对子/刻子
+      if (same >= 2) score += policy.honorRushBoost * 8;
+      if (same >= 3) score += policy.honorRushBoost * 10;
     } else {
-      score -= policy.honorRushBoost * 6;
+      score -= policy.honorRushBoost * 8;
     }
   }
 
   // 偏向单花色（冲清一色/清碰）
-  const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
   const suitCount = new Map<TileSuit, number>();
   for (const t of hand) {
     if (!numberSuits.includes(t.suit)) continue;
@@ -366,34 +430,49 @@ function keepScore(hand: Tile[], tile: Tile, isWild: (t: Tile) => boolean, polic
   }
   let dominantSuit: TileSuit | null = null;
   let dominant = 0;
+  let secondDominant = 0;
   for (const [s, c] of suitCount) {
     if (c > dominant) {
+      secondDominant = dominant;
       dominant = c;
       dominantSuit = s;
+    } else if (c > secondDominant) {
+      secondDominant = c;
     }
   }
-  if (dominantSuit && tile.suit === dominantSuit) {
-    score += policy.dominantSuitBonus * attackScale;
+  const flushAdvantage = dominant - secondDominant; // 花色差距越大越冲清一色
+  if (dominantSuit && isNum) {
+    if (tile.suit === dominantSuit) {
+      score += policy.dominantSuitBonus * attackScale;
+      // 花色优势大时额外加成（冲清一色）
+      if (flushAdvantage >= 3) {
+        score += policy.flushChaseBonus * (flushAdvantage - 2) * attackScale;
+      }
+    } else {
+      // 非主力花色，降低保留意愿（促进清一色）
+      score -= policy.dominantSuitBonus * 0.5;
+      if (flushAdvantage >= 4) {
+        score -= policy.flushChaseBonus * 2;
+      }
+    }
   }
 
-  const isNum = numberSuits.includes(tile.suit);
+  // 数牌相邻加成
   if (isNum) {
     const near = hand.filter(t =>
       t.suit === tile.suit && Math.abs(t.value - tile.value) <= 2 && t.id !== tile.id
     ).length;
     score += near * policy.nearWeight;
-  } else {
-    if (same >= 2) score += policy.honorPairBonus;
   }
 
   return score;
 }
 
-function pickDiscard(hand: Tile[], isWild: (t: Tile) => boolean, policy: Policy, honorRush = false): Tile {
+function pickDiscard(hand: Tile[], isWild: (t: Tile) => boolean, policy: Policy, honorRush = false, meldCount = 0): Tile {
   let best = hand[0]!;
   let bestScore = Number.POSITIVE_INFINITY;
   for (const t of hand) {
-    const s = keepScore(hand, t, isWild, policy, honorRush);
+    const s = keepScore(hand, t, isWild, policy, honorRush, meldCount);
     if (s < bestScore) {
       bestScore = s;
       best = t;
@@ -633,7 +712,7 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
       }
     }
 
-    const discard = pickDiscard(player.hand, isWild, policy, honorRush);
+    const discard = pickDiscard(player.hand, isWild, policy, honorRush, player.melds.length);
     removeTile(player.hand, discard);
 
     const huCandidates: Array<{ idx: number; points: number; detail: WinDetail }> = [];
@@ -874,7 +953,7 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
   const selfDrawCount = winners.filter(w => w.winMode === '自摸').length;
   const selfDrawRate = winners.length ? selfDrawCount / winners.length : 0;
 
-  const bigHandNames = new Set(['风碰', '风一色', '清碰']);
+  const bigHandNames = new Set(['风碰', '风一色', '清碰', '混碰', '清一色', '大吊碰碰胡', '大吊混一色', '大吊']);
   const bigHandCount = winners.filter(w => bigHandNames.has(w.handType)).length;
   const bigHandRate = winners.length ? bigHandCount / winners.length : 0;
 
@@ -894,9 +973,11 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
   const selfDrawTarget = 0.65;
   const selfDrawPenalty = -Math.abs(selfDrawRate - selfDrawTarget) * 500;
 
-  // 大牌率（风碰+风一色+清碰）目标 4-8%，偏离惩罚
+  // 大牌率（风碰+风一色+清碰）目标 4-8%，偏离惩罚 + 额外正奖励
   const bigHandTarget = 0.06;
-  const bigHandPenalty = -Math.abs(bigHandRate - bigHandTarget) * 400;
+  const bigHandPenalty = -Math.abs(bigHandRate - bigHandTarget) * 800;
+  // 大牌正奖励：每1%大牌率给200分奖励，极大推动大牌出现
+  const bigHandBonus = bigHandRate * 3000;
 
   // 门清胡牌率目标 6-10%，偏离惩罚
   const menQingTarget = 0.08;
@@ -911,6 +992,7 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
     lastPlayerRate * 150 +
     selfDrawPenalty +
     bigHandPenalty +
+    bigHandBonus +
     menQingPenalty +
     avgWinnerPoints * 1.0 +
     avgPot / 120;
@@ -919,12 +1001,20 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
   const worstGame = all.reduce((worst, g) => {
     const gameWorstLoser = g.worstLoser;
     if (!gameWorstLoser) return worst;
-    if (!worst || gameWorstLoser.score < worst.score) {
+    if (!worst || gameWorstLoser.score < (worst.worstLoser?.score ?? 0)) {
       // Return the whole game record that has the worst loser
       return g;
     }
     return worst;
   }, null as GameRecord | null) || all[0];
+
+  // 找高倍数（>=2）最大亏损局
+  const highMultGames = all.filter(g => g.diceMultiplier >= 2);
+  const worstHighMultGame = highMultGames.reduce((worst, g) => {
+    if (!g.worstLoser) return worst;
+    if (!worst || (g.worstLoser.score < (worst.worstLoser?.score ?? 0))) return g;
+    return worst;
+  }, null as GameRecord | null);
 
   return {
     round,
@@ -943,7 +1033,9 @@ function evaluate(policy: Policy, games: number, round: number): RoundMetrics {
     menQingRate,
     avgWinnerPoints,
     fitness,
-    worstGame: worstGame!
+    worstGame: worstGame!,
+    worstHighMultGame,
+    highMultGameCount: highMultGames.length
   };
 }
 
@@ -1027,6 +1119,30 @@ function appendRoundDoc(metrics: RoundMetrics) {
     lines.push('  - (无)');
   } else {
     for (const d of b.settlementDetails) lines.push(`  - ${d}`);
+  }
+
+  // 高倍数（骰子>=2倍）最大亏损局
+  lines.push('');
+  lines.push(`### 高倍数最大亏损局明细（骰子倍数>=2，共 ${metrics.highMultGameCount} 局）`);
+  const hm = metrics.worstHighMultGame;
+  if (!hm) {
+    lines.push('- (本轮无骰子倍数>=2的局)');
+  } else {
+    lines.push(`- 最大亏损: ${hm.worstLoser ? hm.worstLoser.name + ' ' + hm.worstLoser.score + ' 点（绝对值 ' + Math.abs(hm.worstLoser.score) + '）' : '(无)'}`);
+    lines.push(`- 局号: ${hm.gameNum}`);
+    lines.push(`- 骰子点数: ${hm.dice1} + ${hm.dice2}`);
+    lines.push(`- 骰子倍数: x${hm.diceMultiplier}`);
+    const hmGlobal = Math.min(8, hm.diceMultiplier * hm.flowMultiplier * hm.inheritMultiplier);
+    lines.push(`- 综合全局倍数: x${hmGlobal}`);
+    lines.push(`- 总筹码: ${hm.totalPot}`);
+    if (hm.winners.length > 0) {
+      lines.push('- 胡牌玩家:');
+      for (const w of hm.winners) {
+        lines.push(`  - ${w.name}: ${w.winMode} ${w.handType} ${w.baseFan}番 ${w.finalPoints}点`);
+      }
+    }
+    lines.push('- 结算明细:');
+    for (const d of hm.settlementDetails) lines.push(`  - ${d}`);
   }
 
   fs.appendFileSync(OUT_FILE, lines.join('\n') + '\n', 'utf8');
@@ -1121,11 +1237,13 @@ async function main() {
   // 全局最大单人亏损追踪（跨所有轮次）
   let globalWorstGame: GameRecord | null = null;
   let globalWorstScore = 0; // 最负的 score
+  let globalWorstHighMultGame: GameRecord | null = null;
+  let globalWorstHighMultScore = 0;
 
   for (let round = 1; round <= ROUNDS; round++) {
     const candidates: Policy[] = [
       { ...champion, id: `champion-r${round}` },
-      ...Array.from({ length: 5 }).map((_, i) => mutate(champion, i + 1))
+      ...Array.from({ length: 8 }).map((_, i) => mutate(champion, i + 1))
     ];
 
     const quickGames = Math.max(200, Math.floor(GAMES_PER_ROUND / 5));
@@ -1152,11 +1270,20 @@ async function main() {
       }
     }
 
+    // 追踪全局高倍数最大亏损（跨轮次）
+    if (full.worstHighMultGame && full.worstHighMultGame.worstLoser) {
+      const hmWorst = full.worstHighMultGame.worstLoser.score;
+      if (hmWorst < globalWorstHighMultScore) {
+        globalWorstHighMultScore = hmWorst;
+        globalWorstHighMultGame = full.worstHighMultGame;
+      }
+    }
+
     champion = { ...bestCandidate, id: `champion-r${round}` };
     savePolicySnapshot(round, champion, full);
 
     console.log(
-      `Round ${round}/${ROUNDS} | hu=${(full.huRate * 100).toFixed(1)}% | draw=${(full.drawRate * 100).toFixed(1)}% | last=${(full.lastPlayerRate * 100).toFixed(1)}% | selfDraw=${(full.selfDrawRate * 100).toFixed(1)}% | bigHand=${(full.bigHandRate * 100).toFixed(2)}% | menQing=${(full.menQingRate * 100).toFixed(1)}% | fit=${full.fitness.toFixed(2)}`
+      `Round ${round}/${ROUNDS} | hu=${(full.huRate * 100).toFixed(1)}% | draw=${(full.drawRate * 100).toFixed(1)}% | last=${(full.lastPlayerRate * 100).toFixed(1)}% | selfDraw=${(full.selfDrawRate * 100).toFixed(1)}% | bigHand=${(full.bigHandRate * 100).toFixed(2)}% | menQing=${(full.menQingRate * 100).toFixed(1)}% | highMult=${full.highMultGameCount} | fit=${full.fitness.toFixed(2)}`
     );
   }
 
@@ -1173,6 +1300,7 @@ async function main() {
     lines.push(`- 原因: ${g.reason}`);
     lines.push(`- 回合: ${g.rounds}`);
     lines.push(`- 总筹码: ${g.totalPot}`);
+    lines.push(`- 骰子倍数: x${g.diceMultiplier}`);
     if (g.winners.length > 0) {
       lines.push('- 胡牌玩家:');
       for (const w of g.winners) {
@@ -1181,8 +1309,38 @@ async function main() {
     }
     lines.push('- 结算明细:');
     for (const d of g.settlementDetails) lines.push(`  - ${d}`);
+
+    // 高倍数全局最大亏损局
+    if (globalWorstHighMultGame && globalWorstHighMultGame.worstLoser) {
+      const hg = globalWorstHighMultGame;
+      const hw = hg.worstLoser;
+      lines.push('');
+      lines.push('## 全局高倍数最大单人亏损局（骰子>=2倍，跨所有轮次）');
+      lines.push(`- 最大亏损: ${hw.name} ${hw.score} 点（绝对值 ${Math.abs(hw.score)}）`);
+      lines.push(`- 局号: ${hg.gameNum}`);
+      lines.push(`- 骰子: ${hg.dice1}+${hg.dice2} = x${hg.diceMultiplier}`);
+      const hgGlobal = Math.min(8, hg.diceMultiplier * hg.flowMultiplier * hg.inheritMultiplier);
+      lines.push(`- 综合全局倍数: x${hgGlobal}`);
+      lines.push(`- 总筹码: ${hg.totalPot}`);
+      if (hg.winners.length > 0) {
+        lines.push('- 胡牌玩家:');
+        for (const w of hg.winners) {
+          lines.push(`  - ${w.name}: ${w.winMode} ${w.handType} ${w.baseFan}番 ${w.finalPoints}点`);
+        }
+      }
+      lines.push('- 结算明细:');
+      for (const d of hg.settlementDetails) lines.push(`  - ${d}`);
+    } else {
+      lines.push('');
+      lines.push('## 全局高倍数最大单人亏损局');
+      lines.push('- (所有轮次中无骰子倍数>=2的亏损局记录)');
+    }
+
     fs.appendFileSync(OUT_FILE, lines.join('\n') + '\n', 'utf8');
     console.log(`\n🏆 全局最大单人亏损: ${wl.name} ${wl.score} 点（|${Math.abs(wl.score)}|）`);
+    if (globalWorstHighMultGame?.worstLoser) {
+      console.log(`🏆 全局高倍数最大亏损: ${globalWorstHighMultGame.worstLoser.name} ${globalWorstHighMultGame.worstLoser.score} 点`);
+    }
   }
 
   console.log('✅ 训练完成');
