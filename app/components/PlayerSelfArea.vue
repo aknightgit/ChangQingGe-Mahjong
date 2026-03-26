@@ -248,7 +248,7 @@ const onTileClick = (tile: Tile) => {
   min-height: 72px;
   padding: 4px;
   border-radius: 10px;
-  background: rgba(9, 30, 22, 0.9);
+  background: transparent;
 }
 
 .claim-actions {

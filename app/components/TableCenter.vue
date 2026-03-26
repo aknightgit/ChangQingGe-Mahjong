@@ -22,18 +22,19 @@
     <!-- 中心信息：倍数 + 百搭小牌 -->
     <div class="center-info">
       <div class="center-badges">
-        <span v-if="roundMultiplier > 1" class="multiplier-badge">
-          🎲 ×{{ roundMultiplier }}
+        <span class="multiplier-badge">
+          🎲 局倍 ×{{ roundMultiplier || 1 }}
         </span>
-        <span v-if="globalMultiplier > 1" class="multiplier-badge multiplier-badge--global">
-          📈 ×{{ globalMultiplier }}
+        <span class="multiplier-badge multiplier-badge--global">
+          📈 总倍 ×{{ globalMultiplier || 1 }}
         </span>
       </div>
-      <!-- 百搭：缩小真实牌面 -->
+      <!-- 百搭：缩小真实牌面（无百搭时给出占位） -->
       <div v-if="wildTile" class="wild-tile-mini">
         <MahjongTile :tile="wildTile" :small="true" />
         <span class="wild-label">百搭</span>
       </div>
+      <div v-else class="wild-placeholder">百搭：未定</div>
     </div>
   </div>
 </template>
@@ -59,16 +60,12 @@ const props = defineProps<{
 <style scoped>
 .table-center-zone {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 50%;
-  height: 45%;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
   pointer-events: none;
 }
 
@@ -104,18 +101,19 @@ const props = defineProps<{
 
 .center-badges {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   justify-content: center;
+  flex-wrap: wrap;
 }
 
 .multiplier-badge {
-  background: rgba(255, 152, 0, 0.85);
+  background: rgba(255, 152, 0, 0.92);
   color: #fff;
-  font-size: 0.7rem;
-  font-weight: 700;
-  padding: 2px 8px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 4px 10px;
   border-radius: 999px;
-  box-shadow: 0 2px 6px rgba(255, 152, 0, 0.35);
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.38);
 }
 
 .multiplier-badge--global {
@@ -134,8 +132,20 @@ const props = defineProps<{
 }
 
 .wild-label {
-  font-size: 0.6rem;
+  font-size: 0.66rem;
+  font-weight: 700;
   color: #ffd700;
   text-shadow: 0 0 4px rgba(255, 215, 0, 0.5);
+}
+
+.wild-placeholder {
+  margin-top: 6px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 2px 8px;
 }
 </style>

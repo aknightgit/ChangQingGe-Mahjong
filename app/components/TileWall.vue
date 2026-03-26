@@ -47,41 +47,44 @@ const wallRows = computed(() => {
 
 <style scoped>
 .tile-wall {
-  display: grid;
-  grid-template-areas:
-    ".    top  .   "
-    "left .    right"
-    ".    bottom . ";
-  grid-template-columns: 1fr auto 1fr;
-  grid-template-rows: auto auto auto;
-  gap: 2px;
-  justify-items: center;
-  align-items: center;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 .wall-row {
+  position: absolute;
   display: flex;
   gap: 1px;
 }
 
+/* 统一规则：所有牌墙离桌边约 1/6 */
 .wall-row--top {
-  grid-area: top;
+  top: 16.666%;
+  left: 50%;
+  transform: translateX(-50%);
   flex-direction: row;
 }
 
 .wall-row--bottom {
-  grid-area: bottom;
+  bottom: 16.666%;
+  left: 50%;
+  transform: translateX(-50%);
   flex-direction: row-reverse;
 }
 
 .wall-row--left {
-  grid-area: left;
+  left: 16.666%;
+  top: 50%;
+  transform: translateY(-50%);
   flex-direction: column;
   align-items: center;
 }
 
 .wall-row--right {
-  grid-area: right;
+  right: 16.666%;
+  top: 50%;
+  transform: translateY(-50%);
   flex-direction: column;
   align-items: center;
 }
@@ -110,22 +113,22 @@ const wallRows = computed(() => {
 }
 
 .wall-tile-back {
-  width: 75%;
-  height: 75%;
+  width: 98%;
+  height: 98%;
   position: absolute;
-  top: 12%;
-  left: 12%;
+  top: 1%;
+  left: 1%;
   border-radius: 2px;
   background: linear-gradient(145deg, #2e8b57, #1a6b3d, #0d4a28);
   box-shadow: inset 0 1px 2px rgba(255,255,255,0.15), inset 0 -1px 2px rgba(0,0,0,0.2);
 }
 
-/* 牌墙展开时左/右边的牌也水平排列 */
+/* 左/右牌墙保持纵向，高度按比例 */
 .wall-row--left,
 .wall-row--right {
-  flex-direction: row;
-  flex-wrap: wrap;
+  flex-direction: column;
+  flex-wrap: nowrap;
   justify-content: center;
-  max-width: 80px;
+  max-height: 60%;
 }
 </style>

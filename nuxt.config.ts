@@ -2,9 +2,14 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  modules: ['@nuxt/ui'],
+  modules: [
+    ['@nuxt/ui', {
+      // 关键：关闭 @nuxt/ui 自动注入的 @nuxt/fonts（默认会拉 google/googleicons 元数据）
+      fonts: false
+    }]
+  ],
   css: ['~/main.css'],
-  // Disable all font providers to avoid Google timeout
+  // 双保险：即便有其它模块尝试走字体模块，也保持关闭
   fonts: false,
   icon: {
     provider: 'none'

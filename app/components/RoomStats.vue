@@ -89,7 +89,9 @@ const winRate = (p: PlayerStat) => {
 
 <style scoped>
 .room-stats {
-  width: 240px;
+  width: 380px;
+  min-width: 280px;
+  max-width: 460px;
   background: linear-gradient(180deg, #1a0a2e 0%, #0d1b3e 50%, #0a2020 100%);
   border-radius: 16px;
   border: 2px solid rgba(255, 215, 0, 0.2);
@@ -219,5 +221,12 @@ const winRate = (p: PlayerStat) => {
 .spectate-btn.active {
   background: rgba(255, 215, 0, 0.2); border-color: rgba(255, 215, 0, 0.5);
   color: #ffd700;
+}
+
+@media (max-width: 1100px) {
+  .room-stats {
+    width: 280px;
+    min-width: 240px;
+  }
 }
 </style>

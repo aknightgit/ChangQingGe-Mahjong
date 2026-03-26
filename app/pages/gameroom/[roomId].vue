@@ -45,7 +45,7 @@
           <div class="mahjong-table">
             <!-- 左上角: 轮次信息 -->
             <div class="round-info" v-if="gameState?.phase === 'playing'">
-              第 {{ currentRound || 1 }} 轮
+              第 {{ currentRound || 1 }} 局
             </div>
             <!-- 状态消息（非中心显示） -->
             <div class="turn-indicator">
@@ -192,6 +192,12 @@
           <div class="test-controls" v-if="isConnected">
             <h2 class="panel-title">游戏操作</h2>
             <p v-if="actionWindowText" class="panel-subtitle action-window-text">{{ actionWindowText }}</p>
+
+            <div v-if="showDraw">
+              <button class="mahjong-button panel-button" @click="onDraw" :disabled="isInteractionLocked">
+                摸牌
+              </button>
+            </div>
             
             <div v-if="showChow">
               <button class="mahjong-button panel-button" @click="onChow" :disabled="isInteractionLocked">
@@ -265,7 +271,7 @@
               </p>
             </div>
 
-            <div v-if="!showChow && !showPeng && !showKong && !showHu && !showPass && !showConcealedKong && !showExtendedKong">
+            <div v-if="!showDraw && !showChow && !showPeng && !showKong && !showHu && !showPass && !showConcealedKong && !showExtendedKong">
               <p class="panel-subtitle">等待其他玩家...</p>
             </div>
           </div>
@@ -598,6 +604,7 @@ const handleTileClick = (tile: Tile) => {
 // The backend `executeAction` for PENG doesn't require tileId if it's obvious, 
 // but `gameManager.ts` implementation of `handlePeng` finds matching tiles automatically.
 
+const showDraw = computed(() => availableActions.value.includes(ActionType.DRAW))
 const showChow = computed(() => availableActions.value.includes(ActionType.CHOW))
 const showPeng = computed(() => availableActions.value.includes(ActionType.PENG))
 const showKong = computed(() => availableActions.value.includes(ActionType.KONG))
@@ -609,6 +616,7 @@ const canCheatHu = computed(
   () => isAdminUser.value && isMyTurn.value && gameState.value?.phase === GamePhase.PLAYING
 )
 
+const onDraw = () => executeAction(ActionType.DRAW)
 const onChow = () => executeAction(ActionType.CHOW)
 const onPeng = () => executeAction(ActionType.PENG)
 const onKong = () => executeAction(ActionType.KONG)
@@ -963,40 +971,43 @@ const forceDiscard = async (p: Player) => {
   filter: drop-shadow(0 0 12px rgba(255, 234, 120, 0.8));
 }
 
-/* ===== 座位定位（canvas=100比例） ===== */
+/* ===== 座位定位 ===== */
+/* 对面: 往桌中心回收，不贴边 */
 .seat-top {
-  top: 4%;
+  top: 14%;
   left: 50%;
   transform: translateX(-50%) rotate(180deg);
-  width: 75%;
+  width: 60%;
 }
 
+/* 本家: 向桌中心回收到更合理位置 */
 .seat-bottom {
-  bottom: 2%;
+  bottom: 10%;
   left: 50%;
   transform: translateX(-50%);
-  width: 90%;
+  width: 80%;
 }
 
-/* 左手玩家: 手牌+门口左移10%，弃牌区左移30%+上移15% */
+/* 左手: 往外移约桌宽 1/10，让长边与桌边更贴合 */
 .seat-left {
-  left: -8%;
+  left: -10%;
   top: 50%;
-  transform: translateY(-50%);
-  width: 28%;
+  transform: translateY(-50%) rotate(90deg);
+  width: 60%;
 }
 
-/* 右手玩家: 手牌+门口右移10%，弃牌区右移36%+下移15% */
+/* 右手: 往外移约桌宽 1/10，让长边与桌边更贴合 */
 .seat-right {
-  right: -8%;
+  right: -10%;
   top: 50%;
-  transform: translateY(-50%);
-  width: 28%;
+  transform: translateY(-50%) rotate(-90deg);
+  width: 60%;
 }
 
 /* Side panel */
 .side-panel {
-  flex: 0 0 230px;
+  flex: 0 0 460px;
+  max-width: 460px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1104,11 +1115,12 @@ const forceDiscard = async (p: Player) => {
 @media (max-width: 1100px) {
   .mahjong-table {
     width: 100%;
-    max-width: 780px;
+    max-width: 760px;
   }
 
   .side-panel {
-    flex: 0 0 200px;
+    flex: 0 0 320px;
+    max-width: 320px;
   }
 }
 

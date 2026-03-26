@@ -211,9 +211,9 @@ const chineseNum = computed(() => {
   background: linear-gradient(135deg, #fff8e1, #ffe0b2);
   border-color: #ffb74d;
 }
-.tile-flower-top { font-size: 1rem; line-height: 1; }
+.tile-flower-top { font-size: 2rem; line-height: 1; }
 .tile-flower-name {
-  font-size: 0.85rem; font-weight: 700;
+  font-size: 1.7rem; font-weight: 800;
   background: linear-gradient(135deg, #e91e63, #ff9800);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
   line-height: 1; margin-top: 1px;
@@ -257,8 +257,8 @@ const chineseNum = computed(() => {
 
 /* ==================== 牌背 - 绿色渐变立体 ==================== */
 .tile-back-pattern {
-  width: 80%;
-  height: 80%;
+  width: 98%;
+  height: 98%;
   border-radius: 3px;
   background: linear-gradient(145deg, #2e8b57, #1a6b3d, #0d4a28);
   box-shadow: inset 0 1px 3px rgba(255,255,255,0.2), inset 0 -1px 3px rgba(0,0,0,0.3);
@@ -269,8 +269,8 @@ const chineseNum = computed(() => {
 .tile--small .tile-char-top { font-size: 0.8rem; }
 .tile--small .tile-char-bottom { font-size: 0.95rem; }
 .tile--small .tile-wind, .tile--small .tile-dragon { font-size: 1.4rem; }
-.tile--small .tile-flower-top { font-size: 0.8rem; }
-.tile--small .tile-flower-name { font-size: 0.7rem; }
+.tile--small .tile-flower-top { font-size: 1.2rem; }
+.tile--small .tile-flower-name { font-size: 1.05rem; }
 
 /* ==================== 响应式 ==================== */
 @media (max-width: 1300px) {
@@ -279,6 +279,8 @@ const chineseNum = computed(() => {
   .tile-char-top { font-size: 0.8rem; }
   .tile-char-bottom { font-size: 1rem; }
   .tile-wind, .tile-dragon { font-size: 1.4rem; }
+  .tile-flower-top { font-size: 1.3rem; }
+  .tile-flower-name { font-size: 1.1rem; }
 }
 @media (max-width: 900px) {
   .tile { width: 22px; height: 30px; }
@@ -286,5 +288,7 @@ const chineseNum = computed(() => {
   .tile-char-top { font-size: 0.6rem; }
   .tile-char-bottom { font-size: 0.75rem; }
   .tile-wind, .tile-dragon { font-size: 1rem; }
+  .tile-flower-top { font-size: 1rem; }
+  .tile-flower-name { font-size: 0.85rem; }
 }
 </style>
