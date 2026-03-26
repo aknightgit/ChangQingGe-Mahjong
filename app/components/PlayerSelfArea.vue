@@ -11,30 +11,6 @@
       </div>
     </div>
 
-    <!-- Melds (Pung / Kong) with source dots -->
-    <div class="player-melds" v-if="melds.length">
-      <div
-        v-for="(meld, i) in melds"
-        :key="i"
-        class="meld"
-        :class="`meld--${meld.type}`"
-      >
-        <MahjongTile
-          v-for="tile in meld.tiles"
-          :key="tile.id"
-          :tile="tile"
-          :small="true"
-          :dimmed="isWinner"
-        />
-        <!-- 来源颜色圆点 -->
-        <span
-          v-if="meld.sourceIndex !== undefined"
-          class="meld-source"
-          :style="{ background: colors[meld.sourceIndex] }"
-        />
-      </div>
-    </div>
-
     <!-- 互包警告 -->
     <div v-if="bailoutCounts && Object.keys(bailoutCounts).length" class="bailout-warning">
       ⚠️ 互包:
@@ -45,51 +21,80 @@
       </span>
     </div>
 
-    <!-- Discards moved above hand (closer to table center) -->
-    <div class="player-discards">
-      <div class="discards-label">出牌区</div>
-      <div class="discards-row">
+    <!-- 主区域：melds左 + 手牌右（含出牌区 overlay） -->
+    <div class="player-main-row">
+      <!-- 门口牌：左侧 -->
+      <div class="player-melds" v-if="melds.length">
         <div
-          v-for="(tile, i) in discards"
-          :key="tile.id"
-          class="discard-item"
+          v-for="(meld, i) in melds"
+          :key="i"
+          class="meld"
+          :class="`meld--${meld.type}`"
         >
-          <span v-if="i === discards.length - 1 && !isWinner" class="latest-arrow">▼</span>
           <MahjongTile
+            v-for="tile in meld.tiles"
+            :key="tile.id"
             :tile="tile"
             :small="true"
-            :dimmed="isWinner && i !== discards.length - 1"
+            :dimmed="isWinner"
+          />
+          <!-- 来源颜色圆点 -->
+          <span
+            v-if="meld.sourceIndex !== undefined"
+            class="meld-source"
+            :style="{ background: colors[meld.sourceIndex] }"
           />
         </div>
       </div>
-    </div>
 
-    <!-- Hand + claim actions overlay -->
-    <div class="player-hand-wrapper">
-      <div class="player-hand">
-        <MahjongTile
-          v-for="tile in hand"
-          :key="tile.id"
-          :tile="tile"
-          :selected="selectedTileId === tile.id"
-          :just-drawn="justDrawnTileId === tile.id"
-          :claim-highlight="claimCandidateIds?.includes(tile.id)"
-          :dimmed="isWinner"
-          @click="onTileClick(tile)"
-        />
-      </div>
+      <!-- 手牌 + 出牌区 overlay -->
+      <div class="player-hand-wrapper">
+        <!-- 出牌区：叠在手牌上方 -->
+        <div class="player-discards" v-if="discards.length">
+          <div class="discards-label">出牌区</div>
+          <div class="discards-row">
+            <div
+              v-for="(tile, i) in discards"
+              :key="tile.id"
+              class="discard-item"
+            >
+              <span v-if="i === discards.length - 1 && !isWinner" class="latest-arrow">▼</span>
+              <MahjongTile
+                :tile="tile"
+                :small="true"
+                :dimmed="isWinner && i !== discards.length - 1"
+              />
+            </div>
+          </div>
+        </div>
 
-      <div v-if="showClaimOptions && claimType" class="claim-actions">
-        <span class="claim-label">
-          可以{{ claimType === 'pung' ? '碰' : '杠' }}这张牌
-        </span>
-        <div class="claim-buttons">
-          <button class="claim-button primary" @click="confirmClaim">
-            {{ claimType === 'pung' ? '碰' : '杠' }}
-          </button>
-          <button class="claim-button" @click="skipClaim">
-            过
-          </button>
+        <!-- 手牌 -->
+        <div class="player-hand">
+          <MahjongTile
+            v-for="tile in hand"
+            :key="tile.id"
+            :tile="tile"
+            :selected="selectedTileId === tile.id"
+            :just-drawn="justDrawnTileId === tile.id"
+            :claim-highlight="claimCandidateIds?.includes(tile.id)"
+            :dimmed="isWinner"
+            @click="onTileClick(tile)"
+          />
+        </div>
+
+        <!-- 碰杠操作浮层 -->
+        <div v-if="showClaimOptions && claimType" class="claim-actions">
+          <span class="claim-label">
+            可以{{ claimType === 'pung' ? '碰' : '杠' }}这张牌
+          </span>
+          <div class="claim-buttons">
+            <button class="claim-button primary" @click="confirmClaim">
+              {{ claimType === 'pung' ? '碰' : '杠' }}
+            </button>
+            <button class="claim-button" @click="skipClaim">
+              过
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -143,11 +148,18 @@ const onTileClick = (tile: Tile) => {
   gap: 10px;
   padding: 10px 12px 12px;
   border-radius: 14px;
-  background: rgba(5, 14, 10, 0.8);
+  background: transparent;
 }
 
 .player-area--winner {
-  background: rgba(3, 8, 6, 0.8);
+  background: transparent;
+}
+
+/* 主行：melds 左 + 手牌右 */
+.player-main-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .player-header {
@@ -191,7 +203,7 @@ const onTileClick = (tile: Tile) => {
   display: inline-flex;
   padding: 4px 6px;
   border-radius: 8px;
-  background: rgba(17, 43, 33, 0.9);
+  background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
@@ -200,7 +212,10 @@ const onTileClick = (tile: Tile) => {
 }
 
 .player-discards {
-  margin-top: -60px;
+  position: absolute;
+  top: -50px;
+  left: 0;
+  z-index: 10;
 }
 
 .discards-label {
@@ -239,6 +254,9 @@ const onTileClick = (tile: Tile) => {
 /* hand + claim overlay */
 .player-hand-wrapper {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .player-hand {

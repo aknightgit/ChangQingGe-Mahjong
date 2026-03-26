@@ -66,7 +66,7 @@
               :claimable-id="claimableDiscardTileId"
             />
             <!-- Top player -->
-            <div class="seat seat-top" :class="{ 'seat-active': activePosition !== null && topPlayer?.position === activePosition }">
+            <div class="seat seat-top" :class="{ 'seat-active': activePosition !== null && topPlayer?.position === activePosition }" style="--name-rotate: 180deg">
               <PlayerOtherArea
                 :name="topPlayer?.name || '北家'"
                 position="top"
@@ -79,7 +79,7 @@
             </div>
 
             <!-- Left player -->
-            <div class="seat seat-left" :class="{ 'seat-active': activePosition !== null && leftPlayer?.position === activePosition }">
+            <div class="seat seat-left" :class="{ 'seat-active': activePosition !== null && leftPlayer?.position === activePosition }" style="--name-rotate: -90deg">
               <PlayerOtherArea
                 :name="leftPlayer?.name || '西家'"
                 position="left"
@@ -92,7 +92,7 @@
             </div>
 
             <!-- Right player -->
-            <div class="seat seat-right" :class="{ 'seat-active': activePosition !== null && rightPlayer?.position === activePosition }">
+            <div class="seat seat-right" :class="{ 'seat-active': activePosition !== null && rightPlayer?.position === activePosition }" style="--name-rotate: 90deg">
               <PlayerOtherArea
                 :name="rightPlayer?.name || '东家'"
                 position="right"

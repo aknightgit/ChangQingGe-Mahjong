@@ -133,6 +133,8 @@ const getArrowChar = (sourcePos: number): string => {
 .player-other-name {
   font-weight: 600;
   letter-spacing: 0.04em;
+  transform: rotate(var(--name-rotate, 0deg));
+  transform-origin: center center;
 }
 
 .winner-tag {
