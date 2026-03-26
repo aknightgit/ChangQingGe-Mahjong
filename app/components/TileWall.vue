@@ -1,48 +1,54 @@
 <template>
-  <div class="tile-wall" :class="`tile-wall--${layout}`">
-    <div
-      v-for="row in wallRows"
-      :key="row.side"
-      class="wall-row"
-      :class="`wall-row--${row.side}`"
-    >
-      <div
-        v-for="(tower, ti) in row.towers"
-        :key="ti"
-        class="wall-tower"
-        :class="`wall-tower--${row.side}`"
-      >
-        <div class="tower-tile" />
-        <div class="tower-tile" />
+  <!--
+    菱形牌墙：四边围绕牌桌中央形成菱形
+    - 容器旋转45度成为菱形
+    - 四边各有18张扁平牌（宽>高，显示2.5D厚度）
+    - 长边相连，形成完整环形
+  -->
+  <div class="tile-wall">
+    <!-- 菱形容器：旋转45度 -->
+    <div class="diamond-ring">
+      <!-- 上边墙：水平排列，左→右 -->
+      <div class="wall-segment wall-top">
+        <div
+          v-for="i in TOWERS"
+          :key="`t-${i}`"
+          class="flat-tile"
+        />
+      </div>
+
+      <!-- 右边墙：垂直排列，上→下 -->
+      <div class="wall-segment wall-right">
+        <div
+          v-for="i in TOWERS"
+          :key="`r-${i}`"
+          class="flat-tile rotated"
+        />
+      </div>
+
+      <!-- 下边墙：水平排列，右→左 -->
+      <div class="wall-segment wall-bottom">
+        <div
+          v-for="i in TOWERS"
+          :key="`b-${i}`"
+          class="flat-tile"
+        />
+      </div>
+
+      <!-- 左边墙：垂直排列，下→上 -->
+      <div class="wall-segment wall-left">
+        <div
+          v-for="i in TOWERS"
+          :key="`l-${i}`"
+          class="flat-tile rotated"
+        />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-/**
- * 牌墙组件 - 每边固定18剁（18组×2张=36张/边）
- * 每剁(tower) = 2张牌竖叠（flex-direction: column），长边相连
- * 所有4边用同一套逻辑，左/右墙的牌旋转90°
- */
-
-const props = defineProps<{
-  remaining: number
-  layout?: 'diamond' | 'rect'
-}>()
-
-const layout = computed(() => props.layout || 'diamond')
-
-const TOWERS_PER_SIDE = 18
-
-const wallRows = computed(() => {
-  const sides = ['top', 'right', 'bottom', 'left'] as const
-  return sides.map((side, i) => ({
-    side,
-    towers: Array.from({ length: TOWERS_PER_SIDE }, (_, j) => j),
-    offset: i * TOWERS_PER_SIDE
-  }))
-})
+const TOWERS = 18
 </script>
 
 <style scoped>
@@ -51,112 +57,116 @@ const wallRows = computed(() => {
   inset: 0;
   pointer-events: none;
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.wall-row {
+/* 菱形容器：旋转45度 */
+.diamond-ring {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform: rotate(0deg); /* 牌桌是正的，不需要旋转 */
+}
+
+/* ===== 4个边墙：绝对定位围绕中心 ===== */
+.wall-segment {
   position: absolute;
   display: flex;
   gap: 0;
 }
 
-/* ===== 上下墙：towers 水平排列 ===== */
-.wall-row--top {
-  top: 10%;
+/* 上边：水平，贴顶部 */
+.wall-top {
+  top: 8%;
   left: 50%;
   transform: translateX(-50%);
   flex-direction: row;
-  flex-wrap: nowrap;
 }
 
-.wall-row--bottom {
-  bottom: 9%;
+/* 下边：水平，贴底部，反向排列 */
+.wall-bottom {
+  bottom: 8%;
   left: 50%;
   transform: translateX(-50%);
   flex-direction: row-reverse;
-  flex-wrap: nowrap;
 }
 
-/* ===== 左右墙：towers 垂直排列 ===== */
-.wall-row--left {
-  left: 10%;
-  top: 50%;
-  transform: translateY(-50%);
-  flex-direction: column;
-  flex-wrap: nowrap;
-  align-items: center;
-}
-
-.wall-row--right {
-  right: 10%;
+/* 左边：垂直，贴左侧 */
+.wall-left {
+  left: 8%;
   top: 50%;
   transform: translateY(-50%);
   flex-direction: column-reverse;
-  flex-wrap: nowrap;
-  align-items: center;
 }
 
-/* ===== 所有 tower：统一 2张牌竖叠（column），gap: 0 ===== */
-.wall-tower {
-  display: flex;
+/* 右边：垂直，贴右侧 */
+.wall-right {
+  right: 8%;
+  top: 50%;
+  transform: translateY(-50%);
   flex-direction: column;
-  gap: 0;
-  flex-shrink: 0;
 }
 
-/* ===== 单张牌：与手牌 small 尺寸一致 ===== */
-.tower-tile {
-  width: 31px;
-  height: 45px;
+/* ===== 扁平牌：宽>高，2.5D厚度效果 ===== */
+.flat-tile {
+  /* 扁平矩形：宽>高，模拟从上方俯视的牌面 */
+  width: 28px;
+  height: 18px;
   border-radius: 3px;
-  background: linear-gradient(155deg, #3da86a 0%, #2e8b57 30%, #1a6b3d 65%, #0d4a28 100%);
-  border: 0.5px solid #145a32;
-  box-shadow:
-    inset 0 1px 2px rgba(255,255,255,0.25),
-    inset 0 -2px 3px rgba(0,0,0,0.3),
-    inset 2px 0 1px rgba(255,255,255,0.08),
-    0 1px 3px rgba(0,0,0,0.3);
-  position: relative;
-  overflow: hidden;
   flex-shrink: 0;
+
+  /* 2.5D 绿色牌面 */
+  background: linear-gradient(
+    160deg,
+    #4aba7a 0%,
+    #2e8b57 35%,
+    #1a6b3d 65%,
+    #0d4a28 100%
+  );
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
+
+  /* 顶部高光（厚度感） */
+  box-shadow:
+    /* 上边缘高光 */
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.28),
+    /* 下边缘阴影 */
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.25),
+    /* 右边薄边 */
+    inset 2px 0 1px rgba(255, 255, 255, 0.08),
+    /* 整体投影 */
+    0 2px 4px rgba(0, 0, 0, 0.35),
+    0 4px 8px rgba(0, 0, 0, 0.15);
+  position: relative;
 }
 
-/* ===== 上下墙：tower 内 2 张牌紧密叠放 ===== */
-.wall-tower--top .tower-tile + .tower-tile,
-.wall-tower--bottom .tower-tile + .tower-tile {
-  margin-top: -1px;
+/* 垂直边的牌：旋转90度 */
+.flat-tile.rotated {
+  width: 18px;
+  height: 28px;
 }
 
-/* ===== 左右墙：每张牌旋转 90°，使长边沿墙方向 ===== */
-/* 31×45 旋转后视觉：45 宽 × 31 高。2张叠放：总高 31 需 overlap=14px，每边 -7px */
-.wall-tower--left .tower-tile,
-.wall-tower--right .tower-tile {
-  transform: rotate(90deg);
-  margin-top: -7px;
-  margin-bottom: -7px;
-}
-
-/* ===== 响应式 ===== */
+/* ===== 响应式缩小 ===== */
 @media (max-width: 1300px) {
-  .tower-tile {
+  .flat-tile {
     width: 22px;
-    height: 31px;
+    height: 14px;
   }
-  .wall-tower--left .tower-tile,
-  .wall-tower--right .tower-tile {
-    margin-top: -5px;
-    margin-bottom: -5px;
+  .flat-tile.rotated {
+    width: 14px;
+    height: 22px;
   }
 }
 
 @media (max-width: 900px) {
-  .tower-tile {
-    width: 18px;
-    height: 25px;
+  .flat-tile {
+    width: 16px;
+    height: 10px;
   }
-  .wall-tower--left .tower-tile,
-  .wall-tower--right .tower-tile {
-    margin-top: -4px;
-    margin-bottom: -4px;
+  .flat-tile.rotated {
+    width: 10px;
+    height: 16px;
   }
 }
 </style>
