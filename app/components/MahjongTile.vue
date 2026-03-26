@@ -177,8 +177,8 @@ const chineseNum = computed(() => {
 }
 
 .tile--small {
-  width: 34px;
-  height: 50px;
+  width: 31px;
+  height: 45px;
   border-width: 0.5px;
 }
 
@@ -312,8 +312,8 @@ const chineseNum = computed(() => {
 
 /* ==================== 响应式 ==================== */
 @media (max-width: 1300px) {
-  .tile { width: 28px; height: 38px; }
-  .tile--small { width: 25px; height: 35px; }
+  .tile { width: 25px; height: 34px; }
+  .tile--small { width: 22px; height: 31px; }
   .tile-char-top { font-size: 0.8rem; }
   .tile-char-bottom { font-size: 1rem; }
   .tile-wind, .tile-dragon { font-size: 1.4rem; }
@@ -321,8 +321,8 @@ const chineseNum = computed(() => {
   .tile-flower-name { font-size: 1.1rem; }
 }
 @media (max-width: 900px) {
-  .tile { width: 22px; height: 30px; }
-  .tile--small { width: 20px; height: 28px; }
+  .tile { width: 20px; height: 27px; }
+  .tile--small { width: 18px; height: 25px; }
   .tile-char-top { font-size: 0.6rem; }
   .tile-char-bottom { font-size: 0.75rem; }
   .tile-wind, .tile-dragon { font-size: 1rem; }

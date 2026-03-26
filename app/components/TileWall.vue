@@ -105,8 +105,8 @@ const wallRows = computed(() => {
 
 /* ===== 单张牌：与手牌 small 尺寸一致 ===== */
 .tower-tile {
-  width: 34px;
-  height: 50px;
+  width: 31px;
+  height: 45px;
   border-radius: 3px;
   background: linear-gradient(155deg, #3da86a 0%, #2e8b57 30%, #1a6b3d 65%, #0d4a28 100%);
   border: 0.5px solid #145a32;
@@ -127,36 +127,36 @@ const wallRows = computed(() => {
 }
 
 /* ===== 左右墙：每张牌旋转 90°，使长边沿墙方向 ===== */
-/* 34×50 旋转后视觉：50 宽 × 34 高。2张叠放需 margin 负值来无缝合并 */
+/* 31×45 旋转后视觉：45 宽 × 31 高。2张叠放：总高 31 需 overlap=14px，每边 -7px */
 .wall-tower--left .tower-tile,
 .wall-tower--right .tower-tile {
   transform: rotate(90deg);
-  margin-top: -17px;
-  margin-bottom: -17px;
+  margin-top: -7px;
+  margin-bottom: -7px;
 }
 
 /* ===== 响应式 ===== */
 @media (max-width: 1300px) {
   .tower-tile {
-    width: 25px;
-    height: 35px;
+    width: 22px;
+    height: 31px;
   }
   .wall-tower--left .tower-tile,
   .wall-tower--right .tower-tile {
-    margin-top: -12px;
-    margin-bottom: -12px;
+    margin-top: -5px;
+    margin-bottom: -5px;
   }
 }
 
 @media (max-width: 900px) {
   .tower-tile {
-    width: 20px;
-    height: 28px;
+    width: 18px;
+    height: 25px;
   }
   .wall-tower--left .tower-tile,
   .wall-tower--right .tower-tile {
-    margin-top: -9px;
-    margin-bottom: -9px;
+    margin-top: -4px;
+    margin-bottom: -4px;
   }
 }
 </style>

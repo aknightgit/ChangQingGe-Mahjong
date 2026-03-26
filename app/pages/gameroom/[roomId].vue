@@ -1001,14 +1001,14 @@ const forceDiscard = async (p: Player) => {
 }
 
 .seat-left {
-  left: 0.5%;
+  left: -1%;
   top: 50%;
   transform: translateY(-50%) rotate(90deg);
   width: 55%;
 }
 
 .seat-right {
-  right: 0.5%;
+  right: -1%;
   top: 50%;
   transform: translateY(-50%) rotate(90deg);
   width: 55%;
