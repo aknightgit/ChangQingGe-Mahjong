@@ -120,8 +120,8 @@ const chineseNum = computed(() => {
 
 <style scoped>
 .tile {
-  width: 44px;
-  height: 62px;
+  width: 40px;
+  height: 56px;
   border-radius: 4px;
   background: #faf6ee;
   border: 1px solid #d4c5a0;
@@ -156,14 +156,14 @@ const chineseNum = computed(() => {
 
 /* ==================== 万子 ==================== */
 .tile-char-top {
-  font-size: 0.8rem;
+  font-size: 1.5rem;
   font-weight: 900;
   color: #1a1a1a;
   line-height: 1;
 }
 
 .tile-char-bottom {
-  font-size: 1.8rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: #c62828;
   line-height: 1;
@@ -172,7 +172,7 @@ const chineseNum = computed(() => {
 
 /* ==================== 风牌 ==================== */
 .tile-wind {
-  font-size: 2.2rem;
+  font-size: 1.8rem;
   font-weight: 900;
   color: #1a1a1a;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
@@ -180,7 +180,7 @@ const chineseNum = computed(() => {
 
 /* ==================== 箭牌 ==================== */
 .tile-dragon {
-  font-size: 2.2rem;
+  font-size: 1.8rem;
   font-weight: 900;
   display: flex;
   align-items: center;
