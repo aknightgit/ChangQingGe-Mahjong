@@ -93,9 +93,9 @@ const wallRows = computed(() => {
   width: 22px;
   height: 32px;
   border-radius: 3px;
-  background: #faf6ee;
-  border: 1px solid #c4b590;
-  box-shadow: 1px 2px 0 #8a7a5a, 0 1px 3px rgba(0, 0, 0, 0.3);
+  background: #1a6b3d;
+  border: 1px solid #145a32;
+  box-shadow: 1px 2px 0 #0d4a28, 0 1px 3px rgba(0, 0, 0, 0.3);
   overflow: hidden;
   position: relative;
   transition: opacity 0.3s ease;
@@ -113,14 +113,14 @@ const wallRows = computed(() => {
 }
 
 .wall-tile-back {
-  width: 98%;
-  height: 98%;
+  width: 100%;
+  height: 100%;
   position: absolute;
-  top: 1%;
-  left: 1%;
+  top: 0;
+  left: 0;
   border-radius: 2px;
-  background: linear-gradient(145deg, #2e8b57, #1a6b3d, #0d4a28);
-  box-shadow: inset 0 1px 2px rgba(255,255,255,0.15), inset 0 -1px 2px rgba(0,0,0,0.2);
+  background: linear-gradient(155deg, #3da86a 0%, #2e8b57 30%, #1a6b3d 65%, #0d4a28 100%);
+  box-shadow: inset 0 1px 2px rgba(255,255,255,0.2), inset 0 -1px 2px rgba(0,0,0,0.25);
 }
 
 /* 左/右牌墙保持纵向，高度按比例 */

@@ -89,20 +89,17 @@ const winRate = (p: PlayerStat) => {
 
 <style scoped>
 .room-stats {
-  width: 380px;
-  min-width: 280px;
-  max-width: 460px;
+  width: 100%;
   background: linear-gradient(180deg, #1a0a2e 0%, #0d1b3e 50%, #0a2020 100%);
   border-radius: 16px;
   border: 2px solid rgba(255, 215, 0, 0.2);
   box-shadow: 0 0 20px rgba(255, 215, 0, 0.1), inset 0 0 30px rgba(0, 0, 0, 0.3);
-  padding: 14px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   color: #e0e0e0;
-  font-size: 0.8rem;
-  overflow-y: auto;
+  font-size: 0.75rem;
 }
 
 .stats-header {
@@ -223,10 +220,5 @@ const winRate = (p: PlayerStat) => {
   color: #ffd700;
 }
 
-@media (max-width: 1100px) {
-  .room-stats {
-    width: 280px;
-    min-width: 240px;
-  }
-}
+/* width: 100% inherited, no fixed breakpoint needed */
 </style>

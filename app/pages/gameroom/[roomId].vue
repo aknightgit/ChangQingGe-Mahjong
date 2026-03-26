@@ -107,183 +107,126 @@
 
             <!-- Bottom (self) player -->
             <div class="seat seat-bottom" :class="{ 'seat-active': activePosition !== null && currentPlayer?.position === activePosition }">
-              <PlayerSelfArea
-                name="我"
-                :hand="playerHand"
-                :melds="playerMelds"
-                :discards="playerDiscards"
-                :selected-tile-id="selectedTileId"
-                :is-winner="isWinner"
-                @tileClick="handleTileClick"
-              />
-            </div>
-          </div>
-        </div>
-
-        <!-- 战绩统计面板 -->
-        <RoomStats
-          :players="statsPlayers"
-          :current-round="currentRound"
-          :spectating-id="spectatingId"
-          @spectate="handleSpectate"
-        />
-
-        <!-- Side controls -->
-        <div class="side-panel">
-          <!-- Admin / Dealer Controls -->
-          <div class="test-controls" v-if="canStartGame">
-            <h2 class="panel-title">房间控制</h2>
-            <button class="mahjong-button panel-button" @click="startGame" :disabled="isInteractionLocked">
-              开始游戏 ({{ gameState?.players.length }}/4 位玩家)
-            </button>
-          </div>
-
-          <div class="test-controls" v-if="isAdminUser">
-            <h2 class="panel-title">调试面板</h2>
-            <p class="panel-subtitle">游戏阶段: {{ gameState?.phase }}</p>
-            <p class="panel-subtitle">玩家数量: {{ gameState?.players.length }}</p>
-            
-            <!-- Setup Test Game -->
-            <div v-if="gameState?.phase === 'waiting'">
-              <button 
-                class="mahjong-button panel-button" 
-                @click="setupTestGame"
-                v-if="(gameState?.players.length || 0) < 4"
-                :disabled="isInteractionLocked"
-              >
-              添加机器人并开始
-              </button>
-            </div>
-
-            <!-- Manual Refresh -->
-            <button class="mahjong-button panel-button small" @click="refreshState" :disabled="isInteractionLocked">
-              刷新状态
-            </button>
-
-            <button
-              class="mahjong-button panel-button small"
-              @click="toggleShowAllCards"
-              :disabled="isInteractionLocked"
-            >
-              {{ shouldRevealOpponents ? '隐藏全部手牌' : '显示全部手牌' }}
-            </button>
-            <p class="panel-subtitle" style="margin-top: 4px; opacity: 0.7;">
-              本地查看对手手牌
-            </p>
-
-            <!-- Control Other Players -->
-            <div v-if="gameState?.phase === 'playing'" style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
-              <p class="panel-subtitle">操控其他玩家:</p>
-              
-              <div v-for="p in otherPlayers" :key="p.id" style="margin-bottom: 8px;">
-                <p style="font-size: 0.8rem; margin-bottom: 4px;">{{ p.name }} ({{ p.position }})</p>
-                <button 
-                  class="mahjong-button panel-button small"
-                  @click="forceDiscard(p)"
-                  :disabled="isInteractionLocked || gameState?.currentPlayerIndex !== p.position"
-                  :style="gameState?.currentPlayerIndex !== p.position ? { opacity: 0.5 } : {}"
-                >
-                  随机出牌
-                </button>
+              <div class="self-area-with-actions">
+                <PlayerSelfArea
+                  name="我"
+                  :hand="playerHand"
+                  :melds="playerMelds"
+                  :discards="playerDiscards"
+                  :selected-tile-id="selectedTileId"
+                  :is-winner="isWinner"
+                  @tileClick="handleTileClick"
+                />
+                <!-- 动作按钮放在手牌右侧 -->
+                <div class="inline-action-buttons" v-if="isConnected && !isInteractionLocked">
+                  <div v-if="actionWindowText" class="inline-action-timer">{{ actionWindowText }}</div>
+                  <button
+                    v-if="showDraw"
+                    class="inline-action-btn inline-action-btn--draw"
+                    :disabled="isInteractionLocked"
+                    @click="onDraw"
+                  >摸牌</button>
+                  <button
+                    v-if="showChow"
+                    class="inline-action-btn inline-action-btn--chow"
+                    :disabled="isInteractionLocked"
+                    @click="onChow"
+                  >吃</button>
+                  <button
+                    v-if="showPeng"
+                    class="inline-action-btn inline-action-btn--peng"
+                    :disabled="isInteractionLocked"
+                    @click="onPeng"
+                  >碰</button>
+                  <button
+                    v-if="showKong || showConcealedKong || showExtendedKong"
+                    class="inline-action-btn inline-action-btn--kong"
+                    :disabled="isInteractionLocked"
+                    @click="handleCircularAction('kong')"
+                  >杠</button>
+                  <button
+                    v-if="showHu"
+                    class="inline-action-btn inline-action-btn--hu"
+                    :disabled="isInteractionLocked"
+                    @click="onHu"
+                  >胡</button>
+                  <button
+                    v-if="showPass && hasPriorityActions"
+                    class="inline-action-btn inline-action-btn--pass"
+                    :disabled="isInteractionLocked"
+                    @click="onPass"
+                  >过</button>
+                  <button
+                    v-if="showRebel"
+                    class="inline-action-btn inline-action-btn--rebel"
+                    :disabled="isInteractionLocked"
+                    @click="onRebel"
+                  >🚨造反</button>
+                  <div v-if="!showDraw && !showChow && !showPeng && !showKong && !showHu && !showPass && !showConcealedKong && !showExtendedKong && !showRebel" class="inline-action-waiting">
+                    等待中…
+                  </div>
+                </div>
+                <div v-else-if="!isConnected" class="inline-action-buttons">
+                  <div class="inline-action-waiting">连接中...</div>
+                </div>
               </div>
             </div>
           </div>
+        </div>
 
-          <div class="test-controls" v-if="isConnected">
-            <h2 class="panel-title">游戏操作</h2>
-            <p v-if="actionWindowText" class="panel-subtitle action-window-text">{{ actionWindowText }}</p>
+        <!-- 扩展信息区（右侧，高度=牌桌，宽度≈牌桌1/4） -->
+        <aside class="extended-info-panel">
+          <!-- 战绩统计 -->
+          <RoomStats
+            :players="statsPlayers"
+            :current-round="currentRound"
+            :spectating-id="spectatingId"
+            @spectate="handleSpectate"
+          />
 
-            <div v-if="showDraw">
-              <button class="mahjong-button panel-button" @click="onDraw" :disabled="isInteractionLocked">
-                摸牌
+          <!-- 房间控制 / 管理面板 -->
+          <div class="ext-section" v-if="canStartGame">
+            <h3 class="ext-title">房间控制</h3>
+            <button class="mahjong-button panel-button" @click="startGame" :disabled="isInteractionLocked">
+              开始游戏 ({{ gameState?.players.length }}/4)
+            </button>
+          </div>
+
+          <div class="ext-section" v-if="isAdminUser">
+            <h3 class="ext-title">调试</h3>
+            <p class="ext-meta">阶段: {{ gameState?.phase }} · {{ gameState?.players.length }}人</p>
+            <div v-if="gameState?.phase === 'waiting' && (gameState?.players.length || 0) < 4" style="margin-bottom:6px">
+              <button class="mahjong-button panel-button small" @click="setupTestGame" :disabled="isInteractionLocked">
+                添加机器人并开始
               </button>
             </div>
-            
-            <div v-if="showChow">
-              <button class="mahjong-button panel-button" @click="onChow" :disabled="isInteractionLocked">
-                吃
-              </button>
-            </div>
-
-            <div v-if="showPeng">
-              <button class="mahjong-button panel-button" @click="onPeng" :disabled="isInteractionLocked">
-                碰
-              </button>
-            </div>
-
-            <div v-if="showKong">
-              <button class="mahjong-button panel-button" @click="onKong" :disabled="isInteractionLocked">
-                杠
-              </button>
-            </div>
-
-            <div v-if="showConcealedKong">
-              <button class="mahjong-button panel-button" @click="onConcealedKong" :disabled="isInteractionLocked">
-                暗杠
-              </button>
-            </div>
-
-            <div v-if="showExtendedKong">
-              <button class="mahjong-button panel-button" @click="onExtendedKong" :disabled="isInteractionLocked">
-                续杠
-              </button>
-            </div>
-
-            <div v-if="showHu">
-              <button class="mahjong-button panel-button" @click="onHu" :disabled="isInteractionLocked">
-                胡
-              </button>
-            </div>
-
-            <div v-if="showPass && hasPriorityActions">
-              <button class="mahjong-button panel-button danger small" @click="onPass" :disabled="isInteractionLocked">
-                过
-              </button>
-            </div>
-            <!-- 造反按钮 (五毒散) -->
-            <div v-if="showRebel">
-              <button 
-                class="mahjong-button panel-button rebel-button" 
-                @click="onRebel" 
-                :disabled="isInteractionLocked"
-              >
-                🚨 我要造反!
-              </button>
-              <button 
-                class="mahjong-button panel-button small" 
-                @click="onPass" 
-                :disabled="isInteractionLocked"
-              >
-                不造反
-              </button>
-            </div>
-
-            <div class="cheat-actions" v-if="isAdminUser">
-              <button 
-                class="mahjong-button panel-button" 
-                @click="onCheatHu" 
-                :disabled="isInteractionLocked || !canCheatHu"
-              >
-                测试胡牌 (+1)
-              </button>
-              <p class="panel-subtitle" style="margin-top: 4px; opacity: 0.65;">
-                仅限测试 · 轮到你时可用
+            <button class="mahjong-button panel-button small" @click="refreshState" :disabled="isInteractionLocked">刷新</button>
+            <button class="mahjong-button panel-button small" @click="toggleShowAllCards" :disabled="isInteractionLocked">
+              {{ shouldRevealOpponents ? '隐藏手牌' : '显示手牌' }}
+            </button>
+            <div v-if="gameState?.phase === 'playing'" style="margin-top:8px">
+              <p class="ext-meta" v-for="p in otherPlayers" :key="p.id">
+                {{ p.name }}
+                <button class="mahjong-button panel-button small" style="display:inline;padding:2px 8px;font-size:0.7rem;margin-left:4px"
+                  @click="forceDiscard(p)"
+                  :disabled="isInteractionLocked || gameState?.currentPlayerIndex !== p.position">
+                  出牌
+                </button>
               </p>
             </div>
+          </div>
 
-            <div v-if="!showDraw && !showChow && !showPeng && !showKong && !showHu && !showPass && !showConcealedKong && !showExtendedKong">
-              <p class="panel-subtitle">等待其他玩家...</p>
-            </div>
+          <div class="ext-section" v-if="isAdminUser && canCheatHu">
+            <button class="mahjong-button panel-button" @click="onCheatHu" :disabled="isInteractionLocked">
+              测试胡牌
+            </button>
           </div>
-          <div class="test-controls" v-else>
-             <p class="panel-subtitle">连接中...</p>
-             <p v-if="error" class="panel-subtitle" style="color: red">{{ error }}</p>
-          </div>
-        </div>
+        </aside>
       </main>
 
-      <!-- 圆形操作按钮（右下角浮层） -->
+      <!-- 圆形操作按钮已移至手牌右侧（inline-action-buttons），此浮层保留为移动端备用 -->
       <CircularActionButtons
+        v-if="shouldRotateView"
         :available-actions="availableActions"
         :is-connected="isConnected"
         :is-interaction-locked="isInteractionLocked"
@@ -802,9 +745,6 @@ const forceDiscard = async (p: Player) => {
 
 .room-container--rotated {
   max-width: none;
-}
-
-.room-container--rotated {
   display: flex;
   flex-direction: column;
 }
@@ -813,7 +753,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(7, 19, 14, 0.92);
   border-radius: 20px;
   padding: 16px 16px 20px;
-  max-width: 1280px;
+  max-width: 1400px;
   width: 100%;
   box-shadow: 0 18px 45px rgba(0, 0, 0, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -840,6 +780,7 @@ const forceDiscard = async (p: Player) => {
   opacity: 0.85;
 }
 
+/* ===== 主布局：牌桌 + 扩展信息区 ===== */
 .room-main {
   display: flex;
   flex-direction: column;
@@ -860,6 +801,7 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 0;
 }
 
 .mahjong-table {
@@ -880,7 +822,216 @@ const forceDiscard = async (p: Player) => {
   overflow: hidden;
 }
 
-/* 左上角轮次 */
+/* ===== 扩展信息区 ===== */
+.extended-info-panel {
+  flex: 0 0 280px;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  max-height: 80vh;
+}
+
+/* 桌面端严格 1/4 宽 */
+@media (min-width: 1101px) {
+  .extended-info-panel {
+    /* 牌桌宽度约 75vw (table-wrapper flex), 1/4 ≈ 25vw; 但受 max-width 约束 */
+    flex: 0 0 25%;
+    max-width: 320px;
+  }
+}
+
+/* 窄屏降级 */
+@media (max-width: 1100px) {
+  .extended-info-panel {
+    flex: 0 0 240px;
+    max-width: 240px;
+  }
+}
+
+@media (max-width: 900px) {
+  .extended-info-panel {
+    flex: 0 0 auto;
+    max-width: 100%;
+    max-height: none;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+.ext-section {
+  padding: 8px 10px 10px;
+  border-radius: 14px;
+  background: rgba(5, 14, 10, 0.9);
+}
+
+.ext-title {
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+  opacity: 0.9;
+  font-weight: 600;
+}
+
+.ext-meta {
+  font-size: 0.8rem;
+  margin-bottom: 4px;
+  opacity: 0.85;
+}
+
+/* ===== 座位定位 ===== */
+.seat {
+  position: absolute;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.seat-active {
+  filter: drop-shadow(0 0 12px rgba(255, 234, 120, 0.8));
+}
+
+.seat-top {
+  top: 14%;
+  left: 50%;
+  transform: translateX(-50%) rotate(180deg);
+  width: 60%;
+}
+
+.seat-bottom {
+  bottom: 6%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 85%;
+}
+
+.seat-left {
+  left: -10%;
+  top: 50%;
+  transform: translateY(-50%) rotate(90deg);
+  width: 60%;
+}
+
+.seat-right {
+  right: -10%;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+  width: 60%;
+}
+
+/* ===== 本家：手牌 + 动作按钮横排 ===== */
+.self-area-with-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  width: 100%;
+}
+
+/* 内联动作按钮组 — 放在手牌右侧 */
+.inline-action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: 56px;
+}
+
+.inline-action-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(15, 35, 25, 0.88);
+  color: #e0f2e9;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  text-align: center;
+  transition: all 0.15s ease;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.inline-action-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.15);
+}
+
+.inline-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.inline-action-btn--draw {
+  background: linear-gradient(135deg, #1f8a52, #46c574);
+  color: #03100a;
+  border-color: rgba(70,197,116,0.5);
+}
+
+.inline-action-btn--chow {
+  background: linear-gradient(135deg, #1565c0, #42a5f5);
+  color: #fff;
+  border-color: rgba(66,165,245,0.5);
+}
+
+.inline-action-btn--peng {
+  background: linear-gradient(135deg, #e65100, #ff9800);
+  color: #fff;
+  border-color: rgba(255,152,0,0.5);
+}
+
+.inline-action-btn--kong {
+  background: linear-gradient(135deg, #6a1b9a, #ab47bc);
+  color: #fff;
+  border-color: rgba(171,71,188,0.5);
+}
+
+.inline-action-btn--hu {
+  background: linear-gradient(135deg, #c62828, #ef5350);
+  color: #fff;
+  border-color: rgba(239,83,80,0.5);
+  font-size: 0.9rem;
+  animation: hu-glow 1s infinite;
+}
+
+@keyframes hu-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(239,83,80,0.4); }
+  50% { box-shadow: 0 0 18px rgba(239,83,80,0.8); }
+}
+
+.inline-action-btn--pass {
+  background: rgba(60, 60, 60, 0.85);
+  color: #ccc;
+  border-color: rgba(255,255,255,0.1);
+  font-size: 0.75rem;
+}
+
+.inline-action-btn--rebel {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  color: #ffd700;
+  border-color: #ffd700;
+  animation: heartbeat 1.2s ease-in-out infinite;
+}
+
+.inline-action-timer {
+  font-size: 0.65rem;
+  color: #ffd36a;
+  font-weight: 700;
+  text-align: center;
+  padding: 2px 0;
+  white-space: nowrap;
+}
+
+.inline-action-waiting {
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.5);
+  text-align: center;
+  padding: 8px 4px;
+}
+
+/* ===== 左上角轮次 ===== */
 .round-info {
   position: absolute;
   top: 8px;
@@ -894,7 +1045,7 @@ const forceDiscard = async (p: Player) => {
   border-radius: 999px;
 }
 
-/* 状态提示（底部偏上） */
+/* 状态提示 */
 .turn-indicator {
   position: absolute;
   bottom: 8px;
@@ -926,122 +1077,7 @@ const forceDiscard = async (p: Player) => {
   50% { opacity: 0.6; }
 }
 
-.table-center {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 60%;
-  transform: translate(-50%, -50%);
-  text-align: center;
-}
-
-.mobile-scroll-notice {
-  background: rgba(9, 30, 22, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 999px;
-  padding: 6px 14px;
-  font-size: 0.75rem;
-  margin-bottom: 6px;
-  display: inline-block;
-}
-
-.status {
-  font-size: 1.2rem;
-  margin-bottom: 6px;
-  font-weight: 600;
-}
-
-.hint {
-  font-size: 0.9rem;
-  opacity: 0.9;
-  line-height: 1.4;
-}
-
-/* Seat positioning */
-.seat {
-  position: absolute;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  transition: transform 0.15s ease, filter 0.15s ease;
-}
-
-.seat-active {
-  transform: scale(1.03);
-  filter: drop-shadow(0 0 12px rgba(255, 234, 120, 0.8));
-}
-
-/* ===== 座位定位 ===== */
-/* 对面: 往桌中心回收，不贴边 */
-.seat-top {
-  top: 14%;
-  left: 50%;
-  transform: translateX(-50%) rotate(180deg);
-  width: 60%;
-}
-
-/* 本家: 向桌中心回收到更合理位置 */
-.seat-bottom {
-  bottom: 10%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 80%;
-}
-
-/* 左手: 往外移约桌宽 1/10，让长边与桌边更贴合 */
-.seat-left {
-  left: -10%;
-  top: 50%;
-  transform: translateY(-50%) rotate(90deg);
-  width: 60%;
-}
-
-/* 右手: 往外移约桌宽 1/10，让长边与桌边更贴合 */
-.seat-right {
-  right: -10%;
-  top: 50%;
-  transform: translateY(-50%) rotate(-90deg);
-  width: 60%;
-}
-
-/* Side panel */
-.side-panel {
-  flex: 0 0 460px;
-  max-width: 460px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-@media (max-width: 899px) {
-  .side-panel {
-    flex: 0 0 auto;
-  }
-}
-
-.test-controls {
-  padding: 8px 10px 10px;
-  border-radius: 14px;
-  background: rgba(5, 14, 10, 0.9);
-}
-
-.panel-title {
-  font-size: 0.95rem;
-  margin-bottom: 8px;
-  opacity: 0.9;
-}
-
-.panel-subtitle {
-  font-size: 0.85rem;
-  margin-bottom: 6px;
-  opacity: 0.9;
-}
-
-.action-window-text {
-  color: #ffd36a;
-  font-weight: 700;
-}
-
+/* ===== 通用按钮 ===== */
 .mahjong-button {
   padding: 10px 18px;
   border-radius: 999px;
@@ -1091,6 +1127,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(160, 38, 38, 1);
 }
 
+/* ===== 游戏结束浮层 ===== */
 .game-over-overlay {
   position: absolute;
   inset: 0;
@@ -1110,130 +1147,6 @@ const forceDiscard = async (p: Player) => {
   width: min(360px, 90%);
   text-align: center;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
-}
-
-@media (max-width: 1100px) {
-  .mahjong-table {
-    width: 100%;
-    max-width: 760px;
-  }
-
-  .side-panel {
-    flex: 0 0 320px;
-    max-width: 320px;
-  }
-}
-
-@media (max-width: 900px) {
-  .room-main {
-    gap: 8px;
-  }
-
-  .mahjong-button {
-    font-size: 0.85rem;
-    padding: 8px 14px;
-  }
-}
-
-@media (max-width: 768px) {
-  .room-container {
-    padding: 12px;
-  }
-
-  .room-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .mahjong-title {
-    font-size: 1.2rem;
-  }
-
-  .mahjong-subtitle {
-    font-size: 0.8rem;
-  }
-
-  .mahjong-table {
-    width: 100%;
-    border-width: 3px;
-    padding: 10px;
-  }
-
-  .side-panel {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-
-  .test-controls {
-    flex: 1 1 220px;
-  }
-
-  .panel-title {
-    font-size: 0.85rem;
-  }
-
-  .panel-subtitle {
-    font-size: 0.75rem;
-  }
-}
-
-@media (max-width: 600px) {
-  .mahjong-table {
-    border-width: 2px;
-  }
-
-  .mahjong-button {
-    font-size: 0.75rem;
-    padding: 6px 10px;
-  }
-
-  .test-controls {
-    flex: 1 1 100%;
-  }
-
-  .panel-button {
-    font-size: 0.75rem;
-  }
-}
-
-@media (max-width: 768px) and (orientation: portrait) {
-  .mobile-portrait {
-    min-height: 100vw;
-  }
-
-  .room-viewport--rotated {
-    width: 100vh;
-    height: 100vw;
-    align-items: center;
-    overflow: hidden;
-  }
-
-  .room-container--rotated {
-    transform: rotate(90deg);
-    transform-origin: center;
-    width: min(900px, 90vh);
-    max-height: calc(100vw - 24px);
-  }
-
-  .room-container--rotated .room-header {
-    order: 2;
-    margin-top: 12px;
-  }
-
-  .room-container--rotated .room-main {
-    order: 1;
-    flex-direction: column;
-  }
-
-  .room-container--rotated .table-wrapper {
-    order: 1;
-  }
-
-  .room-container--rotated .side-panel {
-    order: 2;
-    width: 100%;
-  }
 }
 
 .overlay-title {
@@ -1313,25 +1226,6 @@ const forceDiscard = async (p: Player) => {
   color: #f5f5f5;
 }
 
-.result-status,
-.result-round {
-  font-size: 0.8rem;
-  opacity: 0.85;
-}
-
-.overlay-empty {
-  font-size: 0.9rem;
-  opacity: 0.8;
-  margin-bottom: 20px;
-}
-
-.result-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-}
-
 .result-status {
   font-size: 0.85rem;
   opacity: 0.85;
@@ -1342,22 +1236,112 @@ const forceDiscard = async (p: Player) => {
   color: #9ed3b4;
 }
 
-/* 造反按钮心跳动画 */
-.rebel-button {
-  background: linear-gradient(135deg, #dc2626, #b91c1c) !important;
-  color: white !important;
-  font-weight: 900 !important;
-  font-size: 1.1rem !important;
-  animation: heartbeat 1.2s ease-in-out infinite;
-  box-shadow: 0 0 20px rgba(220, 38, 38, 0.6) !important;
-  border: 2px solid #ffd700 !important;
+.overlay-empty {
+  font-size: 0.9rem;
+  opacity: 0.8;
+  margin-bottom: 20px;
 }
 
+/* ===== 造反按钮 ===== */
 @keyframes heartbeat {
   0%, 100% { transform: scale(1); }
   15% { transform: scale(1.08); }
   30% { transform: scale(1); }
   45% { transform: scale(1.05); }
   60% { transform: scale(1); }
+}
+
+/* ===== 响应式降级 ===== */
+@media (max-width: 768px) {
+  .room-container {
+    padding: 12px;
+  }
+
+  .room-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .mahjong-title {
+    font-size: 1.2rem;
+  }
+
+  .mahjong-subtitle {
+    font-size: 0.8rem;
+  }
+
+  .mahjong-table {
+    width: 100%;
+    border-width: 3px;
+    padding: 10px;
+  }
+
+  .self-area-with-actions {
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .inline-action-buttons {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .inline-action-btn {
+    font-size: 0.75rem;
+    padding: 5px 10px;
+  }
+}
+
+@media (max-width: 600px) {
+  .mahjong-table {
+    border-width: 2px;
+  }
+
+  .mahjong-button {
+    font-size: 0.75rem;
+    padding: 6px 10px;
+  }
+}
+
+/* 移动竖屏旋转模式 */
+@media (max-width: 768px) and (orientation: portrait) {
+  .mobile-portrait {
+    min-height: 100vw;
+  }
+
+  .room-viewport--rotated {
+    width: 100vh;
+    height: 100vw;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .room-container--rotated {
+    transform: rotate(90deg);
+    transform-origin: center;
+    width: min(900px, 90vh);
+    max-height: calc(100vw - 24px);
+  }
+
+  .room-container--rotated .room-header {
+    order: 2;
+    margin-top: 12px;
+  }
+
+  .room-container--rotated .room-main {
+    order: 1;
+    flex-direction: column;
+  }
+
+  .room-container--rotated .table-wrapper {
+    order: 1;
+  }
+
+  .room-container--rotated .extended-info-panel {
+    order: 2;
+    width: 100%;
+  }
 }
 </style>

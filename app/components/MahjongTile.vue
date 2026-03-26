@@ -122,10 +122,17 @@ const chineseNum = computed(() => {
 .tile {
   width: 40px;
   height: 56px;
-  border-radius: 4px;
+  border-radius: 5px 5px 4px 4px;
   background: #faf6ee;
   border: 0.5px solid #e0d6c0;
-  box-shadow: 2px 3px 0 #8a7a5a, 3px 4px 0 #6a5a3a, 0 2px 8px rgba(0, 0, 0, 0.35);
+  /* 2.5D: front face highlight + bottom/right side edges + ambient shadow */
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.55),
+    inset -1px 0 0 rgba(0,0,0,0.06),
+    inset 0 -1px 0 rgba(0,0,0,0.08),
+    1px 3px 0 #8a7a5a,
+    2px 5px 0 #6a5a3a,
+    0 3px 10px rgba(0, 0, 0, 0.45);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -255,13 +262,22 @@ const chineseNum = computed(() => {
   cursor: default;
 }
 
-/* ==================== 牌背 - 绿色渐变立体 ==================== */
+/* ==================== 牌背 - 全绿无白线 ==================== */
+/* 当 tile 有 back 模式时，外层 tile 也变成绿色，不留白边 */
+.tile:has(.tile-back-pattern) {
+  background: #1a6b3d;
+  border-color: #145a32;
+}
+
 .tile-back-pattern {
-  width: 98%;
-  height: 98%;
-  border-radius: 3px;
-  background: linear-gradient(145deg, #2e8b57, #1a6b3d, #0d4a28);
-  box-shadow: inset 0 1px 3px rgba(255,255,255,0.2), inset 0 -1px 3px rgba(0,0,0,0.3);
+  width: 100%;
+  height: 100%;
+  border-radius: 4px 4px 3px 3px;
+  background: linear-gradient(155deg, #3da86a 0%, #2e8b57 30%, #1a6b3d 65%, #0d4a28 100%);
+  box-shadow:
+    inset 0 1px 2px rgba(255,255,255,0.25),
+    inset 0 -2px 3px rgba(0,0,0,0.3),
+    inset 2px 0 1px rgba(255,255,255,0.08);
 }
 
 /* ==================== Small tile adjustments ==================== */
