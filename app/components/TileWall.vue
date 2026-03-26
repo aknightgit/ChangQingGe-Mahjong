@@ -10,9 +10,7 @@
         v-for="(tower, ti) in row.towers"
         :key="ti"
         class="wall-tower"
-        :class="{
-          'wall-tower--vertical': row.side === 'left' || row.side === 'right'
-        }"
+        :class="`wall-tower--${row.side}`"
       >
         <div class="tower-tile" />
         <div class="tower-tile" />
@@ -25,6 +23,7 @@
 /**
  * 牌墙组件 - 每边固定18剁（18组×2张=36张/边）
  * 每剁(tower) = 2张牌竖叠，长边相连
+ * 牌墙尺寸与手牌一致（34×50 small tile）
  */
 
 const props = defineProps<{
@@ -61,7 +60,7 @@ const wallRows = computed(() => {
   gap: 0;
 }
 
-/* ===== 上下：水平一整排，tower 长边(宽度)相连 ===== */
+/* ===== 上下墙：水平排列，tower 长边(宽度)相连 ===== */
 .wall-row--top {
   top: 10%;
   left: 50%;
@@ -78,7 +77,7 @@ const wallRows = computed(() => {
   flex-wrap: nowrap;
 }
 
-/* ===== 左右：垂直一整排 ===== */
+/* ===== 左右墙：垂直排列 ===== */
 .wall-row--left {
   left: 10%;
   top: 50%;
@@ -97,45 +96,77 @@ const wallRows = computed(() => {
   align-items: center;
 }
 
-/* ===== 单剁：2张牌竖叠 ===== */
-.wall-tower {
+/* ===== 上下墙的 tower：2张牌竖叠(长边相接) ===== */
+.wall-tower--top,
+.wall-tower--bottom {
   display: flex;
-  /* 水平墙：竖叠2张，长边(宽度)相连 */
   flex-direction: column;
-  /* 2张牌之间无缝，长边相接 */
   gap: 0;
   flex-shrink: 0;
 }
 
-/* 左右墙：横叠2张（旋转90度后看起来是竖叠）*/
-.wall-tower--vertical {
-  flex-direction: row;
+/* ===== 左右墙的 tower：2张牌横排(长边相接)，旋转90° ===== */
+.wall-tower--left,
+.wall-tower--right {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex-shrink: 0;
 }
 
+/* ===== 牌墙中的单张牌：与手牌 small 尺寸一致(34×50) ===== */
 .tower-tile {
-  /* 匹配小号手牌尺寸: 34×50px */
-  width: 22px;
-  height: 34px;
-  border-radius: 2px;
-  background: #1a6b3d;
+  width: 34px;
+  height: 50px;
+  border-radius: 3px;
+  background: linear-gradient(155deg, #3da86a 0%, #2e8b57 30%, #1a6b3d 65%, #0d4a28 100%);
   border: 0.5px solid #145a32;
   box-shadow:
-    inset 0 1px 1px rgba(255,255,255,0.18),
-    inset 0 -1px 1px rgba(0,0,0,0.2),
-    0 1px 2px rgba(0,0,0,0.25);
+    inset 0 1px 2px rgba(255,255,255,0.25),
+    inset 0 -2px 3px rgba(0,0,0,0.3),
+    inset 2px 0 1px rgba(255,255,255,0.08),
+    0 1px 3px rgba(0,0,0,0.3);
   position: relative;
   overflow: hidden;
-  background: linear-gradient(155deg, #3da86a 0%, #2e8b57 30%, #1a6b3d 65%, #0d4a28 100%);
+  flex-shrink: 0;
 }
 
-/* 2张牌之间无缝（长边相接）*/
-/* 竖叠: 上张的底边贴着下张的顶边 */
-.wall-tower .tower-tile + .tower-tile {
-  margin-top: -0.5px;
+/* 上下墙：tower内2张牌竖叠，长边相接 */
+.wall-tower--top .tower-tile + .tower-tile,
+.wall-tower--bottom .tower-tile + .tower-tile {
+  margin-top: -1px;
 }
 
-/* 横叠: 左张的右边贴着右张的左边 */
-.wall-tower--vertical .tower-tile + .tower-tile {
-  margin-left: -0.5px;
+/* 左右墙：每张牌旋转90°，使长边沿墙方向 */
+.wall-tower--left .tower-tile,
+.wall-tower--right .tower-tile {
+  transform: rotate(90deg);
+  margin-bottom: -16px;
+  margin-top: -16px;
+}
+
+/* 响应式：缩小牌墙尺寸 */
+@media (max-width: 1300px) {
+  .tower-tile {
+    width: 25px;
+    height: 35px;
+  }
+  .wall-tower--left .tower-tile,
+  .wall-tower--right .tower-tile {
+    margin-bottom: -10px;
+    margin-top: -10px;
+  }
+}
+
+@media (max-width: 900px) {
+  .tower-tile {
+    width: 20px;
+    height: 28px;
+  }
+  .wall-tower--left .tower-tile,
+  .wall-tower--right .tower-tile {
+    margin-bottom: -8px;
+    margin-top: -8px;
+  }
 }
 </style>

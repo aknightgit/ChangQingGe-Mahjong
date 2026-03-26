@@ -40,7 +40,6 @@
       <div class="player-hand-wrapper">
         <!-- 出牌区：叠在手牌上方 -->
         <div class="player-discards" v-if="discards.length">
-          <div class="discards-label">出牌区</div>
           <div class="discards-row">
             <div
               v-for="(tile, i) in discards"
@@ -173,35 +172,6 @@ const onTileClick = (tile: Tile) => {
   gap: 8px;
 }
 
-.player-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  font-size: 0.9rem;
-}
-
-.player-name {
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.player-status {
-  opacity: 0.8;
-  font-size: 0.85rem;
-}
-
-.winner-tag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 8px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: #f44336;
-  color: #fff;
-  font-size: 0.8rem;
-  font-weight: 700;
-}
 
 .player-melds {
   display: flex;
@@ -240,12 +210,6 @@ const onTileClick = (tile: Tile) => {
   top: -50px;
   left: 0;
   z-index: 10;
-}
-
-.discards-label {
-  font-size: 0.8rem;
-  opacity: 0.75;
-  margin-bottom: 2px;
 }
 
 .discards-row {

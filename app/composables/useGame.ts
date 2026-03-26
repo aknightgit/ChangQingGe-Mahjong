@@ -142,10 +142,18 @@ export const useGame = () => {
     isConnected.value = false
   }
 
+  // 防止并发 refresh
+  let isRefreshing = false
+
   const refreshState = async () => {
     if (!gameId.value || !playerId.value) return
-
-    await fetchGameState(gameId.value, playerId.value)
+    if (isRefreshing) return
+    isRefreshing = true
+    try {
+      await fetchGameState(gameId.value, playerId.value)
+    } finally {
+      isRefreshing = false
+    }
   }
 
   const updateState = (data: any) => {
@@ -192,20 +200,25 @@ export const useGame = () => {
 
   const startGame = async () => {
     if (!gameId.value || !playerId.value) return
-    
+
+    console.log('[startGame] Starting game:', gameId.value)
     try {
       const { data } = await useFetch('/api/game/start', {
         method: 'POST',
         body: { gameId: gameId.value, playerId: playerId.value }
       })
-      
+
       if (data.value?.success) {
+        console.log('[startGame] API success, refreshing state...')
         await refreshState()
         // Notify others via socket
         socket.value?.emit('game:state-update', { gameId: gameId.value })
+        console.log('[startGame] Done, phase:', gameState.value?.phase)
+      } else {
+        console.warn('[startGame] API returned non-success:', data.value)
       }
     } catch (e) {
-      console.error('Failed to start game:', e)
+      console.error('[startGame] Failed:', e)
     }
   }
 

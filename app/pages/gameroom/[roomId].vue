@@ -347,7 +347,7 @@ onMounted(() => {
     window.addEventListener('orientationchange', evaluateViewport)
     actionWindowTimer = setInterval(() => {
       nowTs.value = Date.now()
-    }, 100)
+    }, 250)
   }
 })
 
@@ -728,6 +728,12 @@ let isGameStarting = false
 
 const onStartGame = () => {
   if (isGameStarting) return
+  // 防止在游戏已开始时重复触发
+  if (gameState.value?.phase === GamePhase.PLAYING) {
+    console.warn('[onStartGame] Game already in PLAYING phase, skipping dice overlay')
+    return
+  }
+  console.log('[onStartGame] Showing dice overlay, phase:', gameState.value?.phase)
   // 生成随机骰子值用于动画展示
   diceValues.value = [
     Math.floor(Math.random() * 6) + 1,
@@ -741,9 +747,12 @@ const onDealTiles = async () => {
   if (!showDiceOverlay.value || isGameStarting) return
   isGameStarting = true
   showDiceOverlay.value = false
+  console.log('[onDealTiles] Calling startGame API...')
   try {
     await startGame()
+    console.log('[onDealTiles] startGame done, refreshing state...')
     await refreshState()
+    console.log('[onDealTiles] Done, phase:', gameState.value?.phase)
   } finally {
     isGameStarting = false
   }
@@ -986,31 +995,31 @@ const forceDiscard = async (p: Player) => {
 }
 
 .seat-top {
-  top: 4%;
+  top: 1%;
   left: 50%;
   transform: translateX(-50%) rotate(180deg);
-  width: 60%;
+  width: 55%;
 }
 
 .seat-bottom {
-  bottom: 2%;
+  bottom: 0.5%;
   left: 50%;
   transform: translateX(-50%);
   width: 85%;
 }
 
 .seat-left {
-  left: 2%;
+  left: 0.5%;
   top: 50%;
   transform: translateY(-50%) rotate(90deg);
-  width: 60%;
+  width: 55%;
 }
 
 .seat-right {
-  right: 2%;
+  right: 0.5%;
   top: 50%;
   transform: translateY(-50%) rotate(90deg);
-  width: 60%;
+  width: 55%;
 }
 
 /* ===== 本家：手牌 + 动作按钮横排 ===== */
