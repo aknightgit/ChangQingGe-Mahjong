@@ -1,22 +1,8 @@
 <template>
   <div class="table-center-zone">
-    <!-- 弃牌区 (中心出牌) -->
-    <div class="discard-pool" v-if="discards.length">
-      <div
-        v-for="(tile, i) in discards"
-        :key="tile.id"
-        class="pool-tile"
-        :class="{ 'pool-tile--latest': i === discards.length - 1 }"
-      >
-        <MahjongTile
-          :tile="tile"
-          :small="true"
-          :claim-highlight="claimableId === tile.id"
-        />
-      </div>
-    </div>
+    <!-- 弃牌区已移至各玩家手牌区，不再在中央显示 -->
 
-    <!-- 牌墙 -->
+    <!-- 牌墙：双层2.5D效果 -->
     <TileWall :remaining="remainingTiles" />
 
     <!-- 中心信息：倍数 + 百搭小牌 -->
@@ -45,7 +31,6 @@ import TileWall from './TileWall.vue'
 import type { Tile } from '~/types/game'
 
 const props = defineProps<{
-  discards: Tile[]
   remainingTiles: number
   statusMessage: string
   hintMessage?: string
@@ -53,7 +38,6 @@ const props = defineProps<{
   roundMultiplier?: number
   globalMultiplier?: number
   wildTile?: Tile | null
-  claimableId?: string | null
 }>()
 </script>
 

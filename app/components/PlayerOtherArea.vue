@@ -199,9 +199,37 @@ const getArrowChar = (sourcePos: number): string => {
   display: flex;
 }
 
-/* ===== 弃牌区 ===== */
+/* ===== 弃牌区：靠近中央（远离手牌，朝向牌墙）===== */
 .player-other-discards {
+  /* 各家位置：弃牌区在手牌和中央牌墙之间 */
   margin-top: 2px;
+}
+
+/* 上家：弃牌区在手牌上方（朝向中央） */
+.position-top .player-other-discards {
+  margin-top: 0;
+  margin-bottom: 2px;
+  order: -1;
+}
+
+/* 左家：弃牌区在手牌右侧（朝向中央） */
+.position-left .player-other-discards {
+  margin-top: 0;
+  margin-left: 2px;
+  order: 2;
+}
+.position-left .player-area {
+  flex-direction: row-reverse;
+}
+
+/* 右家：弃牌区在手牌左侧（朝向中央） */
+.position-right .player-other-discards {
+  margin-top: 0;
+  margin-right: 2px;
+  order: -1;
+}
+.position-right .player-area {
+  flex-direction: row;
 }
 
 .discards-row {

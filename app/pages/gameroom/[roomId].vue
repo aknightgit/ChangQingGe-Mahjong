@@ -43,6 +43,8 @@
         <!-- Big responsive table -->
         <div class="table-wrapper">
           <div class="mahjong-table">
+            <!-- 绿色桌布内层 -->
+            <div class="table-felt">
             <!-- 左上角: 轮次信息 -->
             <div class="round-info" v-if="gameState?.phase === 'playing'">
               第 {{ currentRound || 1 }} 局
@@ -55,7 +57,6 @@
             </div>
             <!-- 桌面中心: 弃牌池 + 牌墙 + 倍数 -->
             <TableCenter
-              :discards="allDiscards"
               :remaining-tiles="remainingTileCount"
               :status-message="showMobileActionNotice ? '有可用操作 — 请向下滚动查看按钮' : turnMessage"
               hint-message="点击选牌，再次点击出牌。操作按钮将根据规则自动显示。"
@@ -63,7 +64,6 @@
               :round-multiplier="roundMultiplier"
               :global-multiplier="globalMultiplier"
               :wild-tile="wildTile"
-              :claimable-id="claimableDiscardTileId"
             />
 
             <!-- 操作按钮：永远显示在桌面中央（playing阶段） -->
@@ -275,6 +275,8 @@
           @deal="onDealTiles"
         />
       </Teleport>
+      </div>
+      <!-- 绿色桌布内层结束 -->
       </div>
     </div>
   </div>
@@ -907,19 +909,29 @@ const forceDiscard = async (p: Player) => {
 
 .mahjong-table {
   position: relative;
-  width: min(80vw, 900px);
-  max-height: 80vh;
-  aspect-ratio: 4 / 3;
+  width: min(80vw, 80vh, 900px);
+  /* 1:1 正方形，参考图比例 */
+  aspect-ratio: 1 / 1;
   border-radius: 20px;
-  background: #9B7B50;
-  background-image:
-    radial-gradient(ellipse at 30% 40%, rgba(155,123,80,0.7) 0%, transparent 70%),
-    radial-gradient(ellipse at 70% 60%, rgba(140,108,65,0.5) 0%, transparent 70%);
-  border: 4px solid #A07830;
+  /* 深木色外框 */
+  background: #4a2c0a;
+  border: 12px solid #3a2006;
   box-shadow:
-    inset 0 0 0 3px rgba(0, 0, 0, 0.2),
+    inset 0 0 0 3px rgba(90,60,20,0.5),
+    inset 0 0 40px rgba(0,0,0,0.4),
     0 12px 30px rgba(0, 0, 0, 0.8);
-  padding: 14px;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* 绿色麻将桌布内层 */
+.table-felt {
+  position: absolute;
+  inset: 0;
+  /* 绿色桌布 + 中央聚光 */
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(40,90,50,0.95) 0%, rgba(28,65,35,0.98) 45%, rgba(18,42,22,1) 100%);
+  border-radius: 8px;
   overflow: hidden;
 }
 
@@ -1027,28 +1039,28 @@ const forceDiscard = async (p: Player) => {
   top: 1%;
   left: 50%;
   transform: translateX(-50%) rotate(180deg);
-  width: 55%;
+  width: 62%;
 }
 
 .seat-bottom {
   bottom: 0.5%;
   left: 50%;
   transform: translateX(-50%);
-  width: 85%;
+  width: 62%;
 }
 
 .seat-left {
-  left: -1%;
+  left: 0.5%;
   top: 50%;
   transform: translateY(-50%) rotate(90deg);
-  width: 55%;
+  width: 62%;
 }
 
 .seat-right {
-  right: -1%;
+  right: 0.5%;
   top: 50%;
-  transform: translateY(-50%) rotate(90deg);
-  width: 55%;
+  transform: translateY(-50%) rotate(-90deg);
+  width: 62%;
 }
 
 /* ===== 本家：手牌 + 动作按钮横排 ===== */
