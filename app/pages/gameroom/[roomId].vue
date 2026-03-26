@@ -963,10 +963,11 @@ const forceDiscard = async (p: Player) => {
   filter: drop-shadow(0 0 12px rgba(255, 234, 120, 0.8));
 }
 
+/* ===== 座位定位（canvas=100比例） ===== */
 .seat-top {
   top: 4%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) rotate(180deg);
   width: 75%;
 }
 
@@ -977,18 +978,20 @@ const forceDiscard = async (p: Player) => {
   width: 90%;
 }
 
+/* 左手玩家: 手牌+门口左移10%，弃牌区左移30%+上移15% */
 .seat-left {
-  left: 1.5%;
+  left: -8%;
   top: 50%;
   transform: translateY(-50%);
-  width: 22%;
+  width: 28%;
 }
 
+/* 右手玩家: 手牌+门口右移10%，弃牌区右移36%+下移15% */
 .seat-right {
-  right: 1.5%;
+  right: -8%;
   top: 50%;
   transform: translateY(-50%);
-  width: 22%;
+  width: 28%;
 }
 
 /* Side panel */

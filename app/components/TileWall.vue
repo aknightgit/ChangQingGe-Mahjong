@@ -33,20 +33,15 @@ const layout = computed(() => props.layout || 'diamond')
 
 const dealingIndex = ref(-1)
 
-// 牌墙分成4边，每边默认18墩(36张)，按比例缩放
+// 牌墙分成4边，每边固定18墩(36张)
 const wallRows = computed(() => {
-  const total = props.remaining // 剩余牌总数
   const sides = ['top', 'right', 'bottom', 'left'] as const
-  const maxPerSide = 18 // 每边最多18墩
+  const pairsPerSide = 18 // 每边18墩
 
-  return sides.map((side, i) => {
-    // 每边按剩余比例分配
-    const perSide = Math.min(maxPerSide, Math.ceil(total / 4 / 2))
-    return {
-      side,
-      tiles: Array.from({ length: perSide }, (_, j) => j)
-    }
-  })
+  return sides.map((side) => ({
+    side,
+    tiles: Array.from({ length: pairsPerSide }, (_, j) => j)
+  }))
 })
 </script>
 

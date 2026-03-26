@@ -49,13 +49,18 @@
     <div class="player-discards">
       <div class="discards-label">出牌区</div>
       <div class="discards-row">
-        <MahjongTile
+        <div
           v-for="(tile, i) in discards"
           :key="tile.id"
-          :tile="tile"
-          :small="true"
-          :dimmed="isWinner && i !== discards.length - 1"
-        />
+          class="discard-item"
+        >
+          <span v-if="i === discards.length - 1 && !isWinner" class="latest-arrow">▼</span>
+          <MahjongTile
+            :tile="tile"
+            :small="true"
+            :dimmed="isWinner && i !== discards.length - 1"
+          />
+        </div>
       </div>
     </div>
 
@@ -195,7 +200,7 @@ const onTileClick = (tile: Tile) => {
 }
 
 .player-discards {
-  margin-top: 0;
+  margin-top: -60px;
 }
 
 .discards-label {
@@ -208,6 +213,27 @@ const onTileClick = (tile: Tile) => {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.discard-item {
+  position: relative;
+}
+
+.latest-arrow {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.65rem;
+  color: #ffd700;
+  text-shadow: 0 0 6px rgba(255, 215, 0, 0.6);
+  animation: float-arrow 1.2s ease-in-out infinite;
+  z-index: 2;
+}
+
+@keyframes float-arrow {
+  0%, 100% { transform: translateX(-50%) translateY(0); opacity: 1; }
+  50% { transform: translateX(-50%) translateY(-4px); opacity: 0.6; }
 }
 
 /* hand + claim overlay */

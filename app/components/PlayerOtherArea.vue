@@ -91,14 +91,19 @@
       <div v-if="discards.length" class="player-other-discards">
         <div class="discards-label">出牌区</div>
         <div class="discards-row">
-          <MahjongTile
-            v-for="tile in discards"
+          <div
+            v-for="(tile, idx) in discards"
             :key="tile.id"
-            :tile="tile"
-            :small="true"
-            :dimmed="isWinner && tile.id !== discards[discards.length - 1]?.id"
-            :claim-highlight="claimableDiscardTileId === tile.id"
-          />
+            class="discard-item"
+          >
+            <span v-if="idx === discards.length - 1 && !isWinner" class="latest-arrow">▼</span>
+            <MahjongTile
+              :tile="tile"
+              :small="true"
+              :dimmed="isWinner && idx !== discards.length - 1"
+              :claim-highlight="claimableDiscardTileId === tile.id"
+            />
+          </div>
         </div>
         </div>
       </div>
@@ -107,14 +112,19 @@
       <div v-if="discards.length" class="player-other-discards">
         <div class="discards-label">出牌区</div>
         <div class="discards-row">
-          <MahjongTile
-            v-for="tile in discards"
+          <div
+            v-for="(tile, idx) in discards"
             :key="tile.id"
-            :tile="tile"
-            :small="true"
-            :dimmed="isWinner && tile.id !== discards[discards.length - 1]?.id"
-            :claim-highlight="claimableDiscardTileId === tile.id"
-          />
+            class="discard-item"
+          >
+            <span v-if="idx === discards.length - 1 && !isWinner" class="latest-arrow">▼</span>
+            <MahjongTile
+              :tile="tile"
+              :small="true"
+              :dimmed="isWinner && idx !== discards.length - 1"
+              :claim-highlight="claimableDiscardTileId === tile.id"
+            />
+          </div>
         </div>
       </div>
     </template>
@@ -294,5 +304,27 @@ const posColor = computed(() => {
   flex-direction: column;
   align-items: center;
   flex-wrap: nowrap;
+}
+
+/* 最新出牌指示箭头 */
+.discard-item {
+  position: relative;
+}
+
+.latest-arrow {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.65rem;
+  color: #ffd700;
+  text-shadow: 0 0 6px rgba(255, 215, 0, 0.6);
+  animation: float-arrow 1.2s ease-in-out infinite;
+  z-index: 2;
+}
+
+@keyframes float-arrow {
+  0%, 100% { transform: translateX(-50%) translateY(0); opacity: 1; }
+  50% { transform: translateX(-50%) translateY(-4px); opacity: 0.6; }
 }
 </style>
