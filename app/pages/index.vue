@@ -336,33 +336,55 @@ const startPvEGame = async () => {
       headers: { 'Cache-Control': 'no-cache' }
     })
 
+    console.log('[PvE] Create response:', JSON.stringify(response))
+
     if (!response || !response.success) {
-      console.error('Unexpected response creating game:', response)
+      console.error('[PvE] Unexpected response:', response)
       return
     }
 
-    const { gameId, playerId } = response.data || {}
+    const gameId = response.data?.gameId
+    const playerId = response.data?.playerId
+    console.log('[PvE] gameId:', gameId, 'playerId:', playerId)
+
+    if (!gameId) {
+      console.error('[PvE] No gameId in response!')
+      return
+    }
 
     // 2. Join 3 AI bots
     for (const botName of AI_BOT_NAMES) {
-      await $fetch('/api/game/join', {
-        method: 'POST',
-        body: { gameId, playerName: botName },
-        headers: { 'Cache-Control': 'no-cache' }
-      })
+      console.log('[PvE] Joining bot:', botName)
+      try {
+        const joinRes = await $fetch('/api/game/join', {
+          method: 'POST',
+          body: { gameId, playerName: botName },
+          headers: { 'Cache-Control': 'no-cache' }
+        })
+        console.log('[PvE] Bot joined:', botName, JSON.stringify(joinRes))
+      } catch (joinErr) {
+        console.error('[PvE] Bot join failed:', botName, joinErr)
+      }
     }
 
     // 3. Start game
-    await $fetch('/api/game/start', {
-      method: 'POST',
-      body: { gameId, playerId },
-      headers: { 'Cache-Control': 'no-cache' }
-    })
+    console.log('[PvE] Starting game...')
+    try {
+      const startRes = await $fetch('/api/game/start', {
+        method: 'POST',
+        body: { gameId, playerId },
+        headers: { 'Cache-Control': 'no-cache' }
+      })
+      console.log('[PvE] Game started:', JSON.stringify(startRes))
+    } catch (startErr) {
+      console.error('[PvE] Start failed:', startErr)
+    }
 
     // 4. Navigate to game room
+    console.log('[PvE] Navigating to:', `/gameroom/${gameId}?playerId=${playerId}`)
     return navigateTo(`/gameroom/${gameId}?playerId=${playerId}`)
   } catch (e) {
-    console.error('Error starting PvE game:', e)
+    console.error('[PvE] Error:', e)
   } finally {
     isCreatingGame.value = false
   }
