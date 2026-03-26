@@ -47,21 +47,29 @@
       </div>
     </div>
 
-    <!-- 弃牌区 -->
+    <!-- 弃牌区：每列最多6张 -->
     <div v-if="discards.length" class="player-other-discards">
       <div class="discards-row">
         <div
-          v-for="(tile, idx) in discards"
-          :key="tile.id"
-          class="discard-item"
+          v-for="(col, ci) in discardColumns"
+          :key="ci"
+          class="discard-column"
         >
-          <span v-if="idx === discards.length - 1 && !isWinner" class="latest-arrow">▼</span>
-          <MahjongTile
-            :tile="tile"
-            :small="true"
-            :dimmed="isWinner && idx !== discards.length - 1"
-            :claim-highlight="claimableDiscardTileId === tile.id"
-          />
+          <div
+            v-for="(tile, ti) in col"
+            :key="tile.id"
+            class="discard-item"
+          >
+            <span v-if="tile.id === discards[discards.length - 1].id && !isWinner" class="latest-arrow">
+              <svg viewBox="0 0 10 8" class="arrow-svg"><polygon points="5,8 0,0 10,0" fill="#f44336" /></svg>
+            </span>
+            <MahjongTile
+              :tile="tile"
+              :small="true"
+              :dimmed="isWinner && tile.id !== discards[discards.length - 1].id"
+              :claim-highlight="claimableDiscardTileId === tile.id"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -87,6 +95,18 @@ const props = defineProps<{
 const posColor = computed(() => {
   const c: Record<string, string> = { top: 'north', left: 'west', right: 'east' }
   return c[props.position] || 'north'
+})
+
+// 弃牌区分列，每列最多6张
+const MAX_PER_COL = 6
+const discardColumns = computed(() => {
+  const cols: typeof props.discards[] = []
+  for (let i = 0; i < props.discards.length; i++) {
+    const colIdx = Math.floor(i / MAX_PER_COL)
+    if (!cols[colIdx]) cols[colIdx] = []
+    cols[colIdx].push(props.discards[i])
+  }
+  return cols
 })
 
 const isFlowerMeld = (meld: Meld): boolean => {
@@ -199,6 +219,23 @@ const getArrowChar = (sourcePos: number): string => {
   display: flex;
 }
 
+/* 上家：每列1张，纵向排列 */
+.position-top .player-other-hand {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: 1fr;
+  gap: 2px;
+}
+
+/* 左家/右家：每列1张，横向排列 */
+.position-left .player-other-hand,
+.position-right .player-other-hand {
+  display: grid;
+  grid-auto-flow: row;
+  grid-template-columns: 1fr;
+  gap: 2px;
+}
+
 /* ===== 弃牌区：靠近中央（远离手牌，朝向牌墙）===== */
 .player-other-discards {
   /* 各家位置：弃牌区在手牌和中央牌墙之间 */
@@ -234,8 +271,28 @@ const getArrowChar = (sourcePos: number): string => {
 
 .discards-row {
   display: flex;
-  flex-wrap: wrap;
   gap: 1px;
+}
+
+.discard-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* 上家弃牌列：从上往下（朝中央） */
+.position-top .discard-column {
+  flex-direction: column;
+}
+
+/* 左家弃牌列：从左往右（朝中央） */
+.position-left .discard-column {
+  flex-direction: column;
+}
+
+/* 右家弃牌列：从左往右 */
+.position-right .discard-column {
+  flex-direction: column;
 }
 
 .discard-item {
@@ -244,14 +301,18 @@ const getArrowChar = (sourcePos: number): string => {
 
 .latest-arrow {
   position: absolute;
-  top: -12px;
+  top: -8px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 0.55rem;
-  color: #ffd700;
-  text-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
-  animation: fa 1.2s ease-in-out infinite;
   z-index: 2;
+  animation: fa 1.2s ease-in-out infinite;
+}
+
+.arrow-svg {
+  width: 8px;
+  height: 6px;
+  display: block;
+  filter: drop-shadow(0 0 3px rgba(244, 67, 54, 0.6));
 }
 
 @keyframes fa {

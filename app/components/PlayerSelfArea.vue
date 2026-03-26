@@ -42,16 +42,24 @@
         <div class="player-discards" v-if="discards.length">
           <div class="discards-row">
             <div
-              v-for="(tile, i) in discards"
-              :key="tile.id"
-              class="discard-item"
+              v-for="(col, ci) in discardColumns"
+              :key="ci"
+              class="discard-column"
             >
-              <span v-if="i === discards.length - 1 && !isWinner" class="latest-arrow">▼</span>
-              <MahjongTile
-                :tile="tile"
-                :small="true"
-                :dimmed="isWinner && i !== discards.length - 1"
-              />
+              <div
+                v-for="(tile, ti) in col"
+                :key="tile.id"
+                class="discard-item"
+              >
+                <span v-if="tile.id === discards[discards.length - 1].id && !isWinner" class="latest-arrow">
+                  <svg viewBox="0 0 10 8" class="arrow-svg"><polygon points="5,8 0,0 10,0" fill="#f44336" /></svg>
+                </span>
+                <MahjongTile
+                  :tile="tile"
+                  :small="true"
+                  :dimmed="isWinner && tile.id !== discards[discards.length - 1].id"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -111,6 +119,18 @@ const colors = computed(() => props.playerColors || ['#e53935', '#43a047', '#1e8
 const isFlowerMeld = (meld: Meld): boolean => {
   return meld.tiles.some(t => t.suit === 'hua' || t.isFlower)
 }
+
+// 弃牌区分列，每列最多6张
+const MAX_PER_COL = 6
+const discardColumns = computed(() => {
+  const cols: typeof props.discards[] = []
+  for (let i = 0; i < props.discards.length; i++) {
+    const colIdx = Math.floor(i / MAX_PER_COL)
+    if (!cols[colIdx]) cols[colIdx] = []
+    cols[colIdx].push(props.discards[i])
+  }
+  return cols
+})
 function getPlayerIndex(playerId: string): number {
   let hash = 0
   for (let i = 0; i < playerId.length; i++) {
@@ -194,8 +214,13 @@ const onTileClick = (tile: Tile) => {
 
 .discards-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  gap: 2px;
+}
+
+.discard-column {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .discard-item {
@@ -204,14 +229,18 @@ const onTileClick = (tile: Tile) => {
 
 .latest-arrow {
   position: absolute;
-  top: -14px;
+  top: -8px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 0.65rem;
-  color: #ffd700;
-  text-shadow: 0 0 6px rgba(255, 215, 0, 0.6);
-  animation: float-arrow 1.2s ease-in-out infinite;
   z-index: 2;
+  animation: float-arrow 1.2s ease-in-out infinite;
+}
+
+.arrow-svg {
+  width: 8px;
+  height: 6px;
+  display: block;
+  filter: drop-shadow(0 0 3px rgba(244, 67, 54, 0.6));
 }
 
 @keyframes float-arrow {

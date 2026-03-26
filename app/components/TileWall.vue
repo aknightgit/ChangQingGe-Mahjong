@@ -330,36 +330,36 @@ function leftTileStyleOuter(i: number) {
   border-radius: 3px;
   background:
     linear-gradient(180deg,
-      rgba(255,255,255,0.18) 0%,
-      rgba(255,255,255,0.06) 25%,
+      rgba(255,255,255,0.15) 0%,
+      rgba(255,255,255,0.04) 25%,
       transparent 50%,
-      rgba(0,0,0,0.35) 100%),
+      rgba(0,0,0,0.4) 100%),
     linear-gradient(155deg,
-      #2d6b3a 0%,
-      #1a4a28 35%,
-      #0d2e1a 65%,
-      #061810 100%);
-  border: 0.5px solid rgba(180,220,160,0.12);
+      #1a4a28 0%,
+      #123a1e 35%,
+      #0a2212 65%,
+      #040f08 100%);
+  border: 0.5px solid rgba(180,220,160,0.08);
   box-shadow:
-    inset 0 1px 2px rgba(255,255,255,0.15),
-    inset 0 -1px 3px rgba(0,0,0,0.3);
+    inset 0 1px 2px rgba(255,255,255,0.1),
+    inset 0 -1px 3px rgba(0,0,0,0.35);
 }
 
 .tile-back--outer {
   background:
     linear-gradient(180deg,
-      rgba(255,255,255,0.22) 0%,
-      rgba(255,255,255,0.08) 20%,
+      rgba(255,255,255,0.18) 0%,
+      rgba(255,255,255,0.06) 20%,
       transparent 45%,
-      rgba(0,0,0,0.4) 100%),
+      rgba(0,0,0,0.45) 100%),
     linear-gradient(155deg,
-      #357a42 0%,
-      #205532 35%,
-      #123420 65%,
-      #081a0e 100%);
+      #2a6435 0%,
+      #1a4a28 35%,
+      #0e2c18 65%,
+      #05120a 100%);
   box-shadow:
-    inset 0 1px 3px rgba(255,255,255,0.2),
-    inset 0 -2px 4px rgba(0,0,0,0.35);
+    inset 0 1px 3px rgba(255,255,255,0.15),
+    inset 0 -2px 4px rgba(0,0,0,0.4);
 }
 
 /* ===== 2.5D 白色侧面（外层专用） ===== */
