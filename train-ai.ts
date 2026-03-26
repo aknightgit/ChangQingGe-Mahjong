@@ -364,7 +364,7 @@ function removeTile(hand: Tile[], tile: Tile) {
   if (idx >= 0) hand.splice(idx, 1);
 }
 
-function keepScore(hand: Tile[], tile: Tile, isWild: (t: Tile) => boolean, policy: Policy, honorRush = false, meldCount = 0): number {
+function keepScore(hand: Tile[], tile: Tile, isWild: (t: Tile) => boolean, policy: Policy, honorRush = false, meldCount = 0, exposedMelds: Meld[] = []): number {
   if (isWild(tile)) return policy.wildKeepPenalty;
 
   const wildCount = hand.filter(t => isWild(t)).length;
@@ -436,10 +436,19 @@ function keepScore(hand: Tile[], tile: Tile, isWild: (t: Tile) => boolean, polic
   }
 
   // 偏向单花色（冲清一色/清碰）
+  // ★ 把门口副露也纳入花色统计
   const suitCount = new Map<TileSuit, number>();
   for (const t of hand) {
     if (!numberSuits.includes(t.suit)) continue;
     suitCount.set(t.suit, (suitCount.get(t.suit) || 0) + 1);
+  }
+  let meldSameSuitCount = 0;
+  for (const m of exposedMelds) {
+    for (const t of m.tiles) {
+      if (!numberSuits.includes(t.suit)) continue;
+      suitCount.set(t.suit, (suitCount.get(t.suit) || 0) + 1);
+      if (t.suit === tile.suit) meldSameSuitCount++;
+    }
   }
   let dominantSuit: TileSuit | null = null;
   let dominant = 0;
@@ -453,19 +462,31 @@ function keepScore(hand: Tile[], tile: Tile, isWild: (t: Tile) => boolean, polic
       secondDominant = c;
     }
   }
-  const flushAdvantage = dominant - secondDominant; // 花色差距越大越冲清一色
+  const flushAdvantage = dominant - secondDominant;
+
+  // 清碰冲刺：门口副露全部同一花色 → 强烈倾向该花色
+  const allMeldsSameSuit = exposedMelds.length > 0 &&
+    exposedMelds.every(m => m.tiles.length > 0 && numberSuits.includes(m.tiles[0]!.suit) && m.tiles[0]!.suit === exposedMelds[0]!.tiles[0]!.suit);
+
   if (dominantSuit && isNum) {
     if (tile.suit === dominantSuit) {
       score += policy.dominantSuitBonus * attackScale;
-      // 花色优势大时额外加成（冲清一色）
       if (flushAdvantage >= 3) {
         score += policy.flushChaseBonus * (flushAdvantage - 2) * attackScale;
       }
+      // 门口同花色越多，留该花色的加成越大
+      if (allMeldsSameSuit && exposedMelds.length >= 2) {
+        score += policy.flushChaseBonus * exposedMelds.length * 2 * attackScale;
+      }
     } else {
-      // 非主力花色，降低保留意愿（促进清一色）
+      // 非主力花色
       score -= policy.dominantSuitBonus * 0.5;
       if (flushAdvantage >= 4) {
         score -= policy.flushChaseBonus * 2;
+      }
+      // 门口全是同花色时，非该花色牌大幅扣分（逼出清碰）
+      if (allMeldsSameSuit && exposedMelds.length >= 2) {
+        score -= policy.flushChaseBonus * exposedMelds.length * 3 * attackScale;
       }
     }
   }
@@ -481,11 +502,11 @@ function keepScore(hand: Tile[], tile: Tile, isWild: (t: Tile) => boolean, polic
   return score;
 }
 
-function pickDiscard(hand: Tile[], isWild: (t: Tile) => boolean, policy: Policy, honorRush = false, meldCount = 0): Tile {
+function pickDiscard(hand: Tile[], isWild: (t: Tile) => boolean, policy: Policy, honorRush = false, meldCount = 0, exposedMelds: Meld[] = []): Tile {
   let best = hand[0]!;
   let bestScore = Number.POSITIVE_INFINITY;
   for (const t of hand) {
-    const s = keepScore(hand, t, isWild, policy, honorRush, meldCount);
+    const s = keepScore(hand, t, isWild, policy, honorRush, meldCount, exposedMelds);
     if (s < bestScore) {
       bestScore = s;
       best = t;
@@ -725,7 +746,7 @@ function simulateOne(gameNum: number, policy: Policy, ctx: TrainingContext): Gam
       }
     }
 
-    const discard = pickDiscard(player.hand, isWild, policy, honorRush, player.melds.length);
+    const discard = pickDiscard(player.hand, isWild, policy, honorRush, player.melds.length, player.melds);
     removeTile(player.hand, discard);
 
     const huCandidates: Array<{ idx: number; points: number; detail: WinDetail }> = [];
