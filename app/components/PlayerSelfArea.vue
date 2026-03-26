@@ -157,7 +157,7 @@ const onTileClick = (tile: Tile) => {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 56px;
+  min-height: 50px;
 }
 
 .meld {
