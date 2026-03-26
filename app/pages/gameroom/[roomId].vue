@@ -834,7 +834,7 @@ const forceDiscard = async (p: Player) => {
   max-height: 80vh;
   aspect-ratio: 4 / 3;
   border-radius: 20px;
-  background: linear-gradient(180deg, #8B2020 0%, #6B1515 18%, #2D5A3D 48%, #1A3D28 78%, #0D2218 100%);
+  background: linear-gradient(180deg, #9B3030 0%, #7A2020 15%, #8B5E3C 30%, #4A7A50 50%, #2D5A3D 70%, #1A3D28 90%);
   border: 4px solid #A07830;
   box-shadow:
     inset 0 0 0 3px rgba(0, 0, 0, 0.2),

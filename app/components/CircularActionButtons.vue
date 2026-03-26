@@ -56,16 +56,6 @@
       <span class="action-btn__label">胡</span>
     </button>
 
-    <!-- 过按钮：放在大圆下方偏右 -->
-    <button
-      v-if="hasAnyPriorityAction"
-      class="action-btn action-btn--pass"
-      :class="{ 'action-btn--pass-active': true }"
-      :disabled="isInteractionLocked"
-      @click="$emit('action', 'pass')"
-    >
-      <span class="action-btn__label">过</span>
-    </button>
   </div>
 </template>
 
@@ -291,29 +281,6 @@ const isDelaying = computed(() => {
   transform: translateY(-50%) scale(1.1);
 }
 
-/* 过按钮 */
-.action-btn--pass {
-  bottom: -6px;
-  right: -6px;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: rgba(123, 26, 26, 0.85);
-  border-color: rgba(255, 100, 100, 0.4);
-  color: #ffdada;
-  font-size: 0.75rem;
-  cursor: pointer;
-}
-
-.action-btn--pass .action-btn__label {
-  font-size: 0.75rem;
-}
-
-.action-btn--pass:hover {
-  background: rgba(160, 38, 38, 1);
-  transform: scale(1.1);
-}
-
 /* 紧凑模式 */
 .circular-actions--compact .action-btn--center {
   width: 64px;
@@ -334,15 +301,6 @@ const isDelaying = computed(() => {
 
 .circular-actions--compact .action-btn__label {
   font-size: 0.8rem;
-}
-
-.circular-actions--compact .action-btn--pass {
-  width: 32px;
-  height: 32px;
-}
-
-.circular-actions--compact .action-btn--pass .action-btn__label {
-  font-size: 0.65rem;
 }
 
 /* 移动端 */

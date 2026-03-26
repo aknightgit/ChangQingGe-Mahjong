@@ -156,14 +156,14 @@ const chineseNum = computed(() => {
 
 /* ==================== 万子 ==================== */
 .tile-char-top {
-  font-size: 1.2rem;
+  font-size: 1.8rem;
   font-weight: 900;
   color: #1a1a1a;
   line-height: 1;
 }
 
 .tile-char-bottom {
-  font-size: 1.5rem;
+  font-size: 2rem;
   font-weight: 700;
   color: #c62828;
   line-height: 1;
@@ -254,20 +254,13 @@ const chineseNum = computed(() => {
   cursor: default;
 }
 
-/* ==================== 牌背 ==================== */
+/* ==================== 牌背 - 绿色渐变立体 ==================== */
 .tile-back-pattern {
-  width: 72%;
-  height: 72%;
+  width: 80%;
+  height: 80%;
   border-radius: 3px;
-  background:
-    repeating-linear-gradient(
-      45deg,
-      #1a7a5a,
-      #1a7a5a 3px,
-      #0d5a3e 3px,
-      #0d5a3e 6px
-    );
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.15), inset 0 2px 4px rgba(0,0,0,0.2);
+  background: linear-gradient(145deg, #2e8b57, #1a6b3d, #0d4a28);
+  box-shadow: inset 0 1px 3px rgba(255,255,255,0.2), inset 0 -1px 3px rgba(0,0,0,0.3);
 }
 
 /* ==================== Small tile adjustments ==================== */

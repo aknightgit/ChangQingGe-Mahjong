@@ -92,12 +92,12 @@ const wallRows = computed(() => {
 }
 
 .wall-tile {
-  width: 14px;
-  height: 20px;
-  border-radius: 2px;
-  background: #fdfaf3;
-  border: 1px solid #d4c5a0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  width: 22px;
+  height: 32px;
+  border-radius: 3px;
+  background: #faf6ee;
+  border: 1px solid #c4b590;
+  box-shadow: 1px 2px 0 #8a7a5a, 0 1px 3px rgba(0, 0, 0, 0.3);
   overflow: hidden;
   position: relative;
   transition: opacity 0.3s ease;
@@ -115,19 +115,14 @@ const wallRows = computed(() => {
 }
 
 .wall-tile-back {
-  width: 70%;
-  height: 70%;
+  width: 75%;
+  height: 75%;
   position: absolute;
-  top: 15%;
-  left: 15%;
-  border-radius: 1px;
-  background: repeating-linear-gradient(
-    45deg,
-    #00897b,
-    #00897b 2px,
-    #004d40 2px,
-    #004d40 4px
-  );
+  top: 12%;
+  left: 12%;
+  border-radius: 2px;
+  background: linear-gradient(145deg, #2e8b57, #1a6b3d, #0d4a28);
+  box-shadow: inset 0 1px 2px rgba(255,255,255,0.15), inset 0 -1px 2px rgba(0,0,0,0.2);
 }
 
 /* 牌墙展开时左/右边的牌也水平排列 */
