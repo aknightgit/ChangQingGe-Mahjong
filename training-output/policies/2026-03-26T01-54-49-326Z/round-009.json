@@ -1,20 +1,20 @@
 {
-  "savedAt": "2026-03-26T02:04:40.209Z",
-  "round": 10,
+  "savedAt": "2026-03-26T02:03:45.728Z",
+  "round": 9,
   "metrics": {
-    "fitness": 125.19895510907006,
-    "huRate": 0.894,
-    "drawRate": 0.106,
-    "lastPlayerRate": 0.5295,
-    "avgRounds": 83.5385,
-    "avgPot": 144.228,
-    "selfDrawRate": 0.7187141216991964,
-    "bigHandRate": 0.036969001148105626,
-    "menQingRate": 0.10355912743972445,
-    "avgWinnerPoints": 20.60505166475316
+    "fitness": 114.87759167830271,
+    "huRate": 0.8865,
+    "drawRate": 0.1135,
+    "lastPlayerRate": 0.519,
+    "avgRounds": 83.7455,
+    "avgPot": 140.909,
+    "selfDrawRate": 0.7272515708633931,
+    "bigHandRate": 0.03886432394693973,
+    "menQingRate": 0.09518268559460089,
+    "avgWinnerPoints": 20.647428438445427
   },
   "policy": {
-    "id": "champion-r10",
+    "id": "champion-r9",
     "selfWinChance": 0.99,
     "selfWinWildBoost": 0,
     "discardHuChance": 0.8885767034960589,
