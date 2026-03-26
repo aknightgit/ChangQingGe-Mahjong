@@ -117,27 +117,34 @@ const TOWERS = 18
   border-radius: 3px;
   flex-shrink: 0;
 
-  /* 2.5D 绿色牌面 */
-  background: linear-gradient(
-    160deg,
-    #4aba7a 0%,
-    #2e8b57 35%,
-    #1a6b3d 65%,
-    #0d4a28 100%
-  );
-  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  /* 2.5D 深森林绿牌背：参考截图的暗绿调 */
+  background:
+    /* 浅绿圆点纹路层（斜向点阵） */
+    radial-gradient(circle at 30% 30%, rgba(60,140,80,0.35) 0%, transparent 35%),
+    radial-gradient(circle at 70% 60%, rgba(60,140,80,0.25) 0%, transparent 30%),
+    radial-gradient(circle at 50% 80%, rgba(60,140,80,0.2) 0%, transparent 25%),
+    /* 底色：从深绿到次深绿 */
+    linear-gradient(
+      160deg,
+      #1a4a2a 0%,
+      #0f3320 25%,
+      #0a2820 55%,
+      #061a12 100%
+    );
+  border: 0.5px solid rgba(80, 180, 100, 0.2);
 
-  /* 顶部高光（厚度感） */
+  /* 2.5D 厚度感：顶部高光 + 底部暗角 + 投影 */
   box-shadow:
-    /* 上边缘高光 */
-    inset 0 1.5px 2px rgba(255, 255, 255, 0.28),
-    /* 下边缘阴影 */
-    inset 0 -1.5px 2px rgba(0, 0, 0, 0.25),
-    /* 右边薄边 */
-    inset 2px 0 1px rgba(255, 255, 255, 0.08),
+    /* 顶部强高光（光泽感） */
+    inset 0 2px 3px rgba(100, 220, 140, 0.25),
+    inset 0 1px 1px rgba(150, 255, 180, 0.15),
+    /* 底部暗角（厚度感） */
+    inset 0 -3px 4px rgba(0, 0, 0, 0.5),
+    inset -1px 0 1px rgba(0, 0, 0, 0.2),
+    inset 1px 0 1px rgba(0, 0, 0, 0.2),
     /* 整体投影 */
-    0 2px 4px rgba(0, 0, 0, 0.35),
-    0 4px 8px rgba(0, 0, 0, 0.15);
+    0 3px 6px rgba(0, 0, 0, 0.5),
+    0 6px 12px rgba(0, 0, 0, 0.25);
   position: relative;
 }
 
@@ -150,23 +157,23 @@ const TOWERS = 18
 /* ===== 响应式缩小 ===== */
 @media (max-width: 1300px) {
   .flat-tile {
-    width: 22px;
-    height: 14px;
+    width: 24px;
+    height: 15px;
   }
   .flat-tile.rotated {
-    width: 14px;
-    height: 22px;
+    width: 15px;
+    height: 24px;
   }
 }
 
 @media (max-width: 900px) {
   .flat-tile {
-    width: 16px;
-    height: 10px;
+    width: 18px;
+    height: 11px;
   }
   .flat-tile.rotated {
-    width: 10px;
-    height: 16px;
+    width: 11px;
+    height: 18px;
   }
 }
 </style>
