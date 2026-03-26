@@ -20,7 +20,7 @@
           v-for="(meld, i) in melds"
           :key="i"
           class="other-meld"
-          :class="`other-meld--${meld.type}`"
+          :class="[`other-meld--${meld.type}`, { 'other-meld--flower': isFlowerMeld(meld), 'other-meld--concealed': meld.type === 'concealed_kong' }]"
         >
           <MahjongTile
             v-for="tile in meld.tiles"
@@ -88,6 +88,10 @@ const posColor = computed(() => {
   const c: Record<string, string> = { top: 'north', left: 'west', right: 'east' }
   return c[props.position] || 'north'
 })
+
+const isFlowerMeld = (meld: Meld): boolean => {
+  return meld.tiles.some(t => t.suit === 'hua' || t.isFlower)
+}
 
 // 根据相对位置返回来源箭头字符
 const getArrowChar = (sourcePos: number): string => {
@@ -164,6 +168,18 @@ const getArrowChar = (sourcePos: number): string => {
   background: rgba(17, 43, 33, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.1);
   position: relative;
+}
+
+/* 花牌 meld：金色边框 */
+.other-meld--flower {
+  border-color: rgba(255, 215, 0, 0.45) !important;
+  background: rgba(255, 215, 0, 0.08) !important;
+}
+
+/* 暗杠 meld：紫色边框 */
+.other-meld--concealed {
+  border-color: rgba(171, 71, 188, 0.45) !important;
+  background: rgba(171, 71, 188, 0.08) !important;
 }
 
 .other-meld--kong {

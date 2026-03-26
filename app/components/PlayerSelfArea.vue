@@ -18,7 +18,7 @@
           v-for="(meld, i) in melds"
           :key="i"
           class="meld"
-          :class="`meld--${meld.type}`"
+          :class="[`meld--${meld.type}`, { 'meld--flower': isFlowerMeld(meld), 'meld--concealed': meld.type === 'concealed_kong' }]"
         >
           <MahjongTile
             v-for="tile in meld.tiles"
@@ -109,6 +109,10 @@ const props = defineProps<{
 }>()
 
 const colors = computed(() => props.playerColors || ['#e53935', '#43a047', '#1e88e5', '#fb8c00'])
+
+const isFlowerMeld = (meld: Meld): boolean => {
+  return meld.tiles.some(t => t.suit === 'hua' || t.isFlower)
+}
 function getPlayerIndex(playerId: string): number {
   let hash = 0
   for (let i = 0; i < playerId.length; i++) {
@@ -189,10 +193,23 @@ const onTileClick = (tile: Tile) => {
 
 .meld {
   display: inline-flex;
+  align-items: center;
   padding: 4px 6px;
   border-radius: 8px;
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* 花牌 meld：金色边框 + 背景 */
+.meld--flower {
+  border-color: rgba(255, 215, 0, 0.45) !important;
+  background: rgba(255, 215, 0, 0.08) !important;
+}
+
+/* 暗杠 meld：紫色边框 + 背景 */
+.meld--concealed {
+  border-color: rgba(171, 71, 188, 0.45) !important;
+  background: rgba(171, 71, 188, 0.08) !important;
 }
 
 .meld--kong {
