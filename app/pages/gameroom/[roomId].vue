@@ -67,7 +67,7 @@
             />
 
             <!-- 操作按钮：永远显示在桌面中央（playing阶段） -->
-            <div class="center-actions" v-if="gameState?.phase === 'playing' && availableActions.length">
+            <div class="center-actions" v-if="gameState?.phase === 'playing'">
               <CircularActionButtons
                 :available-actions="availableActions"
                 :is-connected="isConnected"
@@ -201,7 +201,7 @@
           />
 
           <!-- 功能菜单：紧贴战绩榜下方 -->
-          <div class="ext-section ext-section--actions" v-if="gameState?.phase === 'playing' && availableActions.length">
+          <div class="ext-section ext-section--actions" v-if="gameState?.phase === 'playing'">
             <h3 class="ext-title">操作</h3>
             <CircularActionButtons
               :available-actions="availableActions"
