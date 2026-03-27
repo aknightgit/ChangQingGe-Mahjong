@@ -78,9 +78,9 @@ const onClick = () => {
 const tileImageSrc = computed(() => {
   const { suit, value } = props.tile
 
-  // 数字牌
-  if (suit === 'man') return `/assets/tileset/pomax_hq/Man${value}.png`
-  if (suit === 'dots') return `/assets/tileset/pomax_hq/Pin${value}.png`
+  // 数字牌 (注意: 服务器端 TileSuit.CHARACTERS = 'wan')
+  if (suit === 'wan' || suit === 'man') return `/assets/tileset/pomax_hq/Man${value}.png`
+  if (suit === 'dots' || suit === 'tong') return `/assets/tileset/pomax_hq/Pin${value}.png`
   if (suit === 'tiao') return `/assets/tileset/pomax_hq/Sou${value}.png`
 
   // 风牌

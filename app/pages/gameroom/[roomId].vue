@@ -649,13 +649,15 @@ const handleCircularAction = (type: string) => {
       onPeng()
       break
     case 'kong':
-      // 优先检测暗杠/续杠
-      if (showConcealedKong.value) {
-        onConcealedKong()
+      // 杠牌优先级：明杠(弃牌) > 续杠 > 暗杠
+      // 明杠是响应式操作（别人出的牌），优先级最高
+      // 续杠和暗杠是自摸操作，续杠修改已有的副露，优先级高于暗杠
+      if (showKong.value) {
+        onKong()
       } else if (showExtendedKong.value) {
         onExtendedKong()
-      } else {
-        onKong()
+      } else if (showConcealedKong.value) {
+        onConcealedKong()
       }
       break
     case 'hu':

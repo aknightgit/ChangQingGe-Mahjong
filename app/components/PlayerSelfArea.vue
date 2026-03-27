@@ -111,7 +111,8 @@ const props = defineProps<{
   claimCandidateIds?: string[]
   showClaimOptions?: boolean
   claimType?: MeldType | null
-
+  bailoutCounts?: Record<string, number>
+  playerColors?: string[]
 }>()
 
 const colors = computed(() => props.playerColors || ['#e53935', '#43a047', '#1e88e5', '#fb8c00'])
@@ -141,9 +142,16 @@ function getPlayerIndex(playerId: string): number {
 
 const emit = defineEmits<{
   (e: 'tileClick', tile: Tile): void
-  (e: 'confirmClaim'): void
-  (e: 'skipClaim'): void
 }>()
+
+const confirmClaim = () => {
+  // Claim logic handled by parent via availableActions
+  // This button is part of the claim overlay (unused in current flow)
+}
+
+const skipClaim = () => {
+  // Skip claim - parent handles via pass action
+}
 
 const onTileClick = (tile: Tile) => {
   emit('tileClick', tile)
