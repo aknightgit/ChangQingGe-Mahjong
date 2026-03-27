@@ -219,16 +219,19 @@ const getArrowChar = (sourcePos: number): string => {
   display: flex;
 }
 
-/* 上家：每列1张，纵向排列 */
+/* 上家：长边贴靠，水平排列 */
 .player-other--top .player-other-hand {
   flex-direction: row;
+  flex-wrap: wrap;
   gap: 2px;
 }
 
-/* 左家/右家：每列1张，横向排列 */
+/* 左家/右家：长边贴靠，水平排列（整体旋转90°） */
 .player-other--left .player-other-hand,
 .player-other--right .player-other-hand {
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
+  max-width: 280px;
   gap: 2px;
 }
 
