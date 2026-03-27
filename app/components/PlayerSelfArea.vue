@@ -201,7 +201,8 @@ const onTileClick = (tile: Tile) => {
   position: absolute;
   top: -50px;
   left: 0;
-  z-index: 10;
+  z-index: 15;
+  background: rgba(255, 255, 0, 0.25); /* 调试用黄色边框，发布时删除 */
 }
 
 .discards-grid {

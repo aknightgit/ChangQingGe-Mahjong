@@ -222,6 +222,8 @@ const getArrowChar = (sourcePos: number): string => {
 .player-other-discards {
   /* 各家位置：弃牌区在手牌和中央牌墙之间 */
   margin-top: 8px;
+  z-index: 15; /* 在牌墙z-index=1之上 */
+  min-width: 186px; /* 6张牌的最小宽度 */
 }
 
 /* 上家：弃牌区在手牌上方（朝向中央） */
