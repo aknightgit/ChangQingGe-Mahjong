@@ -66,7 +66,6 @@
               :wild-tile="wildTile"
             />
 
-                        </div>
             </div>
 
             <!-- Top player -->
