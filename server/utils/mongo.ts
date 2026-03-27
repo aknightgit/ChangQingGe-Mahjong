@@ -29,7 +29,16 @@ function getDefaultDbName(): string {
 export async function getMongoClient(): Promise<MongoClient> {
 	if (g._mongoClient) return g._mongoClient
 
-	const client = new MongoClient(getMongoUri())
+	const client = new MongoClient(getMongoUri(), {
+		connectTimeoutMS: 30000,       // 连接超时 30s（NAS 网络延迟）
+		socketTimeoutMS: 120000,       // Socket 超时 120s
+		serverSelectionTimeoutMS: 30000, // 服务选择超时 30s
+		retryWrites: true,             // 写入失败自动重试
+		retryReads: true,              // 读取失败自动重试
+		maxPoolSize: 10,               // 连接池
+		minPoolSize: 1,
+		heartbeatFrequencyMS: 10000,
+	})
 	// Ensure the connection is valid by pinging admin
 	await client.db('admin').command({ ping: 1 })
 	g._mongoClient = client

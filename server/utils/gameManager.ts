@@ -208,14 +208,19 @@ class GameManager {
 
   private async hydrateFromDatabase() {
     if (this.isHydrated) return;
-    const persistedGames = await loadAllGameStates();
-    for (const game of persistedGames) {
-      this.games.set(game.gameId, game);
-      for (const player of game.players) {
-        this.playerToGame.set(player.id, game.gameId);
+    try {
+      const persistedGames = await loadAllGameStates();
+      for (const game of persistedGames) {
+        this.games.set(game.gameId, game);
+        for (const player of game.players) {
+          this.playerToGame.set(player.id, game.gameId);
+        }
       }
+      console.log(`✅ Hydrated ${persistedGames.length} games from MongoDB`);
+    } catch (error: any) {
+      console.warn('⚠️ MongoDB hydrate failed (will use in-memory only):', error.message);
     }
-    this.isHydrated = true;
+    this.isHydrated = true; // 标记为已处理，防止重复重试
   }
 
   private async ensureGameLoaded(gameId: string): Promise<GameState | undefined> {
@@ -236,7 +241,11 @@ class GameManager {
   }
 
   private async persistGame(game: GameState) {
-    await saveGameState(game);
+    try {
+      await saveGameState(game);
+    } catch (error: any) {
+      console.warn('⚠️ MongoDB persist failed:', error.message);
+    }
   }
 
   private broadcastGameState(gameId: string) {
