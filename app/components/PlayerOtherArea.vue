@@ -222,21 +222,21 @@ const getArrowChar = (sourcePos: number): string => {
 /* ===== 弃牌区：靠近中央（远离手牌，朝向牌墙）===== */
 .player-other-discards {
   /* 各家位置：弃牌区在手牌和中央牌墙之间 */
-  margin-top: 2px;
+  margin-top: 8px;
 }
 
 /* 上家：弃牌区在手牌上方（朝向中央） */
 /* 弃牌区在手牌和中央之间（靠近中心），自然DOM顺序就够了 */
 .player-other--top .player-other-discards {
-  margin-bottom: 6px;
+  margin-bottom: 12px;
 }
 
 .player-other--left .player-other-discards {
-  margin-left: 4px;
+  margin-left: 8px;
 }
 
 .player-other--right .player-other-discards {
-  margin-right: 4px;
+  margin-right: 8px;
 }
 
 .discards-grid {
