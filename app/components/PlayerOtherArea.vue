@@ -210,49 +210,37 @@ const getArrowChar = (sourcePos: number): string => {
   gap: 2px;
 }
 
-/* 左家/右家：长边贴靠，水平排列（整体旋转90°），不换行 */
+/* 左家/右家：不旋转座椅，纵向排列贴边缘 */
 .player-other--left .player-other-hand,
 .player-other--right .player-other-hand {
-  flex-direction: row;
+  flex-direction: column;
   flex-wrap: nowrap;
   gap: 0;
 }
 
-/* ===== 弃牌区：靠近中央（远离手牌，朝向牌墙）===== */
+/* ===== 弃牌区 ===== */
 .player-other-discards {
-  /* 各家位置：弃牌区在手牌和中央牌墙之间 */
-  margin-top: 8px;
-  z-index: 15; /* 在牌墙z-index=1之上 */
-  min-width: 186px; /* 6张牌的最小宽度 */
+  z-index: 15;
 }
 
-/* 上家：弃牌区在手牌上方（朝向中央） */
-/* 弃牌区在手牌和中央之间（靠近中心），自然DOM顺序就够了 */
 .player-other--top .player-other-discards {
   margin-bottom: 12px;
 }
 
+/* 左家弃牌在内侧（靠近中心） */
 .player-other--left .player-other-discards {
-  transform: rotate(-90deg);
-  transform-origin: center center;
-  margin-left: 8px;
+  margin-left: 4px;
 }
 
+/* 右家弃牌在内侧（靠近中心） */
 .player-other--right .player-other-discards {
-  margin-right: 8px;
+  margin-right: 4px;
 }
 
 .discards-grid {
   display: grid;
   grid-template-columns: repeat(6, max-content);
   gap: 1px;
-}
-
-/* 右家：座位已+90°旋转，弃牌区需要补偿旋转使牌面正向 */
-.player-other--right .player-other-discards {
-  transform: rotate(-90deg);
-  transform-origin: center center;
-  margin-right: 8px;
 }
 
 .discard-item {

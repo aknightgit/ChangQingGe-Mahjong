@@ -1010,6 +1010,7 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   justify-content: center;
   align-items: center;
+  z-index: 5; /* 在牌墙z-index=1之上 */
   transition: transform 0.15s ease, filter 0.15s ease;
 }
 
@@ -1023,14 +1024,9 @@ const forceDiscard = async (p: Player) => {
   transform: rotate(180deg);
 }
 
-.seat-left :deep(.player-other-name) {
-  display: inline-block;
-  transform: rotate(-90deg);
-}
-
+.seat-left :deep(.player-other-name),
 .seat-right :deep(.player-other-name) {
   display: inline-block;
-  transform: rotate(-90deg);
 }
 
 .seat-top {
@@ -1049,16 +1045,22 @@ const forceDiscard = async (p: Player) => {
 
 .seat-left {
   left: 0;
-  top: 50%;
-  transform: translateY(-50%) rotate(90deg);
-  width: 88%;
+  top: 0;
+  height: 100%;
+  width: 60px;
+  flex-direction: column;
+  align-items: flex-start; /* 手牌贴左边缘（桌子边缘） */
+  justify-content: center; /* 内容整体垂直居中 */
 }
 
 .seat-right {
   right: 0;
-  top: 50%;
-  transform: translateY(-50%) rotate(90deg);
-  width: 88%;
+  top: 0;
+  height: 100%;
+  width: 60px;
+  flex-direction: column;
+  align-items: flex-end; /* 手牌贴右边缘（桌子边缘） */
+  justify-content: center; /* 内容整体垂直居中 */
 }
 
 /* ===== 本家：手牌 + 动作按钮横排 ===== */
