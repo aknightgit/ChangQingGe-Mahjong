@@ -16,7 +16,17 @@ export default defineEventHandler(async (event) => {
   const normalizedGameId = gameId as string;
   const normalizedPlayerId = playerId as string;
 
-  const game = await gameManager.getGame(normalizedGameId);
+  let game;
+  try {
+    game = await gameManager.getGame(normalizedGameId);
+  } catch (err: any) {
+    console.warn('⚠️ getGame failed:', err.message);
+    // MongoDB may be slow; try in-memory fallback
+    game = gameManager.getGameInMemory?.(normalizedGameId);
+    if (!game) {
+      throw createError({ statusCode: 503, message: 'Database temporarily unavailable, please retry' });
+    }
+  }
   
   if (!game) {
     throw createError({
@@ -34,7 +44,13 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const availableActions = await gameManager.getAvailableActions(normalizedGameId, normalizedPlayerId);
+  let availableActions: string[] = [];
+  try {
+    availableActions = await gameManager.getAvailableActions(normalizedGameId, normalizedPlayerId);
+  } catch (err: any) {
+    console.warn('⚠️ getAvailableActions failed:', err.message);
+    availableActions = [];
+  }
 
   const isAdminUser = await isAdminFromEvent(event);
 

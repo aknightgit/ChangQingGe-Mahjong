@@ -228,13 +228,17 @@ class GameManager {
       return this.games.get(gameId);
     }
 
-    const stored = await loadGameState(gameId);
-    if (stored) {
-      this.games.set(gameId, stored);
-      for (const player of stored.players) {
-        this.playerToGame.set(player.id, gameId);
+    try {
+      const stored = await loadGameState(gameId);
+      if (stored) {
+        this.games.set(gameId, stored);
+        for (const player of stored.players) {
+          this.playerToGame.set(player.id, gameId);
+        }
+        return stored;
       }
-      return stored;
+    } catch (err: any) {
+      console.warn('⚠️ ensureGameLoaded failed:', err.message);
     }
 
     return undefined;
@@ -530,9 +534,10 @@ class GameManager {
    * Get available actions for a player
    */
   async getAvailableActions(gameId: string, playerId: string): Promise<ActionType[]> {
-    await this.hydrateFromDatabase();
-    const game = await this.ensureGameLoaded(gameId);
-    if (!game || game.phase !== GamePhase.PLAYING) return [];
+    try {
+      await this.hydrateFromDatabase();
+      const game = await this.ensureGameLoaded(gameId);
+      if (!game || game.phase !== GamePhase.PLAYING) return [];
 
     const player = game.players.find(p => p.id === playerId);
     if (!player || player.status !== PlayerStatus.PLAYING) return [];
@@ -604,6 +609,10 @@ class GameManager {
     }
 
     return actions;
+    } catch (err: any) {
+      console.warn('⚠️ getAvailableActions failed:', err.message);
+      return [];
+    }
   }
 
   /**
