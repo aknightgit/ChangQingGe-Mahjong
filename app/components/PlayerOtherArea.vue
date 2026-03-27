@@ -232,6 +232,8 @@ const getArrowChar = (sourcePos: number): string => {
 }
 
 .player-other--left .player-other-discards {
+  transform: rotate(-90deg);
+  transform-origin: center center;
   margin-left: 8px;
 }
 
@@ -240,11 +242,16 @@ const getArrowChar = (sourcePos: number): string => {
 }
 
 .discards-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(6, max-content);
   gap: 1px;
-  width: max-content;
-  max-width: 100%;
+}
+
+/* 右家：座位已+90°旋转，弃牌区需要补偿旋转使牌面正向 */
+.player-other--right .player-other-discards {
+  transform: rotate(-90deg);
+  transform-origin: center center;
+  margin-right: 8px;
 }
 
 .discard-item {

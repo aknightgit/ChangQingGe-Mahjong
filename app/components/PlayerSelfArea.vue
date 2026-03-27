@@ -205,11 +205,9 @@ const onTileClick = (tile: Tile) => {
 }
 
 .discards-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(6, max-content);
   gap: 2px;
-  width: max-content;
-  max-width: 100%;
 }
 
 .discard-item {
