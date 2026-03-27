@@ -123,6 +123,13 @@ export const useGame = () => {
         await refreshState()
       })
 
+      // Listen for server's broadcastGameState events (different name from action-triggered events)
+      socket.value.on('gameStateUpdate', async (data) => {
+        console.log('GameStateUpdate from server:', data)
+        lastStateChangeAt.value = Date.now()
+        await refreshState()
+      })
+
       socket.value.on('game:action-received', async (data) => {
         console.log('Action received:', data)
         lastStateChangeAt.value = Date.now()
