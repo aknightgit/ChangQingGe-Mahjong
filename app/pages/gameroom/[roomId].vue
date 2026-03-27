@@ -66,18 +66,7 @@
               :wild-tile="wildTile"
             />
 
-            <!-- 操作按钮：永远显示在桌面中央（playing阶段） -->
-            <div class="center-actions" v-if="gameState?.phase === 'playing'">
-              <CircularActionButtons
-                :available-actions="availableActions"
-                :is-connected="isConnected"
-                :is-interaction-locked="isInteractionLocked"
-                :last-state-change-at="lastStateChangeAt"
-                :now-ts="nowTs"
-                :highlight-delay-ms="ACTION_HIGHLIGHT_DELAY_MS"
-                @action="handleCircularAction"
-              />
-            </div>
+                        </div>
             </div>
 
             <!-- Top player -->

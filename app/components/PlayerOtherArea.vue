@@ -224,18 +224,24 @@ const getArrowChar = (sourcePos: number): string => {
   min-width: 186px; /* 6张牌最小宽度 */
 }
 
+/* 弃牌区旋转：牌头部朝向与玩家一致 */
 .player-other--top .player-other-discards {
   margin-bottom: 12px;
+  transform: rotate(180deg); /* 上家：头部朝下 */
 }
 
-/* 左家弃牌：在手牌下方（朝中心方向），用手牌宽度的偏移量 */
+.player-other--bottom .player-other-discards {
+  transform: rotate(0deg); /* 本家：头部朝上（默认） */
+}
+
 .player-other--left .player-other-discards {
   margin-top: 8px;
+  transform: rotate(90deg); /* 左家：头部朝右 */
 }
 
-/* 右家弃牌：在手牌下方（朝中心方向） */
 .player-other--right .player-other-discards {
   margin-top: 8px;
+  transform: rotate(270deg); /* 右家：头部朝左 */
 }
 
 .discards-grid {
