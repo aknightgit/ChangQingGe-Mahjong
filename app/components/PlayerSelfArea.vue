@@ -40,26 +40,20 @@
       <div class="player-hand-wrapper">
         <!-- 出牌区：叠在手牌上方 -->
         <div class="player-discards" v-if="discards.length">
-          <div class="discards-row">
+          <div class="discards-grid">
             <div
-              v-for="(col, ci) in discardColumns"
-              :key="ci"
-              class="discard-column"
+              v-for="(tile, ti) in discards"
+              :key="tile.id"
+              class="discard-item"
             >
-              <div
-                v-for="(tile, ti) in col"
-                :key="tile.id"
-                class="discard-item"
-              >
-                <span v-if="tile.id === discards[discards.length - 1].id && !isWinner" class="latest-arrow">
-                  <svg viewBox="0 0 10 8" class="arrow-svg"><polygon points="5,8 0,0 10,0" fill="#f44336" /></svg>
-                </span>
-                <MahjongTile
-                  :tile="tile"
-                  :small="true"
-                  :dimmed="isWinner && tile.id !== discards[discards.length - 1].id"
-                />
-              </div>
+              <span v-if="tile.id === discards[discards.length - 1].id && !isWinner" class="latest-arrow">
+                <svg viewBox="0 0 10 8" class="arrow-svg"><polygon points="5,8 0,0 10,0" fill="#f44336" /></svg>
+              </span>
+              <MahjongTile
+                :tile="tile"
+                :small="true"
+                :dimmed="isWinner && tile.id !== discards[discards.length - 1].id"
+              />
             </div>
           </div>
         </div>
@@ -121,17 +115,7 @@ const isFlowerMeld = (meld: Meld): boolean => {
   return meld.tiles.some(t => t.suit === 'hua' || t.isFlower)
 }
 
-// 弃牌区分列，每列最多6张
-const MAX_PER_COL = 6
-const discardColumns = computed(() => {
-  const cols: typeof props.discards[] = []
-  for (let i = 0; i < props.discards.length; i++) {
-    const colIdx = Math.floor(i / MAX_PER_COL)
-    if (!cols[colIdx]) cols[colIdx] = []
-    cols[colIdx].push(props.discards[i])
-  }
-  return cols
-})
+// 弃牌区每行6张，自动换行（由CSS flex-wrap处理，无需computed）
 function getPlayerIndex(playerId: string): number {
   let hash = 0
   for (let i = 0; i < playerId.length; i++) {
@@ -220,15 +204,12 @@ const onTileClick = (tile: Tile) => {
   z-index: 10;
 }
 
-.discards-row {
+.discards-grid {
   display: flex;
+  flex-wrap: wrap;
   gap: 2px;
-}
-
-.discard-column {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  width: max-content;
+  max-width: 100%;
 }
 
 .discard-item {

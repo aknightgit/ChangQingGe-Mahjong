@@ -109,12 +109,18 @@ const isDelaying = computed(() => {
 
 <style scoped>
 .circular-actions {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
+  position: relative;
   width: 180px;
   height: 180px;
   z-index: 20;
+  background: rgba(255, 215, 0, 0.12);
+  border: 2px solid rgba(255, 215, 0, 0.5);
+  border-radius: 20px;
+  padding: 16px;
+  box-shadow: 0 0 24px rgba(255, 215, 0, 0.15), 0 4px 16px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .circular-actions--compact {
@@ -307,10 +313,10 @@ const isDelaying = computed(() => {
 /* 移动端 */
 @media (max-width: 768px) {
   .circular-actions {
-    bottom: 16px;
-    right: 16px;
-    width: 150px;
-    height: 150px;
+    width: 160px;
+    height: 160px;
+    padding: 12px;
+    border-radius: 16px;
   }
 
   .action-btn--center {
