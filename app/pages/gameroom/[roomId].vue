@@ -254,7 +254,6 @@
         </aside>
       </main>
 
-      <!-- 圆形操作按钮已移至手牌右侧（inline-action-buttons），此浮层保留为移动端备用 -->
       <CircularActionButtons
         v-if="shouldRotateView"
         :available-actions="availableActions"
@@ -266,7 +265,6 @@
         @action="handleCircularAction"
       />
 
-      <!-- 骰子投掷动画（Teleport到body避免被父级裁剪） -->
       <Teleport to="body">
         <DiceAnimation
           v-if="showDiceOverlay"
@@ -276,12 +274,9 @@
           @deal="onDealTiles"
         />
       </Teleport>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
-</template>
+</div></template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
