@@ -1051,14 +1051,14 @@ const forceDiscard = async (p: Player) => {
   left: 0;
   top: 50%;
   transform: translateY(-50%) rotate(90deg);
-  width: 62%;
+  width: 88%;
 }
 
 .seat-right {
   right: 0;
   top: 50%;
   transform: translateY(-50%) rotate(90deg);
-  width: 62%;
+  width: 88%;
 }
 
 /* ===== 本家：手牌 + 动作按钮横排 ===== */

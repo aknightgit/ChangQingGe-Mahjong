@@ -210,13 +210,12 @@ const getArrowChar = (sourcePos: number): string => {
   gap: 2px;
 }
 
-/* 左家/右家：长边贴靠，水平排列（整体旋转90°） */
+/* 左家/右家：长边贴靠，水平排列（整体旋转90°），不换行 */
 .player-other--left .player-other-hand,
 .player-other--right .player-other-hand {
   flex-direction: row;
-  flex-wrap: wrap;
-  max-width: 280px;
-  gap: 2px;
+  flex-wrap: nowrap;
+  gap: 0;
 }
 
 /* ===== 弃牌区：靠近中央（远离手牌，朝向牌墙）===== */
