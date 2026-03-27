@@ -78,6 +78,7 @@
                 @action="handleCircularAction"
               />
             </div>
+            </div>
 
             <!-- Top player -->
             <div class="seat seat-top" :class="{ 'seat-active': activePosition !== null && topPlayer?.position === activePosition }">
@@ -275,7 +276,6 @@
           @deal="onDealTiles"
         />
       </Teleport>
-      </main>
           </div>
         </div>
       </div>
