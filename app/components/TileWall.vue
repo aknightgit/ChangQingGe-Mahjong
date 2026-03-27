@@ -195,7 +195,7 @@ function getFaceL(i: number) { return FACE_SEQUENCE[(i * 17 + 11) % (FACE_SEQUEN
 // 牌实际尺寸（前台使用中的大小）
 const TILE_W = 28  // 牌宽(px)
 const TILE_H = 40  // 牌高(px)
-const OVERLAP = 40 // 相邻牌最小间距（牌宽28px，间距=12px），消除首尾相连
+const OVERLAP = 28 // = TILE_W，牌墙连续无空隙
 const LAYER_OFFSET = 5 // 外层相对内层的偏移(px)，露出侧面
 
 // ===== 上边（水平） =====

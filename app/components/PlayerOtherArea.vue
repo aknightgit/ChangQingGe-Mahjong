@@ -210,31 +210,43 @@ const getArrowChar = (sourcePos: number): string => {
   gap: 2px;
 }
 
-/* 左家/右家：不旋转座椅，纵向排列贴边缘 */
+/* 左家/右家：手牌横排（朝中心），允许溢出父容器 */
 .player-other--left .player-other-hand,
 .player-other--right .player-other-hand {
-  flex-direction: column;
+  flex-direction: row;
   flex-wrap: nowrap;
+  flex-shrink: 0;
   gap: 0;
+}
+
+/* 左家手牌：从左边缘向右延伸（溢出到中央区域） */
+.player-other--left .player-other-hand {
+  position: relative;
+}
+
+/* 右家手牌：从右边缘向左延伸 */
+.player-other--right .player-other-hand {
+  position: relative;
 }
 
 /* ===== 弃牌区 ===== */
 .player-other-discards {
   z-index: 15;
+  min-width: 186px; /* 6张牌最小宽度 */
 }
 
 .player-other--top .player-other-discards {
   margin-bottom: 12px;
 }
 
-/* 左家弃牌在内侧（靠近中心） */
+/* 左家弃牌：在手牌下方（朝中心方向），用手牌宽度的偏移量 */
 .player-other--left .player-other-discards {
-  margin-left: 4px;
+  margin-top: 8px;
 }
 
-/* 右家弃牌在内侧（靠近中心） */
+/* 右家弃牌：在手牌下方（朝中心方向） */
 .player-other--right .player-other-discards {
-  margin-right: 4px;
+  margin-top: 8px;
 }
 
 .discards-grid {

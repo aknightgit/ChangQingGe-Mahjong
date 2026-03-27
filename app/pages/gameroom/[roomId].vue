@@ -1051,6 +1051,7 @@ const forceDiscard = async (p: Player) => {
   flex-direction: column;
   align-items: flex-start; /* 手牌贴左边缘（桌子边缘） */
   justify-content: center; /* 内容整体垂直居中 */
+  overflow: visible;
 }
 
 .seat-right {
@@ -1061,6 +1062,7 @@ const forceDiscard = async (p: Player) => {
   flex-direction: column;
   align-items: flex-end; /* 手牌贴右边缘（桌子边缘） */
   justify-content: center; /* 内容整体垂直居中 */
+  overflow: visible;
 }
 
 /* ===== 本家：手牌 + 动作按钮横排 ===== */
