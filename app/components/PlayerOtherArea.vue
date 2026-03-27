@@ -210,23 +210,12 @@ const getArrowChar = (sourcePos: number): string => {
   gap: 2px;
 }
 
-/* 左家/右家：手牌横排（朝中心），允许溢出父容器 */
+/* 左家/右家：纵向排列贴边缘 */
 .player-other--left .player-other-hand,
 .player-other--right .player-other-hand {
-  flex-direction: row;
+  flex-direction: column;
   flex-wrap: nowrap;
-  flex-shrink: 0;
   gap: 0;
-}
-
-/* 左家手牌：从左边缘向右延伸（溢出到中央区域） */
-.player-other--left .player-other-hand {
-  position: relative;
-}
-
-/* 右家手牌：从右边缘向左延伸 */
-.player-other--right .player-other-hand {
-  position: relative;
 }
 
 /* ===== 弃牌区 ===== */

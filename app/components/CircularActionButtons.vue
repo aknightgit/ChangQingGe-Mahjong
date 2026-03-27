@@ -1,7 +1,7 @@
 <template>
-  <div v-if="isConnected && !isInteractionLocked" class="circular-actions" :class="{ 'circular-actions--compact': compact }">
+  <div class="circular-actions" :class="{ 'circular-actions--compact': compact, 'circular-actions--offline': !isConnected }">
     <!-- 延迟提示 -->
-    <div v-if="isDelaying && hasAnyAction" class="delay-indicator">
+    <div v-if="isDelaying && hasAnyAction && isConnected" class="delay-indicator">
       <span class="delay-dot"></span>
       等待看清出牌...
     </div>
@@ -10,7 +10,7 @@
     <button
       class="action-btn action-btn--center"
       :class="{ 'action-btn--active': canDraw, 'action-btn--highlight': canDraw && !isDelaying }"
-      :disabled="!canDraw || isDelaying || isInteractionLocked"
+      :disabled="!canDraw || isDelaying || isInteractionLocked || !isConnected"
       @click="$emit('action', 'draw')"
     >
       <span class="action-btn__label">摸</span>
@@ -20,7 +20,7 @@
     <button
       class="action-btn action-btn--top"
       :class="{ 'action-btn--active': hasChow, 'action-btn--highlight': hasChow && !isDelaying }"
-      :disabled="!hasChow || isDelaying || isInteractionLocked"
+      :disabled="!hasChow || isDelaying || isInteractionLocked || !isConnected"
       @click="$emit('action', 'chow')"
     >
       <span class="action-btn__label">吃</span>
@@ -30,7 +30,7 @@
     <button
       class="action-btn action-btn--right"
       :class="{ 'action-btn--active': hasPeng, 'action-btn--highlight': hasPeng && !isDelaying }"
-      :disabled="!hasPeng || isDelaying || isInteractionLocked"
+      :disabled="!hasPeng || isDelaying || isInteractionLocked || !isConnected"
       @click="$emit('action', 'peng')"
     >
       <span class="action-btn__label">碰</span>
@@ -40,7 +40,7 @@
     <button
       class="action-btn action-btn--bottom"
       :class="{ 'action-btn--active': hasKong, 'action-btn--highlight': hasKong && !isDelaying }"
-      :disabled="!hasKong || isDelaying || isInteractionLocked"
+      :disabled="!hasKong || isDelaying || isInteractionLocked || !isConnected"
       @click="$emit('action', 'kong')"
     >
       <span class="action-btn__label">杠</span>
@@ -50,7 +50,7 @@
     <button
       class="action-btn action-btn--left"
       :class="{ 'action-btn--active': hasHu, 'action-btn--highlight': hasHu && !isDelaying }"
-      :disabled="!hasHu || isDelaying || isInteractionLocked"
+      :disabled="!hasHu || isDelaying || isInteractionLocked || !isConnected"
       @click="$emit('action', 'hu')"
     >
       <span class="action-btn__label">胡</span>
@@ -308,6 +308,13 @@ const isDelaying = computed(() => {
 
 .circular-actions--compact .action-btn__label {
   font-size: 0.8rem;
+}
+
+/* 离线状态：按钮半透明，表示未连接 */
+.circular-actions--offline {
+  opacity: 0.5;
+  filter: grayscale(0.6);
+  pointer-events: none;
 }
 
 /* 移动端 */
