@@ -179,10 +179,10 @@ const TILES_PER_SIDE = 18
 
 // 牌面序列（用于显示）
 const FACE_SEQUENCE = [
-  'Man1','Pin1','Sou1','Man2','Pin2','Sou2','Man3','Pin3','Sou3',
-  'Man4','Pin4','Sou4','Man5','Pin5','Sou5','Man6','Pin6','Sou6',
-  'Man7','Pin7','Sou7','Man8','Pin8','Sou8','Man9','Pin9','Sou9',
-  'East','South','West','North','Chun','Pei','Haku','Hatsu','Nan',
+  'Back','Back','Back','Back','Back','Back','Back','Back','Back',
+  'Back','Back','Back','Back','Back','Back','Back','Back','Back',
+  'Back','Back','Back','Back','Back','Back','Back','Back','Back',
+  'Back','Back','Back','Back','Back','Back','Back','Back','Back',
   'Back'
 ]
 

@@ -149,13 +149,18 @@ export const useGame = () => {
     isConnected.value = false
   }
 
-  // 防止并发 refresh
+  // 防止并发 refresh + 防抖
   let isRefreshing = false
+  let lastRefreshAt = 0
+  const DEBOUNCE_MS = 500
 
   const refreshState = async () => {
     if (!gameId.value || !playerId.value) return
     if (isRefreshing) return
+    const now = Date.now()
+    if (now - lastRefreshAt < DEBOUNCE_MS) return
     isRefreshing = true
+    lastRefreshAt = now
     try {
       await fetchGameState(gameId.value, playerId.value)
     } finally {
