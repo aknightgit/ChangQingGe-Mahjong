@@ -221,18 +221,14 @@ const getArrowChar = (sourcePos: number): string => {
 
 /* 上家：每列1张，纵向排列 */
 .player-other--top .player-other-hand {
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: 1fr;
+  flex-direction: row;
   gap: 2px;
 }
 
 /* 左家/右家：每列1张，横向排列 */
 .player-other--left .player-other-hand,
 .player-other--right .player-other-hand {
-  display: grid;
-  grid-auto-flow: row;
-  grid-template-columns: 1fr;
+  flex-direction: column;
   gap: 2px;
 }
 

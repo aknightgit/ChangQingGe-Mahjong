@@ -311,9 +311,9 @@ const {
 
 const backToLobby = () => navigateTo('/')
 const isAdmin = useCookie('is_admin')
-const isAdminUser = computed(() => isAdmin.value === 'true' || isAdmin.value === true)
+const isAdminUser = computed(() => false)
 const showAllCards = ref(false)
-const shouldRevealOpponents = computed(() => isAdminUser.value && showAllCards.value)
+const shouldRevealOpponents = computed(() => false)
 const isMobilePortrait = ref(false)
 const shouldRotateView = computed(() => isMobilePortrait.value)
 const nowTs = ref(Date.now())
@@ -1037,27 +1037,28 @@ const forceDiscard = async (p: Player) => {
   top: 0;
   left: 50%;
   transform: translateX(-50%) rotate(180deg);
-  width: 100%;
+  width: 62%;
 }
 
 .seat-bottom {
   bottom: 0;
-  left: 0;
-  right: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 62%;
 }
 
 .seat-left {
   left: 0;
   top: 50%;
   transform: translateY(-50%) rotate(90deg);
-  height: 100%;
+  width: 62%;
 }
 
 .seat-right {
   right: 0;
   top: 50%;
   transform: translateY(-50%) rotate(-90deg);
-  height: 100%;
+  width: 62%;
 }
 
 /* ===== 本家：手牌 + 动作按钮横排 ===== */
