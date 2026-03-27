@@ -907,9 +907,9 @@ const forceDiscard = async (p: Player) => {
 
 .mahjong-table {
   position: relative;
-  width: min(80vw, 80vh, 900px);
-  /* 1:1 正方形，参考图比例 */
-  aspect-ratio: 1 / 1;
+  width: min(100vw, calc(80vh * 4/3), 1200px);
+  /* 4:3 比例，高度不变，宽度扩展 */
+  aspect-ratio: 4 / 3;
   border-radius: 20px;
   /* 深木色外框 */
   background: #4a2c0a;
