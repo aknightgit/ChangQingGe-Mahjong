@@ -1034,31 +1034,30 @@ const forceDiscard = async (p: Player) => {
 }
 
 .seat-top {
-  top: 1%;
+  top: 0;
   left: 50%;
   transform: translateX(-50%) rotate(180deg);
-  width: 62%;
+  width: 100%;
 }
 
 .seat-bottom {
-  bottom: 0.5%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 62%;
+  bottom: 0;
+  left: 0;
+  right: 0;
 }
 
 .seat-left {
-  left: 0.5%;
+  left: 0;
   top: 50%;
   transform: translateY(-50%) rotate(90deg);
-  width: 62%;
+  height: 100%;
 }
 
 .seat-right {
-  right: 0.5%;
+  right: 0;
   top: 50%;
   transform: translateY(-50%) rotate(-90deg);
-  width: 62%;
+  height: 100%;
 }
 
 /* ===== 本家：手牌 + 动作按钮横排 ===== */
