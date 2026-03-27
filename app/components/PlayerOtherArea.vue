@@ -2,7 +2,7 @@
 <template>
   <div
     class="player-other"
-    :class="{ 'player-other--winner': isWinner }"
+    :class="[`player-other--${position}`, { 'player-other--winner': isWinner }]"
   >
     <div class="player-other-header">
       <span class="position-dot" :class="`dot--${posColor}`"></span>
@@ -220,7 +220,7 @@ const getArrowChar = (sourcePos: number): string => {
 }
 
 /* 上家：每列1张，纵向排列 */
-.position-top .player-other-hand {
+.player-other--top .player-other-hand {
   display: grid;
   grid-auto-flow: column;
   grid-template-rows: 1fr;
@@ -228,8 +228,8 @@ const getArrowChar = (sourcePos: number): string => {
 }
 
 /* 左家/右家：每列1张，横向排列 */
-.position-left .player-other-hand,
-.position-right .player-other-hand {
+.player-other--left .player-other-hand,
+.player-other--right .player-other-hand {
   display: grid;
   grid-auto-flow: row;
   grid-template-columns: 1fr;
@@ -243,30 +243,17 @@ const getArrowChar = (sourcePos: number): string => {
 }
 
 /* 上家：弃牌区在手牌上方（朝向中央） */
-.position-top .player-other-discards {
-  margin-top: 0;
-  margin-bottom: 2px;
-  order: -1;
+/* 弃牌区在手牌和中央之间（靠近中心），自然DOM顺序就够了 */
+.player-other--top .player-other-discards {
+  margin-bottom: 6px;
 }
 
-/* 左家：弃牌区在手牌右侧（朝向中央） */
-.position-left .player-other-discards {
-  margin-top: 0;
-  margin-left: 2px;
-  order: 2;
-}
-.position-left .player-area {
-  flex-direction: row-reverse;
+.player-other--left .player-other-discards {
+  margin-left: 4px;
 }
 
-/* 右家：弃牌区在手牌左侧（朝向中央） */
-.position-right .player-other-discards {
-  margin-top: 0;
-  margin-right: 2px;
-  order: -1;
-}
-.position-right .player-area {
-  flex-direction: row;
+.player-other--right .player-other-discards {
+  margin-right: 4px;
 }
 
 .discards-row {
@@ -281,17 +268,17 @@ const getArrowChar = (sourcePos: number): string => {
 }
 
 /* 上家弃牌列：从上往下（朝中央） */
-.position-top .discard-column {
+.player-other--top .discard-column {
   flex-direction: column;
 }
 
 /* 左家弃牌列：从左往右（朝中央） */
-.position-left .discard-column {
+.player-other--left .discard-column {
   flex-direction: column;
 }
 
 /* 右家弃牌列：从左往右 */
-.position-right .discard-column {
+.player-other--right .discard-column {
   flex-direction: column;
 }
 
