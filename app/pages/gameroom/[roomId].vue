@@ -275,8 +275,9 @@
           @deal="onDealTiles"
         />
       </Teleport>
-      </div>
-      <!-- 绿色桌布内层结束 -->
+      </main>
+          </div>
+        </div>
       </div>
     </div>
   </div>
