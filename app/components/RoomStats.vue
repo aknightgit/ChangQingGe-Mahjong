@@ -28,40 +28,34 @@
       </div>
     </div>
 
-    <!-- 累积胜负 + 上局状态 -->
-    <div class="stats-summary">
-      <div class="summary-row" v-for="player in rankedPlayers" :key="'sum-' + player.id">
-        <span class="summary-name" :class="{ 'summary-name--me': player.isMe }">{{ player.name }}</span>
-        <span class="summary-cumulative">
-          累积 <span class="sc-pos">{{ player.totalWins }}胜</span>/<span class="sc-neg">{{ player.totalLosses }}负</span>
-        </span>
-        <span class="summary-last" :class="lastRoundClass(player)">
-          {{ lastRoundLabel(player) }}
-        </span>
-      </div>
-    </div>
-
-    <!-- 输赢盘数 -->
-    <div class="stats-record">
-      <div v-for="player in rankedPlayers" :key="'r-' + player.id" class="record-row">
-        <span class="record-name">{{ player.name }}</span>
-        <span class="record-wins">{{ player.wins }}胜</span>
-        <span class="record-losses">{{ player.losses }}负</span>
-        <span class="record-bar">
-          <span class="bar-fill" :style="{ width: winRate(player) + '%' }"></span>
+    <!-- 战斗风格 -->
+    <div class="stats-style">
+      <div class="style-header">⚔️ 战斗风格</div>
+      <div class="style-row" v-for="player in rankedPlayers" :key="'style-' + player.id">
+        <span class="style-name" :class="{ 'style-name--me': player.isMe }">{{ player.name }}</span>
+        <span class="style-stats">
+          <span class="style-item">
+            捉冲 <span class="sc-pos">{{ player.catchRate || 0 }}%</span>
+            均<span class="sc-pos">{{ player.catchAvg || 0 }}</span>点
+          </span>
+          <span class="style-item">
+            自摸 <span class="sc-neg">{{ player.selfDrawRate || 0 }}%</span>
+            均<span class="sc-neg">{{ player.selfDrawAvg || 0 }}</span>点
+          </span>
         </span>
       </div>
     </div>
 
-    <!-- 观赛模式 -->
+    <!-- 观赛视角（锁定模式：同局内选一家后不可切换） -->
     <div class="stats-spectate">
-      <p class="spectate-title">👁️ 观赛视角</p>
+      <p class="spectate-title">👁️ 观赛视角{{ spectatingId ? '（已锁定）' : '' }}</p>
       <div class="spectate-btns">
         <button
           v-for="p in rankedPlayers"
           :key="'s-' + p.id"
           class="spectate-btn"
-          :class="{ active: spectatingId === p.id }"
+          :class="{ active: spectatingId === p.id, locked: !!spectatingId && spectatingId !== p.id }"
+          :disabled="!!spectatingId"
           @click="$emit('spectate', p.id)"
         >
           {{ p.name }}
@@ -80,9 +74,11 @@ interface PlayerStat {
   losses: number
   color: string
   isMe: boolean
-  totalWins?: number
-  totalLosses?: number
-  lastRoundStatus?: 'won' | 'lost' | 'none' | null
+  // 战斗风格
+  catchRate?: number      // 捉冲占比 %
+  catchAvg?: number       // 捉冲平均点数
+  selfDrawRate?: number   // 自摸占比 %
+  selfDrawAvg?: number    // 自摸平均点数
 }
 
 const props = defineProps<{
@@ -96,23 +92,6 @@ defineEmits<{ spectate: [id: string] }>()
 const rankedPlayers = computed(() =>
   [...props.players].sort((a, b) => b.score - a.score)
 )
-
-const winRate = (p: PlayerStat) => {
-  const total = p.wins + p.losses
-  return total > 0 ? (p.wins / total) * 100 : 0
-}
-
-const lastRoundLabel = (p: PlayerStat): string => {
-  if (p.lastRoundStatus === 'won') return '上局赢'
-  if (p.lastRoundStatus === 'lost') return '上局输'
-  return '首局'
-}
-
-const lastRoundClass = (p: PlayerStat): string => {
-  if (p.lastRoundStatus === 'won') return 'last-won'
-  if (p.lastRoundStatus === 'lost') return 'last-lost'
-  return 'last-none'
-}
 </script>
 
 <style scoped>
@@ -202,16 +181,19 @@ const lastRoundClass = (p: PlayerStat): string => {
 .sc-pos { color: #66bb6a; }
 .sc-neg { color: #ef5350; }
 
-/* 累积胜负 + 上局状态 */
-.stats-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+/* 战斗风格 */
+.stats-style {
   padding-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.summary-row {
+.style-header {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 6px;
+}
+
+.style-row {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -219,68 +201,26 @@ const lastRoundClass = (p: PlayerStat): string => {
   padding: 3px 0;
 }
 
-.summary-name {
+.style-name {
   width: 48px;
   font-weight: 600;
   flex-shrink: 0;
 }
 
-.summary-name--me { color: #ffd700; }
+.style-name--me { color: #ffd700; }
 
-.summary-cumulative {
+.style-stats {
   flex: 1;
+  display: flex;
+  gap: 10px;
   opacity: 0.85;
 }
 
-.summary-last {
-  font-size: 0.65rem;
-  padding: 1px 6px;
-  border-radius: 4px;
-  flex-shrink: 0;
+.style-item {
+  white-space: nowrap;
 }
 
-.last-won {
-  color: #66bb6a;
-  background: rgba(102, 187, 106, 0.15);
-}
-
-.last-lost {
-  color: #ef5350;
-  background: rgba(239, 83, 80, 0.15);
-}
-
-.last-none {
-  color: rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-/* 输赢盘数 */
-.stats-record {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.record-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.7rem;
-}
-.record-name { width: 48px; font-weight: 600; }
-.record-wins { color: #66bb6a; }
-.record-losses { color: #ef5350; }
-.record-bar {
-  flex: 1; height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden;
-}
-.bar-fill {
-  height: 100%; background: linear-gradient(90deg, #66bb6a, #4caf50); border-radius: 2px;
-  transition: width 0.3s;
-}
-
-/* 观赛 */
+/* 观赛（锁定模式） */
 .stats-spectate {
   padding-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
@@ -296,10 +236,13 @@ const lastRoundClass = (p: PlayerStat): string => {
   background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.6);
   font-size: 0.7rem; cursor: pointer; transition: all 0.2s;
 }
-.spectate-btn:hover { background: rgba(255,255,255,0.1); }
+.spectate-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
 .spectate-btn.active {
   background: rgba(255, 215, 0, 0.2); border-color: rgba(255, 215, 0, 0.5);
   color: #ffd700;
+}
+.spectate-btn.locked {
+  opacity: 0.3; cursor: not-allowed;
 }
 
 @media (max-width: 900px) {
