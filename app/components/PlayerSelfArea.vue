@@ -38,26 +38,6 @@
 
       <!-- 手牌 + 出牌区 overlay -->
       <div class="player-hand-wrapper">
-        <!-- 出牌区：叠在手牌上方 -->
-        <div class="player-discards" v-if="discards.length">
-          <div class="discards-grid">
-            <div
-              v-for="(tile, ti) in discards"
-              :key="tile.id"
-              class="discard-item"
-            >
-              <span v-if="tile.id === discards[discards.length - 1].id && !isWinner" class="latest-arrow">
-                <svg viewBox="0 0 10 8" class="arrow-svg"><polygon points="5,8 0,0 10,0" fill="#f44336" /></svg>
-              </span>
-              <MahjongTile
-                :tile="tile"
-                :small="true"
-                :dimmed="isWinner && tile.id !== discards[discards.length - 1].id"
-              />
-            </div>
-          </div>
-        </div>
-
         <!-- 手牌 -->
         <div class="player-hand">
           <MahjongTile
@@ -68,7 +48,11 @@
             :just-drawn="justDrawnTileId === tile.id"
             :claim-highlight="claimCandidateIds?.includes(tile.id)"
             :dimmed="isWinner"
+            draggable="true"
             @click="onTileClick(tile)"
+            @dblclick="onTileDblclick(tile)"
+            @dragstart="onDragStart($event, tile)"
+            @dragend="onDragEnd"
           />
         </div>
 
@@ -98,7 +82,6 @@ import type { Tile, Meld, MeldType } from '~/types/game'
 const props = defineProps<{
   hand: Tile[]
   melds: Meld[]
-  discards: Tile[]
   selectedTileId?: string | null
   isWinner?: boolean
   justDrawnTileId?: string | null
@@ -126,6 +109,9 @@ function getPlayerIndex(playerId: string): number {
 
 const emit = defineEmits<{
   (e: 'tileClick', tile: Tile): void
+  (e: 'tileDblclick', tile: Tile): void
+  (e: 'tileDiscard', tile: Tile): void
+  (e: 'dragStateChange', dragging: boolean): void
 }>()
 
 const confirmClaim = () => {
@@ -139,6 +125,27 @@ const skipClaim = () => {
 
 const onTileClick = (tile: Tile) => {
   emit('tileClick', tile)
+}
+
+const onTileDblclick = (tile: Tile) => {
+  emit('tileDblclick', tile)
+}
+
+// ===== Drag & Drop =====
+const onDragStart = (event: DragEvent, tile: Tile) => {
+  if (props.isWinner) return
+  // Pass tile ID as transfer data
+  event.dataTransfer?.setData('text/plain', tile.id)
+  event.dataTransfer?.setData('application/tile-id', tile.id)
+  // Set drag image (use the tile element itself)
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+  }
+  emit('dragStateChange', true)
+}
+
+const onDragEnd = (event: DragEvent) => {
+  emit('dragStateChange', false)
 }
 </script>
 
@@ -252,6 +259,15 @@ const onTileClick = (tile: Tile) => {
   padding: 4px;
   border-radius: 10px;
   background: transparent;
+}
+
+/* 拖拽：手牌可拖拽光标 */
+.player-hand :deep(.tile[draggable="true"]) {
+  cursor: grab;
+}
+
+.player-hand :deep(.tile[draggable="true"]:active) {
+  cursor: grabbing;
 }
 
 .claim-actions {

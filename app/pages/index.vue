@@ -41,6 +41,10 @@
           对局记录
         </button>
 
+        <button class="mahjong-button secondary" @click="navigateTo('/rules')">
+          📖 规则说明
+        </button>
+
         <button class="mahjong-button secondary" @click="openProfileModal">
           个人资料
         </button>

@@ -36,8 +36,42 @@ class GameManager {
   // Pending action超时处理（自动推进）
   private pendingActionTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
+  // AI托管模式：玩家ID集合，被标记的玩家由AI自动出牌
+  private botModePlayers: Set<string> = new Set();
+
   setWebSocketManager(manager: any) {
     this.wsManager = manager;
+  }
+
+  // ===== AI托管模式控制 =====
+  /**
+   * 判断玩家是否被AI托管（包括本身是bot玩家，或被手动标记为AI托管）
+   */
+  private isPlayerBotControlled(player: Player): boolean {
+    return isBotPlayer(player) || this.botModePlayers.has(player.id);
+  }
+
+  /**
+   * 启用AI托管模式
+   */
+  enableBotMode(gameId: string, playerId: string): void {
+    this.botModePlayers.add(playerId);
+    // 立即由 AI 开始出牌
+    this.scheduleBotDiscard(gameId, playerId);
+  }
+
+  /**
+   * 禁用AI托管模式（玩家回来）
+   */
+  disableBotMode(playerId: string): void {
+    this.botModePlayers.delete(playerId);
+  }
+
+  /**
+   * 检查玩家是否处于AI托管模式
+   */
+  isPlayerInBotMode(playerId: string): boolean {
+    return this.botModePlayers.has(playerId);
   }
 
   private clearPendingActionTimer(gameId: string): void {
@@ -62,8 +96,8 @@ class GameManager {
         for (const pa of pending) {
           const player = game.players.find(p => p.id === pa.playerId);
           if (!player || player.status !== PlayerStatus.PLAYING) continue;
-          // Bot 已在 checkPendingActions 的 setTimeout 中处理过，跳过
-          if (isBotPlayer(player)) continue;
+          // Bot / AI托管玩家已在 checkPendingActions 的 setTimeout 中处理过，跳过
+          if (this.isPlayerBotControlled(player)) continue;
           this.handlePass(game, player);
         }
 
@@ -1335,7 +1369,7 @@ class GameManager {
       // 调度 bot 玩家的自动响应（优先于1秒超时）
       for (const pa of game.pendingActions) {
         const player = game.players.find(p => p.id === pa.playerId);
-        if (player && isBotPlayer(player)) {
+        if (player && this.isPlayerBotControlled(player)) {
           const delay = 300 + Math.floor(Math.random() * 400); // 300-700ms 随机延迟
           setTimeout(() => {
             // 重新检查是否还有这个玩家的 pending action
@@ -1457,8 +1491,8 @@ class GameManager {
     // 然后正常摸牌
     this.handleDraw(game, nextPlayer);
 
-    // 如果是 bot 玩家，延迟后自动出牌（给客户端留出动画时间）
-    if (isBotPlayer(nextPlayer)) {
+    // 如果是 bot 玩家或AI托管，延迟后自动出牌（给客户端留出动画时间）
+    if (this.isPlayerBotControlled(nextPlayer)) {
       this.scheduleBotDiscard(game.gameId, nextPlayer.id);
     }
   }

@@ -47,26 +47,7 @@
       </div>
     </div>
 
-    <!-- 弃牌区：每行6张，自动换行 -->
-    <div v-if="discards.length" class="player-other-discards">
-      <div class="discards-grid">
-        <div
-          v-for="(tile, ti) in discards"
-          :key="tile.id"
-          class="discard-item"
-        >
-          <span v-if="tile.id === discards[discards.length - 1].id && !isWinner" class="latest-arrow">
-            <svg viewBox="0 0 10 8" class="arrow-svg"><polygon points="5,8 0,0 10,0" fill="#f44336" /></svg>
-          </span>
-          <MahjongTile
-            :tile="tile"
-            :small="true"
-            :dimmed="isWinner && tile.id !== discards[discards.length - 1].id"
-            :claim-highlight="claimableDiscardTileId === tile.id"
-          />
-        </div>
-      </div>
-    </div>
+    <!-- 弃牌区已移至独立的 DiscardZone 组件，不再在此渲染 -->
   </div>
 </template>
 
@@ -79,9 +60,7 @@ const props = defineProps<{
   position: 'top' | 'left' | 'right'
   hand: Tile[]
   melds: Meld[]
-  discards: Tile[]
   isWinner?: boolean
-  claimableDiscardTileId?: string | null
   revealHand?: boolean
   avatar?: string
 }>()
@@ -216,62 +195,5 @@ const getArrowChar = (sourcePos: number): string => {
   flex-direction: column;
   flex-wrap: nowrap;
   gap: 0;
-}
-
-/* ===== 弃牌区 ===== */
-.player-other-discards {
-  z-index: 15;
-  min-width: 186px; /* 6张牌最小宽度 */
-}
-
-/* 弃牌区旋转：牌头部朝向与玩家一致 */
-.player-other--top .player-other-discards {
-  margin-bottom: 12px;
-  transform: rotate(180deg); /* 上家：头部朝下 */
-}
-
-.player-other--bottom .player-other-discards {
-  transform: rotate(0deg); /* 本家：头部朝上（默认） */
-}
-
-.player-other--left .player-other-discards {
-  margin-top: 8px;
-  transform: rotate(90deg); /* 左家：头部朝右 */
-}
-
-.player-other--right .player-other-discards {
-  margin-top: 8px;
-  transform: rotate(270deg); /* 右家：头部朝左 */
-}
-
-.discards-grid {
-  display: grid;
-  grid-template-columns: repeat(6, max-content);
-  gap: 1px;
-}
-
-.discard-item {
-  position: relative;
-}
-
-.latest-arrow {
-  position: absolute;
-  top: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 2;
-  animation: fa 1.2s ease-in-out infinite;
-}
-
-.arrow-svg {
-  width: 8px;
-  height: 6px;
-  display: block;
-  filter: drop-shadow(0 0 3px rgba(244, 67, 54, 0.6));
-}
-
-@keyframes fa {
-  0%, 100% { transform: translateX(-50%) translateY(0); opacity: 1; }
-  50% { transform: translateX(-50%) translateY(-3px); opacity: 0.6; }
 }
 </style>

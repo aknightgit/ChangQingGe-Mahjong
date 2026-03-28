@@ -10,9 +10,25 @@
           </p>
         </div>
 
-        <button class="mahjong-button small" @click="backToLobby">
-          返回大厅
-        </button>
+        <div class="header-actions">
+          <button
+            class="mahjong-button small secondary"
+            :class="{ 'sound-off': !soundEnabled }"
+            @click="toggleSound"
+            :title="soundEnabled ? '🔊 音效开' : '🔇 音效关'"
+          >
+            {{ soundEnabled ? '🔊' : '🔇' }}
+          </button>
+          <button class="mahjong-button small secondary" @click="showSettings = true">
+            ⚙️ 设置
+          </button>
+          <button class="mahjong-button small secondary" @click="navigateTo('/rules')">
+            📖 规则
+          </button>
+          <button class="mahjong-button small" @click="backToLobby">
+            返回大厅
+          </button>
+        </div>
       </header>
 
       <main class="room-main">
@@ -40,20 +56,116 @@
           </div>
         </div>
 
+        <!-- 设置面板 -->
+        <Transition name="settings-slide">
+          <div v-if="showSettings" class="settings-overlay" @click.self="showSettings = false">
+            <div class="settings-panel">
+              <div class="settings-header">
+                <h2 class="settings-title">⚙️ 游戏设置</h2>
+                <button class="settings-close" @click="showSettings = false">✕</button>
+              </div>
+              <div class="settings-body">
+                <!-- 音效开关 -->
+                <div class="settings-item">
+                  <div class="settings-item-label">
+                    <span class="settings-icon">🔊</span>
+                    <span>音效</span>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" :checked="soundEnabled" @change="toggleSound" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <!-- 出牌提示 -->
+                <div class="settings-item">
+                  <div class="settings-item-label">
+                    <span class="settings-icon">💡</span>
+                    <span>出牌提示</span>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" v-model="showHintEnabled" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <!-- 牌面动画 -->
+                <div class="settings-item">
+                  <div class="settings-item-label">
+                    <span class="settings-icon">✨</span>
+                    <span>牌面动画</span>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" v-model="tileAnimationEnabled" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <!-- 操作音效 -->
+                <div class="settings-item">
+                  <div class="settings-item-label">
+                    <span class="settings-icon">🎵</span>
+                    <span>操作音效</span>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" v-model="actionSoundEnabled" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <!-- 倒计时警告 -->
+                <div class="settings-item">
+                  <div class="settings-item-label">
+                    <span class="settings-icon">⏱</span>
+                    <span>倒计时警告</span>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" v-model="timerWarningEnabled" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div class="settings-divider"></div>
+                <div class="settings-item settings-item--info">
+                  <span class="settings-icon">ℹ️</span>
+                  <span>长清阁麻将 v2.2</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Transition>
+
         <!-- Big responsive table -->
-        <div class="table-wrapper">
-          <div class="mahjong-table">
+        <div class="table-wrapper" @dragover.prevent="onTableDragOver" @dragleave="onTableDragLeave" @drop.prevent="onTableDrop">
+          <div class="mahjong-table" :class="{ 'table--drag-over': isDragOverTable }">
             <!-- 绿色桌布内层 -->
             <div class="table-felt">
             <!-- 左上角: 轮次信息 -->
             <div class="round-info" v-if="gameState?.phase === 'playing'">
-              第 {{ currentRound || 1 }} 局
+              {{ roundDisplay }}
             </div>
             <!-- 状态消息（非中心显示） -->
             <div class="turn-indicator">
               <span v-if="isWinner" class="turn-win">🎉 你赢了！</span>
+              <span v-else-if="isAIControlled" class="turn-ai">🤖 AI托管中</span>
               <span v-else-if="showMobileActionNotice" class="turn-action">有可用操作</span>
+              <span v-else-if="hesitationState.active" class="turn-action">出牌犹豫中…</span>
               <span v-else>{{ turnMessage }}</span>
+              <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
+                ⏱ {{ turnTimer }}s
+              </span>
+            </div>
+
+            <!-- 犹豫响应期浮层 -->
+            <div v-if="hesitationState.active" class="hesitation-overlay">
+              <div class="hesitation-card">
+                <MahjongTile
+                  v-if="hesitationState.tile"
+                  :tile="hesitationState.tile"
+                  :small="true"
+                />
+                <div class="hesitation-bar-track">
+                  <div class="hesitation-bar-fill" :style="{ width: hesitationProgress + '%' }"></div>
+                </div>
+                <button class="hesitation-cancel-btn" @click="cancelHesitation">
+                  撤销出牌
+                </button>
+              </div>
             </div>
             <!-- 桌面中心: 弃牌池 + 牌墙 + 倍数 -->
             <TableCenter
@@ -66,6 +178,32 @@
               :wild-tile="wildTile"
             />
 
+            <!-- 弃牌区（4个独立位置） -->
+            <DiscardZone
+              position="bottom"
+              :tiles="playerDiscards"
+              :is-winner="isWinner"
+              :latest-tile-id="selfLatestDiscardId"
+            />
+            <DiscardZone
+              position="top"
+              :tiles="northDiscards"
+              :is-winner="northIsWinner"
+              :latest-tile-id="northLatestDiscardId"
+            />
+            <DiscardZone
+              position="left"
+              :tiles="westDiscards"
+              :is-winner="westIsWinner"
+              :latest-tile-id="westLatestDiscardId"
+            />
+            <DiscardZone
+              position="right"
+              :tiles="eastDiscards"
+              :is-winner="eastIsWinner"
+              :latest-tile-id="eastLatestDiscardId"
+            />
+
             </div>
 
             <!-- Top player -->
@@ -75,7 +213,6 @@
                 position="top"
                 :hand="northHand"
                 :melds="northMelds"
-                :discards="northDiscards"
                 :is-winner="northIsWinner"
                 :reveal-hand="shouldRevealOpponents"
               />
@@ -88,7 +225,6 @@
                 position="left"
                 :hand="westHand"
                 :melds="westMelds"
-                :discards="westDiscards"
                 :is-winner="westIsWinner"
                 :reveal-hand="shouldRevealOpponents"
               />
@@ -101,9 +237,7 @@
                 position="right"
                 :hand="eastHand"
                 :melds="eastMelds"
-                :discards="eastDiscards"
                 :is-winner="eastIsWinner"
-                :claimable-discard-tile-id="claimableDiscardTileId"
                 :reveal-hand="shouldRevealOpponents"
               />
             </div>
@@ -115,14 +249,22 @@
                   name="我"
                   :hand="playerHand"
                   :melds="playerMelds"
-                  :discards="playerDiscards"
                   :selected-tile-id="selectedTileId"
                   :is-winner="isWinner"
-
                   @tileClick="handleTileClick"
+                  @tileDblclick="handleTileDblclick"
                 />
                 <!-- 动作按钮放在手牌右侧 -->
-                <div class="inline-action-buttons" v-if="isConnected && !isInteractionLocked">
+                <div v-if="isAIControlled" class="inline-action-buttons">
+                  <div class="ai-controlled-notice">
+                    🤖 已由AI自动出牌
+                  </div>
+                  <button
+                    class="inline-action-btn inline-action-btn--comeback"
+                    @click="onPlayerBack"
+                  >我回来了</button>
+                </div>
+                <div class="inline-action-buttons" v-else-if="isConnected && !isInteractionLocked">
                   <div v-if="actionWindowText" class="inline-action-timer">{{ actionWindowText }}</div>
                   <button
                     v-if="showDraw"
@@ -275,7 +417,9 @@ import TableCenter from '~/components/TableCenter.vue'
 import DiceAnimation from '~/components/DiceAnimation.vue'
 import PlayerInfo from '~/components/PlayerInfo.vue'
 import RoomStats from '~/components/RoomStats.vue'
+import DiscardZone from '~/components/DiscardZone.vue'
 import { useGame, ACTION_HIGHLIGHT_DELAY_MS } from '~/composables/useGame'
+import { useSound } from '~/composables/useSound'
 import { ActionType, GamePhase, GameEndReason, type Tile, type Meld, type Player } from '~/types/game'
 
 const route = useRoute()
@@ -298,6 +442,11 @@ const {
 } = useGame()
 
 const backToLobby = () => navigateTo('/')
+const { play: playSound, isEnabled: soundEnabled, setEnabled: setSoundEnabled } = useSound()
+
+const toggleSound = () => {
+  setSoundEnabled(!soundEnabled.value)
+}
 const isAdmin = useCookie('is_admin')
 const isAdminUser = computed(() => false)
 const showAllCards = ref(false)
@@ -306,6 +455,127 @@ const isMobilePortrait = ref(false)
 const shouldRotateView = computed(() => isMobilePortrait.value)
 const nowTs = ref(Date.now())
 let actionWindowTimer: ReturnType<typeof setInterval> | null = null
+
+// ===== 出牌倒计时 & AI托管 =====
+const TURN_TIMEOUT_SEC = 60
+const CONSECUTIVE_AUTO_THRESHOLD = 2 // 连续自动操作N次后AI接管
+const turnTimer = ref(TURN_TIMEOUT_SEC)
+const turnTimerActive = ref(false)
+let turnTimerInterval: ReturnType<typeof setInterval> | null = null
+let lastWarnAt = 0
+let consecutiveAutoCount = 0   // 连续自动操作次数
+const isAIControlled = ref(false) // 是否被AI接管
+const showSettings = ref(false) // 显示设置面板
+
+// 游戏设置
+const showHintEnabled = ref(true)       // 出牌提示
+const tileAnimationEnabled = ref(true)   // 牌面动画
+const actionSoundEnabled = ref(true)    // 操作音效
+const timerWarningEnabled = ref(true)   // 倒计时警告音
+
+const startTurnTimer = () => {
+  stopTurnTimer()
+  // AI接管期间不启动人类计时器
+  if (isAIControlled.value) return
+  turnTimer.value = TURN_TIMEOUT_SEC
+  turnTimerActive.value = true
+  lastWarnAt = 0
+  turnTimerInterval = setInterval(() => {
+    turnTimer.value--
+    // 10秒警告音效
+    if (turnTimer.value === 10 && lastWarnAt !== 10) {
+      playSound('timer-warn')
+      lastWarnAt = 10
+    }
+    if (turnTimer.value <= 0) {
+      stopTurnTimer()
+      handleAutoAction()
+    }
+  }, 1000)
+}
+
+const stopTurnTimer = () => {
+  turnTimerActive.value = false
+  if (turnTimerInterval) {
+    clearInterval(turnTimerInterval)
+    turnTimerInterval = null
+  }
+}
+
+// 玩家主动操作时重置连续计数
+const resetAutoCount = () => {
+  consecutiveAutoCount = 0
+}
+
+// 超时自动操作
+const handleAutoAction = () => {
+  consecutiveAutoCount++
+
+  // 1. 有摸到的牌但没出 → 自动打出摸到的牌
+  if (currentPlayer.value?.hand?.concealedTiles?.length) {
+    const lastTile = currentPlayer.value.hand.concealedTiles.at(-1)
+    if (lastTile) {
+      playSound('tile-discard')
+      executeAction(ActionType.DISCARD, lastTile.id)
+    }
+  }
+  // 2. 有优先操作（吃/碰/杠/胡）→ 自动过
+  else if (showPass.value) {
+    onPass()
+  }
+  // 3. 轮到摸牌 → 自动摸
+  else if (showDraw.value) {
+    playSound('tile-draw')
+    executeAction(ActionType.DRAW)
+  }
+
+  // 检查是否达到连续阈值 → AI托管
+  if (consecutiveAutoCount >= CONSECUTIVE_AUTO_THRESHOLD) {
+    isAIControlled.value = true
+    consecutiveAutoCount = 0
+    // 通知服务器开启AI托管
+    useFetch('/api/game/bot-mode', {
+      method: 'POST',
+      body: { gameId: roomId.value, playerId: playerId.value, enabled: true }
+    }).catch(console.error)
+  }
+}
+
+// 玩家回来：点击"我回来了"恢复控制
+const onPlayerBack = () => {
+  isAIControlled.value = false
+  consecutiveAutoCount = 0
+  // 通知服务器关闭AI托管
+  useFetch('/api/game/bot-mode', {
+    method: 'POST',
+    body: { gameId: roomId.value, playerId: playerId.value, enabled: false }
+  }).catch(console.error)
+  // 恢复后重新启动计时
+  if (isMyTurn.value || hasPriorityActions.value) {
+    startTurnTimer()
+  }
+}
+
+// 监听回合变化，启动/停止倒计时
+watch([isMyTurn, hasPriorityActions], ([myTurn, hasActions]) => {
+  if (isAIControlled.value) return
+  if (myTurn || hasActions) {
+    startTurnTimer()
+  } else {
+    stopTurnTimer()
+  }
+})
+
+const isMyTurn = computed(() => currentTurnPlayer.value?.id === currentPlayer.value?.id)
+
+// 监听回合变化，启动/停止倒计时
+watch([isMyTurn, hasPriorityActions], ([myTurn, hasActions]) => {
+  if (myTurn || hasActions) {
+    startTurnTimer()
+  } else {
+    stopTurnTimer()
+  }
+})
 
 // 骰子动画状态
 const showDiceOverlay = ref(false)
@@ -363,6 +633,7 @@ onUnmounted(() => {
       clearInterval(actionWindowTimer)
       actionWindowTimer = null
     }
+    stopTurnTimer()
   }
 })
 
@@ -378,7 +649,11 @@ const rightPlayer = computed(() => getPlayerByRelativePos(1))
 const topPlayer = computed(() => getPlayerByRelativePos(2))
 const leftPlayer = computed(() => getPlayerByRelativePos(3))
 
-// ---- Self State ----
+// ---- Latest Discard ID per Player ----
+const selfLatestDiscardId = computed(() => playerDiscards.value.at(-1)?.id ?? null)
+const northLatestDiscardId = computed(() => northDiscards.value.at(-1)?.id ?? null)
+const westLatestDiscardId = computed(() => westDiscards.value.at(-1)?.id ?? null)
+const eastLatestDiscardId = computed(() => eastDiscards.value.at(-1)?.id ?? null)
 const playerHand = computed(() => currentPlayer.value?.hand.concealedTiles || [])
 const playerMelds = computed(() => currentPlayer.value?.hand.exposedMelds || [])
 const playerDiscards = computed(() => currentPlayer.value?.hand.discardedTiles || [])
@@ -398,6 +673,16 @@ const allDiscards = computed(() => {
 const remainingTileCount = computed(() => gameState.value?.wallRemaining ?? 0)
 const currentRound = computed(() => gameState.value?.currentRound ?? 1)
 const roundMultiplier = computed(() => gameState.value?.roundMultiplier ?? 1)
+
+// 圈方位 & 局数（用于显示"第1圈 东二局"格式）
+const windNames = ['东', '南', '西', '北']
+const roundCircle = computed(() => Math.floor((currentRound.value - 1) / 4) + 1)
+const prevailingWind = computed(() => {
+  // 每4局换一次方位：1-4局=东，5-8局=南，9-12局=西，13-16局=北
+  return windNames[Math.floor((currentRound.value - 1) / 4) % 4]
+})
+const roundPosition = computed(() => ((currentRound.value - 1) % 4) + 1)
+const roundDisplay = computed(() => `第${roundCircle.value}圈 ${prevailingWind.value}${roundPosition.value}局`)
 const globalMultiplier = computed(() => gameState.value?.globalMultiplier ?? 1)
 const wildTile = computed(() => {
   const w = gameState.value?.wildTile
@@ -574,16 +859,109 @@ const eastIsWinner = computed(() => rightPlayer.value?.status === 'won')
 const selectedTileId = ref<string | null>(null)
 const claimableDiscardTileId = ref<string | null>(null)
 
+// ===== 犹豫响应期 =====
+const HESITATION_MS = 1500
+const hesitationState = ref<{
+  active: boolean
+  tile: Tile | null
+  timer: ReturnType<typeof setTimeout> | null
+  startTime: number
+}>({ active: false, tile: null, timer: null, startTime: 0 })
+const hesitationProgress = ref(100)
+let hesitationRaf: ReturnType<typeof requestAnimationFrame> | null = null
+
+const startHesitation = (tile: Tile) => {
+  // 清理旧状态
+  if (hesitationState.value.timer) clearTimeout(hesitationState.value.timer)
+  if (hesitationRaf) cancelAnimationFrame(hesitationRaf)
+
+  hesitationState.value.active = true
+  hesitationState.value.tile = tile
+  hesitationState.value.startTime = Date.now()
+
+  // 进度条动画
+  const tickProgress = () => {
+    const elapsed = Date.now() - hesitationState.value.startTime
+    hesitationProgress.value = Math.max(0, 100 - (elapsed / HESITATION_MS) * 100)
+    if (hesitationProgress.value > 0) {
+      hesitationRaf = requestAnimationFrame(tickProgress)
+    }
+  }
+  hesitationRaf = requestAnimationFrame(tickProgress)
+
+  // 超时自动出牌
+  hesitationState.value.timer = setTimeout(() => {
+    commitDiscard(tile)
+    clearHesitation()
+  }, HESITATION_MS)
+}
+
+const commitDiscard = (tile: Tile) => {
+  resetAutoCount()
+  playSound('tile-discard')
+  executeAction(ActionType.DISCARD, tile.id)
+  selectedTileId.value = null
+}
+
+const clearHesitation = () => {
+  if (hesitationState.value.timer) clearTimeout(hesitationState.value.timer)
+  if (hesitationRaf) cancelAnimationFrame(hesitationRaf)
+  hesitationState.value = { active: false, tile: null, timer: null, startTime: 0 }
+  hesitationProgress.value = 100
+}
+
+const cancelHesitation = () => {
+  clearHesitation()
+}
+
+// ===== 拖拽出牌 =====
+const isDragOverTable = ref(false)
+
+const onTableDragOver = (e: DragEvent) => {
+  if (hesitationState.value.active || isInteractionLocked.value) return
+  e.preventDefault()
+  isDragOverTable.value = true
+}
+
+const onTableDragLeave = () => {
+  isDragOverTable.value = false
+}
+
+const onTableDrop = (e: DragEvent) => {
+  isDragOverTable.value = false
+  if (hesitationState.value.active || isInteractionLocked.value) return
+
+  const tileId = e.dataTransfer?.getData('application/tile-id')
+    || e.dataTransfer?.getData('text/plain')
+  if (!tileId || !currentPlayer.value) return
+
+  const canDiscard = availableActions.value.includes(ActionType.DISCARD)
+  if (!canDiscard) return
+
+  const tile = currentPlayer.value.hand.concealedTiles.find(t => t.id === tileId)
+  if (!tile) return
+
+  startHesitation(tile)
+}
+
+// ===== 双击出牌 =====
+const handleTileDblclick = (tile: Tile) => {
+  if (isWinner.value || isInteractionLocked.value || hesitationState.value.active) return
+  const canDiscard = availableActions.value.includes(ActionType.DISCARD)
+  if (!canDiscard) return
+  startHesitation(tile)
+}
+
 const handleTileClick = (tile: Tile) => {
-  if (isWinner.value || isInteractionLocked.value) return
+  if (isWinner.value || isInteractionLocked.value || hesitationState.value.active) return
   
   // If it's our turn and we can discard
   const canDiscard = availableActions.value.includes(ActionType.DISCARD)
   
   if (selectedTileId.value === tile.id) {
     if (canDiscard) {
-      executeAction(ActionType.DISCARD, tile.id)
-      selectedTileId.value = null
+      // 二次点击 → 进入犹豫期
+      startHesitation(tile)
     }
   } else {
     selectedTileId.value = tile.id
@@ -605,19 +983,18 @@ const showKong = computed(() => availableActions.value.includes(ActionType.KONG)
 const showHu = computed(() => availableActions.value.includes(ActionType.HU))
 const showPass = computed(() => availableActions.value.includes(ActionType.PASS))
 const showRebel = computed(() => availableActions.value.includes(ActionType.REBEL))
-const isMyTurn = computed(() => currentTurnPlayer.value?.id === currentPlayer.value?.id)
 const canCheatHu = computed(
   () => isAdminUser.value && isMyTurn.value && gameState.value?.phase === GamePhase.PLAYING
 )
 
-const onDraw = () => executeAction(ActionType.DRAW)
-const onChow = () => executeAction(ActionType.CHOW)
-const onPeng = () => executeAction(ActionType.PENG)
-const onKong = () => executeAction(ActionType.KONG)
-const onHu = () => executeAction(ActionType.HU)
-const onPass = () => executeAction(ActionType.PASS)
-const onRebel = () => executeAction(ActionType.REBEL)
-const onCheatHu = () => executeAction(ActionType.CHEAT_HU)
+const onDraw = () => { resetAutoCount(); playSound('tile-draw'); executeAction(ActionType.DRAW) }
+const onChow = () => { resetAutoCount(); playSound('tile-chow'); executeAction(ActionType.CHOW) }
+const onPeng = () => { resetAutoCount(); playSound('tile-pong'); executeAction(ActionType.PENG) }
+const onKong = () => { resetAutoCount(); playSound('tile-kong'); executeAction(ActionType.KONG) }
+const onHu = () => { resetAutoCount(); playSound('tile-hu'); executeAction(ActionType.HU) }
+const onPass = () => { resetAutoCount(); executeAction(ActionType.PASS) }
+const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); executeAction(ActionType.REBEL) }
+const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); executeAction(ActionType.CHEAT_HU) }
 
 // 圆形操作按钮事件处理
 const handleCircularAction = (type: string) => {
@@ -736,6 +1113,7 @@ const onStartGame = () => {
     Math.floor(Math.random() * 6) + 1,
     Math.floor(Math.random() * 6) + 1
   ]
+  playSound('dice-roll')
   // 强制先关闭再打开，确保 DiceAnimation 组件重新 mount
   showDiceOverlay.value = false
   nextTick(() => {
@@ -856,6 +1234,22 @@ const forceDiscard = async (p: Player) => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.mahjong-button.secondary {
+  background: rgba(60, 60, 60, 0.85);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.sound-off {
+  opacity: 0.5;
 }
 
 .mahjong-title {
@@ -1003,7 +1397,13 @@ const forceDiscard = async (p: Player) => {
 }
 
 .seat-active {
-  filter: drop-shadow(0 0 12px rgba(255, 234, 120, 0.8));
+  filter: drop-shadow(0 0 16px rgba(255, 220, 60, 0.9));
+  animation: seat-glow 1.5s ease-in-out infinite;
+}
+
+@keyframes seat-glow {
+  0%, 100% { filter: drop-shadow(0 0 14px rgba(255, 220, 60, 0.8)); }
+  50% { filter: drop-shadow(0 0 24px rgba(255, 220, 60, 1.0)); }
 }
 
 /* Counter-rotate names so they read upright despite seat rotation */
@@ -1147,6 +1547,33 @@ const forceDiscard = async (p: Player) => {
   animation: heartbeat 1.2s ease-in-out infinite;
 }
 
+.inline-action-btn--comeback {
+  background: linear-gradient(135deg, #0d6efd, #42a5f5);
+  color: #fff;
+  border-color: rgba(66, 165, 245, 0.6);
+  font-size: 0.85rem;
+  padding: 8px 16px;
+  animation: comeback-glow 1.5s infinite;
+}
+
+@keyframes comeback-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(66, 165, 245, 0.4); }
+  50% { box-shadow: 0 0 20px rgba(66, 165, 245, 0.8); }
+}
+
+.ai-controlled-notice {
+  font-size: 0.7rem;
+  color: #ffd36a;
+  text-align: center;
+  padding: 4px;
+  white-space: nowrap;
+}
+
+.turn-ai {
+  color: #ffd36a;
+  font-weight: 700;
+}
+
 .inline-action-timer {
   font-size: 0.65rem;
   color: #ffd36a;
@@ -1207,6 +1634,27 @@ const forceDiscard = async (p: Player) => {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
+}
+
+/* 出牌倒计时 */
+.turn-timer {
+  margin-left: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #81c784;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
+.turn-timer--urgent {
+  color: #ef5350;
+  animation: timer-pulse 0.5s infinite;
+}
+
+@keyframes timer-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.05); }
 }
 
 /* ===== 通用按钮 ===== */
@@ -1381,6 +1829,86 @@ const forceDiscard = async (p: Player) => {
   30% { transform: scale(1); }
   45% { transform: scale(1.05); }
   60% { transform: scale(1); }
+}
+
+/* ===== 拖拽出牌：桌面高亮 ===== */
+.table--drag-over .table-felt {
+  box-shadow: inset 0 0 30px rgba(255, 215, 0, 0.25);
+}
+
+.table--drag-over .table-felt::after {
+  content: '松手出牌';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: rgba(255, 215, 0, 0.7);
+  pointer-events: none;
+  z-index: 50;
+  text-shadow: 0 0 12px rgba(255, 215, 0, 0.4);
+}
+
+/* ===== 犹豫响应期浮层 ===== */
+.hesitation-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 60;
+  animation: hesitation-fade-in 0.2s ease;
+}
+
+@keyframes hesitation-fade-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+.hesitation-card {
+  background: rgba(4, 16, 11, 0.95);
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  border-radius: 14px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  min-width: 120px;
+}
+
+.hesitation-bar-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.hesitation-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #ffd700, #ff9800);
+  transition: width 0.05s linear;
+}
+
+.hesitation-cancel-btn {
+  padding: 4px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 152, 0, 0.5);
+  background: rgba(230, 81, 0, 0.25);
+  color: #ffb74d;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.hesitation-cancel-btn:hover {
+  background: rgba(230, 81, 0, 0.5);
+  color: #fff;
 }
 
 /* ===== 响应式降级 ===== */

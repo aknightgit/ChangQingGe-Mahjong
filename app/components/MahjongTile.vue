@@ -68,10 +68,24 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'click', tile: Tile): void
+  (e: 'dblclick', tile: Tile): void
 }>()
 
+let clickTimer: ReturnType<typeof setTimeout> | null = null
+let clickCount = 0
+
 const onClick = () => {
-  emit('click', props.tile)
+  clickCount++
+  if (clickCount === 1) {
+    clickTimer = setTimeout(() => {
+      clickCount = 0
+      emit('click', props.tile)
+    }, 250)
+  } else if (clickCount === 2) {
+    if (clickTimer) clearTimeout(clickTimer)
+    clickCount = 0
+    emit('dblclick', props.tile)
+  }
 }
 
 // ===== PNG 牌图映射 =====
