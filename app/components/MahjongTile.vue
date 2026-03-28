@@ -89,36 +89,37 @@ const onClick = () => {
 }
 
 // ===== PNG 牌图映射 =====
+// 优先使用 ak_jpg 实体牌素材，fallback 到 pomax_hq
 const tileImageSrc = computed(() => {
   const { suit, value } = props.tile
 
-  // 数字牌 (注意: 服务器端 TileSuit.CHARACTERS = 'wan')
-  if (suit === 'wan' || suit === 'man') return `/assets/tileset/pomax_hq/Man${value}.png`
-  if (suit === 'dots' || suit === 'tong') return `/assets/tileset/pomax_hq/Pin${value}.png`
-  if (suit === 'tiao') return `/assets/tileset/pomax_hq/Sou${value}.png`
+  // 数字牌
+  if (suit === 'wan' || suit === 'man') return `/assets/tileset/ak_jpg/man${value}.jpg`
+  if (suit === 'dots' || suit === 'tong') return `/assets/tileset/ak_jpg/pin${value}.jpg`
+  if (suit === 'tiao') return `/assets/tileset/ak_jpg/bamboo${value}.jpg`
 
   // 风牌
   if (suit === 'feng') {
-    const windMap: Record<number, string> = { 1: 'Ton', 2: 'Nan', 3: 'Pei', 4: 'Shaa' }
+    const windMap: Record<number, string> = { 1: 'east', 2: 'south', 3: 'west', 4: 'north' }
     const name = windMap[value]
-    return name ? `/assets/tileset/pomax_hq/${name}.png` : null
+    return name ? `/assets/tileset/ak_jpg/${name}.jpg` : null
   }
 
   // 箭牌: 中发白
   if (suit === 'jian') {
-    const dragonMap: Record<number, string> = { 1: 'Chun', 2: 'Hatsu', 3: 'Haku' }
+    const dragonMap: Record<number, string> = { 1: 'zhong', 2: 'fa', 3: 'bai' }
     const name = dragonMap[value]
-    return name ? `/assets/tileset/pomax_hq/${name}.png` : null
+    return name ? `/assets/tileset/ak_jpg/${name}.jpg` : null
   }
 
   // 花牌
   if (suit === 'hua') {
     const flowerMap: Record<number, string> = {
-      1: 'Spring', 2: 'Summer', 3: 'Autumn', 4: 'Winter',
-      5: 'Orchid', 6: 'Plum', 7: 'Bamboo', 8: 'Chrysanthemum'
+      1: 'spring', 2: 'summer', 3: 'autumn', 4: 'winter',
+      5: 'plum', 6: 'orchid', 7: 'bamboo_flower', 8: 'chrysanthemum'
     }
     const name = flowerMap[value]
-    return name ? `/assets/tileset/pomax_hq/${name}.png` : null
+    return name ? `/assets/tileset/ak_jpg/${name}.jpg` : null
   }
 
   return null
