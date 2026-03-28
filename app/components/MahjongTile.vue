@@ -145,9 +145,9 @@ const chineseNum = computed(() => {
 
 <style scoped>
 .tile {
-  width: 36px;
-  height: 50px;
-  border-radius: 5px 5px 4px 4px;
+  width: 28px;
+  height: 40px;
+  border-radius: 3px 3px 2px 2px;
   background: #faf6ee;
   border: 0.5px solid #e0d6c0;
   /* 2.5D: front face highlight + bottom/right side edges + ambient shadow */
@@ -177,8 +177,8 @@ const chineseNum = computed(() => {
 }
 
 .tile--small {
-  width: 31px;
-  height: 45px;
+  width: 28px;
+  height: 40px;
   border-width: 0.5px;
 }
 
@@ -313,7 +313,7 @@ const chineseNum = computed(() => {
 /* ==================== 响应式 ==================== */
 @media (max-width: 1300px) {
   .tile { width: 25px; height: 34px; }
-  .tile--small { width: 22px; height: 31px; }
+  .tile--small { width: 25px; height: 34px; }
   .tile-char-top { font-size: 0.8rem; }
   .tile-char-bottom { font-size: 1rem; }
   .tile-wind, .tile-dragon { font-size: 1.4rem; }
@@ -322,7 +322,7 @@ const chineseNum = computed(() => {
 }
 @media (max-width: 900px) {
   .tile { width: 20px; height: 27px; }
-  .tile--small { width: 18px; height: 25px; }
+  .tile--small { width: 20px; height: 27px; }
   .tile-char-top { font-size: 0.6rem; }
   .tile-char-bottom { font-size: 0.75rem; }
   .tile-wind, .tile-dragon { font-size: 1rem; }

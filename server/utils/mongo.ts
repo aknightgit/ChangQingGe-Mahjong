@@ -30,9 +30,9 @@ export async function getMongoClient(): Promise<MongoClient> {
 	if (g._mongoClient) return g._mongoClient
 
 	const client = new MongoClient(getMongoUri(), {
-		connectTimeoutMS: 30000,       // 连接超时 30s（NAS 网络延迟）
-		socketTimeoutMS: 120000,       // Socket 超时 120s
-		serverSelectionTimeoutMS: 30000, // 服务选择超时 30s
+		connectTimeoutMS: 10000,        // 连接超时 10s（防挂死）
+		socketTimeoutMS: 30000,         // Socket 超时 30s（加快失败）
+		serverSelectionTimeoutMS: 10000, // 服务选择超时 10s
 		retryWrites: true,             // 写入失败自动重试
 		retryReads: true,              // 读取失败自动重试
 		maxPoolSize: 10,               // 连接池

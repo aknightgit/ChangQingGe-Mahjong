@@ -18,6 +18,7 @@ import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculat
 import { randomUUID } from 'crypto';
 import { saveGameState, loadGameState, loadAllGameStates, deleteGameState } from './gamePersistence';
 import { MatchHistoryService } from '../services/matchHistoryService';
+import { isBotPlayer, selectDiscardTile, shouldClaimPendingAction } from '../services/botService';
 
 /**
  * In-memory game state manager
@@ -61,6 +62,8 @@ class GameManager {
         for (const pa of pending) {
           const player = game.players.find(p => p.id === pa.playerId);
           if (!player || player.status !== PlayerStatus.PLAYING) continue;
+          // Bot 已在 checkPendingActions 的 setTimeout 中处理过，跳过
+          if (isBotPlayer(player)) continue;
           this.handlePass(game, player);
         }
 
@@ -1328,6 +1331,31 @@ class GameManager {
 
     if (game.pendingActions.length > 0) {
       this.schedulePendingActionTimeout(game.gameId);
+
+      // 调度 bot 玩家的自动响应（优先于1秒超时）
+      for (const pa of game.pendingActions) {
+        const player = game.players.find(p => p.id === pa.playerId);
+        if (player && isBotPlayer(player)) {
+          const delay = 300 + Math.floor(Math.random() * 400); // 300-700ms 随机延迟
+          setTimeout(() => {
+            // 重新检查是否还有这个玩家的 pending action
+            const currentPa = game.pendingActions.find(p => p.playerId === player.id);
+            if (!currentPa) return; // 已经被处理过了
+
+            const action = shouldClaimPendingAction(player, currentPa.availableActions, game);
+            if (action !== ActionType.PASS) {
+              // Bot 决定要碰/杠/胡 → 执行动作
+              this.executeAction(game.gameId, player.id, action)
+                .catch(err => console.error('[BotService] Pending action error:', err));
+            } else {
+              // PASS
+              this.handlePass(game, player);
+              this.persistGame(game);
+              this.broadcastGameState(game.gameId);
+            }
+          }, delay);
+        }
+      }
     } else {
       this.clearPendingActionTimer(game.gameId);
     }
@@ -1428,6 +1456,50 @@ class GameManager {
     
     // 然后正常摸牌
     this.handleDraw(game, nextPlayer);
+
+    // 如果是 bot 玩家，延迟后自动出牌（给客户端留出动画时间）
+    if (isBotPlayer(nextPlayer)) {
+      this.scheduleBotDiscard(game.gameId, nextPlayer.id);
+    }
+  }
+
+  /**
+   * 调度 bot 玩家延迟出牌
+   */
+  private botTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
+  private scheduleBotDiscard(gameId: string, playerId: string): void {
+    // 清除旧的 timer
+    const existing = this.botTimers.get(gameId);
+    if (existing) clearTimeout(existing);
+
+    const timer = setTimeout(async () => {
+      this.botTimers.delete(gameId);
+      try {
+        const game = await this.getGame(gameId);
+        if (!game || game.phase !== GamePhase.PLAYING) return;
+        if (game.players[game.currentPlayerIndex].id !== playerId) return; // 不是当前玩家
+        if (game.pendingActions.length > 0) {
+          // 有待响应的动作（别人打出的牌），bot 处理碰/杠/胡/过
+          const botAction = shouldClaimPendingAction(
+            game.players[game.currentPlayerIndex],
+            game.pendingActions.find(pa => pa.playerId === playerId)?.availableActions || [],
+            game
+          );
+          await this.executeAction(gameId, playerId, botAction as ActionType);
+        } else {
+          // 正常出牌
+          const tileId = selectDiscardTile(game.players[game.currentPlayerIndex], game);
+          if (tileId) {
+            await this.executeAction(gameId, playerId, ActionType.DISCARD, tileId);
+          }
+        }
+      } catch (err) {
+        console.error('[BotService] Bot discard error:', err);
+      }
+    }, 800); // 800ms 延迟，让客户端看到摸牌
+
+    this.botTimers.set(gameId, timer);
   }
 
   /**
