@@ -20,17 +20,7 @@ export default defineNuxtConfig({
     },
     // Ensure Socket.IO can access the HTTP server
     timing: false,
-    // 全局错误拦截：ECONNABORTED 不触发 Nuxt 重启
-    errorHandler: (error, event) => {
-      const code = (error as any)?.code
-      if (code === 'ECONNABORTED' || (error as any)?.message?.includes('ECONNABORTED')) {
-        console.warn('⚠️ [nitro.errorHandler] ECONNABORTED suppressed:', code)
-        return
-      }
-      // 其他错误正常抛出
-      console.error('[nitro.errorHandler]', error)
-      throw error
-    },
+    // ⚠️ errorHandler 已移至 server/utils/errorHandler.ts（Nitro 自动发现）
   },
   // Socket.IO needs CORS for cross-origin dev
   vite: {
