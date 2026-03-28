@@ -144,7 +144,7 @@
               <span v-if="isWinner" class="turn-win">🎉 你赢了！</span>
               <span v-else-if="isAIControlled" class="turn-ai">🤖 AI托管中</span>
               <span v-else-if="showMobileActionNotice" class="turn-action">有可用操作</span>
-              <span v-else-if="hesitationState.active" class="turn-action">出牌犹豫中…</span>
+              <span v-else-if="hesitationState?.active" class="turn-action">出牌犹豫中…</span>
               <span v-else>{{ turnMessage }}</span>
               <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
                 ⏱ {{ turnTimer }}s
@@ -152,11 +152,11 @@
             </div>
 
             <!-- 犹豫响应期浮层 -->
-            <div v-if="hesitationState.active" class="hesitation-overlay">
+            <div v-if="hesitationState?.active" class="hesitation-overlay">
               <div class="hesitation-card">
                 <MahjongTile
-                  v-if="hesitationState.tile"
-                  :tile="hesitationState.tile"
+                  v-if="hesitationState?.tile"
+                  :tile="hesitationState?.tile"
                   :small="true"
                 />
                 <div class="hesitation-bar-track">
