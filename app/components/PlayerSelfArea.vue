@@ -204,45 +204,6 @@ const onDragEnd = (event: DragEvent) => {
   box-shadow: 0 0 10px rgba(255, 214, 0, 0.4);
 }
 
-.player-discards {
-  position: absolute;
-  top: -50px;
-  left: 0;
-  z-index: 15;
-  background: rgba(255, 255, 0, 0.25); /* 调试用黄色边框，发布时删除 */
-}
-
-.discards-grid {
-  display: grid;
-  grid-template-columns: repeat(6, max-content);
-  gap: 2px;
-}
-
-.discard-item {
-  position: relative;
-}
-
-.latest-arrow {
-  position: absolute;
-  top: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 2;
-  animation: float-arrow 1.2s ease-in-out infinite;
-}
-
-.arrow-svg {
-  width: 8px;
-  height: 6px;
-  display: block;
-  filter: drop-shadow(0 0 3px rgba(244, 67, 54, 0.6));
-}
-
-@keyframes float-arrow {
-  0%, 100% { transform: translateX(-50%) translateY(0); opacity: 1; }
-  50% { transform: translateX(-50%) translateY(-4px); opacity: 0.6; }
-}
-
 /* hand + claim overlay */
 .player-hand-wrapper {
   position: relative;

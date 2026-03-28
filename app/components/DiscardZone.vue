@@ -83,35 +83,50 @@ const props = defineProps<{
   50% { transform: translateX(-50%) translateY(-4px); opacity: 0.6; }
 }
 
-/* ===== 本家（下）===== */
-.discard-zone--bottom {
-  /* 位于桌面下半部分中央，偏上（靠近牌墙） */
-  bottom: 25%;
-  left: 50%;
-  transform: translateX(-50%);
-}
+/*
+ * 4:3 比例坐标（宽100% × 高75% 等效）
+ * 上: (25%,8%) ~ (75%,22%)  → top: 8%; left:25%; width:50%;
+ * 下: (25%,53%) ~ (75%,67%) → bottom: 8%; left:25%; width:50%;
+ * 左: (5%,22%) ~ (25%,53%)  → top:22%; left:5%; width:20%;
+ * 右: (75%,22%) ~ (95%,53%) → top:22%; right:5%; width:20%;
+ */
 
 /* ===== 上家 ===== */
 .discard-zone--top {
-  /* 位于桌面上半部分中央，偏下 */
-  top: 25%;
-  left: 50%;
-  transform: translateX(-50%) rotate(180deg);
+  top: 8%;
+  left: 25%;
+  width: 50%;
+  display: flex;
+  justify-content: center;
+  transform: rotate(180deg);
+}
+
+/* ===== 下家（本家）===== */
+.discard-zone--bottom {
+  bottom: 8%;
+  left: 25%;
+  width: 50%;
+  display: flex;
+  justify-content: center;
 }
 
 /* ===== 左家 ===== */
 .discard-zone--left {
-  /* 位于桌面左半部分中央 */
-  left: 18%;
-  top: 50%;
-  transform: translate(-50%, -50%) rotate(90deg);
+  top: 22%;
+  left: 5%;
+  width: 20%;
+  display: flex;
+  justify-content: center;
+  transform: rotate(90deg);
 }
 
 /* ===== 右家 ===== */
 .discard-zone--right {
-  /* 位于桌面右半部分中央 */
-  right: 18%;
-  top: 50%;
-  transform: translate(50%, -50%) rotate(270deg);
+  top: 22%;
+  right: 5%;
+  width: 20%;
+  display: flex;
+  justify-content: center;
+  transform: rotate(270deg);
 }
 </style>

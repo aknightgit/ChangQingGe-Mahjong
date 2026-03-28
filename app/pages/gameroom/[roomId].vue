@@ -1289,8 +1289,8 @@ const forceDiscard = async (p: Player) => {
 
 .mahjong-table {
   position: relative;
+  /* 4:3 比例，56em×42em ≈ 896×672px，保证零隐藏 */
   width: min(100vw, calc(80vh * 4/3), 1200px);
-  /* 4:3 比例，高度不变，宽度扩展 */
   aspect-ratio: 4 / 3;
   border-radius: 20px;
   /* 深木色外框 */
@@ -1422,6 +1422,7 @@ const forceDiscard = async (p: Player) => {
   left: 50%;
   transform: translateX(-50%) rotate(180deg);
   width: 62%;
+  height: auto;
 }
 
 .seat-bottom {
@@ -1429,6 +1430,7 @@ const forceDiscard = async (p: Player) => {
   left: 50%;
   transform: translateX(-50%);
   width: 62%;
+  height: auto;
 }
 
 .seat-left {
@@ -1437,8 +1439,8 @@ const forceDiscard = async (p: Player) => {
   height: 100%;
   width: 60px;
   flex-direction: column;
-  align-items: flex-start; /* 手牌贴左边缘（桌子边缘） */
-  justify-content: center; /* 内容整体垂直居中 */
+  align-items: flex-start;
+  justify-content: center;
   overflow: visible;
 }
 
@@ -1448,8 +1450,8 @@ const forceDiscard = async (p: Player) => {
   height: 100%;
   width: 60px;
   flex-direction: column;
-  align-items: flex-end; /* 手牌贴右边缘（桌子边缘） */
-  justify-content: center; /* 内容整体垂直居中 */
+  align-items: flex-end;
+  justify-content: center;
   overflow: visible;
 }
 

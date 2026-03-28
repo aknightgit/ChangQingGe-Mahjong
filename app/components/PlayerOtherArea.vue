@@ -13,38 +13,77 @@
       </span>
     </div>
 
-    <!-- 统一布局：melds左 + hand右 -->
-    <div class="player-area">
-      <div class="player-other-melds" v-if="melds.length">
-        <div
-          v-for="(meld, i) in melds"
-          :key="i"
-          class="other-meld"
-          :class="[`other-meld--${meld.type}`, { 'other-meld--flower': isFlowerMeld(meld), 'other-meld--concealed': meld.type === 'concealed_kong' }]"
-        >
+    <!-- 布局方向由 position 控制：
+         top/bottom: flex-row, hand左 + melds右（melds在玩家左手边）
+         left: column, hand上 + meld下（meld在玩家左手边=下）
+         right: column, meld上 + hand下（meld在玩家左手边=上） -->
+    <div class="player-area" :class="`player-area--${position}`">
+      <!-- left/bottom: hand 在前 -->
+      <template v-if="position === 'left'">
+        <div class="player-other-hand">
           <MahjongTile
-            v-for="tile in meld.tiles"
+            v-for="tile in hand"
             :key="tile.id"
             :tile="tile"
             :small="true"
+            :back="!revealHand"
             :dimmed="isWinner"
           />
-          <span v-if="meld.sourcePosition !== undefined" class="meld-arrow">
-            {{ getArrowChar(meld.sourcePosition) }}
-          </span>
         </div>
-      </div>
+        <div class="player-other-melds" v-if="melds.length">
+          <div
+            v-for="(meld, i) in melds"
+            :key="i"
+            class="other-meld"
+            :class="[`other-meld--${meld.type}`, { 'other-meld--flower': isFlowerMeld(meld), 'other-meld--concealed': meld.type === 'concealed_kong' }]"
+          >
+            <MahjongTile
+              v-for="tile in meld.tiles"
+              :key="tile.id"
+              :tile="tile"
+              :small="true"
+              :dimmed="isWinner"
+            />
+            <span v-if="meld.sourcePosition !== undefined" class="meld-arrow">
+              {{ getArrowChar(meld.sourcePosition) }}
+            </span>
+          </div>
+        </div>
+      </template>
 
-      <div class="player-other-hand">
-        <MahjongTile
-          v-for="tile in hand"
-          :key="tile.id"
-          :tile="tile"
-          :small="true"
-          :back="!revealHand"
-          :dimmed="isWinner"
-        />
-      </div>
+      <!-- top/right: melds 在前 -->
+      <template v-else>
+        <div class="player-other-melds" v-if="melds.length">
+          <div
+            v-for="(meld, i) in melds"
+            :key="i"
+            class="other-meld"
+            :class="[`other-meld--${meld.type}`, { 'other-meld--flower': isFlowerMeld(meld), 'other-meld--concealed': meld.type === 'concealed_kong' }]"
+          >
+            <MahjongTile
+              v-for="tile in meld.tiles"
+              :key="tile.id"
+              :tile="tile"
+              :small="true"
+              :dimmed="isWinner"
+            />
+            <span v-if="meld.sourcePosition !== undefined" class="meld-arrow">
+              {{ getArrowChar(meld.sourcePosition) }}
+            </span>
+          </div>
+        </div>
+
+        <div class="player-other-hand">
+          <MahjongTile
+            v-for="tile in hand"
+            :key="tile.id"
+            :tile="tile"
+            :small="true"
+            :back="!revealHand"
+            :dimmed="isWinner"
+          />
+        </div>
+      </template>
     </div>
 
     <!-- 弃牌区已移至独立的 DiscardZone 组件，不再在此渲染 -->
@@ -131,11 +170,29 @@ const getArrowChar = (sourcePos: number): string => {
   font-size: 0.6rem;
 }
 
-/* ===== 统一布局：melds左 + hand右 ===== */
+/* ===== 布局：由 position 类控制方向 ===== */
 .player-area {
   display: flex;
-  align-items: center;
   gap: 3px;
+}
+
+/* top/bottom: 水平排列，hand左 + melds右（meld在player左手边） */
+.player-area--top,
+.player-area--bottom {
+  flex-direction: row;
+  align-items: center;
+}
+
+/* left: 垂直排列，hand上 + meld下（player左手=桌下=底部） */
+.player-area--left {
+  flex-direction: column;
+  align-items: center;
+}
+
+/* right: 垂直排列，meld上 + hand下（player左手=桌上=顶部） */
+.player-area--right {
+  flex-direction: column-reverse;
+  align-items: center;
 }
 
 .player-other-melds {
@@ -195,5 +252,12 @@ const getArrowChar = (sourcePos: number): string => {
   flex-direction: column;
   flex-wrap: nowrap;
   gap: 0;
+}
+
+/* 左家/右家 melds：纵向排列 */
+.player-other--left .player-other-melds,
+.player-other--right .player-other-melds {
+  flex-direction: column;
+  gap: 2px;
 }
 </style>
