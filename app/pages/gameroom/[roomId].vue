@@ -556,26 +556,7 @@ const onPlayerBack = () => {
   }
 }
 
-// 监听回合变化，启动/停止倒计时
-watch([isMyTurn, hasPriorityActions], ([myTurn, hasActions]) => {
-  if (isAIControlled.value) return
-  if (myTurn || hasActions) {
-    startTurnTimer()
-  } else {
-    stopTurnTimer()
-  }
-})
-
 const isMyTurn = computed(() => currentTurnPlayer.value?.id === currentPlayer.value?.id)
-
-// 监听回合变化，启动/停止倒计时
-watch([isMyTurn, hasPriorityActions], ([myTurn, hasActions]) => {
-  if (myTurn || hasActions) {
-    startTurnTimer()
-  } else {
-    stopTurnTimer()
-  }
-})
 
 // 骰子动画状态
 const showDiceOverlay = ref(false)
@@ -1042,6 +1023,16 @@ const hasPriorityActions = computed(
     showConcealedKong.value ||
     showExtendedKong.value
 )
+
+// 监听回合变化，启动/停止倒计时（移到 hasPriorityActions 定义之后，避免 TDZ）
+watch([isMyTurn, hasPriorityActions], ([myTurn, hasActions]) => {
+  if (isAIControlled.value) return
+  if (myTurn || hasActions) {
+    startTurnTimer()
+  } else {
+    stopTurnTimer()
+  }
+})
 
 const myPendingAction = computed(() => {
   if (!gameState.value || !currentPlayer.value) return null
