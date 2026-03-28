@@ -139,6 +139,16 @@
             <div class="round-info" v-if="gameState?.phase === 'playing'">
               {{ roundDisplay }}
             </div>
+            <!-- 十字定位标志 -->
+            <div class="cross-marker">
+              <div class="cross-h"></div>
+              <div class="cross-v"></div>
+            </div>
+            <!-- 四方位标注 -->
+            <span class="compass compass--n">北</span>
+            <span class="compass compass--s">南</span>
+            <span class="compass compass--w">西</span>
+            <span class="compass compass--e">东</span>
             <!-- 状态消息（非中心显示） -->
             <div class="turn-indicator">
               <span v-if="isWinner" class="turn-win">🎉 你赢了！</span>
@@ -1629,6 +1639,44 @@ const forceDiscard = async (p: Player) => {
   padding: 2px 10px;
   border-radius: 999px;
 }
+
+/* 十字定位标志 */
+.cross-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 30px;
+  height: 30px;
+  z-index: 2;
+  pointer-events: none;
+}
+.cross-h, .cross-v {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.12);
+}
+.cross-h {
+  top: 50%; left: 0; width: 100%; height: 1px;
+  transform: translateY(-0.5px);
+}
+.cross-v {
+  left: 50%; top: 0; height: 100%; width: 1px;
+  transform: translateX(-0.5px);
+}
+
+/* 四方位标注 */
+.compass {
+  position: absolute;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.35);
+  z-index: 2;
+  pointer-events: none;
+}
+.compass--n { top: 2%; left: 50%; transform: translateX(-50%); }
+.compass--s { bottom: 2%; left: 50%; transform: translateX(-50%); }
+.compass--w { left: 2%; top: 50%; transform: translateY(-50%); }
+.compass--e { right: 2%; top: 50%; transform: translateY(-50%); }
 
 /* 状态提示 */
 .turn-indicator {

@@ -5,14 +5,11 @@
     <!-- 牌墙：双层2.5D效果 -->
     <TileWall :remaining="remainingTiles" />
 
-    <!-- 中心信息：倍数 + 百搭小牌 -->
+    <!-- 中心信息：总倍数 + 百搭小牌 -->
     <div class="center-info">
       <div class="center-badges">
         <span class="multiplier-badge">
-          🎲 局倍 ×{{ roundMultiplier || 1 }}
-        </span>
-        <span class="multiplier-badge multiplier-badge--global">
-          📈 总倍 ×{{ globalMultiplier || 1 }}
+          🎲 总倍 ×{{ globalMultiplier || 1 }}
         </span>
       </div>
       <!-- 百搭：缩小真实牌面（无百搭时给出占位） -->
@@ -100,11 +97,6 @@ const props = defineProps<{
   box-shadow: 0 2px 8px rgba(255, 152, 0, 0.38);
 }
 
-.multiplier-badge--global {
-  background: rgba(233, 30, 99, 0.85);
-  box-shadow: 0 2px 6px rgba(233, 30, 99, 0.35);
-}
-
 .wild-tile-mini {
   display: flex;
   flex-direction: column;
@@ -113,13 +105,18 @@ const props = defineProps<{
   margin-top: 4px;
   transform: scale(0.35);
   transform-origin: center;
+  filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.6));
+  border: 2px solid rgba(255, 215, 0, 0.7);
+  border-radius: 4px;
+  padding: 1px;
+  background: rgba(255, 215, 0, 0.08);
 }
 
 .wild-label {
   font-size: 0.66rem;
   font-weight: 700;
   color: #ffd700;
-  text-shadow: 0 0 4px rgba(255, 215, 0, 0.5);
+  text-shadow: 0 0 6px rgba(255, 215, 0, 0.7);
 }
 
 .wild-placeholder {
