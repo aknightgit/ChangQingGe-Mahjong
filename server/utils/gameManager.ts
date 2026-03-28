@@ -1544,26 +1544,46 @@ class GameManager {
     const flowerMelds = player.hand.exposedMelds.filter(
       m => m.tiles.length === 1 && isFlower(m.tiles[0])
     );
-    
+
+    if (flowerMelds.length === 0) return;
+
+    // 从 exposedMelds 中移除这些花牌 meld（处理完再加回来）
+    player.hand.exposedMelds = player.hand.exposedMelds.filter(
+      m => !(m.tiles.length === 1 && isFlower(m.tiles[0]))
+    );
+
+    const newFlowers: Tile[] = [];
+
     for (const meld of flowerMelds) {
       if (game.wall.length === 0) break;
-      
-      // 从牌墙补一张牌
-      const replacement = game.wall.pop()!;
-      
-      if (isFlower(replacement)) {
-        // 补到的还是花牌，加到门口继续补
-        player.hand.exposedMelds.push({
-          type: MeldType.TRIPLET,
-          tiles: [replacement],
-          isConcealed: false
-        });
-      } else {
+
+      let replacement = game.wall.pop()!;
+
+      // 如果补到花牌，继续从牌墙补
+      while (isFlower(replacement)) {
+        newFlowers.push(replacement);
+        if (game.wall.length === 0) {
+          replacement = null as any;
+          break;
+        }
+        replacement = game.wall.pop()!;
+      }
+
+      if (replacement) {
         // 补到普通牌，加入手牌
         player.hand.concealedTiles.push(replacement);
       }
     }
-    
+
+    // 新补到的花牌也放到门口
+    for (const flower of newFlowers) {
+      player.hand.exposedMelds.push({
+        type: MeldType.TRIPLET,
+        tiles: [flower],
+        isConcealed: false
+      });
+    }
+
     player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
   }
 

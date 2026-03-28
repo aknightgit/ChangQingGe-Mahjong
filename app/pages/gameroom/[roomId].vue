@@ -144,29 +144,12 @@
               <span v-if="isWinner" class="turn-win">🎉 你赢了！</span>
               <span v-else-if="isAIControlled" class="turn-ai">🤖 AI托管中</span>
               <span v-else-if="showMobileActionNotice" class="turn-action">有可用操作</span>
-              <span v-else-if="hesitationState?.active" class="turn-action">出牌犹豫中…</span>
               <span v-else>{{ turnMessage }}</span>
               <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
                 ⏱ {{ turnTimer }}s
               </span>
             </div>
 
-            <!-- 犹豫响应期浮层 -->
-            <div v-if="hesitationState?.active" class="hesitation-overlay">
-              <div class="hesitation-card">
-                <MahjongTile
-                  v-if="hesitationState?.tile"
-                  :tile="hesitationState?.tile"
-                  :small="true"
-                />
-                <div class="hesitation-bar-track">
-                  <div class="hesitation-bar-fill" :style="{ width: hesitationProgress + '%' }"></div>
-                </div>
-                <button class="hesitation-cancel-btn" @click="cancelHesitation">
-                  撤销出牌
-                </button>
-              </div>
-            </div>
             <!-- 桌面中心: 弃牌池 + 牌墙 + 倍数 -->
             <TableCenter
               :remaining-tiles="remainingTileCount"
@@ -899,7 +882,7 @@ const cancelHesitation = () => {
 const isDragOverTable = ref(false)
 
 const onTableDragOver = (e: DragEvent) => {
-  if (hesitationState.value.active || isInteractionLocked.value) return
+  if (isInteractionLocked.value) return
   e.preventDefault()
   isDragOverTable.value = true
 }
@@ -910,7 +893,7 @@ const onTableDragLeave = () => {
 
 const onTableDrop = (e: DragEvent) => {
   isDragOverTable.value = false
-  if (hesitationState.value.active || isInteractionLocked.value) return
+  if (isInteractionLocked.value) return
 
   const tileId = e.dataTransfer?.getData('application/tile-id')
     || e.dataTransfer?.getData('text/plain')
@@ -927,22 +910,22 @@ const onTableDrop = (e: DragEvent) => {
 
 // ===== 双击出牌 =====
 const handleTileDblclick = (tile: Tile) => {
-  if (isWinner.value || isInteractionLocked.value || hesitationState.value.active) return
+  if (isWinner.value || isInteractionLocked.value) return
   const canDiscard = availableActions.value.includes(ActionType.DISCARD)
   if (!canDiscard) return
-  startHesitation(tile)
+  commitDiscard(tile)
 }
 
 const handleTileClick = (tile: Tile) => {
-  if (isWinner.value || isInteractionLocked.value || hesitationState.value.active) return
+  if (isWinner.value || isInteractionLocked.value) return
   
   // If it's our turn and we can discard
   const canDiscard = availableActions.value.includes(ActionType.DISCARD)
   
   if (selectedTileId.value === tile.id) {
     if (canDiscard) {
-      // 二次点击 → 进入犹豫期
-      startHesitation(tile)
+      // 二次点击 → 直接出牌
+      commitDiscard(tile)
     }
   } else {
     selectedTileId.value = tile.id
@@ -1315,6 +1298,43 @@ const forceDiscard = async (p: Player) => {
   z-index: 20;
 }
 
+/* ===== 弃牌区定位（4:3 比例） ===== */
+/* 上家：桌面上半部分中央 */
+:deep(.discard-zone--top) {
+  top: 15%;
+  left: 25%;
+  width: 50%;
+  display: flex;
+  justify-content: center;
+  transform: rotate(180deg);
+}
+/* 下家（本家）：桌面下半部分中央 */
+:deep(.discard-zone--bottom) {
+  bottom: 15%;
+  left: 25%;
+  width: 50%;
+  display: flex;
+  justify-content: center;
+}
+/* 左家：桌面左侧纵向 */
+:deep(.discard-zone--left) {
+  top: 25%;
+  left: 3%;
+  width: 20%;
+  display: flex;
+  justify-content: center;
+  transform: rotate(90deg);
+}
+/* 右家：桌面右侧纵向 */
+:deep(.discard-zone--right) {
+  top: 25%;
+  right: 3%;
+  width: 20%;
+  display: flex;
+  justify-content: center;
+  transform: rotate(270deg);
+}
+
 /* ===== 扩展信息区 ===== */
 .extended-info-panel {
   flex: 0 0 280px;
@@ -1408,6 +1428,15 @@ const forceDiscard = async (p: Player) => {
   display: inline-block;
 }
 
+/* Counter-rotate names so they read upright despite seat rotation */
+.seat-left :deep(.player-other-name) {
+  transform: rotate(-90deg);
+}
+
+.seat-right :deep(.player-other-name) {
+  transform: rotate(-270deg);
+}
+
 .seat-top {
   top: 0;
   left: 50%;
@@ -1433,6 +1462,8 @@ const forceDiscard = async (p: Player) => {
   align-items: flex-start;
   justify-content: center;
   overflow: visible;
+  transform: rotate(90deg);
+  transform-origin: center center;
 }
 
 .seat-right {
@@ -1444,6 +1475,8 @@ const forceDiscard = async (p: Player) => {
   align-items: flex-end;
   justify-content: center;
   overflow: visible;
+  transform: rotate(270deg);
+  transform-origin: center center;
 }
 
 /* ===== 本家：手牌 + 动作按钮横排 ===== */
