@@ -823,10 +823,10 @@
 | T-202 | 四个 .seat 区域定位 | T-201 | `[roomId].vue` CSS | ✅ | ✅ |
 | T-203 | 十字定位标志 | T-201 | `[roomId].vue` CSS | ⚠️ | ❌ |
 | T-204 | 四方位标注（东南西北） | T-201 | `[roomId].vue` CSS | ⚠️ | ❌ |
-| T-205 | 牌桌比例调整为 4:3（56em×42em，保证零隐藏） | T-201 | `[roomId].vue` CSS → `--w:56em; --h:42em; aspect-ratio:4/3` | ❌ | ❌ |
-| T-206 | 4:3 比例下各区域坐标重算（弃牌区/手牌/牌墙） | T-205 | `[roomId].vue` + 各组件定位 CSS | ❌ | ❌ |
-| T-207 | 4:3 比例下牌墙四边位置适配 | T-205,T-250 | `TileWall.vue` CSS 百分比定位 | ❌ | ❌ |
-| T-208 | 4:3 比例下弃牌区4象限位置适配 | T-205,T-231 | `DiscardZone.vue` + `[roomId].vue` | ❌ | ❌ |
+| T-205 | 牌桌比例调整为 4:3（56em×42em，保证零隐藏） | T-201 | `[roomId].vue` CSS → `--w:56em; --h:42em; aspect-ratio:4/3` | ✅ | ⚠️ |
+| T-206 | 4:3 比例下各区域坐标重算（弃牌区/手牌/牌墙） | T-205 | `[roomId].vue` + 各组件定位 CSS | ✅ | ⚠️ |
+| T-207 | 4:3 比例下牌墙四边位置适配 | T-205,T-250 | `TileWall.vue` CSS 百分比定位 | ⚠️ | ❌ |
+| T-208 | 4:3 比例下弃牌区4象限位置适配 | T-205,T-231 | `DiscardZone.vue` + `[roomId].vue` | ✅ | ⚠️ |
 
 ### 5.3.2 牌面渲染组件
 | 编号 | 任务 | 前置条件 | 产出文件 | 完成 | 验收 |
@@ -852,21 +852,21 @@
 | 编号 | 任务 | 前置条件 | 产出文件 | 完成 | 验收 |
 |------|------|---------|---------|------|------|
 | T-230 | DiscardZone 独立组件 | T-201 | `app/components/DiscardZone.vue` (117行) | ✅ | ⚠️ |
-| T-231 | 4个位置绝对定位（top/bottom/left/right） | T-230 | `[roomId].vue` 布局 | ⚠️ | ❌ |
-| T-232 | CSS grid 6列布局，gap 2px | T-230 | `DiscardZone.vue` CSS | ⚠️ | ❌ |
-| T-233 | 弃牌区朝向旋转（4方向） | T-231 | `DiscardZone.vue` CSS | ⚠️ | ❌ |
-| T-234 | 最近出牌红色箭头标记+浮动动画 | T-230 | `DiscardZone.vue` | ❌ | ❌ |
+| T-231 | 4个位置绝对定位（top/bottom/left/right） | T-230 | `[roomId].vue` 布局 | ✅ | ⚠️ |
+| T-232 | CSS grid 6列布局，gap 2px | T-230 | `DiscardZone.vue` CSS | ✅ | ✅ |
+| T-233 | 弃牌区朝向旋转（4方向） | T-231 | `DiscardZone.vue` CSS | ✅ | ✅ |
+| T-234 | 最近出牌红色箭头标记+浮动动画 | T-230 | `DiscardZone.vue` | ✅ | ✅ |
 | T-235 | 弃牌分数标注（绿色得/红色失） | T-230 | `DiscardZone.vue` | ❌ | ❌ |
-| T-236 | 移除旧弃牌区代码（PlayerSelfArea/PlayerOtherArea） | T-231 | `PlayerSelfArea.vue` / `PlayerOtherArea.vue` | ❌ | ❌ |
+| T-236 | 移除旧弃牌区代码（PlayerSelfArea/PlayerOtherArea） | T-231 | `PlayerSelfArea.vue` / `PlayerOtherArea.vue` | ✅ | ✅ |
 
 ### 5.3.5 露牌区
 | 编号 | 任务 | 前置条件 | 产出文件 | 完成 | 验收 |
 |------|------|---------|---------|------|------|
-| T-240 | 本家露牌在手牌右侧（相对左手边） | T-220 | `PlayerSelfArea.vue` | ⚠️ | ❌ |
-| T-241 | 上家露牌在手牌左侧 | T-221 | `PlayerOtherArea.vue` | ⚠️ | ❌ |
-| T-242 | 左家露牌在手牌上方 | T-221 | `PlayerOtherArea.vue` | ⚠️ | ❌ |
-| T-243 | 右家露牌在手牌下方 | T-221 | `PlayerOtherArea.vue` | ⚠️ | ❌ |
-| T-244 | 根据 position prop 动态切换 flex 方向 | T-240~T-243 | `PlayerOtherArea.vue` | ❌ | ❌ |
+| T-240 | 本家露牌在手牌左侧（PlayerSelfArea默认） | T-220 | `PlayerSelfArea.vue` | ✅ | ✅ |
+| T-241 | 上家露牌在手牌左侧（top旋转后=玩家左侧） | T-221 | `PlayerOtherArea.vue` | ✅ | ⚠️ |
+| T-242 | 左家露牌在手牌上方（player左手=朝下→column+手上/露下） | T-221 | `PlayerOtherArea.vue` | ✅ | ⚠️ |
+| T-243 | 右家露牌在手牌下方（player左手=朝上→column-reverse+露上/手下） | T-221 | `PlayerOtherArea.vue` | ✅ | ⚠️ |
+| T-244 | 根据 position prop 动态切换 flex 方向（相对左手边） | T-240~T-243 | `PlayerOtherArea.vue` | ✅ | ⚠️ |
 | T-245 | 露牌分数标注（x2, x4 等） | T-240 | 组件 | ❌ | ❌ |
 | T-246 | 来源玩家颜色圆点标注 | T-240 | 组件 | ✅ | ⚠️ |
 
