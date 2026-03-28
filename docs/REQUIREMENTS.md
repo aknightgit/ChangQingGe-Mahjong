@@ -856,7 +856,6 @@
 | T-232 | CSS grid 6列布局，gap 2px | T-230 | `DiscardZone.vue` CSS | ✅ | ✅ |
 | T-233 | 弃牌区朝向旋转（4方向） | T-231 | `DiscardZone.vue` CSS | ✅ | ✅ |
 | T-234 | 最近出牌红色箭头标记+浮动动画 | T-230 | `DiscardZone.vue` | ✅ | ✅ |
-| T-235 | 弃牌分数标注（绿色得/红色失） | T-230 | `DiscardZone.vue` | ❌ | ❌ |
 | T-236 | 移除旧弃牌区代码（PlayerSelfArea/PlayerOtherArea） | T-231 | `PlayerSelfArea.vue` / `PlayerOtherArea.vue` | ✅ | ✅ |
 
 ### 5.3.5 露牌区
