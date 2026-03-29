@@ -838,30 +838,29 @@ class GameManager {
       return;
     }
 
-    const tile = game.wall.pop()!;
+    let tile = game.wall.pop()!;
     
-    // 花牌处理
-    if (isFlower(tile)) {
-      // 检查是否是百搭花牌
-      const isWildFlower = this.isWildTile(game, tile);
-      
-      if (isWildFlower) {
-        // 百搭花牌 → 进入手牌，不补花
-        player.hand.concealedTiles.push(tile);
-        player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
-      } else {
-        // 普通花牌 → 放门口，递归补花
-        player.hand.exposedMelds.push({
-          type: MeldType.TRIPLET,
-          tiles: [tile],
-          isConcealed: false
-        });
-        this.handleDraw(game, player); // 递归补花
+    // 循环补花：摸到普通花牌就放门口继续摸，直到摸到非花牌
+    while (isFlower(tile) && !this.isWildTile(game, tile)) {
+      player.hand.exposedMelds.push({
+        type: MeldType.TRIPLET,
+        tiles: [tile],
+        isConcealed: false
+      });
+      if (game.wall.length === 0) {
+        this.endRound(game, GameEndReason.WALL_EXHAUSTED);
+        return;
       }
-      return;
+      tile = game.wall.pop()!;
     }
     
-    player.hand.concealedTiles.push(tile);
+    // 花牌百搭 → 进手牌
+    if (isFlower(tile) && this.isWildTile(game, tile)) {
+      player.hand.concealedTiles.push(tile);
+    } else {
+      // 普通牌 → 进手牌
+      player.hand.concealedTiles.push(tile);
+    }
     player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
   }
 
