@@ -214,12 +214,14 @@ const onDragEnd = (event: DragEvent) => {
 
 .player-hand {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   justify-content: center;
   min-height: 72px;
   padding: 4px;
   border-radius: 10px;
   background: transparent;
+  max-width: 100%;
 }
 
 /* 拖拽：手牌可拖拽光标 */

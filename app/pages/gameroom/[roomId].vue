@@ -1326,41 +1326,38 @@ const forceDiscard = async (p: Player) => {
   z-index: 20;
 }
 
-/* ===== 弃牌区定位（4:3 比例） ===== */
-/* 上家：桌面上半部分中央 */
+/* ===== 弃牌区定位 ===== */
+/* 上家：桌面上方1/4区域中央 */
 :deep(.discard-zone--top) {
-  top: 15%;
-  left: 25%;
-  width: 50%;
+  top: 22%;
+  left: 28%;
+  width: 44%;
   display: flex;
   justify-content: center;
-  transform: rotate(180deg);
 }
-/* 下家（本家）：桌面下半部分中央 */
+/* 下家（本家）：桌面下方1/4区域中央 */
 :deep(.discard-zone--bottom) {
-  bottom: 15%;
-  left: 25%;
-  width: 50%;
+  bottom: 22%;
+  left: 28%;
+  width: 44%;
   display: flex;
   justify-content: center;
 }
-/* 左家：桌面左侧纵向 */
+/* 左家：桌面左侧 */
 :deep(.discard-zone--left) {
-  top: 25%;
-  left: 3%;
+  top: 30%;
+  left: 14%;
   width: 20%;
   display: flex;
   justify-content: center;
-  transform: rotate(90deg);
 }
-/* 右家：桌面右侧纵向 */
+/* 右家：桌面右侧 */
 :deep(.discard-zone--right) {
-  top: 25%;
-  right: 3%;
+  top: 30%;
+  right: 14%;
   width: 20%;
   display: flex;
   justify-content: center;
-  transform: rotate(270deg);
 }
 
 /* ===== 扩展信息区 ===== */
@@ -1445,30 +1442,10 @@ const forceDiscard = async (p: Player) => {
   50% { filter: drop-shadow(0 0 24px rgba(255, 220, 60, 1.0)); }
 }
 
-/* Counter-rotate names so they read upright despite seat rotation */
-.seat-top :deep(.player-other-name) {
-  display: inline-block;
-  transform: rotate(180deg);
-}
-
-.seat-left :deep(.player-other-name),
-.seat-right :deep(.player-other-name) {
-  display: inline-block;
-}
-
-/* Counter-rotate names so they read upright despite seat rotation */
-.seat-left :deep(.player-other-name) {
-  transform: rotate(-90deg);
-}
-
-.seat-right :deep(.player-other-name) {
-  transform: rotate(-270deg);
-}
-
 .seat-top {
   top: 0;
   left: 50%;
-  transform: translateX(-50%) rotate(180deg);
+  transform: translateX(-50%);
   width: 62%;
   height: auto;
 }
@@ -1489,9 +1466,7 @@ const forceDiscard = async (p: Player) => {
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  overflow: visible;
-  transform: rotate(90deg);
-  transform-origin: center center;
+  overflow: hidden;
 }
 
 .seat-right {
@@ -1502,9 +1477,7 @@ const forceDiscard = async (p: Player) => {
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
-  overflow: visible;
-  transform: rotate(270deg);
-  transform-origin: center center;
+  overflow: hidden;
 }
 
 /* ===== 本家：手牌 + 动作按钮横排 ===== */

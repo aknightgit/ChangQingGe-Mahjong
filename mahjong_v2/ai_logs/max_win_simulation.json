@@ -1,0 +1,25 @@
+{
+  "simulation_type": "max_win_finder",
+  "total_games": 20000,
+  "completed_games": 20000,
+  "max_win_delta": 480,
+  "max_game": {
+    "game_number": 4230,
+    "winner": 0,
+    "win_type": "SelfDraw",
+    "hu_type": "风一色",
+    "from_player": null,
+    "base_points": 12,
+    "round_multiplier": 1,
+    "extra_multiplier": 8,
+    "total_points": 96,
+    "deltas": {
+      "0": 480,
+      "1": -96,
+      "2": -96,
+      "3": -288
+    },
+    "winner_delta": 480
+  },
+  "scoring_notes": "风一色 (All Honors) is one of the rarest hands worth 12 base points. With 8x extra multiplier (from melds + bao connections), each player pays 96. The bao system caused Player 3 to pay 3x (-288) instead of 1x."
+}
