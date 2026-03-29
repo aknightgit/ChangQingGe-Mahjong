@@ -1303,8 +1303,8 @@ const forceDiscard = async (p: Player) => {
 
 /* ===== 扩展信息区 ===== */
 .extended-info-panel {
-  flex: 0 0 280px;
-  max-width: 280px;
+  flex: 0 0 308px;
+  max-width: 308px;
   display: flex;
   flex-direction: column;
   gap: 10px;
