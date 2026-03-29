@@ -1571,7 +1571,7 @@ class GameManager {
     }
 
     if (game.players.length === 0) {
-      throw new Error('No players available to take a turn');
+      throw new Error('No players remaining');
     }
 
     let rotations = 0;
@@ -1579,35 +1579,40 @@ class GameManager {
       game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
       rotations++;
       if (rotations > game.players.length) {
-        throw new Error('No active players remaining in the round');
+        throw new Error('No active players remaining');
       }
     } while (game.players[game.currentPlayerIndex].status !== PlayerStatus.PLAYING);
 
     const nextPlayer = game.players[game.currentPlayerIndex];
-    const freezeMs = game.freezeDurationMs || 1000; // 默认冻结1秒
+    const freezeMs = game.freezeDurationMs || 1000;
 
-    // 回合开始时补花：门口有花牌就从牌墙补牌
+    console.log(`[moveToNextPlayer] → ${nextPlayer.name} (${this.isPlayerBotControlled(nextPlayer) ? 'BOT' : 'HUMAN'}), freeze: ${freezeMs}ms`);
+
     this.replaceFlowers(game, nextPlayer);
 
-    // 冻结期：上家打牌后，下家等待指定秒数才能摸牌
     if (this.isPlayerBotControlled(nextPlayer)) {
-      // Bot: 延迟后自动摸牌+出牌
       setTimeout(() => {
+        console.log(`[bot-freeze] Freeze expired for ${nextPlayer.name}, drawing...`);
         this.handleDraw(game, nextPlayer);
+        console.log(`[bot-freeze] Draw done, hand: ${nextPlayer.hand.concealedTiles.length} tiles, scheduling discard`);
         this.scheduleBotDiscard(game.gameId, nextPlayer.id);
       }, freezeMs);
     } else {
-      // 人类: 先广播当前状态（冻结中），延迟后广播可用摸牌
-      game._freezeUntil = Date.now() + freezeMs;
+      (game as any)._freezeUntil = Date.now() + freezeMs;
       await this.persistGame(game);
       this.broadcastGameState(game.gameId);
 
+      const freezeCurrentIndex = game.currentPlayerIndex;
       setTimeout(async () => {
-        const freshGame = await this.getGame(game.gameId);
-        if (freshGame && freshGame.currentPlayerIndex === game.currentPlayerIndex) {
-          delete freshGame._freezeUntil;
-          await this.persistGame(freshGame);
-          this.broadcastGameState(game.gameId);
+        try {
+          const freshGame = await this.getGame(game.gameId);
+          if (freshGame && freshGame.currentPlayerIndex === freezeCurrentIndex) {
+            delete (freshGame as any)._freezeUntil;
+            await this.persistGame(freshGame);
+            this.broadcastGameState(game.gameId);
+          }
+        } catch (err) {
+          console.error('[freeze] Error clearing freeze:', err);
         }
       }, freezeMs);
     }
@@ -1619,7 +1624,6 @@ class GameManager {
   private botTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   private scheduleBotDiscard(gameId: string, playerId: string): void {
-    // 清除旧的 timer
     const existing = this.botTimers.get(gameId);
     if (existing) clearTimeout(existing);
 
@@ -1627,27 +1631,27 @@ class GameManager {
       this.botTimers.delete(gameId);
       try {
         const game = await this.getGame(gameId);
-        if (!game || game.phase !== GamePhase.PLAYING) return;
-        if (game.players[game.currentPlayerIndex].id !== playerId) return; // 不是当前玩家
-        if (game.pendingActions.length > 0) {
-          // 有待响应的动作（别人打出的牌），bot 处理碰/杠/胡/过
-          const botAction = shouldClaimPendingAction(
-            game.players[game.currentPlayerIndex],
-            game.pendingActions.find(pa => pa.playerId === playerId)?.availableActions || [],
-            game
-          );
-          await this.executeAction(gameId, playerId, botAction as ActionType);
+        if (!game || game.phase !== GamePhase.PLAYING) {
+          console.log(`[bot-discard] Game not playing, skipping`);
+          return;
+        }
+        const currentP = game.players[game.currentPlayerIndex];
+        if (currentP.id !== playerId) {
+          console.log(`[bot-discard] Not ${playerId}'s turn (current: ${currentP.id}), skipping`);
+          return;
+        }
+
+        const tileId = selectDiscardTile(currentP, game);
+        if (tileId) {
+          console.log(`[bot-discard] ${currentP.name} discarding tile: ${tileId}`);
+          await this.executeAction(gameId, playerId, ActionType.DISCARD, tileId);
         } else {
-          // 正常出牌
-          const tileId = selectDiscardTile(game.players[game.currentPlayerIndex], game);
-          if (tileId) {
-            await this.executeAction(gameId, playerId, ActionType.DISCARD, tileId);
-          }
+          console.warn(`[bot-discard] ${currentP.name} has no tile to discard! hand: ${currentP.hand.concealedTiles.length}`);
         }
       } catch (err) {
-        console.error('[BotService] Bot discard error:', err);
+        console.error('[bot-discard] Error:', err);
       }
-    }, 500 + Math.floor(Math.random() * 1500)); // 0.5~2秒随机延迟，模拟思考出牌
+    }, 500 + Math.floor(Math.random() * 1500));
 
     this.botTimers.set(gameId, timer);
   }
