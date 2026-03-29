@@ -49,7 +49,7 @@
     <div class="wall-side wall-right">
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`ro-${i}`" class="tile-slot tile-slot--vertical"
-          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(i - 1) * V_OVERLAP}px + 15px)`, right: 'calc(18% + 39px)', zIndex: '2', transform: 'translateY(-50%)' }">
+          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(i - 1) * V_OVERLAP}px + 15px)`, right: 'calc(18% + 99px)', zIndex: '2', transform: 'translateY(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back wall-back--outer" />
           <div class="tile-side tile-side--bottom" />
         </div>
