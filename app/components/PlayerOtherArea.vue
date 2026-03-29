@@ -216,10 +216,10 @@ const getArrowChar = (sourcePos: number): string => {
   position: relative;
 }
 
-/* 花牌 meld：金色边框 */
+/* 花牌 meld：无边框 */
 .other-meld--flower {
-  border-color: rgba(255, 215, 0, 0.45) !important;
-  background: rgba(255, 215, 0, 0.08) !important;
+  border-color: transparent !important;
+  background: transparent !important;
 }
 
 /* 暗杠 meld：紫色边框 */

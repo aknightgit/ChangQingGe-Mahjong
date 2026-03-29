@@ -182,10 +182,10 @@ const onPointerCancel = () => {
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-/* 花牌 meld：金色边框 + 背景 */
+/* 花牌 meld：无边框 */
 .meld--flower {
-  border-color: rgba(255, 215, 0, 0.45) !important;
-  background: rgba(255, 215, 0, 0.08) !important;
+  border-color: transparent !important;
+  background: transparent !important;
 }
 
 /* 暗杠 meld：紫色边框 + 背景 */
