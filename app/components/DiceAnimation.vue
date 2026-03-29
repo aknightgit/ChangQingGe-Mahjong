@@ -403,7 +403,6 @@ const onDeal = () => {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
-}
 
 @keyframes result-in {
   from { opacity: 0; transform: translateY(12px); }

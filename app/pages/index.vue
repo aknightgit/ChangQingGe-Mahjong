@@ -233,7 +233,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 // 首页不需要SSR，避免水合期间按钮点击失效
 definePageMeta({ ssr: false })
 
