@@ -18,8 +18,18 @@
          left: column, hand上 + meld下（meld在玩家左手边=下）
          right: column, meld上 + hand下（meld在玩家左手边=上） -->
     <div class="player-area" :class="`player-area--${position}`">
-      <!-- left: melds在上(靠近牌桌中心), hand在下(靠近牌桌边缘) -->
+      <!-- left: hand在上(边缘), melds在下(靠近牌桌中心/蓝圈位置) -->
       <template v-if="position === 'left'">
+        <div class="player-other-hand">
+          <MahjongTile
+            v-for="tile in hand"
+            :key="tile.id"
+            :tile="tile"
+            :small="true"
+            :back="true"
+            :dimmed="isWinner"
+          />
+        </div>
         <div class="player-other-melds" v-if="melds.length">
           <div
             v-for="(meld, i) in melds"
@@ -38,16 +48,6 @@
               {{ getArrowChar(meld.sourcePosition) }}
             </span>
           </div>
-        </div>
-        <div class="player-other-hand">
-          <MahjongTile
-            v-for="tile in hand"
-            :key="tile.id"
-            :tile="tile"
-            :small="true"
-            :back="true"
-            :dimmed="isWinner"
-          />
         </div>
       </template>
 
