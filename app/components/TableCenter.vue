@@ -80,7 +80,7 @@ const props = defineProps<{
   align-items: center;
   gap: 2px;
   margin-top: 4px;
-  transform: scale(0.35);
+  transform: scale(0.7);
   transform-origin: center;
   filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.6));
   border: 2px solid rgba(255, 215, 0, 0.7);

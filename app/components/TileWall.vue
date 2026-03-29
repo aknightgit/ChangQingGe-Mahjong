@@ -1,67 +1,67 @@
 <template>
   <div class="tile-wall">
-    <!-- 上边牌墙 -->
+    <!-- 上边牌墙：往右移10px -->
     <div class="wall-side wall-top">
       <div class="wall-layer wall-layer--inner">
         <div v-for="i in TILES_PER_SIDE" :key="`ti-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px)`, top: '16%', zIndex: '1', transform: 'translateX(-50%)' }">
+          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: '16%', zIndex: '1', transform: 'translateX(-50%)' }">
           <div class="tile-back" />
         </div>
       </div>
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`to-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px)`, top: `calc(16% + ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
+          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: `calc(16% + ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
           <div class="tile-back tile-back--outer" />
           <div class="tile-side tile-side--bottom" />
         </div>
       </div>
     </div>
 
-    <!-- 下边牌墙 -->
+    <!-- 下边牌墙（本家）：往右移10px -->
     <div class="wall-side wall-bottom">
       <div class="wall-layer wall-layer--inner">
         <div v-for="i in TILES_PER_SIDE" :key="`bi-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px)`, bottom: '16%', zIndex: '1', transform: 'translateX(-50%)' }">
+          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px + 10px)`, bottom: '16%', zIndex: '1', transform: 'translateX(-50%)' }">
           <div class="tile-back" />
         </div>
       </div>
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`bo-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px)`, bottom: `calc(16% - ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
+          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px + 10px)`, bottom: `calc(16% - ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
           <div class="tile-back tile-back--outer" />
           <div class="tile-side tile-side--bottom" />
         </div>
       </div>
     </div>
 
-    <!-- 左边牌墙 -->
+    <!-- 左边牌墙：往左移10px，往下移5px -->
     <div class="wall-side wall-left">
       <div class="wall-layer wall-layer--inner">
         <div v-for="i in TILES_PER_SIDE" :key="`li-${i}`" class="tile-slot tile-slot--vertical"
-          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * V_OVERLAP}px)`, left: '18%', zIndex: '1', transform: 'translateY(-50%)' }">
+          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * V_OVERLAP}px + 5px)`, left: 'calc(18% - 10px)', zIndex: '1', transform: 'translateY(-50%)' }">
           <div class="tile-back" />
         </div>
       </div>
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`lo-${i}`" class="tile-slot tile-slot--vertical"
-          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * V_OVERLAP}px)`, left: `calc(18% + ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateY(-50%)' }">
+          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * V_OVERLAP}px + 5px)`, left: `calc(18% - 10px + ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateY(-50%)' }">
           <div class="tile-back tile-back--outer" />
           <div class="tile-side tile-side--bottom" />
         </div>
       </div>
     </div>
 
-    <!-- 右边牌墙 -->
+    <!-- 右边牌墙：往右移10px，往下移5px -->
     <div class="wall-side wall-right">
       <div class="wall-layer wall-layer--inner">
         <div v-for="i in TILES_PER_SIDE" :key="`ri-${i}`" class="tile-slot tile-slot--vertical"
-          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(i - 1) * V_OVERLAP}px)`, right: '18%', zIndex: '1', transform: 'translateY(-50%)' }">
+          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(i - 1) * V_OVERLAP}px + 5px)`, right: 'calc(18% - 10px)', zIndex: '1', transform: 'translateY(-50%)' }">
           <div class="tile-back" />
         </div>
       </div>
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`ro-${i}`" class="tile-slot tile-slot--vertical"
-          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(i - 1) * V_OVERLAP}px)`, right: `calc(18% - ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateY(-50%)' }">
+          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(i - 1) * V_OVERLAP}px + 5px)`, right: `calc(18% - 10px - ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateY(-50%)' }">
           <div class="tile-back tile-back--outer" />
           <div class="tile-side tile-side--bottom" />
         </div>
@@ -106,7 +106,7 @@ const LAYER_OFFSET = 5
   height: 28px;
 }
 
-/* 牌背（内层） */
+/* 牌背（内层）— 与手牌牌背一致的绿色 */
 .tile-back {
   width: 100%;
   height: 100%;
@@ -137,7 +137,7 @@ const LAYER_OFFSET = 5
   background: rgba(0,0,0,0.15);
 }
 
-/* 外层牌背（更亮） */
+/* 外层牌背（稍亮） */
 .tile-back--outer {
   background:
     linear-gradient(180deg,
@@ -153,8 +153,7 @@ const LAYER_OFFSET = 5
     0 2px 6px rgba(0,0,0,0.3);
 }
 
-/* ===== 2.5D 白色侧面：全部朝下 ===== */
-/* 1/3 绿色（贴牌背）+ 2/3 白色（牌面侧边） */
+/* ===== 2.5D 侧面：1/3绿色+2/3白色 ===== */
 .tile-side {
   position: absolute;
   pointer-events: none;
