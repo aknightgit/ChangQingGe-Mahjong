@@ -262,12 +262,20 @@ const getArrowChar = (sourcePos: number): string => {
   align-content: flex-start;
 }
 
-/* 左家/右家 melds：纵向排列 */
-.player-other--left .player-other-melds,
+/* 左家 melds：推向牌桌中心 */
+.player-other--left .player-other-melds {
+  flex-direction: column;
+  gap: 0;
+  flex-shrink: 0;
+  margin-top: 60px;
+}
+
+/* 右家 melds：纵向排列 */
 .player-other--right .player-other-melds {
   flex-direction: column;
   gap: 0;
   flex-shrink: 0;
+  margin-top: 60px;
 }
 
 /* 上家 melds：紧凑排列 */
