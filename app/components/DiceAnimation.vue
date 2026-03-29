@@ -13,7 +13,11 @@
             <p class="dice-hint" style="font-size: 1.1rem; margin-bottom: 16px;">
               {{ dealerName ? `${dealerName} 掷骰子` : '等待掷骰子...' }}
             </p>
-            <div class="dice-row">
+            <div
+              class="dice-row"
+              :class="{ 'dice-row--clickable': isDealer }"
+              @click="isDealer && onRoll()"
+            >
               <div class="dice3d dice3d--idle" :class="'dice3d--face1'">
                 <div class="dice3d-face dice3d-face--front"><div class="dot dot--center" /></div>
                 <div class="dice3d-face dice3d-face--back"><div class="dot dot--tl" /><div class="dot dot--tr" /><div class="dot dot--ml" /><div class="dot dot--mr" /><div class="dot dot--bl" /><div class="dot dot--br" /></div>
