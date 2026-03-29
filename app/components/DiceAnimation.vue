@@ -31,13 +31,11 @@
                 <div class="dice3d-face dice3d-face--bottom"><div class="dot dot--tl" /><div class="dot dot--tr" /><div class="dot dot--ml" /><div class="dot dot--mr" /><div class="dot dot--bl" /><div class="dot dot--br" /></div>
               </div>
             </div>
-            <p class="dice-roll-count" v-if="maxRollsLimit > 1" style="margin-top: 12px;">
-              最多可掷 {{ maxRollsLimit }} 次
-            </p>
-            <button v-if="isDealer" class="deal-button" style="margin-top: 20px;" @click="onRoll">
-              🎲 掷骰子
+            <p class="dice-hint" v-if="maxRollsLimit > 1" style="margin-top: 8px;">{{ currentRoll }}/{{ maxRollsLimit }}</p>
+            <button v-if="isDealer" class="deal-button" style="margin-top: 16px;" @click="onProceedToDeal">
+              <span class="deal-icon">🃏</span> 发牌
             </button>
-            <p v-else class="dice-hint" style="margin-top: 16px;">等待庄家掷骰子...</p>
+            <p v-if="!isDealer" class="dice-hint" style="margin-top: 16px;">等待庄家掷骰子...</p>
           </div>
         </template>
 
@@ -58,10 +56,14 @@
           <p class="dice-rolling-label">🎲 掷骰子...</p>
         </template>
 
-        <!-- 阶段2: 掷骰结果 -->
+        <!-- 阶段2: 掷骰结果 - 点击骰子可重掷 -->
         <template v-if="phase === 'result'">
           <div class="dice-result-phase">
-            <div class="dice-row">
+            <div
+              class="dice-row"
+              :class="{ 'dice-row--clickable': canReroll && isDealer }"
+              @click="canReroll && isDealer && onReroll()"
+            >
               <div class="dice3d dice3d--landed" :class="`dice3d--face${dice1}`">
                 <div class="dice3d-face dice3d-face--front"><template v-for="d in getDots(dice1)" :key="d"><div class="dot" :class="`dot--${d}`" /></template></div>
                 <div class="dice3d-face dice3d-face--back" /><div class="dice3d-face dice3d-face--right" />
@@ -79,16 +81,12 @@
               <span class="dice-total-num">{{ dice1 + dice2 }}</span> 点
             </p>
             <p class="dice-hint">{{ dealerName ? `庄家: ${dealerName}` : '' }}</p>
-            <p class="dice-roll-count" v-if="maxRollsLimit > 1">第 {{ currentRoll }} / {{ maxRollsLimit }} 次</p>
-            <div class="dice-result-actions" v-if="isDealer">
-              <button v-if="canReroll" class="dice-btn dice-btn--reroll" @click="onReroll">
-                🎲 再掷一次 ({{ currentRoll }}/{{ maxRollsLimit }})
-              </button>
-              <button class="dice-btn dice-btn--proceed" @click="onProceedToDeal">
-                {{ canReroll ? '使用此结果' : '发牌' }} →
-              </button>
-            </div>
-            <p v-else class="dice-hint" style="margin-top: 16px;">等待庄家操作...</p>
+            <p class="dice-hint" v-if="maxRollsLimit > 1">{{ currentRoll }}/{{ maxRollsLimit }}</p>
+            <p class="dice-hint" v-if="canReroll && isDealer" style="font-size: 0.75rem; opacity: 0.5;">点击骰子可重掷</p>
+            <button v-if="isDealer" class="deal-button" style="margin-top: 12px;" @click="onProceedToDeal">
+              <span class="deal-icon">🃏</span> 发牌
+            </button>
+            <p v-if="!isDealer" class="dice-hint" style="margin-top: 12px;">等待庄家操作...</p>
           </div>
         </template>
 
@@ -349,6 +347,15 @@ const onDeal = () => {
 @keyframes idle-float {
   0%, 100% { transform: rotateX(-15deg) rotateY(-20deg) translateY(0); }
   50% { transform: rotateX(-15deg) rotateY(-20deg) translateY(-8px); }
+}
+
+/* 可点击骰子 */
+.dice-row--clickable {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+.dice-row--clickable:hover {
+  transform: scale(1.05);
 }
 
 /* 掷骰弹跳+旋转动画 */
