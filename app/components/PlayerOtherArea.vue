@@ -132,6 +132,12 @@ const getArrowChar = (sourcePos: number): string => {
   color: #f5f5f5;
 }
 
+/* 对家：名字放上方（朝牌桌中心），整体下移30px */
+.player-other--top {
+  flex-direction: column-reverse;
+  margin-top: 30px;
+}
+
 .player-other-header {
   display: flex;
   justify-content: center;
