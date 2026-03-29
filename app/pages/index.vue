@@ -256,6 +256,9 @@ const allAIBots = [
   { id: 'AI-小胖', name: 'AI-小胖', desc: '稳健型' },
   { id: 'AI-老赵', name: 'AI-老赵', desc: '进攻型' },
   { id: 'AI-阿水', name: 'AI-阿水', desc: '随机型' },
+  { id: 'AI-老徐', name: 'AI-老徐', desc: '默认策略' },
+  { id: 'AI-老蒋', name: 'AI-老蒋', desc: '默认策略' },
+  { id: 'AI-AK', name: 'AI-AK', desc: '默认策略' },
 ]
 const selectedBots = ref<string[]>([])
 
