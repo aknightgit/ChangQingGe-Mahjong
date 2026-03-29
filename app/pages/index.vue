@@ -12,7 +12,7 @@
         <button
           class="mahjong-button primary"
           :disabled="isCreatingGame"
-          @click="startNewGame"
+          @click="openCreateModal(0)"
         >
           创建新局
         </button>
@@ -20,7 +20,7 @@
         <button
           class="mahjong-button primary"
           :disabled="isCreatingGame"
-          @click="startPvEGame"
+          @click="openCreateModal(3)"
         >
           人机大战
         </button>
@@ -180,6 +180,40 @@
         </div>
       </template>
     </UModal>
+
+    <!-- 创建房间参数配置弹窗 -->
+    <Teleport to="body">
+      <div v-if="showCreateModal" class="create-overlay" @click.self="showCreateModal = false">
+        <div class="create-modal">
+          <h2 class="create-title">创建牌局</h2>
+
+          <div class="create-field">
+            <label>掷骰子次数上限</label>
+            <input type="number" v-model.number="createParams.maxDiceRolls" min="1" max="10" />
+            <span class="create-hint">默认2次，决定发牌起始位置</span>
+          </div>
+
+          <div class="create-field">
+            <label>AI玩家个数</label>
+            <input type="number" v-model.number="createParams.aiCount" min="0" max="3" />
+            <span class="create-hint">0=真人对战，1-3=人机混合</span>
+          </div>
+
+          <div class="create-field">
+            <label>冻结下家摸牌秒数</label>
+            <input type="number" v-model.number="createParams.freezeSeconds" min="0" max="10" step="0.5" />
+            <span class="create-hint">打出百搭后冻结时间（默认1秒）</span>
+          </div>
+
+          <div class="create-actions">
+            <button class="create-btn create-btn--cancel" @click="showCreateModal = false">取消</button>
+            <button class="create-btn create-btn--start" @click="confirmCreateGame" :disabled="isCreatingGame">
+              {{ isCreatingGame ? '创建中...' : '开始' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -193,6 +227,62 @@ const router = useRouter()
 
 const isAdminUser = computed(() => isAdmin.value === 'true' || isAdmin.value === true)
 const isCreatingGame = ref(false)
+
+// 创建房间参数弹窗
+const showCreateModal = ref(false)
+const createParams = reactive({
+  maxDiceRolls: 2,
+  aiCount: 0,
+  freezeSeconds: 1
+})
+
+const openCreateModal = (aiCount: number) => {
+  createParams.aiCount = aiCount
+  showCreateModal.value = true
+}
+
+const confirmCreateGame = async () => {
+  if (isCreatingGame.value) return
+  isCreatingGame.value = true
+  showCreateModal.value = false
+  try {
+    const response = await $fetch('/api/game/create', {
+      method: 'POST',
+      body: { playerName: userName.value || 'Player 1' },
+      headers: { 'Cache-Control': 'no-cache' }
+    })
+
+    if (!response || !response.success) {
+      console.error('[Create] Unexpected response:', response)
+      return
+    }
+
+    const gameId = response.data?.gameId
+    const playerId = response.data?.playerId
+    if (!gameId) return
+
+    // 加入AI玩家
+    const AI_BOT_NAMES = ['AI-小胖', 'AI-老赵', 'AI-阿水']
+    for (let i = 0; i < createParams.aiCount; i++) {
+      try {
+        await $fetch('/api/game/join', {
+          method: 'POST',
+          body: { gameId, playerName: AI_BOT_NAMES[i] },
+          headers: { 'Cache-Control': 'no-cache' }
+        })
+      } catch (e) {
+        console.error('[Create] Bot join failed:', AI_BOT_NAMES[i], e)
+      }
+    }
+
+    // 携带参数进入房间
+    navigateTo(`/gameroom/${gameId}?playerId=${playerId}`)
+  } catch (e) {
+    console.error('[Create] Error:', e)
+  } finally {
+    isCreatingGame.value = false
+  }
+}
 
 const { data: profileResponse, pending: profilePending, error: profileError, refresh: refreshProfile } =
   useFetch('/api/profile', {
@@ -308,83 +398,7 @@ const saveProfile = async () => {
   }
 }
 
-const startNewGame = async () => {
-  if (isCreatingGame.value) return
-  isCreatingGame.value = true
-  try {
-    const response = await $fetch('/api/game/create', {
-      method: 'POST',
-      body: { playerName: userName.value || 'Player 1' },
-      headers: { 'Cache-Control': 'no-cache' }
-    })
-
-    if (response && response.success) {
-      const { gameId, playerId } = response.data || {}
-      return navigateTo(`/gameroom/${gameId}?playerId=${playerId}`)
-    }
-    console.error('Unexpected response creating game:', response)
-  } catch (e) {
-    console.error('Error creating game:', e)
-  } finally {
-    isCreatingGame.value = false
-  }
-}
-
-const AI_BOT_NAMES = ['AI-小胖', 'AI-老赵', 'AI-阿水']
-
-const startPvEGame = async () => {
-  if (isCreatingGame.value) return
-  isCreatingGame.value = true
-  try {
-    // 1. Create room
-    const response = await $fetch('/api/game/create', {
-      method: 'POST',
-      body: { playerName: userName.value || 'Player 1' },
-      headers: { 'Cache-Control': 'no-cache' }
-    })
-
-    console.log('[PvE] Create response:', JSON.stringify(response))
-
-    if (!response || !response.success) {
-      console.error('[PvE] Unexpected response:', response)
-      return
-    }
-
-    const gameId = response.data?.gameId
-    const playerId = response.data?.playerId
-    console.log('[PvE] gameId:', gameId, 'playerId:', playerId)
-
-    if (!gameId) {
-      console.error('[PvE] No gameId in response!')
-      return
-    }
-
-    // 2. Join 3 AI bots
-    for (const botName of AI_BOT_NAMES) {
-      console.log('[PvE] Joining bot:', botName)
-      try {
-        const joinRes = await $fetch('/api/game/join', {
-          method: 'POST',
-          body: { gameId, playerName: botName },
-          headers: { 'Cache-Control': 'no-cache' }
-        })
-        console.log('[PvE] Bot joined:', botName, JSON.stringify(joinRes))
-      } catch (joinErr) {
-        console.error('[PvE] Bot join failed:', botName, joinErr)
-      }
-    }
-
-    // 3. 不再调用 startGame API — 让 gameroom 页面自行处理掷骰子+发牌流程
-
-    // 4. Navigate to game room
-    console.log('[PvE] Navigating to:', `/gameroom/${gameId}?playerId=${playerId}`)
-    return navigateTo(`/gameroom/${gameId}?playerId=${playerId}`)
-  } catch (e) {
-    console.error('[PvE] Error:', e)
-  } finally {
-    isCreatingGame.value = false
-  }
-}
+// old startNewGame and startPvEGame removed - replaced by openCreateModal + confirmCreateGame
 
 const onJoinGame = () => navigateTo('/join-game')
 const onMatchHistory = () => router.push('/history')
@@ -561,5 +575,113 @@ const logout = () => {
     font-size: 0.8rem;
     padding: 8px 14px;
   }
+}
+
+/* ===== 创建房间弹窗 ===== */
+.create-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.create-modal {
+  background: linear-gradient(145deg, #1a2f25, #0d1f17);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  padding: 32px;
+  width: 360px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.create-title {
+  color: #ffd700;
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0 0 24px;
+  text-align: center;
+}
+
+.create-field {
+  margin-bottom: 20px;
+}
+
+.create-field label {
+  display: block;
+  color: #e0e0e0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.create-field input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.3);
+  color: #fff;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.create-field input:focus {
+  border-color: rgba(70, 197, 116, 0.6);
+}
+
+.create-hint {
+  display: block;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.75rem;
+  margin-top: 4px;
+}
+
+.create-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.create-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.create-btn--cancel {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ccc;
+}
+
+.create-btn--cancel:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.create-btn--start {
+  background: linear-gradient(135deg, #1f8a52, #2eaa6a);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(70, 197, 116, 0.3);
+}
+
+.create-btn--start:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(70, 197, 116, 0.4);
+}
+
+.create-btn--start:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
 }
 </style>
