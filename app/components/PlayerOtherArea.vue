@@ -26,7 +26,7 @@
             :key="tile.id"
             :tile="tile"
             :small="true"
-            :back="!revealHand"
+            :back="true"
             :dimmed="isWinner"
           />
         </div>
@@ -79,7 +79,7 @@
             :key="tile.id"
             :tile="tile"
             :small="true"
-            :back="!revealHand"
+            :back="true"
             :dimmed="isWinner"
           />
         </div>
