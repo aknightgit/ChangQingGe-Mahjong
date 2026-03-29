@@ -36,5 +36,9 @@
   "梅.jpg": "plum",
   "兰.jpg": "orchid",
   "竹.jpg": "bamboo_flower",
-  "菊.jpg": "chrysanthemum"
+  "菊.jpg": "chrysanthemum",
+  "东.jpg": "east",
+  "南.jpg": "south",
+  "西.jpg": "west",
+  "北.jpg": "north"
 }
