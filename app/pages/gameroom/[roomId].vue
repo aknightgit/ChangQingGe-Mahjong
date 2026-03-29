@@ -621,10 +621,16 @@ const topPlayer = computed(() => getPlayerByRelativePos(2))
 const leftPlayer = computed(() => getPlayerByRelativePos(3))
 
 // ---- Latest Discard ID per Player ----
-const selfLatestDiscardId = computed(() => playerDiscards.value.at(-1)?.id ?? null)
-const northLatestDiscardId = computed(() => northDiscards.value.at(-1)?.id ?? null)
-const westLatestDiscardId = computed(() => westDiscards.value.at(-1)?.id ?? null)
-const eastLatestDiscardId = computed(() => eastDiscards.value.at(-1)?.id ?? null)
+// 全局最后一张弃牌（所有玩家中打出的最新一张）
+const globalLatestDiscardId = computed(() => {
+  const allDiscards = gameState.value?.discardPile || []
+  return allDiscards.length > 0 ? allDiscards[allDiscards.length - 1]?.id : null
+})
+
+const selfLatestDiscardId = computed(() => globalLatestDiscardId.value)
+const northLatestDiscardId = computed(() => globalLatestDiscardId.value)
+const westLatestDiscardId = computed(() => globalLatestDiscardId.value)
+const eastLatestDiscardId = computed(() => globalLatestDiscardId.value)
 const playerHand = computed(() => currentPlayer.value?.hand.concealedTiles || [])
 const playerMelds = computed(() => currentPlayer.value?.hand.exposedMelds || [])
 const playerDiscards = computed(() => currentPlayer.value?.hand.discardedTiles || [])
