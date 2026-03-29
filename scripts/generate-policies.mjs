@@ -74,21 +74,26 @@ const PROFILES = {
   'AI-阿水': {
     name: 'AI-阿水',
     style: '做大做强型',
-    desc: '爱做大牌，能门清就门清',
+    desc: '爱做大牌，能门清就门清，追求风一色/风碰，高风险高回报',
     mod: {
-      selfWinChance: 0.95,          // 大牌要自摸
-      discardHuChance: 0.65,        // 不急着捉冲
-      discardHuMenQingPenalty: 0.35,// 门清对捉冲惩罚大（保护门清）
-      pengChance: 0.25,             // 不碰（保留门清）
-      kongChance: 0.15,             // 不杠（影响门清）
-      chowChance: 0.03,             // 不吃
-      flushChaseBonus: 6.5,         // 追清一色
-      tripletComboBonus: 5.5,       // 追碰碰胡
-      honorTripletKeepBonus: 15.0,  // 大牌要素
-      windDragonPairKeepBonus: 12.0,// 保留风箭
-      pairWeight: 6.0,              // 对子很重要
-      wildKeepPenalty: 2500,        // 百搭绝不放
-      dominantSuitBonus: 5.0,       // 同花色大牌
+      selfWinChance: 0.98,          // 极高自摸意愿
+      discardHuChance: 0.40,        // 不喜欢捉冲，等自摸
+      discardHuWildPenalty: 0.5,    // 捉冲惩罚大
+      discardHuMenQingPenalty: 0.4, // 门清保护
+      pengChance: 0.15,             // 极少碰（保留门清+风牌）
+      kongChance: 0.10,             // 极少杠（影响门清）
+      chowChance: 0.02,             // 几乎不吃
+      flushChaseBonus: 8.0,         // 追清一色
+      tripletComboBonus: 6.0,       // 追碰碰胡
+      honorTripletKeepBonus: 20.0,  // 风箭刻子极力保留
+      windDragonPairKeepBonus: 15.0,// 风箭对子极力保留
+      honorRushThreshold: 2,        // 2张风牌就开始做风一色
+      honorRushBoost: 0.9,          // 风一色加成极高
+      honorPairBonus: 5.0,          // 风对子极力保留
+      pairWeight: 7.0,              // 对子很重要（风对+大牌对）
+      wildKeepPenalty: 3000,        // 百搭绝不放
+      dominantSuitBonus: 6.0,       // 同花色大牌
+      tripletKeepBonus: 5.0,        // 刻子也重要
     }
   },
   'AI-AK': {
