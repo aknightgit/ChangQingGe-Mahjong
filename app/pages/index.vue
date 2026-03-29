@@ -184,6 +184,9 @@
 </template>
 
 <script setup>
+// 首页不需要SSR，避免水合期间按钮点击失效
+definePageMeta({ ssr: false })
+
 const userName = useCookie('user_name')
 const isAdmin = useCookie('is_admin')
 const router = useRouter()
