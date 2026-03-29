@@ -440,6 +440,19 @@ class GameManager {
   /**
    * Join an existing game
    */
+  /**
+   * 通过4位房间号查找游戏
+   */
+  async findGameByRoomNumber(roomNumber: string): Promise<string | null> {
+    await this.hydrateFromDatabase();
+    for (const [gameId, game] of this.games) {
+      if (game.roomNumber === roomNumber && game.phase !== GamePhase.ENDED) {
+        return gameId;
+      }
+    }
+    return null;
+  }
+
   async joinGame(gameId: string, playerName: string): Promise<{ playerId: string; position: number }> {
     await this.hydrateFromDatabase();
 

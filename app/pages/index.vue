@@ -186,8 +186,17 @@
           </div>
 
           <div class="create-field">
-            <label>AI玩家</label>
-            <div class="ai-select-list">
+            <label>冻结下家摸牌秒数</label>
+            <input type="number" v-model.number="createParams.freezeSeconds" min="0" max="10" step="0.5" />
+            <span class="create-hint">上家打牌后，下家等待时间（默认1秒）</span>
+          </div>
+
+          <!-- AI玩家选择（可展开/收起） -->
+          <div class="create-field">
+            <button class="ai-toggle-btn" @click="showAISelection = !showAISelection">
+              {{ showAISelection ? '▼' : '▶' }} 加AI玩家 <span v-if="selectedBots.length" class="ai-count-badge">({{ selectedBots.length }}/3)</span>
+            </button>
+            <div v-if="showAISelection" class="ai-select-list">
               <label
                 v-for="bot in allAIBots"
                 :key="bot.id"
@@ -204,19 +213,15 @@
                 <span class="ai-select-desc">{{ bot.desc }}</span>
               </label>
             </div>
-            <span class="create-hint">最多选择3个AI（{{ selectedBots.length }}/3）</span>
-          </div>
-
-          <div class="create-field">
-            <label>冻结下家摸牌秒数</label>
-            <input type="number" v-model.number="createParams.freezeSeconds" min="0" max="10" step="0.5" />
-            <span class="create-hint">上家打牌后，下家等待时间（默认1秒）</span>
+            <span class="create-hint" v-if="selectedBots.length > 0">
+              已选{{ selectedBots.length }}个AI，还需{{ 4 - selectedBots.length - 1 }}位真人玩家
+            </span>
           </div>
 
           <div class="create-actions">
             <button class="create-btn create-btn--cancel" @click="showCreateModal = false">取消</button>
             <button class="create-btn create-btn--start" @click="confirmCreateGame" :disabled="isCreatingGame">
-              {{ isCreatingGame ? '创建中...' : '开始' }}
+              {{ isCreatingGame ? '创建中...' : '创建新局' }}
             </button>
           </div>
         </div>
@@ -244,6 +249,7 @@ const createParams = reactive({
 })
 
 // AI玩家选择
+const showAISelection = ref(false)
 const allAIBots = [
   { id: 'AI-小胖', name: 'AI-小胖', desc: '稳健型' },
   { id: 'AI-老赵', name: 'AI-老赵', desc: '进攻型' },
@@ -703,6 +709,29 @@ const logout = () => {
 }
 
 /* AI玩家选择列表 */
+/* AI选择展开按钮 */
+.ai-toggle-btn {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+  color: #e0e0e0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+}
+.ai-toggle-btn:hover {
+  border-color: rgba(70, 197, 116, 0.3);
+  background: rgba(70, 197, 116, 0.05);
+}
+.ai-count-badge {
+  color: #46c574;
+  font-weight: 700;
+}
+
 .ai-select-list {
   display: flex;
   flex-direction: column;

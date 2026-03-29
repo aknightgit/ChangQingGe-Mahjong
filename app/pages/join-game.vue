@@ -10,13 +10,16 @@
       </header>
 
       <section class="manual-join">
-        <label for="manual-id">输入房间号</label>
+        <label for="manual-id">输入4位房间号</label>
         <div class="manual-controls">
           <input
             id="manual-id"
             v-model="manualGameId"
             type="text"
-            placeholder="例如：abc123-def456"
+            placeholder="例如：7392"
+            maxlength="4"
+            pattern="[0-9]{4}"
+            inputmode="numeric"
           />
           <button
             class="mahjong-button primary"
@@ -45,10 +48,10 @@
         <ul v-else class="available-list">
           <li v-for="game in waitingGames" :key="game.gameId" class="available-item">
             <div class="available-details">
-              <span class="available-id">{{ game.gameId }}</span>
+              <span class="available-id">{{ game.roomNumber || game.gameId.slice(0, 8) }}</span>
               <span class="available-meta">{{ game.playerCount }}/4 人 · 庄家: {{ game.dealerName || '待定' }}</span>
             </div>
-            <button class="mahjong-button secondary join" @click="joinExistingGame(game.gameId)">
+            <button class="mahjong-button secondary join" @click="joinExistingGame(game.roomNumber || game.gameId)">
               加入
             </button>
           </li>
