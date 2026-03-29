@@ -48,11 +48,11 @@
             :just-drawn="justDrawnTileId === tile.id"
             :claim-highlight="claimCandidateIds?.includes(tile.id)"
             :dimmed="isWinner"
-            draggable="true"
             @click="onTileClick(tile)"
             @dblclick="onTileDblclick(tile)"
-            @dragstart="onDragStart($event, tile)"
-            @dragend="onDragEnd"
+            @pointerdown="onPointerDown($event, tile)"
+            @pointerup="onPointerUp($event)"
+            @pointercancel="onPointerCancel"
           />
         </div>
 
@@ -111,7 +111,6 @@ const emit = defineEmits<{
   (e: 'tileClick', tile: Tile): void
   (e: 'tileDblclick', tile: Tile): void
   (e: 'tileDiscard', tile: Tile): void
-  (e: 'dragStateChange', dragging: boolean): void
 }>()
 
 const confirmClaim = () => {
@@ -131,21 +130,32 @@ const onTileDblclick = (tile: Tile) => {
   emit('tileDblclick', tile)
 }
 
-// ===== Drag & Drop =====
-const onDragStart = (event: DragEvent, tile: Tile) => {
+// ===== 拖拽出牌（pointer 事件 + 距离阈值） =====
+const DRAG_THRESHOLD = 15 // px
+let pointerStart: { x: number; y: number; tile: Tile } | null = null
+
+const onPointerDown = (event: PointerEvent, tile: Tile) => {
   if (props.isWinner) return
-  // Pass tile ID as transfer data
-  event.dataTransfer?.setData('text/plain', tile.id)
-  event.dataTransfer?.setData('application/tile-id', tile.id)
-  // Set drag image (use the tile element itself)
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move'
-  }
-  emit('dragStateChange', true)
+  pointerStart = { x: event.clientX, y: event.clientY, tile }
 }
 
-const onDragEnd = (event: DragEvent) => {
-  emit('dragStateChange', false)
+const onPointerUp = (event: PointerEvent) => {
+  if (!pointerStart) return
+  const dx = event.clientX - pointerStart.x
+  const dy = event.clientY - pointerStart.y
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  const tile = pointerStart.tile
+  pointerStart = null
+
+  if (dist >= DRAG_THRESHOLD) {
+    // 拖拽超过阈值 → 出牌
+    emit('tileDiscard', tile)
+  }
+  // 距离 < 阈值 → 不做任何事（正常 click 事件会处理）
+}
+
+const onPointerCancel = () => {
+  pointerStart = null
 }
 </script>
 
@@ -224,13 +234,8 @@ const onDragEnd = (event: DragEvent) => {
   max-width: 100%;
 }
 
-/* 拖拽：手牌可拖拽光标 */
-.player-hand :deep(.tile[draggable="true"]) {
-  cursor: grab;
-}
-
-.player-hand :deep(.tile[draggable="true"]:active) {
-  cursor: grabbing;
+.player-hand :deep(.tile) {
+  cursor: pointer;
 }
 
 .claim-actions {

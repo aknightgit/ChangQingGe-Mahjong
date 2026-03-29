@@ -482,6 +482,7 @@ class GameManager {
     for (const player of game.players) {
       player.hand.concealedTiles = [];
       player.hand.exposedMelds = [];
+      player.hand.discardedTiles = [];
       for (let i = 0; i < 13; i++) {
         const tile = game.wall.pop()!;
         if (isFlower(tile)) {

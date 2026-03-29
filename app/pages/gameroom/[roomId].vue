@@ -131,8 +131,8 @@
         </Transition>
 
         <!-- Big responsive table -->
-        <div class="table-wrapper" @dragover.prevent="onTableDragOver" @dragleave="onTableDragLeave" @drop.prevent="onTableDrop">
-          <div class="mahjong-table" :class="{ 'table--drag-over': isDragOverTable }">
+        <div class="table-wrapper">
+          <div class="mahjong-table">
             <!-- 绿色桌布内层 -->
             <div class="table-felt">
             <!-- 左上角: 轮次信息 -->
@@ -246,6 +246,7 @@
                   :is-winner="isWinner"
                   @tileClick="handleTileClick"
                   @tileDblclick="handleTileDblclick"
+                  @tileDiscard="handleTileDiscard"
                 />
                 <!-- 动作按钮放在手牌右侧 -->
                 <div v-if="isAIControlled" class="inline-action-buttons">
@@ -851,43 +852,7 @@ const eastIsWinner = computed(() => rightPlayer.value?.status === 'won')
 const selectedTileId = ref<string | null>(null)
 const claimableDiscardTileId = ref<string | null>(null)
 
-// ===== 犹豫响应期 =====
-const HESITATION_MS = 1500
-const hesitationState = ref<{
-  active: boolean
-  tile: Tile | null
-  timer: ReturnType<typeof setTimeout> | null
-  startTime: number
-}>({ active: false, tile: null, timer: null, startTime: 0 })
-const hesitationProgress = ref(100)
-let hesitationRaf: ReturnType<typeof requestAnimationFrame> | null = null
-
-const startHesitation = (tile: Tile) => {
-  // 清理旧状态
-  if (hesitationState.value.timer) clearTimeout(hesitationState.value.timer)
-  if (hesitationRaf) cancelAnimationFrame(hesitationRaf)
-
-  hesitationState.value.active = true
-  hesitationState.value.tile = tile
-  hesitationState.value.startTime = Date.now()
-
-  // 进度条动画
-  const tickProgress = () => {
-    const elapsed = Date.now() - hesitationState.value.startTime
-    hesitationProgress.value = Math.max(0, 100 - (elapsed / HESITATION_MS) * 100)
-    if (hesitationProgress.value > 0) {
-      hesitationRaf = requestAnimationFrame(tickProgress)
-    }
-  }
-  hesitationRaf = requestAnimationFrame(tickProgress)
-
-  // 超时自动出牌
-  hesitationState.value.timer = setTimeout(() => {
-    commitDiscard(tile)
-    clearHesitation()
-  }, HESITATION_MS)
-}
-
+// ===== 出牌 =====
 const commitDiscard = (tile: Tile) => {
   resetAutoCount()
   playSound('tile-discard')
@@ -895,45 +860,12 @@ const commitDiscard = (tile: Tile) => {
   selectedTileId.value = null
 }
 
-const clearHesitation = () => {
-  if (hesitationState.value.timer) clearTimeout(hesitationState.value.timer)
-  if (hesitationRaf) cancelAnimationFrame(hesitationRaf)
-  hesitationState.value = { active: false, tile: null, timer: null, startTime: 0 }
-  hesitationProgress.value = 100
-}
-
-const cancelHesitation = () => {
-  clearHesitation()
-}
-
-// ===== 拖拽出牌 =====
-const isDragOverTable = ref(false)
-
-const onTableDragOver = (e: DragEvent) => {
-  if (isInteractionLocked.value) return
-  e.preventDefault()
-  isDragOverTable.value = true
-}
-
-const onTableDragLeave = () => {
-  isDragOverTable.value = false
-}
-
-const onTableDrop = (e: DragEvent) => {
-  isDragOverTable.value = false
-  if (isInteractionLocked.value) return
-
-  const tileId = e.dataTransfer?.getData('application/tile-id')
-    || e.dataTransfer?.getData('text/plain')
-  if (!tileId || !currentPlayer.value) return
-
+// 拖拽超出阈值 → 直接出牌
+const handleTileDiscard = (tile: Tile) => {
+  if (isWinner.value || isInteractionLocked.value) return
   const canDiscard = availableActions.value.includes(ActionType.DISCARD)
   if (!canDiscard) return
-
-  const tile = currentPlayer.value.hand.concealedTiles.find(t => t.id === tileId)
-  if (!tile) return
-
-  startHesitation(tile)
+  commitDiscard(tile)
 }
 
 // ===== 双击出牌 =====
@@ -1894,86 +1826,6 @@ const forceDiscard = async (p: Player) => {
   30% { transform: scale(1); }
   45% { transform: scale(1.05); }
   60% { transform: scale(1); }
-}
-
-/* ===== 拖拽出牌：桌面高亮 ===== */
-.table--drag-over .table-felt {
-  box-shadow: inset 0 0 30px rgba(255, 215, 0, 0.25);
-}
-
-.table--drag-over .table-felt::after {
-  content: '松手出牌';
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: rgba(255, 215, 0, 0.7);
-  pointer-events: none;
-  z-index: 50;
-  text-shadow: 0 0 12px rgba(255, 215, 0, 0.4);
-}
-
-/* ===== 犹豫响应期浮层 ===== */
-.hesitation-overlay {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 60;
-  animation: hesitation-fade-in 0.2s ease;
-}
-
-@keyframes hesitation-fade-in {
-  from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
-  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-}
-
-.hesitation-card {
-  background: rgba(4, 16, 11, 0.95);
-  border: 1px solid rgba(255, 215, 0, 0.3);
-  border-radius: 14px;
-  padding: 12px 16px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
-  min-width: 120px;
-}
-
-.hesitation-bar-track {
-  width: 100%;
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.1);
-  overflow: hidden;
-}
-
-.hesitation-bar-fill {
-  height: 100%;
-  border-radius: 2px;
-  background: linear-gradient(90deg, #ffd700, #ff9800);
-  transition: width 0.05s linear;
-}
-
-.hesitation-cancel-btn {
-  padding: 4px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 152, 0, 0.5);
-  background: rgba(230, 81, 0, 0.25);
-  color: #ffb74d;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.12s ease;
-}
-
-.hesitation-cancel-btn:hover {
-  background: rgba(230, 81, 0, 0.5);
-  color: #fff;
 }
 
 /* ===== 响应式降级 ===== */
