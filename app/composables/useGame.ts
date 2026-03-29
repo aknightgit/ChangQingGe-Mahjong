@@ -199,28 +199,24 @@ export const useGame = () => {
     if (isActionPending.value) return
     isActionPending.value = true
 
-    // 单通道执行：统一走 API，避免 Socket + API 重复执行
     try {
-      const { data, error: apiError } = await useFetch('/api/game/action', {
+      const response = await $fetch('/api/game/action', {
         method: 'POST',
         body: {
           gameId: gameId.value,
           playerId: playerId.value,
           action,
-          type: action, // 兼容旧字段
+          type: action,
           tileId,
           tileIds
         }
       })
 
-      if (apiError.value) {
-        console.error('Action failed:', apiError.value)
-        return
-      }
-
-      if (data.value?.success) {
-        updateState(data.value.data)
+      if ((response as any)?.success) {
+        updateState((response as any).data)
         await refreshState()
+      } else {
+        console.error('Action failed:', response)
       }
     } catch (e) {
       console.error('Error executing action:', e)
