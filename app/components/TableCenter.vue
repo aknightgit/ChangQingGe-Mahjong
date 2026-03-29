@@ -3,19 +3,16 @@
     <!-- 牌墙：双层2.5D效果 -->
     <TileWall :remaining="remainingTiles" />
 
-    <!-- 中心信息：总倍数 + 百搭小牌 -->
+    <!-- 中心信息：总倍数 + 剩余牌数 -->
     <div class="center-info">
       <div class="center-badges">
         <span class="multiplier-badge">
           🎲 总倍 ×{{ globalMultiplier || 1 }}
         </span>
+        <span class="remaining-badge">
+          🀄 剩余 {{ remainingTiles }}
+        </span>
       </div>
-      <!-- 百搭：缩小真实牌面（无百搭时给出占位） -->
-      <div v-if="wildTile" class="wild-tile-mini">
-        <MahjongTile :tile="wildTile" :small="true" />
-        <span class="wild-label">百搭 · {{ wildTileName }}</span>
-      </div>
-      <div v-else class="wild-placeholder">百搭：未定</div>
     </div>
   </div>
 </template>
@@ -88,36 +85,13 @@ const wildTileName = computed(() => {
   box-shadow: 0 2px 8px rgba(255, 152, 0, 0.38);
 }
 
-.wild-tile-mini {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  margin-top: 4px;
-  transform: scale(1.05);
-  transform-origin: center;
-  filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.6));
-  border: none;
-  border-radius: 4px;
-  padding: 1px;
-  background: transparent;
-}
-
-.wild-label {
-  font-size: 0.66rem;
-  font-weight: 700;
-  color: #ffd700;
-  text-shadow: 0 0 6px rgba(255, 215, 0, 0.7);
-}
-
-.wild-placeholder {
-  margin-top: 6px;
-  font-size: 0.66rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+.remaining-badge {
+  background: rgba(0, 120, 80, 0.85);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 4px 10px;
   border-radius: 999px;
-  padding: 2px 8px;
+  box-shadow: 0 2px 8px rgba(0, 120, 80, 0.35);
 }
 </style>
