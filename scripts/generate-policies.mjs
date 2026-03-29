@@ -1,37 +1,37 @@
 /**
  * 生成6个AI玩家的policy文件
- * 基于当前best-policy.json微调各参数，体现不同风格
+ * 基于训练最优policy (champion-r10) 微调各参数，体现不同风格
  */
 import fs from 'fs'
 import path from 'path'
 
-// 基准policy（当前最优）
+// 基准policy（2026-03-30 训练结果 champion-r10）
 const BASE = {
-  "selfWinChance": 0.925,
-  "selfWinWildBoost": 0.04,
-  "discardHuChance": 0.929,
-  "discardHuWildPenalty": 0.131,
-  "discardHuMenQingPenalty": 0.053,
-  "pengChance": 0.65,
-  "kongChance": 0.299,
-  "chowChance": 0.06,
-  "pengWildBoost": 0.067,
-  "kongWildBoost": 0.261,
-  "chowWildPenalty": 0.1,
-  "bailoutBuildWildBoost": 0.403,
-  "bailoutHuPenaltyPerMeld": 0.055,
+  "selfWinChance": 0.8355,
+  "selfWinWildBoost": 0.0957,
+  "discardHuChance": 0.9387,
+  "discardHuWildPenalty": 0.3198,
+  "discardHuMenQingPenalty": 0.2067,
+  "pengChance": 0.8113,
+  "kongChance": 0.4367,
+  "chowChance": 0.1591,
+  "pengWildBoost": 0,
+  "kongWildBoost": 0.0693,
+  "chowWildPenalty": 0.1132,
+  "bailoutBuildWildBoost": 0.1704,
+  "bailoutHuPenaltyPerMeld": 0.0402,
   "honorRushThreshold": 2,
-  "honorRushBoost": 0.492,
-  "pairWeight": 4.82,
-  "nearWeight": 0.1,
-  "honorPairBonus": 0.261,
-  "wildKeepPenalty": 509,
-  "dominantSuitBonus": 2.84,
-  "tripletKeepBonus": 4.525,
-  "honorTripletKeepBonus": 11.79,
-  "windDragonPairKeepBonus": 6.8,
-  "tripletComboBonus": 2.77,
-  "flushChaseBonus": 3.57
+  "honorRushBoost": 0.4264,
+  "pairWeight": 4.1499,
+  "nearWeight": 2.168,
+  "honorPairBonus": 2.3602,
+  "wildKeepPenalty": 1491.66,
+  "dominantSuitBonus": 0,
+  "tripletKeepBonus": 3.8235,
+  "honorTripletKeepBonus": 7.0,
+  "windDragonPairKeepBonus": 10.9668,
+  "tripletComboBonus": 2.7776,
+  "flushChaseBonus": 1.3572
 }
 
 // 6个AI角色定义
@@ -41,16 +41,17 @@ const PROFILES = {
     style: '稳健型',
     desc: '尽量前两名胡牌，不做第三甚至最后输家，捉冲意愿高',
     mod: {
-      discardHuChance: 0.98,        // 捉冲意愿极高
-      discardHuWildPenalty: 0.05,   // 有花也果断捉
-      discardHuMenQingPenalty: 0.02,// 不太在乎门清
-      selfWinChance: 0.95,          // 自摸也积极
-      pengChance: 0.8,              // 碰了就加速
-      kongChance: 0.5,              // 杠也愿意
-      chowChance: 0.15,             // 偶尔吃
+      discardHuChance: 0.99,        // 捉冲意愿极高
+      discardHuWildPenalty: 0.1,    // 有花也果断捉
+      discardHuMenQingPenalty: 0.05,// 不太在乎门清
+      selfWinChance: 0.90,          // 自摸也积极
+      pengChance: 0.90,             // 碰了就加速
+      kongChance: 0.55,             // 杠也愿意
+      chowChance: 0.20,             // 偶尔吃
       pairWeight: 3.5,              // 对子优先级中等
-      dominantSuitBonus: 3.5,       // 集中花色加速
-      wildKeepPenalty: 800,         // 百搭死守住
+      dominantSuitBonus: 2.0,       // 集中花色加速
+      flushChaseBonus: 0.8,         // 不追求大牌
+      tripletComboBonus: 1.5,       // 不执着碰碰胡
     }
   },
   'AI-老赵': {
@@ -59,14 +60,14 @@ const PROFILES = {
     desc: '不怕三口，勇敢进攻，甚至主动制造三口四口',
     mod: {
       pengChance: 0.95,             // 碰到就碰
-      kongChance: 0.7,              // 杠也很积极
+      kongChance: 0.70,             // 杠也很积极
       chowChance: 0.85,             // 吃牌非常积极
       chowWildPenalty: 0.02,        // 不怎么在乎百搭不吃的规则
       bailoutBuildWildBoost: 0.8,   // 有百搭就建立三口
       bailoutHuPenaltyPerMeld: 0.02,// 三口四口也果断胡
-      tripletComboBonus: 4.0,       // 追求碰碰胡
+      tripletComboBonus: 4.5,       // 追求碰碰胡
       discardHuChance: 0.75,        // 宁可不等别人放冲
-      selfWinChance: 0.85,          // 更倾向进攻
+      selfWinChance: 0.80,          // 更倾向进攻
       pairWeight: 2.5,              // 对子不太保留
     }
   },
@@ -75,25 +76,25 @@ const PROFILES = {
     style: '做大做强型',
     desc: '爱做大牌，能门清就门清',
     mod: {
-      selfWinChance: 0.98,          // 大牌要自摸
-      discardHuChance: 0.6,         // 不急着捉冲
-      discardHuMenQingPenalty: 0.3, // 门清对捉冲惩罚大（保护门清）
+      selfWinChance: 0.95,          // 大牌要自摸
+      discardHuChance: 0.65,        // 不急着捉冲
+      discardHuMenQingPenalty: 0.35,// 门清对捉冲惩罚大（保护门清）
       pengChance: 0.25,             // 不碰（保留门清）
       kongChance: 0.15,             // 不杠（影响门清）
       chowChance: 0.03,             // 不吃
-      flushChaseBonus: 6.0,         // 追清一色
-      tripletComboBonus: 5.0,       // 追碰碰胡
+      flushChaseBonus: 6.5,         // 追清一色
+      tripletComboBonus: 5.5,       // 追碰碰胡
       honorTripletKeepBonus: 15.0,  // 大牌要素
-      windDragonPairKeepBonus: 10.0,// 保留风箭
+      windDragonPairKeepBonus: 12.0,// 保留风箭
       pairWeight: 6.0,              // 对子很重要
-      wildKeepPenalty: 2000,        // 百搭绝不放
+      wildKeepPenalty: 2500,        // 百搭绝不放
       dominantSuitBonus: 5.0,       // 同花色大牌
     }
   },
   'AI-AK': {
     name: 'AI-AK',
     style: '默认型',
-    desc: '指向当前默认的best policy',
+    desc: '指向当前默认的best policy（训练最优）',
     mod: {}  // 完全用基准policy
   },
   'AI-老蒋': {
@@ -101,13 +102,13 @@ const PROFILES = {
     style: '均衡型',
     desc: 'best policy，再偏保守一点点',
     mod: {
-      selfWinChance: 0.95,          // 稍微更积极一点
-      discardHuChance: 0.95,        // 稍微更愿意捉冲
-      pengChance: 0.7,              // 碰稍微多点
-      kongChance: 0.35,             // 杠稍微多点
-      chowChance: 0.1,              // 偶尔吃
-      pairWeight: 5.0,              // 对子保留稍高
-      wildKeepPenalty: 600,         // 百搭保护略强
+      selfWinChance: 0.88,          // 稍微更积极一点
+      discardHuChance: 0.96,        // 稍微更愿意捉冲
+      pengChance: 0.85,             // 碰稍微多点
+      kongChance: 0.50,             // 杠稍微多点
+      chowChance: 0.20,             // 偶尔吃
+      pairWeight: 4.5,              // 对子保留稍高
+      wildKeepPenalty: 1600,        // 百搭保护略强
     }
   },
   'AI-小猪': {
@@ -115,17 +116,17 @@ const PROFILES = {
     style: '风险规避型',
     desc: '偏保守，风险规避，尽量提前捉冲走人',
     mod: {
-      selfWinChance: 0.85,          // 不追求自摸
+      selfWinChance: 0.78,          // 不追求自摸
       discardHuChance: 0.99,        // 一有机会就捉冲
-      discardHuWildPenalty: 0.01,   // 有花也冲
-      discardHuMenQingPenalty: 0.0, // 门清也不管
-      pengChance: 0.9,              // 碰了加速胡
-      kongChance: 0.6,              // 杠也积极
-      chowChance: 0.3,              // 偶尔吃
+      discardHuWildPenalty: 0.05,   // 有花也冲
+      discardHuMenQingPenalty: 0.02,// 门清也不管
+      pengChance: 0.90,             // 碰了加速胡
+      kongChance: 0.65,             // 杠也积极
+      chowChance: 0.30,             // 偶尔吃
       pairWeight: 2.0,              // 对子不太重要
       tripletKeepBonus: 2.0,        // 不执着刻子
-      wildKeepPenalty: 300,         // 百搭适度保护
-      flushChaseBonus: 1.0,         // 不做大牌
+      wildKeepPenalty: 800,         // 百搭适度保护
+      flushChaseBonus: 0.8,         // 不做大牌
       tripletComboBonus: 1.0,       // 不执着碰碰胡
       bailoutHuPenaltyPerMeld: 0.15,// 百搭多时果断胡
     }
@@ -142,18 +143,19 @@ function generatePolicy(name, profile) {
     style: profile.style,
     desc: profile.desc,
     savedAt: policy.savedAt,
+    baseId: 'champion-r10',
     metrics: {
       huRate: 0.0,
       selfDrawRate: 0.0,
       lastPlayerRate: 0.0,
-      note: '手动配置，待训练验证'
+      note: '基于champion-r10训练最优policy微调，待实战验证'
     },
     policy
   }
 }
 
 // 输出目录
-const outDir = '/home/node/.openclaw/workspace/ChangQingGe-Mahjong/training-output/policies/characters'
+const outDir = '/home/node/.openclaw/workspace/ChangQingGe-Mahjong/AI_policies/characters'
 fs.mkdirSync(outDir, { recursive: true })
 
 // 生成6个policy文件
