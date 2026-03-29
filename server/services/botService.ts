@@ -48,8 +48,11 @@ function getPolicy(): any {
 /**
  * Is this player a bot (computer)?
  */
+// AI Bot 名单（PvE 模式自动加入的机器人）
+const BOT_NAMES = ['小胖', '老赵', '阿水', '电脑']
+
 export function isBotPlayer(player: Player): boolean {
-  return player.name.startsWith('电脑')
+  return BOT_NAMES.some(botName => player.name.startsWith(botName))
 }
 
 /**

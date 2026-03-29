@@ -1251,17 +1251,17 @@ const forceDiscard = async (p: Player) => {
 }
 
 /* ===== 弃牌区定位 ===== */
-/* 上家：桌面上方1/4区域中央 */
+/* 上家：靠近牌桌中心 */
 :deep(.discard-zone--top) {
-  top: 22%;
+  top: 30%;
   left: 28%;
   width: 44%;
   display: flex;
   justify-content: center;
 }
-/* 下家（本家）：桌面下方1/4区域中央 */
+/* 下家（本家）：靠近牌桌中心 */
 :deep(.discard-zone--bottom) {
-  bottom: 22%;
+  bottom: 30%;
   left: 28%;
   width: 44%;
   display: flex;
