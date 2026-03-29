@@ -47,8 +47,8 @@
       </template>
     </template>
     <template v-else>
-      <!-- 牌背用 Back.png -->
-      <img src="/assets/tileset/pomax_hq/Back.png" class="tile-img" loading="lazy" />
+      <!-- 牌背（CSS渲染） -->
+      <div class="tile-back-face" />
     </template>
   </div>
 </template>
@@ -209,6 +209,41 @@ const chineseNum = computed(() => {
 .tile-svg {
   width: 90%;
   height: 90%;
+}
+
+/* ==================== 牌背（CSS渲染，与牌墙统一） ==================== */
+.tile-back-face {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px 4px 3px 3px;
+  background:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.15) 0%,
+      rgba(255,255,255,0.04) 25%,
+      transparent 50%,
+      rgba(0,0,0,0.4) 100%),
+    linear-gradient(155deg,
+      #1a4a28 0%,
+      #123a1e 35%,
+      #0a2212 65%,
+      #040f08 100%);
+  border: 0.5px solid rgba(180,220,160,0.12);
+  box-shadow:
+    inset 0 1px 2px rgba(255,255,255,0.1),
+    inset 0 -1px 3px rgba(0,0,0,0.35);
+  position: relative;
+}
+.tile-back-face::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 50%;
+  height: 55%;
+  border: 1px solid rgba(180, 220, 160, 0.12);
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.15);
 }
 
 /* ==================== 万子 ==================== */
