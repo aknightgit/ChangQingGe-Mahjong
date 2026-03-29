@@ -1577,7 +1577,7 @@ class GameManager {
       } catch (err) {
         console.error('[BotService] Bot discard error:', err);
       }
-    }, 1500); // 1.5秒延迟，让游戏有节奏感
+    }, 1200 + Math.floor(Math.random() * 1300)); // 1.2~2.5秒随机延迟，模拟思考出牌
 
     this.botTimers.set(gameId, timer);
   }
