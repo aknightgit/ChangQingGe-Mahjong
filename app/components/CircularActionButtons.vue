@@ -98,6 +98,8 @@ const isDelaying = computed(() => {
   border: 1.5px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  width: 100%;
+  justify-content: flex-start;
 }
 
 .action-panel--compact {
