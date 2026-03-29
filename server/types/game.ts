@@ -159,6 +159,7 @@ export interface RebelEvent {
 
 export interface GameState {
   gameId: string;
+  roomNumber?: string; // 4位随机房间号
   phase: GamePhase;
   endReason: GameEndReason | null;
   players: Player[];

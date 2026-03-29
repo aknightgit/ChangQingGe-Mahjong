@@ -135,6 +135,10 @@
           <div class="mahjong-table">
             <!-- 绿色桌布内层 -->
             <div class="table-felt">
+            <!-- 房间号 -->
+            <div class="room-number" v-if="gameState?.roomNumber">
+              #{{ gameState.roomNumber }}
+            </div>
             <!-- 左上角: 轮次信息 -->
             <div class="round-info" v-if="gameState?.phase === 'playing'">
               {{ roundDisplay }}
@@ -1315,8 +1319,8 @@ const forceDiscard = async (p: Player) => {
 
 /* ===== 扩展信息区 ===== */
 .extended-info-panel {
-  flex: 0 0 308px;
-  max-width: 308px;
+  flex: 0 0 354px;
+  max-width: 354px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1329,15 +1333,15 @@ const forceDiscard = async (p: Player) => {
   .extended-info-panel {
     /* 牌桌宽度约 75vw (table-wrapper flex), 1/4 ≈ 25vw; 但受 max-width 约束 */
     flex: 0 0 25%;
-    max-width: 320px;
+    max-width: 370px;
   }
 }
 
 /* 窄屏降级 */
 @media (max-width: 1100px) {
   .extended-info-panel {
-    flex: 0 0 240px;
-    max-width: 240px;
+    flex: 0 0 276px;
+    max-width: 276px;
   }
 }
 
@@ -1582,9 +1586,24 @@ const forceDiscard = async (p: Player) => {
 }
 
 /* ===== 左上角轮次 ===== */
-.round-info {
+/* 房间号 */
+.room-number {
   position: absolute;
   top: 8px;
+  left: 12px;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 700;
+  z-index: 4;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.5px;
+}
+
+.round-info {
+  position: absolute;
+  top: 32px;
   left: 12px;
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.7);

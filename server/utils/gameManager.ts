@@ -352,6 +352,25 @@ class GameManager {
   /**
    * Create a new game
    */
+  private generateRoomNumber(): string {
+    // 生成4位随机房间号，确保不重复（跳过已存在的活跃房间）
+    const maxAttempts = 100;
+    for (let i = 0; i < maxAttempts; i++) {
+      const num = String(Math.floor(1000 + Math.random() * 9000)); // 1000-9999
+      // 检查是否有活跃的游戏用了这个房间号
+      let exists = false;
+      for (const game of this.games.values()) {
+        if (game.roomNumber === num && game.phase !== GamePhase.ENDED) {
+          exists = true;
+          break;
+        }
+      }
+      if (!exists) return num;
+    }
+    // Fallback: 使用时间戳最后4位
+    return String(Date.now()).slice(-4);
+  }
+
   async createGame(playerName: string, options?: { freezeDurationMs?: number; diceRollCount?: number }): Promise<{ gameId: string; playerId: string }> {
     await this.hydrateFromDatabase();
 
@@ -382,6 +401,7 @@ class GameManager {
 
     const game: GameState = {
       gameId,
+      roomNumber: this.generateRoomNumber(),
       phase: GamePhase.WAITING,
       endReason: null,
       players: [player],
