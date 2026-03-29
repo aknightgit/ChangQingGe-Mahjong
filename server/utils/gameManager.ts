@@ -1564,14 +1564,12 @@ class GameManager {
     // 回合开始时补花：门口有花牌就从牌墙补牌
     this.replaceFlowers(game, nextPlayer);
     
-    // 然后正常摸牌
-    this.handleDraw(game, nextPlayer);
-
-    // 如果是 bot 玩家或AI托管，延迟后自动出牌（给客户端留出动画时间）
+    // Bot玩家自动摸牌；人类玩家需手动点击"摸"
     if (this.isPlayerBotControlled(nextPlayer)) {
+      this.handleDraw(game, nextPlayer);
       this.scheduleBotDiscard(game.gameId, nextPlayer.id);
     } else {
-      // 人类玩家回合：广播状态让客户端显示摸牌+出牌按钮
+      // 人类玩家回合：广播状态让客户端显示摸牌按钮
       this.broadcastGameState(game.gameId);
     }
   }
