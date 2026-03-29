@@ -530,6 +530,20 @@ class GameManager {
     }
     game.inheritedGlobalMultiplier = undefined;
 
+    // 庄家自动补花（开局时门口花牌自动替换，无需玩家手动点击）
+    const dealer = game.players[game.dealerIndex];
+    this.replaceInitialFlowers(game, dealer);
+    // 如果补花后又摸到花牌，递归补（直到没有花牌或牌墙空）
+    let dealerFlowers = dealer.hand.exposedMelds.filter(
+      m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
+    );
+    while (dealerFlowers.length > 0 && game.wall.length > 0) {
+      this.replaceInitialFlowers(game, dealer);
+      dealerFlowers = dealer.hand.exposedMelds.filter(
+        m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
+      );
+    }
+
     game.currentPlayerIndex = game.dealerIndex;
     game.phase = GamePhase.PLAYING;
     game.lastActionTime = Date.now();

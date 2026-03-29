@@ -374,18 +374,7 @@ const startPvEGame = async () => {
       }
     }
 
-    // 3. Start game
-    console.log('[PvE] Starting game...')
-    try {
-      const startRes = await $fetch('/api/game/start', {
-        method: 'POST',
-        body: { gameId, playerId },
-        headers: { 'Cache-Control': 'no-cache' }
-      })
-      console.log('[PvE] Game started:', JSON.stringify(startRes))
-    } catch (startErr) {
-      console.error('[PvE] Start failed:', startErr)
-    }
+    // 3. 不再调用 startGame API — 让 gameroom 页面自行处理掷骰子+发牌流程
 
     // 4. Navigate to game room
     console.log('[PvE] Navigating to:', `/gameroom/${gameId}?playerId=${playerId}`)

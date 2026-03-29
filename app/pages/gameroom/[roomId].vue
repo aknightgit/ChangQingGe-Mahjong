@@ -579,9 +579,21 @@ const toggleShowAllCards = () => {
   showAllCards.value = !showAllCards.value
 }
 
-onMounted(() => {
+onMounted(async () => {
   if (roomId.value && playerId.value) {
-    connect(roomId.value, playerId.value)
+    await connect(roomId.value, playerId.value)
+
+    // 游戏未开始 → 自动显示掷骰子
+    await nextTick()
+    if (gameState.value && gameState.value.phase !== GamePhase.PLAYING && gameState.value.phase !== GamePhase.ENDED) {
+      // 等 Socket.IO 连接完成后检查玩家数
+      setTimeout(() => {
+        if (gameState.value?.players?.length >= 2 && gameState.value.phase !== GamePhase.PLAYING) {
+          console.log('[gameroom] Auto-showing dice overlay for game setup')
+          onStartGame()
+        }
+      }, 500)
+    }
   }
 
   if (process.client) {
