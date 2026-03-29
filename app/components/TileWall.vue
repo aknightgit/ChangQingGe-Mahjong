@@ -40,7 +40,7 @@
         <div v-for="i in TILES_PER_SIDE" :key="`lo-${i}`" class="tile-slot tile-slot--vertical"
           :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * V_OVERLAP}px + 15px)`, left: 'calc(18% - 20px)', zIndex: '2', transform: 'translateY(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back wall-back--outer" />
-          <div v-if="i === TILES_PER_SIDE" class="tile-side tile-side--bottom" />
+          <div v-if="i === 1" class="tile-side tile-side--bottom" />
         </div>
       </div>
     </div>
