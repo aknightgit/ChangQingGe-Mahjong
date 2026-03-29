@@ -257,7 +257,7 @@ const getArrowChar = (sourcePos: number): string => {
 .player-other--right .player-other-hand {
   flex-direction: column;
   flex-wrap: wrap;
-  gap: 0;
+  gap: 1px;
   max-height: 100%;
   align-content: flex-start;
 }
