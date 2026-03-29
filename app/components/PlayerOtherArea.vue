@@ -197,14 +197,14 @@ const getArrowChar = (sourcePos: number): string => {
 
 .player-other-melds {
   display: flex;
-  gap: 3px;
+  gap: 1px;
 }
 
 .other-meld {
   display: inline-flex;
   align-items: center;
-  padding: 2px;
-  border-radius: 5px;
+  padding: 1px;
+  border-radius: 4px;
   background: rgba(17, 43, 33, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.1);
   position: relative;
@@ -260,7 +260,12 @@ const getArrowChar = (sourcePos: number): string => {
 .player-other--left .player-other-melds,
 .player-other--right .player-other-melds {
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
   flex-shrink: 0;
+}
+
+/* 上家 melds：紧凑排列 */
+.player-other--top .player-other-melds {
+  gap: 0;
 }
 </style>

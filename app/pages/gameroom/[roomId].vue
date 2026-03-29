@@ -1369,7 +1369,7 @@ const forceDiscard = async (p: Player) => {
 .seat-top {
   top: 0;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) rotate(180deg);
   width: 62%;
   height: auto;
 }
@@ -1380,6 +1380,12 @@ const forceDiscard = async (p: Player) => {
   transform: translateX(-50%);
   width: 62%;
   height: auto;
+}
+
+/* 对家名字反向旋转，保持正向可读 */
+.seat-top :deep(.player-other-name) {
+  display: inline-block;
+  transform: rotate(180deg);
 }
 
 .seat-left {

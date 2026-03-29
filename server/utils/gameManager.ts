@@ -598,6 +598,15 @@ class GameManager {
     // If it's the player's turn and no one else has pending reactions, allow turn actions
     // Note: freeze does NOT block the player's own draw+discard cycle
     if (currentPlayer.id === playerId && game.pendingActions.length === 0) {
+
+      // 自动补花：如果门口有未替换的花牌，先补花
+      const unreplacedFlowers = player.hand.exposedMelds.filter(
+        m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
+      )
+      if (unreplacedFlowers.length > 0 && game.wall.length > 0) {
+        actions.push(ActionType.DRAW);
+        return actions;
+      }
       // 检查造反（五毒散）- 仅第一圈有效
       const wildParts = game.customScoringMode?.split('-');
       const wildSuit = wildParts ? wildParts[0] as TileSuit : undefined;
@@ -681,6 +690,9 @@ class GameManager {
         break;
 
       case ActionType.DRAW:
+        // 先处理门口的初始花牌（发牌时放门口的）
+        this.replaceInitialFlowers(game, player);
+        // 再正常摸牌（摸到花牌会递归补花）
         this.handleDraw(game, player);
         break;
 
@@ -801,6 +813,38 @@ class GameManager {
     
     player.hand.concealedTiles.push(tile);
     player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
+  }
+
+  /**
+   * 替换门口的初始花牌（发牌时放门口但未补花的）
+   */
+  private replaceInitialFlowers(game: GameState, player: Player): void {
+    const flowerMelds = player.hand.exposedMelds.filter(
+      m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
+    );
+    for (const meld of flowerMelds) {
+      if (game.wall.length === 0) break;
+      const replacement = game.wall.pop()!;
+      if (isFlower(replacement) && !this.isWildTile(game, replacement)) {
+        // 补到的又是花牌 → 加到门口，递归补
+        player.hand.exposedMelds.push({
+          type: MeldType.TRIPLET,
+          tiles: [replacement],
+          isConcealed: false
+        });
+        // 递归
+        this.replaceInitialFlowers(game, player);
+        return;
+      } else if (isFlower(replacement) && this.isWildTile(game, replacement)) {
+        // 百搭花牌 → 进手牌
+        player.hand.concealedTiles.push(replacement);
+        player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
+      } else {
+        // 普通牌 → 进手牌
+        player.hand.concealedTiles.push(replacement);
+        player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
+      }
+    }
   }
 
   /**
