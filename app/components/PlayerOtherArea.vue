@@ -280,23 +280,26 @@ const getArrowChar = (sourcePos: number): string => {
   filter: brightness(0.85);
 }
 
-/* 左家 melds：推向牌桌中心 */
+/* 左家门口：靠边缘（order -1） */
 .player-other--left .player-other-melds {
   flex-direction: column;
   gap: 0;
   flex-shrink: 0;
-  margin-top: 60px;
+  order: -1;
 }
 .player-other--left .player-other-melds :deep(.tile) {
   transform: rotate(90deg);
 }
+.player-other--left .player-other-hand {
+  margin-top: 30px;
+}
 
-/* 右家 melds */
+/* 右家门口：靠中心 */
 .player-other--right .player-other-melds {
   flex-direction: column;
   gap: 0;
   flex-shrink: 0;
-  margin-top: 60px;
+  margin-top: 30px;
 }
 .player-other--right .player-other-melds :deep(.tile) {
   transform: rotate(-90deg);
