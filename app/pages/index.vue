@@ -194,15 +194,31 @@
           </div>
 
           <div class="create-field">
-            <label>AI玩家个数</label>
-            <input type="number" v-model.number="createParams.aiCount" min="0" max="3" />
-            <span class="create-hint">0=真人对战，1-3=人机混合</span>
+            <label>AI玩家</label>
+            <div class="ai-select-list">
+              <label
+                v-for="bot in allAIBots"
+                :key="bot.id"
+                class="ai-select-item"
+                :class="{ 'ai-select-item--active': selectedBots.includes(bot.id) }"
+              >
+                <input
+                  type="checkbox"
+                  :value="bot.id"
+                  v-model="selectedBots"
+                  :disabled="!selectedBots.includes(bot.id) && selectedBots.length >= 3"
+                />
+                <span class="ai-select-name">{{ bot.name }}</span>
+                <span class="ai-select-desc">{{ bot.desc }}</span>
+              </label>
+            </div>
+            <span class="create-hint">最多选择3个AI（{{ selectedBots.length }}/3）</span>
           </div>
 
           <div class="create-field">
             <label>冻结下家摸牌秒数</label>
             <input type="number" v-model.number="createParams.freezeSeconds" min="0" max="10" step="0.5" />
-            <span class="create-hint">打出百搭后冻结时间（默认1秒）</span>
+            <span class="create-hint">上家打牌后，下家等待时间（默认1秒）</span>
           </div>
 
           <div class="create-actions">
@@ -232,12 +248,20 @@ const isCreatingGame = ref(false)
 const showCreateModal = ref(false)
 const createParams = reactive({
   maxDiceRolls: 2,
-  aiCount: 0,
   freezeSeconds: 1
 })
 
+// AI玩家选择
+const allAIBots = [
+  { id: 'AI-小胖', name: 'AI-小胖', desc: '稳健型' },
+  { id: 'AI-老赵', name: 'AI-老赵', desc: '进攻型' },
+  { id: 'AI-阿水', name: 'AI-阿水', desc: '随机型' },
+]
+const selectedBots = ref<string[]>([])
+
 const openCreateModal = (aiCount: number) => {
-  createParams.aiCount = aiCount
+  // 人机大战默认选满3个
+  selectedBots.value = aiCount > 0 ? allAIBots.slice(0, aiCount).map(b => b.id) : []
   showCreateModal.value = true
 }
 
@@ -261,21 +285,19 @@ const confirmCreateGame = async () => {
     const playerId = response.data?.playerId
     if (!gameId) return
 
-    // 加入AI玩家
-    const AI_BOT_NAMES = ['AI-小胖', 'AI-老赵', 'AI-阿水']
-    for (let i = 0; i < createParams.aiCount; i++) {
+    // 加入选中的AI玩家
+    for (const botId of selectedBots.value) {
       try {
         await $fetch('/api/game/join', {
           method: 'POST',
-          body: { gameId, playerName: AI_BOT_NAMES[i] },
+          body: { gameId, playerName: botId },
           headers: { 'Cache-Control': 'no-cache' }
         })
       } catch (e) {
-        console.error('[Create] Bot join failed:', AI_BOT_NAMES[i], e)
+        console.error('[Create] Bot join failed:', botId, e)
       }
     }
 
-    // 携带参数进入房间
     navigateTo(`/gameroom/${gameId}?playerId=${playerId}&dice=${createParams.maxDiceRolls}&freeze=${createParams.freezeSeconds}`)
   } catch (e) {
     console.error('[Create] Error:', e)
@@ -683,5 +705,53 @@ const logout = () => {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+}
+
+/* AI玩家选择列表 */
+.ai-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.ai-select-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ai-select-item:hover {
+  border-color: rgba(70, 197, 116, 0.3);
+  background: rgba(70, 197, 116, 0.05);
+}
+
+.ai-select-item--active {
+  border-color: rgba(70, 197, 116, 0.5);
+  background: rgba(70, 197, 116, 0.1);
+}
+
+.ai-select-item input[type="checkbox"] {
+  accent-color: #46c574;
+  width: 16px;
+  height: 16px;
+}
+
+.ai-select-name {
+  color: #e0e0e0;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.ai-select-desc {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.75rem;
+  margin-left: auto;
 }
 </style>
