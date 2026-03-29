@@ -690,6 +690,13 @@ class GameManager {
         break;
 
       case ActionType.DRAW:
+        // 防止重复摸牌：检查手牌+门口是否已满14张
+        const drawExposedCount = player.hand.exposedMelds.reduce((sum, m) => sum + m.tiles.length, 0);
+        const drawTotalCount = player.hand.concealedTiles.length + drawExposedCount;
+        if (drawTotalCount >= 14) {
+          console.warn(`[DRAW] Blocked: player ${player.id} already has ${drawTotalCount} tiles`);
+          break;
+        }
         // 先处理门口的初始花牌（发牌时放门口的）
         this.replaceInitialFlowers(game, player);
         // 再正常摸牌（摸到花牌会递归补花）

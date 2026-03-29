@@ -263,12 +263,6 @@
                 <div class="inline-action-buttons" v-else-if="isConnected && !isInteractionLocked">
                   <div v-if="actionWindowText" class="inline-action-timer">{{ actionWindowText }}</div>
                   <button
-                    v-if="showDraw"
-                    class="inline-action-btn inline-action-btn--draw"
-                    :disabled="isInteractionLocked"
-                    @click="onDraw"
-                  >摸牌</button>
-                  <button
                     v-if="showChow"
                     class="inline-action-btn inline-action-btn--chow"
                     :disabled="isInteractionLocked"
