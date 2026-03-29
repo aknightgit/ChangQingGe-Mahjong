@@ -56,11 +56,12 @@ export const useGame = () => {
       const wsUrl = window.location.origin
       socket.value = io(wsUrl, {
         withCredentials: true,
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'],
         timeout: 10000,
         reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000
       })
 
       socket.value.on('connect', () => {
@@ -83,6 +84,8 @@ export const useGame = () => {
       })
 
       socket.value.on('connect_error', (err) => {
+        // Suppress first websocket error (expected fallback to polling)
+        if (err.message?.includes('websocket') && !isConnected.value) return
         console.error('Socket connection error:', err)
         error.value = 'Connection failed: ' + err.message
         isConnected.value = false
