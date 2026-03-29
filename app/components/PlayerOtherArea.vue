@@ -258,7 +258,6 @@ const getArrowChar = (sourcePos: number): string => {
   flex-direction: column;
   flex-wrap: wrap;
   gap: 0;
-  max-height: 100%;
   align-content: flex-start;
 }
 /* 左右手牌去掉3D阴影和边框，消除缝隙 */
