@@ -47,8 +47,8 @@
       </template>
     </template>
     <template v-else>
-      <!-- 牌背（CSS渲染） -->
-      <div class="tile-back-face" />
+      <!-- 牌背用 pomax_hq Back.png -->
+      <img src="/assets/tileset/pomax_hq/Back.png" class="tile-img" loading="lazy" />
     </template>
   </div>
 </template>
