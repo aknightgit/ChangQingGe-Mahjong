@@ -261,11 +261,13 @@ const getArrowChar = (sourcePos: number): string => {
   max-height: 100%;
   align-content: flex-start;
 }
-/* 左右手牌去掉3D阴影，消除缝隙 */
+/* 左右手牌去掉3D阴影和边框，消除缝隙 */
 .player-other--left .player-other-hand :deep(.tile),
 .player-other--right .player-other-hand :deep(.tile) {
   box-shadow: 0 1px 3px rgba(0,0,0,0.4);
   margin: 0;
+  border: none;
+  border-radius: 2px;
 }
 
 /* 左家手牌：牌背朝中心（旋转90°） */
