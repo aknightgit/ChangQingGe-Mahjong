@@ -163,8 +163,8 @@ const chineseNum = computed(() => {
   width: 28px;
   height: 40px;
   border-radius: 3px 3px 2px 2px;
-  background: #faf6ee;
-  border: 0.5px solid #e0d6c0;
+  background: transparent;
+  border: none;
   /* 2.5D: front face highlight + bottom/right side edges + ambient shadow */
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.55),
@@ -194,15 +194,14 @@ const chineseNum = computed(() => {
 .tile--small {
   width: 28px;
   height: 40px;
-  border-width: 0.5px;
 }
 
 /* ==================== PNG 牌图 ==================== */
 .tile-img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  border-radius: 4px 4px 3px 3px;
+  object-fit: cover;
+  border-radius: 3px 3px 2px 2px;
 }
 
 /* SVG fallback 保留（兼容） */
@@ -352,7 +351,7 @@ const chineseNum = computed(() => {
 }
 
 /* ==================== Small tile adjustments ==================== */
-.tile--small .tile-img { width: 95%; height: 95%; }
+.tile--small .tile-img { width: 100%; height: 100%; }
 .tile--small .tile-svg { width: 85%; height: 85%; }
 .tile--small .tile-char-top { font-size: 0.8rem; }
 .tile--small .tile-char-bottom { font-size: 0.95rem; }
