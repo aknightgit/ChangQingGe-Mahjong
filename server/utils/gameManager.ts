@@ -96,8 +96,6 @@ class GameManager {
         for (const pa of pending) {
           const player = game.players.find(p => p.id === pa.playerId);
           if (!player || player.status !== PlayerStatus.PLAYING) continue;
-          // Bot / AI托管玩家已在 checkPendingActions 的 setTimeout 中处理过，跳过
-          if (this.isPlayerBotControlled(player)) continue;
           this.handlePass(game, player);
         }
 
@@ -111,6 +109,49 @@ class GameManager {
     }, 1000); // 1秒窗口
 
     this.pendingActionTimers.set(gameId, timer);
+  }
+
+  /**
+   * 让 bot 处理自己的 pending action（碰/杠/胡/吃/过）
+   */
+  private handleBotPendingActions(gameId: string): void {
+    setTimeout(async () => {
+      try {
+        const game = await this.getGame(gameId);
+        if (!game || game.phase !== GamePhase.PLAYING) return;
+
+        for (const pa of [...game.pendingActions]) {
+          const player = game.players.find(p => p.id === pa.playerId);
+          if (!player || player.status !== PlayerStatus.PLAYING) continue;
+          if (!this.isPlayerBotControlled(player)) continue;
+
+          const action = shouldClaimPendingAction(player, pa.availableActions, game);
+          console.log(`[BotService] ${player.name} pending action: ${action} (from ${pa.availableActions})`);
+
+          if (action === ActionType.PASS) {
+            this.handlePass(game, player);
+          } else if (action === ActionType.PENG) {
+            this.handlePeng(game, player);
+          } else if (action === ActionType.KONG) {
+            this.handleKong(game, player, pa.tile?.id || '');
+          } else if (action === ActionType.HU) {
+            this.handleHu(game, player);
+          } else if (action === ActionType.CHOW) {
+            const sequences = this.findChowSequences(player.hand.concealedTiles, pa.tile!);
+            if (sequences.length > 0) {
+              this.handleChow(game, player);
+            } else {
+              this.handlePass(game, player);
+            }
+          }
+        }
+
+        await this.persistGame(game);
+        this.broadcastGameState(gameId);
+      } catch (err) {
+        console.error('[BotService] Pending action error:', err);
+      }
+    }, 300 + Math.floor(Math.random() * 500)); // bot 响应延迟 0.3~0.8s
   }
 
   /**
@@ -822,13 +863,23 @@ class GameManager {
     if (this.isWildTile(game, tile)) {
       game.freezeRound = game.roundNumber;
       game.pendingActions = [];
+      this.broadcastGameState(game.gameId);
+      this.schedulePendingActionTimeout(game.gameId);
       this.moveToNextPlayer(game);
       return;
     }
 
-    // 去掉碰/杠/胡响应窗口：直接进入下家回合
-    // 冻结逻辑由 moveToNextPlayer 处理
-    game.pendingActions = [];
+    // 检查其他玩家是否可以碰/杠/胡/吃
+    this.checkPendingActions(game, tile);
+
+    // 如果有人有响应选项，广播游戏状态让用户选择
+    if (game.pendingActions.length > 0) {
+      this.broadcastGameState(game.gameId);
+      this.schedulePendingActionTimeout(game.gameId);
+      // 同时让 bot 处理自己的 pending action
+      this.handleBotPendingActions(game.gameId);
+    }
+
     this.moveToNextPlayer(game);
   }
 
