@@ -164,7 +164,7 @@ const chineseNum = computed(() => {
   height: 40px;
   border-radius: 3px 3px 2px 2px;
   background: transparent;
-  border: none;
+  border: 0.5px solid rgba(180, 165, 130, 0.5);
   /* 2.5D: front face highlight + bottom/right side edges + ambient shadow */
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.55),
