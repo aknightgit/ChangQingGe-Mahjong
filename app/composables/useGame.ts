@@ -56,7 +56,7 @@ export const useGame = () => {
       const wsUrl = window.location.origin
       socket.value = io(wsUrl, {
         withCredentials: true,
-        transports: ['polling', 'websocket'],
+        transports: ['polling'],
         timeout: 10000,
         reconnection: true,
         reconnectionAttempts: 10,

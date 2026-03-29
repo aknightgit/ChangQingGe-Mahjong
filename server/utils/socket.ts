@@ -90,7 +90,7 @@ export async function initializeSocketIO(server: HTTPServer) {
       methods: ['GET', 'POST'],
       credentials: true
     },
-    transports: ['websocket', 'polling']
+    transports: ['polling']
   })
 
   // ✅ Configure Redis adapter for horizontal scaling
