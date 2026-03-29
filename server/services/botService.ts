@@ -14,13 +14,25 @@ function getPolicy(): any {
     // Try loading from training directory
     const fs = require('fs')
     const path = require('path')
-    const policyPath = path.resolve(__dirname, '../../training/best-policy.json')
-    const raw = fs.readFileSync(policyPath, 'utf-8')
+    // Nitro 兼容: 尝试多个可能的路径
+    const possiblePaths = [
+      path.resolve(process.cwd(), 'training/best-policy.json'),
+      path.resolve(__dirname, '../../training/best-policy.json'),
+      path.resolve(__dirname, '../../../training/best-policy.json'),
+    ]
+    let raw = ''
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        raw = fs.readFileSync(p, 'utf-8')
+        break
+      }
+    }
+    if (!raw) throw new Error('Policy file not found in any expected location')
     const data = JSON.parse(raw)
     _policy = data.policy || data
-    console.log('[BotService] Loaded policy:', _policy.id || 'unknown')
-  } catch (err) {
-    console.warn('[BotService] Failed to load policy, using defaults')
+    console.log('[BotService] ✅ Loaded policy:', _policy.id || 'unknown')
+  } catch (err: any) {
+    console.warn('[BotService] ⚠️ Failed to load policy:', err.message, '- using defaults')
     _policy = {
       id: 'default',
       selfWinChance: 0.95,
