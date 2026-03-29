@@ -1394,7 +1394,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .seat-left {
-  left: 8%;
+  left: 5%;
   top: 0;
   height: 100%;
   width: 60px;
@@ -1405,7 +1405,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .seat-right {
-  right: 8%;
+  right: 5%;
   top: 0;
   height: 100%;
   width: 60px;

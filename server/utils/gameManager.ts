@@ -855,6 +855,13 @@ class GameManager {
     const flowerMelds = player.hand.exposedMelds.filter(
       m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
     );
+    if (flowerMelds.length === 0) return;
+
+    // 先从exposedMelds中移除这些花牌
+    player.hand.exposedMelds = player.hand.exposedMelds.filter(
+      m => !(m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]))
+    );
+
     for (const meld of flowerMelds) {
       if (game.wall.length === 0) break;
       const replacement = game.wall.pop()!;
