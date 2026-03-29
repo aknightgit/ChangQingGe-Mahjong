@@ -96,11 +96,15 @@ class GameManager {
         for (const pa of pending) {
           const player = game.players.find(p => p.id === pa.playerId);
           if (!player || player.status !== PlayerStatus.PLAYING) continue;
+          if (this.isPlayerBotControlled(player)) continue; // bot 已在 handleBotPendingActions 处理
           this.handlePass(game, player);
         }
 
+        // 所有 pending 都已处理 → 进入下家
+        game.pendingActions = [];
         await this.persistGame(game);
         this.broadcastGameState(gameId);
+        await this.moveToNextPlayer(game);
       } catch (err) {
         console.error('Failed to auto-resolve pending actions:', err);
       } finally {
@@ -120,6 +124,8 @@ class GameManager {
         const game = await this.getGame(gameId);
         if (!game || game.phase !== GamePhase.PLAYING) return;
 
+        let claimedAction = false;
+
         for (const pa of [...game.pendingActions]) {
           const player = game.players.find(p => p.id === pa.playerId);
           if (!player || player.status !== PlayerStatus.PLAYING) continue;
@@ -132,22 +138,31 @@ class GameManager {
             this.handlePass(game, player);
           } else if (action === ActionType.PENG) {
             this.handlePeng(game, player);
+            claimedAction = true;
           } else if (action === ActionType.KONG) {
             this.handleKong(game, player, pa.tile?.id || '');
+            claimedAction = true;
           } else if (action === ActionType.HU) {
             this.handleHu(game, player);
+            claimedAction = true;
           } else if (action === ActionType.CHOW) {
-            const sequences = this.findChowSequences(player.hand.concealedTiles, pa.tile!);
-            if (sequences.length > 0) {
-              this.handleChow(game, player);
-            } else {
-              this.handlePass(game, player);
-            }
+            this.handleChow(game, player);
+            claimedAction = true;
           }
         }
 
+        // 所有 pending 都已处理 → 进入下家（除非有人碰/杠/胡）
+        if (!claimedAction) {
+          game.pendingActions = [];
+        }
+        
         await this.persistGame(game);
         this.broadcastGameState(gameId);
+
+        // 如果没人碰/杠，进入下家；如果有人碰了，其回合已设好
+        if (!claimedAction) {
+          await this.moveToNextPlayer(game);
+        }
       } catch (err) {
         console.error('[BotService] Pending action error:', err);
       }
@@ -833,6 +848,15 @@ class GameManager {
     game.actionHistory.push(gameAction);
     game.lastActionTime = Date.now();
 
+    // 如果所有 pending actions 都处理完了，推进到下家
+    if (game.pendingActions.length === 0 && action !== ActionType.DISCARD) {
+      await this.persistGame(game);
+      this.broadcastGameState(gameId);
+      this.clearPendingActionTimer(gameId); // 取消 timeout
+      await this.moveToNextPlayer(game);
+      return;
+    }
+
     // Broadcast game state update
     await this.persistGame(game);
     this.broadcastGameState(gameId);
@@ -863,8 +887,8 @@ class GameManager {
     if (this.isWildTile(game, tile)) {
       game.freezeRound = game.roundNumber;
       game.pendingActions = [];
+      await this.persistGame(game);
       this.broadcastGameState(game.gameId);
-      this.schedulePendingActionTimeout(game.gameId);
       this.moveToNextPlayer(game);
       return;
     }
@@ -872,15 +896,20 @@ class GameManager {
     // 检查其他玩家是否可以碰/杠/胡/吃
     this.checkPendingActions(game, tile);
 
-    // 如果有人有响应选项，广播游戏状态让用户选择
     if (game.pendingActions.length > 0) {
+      // 有人可以响应 → 广播状态，不立即进入下家
+      // pending action 完成后会自动调用 moveToNextPlayer
+      await this.persistGame(game);
       this.broadcastGameState(game.gameId);
       this.schedulePendingActionTimeout(game.gameId);
-      // 同时让 bot 处理自己的 pending action
       this.handleBotPendingActions(game.gameId);
+      return;
     }
 
-    this.moveToNextPlayer(game);
+    // 无人响应 → 直接进入下家
+    await this.persistGame(game);
+    this.broadcastGameState(game.gameId);
+    await this.moveToNextPlayer(game);
   }
 
   private handleDraw(game: GameState, player: Player): void {
@@ -1430,10 +1459,7 @@ class GameManager {
       return;
     }
 
-    // 普通场景
-    if (game.pendingActions.length === 0) {
-      this.moveToNextPlayer(game);
-    }
+    // 普通场景 - 不在这里调用 moveToNextPlayer，由调用方统一处理
   }
 
   private checkPendingActions(game: GameState, discardedTile: Tile): void {
@@ -1617,6 +1643,12 @@ class GameManager {
 
   private async moveToNextPlayer(game: GameState): Promise<void> {
     if (game.phase !== GamePhase.PLAYING) {
+      return;
+    }
+
+    // 如果还有 pending actions 未处理，不要推进
+    if (game.pendingActions.length > 0) {
+      console.log(`[moveToNextPlayer] Skipped: ${game.pendingActions.length} pending actions remaining`);
       return;
     }
 
