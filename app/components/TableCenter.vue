@@ -13,7 +13,7 @@
       <!-- 百搭：缩小真实牌面（无百搭时给出占位） -->
       <div v-if="wildTile" class="wild-tile-mini">
         <MahjongTile :tile="wildTile" :small="true" />
-        <span class="wild-label">百搭</span>
+        <span class="wild-label">百搭 · {{ wildTileName }}</span>
       </div>
       <div v-else class="wild-placeholder">百搭：未定</div>
     </div>
@@ -34,6 +34,20 @@ const props = defineProps<{
   globalMultiplier?: number
   wildTile?: Tile | null
 }>()
+
+// 花牌中文名称
+const FLOWER_NAMES: Record<number, string> = {
+  1: '春', 2: '夏', 3: '秋', 4: '冬',
+  5: '梅', 6: '兰', 7: '竹', 8: '菊',
+}
+
+const wildTileName = computed(() => {
+  if (!props.wildTile) return ''
+  if (props.wildTile.suit === 'hua') {
+    return FLOWER_NAMES[props.wildTile.value] || `花${props.wildTile.value}`
+  }
+  return ''
+})
 </script>
 
 <style scoped>
@@ -80,7 +94,7 @@ const props = defineProps<{
   align-items: center;
   gap: 2px;
   margin-top: 4px;
-  transform: scale(0.7);
+  transform: scale(1.05);
   transform-origin: center;
   filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.6));
   border: none;
