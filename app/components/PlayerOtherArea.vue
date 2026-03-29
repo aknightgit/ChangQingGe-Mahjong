@@ -252,21 +252,23 @@ const getArrowChar = (sourcePos: number): string => {
   gap: 2px;
 }
 
-/* 左家/右家：纵向排列，限制高度防止溢出 */
+/* 左家/右家：纵向排列 */
 .player-other--left .player-other-hand,
 .player-other--right .player-other-hand {
+  display: flex;
   flex-direction: column;
-  flex-wrap: wrap;
   gap: 0;
-  align-content: flex-start;
 }
-/* 左右手牌去掉3D阴影和边框，消除缝隙 */
+/* 左右手牌：旋转后交换宽高，消除缝隙 */
 .player-other--left .player-other-hand :deep(.tile),
 .player-other--right .player-other-hand :deep(.tile) {
-  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  width: 40px;
+  height: 28px;
   margin: 0;
+  padding: 0;
   border: none;
   border-radius: 2px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
 /* 左家手牌：牌背朝中心（旋转90°） */
@@ -280,7 +282,7 @@ const getArrowChar = (sourcePos: number): string => {
   filter: brightness(0.85);
 }
 
-/* 左家门口：靠边缘（order -1） */
+/* 左家门口：靠边缘 */
 .player-other--left .player-other-melds {
   flex-direction: column;
   gap: 0;
@@ -288,6 +290,8 @@ const getArrowChar = (sourcePos: number): string => {
   order: -1;
 }
 .player-other--left .player-other-melds :deep(.tile) {
+  width: 40px;
+  height: 28px;
   transform: rotate(90deg);
 }
 .player-other--left .player-other-hand {
@@ -302,6 +306,8 @@ const getArrowChar = (sourcePos: number): string => {
   margin-top: 30px;
 }
 .player-other--right .player-other-melds :deep(.tile) {
+  width: 40px;
+  height: 28px;
   transform: rotate(-90deg);
 }
 
