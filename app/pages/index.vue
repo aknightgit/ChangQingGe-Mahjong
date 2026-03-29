@@ -18,14 +18,6 @@
         </button>
 
         <button
-          class="mahjong-button primary"
-          :disabled="isCreatingGame"
-          @click="openCreateModal(3)"
-        >
-          人机大战
-        </button>
-
-        <button
           v-if="isAdminUser"
           class="mahjong-button secondary"
           @click="goToAdminSandbox"
