@@ -1,0 +1,41 @@
+{
+  "name": "AI-阿水",
+  "style": "做大做强型",
+  "desc": "爱做大牌，能门清就门清",
+  "savedAt": "2026-03-29T18:05:57.639Z",
+  "metrics": {
+    "huRate": 0,
+    "selfDrawRate": 0,
+    "lastPlayerRate": 0,
+    "note": "手动配置，待训练验证"
+  },
+  "policy": {
+    "selfWinChance": 0.98,
+    "selfWinWildBoost": 0.04,
+    "discardHuChance": 0.6,
+    "discardHuWildPenalty": 0.131,
+    "discardHuMenQingPenalty": 0.3,
+    "pengChance": 0.25,
+    "kongChance": 0.15,
+    "chowChance": 0.03,
+    "pengWildBoost": 0.067,
+    "kongWildBoost": 0.261,
+    "chowWildPenalty": 0.1,
+    "bailoutBuildWildBoost": 0.403,
+    "bailoutHuPenaltyPerMeld": 0.055,
+    "honorRushThreshold": 2,
+    "honorRushBoost": 0.492,
+    "pairWeight": 6,
+    "nearWeight": 0.1,
+    "honorPairBonus": 0.261,
+    "wildKeepPenalty": 2000,
+    "dominantSuitBonus": 5,
+    "tripletKeepBonus": 4.525,
+    "honorTripletKeepBonus": 15,
+    "windDragonPairKeepBonus": 10,
+    "tripletComboBonus": 5,
+    "flushChaseBonus": 6,
+    "id": "AI-阿水-做大做强型",
+    "savedAt": "2026-03-29T18:05:57.639Z"
+  }
+}

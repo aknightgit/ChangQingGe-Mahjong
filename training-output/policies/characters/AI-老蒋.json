@@ -1,0 +1,41 @@
+{
+  "name": "AI-老蒋",
+  "style": "均衡型",
+  "desc": "best policy，再偏保守一点点",
+  "savedAt": "2026-03-29T18:05:57.640Z",
+  "metrics": {
+    "huRate": 0,
+    "selfDrawRate": 0,
+    "lastPlayerRate": 0,
+    "note": "手动配置，待训练验证"
+  },
+  "policy": {
+    "selfWinChance": 0.95,
+    "selfWinWildBoost": 0.04,
+    "discardHuChance": 0.95,
+    "discardHuWildPenalty": 0.131,
+    "discardHuMenQingPenalty": 0.053,
+    "pengChance": 0.7,
+    "kongChance": 0.35,
+    "chowChance": 0.1,
+    "pengWildBoost": 0.067,
+    "kongWildBoost": 0.261,
+    "chowWildPenalty": 0.1,
+    "bailoutBuildWildBoost": 0.403,
+    "bailoutHuPenaltyPerMeld": 0.055,
+    "honorRushThreshold": 2,
+    "honorRushBoost": 0.492,
+    "pairWeight": 5,
+    "nearWeight": 0.1,
+    "honorPairBonus": 0.261,
+    "wildKeepPenalty": 600,
+    "dominantSuitBonus": 2.84,
+    "tripletKeepBonus": 4.525,
+    "honorTripletKeepBonus": 11.79,
+    "windDragonPairKeepBonus": 6.8,
+    "tripletComboBonus": 2.77,
+    "flushChaseBonus": 3.57,
+    "id": "AI-老蒋-均衡型",
+    "savedAt": "2026-03-29T18:05:57.640Z"
+  }
+}

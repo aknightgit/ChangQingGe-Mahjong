@@ -5,56 +5,101 @@
 import { GameState, Player, Tile, TileSuit, MeldType, PlayerStatus, ActionType } from '../types/game'
 import { groupTiles, tilesEqual, isFlower, isHonor, isWind, isDragon } from '../utils/tiles'
 
-// ===== Policy loading =====
-let _policy: any = null
+// ===== Policy loading (per-character) =====
+let _policies: Record<string, any> = {}
 
-function getPolicy(): any {
-  if (_policy) return _policy
-  try {
-    // Try loading from training directory
-    const fs = require('fs')
-    const path = require('path')
-    // Nitro 兼容: 尝试多个可能的路径
-    const possiblePaths = [
-      path.resolve(process.cwd(), 'training/best-policy.json'),
-      path.resolve(__dirname, '../../training/best-policy.json'),
-      path.resolve(__dirname, '../../../training/best-policy.json'),
-    ]
-    let raw = ''
-    for (const p of possiblePaths) {
-      if (fs.existsSync(p)) {
-        raw = fs.readFileSync(p, 'utf-8')
-        break
+function loadCharacterPolicy(botName: string): any {
+  if (_policies[botName]) return _policies[botName]
+
+  const fs = require('fs')
+  const path = require('path')
+  
+  // Try loading character-specific policy first
+  const characterPaths = [
+    path.resolve(process.cwd(), `training-output/policies/characters/${botName}.json`),
+    path.resolve(__dirname, `../../training-output/policies/characters/${botName}.json`),
+  ]
+  
+  for (const p of characterPaths) {
+    if (fs.existsSync(p)) {
+      try {
+        const raw = fs.readFileSync(p, 'utf-8')
+        const data = JSON.parse(raw)
+        _policies[botName] = data.policy || data
+        console.log(`[BotService] ✅ Loaded policy for ${botName}:`, _policies[botName].id || 'character')
+        return _policies[botName]
+      } catch (err: any) {
+        console.warn(`[BotService] ⚠️ Failed to parse ${p}:`, err.message)
       }
     }
-    if (!raw) throw new Error('Policy file not found in any expected location')
-    const data = JSON.parse(raw)
-    _policy = data.policy || data
-    console.log('[BotService] ✅ Loaded policy:', _policy.id || 'unknown')
-  } catch (err: any) {
-    console.warn('[BotService] ⚠️ Failed to load policy:', err.message, '- using defaults')
-    _policy = {
-      id: 'default',
-      selfWinChance: 0.95,
-      discardHuChance: 0.7,
-      discardHuWildPenalty: 0.3,
-      discardHuMenQingPenalty: 0.1,
-      pengChance: 0.6,
-      kongChance: 0.5,
-      chowChance: 0.6,
-      chowWildPenalty: 0.05,
-      wildKeepPenalty: 1000,
-      dominantSuitBonus: 3.0,
-      tripletKeepBonus: 1.0,
-      pairWeight: 8.0,
-      nearWeight: 0.8,
-      honorPairBonus: 0,
-      honorRushThreshold: 8,
-      honorRushBoost: 0.2,
-      bailoutHuPenaltyPerMeld: 0.01,
+  }
+  
+  // Fall back to default/best policy
+  if (!_policies['default']) {
+    const defaultPaths = [
+      path.resolve(process.cwd(), 'training/best-policy.json'),
+      path.resolve(process.cwd(), 'training-output/best-policy.json'),
+      path.resolve(__dirname, '../../training/best-policy.json'),
+      path.resolve(__dirname, '../../training-output/best-policy.json'),
+    ]
+    
+    for (const p of defaultPaths) {
+      if (fs.existsSync(p)) {
+        try {
+          const raw = fs.readFileSync(p, 'utf-8')
+          const data = JSON.parse(raw)
+          _policies['default'] = data.policy || data
+          console.log(`[BotService] ✅ Loaded default policy:`, _policies['default'].id || 'best')
+          break
+        } catch (err: any) {
+          console.warn(`[BotService] ⚠️ Failed to parse ${p}:`, err.message)
+        }
+      }
+    }
+    
+    if (!_policies['default']) {
+      // Hardcoded fallback
+      _policies['default'] = {
+        id: 'fallback',
+        selfWinChance: 0.95,
+        discardHuChance: 0.7,
+        discardHuWildPenalty: 0.3,
+        discardHuMenQingPenalty: 0.1,
+        pengChance: 0.6,
+        kongChance: 0.5,
+        chowChance: 0.6,
+        chowWildPenalty: 0.05,
+        wildKeepPenalty: 1000,
+        dominantSuitBonus: 3.0,
+        tripletKeepBonus: 1.0,
+        pairWeight: 8.0,
+        nearWeight: 0.8,
+        honorPairBonus: 0,
+        honorRushThreshold: 8,
+        honorRushBoost: 0.2,
+        bailoutHuPenaltyPerMeld: 0.01,
+      }
+      console.log('[BotService] ⚠️ Using hardcoded fallback policy')
     }
   }
-  return _policy
+  
+  // Use default for this character
+  _policies[botName] = _policies['default']
+  return _policies[botName]
+}
+
+function getPolicy(): any {
+  // Default policy (backward compatible)
+  return loadCharacterPolicy('default')
+}
+
+function getPolicyForPlayer(player: Player): any {
+  return loadCharacterPolicy(player.name)
+}
+
+// Clear policy cache (for testing)
+function resetPolicyCache(): void {
+  _policies = {}
 }
 
 /**
@@ -94,8 +139,8 @@ function isWildTile(tile: Tile, game: GameState): boolean {
  * Higher score = MORE likely to discard (worse tile).
  * We want to discard the tile with the HIGHEST score.
  */
-function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState): number {
-  const policy = getPolicy()
+function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: Player): number {
+  const policy = getPolicyForPlayer(player)
   let score = 0
 
   const groups = groupTiles(hand)
@@ -182,7 +227,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   let bestScore = -Infinity
 
   for (const tile of hand) {
-    const score = scoreTileForDiscard(tile, hand, game)
+    const score = scoreTileForDiscard(tile, hand, game, player)
     if (score > bestScore) {
       bestScore = score
       bestTile = tile
@@ -201,7 +246,7 @@ export function shouldClaimPendingAction(
   availableActions: ActionType[],
   game: GameState
 ): ActionType {
-  const policy = getPolicy()
+  const policy = getPolicyForPlayer(player)
 
   // Always take HU if available
   if (availableActions.includes(ActionType.HU)) return ActionType.HU
