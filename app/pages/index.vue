@@ -192,7 +192,7 @@ const isAdminUser = computed(() => isAdmin.value === 'true' || isAdmin.value ===
 const isCreatingGame = ref(false)
 
 const { data: profileResponse, pending: profilePending, error: profileError, refresh: refreshProfile } =
-  await useFetch('/api/profile', {
+  useFetch('/api/profile', {
     method: 'GET',
     cache: 'no-cache'
   })
