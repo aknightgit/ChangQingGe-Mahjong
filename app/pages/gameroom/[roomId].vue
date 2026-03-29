@@ -659,9 +659,27 @@ const roundPosition = computed(() => ((currentRound.value - 1) % 4) + 1)
 const roundDisplay = computed(() => `第${roundCircle.value}圈 ${prevailingWind.value}${roundPosition.value}局`)
 const globalMultiplier = computed(() => gameState.value?.globalMultiplier ?? 1)
 const wildTile = computed(() => {
-  const w = gameState.value?.wildTile
-  if (!w) return null
-  return { suit: w.suit, value: w.value, id: 'center-wild', isWild: true, isFlower: false } as any
+  const raw = gameState.value?.customScoringMode
+  if (!raw || raw === 'cheat') return null
+
+  // 解析 "suit-value" 格式（如 "dots-3", "hua-5"）
+  const parts = raw.split('-')
+  if (parts.length < 2) return null
+  const suit = parts[0]
+  const value = parseInt(parts[1], 10)
+
+  // 花牌百搭: 整组为百搭（春夏秋冬 或 梅兰竹菊）
+  const isFlower = suit === 'hua'
+  const group = gameState.value?.wildTileGroup
+
+  return {
+    suit,
+    value,
+    id: 'center-wild',
+    isWild: true,
+    isFlower,
+    flowerGroup: isFlower ? group : undefined
+  } as any
 })
 
 // ---- Room Stats ----
