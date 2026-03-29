@@ -86,8 +86,8 @@ export const useGame = () => {
       socket.value.on('connect_error', (err) => {
         // Suppress first websocket error (expected fallback to polling)
         if (err.message?.includes('websocket') && !isConnected.value) return
-        console.error('Socket connection error:', err)
-        error.value = 'Connection failed: ' + err.message
+        console.warn('Socket connect_error:', err.message)
+        // 不设置 error.value，避免触发不必要的 re-render
         isConnected.value = false
       })
 
@@ -155,7 +155,7 @@ export const useGame = () => {
   // 防止并发 refresh + 防抖
   let isRefreshing = false
   let lastRefreshAt = 0
-  const DEBOUNCE_MS = 500
+  const DEBOUNCE_MS = 1500
 
   const refreshState = async () => {
     if (!gameId.value || !playerId.value) return
@@ -166,6 +166,9 @@ export const useGame = () => {
     lastRefreshAt = now
     try {
       await fetchGameState(gameId.value, playerId.value)
+    } catch (e) {
+      // 静默处理刷新错误，不触发 re-render
+      console.warn('refreshState failed:', e)
     } finally {
       isRefreshing = false
     }
