@@ -704,14 +704,40 @@ class GameManager {
         break;
 
       case ActionType.PENG:
+        // 防止超限：碰牌后手牌不能超过14张
+        {
+          const pengExposedCount = player.hand.exposedMelds.reduce((sum, m) => sum + m.tiles.length, 0);
+          const pengTotalCount = player.hand.concealedTiles.length + pengExposedCount;
+          if (pengTotalCount + 3 > 14) { // 碰牌增加一个3张meld
+            console.warn(`[PENG] Blocked: player ${player.id} would exceed 14 tiles`);
+            break;
+          }
+        }
         this.handlePeng(game, player);
         break;
 
       case ActionType.CHOW:
+        // 防止超限：吃牌后手牌不能超过14张
+        {
+          const chowExposedCount = player.hand.exposedMelds.reduce((sum, m) => sum + m.tiles.length, 0);
+          const chowTotalCount = player.hand.concealedTiles.length + chowExposedCount;
+          if (chowTotalCount + 3 > 14) { // 吃牌增加一个3张meld
+            console.warn(`[CHOW] Blocked: player ${player.id} would exceed 14 tiles`);
+            break;
+          }
+        }
         this.handleChow(game, player);
         break;
 
       case ActionType.KONG:
+        {
+          const kongExposedCount = player.hand.exposedMelds.reduce((sum, m) => sum + m.tiles.length, 0);
+          const kongTotalCount = player.hand.concealedTiles.length + kongExposedCount;
+          if (kongTotalCount + 4 > 14) {
+            console.warn(`[KONG] Blocked: player ${player.id} would exceed 14 tiles`);
+            break;
+          }
+        }
         this.handleKong(game, player, tileId!);
         break;
 
