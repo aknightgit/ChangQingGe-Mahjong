@@ -1580,8 +1580,8 @@ const forceDiscard = async (p: Player) => {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 120px;
-  height: 120px;
+  width: 144px;
+  height: 144px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 215, 0, 0.15) 0%, rgba(255, 180, 0, 0.08) 50%, transparent 70%);
   border: 1.5px solid rgba(255, 215, 0, 0.25);

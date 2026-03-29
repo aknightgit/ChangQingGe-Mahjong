@@ -26,6 +26,7 @@
             :key="tile.id"
             :tile="tile"
             :small="true"
+            :back="true"
             :dimmed="isWinner"
           />
         </div>
@@ -134,7 +135,7 @@ const getArrowChar = (sourcePos: number): string => {
 /* 对家：名字放上方（朝牌桌中心），整体下移30px */
 .player-other--top {
   flex-direction: column-reverse;
-  margin-top: 30px;
+  margin-top: 40px;
 }
 
 .player-other-header {
@@ -202,7 +203,7 @@ const getArrowChar = (sourcePos: number): string => {
 
 .player-other-melds {
   display: flex;
-  gap: 1px;
+  gap: 2px;
 }
 
 .other-meld {
@@ -261,13 +262,15 @@ const getArrowChar = (sourcePos: number): string => {
   align-content: flex-start;
 }
 
-/* 左家手牌：牌面朝中心（旋转90°） */
+/* 左家手牌：牌背朝中心（旋转90°） */
 .player-other-hand--left :deep(.tile) {
   transform: rotate(90deg);
+  filter: brightness(0.85);
 }
-/* 右家手牌：牌面朝中心（旋转-90°） */
+/* 右家手牌：牌背朝中心（旋转-90°） */
 .player-other-hand--right :deep(.tile) {
   transform: rotate(-90deg);
+  filter: brightness(0.85);
 }
 
 /* 左家 melds：推向牌桌中心 */
@@ -288,6 +291,6 @@ const getArrowChar = (sourcePos: number): string => {
 
 /* 上家 melds：紧凑排列 */
 .player-other--top .player-other-melds {
-  gap: 0;
+  gap: 2px;
 }
 </style>
