@@ -161,7 +161,7 @@ const onPointerCancel = () => {
 /* 主行：melds 左 + 手牌右 */
 .player-main-row {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
 }
 
