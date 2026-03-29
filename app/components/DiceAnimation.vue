@@ -14,18 +14,27 @@
               {{ dealerName ? `${dealerName} 掷骰子` : '等待掷骰子...' }}
             </p>
             <div class="dice-row">
-              <div class="dice dice--idle"><span class="dice-face">🎲</span></div>
-              <div class="dice dice--idle"><span class="dice-face">🎲</span></div>
+              <div class="dice3d dice3d--idle" :class="'dice3d--face1'">
+                <div class="dice3d-face dice3d-face--front"><div class="dot dot--center" /></div>
+                <div class="dice3d-face dice3d-face--back"><div class="dot dot--tl" /><div class="dot dot--tr" /><div class="dot dot--ml" /><div class="dot dot--mr" /><div class="dot dot--bl" /><div class="dot dot--br" /></div>
+                <div class="dice3d-face dice3d-face--right"><div class="dot dot--tl" /><div class="dot dot--center" /><div class="dot dot--br" /></div>
+                <div class="dice3d-face dice3d-face--left"><div class="dot dot--tl" /><div class="dot dot--tr" /><div class="dot dot--bl" /><div class="dot dot--br" /></div>
+                <div class="dice3d-face dice3d-face--top"><div class="dot dot--tl" /><div class="dot dot--tr" /><div class="dot dot--bl" /><div class="dot dot--br" /><div class="dot dot--center" /></div>
+                <div class="dice3d-face dice3d-face--bottom"><div class="dot dot--tl" /><div class="dot dot--tr" /><div class="dot dot--ml" /><div class="dot dot--mr" /><div class="dot dot--bl" /><div class="dot dot--br" /></div>
+              </div>
+              <div class="dice3d dice3d--idle" :class="'dice3d--face1'">
+                <div class="dice3d-face dice3d-face--front"><div class="dot dot--center" /></div>
+                <div class="dice3d-face dice3d-face--back"><div class="dot dot--tl" /><div class="dot dot--tr" /><div class="dot dot--ml" /><div class="dot dot--mr" /><div class="dot dot--bl" /><div class="dot dot--br" /></div>
+                <div class="dice3d-face dice3d-face--right"><div class="dot dot--tl" /><div class="dot dot--center" /><div class="dot dot--br" /></div>
+                <div class="dice3d-face dice3d-face--left"><div class="dot dot--tl" /><div class="dot dot--tr" /><div class="dot dot--bl" /><div class="dot dot--br" /></div>
+                <div class="dice3d-face dice3d-face--top"><div class="dot dot--tl" /><div class="dot dot--tr" /><div class="dot dot--bl" /><div class="dot dot--br" /><div class="dot dot--center" /></div>
+                <div class="dice3d-face dice3d-face--bottom"><div class="dot dot--tl" /><div class="dot dot--tr" /><div class="dot dot--ml" /><div class="dot dot--mr" /><div class="dot dot--bl" /><div class="dot dot--br" /></div>
+              </div>
             </div>
             <p class="dice-roll-count" v-if="maxRollsLimit > 1" style="margin-top: 12px;">
               最多可掷 {{ maxRollsLimit }} 次
             </p>
-            <button
-              v-if="isDealer"
-              class="deal-button"
-              style="margin-top: 20px;"
-              @click="onRoll"
-            >
+            <button v-if="isDealer" class="deal-button" style="margin-top: 20px;" @click="onRoll">
               🎲 掷骰子
             </button>
             <p v-else class="dice-hint" style="margin-top: 16px;">等待庄家掷骰子...</p>
@@ -35,27 +44,35 @@
         <!-- 阶段1: 掷骰子动画中 -->
         <template v-if="phase === 'rolling'">
           <div class="dice-row">
-            <div class="dice dice--rolling">
-              <span class="dice-face">{{ dice1Display }}</span>
-              <div class="dice-glow" />
+            <div class="dice3d dice3d--bounce" :style="{ animationDelay: '0s' }">
+              <div class="dice3d-face dice3d-face--front" /><div class="dice3d-face dice3d-face--back" />
+              <div class="dice3d-face dice3d-face--right" /><div class="dice3d-face dice3d-face--left" />
+              <div class="dice3d-face dice3d-face--top" /><div class="dice3d-face dice3d-face--bottom" />
             </div>
-            <div class="dice dice--rolling" style="animation-delay: 0.12s">
-              <span class="dice-face">{{ dice2Display }}</span>
-              <div class="dice-glow" />
+            <div class="dice3d dice3d--bounce" :style="{ animationDelay: '0.15s' }">
+              <div class="dice3d-face dice3d-face--front" /><div class="dice3d-face dice3d-face--back" />
+              <div class="dice3d-face dice3d-face--right" /><div class="dice3d-face dice3d-face--left" />
+              <div class="dice3d-face dice3d-face--top" /><div class="dice3d-face dice3d-face--bottom" />
             </div>
           </div>
           <p class="dice-rolling-label">🎲 掷骰子...</p>
         </template>
 
-        <!-- 阶段2: 掷骰结果 - 庄家可重掷或发牌 -->
+        <!-- 阶段2: 掷骰结果 -->
         <template v-if="phase === 'result'">
           <div class="dice-result-phase">
             <div class="dice-row">
-              <div class="dice dice--landed">
-                <span class="dice-face">{{ DICE_FACES[dice1] }}</span>
+              <div class="dice3d dice3d--landed" :class="`dice3d--face${dice1}`">
+                <div class="dice3d-face dice3d-face--front"><template v-for="d in getDots(dice1)" :key="d"><div class="dot" :class="`dot--${d}`" /></template></div>
+                <div class="dice3d-face dice3d-face--back" /><div class="dice3d-face dice3d-face--right" />
+                <div class="dice3d-face dice3d-face--left" /><div class="dice3d-face dice3d-face--top" />
+                <div class="dice3d-face dice3d-face--bottom" />
               </div>
-              <div class="dice dice--landed">
-                <span class="dice-face">{{ DICE_FACES[dice2] }}</span>
+              <div class="dice3d dice3d--landed" :class="`dice3d--face${dice2}`">
+                <div class="dice3d-face dice3d-face--front"><template v-for="d in getDots(dice2)" :key="d"><div class="dot" :class="`dot--${d}`" /></template></div>
+                <div class="dice3d-face dice3d-face--back" /><div class="dice3d-face dice3d-face--right" />
+                <div class="dice3d-face dice3d-face--left" /><div class="dice3d-face dice3d-face--top" />
+                <div class="dice3d-face dice3d-face--bottom" />
               </div>
             </div>
             <p class="dice-total">
@@ -75,15 +92,21 @@
           </div>
         </template>
 
-        <!-- 阶段2: 发牌确认按钮 -->
+        <!-- 阶段3: 发牌确认按钮 -->
         <template v-if="phase === 'deal'">
           <div class="deal-phase">
-            <div class="dice-final-row">
-              <div class="dice dice--final">
-                <span class="dice-face">{{ DICE_FACES[dice1] }}</span>
+            <div class="dice-row">
+              <div class="dice3d dice3d--landed" :class="`dice3d--face${dice1}`">
+                <div class="dice3d-face dice3d-face--front"><template v-for="d in getDots(dice1)" :key="d"><div class="dot" :class="`dot--${d}`" /></template></div>
+                <div class="dice3d-face dice3d-face--back" /><div class="dice3d-face dice3d-face--right" />
+                <div class="dice3d-face dice3d-face--left" /><div class="dice3d-face dice3d-face--top" />
+                <div class="dice3d-face dice3d-face--bottom" />
               </div>
-              <div class="dice dice--final">
-                <span class="dice-face">{{ DICE_FACES[dice2] }}</span>
+              <div class="dice3d dice3d--landed" :class="`dice3d--face${dice2}`">
+                <div class="dice3d-face dice3d-face--front"><template v-for="d in getDots(dice2)" :key="d"><div class="dot" :class="`dot--${d}`" /></template></div>
+                <div class="dice3d-face dice3d-face--back" /><div class="dice3d-face dice3d-face--right" />
+                <div class="dice3d-face dice3d-face--left" /><div class="dice3d-face dice3d-face--top" />
+                <div class="dice3d-face dice3d-face--bottom" />
               </div>
             </div>
             <p class="deal-total">{{ dice1 + dice2 }} 点</p>
@@ -118,6 +141,18 @@ const emit = defineEmits<{
 }>()
 
 const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
+
+// 每个点数对应的dot位置
+const DOT_LAYOUTS: Record<number, string[]> = {
+  1: ['center'],
+  2: ['tl', 'br'],
+  3: ['tl', 'center', 'br'],
+  4: ['tl', 'tr', 'bl', 'br'],
+  5: ['tl', 'tr', 'center', 'bl', 'br'],
+  6: ['tl', 'tr', 'ml', 'mr', 'bl', 'br'],
+}
+
+const getDots = (n: number) => DOT_LAYOUTS[n] || ['center']
 
 const visible = ref(true)
 const isRolling = ref(false)
@@ -232,98 +267,116 @@ const onDeal = () => {
 }
 
 /* ===== 骰子 ===== */
+/* ===== 3D骰子 ===== */
 .dice-row {
   display: flex;
-  gap: 32px;
+  gap: 48px;
   justify-content: center;
   margin-bottom: 24px;
+  perspective: 600px;
 }
 
-.dice {
-  width: 90px;
-  height: 90px;
-  background: linear-gradient(145deg, #ffffff, #e8e8e8);
-  border-radius: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.5),
-    0 0 0 2px rgba(255, 255, 255, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+.dice3d {
+  width: 72px;
+  height: 72px;
   position: relative;
-  overflow: hidden;
+  transform-style: preserve-3d;
+  transition: transform 0.3s ease;
 }
 
-.dice-glow {
+.dice3d-face {
   position: absolute;
-  inset: -4px;
-  border-radius: 22px;
-  background: conic-gradient(
-    from 0deg,
-    rgba(70, 197, 116, 0.6),
-    rgba(255, 215, 0, 0.6),
-    rgba(70, 197, 116, 0.6)
-  );
-  z-index: -1;
+  width: 72px;
+  height: 72px;
+  background: linear-gradient(145deg, #fefefe, #e8e0d0);
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+  display: grid;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+/* 面的位置 */
+.dice3d-face--front  { transform: translateZ(36px); }
+.dice3d-face--back   { transform: rotateY(180deg) translateZ(36px); }
+.dice3d-face--right  { transform: rotateY(90deg) translateZ(36px); }
+.dice3d-face--left   { transform: rotateY(-90deg) translateZ(36px); }
+.dice3d-face--top    { transform: rotateX(90deg) translateZ(36px); }
+.dice3d-face--bottom { transform: rotateX(-90deg) translateZ(36px); }
+
+/* 非正面隐藏 */
+.dice3d-face--back, .dice3d-face--right, .dice3d-face--left,
+.dice3d-face--top, .dice3d-face--bottom {
   opacity: 0;
-  transition: opacity 0.3s;
 }
 
-.dice--rolling .dice-glow {
+.dice3d--landed .dice3d-face--front {
   opacity: 1;
-  animation: glow-spin 0.8s linear infinite;
 }
 
-@keyframes glow-spin {
-  to { transform: rotate(360deg); }
+/* 点的样式 */
+.dot {
+  width: 12px;
+  height: 12px;
+  background: radial-gradient(circle at 40% 35%, #2a2a2a, #0a0a0a);
+  border-radius: 50%;
+  box-shadow: inset 0 1px 2px rgba(255,255,255,0.15), 0 1px 2px rgba(0,0,0,0.3);
 }
 
-.dice--rolling {
-  animation: dice-shake 0.12s infinite;
+/* 点位布局 */
+.dot--center { grid-area: 2/2/3/3; justify-self: center; align-self: center; }
+.dot--tl     { grid-area: 1/1/2/2; justify-self: start; align-self: start; }
+.dot--tr     { grid-area: 1/3/2/4; justify-self: end; align-self: start; }
+.dot--ml     { grid-area: 2/1/3/2; justify-self: start; align-self: center; }
+.dot--mr     { grid-area: 2/3/3/4; justify-self: end; align-self: center; }
+.dot--bl     { grid-area: 3/1/4/2; justify-self: start; align-self: end; }
+.dot--br     { grid-area: 3/3/4/4; justify-self: end; align-self: end; }
+
+/* 正面用3x3 grid */
+.dice3d-face--front {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr 1fr;
 }
 
-@keyframes dice-shake {
-  0%, 100% { transform: rotate(0deg) scale(1); }
-  20% { transform: rotate(-12deg) scale(1.08); }
-  40% { transform: rotate(10deg) scale(1.05); }
-  60% { transform: rotate(-6deg) scale(1.03); }
-  80% { transform: rotate(8deg) scale(1.06); }
+/* ===== 状态动画 ===== */
+.dice3d--idle {
+  opacity: 0.5;
+  animation: idle-float 3s ease-in-out infinite;
 }
 
-.dice--landed {
-  animation: dice-land 0.4s ease-out;
+@keyframes idle-float {
+  0%, 100% { transform: rotateX(-15deg) rotateY(-20deg) translateY(0); }
+  50% { transform: rotateX(-15deg) rotateY(-20deg) translateY(-8px); }
 }
 
-.dice--idle {
-  opacity: 0.6;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+/* 掷骰弹跳+旋转动画 */
+.dice3d--bounce {
+  animation: dice-bounce 1.8s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
 }
 
-@keyframes dice-land {
-  0% { transform: scale(1.3) rotate(10deg); }
-  50% { transform: scale(0.9) rotate(-3deg); }
-  100% { transform: scale(1) rotate(0deg); }
+@keyframes dice-bounce {
+  0%   { transform: translateY(-200px) rotateX(0) rotateY(0) rotateZ(0); opacity: 0; }
+  10%  { opacity: 1; }
+  25%  { transform: translateY(0) rotateX(360deg) rotateY(180deg) rotateZ(90deg); }
+  35%  { transform: translateY(-80px) rotateX(540deg) rotateY(360deg) rotateZ(180deg); }
+  50%  { transform: translateY(0) rotateX(720deg) rotateY(540deg) rotateZ(270deg); }
+  60%  { transform: translateY(-30px) rotateX(810deg) rotateY(630deg) rotateZ(315deg); }
+  75%  { transform: translateY(0) rotateX(900deg) rotateY(720deg) rotateZ(360deg); }
+  85%  { transform: translateY(-10px) rotateX(940deg) rotateY(760deg) rotateZ(380deg); }
+  100% { transform: translateY(0) rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
 }
 
-.dice--final {
-  width: 70px;
-  height: 70px;
-  border-radius: 14px;
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.4),
-    0 0 20px rgba(70, 197, 116, 0.2);
+/* 落地 */
+.dice3d--landed {
+  animation: dice3d-land 0.4s ease-out;
 }
 
-.dice-face {
-  font-size: 3.2rem;
-  line-height: 1;
-  position: relative;
-  z-index: 1;
-}
-
-.dice--final .dice-face {
-  font-size: 2.5rem;
+@keyframes dice3d-land {
+  0% { transform: scale(1.2); }
+  60% { transform: scale(0.95); }
+  100% { transform: scale(1); }
 }
 
 /* ===== 结果文字 ===== */
@@ -339,9 +392,6 @@ const onDeal = () => {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
-
-.dice-result {
-  animation: result-in 0.5s ease-out;
 }
 
 @keyframes result-in {
@@ -376,13 +426,6 @@ const onDeal = () => {
 @keyframes deal-phase-in {
   from { opacity: 0; transform: scale(0.9); }
   to { opacity: 1; transform: scale(1); }
-}
-
-.dice-final-row {
-  display: flex;
-  gap: 20px;
-  justify-content: center;
-  margin-bottom: 12px;
 }
 
 .deal-total {
