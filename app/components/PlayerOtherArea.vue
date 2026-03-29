@@ -20,13 +20,12 @@
     <div class="player-area" :class="`player-area--${position}`">
       <!-- left: hand在上(边缘), melds在下(靠近牌桌中心/蓝圈位置) -->
       <template v-if="position === 'left'">
-        <div class="player-other-hand">
+        <div class="player-other-hand player-other-hand--left">
           <MahjongTile
             v-for="tile in hand"
             :key="tile.id"
             :tile="tile"
             :small="true"
-            :back="true"
             :dimmed="isWinner"
           />
         </div>
@@ -73,13 +72,13 @@
           </div>
         </div>
 
-        <div class="player-other-hand">
+        <div class="player-other-hand" :class="{ 'player-other-hand--right': position === 'right' }">
           <MahjongTile
             v-for="tile in hand"
             :key="tile.id"
             :tile="tile"
             :small="true"
-            :back="true"
+            :back="position === 'top'"
             :dimmed="isWinner"
           />
         </div>
@@ -260,6 +259,15 @@ const getArrowChar = (sourcePos: number): string => {
   gap: 0;
   max-height: 100%;
   align-content: flex-start;
+}
+
+/* 左家手牌：牌面朝中心（旋转90°） */
+.player-other-hand--left :deep(.tile) {
+  transform: rotate(90deg);
+}
+/* 右家手牌：牌面朝中心（旋转-90°） */
+.player-other-hand--right :deep(.tile) {
+  transform: rotate(-90deg);
 }
 
 /* 左家 melds：推向牌桌中心 */
