@@ -154,6 +154,7 @@ const LAYER_OFFSET = 5
 }
 
 /* ===== 2.5D 白色侧面：全部朝下 ===== */
+/* 1/3 绿色（贴牌背）+ 2/3 白色（牌面侧边） */
 .tile-side {
   position: absolute;
   pointer-events: none;
@@ -162,7 +163,7 @@ const LAYER_OFFSET = 5
   right: 1px;
   height: 5px;
   border-radius: 0 0 2px 2px;
-  background: linear-gradient(180deg, #f5efe0, #d8d0c0);
+  background: linear-gradient(180deg, #1a4a28 0%, #1a4a28 33%, #f5efe0 33%, #e8e0d0 100%);
   box-shadow: 0 2px 3px rgba(0,0,0,0.25);
 }
 
