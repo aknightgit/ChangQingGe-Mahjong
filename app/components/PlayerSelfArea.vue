@@ -204,24 +204,26 @@ const onPointerCancel = () => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  width: 100%;
 }
 
 .player-hand {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  align-content: center;
   justify-content: center;
   min-height: 72px;
   padding: 4px;
   border-radius: 10px;
   background: transparent;
-  max-width: 100%;
+  /* 限制最大宽度为14张牌，多余才换行 */
+  max-width: 440px;
+  margin: 0 auto;
 }
 
 .player-hand :deep(.tile) {
   cursor: pointer;
-  margin: 0 1px;
+  margin: 0 1px 2px 1px;
 }
 
 /* 玩家颜色圆点 */
