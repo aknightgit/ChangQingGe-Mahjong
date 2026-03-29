@@ -18,18 +18,8 @@
          left: column, hand上 + meld下（meld在玩家左手边=下）
          right: column, meld上 + hand下（meld在玩家左手边=上） -->
     <div class="player-area" :class="`player-area--${position}`">
-      <!-- left/bottom: hand 在前 -->
+      <!-- left: melds在上(靠近牌桌中心), hand在下(靠近牌桌边缘) -->
       <template v-if="position === 'left'">
-        <div class="player-other-hand">
-          <MahjongTile
-            v-for="tile in hand"
-            :key="tile.id"
-            :tile="tile"
-            :small="true"
-            :back="true"
-            :dimmed="isWinner"
-          />
-        </div>
         <div class="player-other-melds" v-if="melds.length">
           <div
             v-for="(meld, i) in melds"
@@ -49,9 +39,19 @@
             </span>
           </div>
         </div>
+        <div class="player-other-hand">
+          <MahjongTile
+            v-for="tile in hand"
+            :key="tile.id"
+            :tile="tile"
+            :small="true"
+            :back="true"
+            :dimmed="isWinner"
+          />
+        </div>
       </template>
 
-      <!-- top/right: melds 在前 -->
+      <!-- right/top: melds在前 -->
       <template v-else>
         <div class="player-other-melds" v-if="melds.length">
           <div
@@ -246,12 +246,14 @@ const getArrowChar = (sourcePos: number): string => {
   gap: 2px;
 }
 
-/* 左家/右家：纵向排列贴边缘 */
+/* 左家/右家：纵向排列，限制高度防止溢出 */
 .player-other--left .player-other-hand,
 .player-other--right .player-other-hand {
   flex-direction: column;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 0;
+  max-height: 100%;
+  align-content: flex-start;
 }
 
 /* 左家/右家 melds：纵向排列 */
@@ -259,5 +261,6 @@ const getArrowChar = (sourcePos: number): string => {
 .player-other--right .player-other-melds {
   flex-direction: column;
   gap: 2px;
+  flex-shrink: 0;
 }
 </style>

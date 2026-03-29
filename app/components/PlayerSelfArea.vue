@@ -210,6 +210,7 @@ const onPointerCancel = () => {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
+  align-content: center;
   justify-content: center;
   min-height: 72px;
   padding: 4px;
