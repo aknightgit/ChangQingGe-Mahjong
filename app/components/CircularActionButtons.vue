@@ -1,61 +1,49 @@
 <template>
-  <div class="circular-actions" :class="{ 'circular-actions--compact': compact, 'circular-actions--offline': !isConnected }">
+  <div class="action-panel" :class="{ 'action-panel--compact': compact, 'action-panel--offline': !isConnected }">
     <!-- 延迟提示 -->
     <div v-if="isDelaying && hasAnyAction && isConnected" class="delay-indicator">
       <span class="delay-dot"></span>
       等待看清出牌...
     </div>
 
-    <!-- 中心大圆：摸 -->
+    <!-- 左侧 2×2 小圆：吃/碰/胡/杠 -->
+    <div class="action-grid">
+      <button
+        class="action-btn action-btn--small"
+        :class="{ 'action-btn--active': hasChow, 'action-btn--highlight': hasChow && !isDelaying }"
+        :disabled="!hasChow || isDelaying || isInteractionLocked || !isConnected"
+        @click="$emit('action', 'chow')"
+      >吃</button>
+
+      <button
+        class="action-btn action-btn--small"
+        :class="{ 'action-btn--active': hasPeng, 'action-btn--highlight': hasPeng && !isDelaying }"
+        :disabled="!hasPeng || isDelaying || isInteractionLocked || !isConnected"
+        @click="$emit('action', 'peng')"
+      >碰</button>
+
+      <button
+        class="action-btn action-btn--small"
+        :class="{ 'action-btn--active': hasHu, 'action-btn--highlight': hasHu && !isDelaying }"
+        :disabled="!hasHu || isDelaying || isInteractionLocked || !isConnected"
+        @click="$emit('action', 'hu')"
+      >胡</button>
+
+      <button
+        class="action-btn action-btn--small"
+        :class="{ 'action-btn--active': hasKong, 'action-btn--highlight': hasKong && !isDelaying }"
+        :disabled="!hasKong || isDelaying || isInteractionLocked || !isConnected"
+        @click="$emit('action', 'kong')"
+      >杠</button>
+    </div>
+
+    <!-- 右侧 大圆：摸 -->
     <button
-      class="action-btn action-btn--center"
+      class="action-btn action-btn--draw"
       :class="{ 'action-btn--active': canDraw, 'action-btn--highlight': canDraw && !isDelaying }"
       :disabled="!canDraw || isDelaying || isInteractionLocked || !isConnected"
       @click="$emit('action', 'draw')"
-    >
-      <span class="action-btn__label">摸</span>
-    </button>
-
-    <!-- 上：吃 -->
-    <button
-      class="action-btn action-btn--top"
-      :class="{ 'action-btn--active': hasChow, 'action-btn--highlight': hasChow && !isDelaying }"
-      :disabled="!hasChow || isDelaying || isInteractionLocked || !isConnected"
-      @click="$emit('action', 'chow')"
-    >
-      <span class="action-btn__label">吃</span>
-    </button>
-
-    <!-- 右：碰 -->
-    <button
-      class="action-btn action-btn--right"
-      :class="{ 'action-btn--active': hasPeng, 'action-btn--highlight': hasPeng && !isDelaying }"
-      :disabled="!hasPeng || isDelaying || isInteractionLocked || !isConnected"
-      @click="$emit('action', 'peng')"
-    >
-      <span class="action-btn__label">碰</span>
-    </button>
-
-    <!-- 下：杠 -->
-    <button
-      class="action-btn action-btn--bottom"
-      :class="{ 'action-btn--active': hasKong, 'action-btn--highlight': hasKong && !isDelaying }"
-      :disabled="!hasKong || isDelaying || isInteractionLocked || !isConnected"
-      @click="$emit('action', 'kong')"
-    >
-      <span class="action-btn__label">杠</span>
-    </button>
-
-    <!-- 左：胡 -->
-    <button
-      class="action-btn action-btn--left"
-      :class="{ 'action-btn--active': hasHu, 'action-btn--highlight': hasHu && !isDelaying }"
-      :disabled="!hasHu || isDelaying || isInteractionLocked || !isConnected"
-      @click="$emit('action', 'hu')"
-    >
-      <span class="action-btn__label">胡</span>
-    </button>
-
+    >摸</button>
   </div>
 </template>
 
@@ -78,9 +66,7 @@ const props = withDefaults(defineProps<Props>(), {
   highlightDelayMs: 2000
 })
 
-defineEmits<{
-  action: [type: string]
-}>()
+defineEmits<{ action: [type: string] }>()
 
 const canDraw = computed(() => props.availableActions.includes(ActionType.DRAW))
 const hasChow = computed(() => props.availableActions.includes(ActionType.CHOW))
@@ -92,15 +78,9 @@ const hasKong = computed(() =>
 )
 const hasHu = computed(() => props.availableActions.includes(ActionType.HU))
 
-const hasAnyPriorityAction = computed(
-  () => hasChow.value || hasPeng.value || hasKong.value || hasHu.value
-)
+const hasAnyPriorityAction = computed(() => hasChow.value || hasPeng.value || hasKong.value || hasHu.value)
+const hasAnyAction = computed(() => hasAnyPriorityAction.value || canDraw.value)
 
-const hasAnyAction = computed(
-  () => hasAnyPriorityAction.value || canDraw.value
-)
-
-// 延迟高亮逻辑
 const isDelaying = computed(() => {
   if (props.lastStateChangeAt === 0) return false
   return props.nowTs - props.lastStateChangeAt < props.highlightDelayMs
@@ -108,243 +88,142 @@ const isDelaying = computed(() => {
 </script>
 
 <style scoped>
-.circular-actions {
+.action-panel {
   position: relative;
-  width: 180px;
-  height: 180px;
-  z-index: 20;
-  background: rgba(255, 215, 0, 0.12);
-  border: 2px solid rgba(255, 215, 0, 0.5);
-  border-radius: 20px;
-  padding: 16px;
-  box-shadow: 0 0 24px rgba(255, 215, 0, 0.15), 0 4px 16px rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(10, 25, 18, 0.92);
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
-.circular-actions--compact {
-  width: 140px;
-  height: 140px;
+.action-panel--compact {
+  padding: 8px;
+  gap: 8px;
 }
 
 /* 延迟提示 */
 .delay-indicator {
   position: absolute;
-  top: -28px;
+  top: -24px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: #ffd36a;
   white-space: nowrap;
   display: flex;
   align-items: center;
   gap: 4px;
-  animation: fadeIn 0.3s ease;
 }
-
 .delay-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #ffd36a;
-  animation: pulse-dot 1s infinite;
+  width: 5px; height: 5px; border-radius: 50%;
+  background: #ffd36a; animation: pulse-dot 1s infinite;
+}
+@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* 左侧 2×2 网格 */
+.action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
 }
 
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0); }
-}
-
-/* 基础按钮样式 */
+/* 基础按钮 */
 .action-btn {
-  position: absolute;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.15);
-  background: rgba(15, 35, 25, 0.85);
-  color: #fff;
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  background: rgba(20, 40, 30, 0.85);
+  color: rgba(255, 255, 255, 0.4);
   cursor: default;
-  z-index: 50;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(4px);
+  font-weight: 700;
+  transition: all 0.2s ease;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
-.action-btn:disabled {
-  cursor: default;
+/* 小圆（吃碰胡杠） */
+.action-btn--small {
+  width: 44px;
+  height: 44px;
+  font-size: 0.85rem;
 }
 
-.action-btn__label {
-  font-size: 0.95rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+/* 大圆（摸） */
+.action-btn--draw {
+  width: 72px;
+  height: 72px;
+  font-size: 1.2rem;
+  flex-shrink: 0;
 }
 
-/* 中心大圆 */
-.action-btn--center {
-  width: 80px;
-  height: 80px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 1rem;
-}
-
-.action-btn--center .action-btn__label {
-  font-size: 1.15rem;
-}
-
-/* 激活状态（可用但未高亮 / 延迟中） */
+/* 激活 */
 .action-btn--active {
   border-color: rgba(255, 255, 255, 0.3);
   color: #fff;
   cursor: pointer;
 }
 
-/* 高亮状态（可用 + 延迟结束） */
+/* 高亮 */
 .action-btn--highlight {
   border-color: rgba(70, 197, 116, 0.8);
   background: rgba(31, 138, 82, 0.9);
   color: #fff;
   cursor: pointer;
-  animation: highlight-pop 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 20px rgba(70, 197, 116, 0.35), 0 4px 12px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 14px rgba(70, 197, 116, 0.3);
+  animation: pop 0.3s ease;
 }
-
 .action-btn--highlight:hover {
-  transform: translate(-50%, -50%) scale(1.1);
-  box-shadow: 0 0 28px rgba(70, 197, 116, 0.5), 0 6px 16px rgba(0, 0, 0, 0.5);
+  transform: scale(1.1);
+  box-shadow: 0 0 20px rgba(70, 197, 116, 0.5);
 }
-
 .action-btn--highlight:active {
-  transform: translate(-50%, -50%) scale(0.95);
+  transform: scale(0.92);
 }
 
-@keyframes highlight-pop {
-  0% { transform: translate(-50%, -50%) scale(0.85); opacity: 0.6; }
-  50% { transform: translate(-50%, -50%) scale(1.08); }
-  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+/* 大圆高亮特殊色 */
+.action-btn--draw.action-btn--highlight {
+  background: linear-gradient(135deg, #1f8a52, #46c574);
+  border-color: rgba(70, 197, 116, 0.9);
+  box-shadow: 0 0 20px rgba(70, 197, 116, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-/* 四周小圆位置 */
-.action-btn--top,
-.action-btn--right,
-.action-btn--bottom,
-.action-btn--left {
-  width: 50px;
-  height: 50px;
+/* 胡牌特殊色 */
+.action-btn:nth-child(3).action-btn--highlight {
+  background: linear-gradient(135deg, #c62828, #ef5350);
+  border-color: rgba(239, 83, 80, 0.8);
+  box-shadow: 0 0 14px rgba(239, 83, 80, 0.4);
+  animation: pop 0.3s ease, hu-glow 1s infinite;
+}
+@keyframes hu-glow {
+  0%, 100% { box-shadow: 0 0 14px rgba(239, 83, 80, 0.4); }
+  50% { box-shadow: 0 0 24px rgba(239, 83, 80, 0.7); }
 }
 
-.action-btn--top {
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
+@keyframes pop {
+  0% { transform: scale(0.8); opacity: 0.5; }
+  60% { transform: scale(1.08); }
+  100% { transform: scale(1); opacity: 1; }
 }
 
-.action-btn--top.action-btn--highlight {
-  transform: translateX(-50%) scale(1);
-}
-.action-btn--top.action-btn--highlight:hover {
-  transform: translateX(-50%) scale(1.1);
-}
-
-.action-btn--right {
-  top: 50%;
-  right: 0;
-  transform: translateY(-50%);
-}
-
-.action-btn--right.action-btn--highlight:hover {
-  transform: translateY(-50%) scale(1.1);
-}
-
-.action-btn--bottom {
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.action-btn--bottom.action-btn--highlight:hover {
-  transform: translateX(-50%) scale(1.1);
-}
-
-.action-btn--left {
-  top: 50%;
-  left: 0;
-  transform: translateY(-50%);
-}
-
-.action-btn--left.action-btn--highlight:hover {
-  transform: translateY(-50%) scale(1.1);
-}
-
-/* 紧凑模式 */
-.circular-actions--compact .action-btn--center {
-  width: 64px;
-  height: 64px;
-}
-
-.circular-actions--compact .action-btn--center .action-btn__label {
-  font-size: 1rem;
-}
-
-.circular-actions--compact .action-btn--top,
-.circular-actions--compact .action-btn--right,
-.circular-actions--compact .action-btn--bottom,
-.circular-actions--compact .action-btn--left {
-  width: 42px;
-  height: 42px;
-}
-
-.circular-actions--compact .action-btn__label {
-  font-size: 0.8rem;
-}
-
-/* 离线状态：按钮半透明，表示未连接 */
-.circular-actions--offline {
-  opacity: 0.5;
-  filter: grayscale(0.6);
+/* 离线 */
+.action-panel--offline {
+  opacity: 0.4;
   pointer-events: none;
 }
 
-/* 移动端 */
+/* 紧凑 */
+.action-panel--compact .action-btn--small { width: 36px; height: 36px; font-size: 0.75rem; }
+.action-panel--compact .action-btn--draw { width: 56px; height: 56px; font-size: 1rem; }
+.action-panel--compact .action-grid { gap: 4px; }
+
 @media (max-width: 768px) {
-  .circular-actions {
-    width: 160px;
-    height: 160px;
-    padding: 12px;
-    border-radius: 16px;
-  }
-
-  .action-btn--center {
-    width: 68px;
-    height: 68px;
-  }
-
-  .action-btn--top,
-  .action-btn--right,
-  .action-btn--bottom,
-  .action-btn--left {
-    width: 44px;
-    height: 44px;
-  }
-
-  .action-btn__label {
-    font-size: 0.85rem;
-  }
-
-  .action-btn--center .action-btn__label {
-    font-size: 1rem;
-  }
+  .action-btn--small { width: 40px; height: 40px; }
+  .action-btn--draw { width: 64px; height: 64px; font-size: 1.1rem; }
 }
 </style>

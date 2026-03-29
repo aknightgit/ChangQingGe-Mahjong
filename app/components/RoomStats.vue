@@ -28,38 +28,46 @@
       </div>
     </div>
 
-    <!-- 战斗风格 -->
+    <!-- 战斗风格（表格化） -->
     <div class="stats-style">
       <div class="style-header">⚔️ 战斗风格</div>
-      <div class="style-row" v-for="player in rankedPlayers" :key="'style-' + player.id">
-        <span class="style-name" :class="{ 'style-name--me': player.isMe }">{{ player.name }}</span>
-        <span class="style-stats">
-          <span class="style-item">
-            捉冲 <span class="sc-pos">{{ player.catchRate || 0 }}%</span>
-            均<span class="sc-pos">{{ player.catchAvg || 0 }}</span>点
-          </span>
-          <span class="style-item">
-            自摸 <span class="sc-neg">{{ player.selfDrawRate || 0 }}%</span>
-            均<span class="sc-neg">{{ player.selfDrawAvg || 0 }}</span>点
-          </span>
-        </span>
-      </div>
+      <table class="style-table">
+        <thead>
+          <tr>
+            <th class="style-th-name"></th>
+            <th class="style-th">捉冲</th>
+            <th class="style-th">均点</th>
+            <th class="style-th">自摸</th>
+            <th class="style-th">均点</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="player in rankedPlayers" :key="'s-' + player.id" :class="{ 'row-me': player.isMe }">
+            <td class="style-td-name">
+              <span class="rank-dot rank-dot--sm" :class="`dot--${player.color}`"></span>
+              <span :class="{ 'name-me': player.isMe }">{{ player.name }}</span>
+            </td>
+            <td class="style-td sc-pos">{{ player.catchRate || 0 }}%</td>
+            <td class="style-td sc-pos">{{ player.catchAvg || 0 }}</td>
+            <td class="style-td sc-neg">{{ player.selfDrawRate || 0 }}%</td>
+            <td class="style-td sc-neg">{{ player.selfDrawAvg || 0 }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
-    <!-- 观赛视角（锁定模式：同局内选一家后不可切换） -->
+    <!-- 观赛视角（锁定模式） -->
     <div class="stats-spectate">
       <p class="spectate-title">👁️ 观赛视角{{ spectatingId ? '（已锁定）' : '' }}</p>
       <div class="spectate-btns">
         <button
           v-for="p in rankedPlayers"
-          :key="'s-' + p.id"
+          :key="'sp-' + p.id"
           class="spectate-btn"
           :class="{ active: spectatingId === p.id, locked: !!spectatingId && spectatingId !== p.id }"
           :disabled="!!spectatingId"
           @click="$emit('spectate', p.id)"
-        >
-          {{ p.name }}
-        </button>
+        >{{ p.name }}</button>
       </div>
     </div>
   </div>
@@ -74,11 +82,10 @@ interface PlayerStat {
   losses: number
   color: string
   isMe: boolean
-  // 战斗风格
-  catchRate?: number      // 捉冲占比 %
-  catchAvg?: number       // 捉冲平均点数
-  selfDrawRate?: number   // 自摸占比 %
-  selfDrawAvg?: number    // 自摸平均点数
+  catchRate?: number
+  catchAvg?: number
+  selfDrawRate?: number
+  selfDrawAvg?: number
 }
 
 const props = defineProps<{
@@ -135,17 +142,16 @@ const rankedPlayers = computed(() =>
 .stats-ranking {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .rank-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px;
+  padding: 5px 8px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.04);
-  transition: background 0.2s;
 }
 
 .rank-row.rank-winner {
@@ -163,6 +169,7 @@ const rankedPlayers = computed(() =>
 .rank-dot {
   width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
 }
+.rank-dot--sm { width: 6px; height: 6px; }
 .dot--east { background: #f44336; box-shadow: 0 0 4px rgba(244,67,54,0.5); }
 .dot--south { background: #4caf50; box-shadow: 0 0 4px rgba(76,175,80,0.5); }
 .dot--west { background: #2196f3; box-shadow: 0 0 4px rgba(33,150,243,0.5); }
@@ -171,17 +178,13 @@ const rankedPlayers = computed(() =>
 .rank-name { flex: 1; font-weight: 600; }
 .rank-name--me { color: #ffd700; }
 .rank-star { font-size: 0.8rem; animation: glow 1.5s infinite; }
-
-@keyframes glow {
-  0%, 100% { text-shadow: 0 0 4px rgba(255,215,0,0.4); }
-  50% { text-shadow: 0 0 12px rgba(255,215,0,0.8); }
-}
+@keyframes glow { 0%, 100% { text-shadow: 0 0 4px rgba(255,215,0,0.4); } 50% { text-shadow: 0 0 12px rgba(255,215,0,0.8); } }
 
 .rank-score { font-weight: 700; font-size: 0.85rem; }
 .sc-pos { color: #66bb6a; }
 .sc-neg { color: #ef5350; }
 
-/* 战斗风格 */
+/* 战斗风格表格 */
 .stats-style {
   padding-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
@@ -193,34 +196,46 @@ const rankedPlayers = computed(() =>
   margin-bottom: 6px;
 }
 
-.style-row {
+.style-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.7rem;
+}
+
+.style-th {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 500;
+  padding: 2px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.style-th-name {
+  text-align: left;
+  width: 56px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.style-td {
+  text-align: center;
+  padding: 4px 4px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.style-td-name {
+  text-align: left;
+  padding: 4px 4px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.7rem;
-  padding: 3px 0;
-}
-
-.style-name {
-  width: 48px;
+  gap: 4px;
   font-weight: 600;
-  flex-shrink: 0;
 }
 
-.style-name--me { color: #ffd700; }
+.row-me { background: rgba(255, 215, 0, 0.06); }
+.name-me { color: #ffd700; }
 
-.style-stats {
-  flex: 1;
-  display: flex;
-  gap: 10px;
-  opacity: 0.85;
-}
-
-.style-item {
-  white-space: nowrap;
-}
-
-/* 观赛（锁定模式） */
+/* 观赛 */
 .stats-spectate {
   padding-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
@@ -228,9 +243,7 @@ const rankedPlayers = computed(() =>
 .spectate-title {
   font-size: 0.75rem; color: rgba(255,255,255,0.5); margin-bottom: 6px;
 }
-.spectate-btns {
-  display: flex; flex-wrap: wrap; gap: 4px;
-}
+.spectate-btns { display: flex; flex-wrap: wrap; gap: 4px; }
 .spectate-btn {
   padding: 3px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.15);
   background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.6);
@@ -238,16 +251,11 @@ const rankedPlayers = computed(() =>
 }
 .spectate-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
 .spectate-btn.active {
-  background: rgba(255, 215, 0, 0.2); border-color: rgba(255, 215, 0, 0.5);
-  color: #ffd700;
+  background: rgba(255, 215, 0, 0.2); border-color: rgba(255, 215, 0, 0.5); color: #ffd700;
 }
-.spectate-btn.locked {
-  opacity: 0.3; cursor: not-allowed;
-}
+.spectate-btn.locked { opacity: 0.3; cursor: not-allowed; }
 
 @media (max-width: 900px) {
-  .room-stats {
-    width: 100%;
-  }
+  .room-stats { width: 100%; }
 }
 </style>
