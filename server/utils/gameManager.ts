@@ -423,7 +423,7 @@ class GameManager {
   /**
    * Start the game
    */
-  public async startGame(gameId: string): Promise<void> {
+  public async startGame(gameId: string, options?: { freezeDurationMs?: number }): Promise<void> {
     await this.hydrateFromDatabase();
 
     const game = await this.ensureGameLoaded(gameId);
@@ -438,6 +438,7 @@ class GameManager {
     game.endedAt = undefined;
     game.finalScores = undefined;
     game.customScoringMode = null;
+    game.freezeDurationMs = options?.freezeDurationMs || 1000; // 默认冻结1秒
 
     // Create and shuffle deck
     const deck = createDeck();
@@ -820,21 +821,15 @@ class GameManager {
     // 百搭打出 → 触发冷冻（一圈内不能吃/碰/捉冲）
     if (this.isWildTile(game, tile)) {
       game.freezeRound = game.roundNumber;
-      game.pendingActions = []; // 清空所有待响应
+      game.pendingActions = [];
       this.moveToNextPlayer(game);
       return;
     }
 
-    // 新弃牌产生新的响应窗口，重置一炮多响起点（由首个HU时再设置）
-    game.multiHuStarterIndex = undefined;
-
-    // Check if other players can peng, kong, or hu
-    this.checkPendingActions(game, tile);
-
-    // If no pending actions, move to next player
-    if (game.pendingActions.length === 0) {
-      this.moveToNextPlayer(game);
-    }
+    // 去掉碰/杠/胡响应窗口：直接进入下家回合
+    // 冻结逻辑由 moveToNextPlayer 处理
+    game.pendingActions = [];
+    this.moveToNextPlayer(game);
   }
 
   private handleDraw(game: GameState, player: Player): void {
@@ -1589,18 +1584,32 @@ class GameManager {
     } while (game.players[game.currentPlayerIndex].status !== PlayerStatus.PLAYING);
 
     const nextPlayer = game.players[game.currentPlayerIndex];
-    
+    const freezeMs = game.freezeDurationMs || 1000; // 默认冻结1秒
+
     // 回合开始时补花：门口有花牌就从牌墙补牌
     this.replaceFlowers(game, nextPlayer);
-    
-    // Bot玩家自动摸牌；人类玩家需手动点击"摸"
+
+    // 冻结期：上家打牌后，下家等待指定秒数才能摸牌
     if (this.isPlayerBotControlled(nextPlayer)) {
-      this.handleDraw(game, nextPlayer);
-      this.scheduleBotDiscard(game.gameId, nextPlayer.id);
+      // Bot: 延迟后自动摸牌+出牌
+      setTimeout(() => {
+        this.handleDraw(game, nextPlayer);
+        this.scheduleBotDiscard(game.gameId, nextPlayer.id);
+      }, freezeMs);
     } else {
-      // 人类玩家回合：先持久化再广播，确保客户端读到最新状态
+      // 人类: 先广播当前状态（冻结中），延迟后广播可用摸牌
+      game._freezeUntil = Date.now() + freezeMs;
       await this.persistGame(game);
       this.broadcastGameState(game.gameId);
+
+      setTimeout(async () => {
+        const freshGame = await this.getGame(game.gameId);
+        if (freshGame && freshGame.currentPlayerIndex === game.currentPlayerIndex) {
+          delete freshGame._freezeUntil;
+          await this.persistGame(freshGame);
+          this.broadcastGameState(game.gameId);
+        }
+      }, freezeMs);
     }
   }
 

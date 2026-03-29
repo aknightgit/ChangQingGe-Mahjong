@@ -3,7 +3,7 @@ import { emitToRoom } from '../../utils/socket';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
-  const { gameId, playerId } = body;
+  const { gameId, playerId, freezeDurationMs } = body;
 
   if (!gameId || !playerId) {
     throw createError({
@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    await gameManager.startGame(gameId);
+    await gameManager.startGame(gameId, { freezeDurationMs: freezeDurationMs || 1000 });
     emitToRoom(gameId, 'game:state-changed', {
       gameId,
       phase: 'playing',

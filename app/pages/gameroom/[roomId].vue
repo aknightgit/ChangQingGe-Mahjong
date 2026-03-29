@@ -554,7 +554,8 @@ const isMyTurn = computed(() => currentTurnPlayer.value?.id === currentPlayer.va
 // 骰子动画状态
 const showDiceOverlay = ref(false)
 const diceValues = ref<[number, number]>([1, 1])
-const maxDiceRolls = ref(Number(route.query.dice) || 2) // 从URL参数读取，默认2次
+const maxDiceRolls = ref(Number(route.query.dice) || 2)
+const freezeDurationMs = ref((Number(route.query.freeze) || 1) * 1000) // 秒转毫秒
 
 const onRerollDice = () => {
   diceValues.value = [
@@ -1082,7 +1083,7 @@ const onDealTiles = async () => {
   await new Promise(resolve => setTimeout(resolve, 350))
   console.log('[onDealTiles] Calling startGame API...')
   try {
-    await startGame()
+    await startGame({ freezeDurationMs: freezeDurationMs.value })
     console.log('[onDealTiles] startGame done, refreshing state...')
     await refreshState()
     console.log('[onDealTiles] Done, phase:', gameState.value?.phase)

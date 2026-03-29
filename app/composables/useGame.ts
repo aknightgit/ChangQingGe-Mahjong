@@ -225,24 +225,27 @@ export const useGame = () => {
     }
   }
 
-  const startGame = async () => {
+  const startGame = async (options?: { freezeDurationMs?: number }) => {
     if (!gameId.value || !playerId.value) return
 
     console.log('[startGame] Starting game:', gameId.value)
     try {
-      const { data } = await useFetch('/api/game/start', {
+      const response = await $fetch('/api/game/start', {
         method: 'POST',
-        body: { gameId: gameId.value, playerId: playerId.value }
+        body: {
+          gameId: gameId.value,
+          playerId: playerId.value,
+          freezeDurationMs: options?.freezeDurationMs || 1000
+        }
       })
 
-      if (data.value?.success) {
+      if ((response as any)?.success) {
         console.log('[startGame] API success, refreshing state...')
         await refreshState()
-        // Notify others via socket
         socket.value?.emit('game:state-update', { gameId: gameId.value })
         console.log('[startGame] Done, phase:', gameState.value?.phase)
       } else {
-        console.warn('[startGame] API returned non-success:', data.value)
+        console.warn('[startGame] API returned non-success:', response)
       }
     } catch (e) {
       console.error('[startGame] Failed:', e)
