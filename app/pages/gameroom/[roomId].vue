@@ -1292,20 +1292,20 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   justify-content: center;
 }
-/* 左家：桌面左侧，旋转90° */
+/* 左家：旋转90° */
 :deep(.discard-zone--left) {
-  top: 30%;
+  top: 40%;
   left: 14%;
-  width: 20%;
+  width: 44%;
   display: flex;
   justify-content: center;
   transform: rotate(90deg);
 }
-/* 右家：桌面右侧，旋转-90° */
+/* 右家 */
 :deep(.discard-zone--right) {
-  top: 30%;
+  top: 40%;
   right: 14%;
-  width: 20%;
+  width: 44%;
   display: flex;
   justify-content: center;
   transform: rotate(-90deg);
