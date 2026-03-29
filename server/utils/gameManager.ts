@@ -1537,6 +1537,9 @@ class GameManager {
     // 如果是 bot 玩家或AI托管，延迟后自动出牌（给客户端留出动画时间）
     if (this.isPlayerBotControlled(nextPlayer)) {
       this.scheduleBotDiscard(game.gameId, nextPlayer.id);
+    } else {
+      // 人类玩家回合：广播状态让客户端显示摸牌+出牌按钮
+      this.broadcastGameState(game.gameId);
     }
   }
 
@@ -1574,7 +1577,7 @@ class GameManager {
       } catch (err) {
         console.error('[BotService] Bot discard error:', err);
       }
-    }, 800); // 800ms 延迟，让客户端看到摸牌
+    }, 1500); // 1.5秒延迟，让游戏有节奏感
 
     this.botTimers.set(gameId, timer);
   }
