@@ -119,6 +119,19 @@ export const useGame = () => {
         await refreshState()
       })
 
+      // 房主断连等待重连
+      socket.value.on('room:owner-disconnected', (data) => {
+        console.warn('Owner disconnected, waiting for reconnect...', data)
+        error.value = `房主暂时离线，等待重连中（${data?.graceSeconds || 15}秒）...`
+      })
+
+      // 房主重连成功
+      socket.value.on('room:owner-reconnected', async (data) => {
+        console.log('Owner reconnected:', data)
+        error.value = null
+        await refreshState()
+      })
+
       // Game Events
       socket.value.on('game:state-changed', async (data) => {
         console.log('Game state update:', data)

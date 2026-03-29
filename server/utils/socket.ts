@@ -12,6 +12,10 @@ import { UserService } from '../services/userService'
 
 let io: SocketIOServer | null = null
 
+// 房主断连重连窗口：roomId → { timer, userId, userName }
+const pendingOwnerDismissals = new Map<string, { timer: ReturnType<typeof setTimeout>, userId: string, userName: string }>()
+const OWNER_RECONNECT_GRACE_MS = 15000 // 15秒重连窗口
+
 export interface SocketUser {
   socketId: string
   userId: string
@@ -230,6 +234,15 @@ export async function initializeSocketIO(server: HTTPServer) {
           socketId: u.socketId
         }))
 
+        // 检查是否是房主重连（取消 grace period 解散倒计时）
+        const pending = pendingOwnerDismissals.get(roomId)
+        if (pending && pending.userId === userId) {
+          clearTimeout(pending.timer)
+          pendingOwnerDismissals.delete(roomId)
+          console.log(`✅ Owner ${userName} reconnected to room ${roomId}, grace period cancelled`)
+          io!.to(roomId).emit('room:owner-reconnected', { userId, userName })
+        }
+
         // Notify all users in room
         io!.to(roomId).emit('room:user-joined', {
           userId,
@@ -247,6 +260,12 @@ export async function initializeSocketIO(server: HTTPServer) {
 
     // Leave room
     socket.on('room:leave', async (data: { roomId: string }) => {
+      // 主动离开：取消可能存在的 grace period
+      const pending = pendingOwnerDismissals.get(data.roomId)
+      if (pending) {
+        clearTimeout(pending.timer)
+        pendingOwnerDismissals.delete(data.roomId)
+      }
       await handleLeaveRoom(socket, data.roomId)
     })
 
@@ -330,10 +349,78 @@ export async function initializeSocketIO(server: HTTPServer) {
     socket.on('disconnect', async () => {
       try {
         const connections = await getSocketConnectionsCollection()
+        const roomStates = await getRoomStatesCollection()
         const user = await connections.findOne({ socketId: socket.id })
         
         if (user && user.roomId) {
-          await handleLeaveRoom(socket, user.roomId)
+          const room = await roomStates.findOne({ roomId: user.roomId })
+          const isOwner = room && room.ownerId === user.userId
+
+          if (isOwner) {
+            // 房主意外断连：启动重连窗口，不立即解散
+            console.log(`⏳ Owner ${user.userName} disconnected from room ${user.roomId}, grace period started (${OWNER_RECONNECT_GRACE_MS / 1000}s)`)
+
+            // 通知房间内其他人
+            io!.to(user.roomId).emit('room:owner-disconnected', {
+              graceSeconds: OWNER_RECONNECT_GRACE_MS / 1000
+            })
+
+            // 先从 room state 中移除 socketId（保持 playerIds 不变，方便重连）
+            await roomStates.updateOne(
+              { roomId: user.roomId },
+              {
+                $pull: { socketIds: socket.id },
+                $set: { updatedAt: new Date() }
+              }
+            )
+
+            // 清除用户房间标记
+            await connections.updateOne(
+              { socketId: socket.id },
+              { $unset: { roomId: '' }, $set: { lastSeenAt: new Date() } }
+            )
+
+            // 启动超时解散 timer
+            const existing = pendingOwnerDismissals.get(user.roomId)
+            if (existing) clearTimeout(existing.timer)
+
+            const timer = setTimeout(async () => {
+              pendingOwnerDismissals.delete(user.roomId)
+              console.log(`⏰ Owner grace period expired for room ${user.roomId}, dismissing`)
+              // 房主未重连，正式解散
+              const freshRoom = await roomStates.findOne({ roomId: user.roomId })
+              if (freshRoom) {
+                io!.to(user.roomId).emit('room:dismissed', {
+                  reason: GameEndReason.OWNER_LEFT,
+                  message: 'Room closed by host'
+                })
+
+                const remainingSocketIds = freshRoom.socketIds
+                if (remainingSocketIds.length > 0) {
+                  await connections.updateMany(
+                    { socketId: { $in: remainingSocketIds } },
+                    { $unset: { roomId: '' }, $set: { lastSeenAt: new Date() } }
+                  )
+                  for (const sid of remainingSocketIds) {
+                    const peer = io!.sockets.sockets.get(sid)
+                    peer?.leave(user.roomId)
+                  }
+                }
+
+                try {
+                  await gameManager.endGameForEmptyRoom(user.roomId, GameEndReason.OWNER_LEFT)
+                } catch (err) {
+                  console.error('Failed to end game after owner grace period:', err)
+                }
+                await roomStates.deleteOne({ roomId: user.roomId })
+              }
+            }, OWNER_RECONNECT_GRACE_MS)
+
+            pendingOwnerDismissals.set(user.roomId, { timer, userId: user.userId, userName: user.userName })
+          } else {
+            // 非房主：正常离开
+            await handleLeaveRoom(socket, user.roomId)
+          }
         }
 
         // Remove connection from MongoDB
