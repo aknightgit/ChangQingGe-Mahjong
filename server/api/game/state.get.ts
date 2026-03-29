@@ -21,13 +21,9 @@ export default defineEventHandler(async (event) => {
     game = await gameManager.getGame(normalizedGameId);
   } catch (err: any) {
     console.warn('⚠️ getGame failed:', err.message);
-    // MongoDB may be slow; try in-memory fallback
-    game = gameManager.getGameInMemory?.(normalizedGameId);
-    if (!game) {
-      throw createError({ statusCode: 503, message: 'Database temporarily unavailable, please retry' });
-    }
+    game = undefined;
   }
-  
+
   if (!game) {
     throw createError({
       statusCode: 404,
