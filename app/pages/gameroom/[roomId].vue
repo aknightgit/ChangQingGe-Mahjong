@@ -1413,13 +1413,18 @@ const forceDiscard = async (p: Player) => {
 /* ===== 本家：手牌 + 动作按钮横排 ===== */
 .self-area-with-actions {
   display: flex;
+  justify-content: center;
   align-items: flex-end;
   gap: 8px;
   width: 100%;
+  position: relative;
 }
 
 /* 内联动作按钮组 — 放在手牌右侧 */
 .inline-action-buttons {
+  position: absolute;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
