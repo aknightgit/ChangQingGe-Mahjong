@@ -543,8 +543,9 @@ class GameManager {
    */
   async getGame(gameId: string): Promise<GameState | undefined> {
     await this.hydrateFromDatabase();
-    const game = await this.ensureGameLoaded(gameId);
-    return game;
+    // 先检查内存，避免重复MongoDB查询
+    if (this.games.has(gameId)) return this.games.get(gameId);
+    return this.ensureGameLoaded(gameId);
   }
 
   /**
@@ -563,8 +564,12 @@ class GameManager {
   async getAvailableActions(gameId: string, playerId: string): Promise<ActionType[]> {
     try {
       await this.hydrateFromDatabase();
-      const game = await this.ensureGameLoaded(gameId);
-      if (!game || game.phase !== GamePhase.PLAYING) return [];
+      const game = this.games.get(gameId) || await this.ensureGameLoaded(gameId);
+      if (!game) {
+        console.warn('⚠️ getAvailableActions: game not found:', gameId);
+        return [];
+      }
+      if (game.phase !== GamePhase.PLAYING) return [];
 
     const player = game.players.find(p => p.id === playerId);
     if (!player || player.status !== PlayerStatus.PLAYING) return [];
@@ -605,8 +610,12 @@ class GameManager {
         actions.push(ActionType.DISCARD);
       }
 
+      // 摸牌：手牌+门口 < 14张时可以摸
       const exposedTileCount = player.hand.exposedMelds.reduce((sum, meld) => sum + meld.tiles.length, 0);
       const totalTileCount = player.hand.concealedTiles.length + exposedTileCount;
+      if (totalTileCount < 14 && game.wall.length > 0) {
+        actions.push(ActionType.DRAW);
+      }
 
       if (totalTileCount >= 14) {
         // Check for concealed kong
