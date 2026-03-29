@@ -633,8 +633,12 @@ class GameManager {
         actions.push(ActionType.DISCARD);
       }
 
-      // 摸牌：手牌+门口 < 14张时可以摸
-      const exposedTileCount = player.hand.exposedMelds.reduce((sum, meld) => sum + meld.tiles.length, 0);
+      // 摸牌：手牌+门口（不含花牌）< 14张时可以摸
+      const exposedTileCount = player.hand.exposedMelds.reduce((sum, meld) => {
+        // 单张花牌不计入（待补牌）
+        if (meld.tiles.length === 1 && isFlower(meld.tiles[0])) return sum;
+        return sum + meld.tiles.length;
+      }, 0);
       const totalTileCount = player.hand.concealedTiles.length + exposedTileCount;
       if (totalTileCount < 14 && game.wall.length > 0) {
         actions.push(ActionType.DRAW);
@@ -704,8 +708,11 @@ class GameManager {
         break;
 
       case ActionType.DRAW:
-        // 防止重复摸牌：检查手牌+门口是否已满14张
-        const drawExposedCount = player.hand.exposedMelds.reduce((sum, m) => sum + m.tiles.length, 0);
+        // 防止重复摸牌：检查手牌+门口（不含花牌）是否已满14张
+        const drawExposedCount = player.hand.exposedMelds.reduce((sum, m) => {
+          if (m.tiles.length === 1 && isFlower(m.tiles[0])) return sum;
+          return sum + m.tiles.length;
+        }, 0);
         const drawTotalCount = player.hand.concealedTiles.length + drawExposedCount;
         if (drawTotalCount >= 14) {
           console.warn(`[DRAW] Blocked: player ${player.id} already has ${drawTotalCount} tiles`);
