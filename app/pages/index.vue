@@ -327,7 +327,7 @@ const startNewGame = async () => {
   }
 }
 
-const AI_BOT_NAMES = ['小胖', '老赵', '阿水']
+const AI_BOT_NAMES = ['AI-小胖', 'AI-老赵', 'AI-阿水']
 
 const startPvEGame = async () => {
   if (isCreatingGame.value) return
