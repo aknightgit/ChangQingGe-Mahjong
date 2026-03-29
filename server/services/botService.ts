@@ -16,8 +16,9 @@ function loadCharacterPolicy(botName: string): any {
   
   // Try loading character-specific policy first
   const characterPaths = [
+    path.resolve(process.cwd(), `AI_policies/characters/${botName}.json`),
     path.resolve(process.cwd(), `training-output/policies/characters/${botName}.json`),
-    path.resolve(__dirname, `../../training-output/policies/characters/${botName}.json`),
+    path.resolve(__dirname, `../../AI_policies/characters/${botName}.json`),
   ]
   
   for (const p of characterPaths) {
@@ -37,9 +38,10 @@ function loadCharacterPolicy(botName: string): any {
   // Fall back to default/best policy
   if (!_policies['default']) {
     const defaultPaths = [
-      path.resolve(process.cwd(), 'training/best-policy.json'),
+      path.resolve(process.cwd(), 'AI_policies/best-policy.json'),
       path.resolve(process.cwd(), 'training-output/best-policy.json'),
-      path.resolve(__dirname, '../../training/best-policy.json'),
+      path.resolve(process.cwd(), 'training/best-policy.json'),
+      path.resolve(__dirname, '../../AI_policies/best-policy.json'),
       path.resolve(__dirname, '../../training-output/best-policy.json'),
     ]
     
