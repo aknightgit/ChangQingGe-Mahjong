@@ -1,7 +1,5 @@
 <template>
   <div class="table-center-zone">
-    <!-- 弃牌区已移至各玩家手牌区，不再在中央显示 -->
-
     <!-- 牌墙：双层2.5D效果 -->
     <TileWall :remaining="remainingTiles" />
 
@@ -48,27 +46,6 @@ const props = defineProps<{
   justify-content: center;
   gap: 6px;
   pointer-events: none;
-}
-
-/* 弃牌区 - 各玩家门前（暂时留空，后续按玩家位置分布） */
-.discard-pool {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 1px;
-  max-width: 100%;
-  max-height: 40%;
-  overflow-y: auto;
-  padding: 2px;
-  pointer-events: auto;
-}
-
-.pool-tile { transition: transform 0.1s ease; }
-.pool-tile--latest { transform: scale(1.05); animation: pop-in 0.2s ease; }
-
-@keyframes pop-in {
-  from { transform: scale(1.3) translateY(-6px); opacity: 0.5; }
-  to { transform: scale(1.05); }
 }
 
 /* 牌墙 */

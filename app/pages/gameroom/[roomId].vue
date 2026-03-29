@@ -637,14 +637,6 @@ const isWinner = computed(() => currentPlayer.value?.status === 'won')
 
 
 // ---- Table Center Data ----
-const allDiscards = computed(() => {
-  if (!gameState.value) return []
-  const all: any[] = []
-  for (const p of gameState.value.players) {
-    all.push(...(p.hand.discardedTiles || []))
-  }
-  return all
-})
 const remainingTileCount = computed(() => gameState.value?.wallRemaining ?? 0)
 const currentRound = computed(() => gameState.value?.currentRound ?? 1)
 const roundMultiplier = computed(() => gameState.value?.roundMultiplier ?? 1)
