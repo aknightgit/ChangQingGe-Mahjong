@@ -276,7 +276,7 @@ const confirmCreateGame = async () => {
     }
 
     // 携带参数进入房间
-    navigateTo(`/gameroom/${gameId}?playerId=${playerId}`)
+    navigateTo(`/gameroom/${gameId}?playerId=${playerId}&dice=${createParams.maxDiceRolls}&freeze=${createParams.freezeSeconds}`)
   } catch (e) {
     console.error('[Create] Error:', e)
   } finally {

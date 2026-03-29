@@ -553,7 +553,7 @@ const isMyTurn = computed(() => currentTurnPlayer.value?.id === currentPlayer.va
 // 骰子动画状态
 const showDiceOverlay = ref(false)
 const diceValues = ref<[number, number]>([1, 1])
-const maxDiceRolls = ref(2) // 默认2次，由创建房间参数控制
+const maxDiceRolls = ref(Number(route.query.dice) || 2) // 从URL参数读取，默认2次
 
 const onRerollDice = () => {
   diceValues.value = [
