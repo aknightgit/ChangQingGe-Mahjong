@@ -1598,7 +1598,8 @@ class GameManager {
       this.handleDraw(game, nextPlayer);
       this.scheduleBotDiscard(game.gameId, nextPlayer.id);
     } else {
-      // 人类玩家回合：广播状态让客户端显示摸牌按钮
+      // 人类玩家回合：先持久化再广播，确保客户端读到最新状态
+      await this.persistGame(game);
       this.broadcastGameState(game.gameId);
     }
   }
