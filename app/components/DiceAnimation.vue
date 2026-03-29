@@ -7,37 +7,47 @@
       </div>
 
       <div class="dice-container">
-        <!-- 阶段1: 掷骰子动画 -->
+        <!-- 阶段0: 等待庄家点击掷骰 -->
+        <template v-if="phase === 'idle'">
+          <div class="dice-idle-phase">
+            <p class="dice-hint" style="font-size: 1.1rem; margin-bottom: 16px;">
+              {{ dealerName ? `${dealerName} 掷骰子` : '等待掷骰子...' }}
+            </p>
+            <div class="dice-row">
+              <div class="dice dice--idle"><span class="dice-face">🎲</span></div>
+              <div class="dice dice--idle"><span class="dice-face">🎲</span></div>
+            </div>
+            <p class="dice-roll-count" v-if="maxRollsLimit > 1" style="margin-top: 12px;">
+              最多可掷 {{ maxRollsLimit }} 次
+            </p>
+            <button
+              v-if="isDealer"
+              class="deal-button"
+              style="margin-top: 20px;"
+              @click="onRoll"
+            >
+              🎲 掷骰子
+            </button>
+            <p v-else class="dice-hint" style="margin-top: 16px;">等待庄家掷骰子...</p>
+          </div>
+        </template>
+
+        <!-- 阶段1: 掷骰子动画中 -->
         <template v-if="phase === 'rolling'">
           <div class="dice-row">
-            <div
-              class="dice"
-              :class="{ 'dice--rolling': isRolling, 'dice--landed': !isRolling }"
-            >
+            <div class="dice dice--rolling">
               <span class="dice-face">{{ dice1Display }}</span>
               <div class="dice-glow" />
             </div>
-            <div
-              class="dice"
-              :class="{ 'dice--rolling': isRolling, 'dice--landed': !isRolling }"
-              style="animation-delay: 0.12s"
-            >
+            <div class="dice dice--rolling" style="animation-delay: 0.12s">
               <span class="dice-face">{{ dice2Display }}</span>
               <div class="dice-glow" />
             </div>
           </div>
-
-          <div class="dice-result" v-if="!isRolling">
-            <p class="dice-total">
-              <span class="dice-total-num">{{ dice1 + dice2 }}</span> 点
-            </p>
-            <p class="dice-hint">{{ dealerName ? `庄家: ${dealerName}` : '' }}</p>
-            <p class="dice-roll-count" v-if="maxRollsLimit > 1">第 {{ currentRoll }} / {{ maxRollsLimit }} 次</p>
-          </div>
-          <p v-else class="dice-rolling-label">🎲 掷骰子...</p>
+          <p class="dice-rolling-label">🎲 掷骰子...</p>
         </template>
 
-        <!-- 阶段1.5: 掷骰结果 - 可重掷或进入发牌 -->
+        <!-- 阶段2: 掷骰结果 - 庄家可重掷或发牌 -->
         <template v-if="phase === 'result'">
           <div class="dice-result-phase">
             <div class="dice-row">
@@ -53,14 +63,15 @@
             </p>
             <p class="dice-hint">{{ dealerName ? `庄家: ${dealerName}` : '' }}</p>
             <p class="dice-roll-count" v-if="maxRollsLimit > 1">第 {{ currentRoll }} / {{ maxRollsLimit }} 次</p>
-            <div class="dice-result-actions">
+            <div class="dice-result-actions" v-if="isDealer">
               <button v-if="canReroll" class="dice-btn dice-btn--reroll" @click="onReroll">
-                🎲 重掷 ({{ currentRoll }}/{{ maxRollsLimit }})
+                🎲 再掷一次 ({{ currentRoll }}/{{ maxRollsLimit }})
               </button>
               <button class="dice-btn dice-btn--proceed" @click="onProceedToDeal">
-                {{ canReroll ? '使用此结果' : '继续' }} →
+                {{ canReroll ? '使用此结果' : '发牌' }} →
               </button>
             </div>
+            <p v-else class="dice-hint" style="margin-top: 16px;">等待庄家操作...</p>
           </div>
         </template>
 
@@ -97,6 +108,7 @@ const props = defineProps<{
   dice2: number
   dealerName: string
   maxRolls?: number
+  isDealer?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -107,13 +119,12 @@ const emit = defineEmits<{
 
 const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
 
-// 由父组件通过 v-if 控制显示/隐藏
 const visible = ref(true)
-const isRolling = ref(true)
-const phase = ref<'rolling' | 'result' | 'deal'>('rolling')
+const isRolling = ref(false)
+const phase = ref<'idle' | 'rolling' | 'result' | 'deal'>('idle')
 const dice1Display = ref('🎲')
 const dice2Display = ref('🎲')
-const currentRoll = ref(1)
+const currentRoll = ref(0)
 const maxRollsLimit = computed(() => props.maxRolls || 1)
 const canReroll = computed(() => currentRoll.value < maxRollsLimit.value && phase.value === 'result')
 
@@ -138,19 +149,17 @@ watch(() => visible.value, (val) => {
   }
 })
 
-const resetAnimation = () => {
+const onRoll = () => {
+  currentRoll.value++
+  emit('roll')
   isRolling.value = true
   phase.value = 'rolling'
-  dice1Display.value = '🎲'
-  dice2Display.value = '🎲'
 
-  // Phase 1: rolling animation
   const rollInterval = setInterval(() => {
     dice1Display.value = DICE_FACES[Math.floor(Math.random() * 6) + 1]
     dice2Display.value = DICE_FACES[Math.floor(Math.random() * 6) + 1]
   }, 70)
 
-  // Stop rolling after 1.8s
   setTimeout(() => {
     clearInterval(rollInterval)
     dice1Display.value = DICE_FACES[props.dice1]
@@ -158,26 +167,20 @@ const resetAnimation = () => {
     isRolling.value = false
   }, 1800)
 
-  // Show result phase (user can re-roll or proceed to deal)
   setTimeout(() => {
-    if (visible.value) {
-      phase.value = 'result'
-    }
+    if (visible.value) phase.value = 'result'
   }, 2200)
 }
 
-const onReroll = () => {
-  currentRoll.value++
-  emit('roll')
-}
+const onReroll = () => onRoll()
 
 const onProceedToDeal = () => {
   phase.value = 'deal'
 }
 
 onMounted(() => {
-  currentRoll.value = 1
-  resetAnimation()
+  currentRoll.value = 0
+  phase.value = 'idle'
 })
 
 const onDeal = () => {
@@ -290,6 +293,11 @@ const onDeal = () => {
 
 .dice--landed {
   animation: dice-land 0.4s ease-out;
+}
+
+.dice--idle {
+  opacity: 0.6;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 @keyframes dice-land {

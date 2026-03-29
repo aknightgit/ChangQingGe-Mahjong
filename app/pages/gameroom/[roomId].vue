@@ -392,6 +392,7 @@
           :dice2="diceValues[1]"
           :dealer-name="dealerName"
           :max-rolls="maxDiceRolls"
+          :is-dealer="isDealer"
           @deal="onDealTiles"
           @roll="onRerollDice"
         />
