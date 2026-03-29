@@ -83,10 +83,10 @@ const props = defineProps<{
   transform: scale(0.7);
   transform-origin: center;
   filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.6));
-  border: 2px solid rgba(255, 215, 0, 0.7);
+  border: none;
   border-radius: 4px;
   padding: 1px;
-  background: rgba(255, 215, 0, 0.08);
+  background: transparent;
 }
 
 .wild-label {
