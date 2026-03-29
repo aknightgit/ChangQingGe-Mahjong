@@ -79,7 +79,7 @@
             :key="tile.id"
             :tile="tile"
             :small="true"
-            :back="position === 'top'"
+            :back="position !== 'left'"
             :dimmed="isWinner"
           />
         </div>
@@ -257,7 +257,7 @@ const getArrowChar = (sourcePos: number): string => {
 .player-other--right .player-other-hand {
   flex-direction: column;
   flex-wrap: wrap;
-  gap: 1px;
+  gap: 0;
   max-height: 100%;
   align-content: flex-start;
 }
@@ -281,12 +281,15 @@ const getArrowChar = (sourcePos: number): string => {
   margin-top: 60px;
 }
 
-/* 右家 melds：纵向排列 */
+/* 右家 melds：推向牌桌中心，牌转-90° */
 .player-other--right .player-other-melds {
   flex-direction: column;
-  gap: 0;
+  gap: 2;
   flex-shrink: 0;
   margin-top: 60px;
+}
+.player-other--right .player-other-melds :deep(.tile) {
+  transform: rotate(-90deg);
 }
 
 /* 上家 melds：紧凑排列 */
