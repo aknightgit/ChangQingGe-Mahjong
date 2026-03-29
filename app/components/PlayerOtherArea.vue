@@ -288,11 +288,14 @@ const getArrowChar = (sourcePos: number): string => {
   flex-shrink: 0;
   margin-top: 60px;
 }
+.player-other--left .player-other-melds :deep(.tile) {
+  transform: rotate(90deg);
+}
 
-/* 右家 melds：推向牌桌中心，牌转-90° */
+/* 右家 melds */
 .player-other--right .player-other-melds {
   flex-direction: column;
-  gap: 2;
+  gap: 0;
   flex-shrink: 0;
   margin-top: 60px;
 }
