@@ -20,7 +20,6 @@
     "google-auth-library": "^10.5.0",
     "mongodb": "^6.21.0",
     "nuxt": "^4.1.1",
-    "playwright": "1.48.2",
     "redis": "^5.10.0",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
@@ -30,9 +29,10 @@
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "^1.51.0",
-    "@playwright/test": "1.48.2",
+    "@playwright/test": "^1.58.2",
     "@types/node": "^24.10.1",
+    "playwright": "^1.58.2",
     "tsx": "^4.20.6"
   },
-  "description": "\u957f\u6e05\u9601\u9ebb\u5c06 - \u56db\u5ddd\u8840\u6218\u5230\u5e95\u591a\u4eba\u5728\u7ebf"
+  "description": "长清阁麻将 - 四川血战到底多人在线"
 }
