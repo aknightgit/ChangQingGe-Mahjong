@@ -1,33 +1,33 @@
 <template>
   <div class="tile-wall">
-    <!-- 上边牌墙：上移10px -->
+    <!-- 上边牌墙：上移20px -->
     <div class="wall-side wall-top">
       <div class="wall-layer wall-layer--inner">
         <div v-for="i in TILES_PER_SIDE" :key="`ti-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: 'calc(16% - 10px)', zIndex: '1', transform: 'translateX(-50%)' }">
+          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: 'calc(16% - 20px)', zIndex: '1', transform: 'translateX(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back" />
         </div>
       </div>
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`to-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: `calc(16% - 10px + ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
+          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: `calc(16% - 20px + ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back wall-back--outer" />
           <div class="tile-side tile-side--bottom" />
         </div>
       </div>
     </div>
 
-    <!-- 下边牌墙（本家）：下移10px -->
+    <!-- 下边牌墙（本家）：位置不变 -->
     <div class="wall-side wall-bottom">
       <div class="wall-layer wall-layer--inner">
         <div v-for="i in TILES_PER_SIDE" :key="`bi-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px + 10px)`, bottom: 'calc(16% - 10px)', zIndex: '1', transform: 'translateX(-50%)' }">
+          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px + 10px)`, bottom: 'calc(16%)', zIndex: '1', transform: 'translateX(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back" />
         </div>
       </div>
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`bo-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px + 10px)`, bottom: `calc(16% - 10px - ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
+          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px + 10px)`, bottom: `calc(16% - ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back wall-back--outer" />
           <div class="tile-side tile-side--bottom" />
         </div>
@@ -51,17 +51,17 @@
       </div>
     </div>
 
-    <!-- 右边牌墙：右移1，下移15 -->
+    <!-- 右边牌墙：右移20，下移15 -->
     <div class="wall-side wall-right">
       <div class="wall-layer wall-layer--inner">
         <div v-for="i in TILES_PER_SIDE" :key="`ri-${i}`" class="tile-slot tile-slot--vertical"
-          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(i - 1) * V_OVERLAP}px + 15px)`, right: 'calc(18% - 11px)', zIndex: '1', transform: 'translateY(-50%)' }">
+          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(i - 1) * V_OVERLAP}px + 15px)`, right: 'calc(18% + 9px)', zIndex: '1', transform: 'translateY(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back" />
         </div>
       </div>
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`ro-${i}`" class="tile-slot tile-slot--vertical"
-          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(i - 1) * V_OVERLAP}px + 15px)`, right: `calc(18% - 11px - ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateY(-50%)' }">
+          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(i - 1) * V_OVERLAP}px + 15px)`, right: `calc(18% + 9px - ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateY(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back wall-back--outer" />
           <div class="tile-side tile-side--bottom" />
         </div>
