@@ -391,7 +391,9 @@
           :dice1="diceValues[0]"
           :dice2="diceValues[1]"
           :dealer-name="dealerName"
+          :max-rolls="maxDiceRolls"
           @deal="onDealTiles"
+          @roll="onRerollDice"
         />
       </Teleport>
     </div>
@@ -551,6 +553,14 @@ const isMyTurn = computed(() => currentTurnPlayer.value?.id === currentPlayer.va
 // 骰子动画状态
 const showDiceOverlay = ref(false)
 const diceValues = ref<[number, number]>([1, 1])
+const maxDiceRolls = ref(2) // 默认2次，由创建房间参数控制
+
+const onRerollDice = () => {
+  diceValues.value = [
+    Math.floor(Math.random() * 6) + 1,
+    Math.floor(Math.random() * 6) + 1
+  ]
+}
 const dealerName = computed(() => {
   if (!gameState.value) return ''
   const dealer = gameState.value.players.find(p => p.isDealer)

@@ -32,8 +32,36 @@
               <span class="dice-total-num">{{ dice1 + dice2 }}</span> 点
             </p>
             <p class="dice-hint">{{ dealerName ? `庄家: ${dealerName}` : '' }}</p>
+            <p class="dice-roll-count" v-if="maxRollsLimit > 1">第 {{ currentRoll }} / {{ maxRollsLimit }} 次</p>
           </div>
           <p v-else class="dice-rolling-label">🎲 掷骰子...</p>
+        </template>
+
+        <!-- 阶段1.5: 掷骰结果 - 可重掷或进入发牌 -->
+        <template v-if="phase === 'result'">
+          <div class="dice-result-phase">
+            <div class="dice-row">
+              <div class="dice dice--landed">
+                <span class="dice-face">{{ DICE_FACES[dice1] }}</span>
+              </div>
+              <div class="dice dice--landed">
+                <span class="dice-face">{{ DICE_FACES[dice2] }}</span>
+              </div>
+            </div>
+            <p class="dice-total">
+              <span class="dice-total-num">{{ dice1 + dice2 }}</span> 点
+            </p>
+            <p class="dice-hint">{{ dealerName ? `庄家: ${dealerName}` : '' }}</p>
+            <p class="dice-roll-count" v-if="maxRollsLimit > 1">第 {{ currentRoll }} / {{ maxRollsLimit }} 次</p>
+            <div class="dice-result-actions">
+              <button v-if="canReroll" class="dice-btn dice-btn--reroll" @click="onReroll">
+                🎲 重掷 ({{ currentRoll }}/{{ maxRollsLimit }})
+              </button>
+              <button class="dice-btn dice-btn--proceed" @click="onProceedToDeal">
+                {{ canReroll ? '使用此结果' : '继续' }} →
+              </button>
+            </div>
+          </div>
         </template>
 
         <!-- 阶段2: 发牌确认按钮 -->
@@ -68,11 +96,13 @@ const props = defineProps<{
   dice1: number
   dice2: number
   dealerName: string
+  maxRolls?: number
 }>()
 
 const emit = defineEmits<{
   (e: 'done'): void
   (e: 'deal'): void
+  (e: 'roll'): void
 }>()
 
 const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
@@ -80,9 +110,12 @@ const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
 // 由父组件通过 v-if 控制显示/隐藏
 const visible = ref(true)
 const isRolling = ref(true)
-const phase = ref<'rolling' | 'deal'>('rolling')
+const phase = ref<'rolling' | 'result' | 'deal'>('rolling')
 const dice1Display = ref('🎲')
 const dice2Display = ref('🎲')
+const currentRoll = ref(1)
+const maxRollsLimit = computed(() => props.maxRolls || 1)
+const canReroll = computed(() => currentRoll.value < maxRollsLimit.value && phase.value === 'result')
 
 // 粒子样式生成
 const particleStyle = (n: number) => {
@@ -125,15 +158,25 @@ const resetAnimation = () => {
     isRolling.value = false
   }, 1800)
 
-  // Transition to deal phase after 2.8s (longer so user can see dice result)
+  // Show result phase (user can re-roll or proceed to deal)
   setTimeout(() => {
     if (visible.value) {
-      phase.value = 'deal'
+      phase.value = 'result'
     }
-  }, 2800)
+  }, 2200)
+}
+
+const onReroll = () => {
+  currentRoll.value++
+  emit('roll')
+}
+
+const onProceedToDeal = () => {
+  phase.value = 'deal'
 }
 
 onMounted(() => {
+  currentRoll.value = 1
   resetAnimation()
 })
 
@@ -390,6 +433,57 @@ const onDeal = () => {
   color: rgba(255, 255, 255, 0.5);
   font-size: 0.8rem;
   margin: 12px 0 0;
+}
+
+/* ===== 掷骰结果阶段 ===== */
+.dice-result-phase {
+  animation: result-in 0.5s ease-out;
+  text-align: center;
+}
+
+.dice-roll-count {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.85rem;
+  margin: 4px 0 16px;
+}
+
+.dice-result-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.dice-btn {
+  padding: 10px 24px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.dice-btn--reroll {
+  background: rgba(255, 193, 7, 0.15);
+  color: #ffd700;
+  border-color: rgba(255, 215, 0, 0.3);
+}
+
+.dice-btn--reroll:hover {
+  background: rgba(255, 193, 7, 0.25);
+  transform: translateY(-1px);
+}
+
+.dice-btn--proceed {
+  background: linear-gradient(135deg, #1f8a52, #2eaa6a);
+  color: #fff;
+  border-color: rgba(70, 197, 116, 0.4);
+}
+
+.dice-btn--proceed:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(70, 197, 116, 0.3);
 }
 
 /* ===== 过渡动画 ===== */
