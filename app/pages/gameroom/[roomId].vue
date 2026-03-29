@@ -441,7 +441,7 @@ const { play: playSound, isEnabled: soundEnabled, setEnabled: setSoundEnabled } 
 const toggleSound = () => {
   setSoundEnabled(!soundEnabled.value)
 }
-const isAdmin = useCookie('is_admin')
+// Admin/Debug — 目前禁用 (isAdminUser=false)
 const isAdminUser = computed(() => false)
 const showAllCards = ref(false)
 const shouldRevealOpponents = computed(() => false)

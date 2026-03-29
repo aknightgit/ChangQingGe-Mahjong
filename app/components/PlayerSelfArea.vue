@@ -56,20 +56,6 @@
           />
         </div>
 
-        <!-- 碰杠操作浮层 -->
-        <div v-if="showClaimOptions && claimType" class="claim-actions">
-          <span class="claim-label">
-            可以{{ claimType === 'pung' ? '碰' : '杠' }}这张牌
-          </span>
-          <div class="claim-buttons">
-            <button class="claim-button primary" @click="confirmClaim">
-              {{ claimType === 'pung' ? '碰' : '杠' }}
-            </button>
-            <button class="claim-button" @click="skipClaim">
-              过
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   </div>
@@ -77,7 +63,7 @@
 
 <script setup lang="ts">
 import MahjongTile from './MahjongTile.vue'
-import type { Tile, Meld, MeldType } from '~/types/game'
+import type { Tile, Meld } from '~/types/game'
 
 const props = defineProps<{
   hand: Tile[]
@@ -86,8 +72,6 @@ const props = defineProps<{
   isWinner?: boolean
   justDrawnTileId?: string | null
   claimCandidateIds?: string[]
-  showClaimOptions?: boolean
-  claimType?: MeldType | null
   bailoutCounts?: Record<string, number>
   playerColors?: string[]
 }>()
@@ -238,46 +222,6 @@ const onPointerCancel = () => {
   cursor: pointer;
 }
 
-.claim-actions {
-  position: absolute;
-  top: -4px;
-  right: 6px;
-  transform: translateY(-100%);
-  background: rgba(9, 30, 22, 0.95);
-  border-radius: 10px;
-  padding: 6px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.6);
-  font-size: 0.8rem;
-  max-width: 220px;
-}
-
-.claim-label {
-  display: block;
-  margin-bottom: 4px;
-  opacity: 0.9;
-}
-
-.claim-buttons {
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-.claim-button {
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: none;
-  font-size: 0.8rem;
-  cursor: pointer;
-  background: rgba(12, 40, 30, 0.9);
-  color: #fff;
-}
-
-.claim-button.primary {
-  background: linear-gradient(135deg, #1f8a52, #46c574);
-  color: #fff;
-}
 /* 玩家颜色圆点 */
 .player-dot {
   display: inline-block;
