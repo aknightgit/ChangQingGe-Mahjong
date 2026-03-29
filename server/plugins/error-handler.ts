@@ -1,22 +1,27 @@
-// Suppress ECONNABORTED errors to prevent Nuxt dev server restarts
-// This error occurs when the client aborts an HTTP connection mid-response
-// during MongoDB hydration or game state reads
+// Suppress ECONNABORTED / EPIPE / ECONNRESET errors to prevent Nuxt dev server restarts
+// These errors occur when the client aborts an HTTP connection mid-response
+const SUPPRESS_CODES = new Set(['ECONNABORTED', 'EPIPE', 'ECONNRESET', 'ECANCELED'])
 
-// Process-level handler - runs at module load time (before Nitro plugin)
+function shouldSuppress(err: any): boolean {
+  if (!err) return false
+  if (SUPPRESS_CODES.has(err.code)) return true
+  if (typeof err.message === 'string' && [...SUPPRESS_CODES].some(c => err.message.includes(c))) return true
+  if (err.cause) return shouldSuppress(err.cause)
+  return false
+}
+
 if (typeof process !== 'undefined') {
   process.on('unhandledRejection', (reason: any) => {
-    if (reason?.code === 'ECONNABORTED' || 
-        (typeof reason === 'object' && reason?.message?.includes('ECONNABORTED'))) {
-      console.warn('⚠️ ECONNABORTED rejected promise suppressed (client disconnected)')
+    if (shouldSuppress(reason)) {
+      console.warn('⚠️ Suppressed:', reason?.code || reason?.message?.slice(0, 60))
       return
     }
     console.error('❌ unhandledRejection:', reason)
   })
-  
+
   process.on('uncaughtException', (error: any) => {
-    if (error?.code === 'ECONNABORTED' || 
-        error?.message?.includes('ECONNABORTED')) {
-      console.warn('⚠️ ECONNABORTED exception suppressed (client disconnected)')
+    if (shouldSuppress(error)) {
+      console.warn('⚠️ Suppressed:', error?.code || error?.message?.slice(0, 60))
       return
     }
     console.error('❌ uncaughtException:', error)
@@ -25,6 +30,5 @@ if (typeof process !== 'undefined') {
 }
 
 export default defineNitroPlugin((nitroApp) => {
-  // Log that the error handler is active
-  console.log('🛡️ Error handler: ECONNABORTED suppression active')
+  console.log('🛡️ Error handler active (suppressing ECONNABORTED/EPIPE/ECONNRESET)')
 })
