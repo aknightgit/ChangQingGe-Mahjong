@@ -78,7 +78,7 @@ defineProps<{
 const TILES_PER_SIDE = 18
 const OVERLAP = 28
 const V_OVERLAP = 28
-const LAYER_OFFSET = 2
+const LAYER_OFFSET = 0
 </script>
 
 <style scoped>
