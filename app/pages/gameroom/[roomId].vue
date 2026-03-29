@@ -144,6 +144,8 @@
               <div class="cross-h"></div>
               <div class="cross-v"></div>
             </div>
+            <!-- 中心金色圆环 -->
+            <div class="center-glow"></div>
             <!-- 四方位标注 -->
             <span class="compass compass--n">北</span>
             <span class="compass compass--s">南</span>
@@ -1575,6 +1577,21 @@ const forceDiscard = async (p: Player) => {
   width: 30px;
   height: 30px;
   z-index: 2;
+  pointer-events: none;
+}
+
+/* 中心金色圆环 */
+.center-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.15) 0%, rgba(255, 180, 0, 0.08) 50%, transparent 70%);
+  border: 1.5px solid rgba(255, 215, 0, 0.25);
+  z-index: 1;
   pointer-events: none;
 }
 .cross-h, .cross-v {
