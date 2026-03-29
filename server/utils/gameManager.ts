@@ -1564,7 +1564,7 @@ class GameManager {
     return sequences;
   }
 
-  private moveToNextPlayer(game: GameState): void {
+  private async moveToNextPlayer(game: GameState): Promise<void> {
     if (game.phase !== GamePhase.PLAYING) {
       return;
     }
