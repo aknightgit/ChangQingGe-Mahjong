@@ -4,7 +4,7 @@
     class="player-other"
     :class="[`player-other--${position}`, { 'player-other--winner': isWinner }]"
   >
-    <div class="player-other-header">
+    <div class="player-other-header" v-if="position === 'top'">
       <span class="position-dot" :class="`dot--${posColor}`"></span>
       <span v-if="avatar" class="player-avatar">{{ avatar }}</span>
       <span class="player-other-name">

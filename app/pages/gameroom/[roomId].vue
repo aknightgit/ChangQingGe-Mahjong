@@ -149,8 +149,8 @@
             <!-- 四方位标注 -->
             <span class="compass compass--n">北</span>
             <span class="compass compass--s">南</span>
-            <span class="compass compass--w">西</span>
-            <span class="compass compass--e">东</span>
+            <span class="compass compass--w">{{ leftPlayer?.name || '西' }}</span>
+            <span class="compass compass--e">{{ rightPlayer?.name || '东' }}</span>
             <!-- 状态消息（非中心显示） -->
             <div class="turn-indicator">
               <span v-if="isWinner" class="turn-win">🎉 你赢了！</span>
