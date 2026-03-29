@@ -223,7 +223,7 @@ const onPointerCancel = () => {
 
 .player-hand :deep(.tile) {
   cursor: pointer;
-  margin: 0 1px 2px 1px;
+  margin: 0 0 2px 0;
 }
 
 /* 玩家颜色圆点 */
