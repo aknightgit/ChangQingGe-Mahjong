@@ -1,67 +1,67 @@
 <template>
   <div class="tile-wall">
-    <!-- 上边牌墙：往右移10px -->
+    <!-- 上边牌墙：上移10px -->
     <div class="wall-side wall-top">
       <div class="wall-layer wall-layer--inner">
         <div v-for="i in TILES_PER_SIDE" :key="`ti-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: '16%', zIndex: '1', transform: 'translateX(-50%)' }">
+          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: 'calc(16% - 10px)', zIndex: '1', transform: 'translateX(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back" />
         </div>
       </div>
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`to-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: `calc(16% + ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
+          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: `calc(16% - 10px + ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back wall-back--outer" />
           <div class="tile-side tile-side--bottom" />
         </div>
       </div>
     </div>
 
-    <!-- 下边牌墙（本家）：往右移10px -->
+    <!-- 下边牌墙（本家）：下移10px -->
     <div class="wall-side wall-bottom">
       <div class="wall-layer wall-layer--inner">
         <div v-for="i in TILES_PER_SIDE" :key="`bi-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px + 10px)`, bottom: '16%', zIndex: '1', transform: 'translateX(-50%)' }">
+          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px + 10px)`, bottom: 'calc(16% - 10px)', zIndex: '1', transform: 'translateX(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back" />
         </div>
       </div>
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`bo-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px + 10px)`, bottom: `calc(16% - ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
+          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px + 10px)`, bottom: `calc(16% - 10px - ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back wall-back--outer" />
           <div class="tile-side tile-side--bottom" />
         </div>
       </div>
     </div>
 
-    <!-- 左边牌墙：往左移10px，往下移5px -->
+    <!-- 左边牌墙：左移20，下移15 -->
     <div class="wall-side wall-left">
       <div class="wall-layer wall-layer--inner">
         <div v-for="i in TILES_PER_SIDE" :key="`li-${i}`" class="tile-slot tile-slot--vertical"
-          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * V_OVERLAP}px + 5px)`, left: 'calc(18% - 10px)', zIndex: '1', transform: 'translateY(-50%)' }">
+          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * V_OVERLAP}px + 15px)`, left: 'calc(18% - 20px)', zIndex: '1', transform: 'translateY(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back" />
         </div>
       </div>
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`lo-${i}`" class="tile-slot tile-slot--vertical"
-          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * V_OVERLAP}px + 5px)`, left: `calc(18% - 10px + ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateY(-50%)' }">
+          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * V_OVERLAP}px + 15px)`, left: `calc(18% - 20px + ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateY(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back wall-back--outer" />
           <div class="tile-side tile-side--bottom" />
         </div>
       </div>
     </div>
 
-    <!-- 右边牌墙：往右移10px，往下移5px -->
+    <!-- 右边牌墙：右移1，下移15 -->
     <div class="wall-side wall-right">
       <div class="wall-layer wall-layer--inner">
         <div v-for="i in TILES_PER_SIDE" :key="`ri-${i}`" class="tile-slot tile-slot--vertical"
-          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(i - 1) * V_OVERLAP}px + 5px)`, right: 'calc(18% - 10px)', zIndex: '1', transform: 'translateY(-50%)' }">
+          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(i - 1) * V_OVERLAP}px + 15px)`, right: 'calc(18% - 11px)', zIndex: '1', transform: 'translateY(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back" />
         </div>
       </div>
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`ro-${i}`" class="tile-slot tile-slot--vertical"
-          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(i - 1) * V_OVERLAP}px + 5px)`, right: `calc(18% - 10px - ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateY(-50%)' }">
+          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(i - 1) * V_OVERLAP}px + 15px)`, right: `calc(18% - 11px - ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateY(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back wall-back--outer" />
           <div class="tile-side tile-side--bottom" />
         </div>
@@ -106,7 +106,6 @@ const LAYER_OFFSET = 5
   height: 28px;
 }
 
-/* 牌背图片（与手牌牌背同一张图） */
 .wall-back {
   width: 100%;
   height: 100%;
@@ -119,7 +118,6 @@ const LAYER_OFFSET = 5
   filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5)) brightness(1.1);
 }
 
-/* ===== 2.5D 侧面：1/3绿色+2/3白色 ===== */
 .tile-side {
   position: absolute;
   pointer-events: none;
@@ -132,7 +130,6 @@ const LAYER_OFFSET = 5
   box-shadow: 0 2px 3px rgba(0,0,0,0.25);
 }
 
-/* 响应式 */
 @media (max-width: 1300px) {
   .tile-slot { width: 22px; height: 32px; }
   .tile-slot--vertical { width: 32px; height: 22px; }
