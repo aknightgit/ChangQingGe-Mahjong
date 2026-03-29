@@ -1283,35 +1283,35 @@ const forceDiscard = async (p: Player) => {
 /* ===== 弃牌区定位 ===== */
 /* 上家：靠近牌桌中心，旋转180° */
 :deep(.discard-zone--top) {
-  top: 30%;
-  left: 28%;
-  width: 44%;
+  top: 28%;
+  left: 20%;
+  width: 60%;
   display: flex;
   justify-content: center;
   transform: rotate(180deg);
 }
 /* 下家（本家）：靠近牌桌中心 */
 :deep(.discard-zone--bottom) {
-  bottom: 30%;
-  left: 28%;
-  width: 44%;
+  bottom: 28%;
+  left: 20%;
+  width: 60%;
   display: flex;
   justify-content: center;
 }
 /* 左家：旋转90° */
 :deep(.discard-zone--left) {
-  top: 40%;
-  left: 14%;
-  width: 44%;
+  top: 32%;
+  left: 8%;
+  width: 60%;
   display: flex;
   justify-content: center;
   transform: rotate(90deg);
 }
 /* 右家 */
 :deep(.discard-zone--right) {
-  top: 40%;
-  right: 14%;
-  width: 44%;
+  top: 32%;
+  right: 8%;
+  width: 60%;
   display: flex;
   justify-content: center;
   transform: rotate(-90deg);

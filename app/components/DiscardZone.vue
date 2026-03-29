@@ -53,7 +53,7 @@ const props = defineProps<{
 
 .discards-grid {
   display: grid;
-  grid-template-columns: repeat(6, max-content);
+  grid-template-columns: repeat(8, max-content);
   gap: 2px;
 }
 
