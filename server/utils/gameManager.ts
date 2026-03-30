@@ -1115,7 +1115,7 @@ class GameManager {
     }
 
     // Find all possible sequences
-    const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile);
+    const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile, game);
     if (sequences.length === 0) {
       throw new Error('No valid sequence found for chow');
     }
@@ -1684,7 +1684,7 @@ class GameManager {
     if (game.pendingActions.length === 0) {
       const chowPlayer = this.getNextActivePlayer(game, game.currentPlayerIndex);
       if (chowPlayer) {
-        const sequences = this.findChowSequences(chowPlayer.hand.concealedTiles, discardedTile);
+        const sequences = this.findChowSequences(chowPlayer.hand.concealedTiles, discardedTile, game);
         if (sequences.length > 0) {
           game.pendingActions.push({
             playerId: chowPlayer.id,
@@ -1759,10 +1759,19 @@ class GameManager {
   /**
    * Find all possible sequence combinations in hand that include the given tile
    * Only works for number suits (筒万条)
+   * 百搭牌不能用于吃牌
    */
-  private findChowSequences(hand: Tile[], discardedTile: Tile): Tile[][] {
+  private findChowSequences(hand: Tile[], discardedTile: Tile, game?: GameState): Tile[][] {
     const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-    if (!numberSuits.includes(discardedTile.suit)) return [];
+    if (!numberSuits.includes(discardedTile.suit)) [];
+
+    // 如果弃牌本身是百搭，不能被吃
+    if (game && this.isWildTile(game, discardedTile)) return [];
+
+    // 过滤掉手牌中的百搭牌（百搭不能参与吃牌）
+    const eligibleHand = game 
+      ? hand.filter(t => !this.isWildTile(game, t))
+      : hand;
 
     const sequences: Tile[][] = [];
     const v = discardedTile.value;
@@ -1770,8 +1779,8 @@ class GameManager {
 
     // Case 1: discarded tile is the smallest (e.g. 5, need 6+7)
     if (v <= 7) {
-      const t2 = hand.find(t => t.suit === suit && t.value === v + 1);
-      const t3 = hand.find(t => t.suit === suit && t.value === v + 2);
+      const t2 = eligibleHand.find(t => t.suit === suit && t.value === v + 1);
+      const t3 = eligibleHand.find(t => t.suit === suit && t.value === v + 2);
       if (t2 && t3) {
         sequences.push([discardedTile, t2, t3]);
       }
@@ -1779,8 +1788,8 @@ class GameManager {
 
     // Case 2: discarded tile is the middle (e.g. 5, need 4+6)
     if (v >= 2 && v <= 8) {
-      const t1 = hand.find(t => t.suit === suit && t.value === v - 1);
-      const t3 = hand.find(t => t.suit === suit && t.value === v + 1);
+      const t1 = eligibleHand.find(t => t.suit === suit && t.value === v - 1);
+      const t3 = eligibleHand.find(t => t.suit === suit && t.value === v + 1);
       if (t1 && t3) {
         sequences.push([t1, discardedTile, t3]);
       }
@@ -1788,8 +1797,8 @@ class GameManager {
 
     // Case 3: discarded tile is the largest (e.g. 5, need 3+4)
     if (v >= 3) {
-      const t1 = hand.find(t => t.suit === suit && t.value === v - 2);
-      const t2 = hand.find(t => t.suit === suit && t.value === v - 1);
+      const t1 = eligibleHand.find(t => t.suit === suit && t.value === v - 2);
+      const t2 = eligibleHand.find(t => t.suit === suit && t.value === v - 1);
       if (t1 && t2) {
         sequences.push([t1, t2, discardedTile]);
       }
