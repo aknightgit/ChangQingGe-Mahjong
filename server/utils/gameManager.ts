@@ -2415,7 +2415,7 @@ class GameManager {
             return;
           }
 
-          // 冻结窗口结束且没人抢牌 → 自动摸牌（人类和AI都自动摸）
+          // 冻结窗口结束 → 人类玩家手动摸牌，AI自动摸牌
           const nextPlayer = freshGame.players[freshGame.currentPlayerIndex];
           if (nextPlayer && nextPlayer.status === PlayerStatus.PLAYING) {
             // 牌墙已空 → 流局
@@ -2425,9 +2425,15 @@ class GameManager {
               this.broadcastGameState(game.gameId);
               return;
             }
-            this.replaceFlowers(freshGame, nextPlayer);
-            this.handleDraw(freshGame, nextPlayer);
-            console.log(`[freeze] Auto-draw for ${nextPlayer.name} (freeze expired, no pending)`);
+            // AI玩家：自动摸牌
+            if (this.isPlayerBotControlled(nextPlayer)) {
+              this.replaceFlowers(freshGame, nextPlayer);
+              this.handleDraw(freshGame, nextPlayer);
+              console.log(`[freeze] Auto-draw for bot ${nextPlayer.name}`);
+            } else {
+              // 人类玩家：不自动摸，清除冻结，广播状态让前端显示"摸"按钮
+              console.log(`[freeze] Human ${nextPlayer.name} freeze expired, waiting for manual draw`);
+            }
 
             // 超时自动接管：人类玩家连续2回合未操作 → 自动AI托管
             if (!this.isPlayerBotControlled(nextPlayer)) {
