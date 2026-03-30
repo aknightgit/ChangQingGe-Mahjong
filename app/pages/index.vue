@@ -177,47 +177,69 @@
     <Teleport to="body">
       <div v-if="showCreateModal" class="create-overlay" @click.self="showCreateModal = false">
         <div class="create-modal">
-          <h2 class="create-title">创建牌局</h2>
+          <h2 class="create-title">🀄 创建牌局</h2>
 
-          <div class="create-field">
-            <label>掷骰子次数上限</label>
-            <input type="number" v-model.number="createParams.maxDiceRolls" min="1" max="10" />
-            <span class="create-hint">默认2次，决定发牌起始位置</span>
+          <!-- 基础设置 -->
+          <div class="param-group">
+            <h3 class="param-group-title">⚙️ 基础设置</h3>
+
+            <div class="create-field">
+              <div class="field-header">
+                <label>掷骰子次数</label>
+                <button class="help-btn" @click="toggleHelp('dice')">?</button>
+              </div>
+              <input type="number" v-model.number="createParams.maxDiceRolls" min="1" max="10" />
+              <span v-if="activeHelp === 'dice'" class="help-bubble">决定发牌起始位置。庄家可掷骰1~N次，取最终结果。影响从牌墙哪个位置开始摸牌。</span>
+            </div>
+
+            <div class="create-field">
+              <div class="field-header">
+                <label>冻结秒数</label>
+                <button class="help-btn" @click="toggleHelp('freeze')">?</button>
+              </div>
+              <input type="number" v-model.number="createParams.freezeSeconds" min="0" max="10" step="0.5" />
+              <span v-if="activeHelp === 'freeze'" class="help-bubble">上家打出牌后，下家的等待时间。窗口内其他人可抢碰/杠/胡。默认1秒。</span>
+            </div>
+
+            <div class="create-field create-field--checkbox">
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="createParams.firstRoundDouble" />
+                <span>首局翻倍</span>
+                <button class="help-btn help-btn--inline" @click="toggleHelp('double')">?</button>
+              </label>
+              <span v-if="activeHelp === 'double'" class="help-bubble">今天第一局全局倍数 ×2，增加开局刺激感。默认开启。</span>
+            </div>
           </div>
 
-          <div class="create-field">
-            <label>冻结下家摸牌秒数</label>
-            <input type="number" v-model.number="createParams.freezeSeconds" min="0" max="10" step="0.5" />
-            <span class="create-hint">上家打牌后，下家等待时间（默认1秒）</span>
+          <!-- 特殊玩法 -->
+          <div class="param-group">
+            <h3 class="param-group-title">🔥 特殊玩法</h3>
+
+            <div class="create-field">
+              <div class="field-header">
+                <label>被聚义QJ线</label>
+                <button class="help-btn" @click="toggleHelp('qj')">?</button>
+              </div>
+              <input type="number" v-model.number="createParams.liangShanThreshold" min="0" max="99999" step="100" />
+              <span v-if="activeHelp === 'qj'" class="help-bubble">累积赢分超过此值的玩家，在「梁山聚义」投票时无否决权，自动视为同意。仅4人真人局生效。默认1000。</span>
+            </div>
+
+            <div class="create-field">
+              <div class="field-header">
+                <label>等我想一想 次数</label>
+                <button class="help-btn" @click="toggleHelp('think')">?</button>
+              </div>
+              <input type="number" v-model.number="createParams.thinkChances" min="0" max="10" />
+              <span v-if="activeHelp === 'think'" class="help-bubble">有胡/碰/杠选项时，可用「等」按钮冻结所有对手8秒给自己思考。每局限N次，默认3次。用完变灰。</span>
+            </div>
           </div>
 
-          <!-- 首局翻倍 -->
-          <div class="create-field create-field--checkbox">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="createParams.firstRoundDouble" />
-              <span>首局翻倍</span>
-            </label>
-            <span class="create-hint">今天第一局全局倍数 ×2（默认开启）</span>
-          </div>
-
-          <!-- 被聚义QJ线 -->
-          <div class="create-field">
-            <label>被聚义QJ线</label>
-            <input type="number" v-model.number="createParams.liangShanThreshold" min="0" max="99999" step="100" />
-            <span class="create-hint">累积赢分超过此值的玩家无否决权（默认1000，仅4人真人局生效）</span>
-          </div>
-
-          <!-- 等我想一想机会次数 -->
-          <div class="create-field">
-            <label>等我想一想 次数</label>
-            <input type="number" v-model.number="createParams.thinkChances" min="0" max="10" />
-            <span class="create-hint">每局可用「等」冻结对手的次数（默认3次，每次8秒）</span>
-          </div>
-
-          <!-- AI玩家选择（可展开/收起） -->
-          <div class="create-field">
+          <!-- AI玩家 -->
+          <div class="param-group">
+            <h3 class="param-group-title">🤖 AI玩家</h3>
             <button class="ai-toggle-btn" @click="showAISelection = !showAISelection">
-              {{ showAISelection ? '▼' : '▶' }} 加AI玩家 <span v-if="selectedBots.length" class="ai-count-badge">({{ selectedBots.length }}/3)</span>
+              {{ showAISelection ? '▼ 收起' : '▶ 选择AI玩家' }}
+              <span v-if="selectedBots.length" class="ai-count-badge">{{ selectedBots.length }}/3</span>
             </button>
             <div v-if="showAISelection" class="ai-select-list">
               <label
@@ -237,7 +259,7 @@
               </label>
             </div>
             <span class="create-hint" v-if="selectedBots.length > 0">
-              已选{{ selectedBots.length }}个AI，还需{{ 4 - selectedBots.length - 1 }}位真人玩家
+              已选 {{ selectedBots.length }} 个AI，还需 {{ 4 - selectedBots.length - 1 }} 位真人
             </span>
           </div>
 
@@ -266,6 +288,10 @@ const isCreatingGame = ref(false)
 
 // 创建房间参数弹窗
 const showCreateModal = ref(false)
+const activeHelp = ref<string | null>(null)
+const toggleHelp = (key: string) => {
+  activeHelp.value = activeHelp.value === key ? null : key
+}
 const createParams = reactive({
   maxDiceRolls: 2,
   freezeSeconds: 1,
@@ -656,20 +682,93 @@ const logout = () => {
   color: #ffd700;
   font-size: 1.4rem;
   font-weight: 700;
-  margin: 0 0 24px;
+  margin: 0 0 20px;
   text-align: center;
 }
 
-.create-field {
-  margin-bottom: 20px;
+/* 参数分组 */
+.param-group {
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.create-field label {
-  display: block;
+.param-group:last-of-type {
+  border-bottom: none;
+  margin-bottom: 12px;
+}
+
+.param-group-title {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0 0 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+/* 字段 */
+.create-field {
+  margin-bottom: 14px;
+}
+
+.field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.field-header label {
   color: #e0e0e0;
   font-size: 0.9rem;
   font-weight: 600;
-  margin-bottom: 6px;
+}
+
+/* 帮助按钮 */
+.help-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.help-btn:hover {
+  background: rgba(100, 200, 255, 0.15);
+  border-color: rgba(100, 200, 255, 0.3);
+  color: #64c8ff;
+}
+
+.help-btn--inline {
+  margin-left: 6px;
+}
+
+/* 帮助气泡 */
+.help-bubble {
+  display: block;
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: rgba(100, 200, 255, 0.08);
+  border: 1px solid rgba(100, 200, 255, 0.15);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.5;
+  animation: helpFadeIn 0.15s ease-out;
+}
+
+@keyframes helpFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .create-field input {
