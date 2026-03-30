@@ -174,7 +174,6 @@
     </UModal>
 
     <!-- 创建房间参数配置弹窗 -->
-    <Teleport to="body">
       <div v-if="showCreateModal" class="create-overlay" @click.self="showCreateModal = false">
         <div class="create-modal">
           <h2 class="create-title">🀄 创建牌局</h2>
@@ -296,7 +295,6 @@
           </div>
         </div>
       </div>
-    </Teleport>
   </div>
 </template>
 
