@@ -14,10 +14,89 @@ import {
   calculateScore
 } from '../server/utils/scoring'
 import { TileSuit, MeldType, WinType, type Tile, type Meld } from '../server/types/game'
+import * as fs from 'fs'
+import * as path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const ROUNDS = parseInt(process.argv[2] || '10')
 const GAMES_PER_ROUND = parseInt(process.argv[3] || '200')
 const SETTLEMENT_MULT = 10
+const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
+
+// ========== Bot Policy (from character JSON) ==========
+interface BotPolicy {
+  id: string
+  // Win decisions
+  selfWinChance: number       // probability to claim self-draw win
+  discardHuChance: number     // probability to claim discard win
+  selfWinWildBoost: number    // extra chance when wild tiles present
+  discardHuWildPenalty: number
+  discardHuMenQingPenalty: number
+  // Claim decisions
+  pengChance: number
+  kongChance: number
+  chowChance: number
+  pengWildBoost: number
+  kongWildBoost: number
+  chowWildPenalty: number
+  // Bailout
+  bailoutBuildWildBoost: number
+  bailoutHuPenaltyPerMeld: number
+  // Honor rush
+  honorRushThreshold: number
+  honorRushBoost: number
+  // Discard scoring
+  pairWeight: number
+  nearWeight: number
+  honorPairBonus: number
+  wildKeepPenalty: number
+  dominantSuitBonus: number
+  tripletKeepBonus: number
+  honorTripletKeepBonus: number
+  windDragonPairKeepBonus: number
+  tripletComboBonus: number
+  flushChaseBonus: number
+}
+
+const DEFAULT_POLICY: BotPolicy = {
+  id: 'default',
+  selfWinChance: 0.8, discardHuChance: 0.8,
+  selfWinWildBoost: 0.1, discardHuWildPenalty: 0.4, discardHuMenQingPenalty: 0.14,
+  pengChance: 0.79, kongChance: 0.47, chowChance: 0.03,
+  pengWildBoost: 0.06, kongWildBoost: 0.14, chowWildPenalty: 0.18,
+  bailoutBuildWildBoost: 0.23, bailoutHuPenaltyPerMeld: 0.04,
+  honorRushThreshold: 4, honorRushBoost: 0.47,
+  pairWeight: 4.0, nearWeight: 3.6, honorPairBonus: 1.34,
+  wildKeepPenalty: 1400, dominantSuitBonus: 0,
+  tripletKeepBonus: 4.71, honorTripletKeepBonus: 8.94,
+  windDragonPairKeepBonus: 11.84, tripletComboBonus: 1.38, flushChaseBonus: 1.94
+}
+
+function loadCharacter(name: string): BotPolicy {
+  const filePath = path.join(CHAR_DIR, `${name}.json`)
+  try {
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+    return { ...DEFAULT_POLICY, ...data.policy, id: data.policy?.id || name }
+  } catch (e) {
+    console.warn(`[Character] Failed to load ${name}, using default policy`)
+    return { ...DEFAULT_POLICY, id: name }
+  }
+}
+
+function saveCharacter(name: string, policy: BotPolicy, metrics: any): void {
+  const filePath = path.join(CHAR_DIR, `${name}.json`)
+  const data = {
+    savedAt: new Date().toISOString(),
+    round: 0,
+    metrics,
+    policy
+  }
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')
+  console.log(`[Character] Saved ${name} to ${filePath}`)
+}
 
 // ========== Tile helpers ==========
 function t(suit: TileSuit, v: number, id?: string): Tile {
@@ -40,6 +119,7 @@ interface BotPlayer {
   id: string
   status: 'playing' | 'won'
   winMode?: 'self_draw' | 'discard' | 'kong_draw'
+  policy: BotPolicy
 }
 
 interface GameState {
@@ -68,10 +148,14 @@ function setupGame(): GameState {
   const w = nonFlower[Math.floor(Math.random() * nonFlower.length)]
   const ws = w.suit as TileSuit, wv = w.value
 
+  // Load each bot's character policy
+  const policies = AI_NAMES.map(name => loadCharacter(name))
+
   const players = AI_NAMES.map((name, i) => ({
     name, pos: i, hand: [] as Tile[], exposedMelds: [] as Meld[], flowerTiles: [] as Tile[],
     isBot: true, isTing: false, score: 0, wildSuit: ws, wildValue: wv, kongCount: 0, id: `p${i}`,
-    status: 'playing' as const
+    status: 'playing' as const,
+    policy: policies[i]
   }))
 
   return { deck, wallIdx: 0, players, current: 0, wildSuit: ws, wildValue: wv, discardPile: [] }
@@ -199,17 +283,8 @@ function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean): numbe
 // Policy-based discard (inspired by old simulate.ts that achieved 85%+ win rate)
 function aiDiscard(p: BotPlayer): Tile {
   const wt = makeWT(p)
-  const policy = {
-    pairWeight: 4.0,           // keep pairs (old training: 4.85)
-    tripletKeepBonus: 3.0,     // keep triplets
-    sequencePotential: 1.5,    // keep sequence-connected tiles
-    honorPairBonus: 2.0,       // keep honor pairs
-    terminalWeight: 0.8,       // slight preference to keep terminals near neighbors
-    connectivityWeight: 1.0,   // keep connected tiles
-    honorSinglePenalty: -1.5,  // discard honor singles (old: honor singles get positive = discard)
-    terminalIsolatedPenalty: -1.5, // discard isolated terminals
-    wildKeepPenalty: 500,      // never discard wild
-  }
+  // Use the bot's character policy for discard scoring
+  const policy = p.policy
 
   const candidates: { tile: Tile; keepScore: number }[] = []
   for (const tile of p.hand) {
@@ -218,7 +293,7 @@ function aiDiscard(p: BotPlayer): Tile {
     const count = p.hand.filter(t => tileEq(t, tile)).length
     const sameSuit = p.hand.filter(t => t.suit === tile.suit && !tileEq(t, tile))
 
-    // Pairs & triplets → strongly keep
+    // Pairs & triplets → strongly keep (use character weights)
     if (count >= 2) keepScore += policy.pairWeight
     if (count >= 3) keepScore += policy.tripletKeepBonus
 
@@ -226,25 +301,46 @@ function aiDiscard(p: BotPlayer): Tile {
     if (!isHonor(tile) && tile.suit !== TileSuit.FLOWER) {
       const hasLeft = sameSuit.some(t => t.value === tile.value - 1 || t.value === tile.value - 2)
       const hasRight = sameSuit.some(t => t.value === tile.value + 1 || t.value === tile.value + 2)
-      if (hasLeft) keepScore += policy.sequencePotential
-      if (hasRight) keepScore += policy.sequencePotential
+      if (hasLeft) keepScore += policy.nearWeight
+      if (hasRight) keepScore += policy.nearWeight
       // Neighbor count
       const neighbors = sameSuit.filter(t => Math.abs(t.value - tile.value) <= 2)
-      keepScore += neighbors.length * policy.connectivityWeight * 0.2
+      keepScore += neighbors.length * policy.nearWeight * 0.2
     }
 
     // Honor tiles
     if (isHonor(tile)) {
       if (count >= 2) keepScore += policy.honorPairBonus * policy.pairWeight
-      else keepScore += policy.honorSinglePenalty // honor singles → discard
+      else keepScore -= policy.honorPairBonus * 0.5 // honor singles → discard
+    }
+
+    // Honor triplet keep bonus
+    if (isHonor(tile) && count >= 3) {
+      keepScore += policy.honorTripletKeepBonus
+    }
+
+    // Wind/Dragon pair keep bonus
+    if ((tile.suit === TileSuit.WIND || tile.suit === TileSuit.DRAGON) && count >= 2) {
+      keepScore += policy.windDragonPairKeepBonus
     }
 
     // Terminals
     if (tile.value === 1 || tile.value === 9) {
-      keepScore += policy.terminalWeight
       // Unless isolated
       const neighbors = sameSuit.filter(t => Math.abs(t.value - tile.value) <= 2)
-      if (neighbors.length === 0) keepScore += policy.terminalIsolatedPenalty
+      if (neighbors.length === 0) keepScore -= policy.nearWeight
+    }
+
+    // Dominant suit bonus
+    if (policy.dominantSuitBonus > 0) {
+      const suitCount = p.hand.filter(t => t.suit === tile.suit).length
+      if (suitCount >= 5) keepScore += policy.dominantSuitBonus
+    }
+
+    // Flush chase bonus
+    if (policy.flushChaseBonus > 0) {
+      const suitTiles = p.hand.filter(t => t.suit === tile.suit && !tileEq(t, tile))
+      if (suitTiles.length >= 6) keepScore += policy.flushChaseBonus
     }
 
     // Wild tile → never discard
@@ -297,9 +393,17 @@ function runGame(): { winner: number; huType: string; scores: number[] } | null 
     // Auto-draw flower
     if (isFlower(drawn)) continue
 
-    // Check self-draw win
+    // Check self-draw win (policy-driven)
     if (canWin(player.hand.filter(t => t !== undefined), player.exposedMelds.length, makeWT(player)).canWin) {
-      return { winner: curr, huType: 'self_draw', scores: g.players.map(p => p.score) }
+      let winChance = player.policy.selfWinChance
+      // Boost if wild tiles present (bigger hand)
+      const wildCount = player.hand.filter(t => isWT(t, player)).length
+      winChance += wildCount * player.policy.selfWinWildBoost
+      // Penalty if many exposed melds (bailout)
+      winChance -= player.exposedMelds.length * player.policy.bailoutHuPenaltyPerMeld
+      if (Math.random() < winChance) {
+        return { winner: curr, huType: 'self_draw', scores: g.players.map(p => p.score) }
+      }
     }
 
     // AnKong / JiaGang check
@@ -343,11 +447,17 @@ function runGame(): { winner: number; huType: string; scores: number[] } | null 
       // Temporarily add discarded tile to check win
       const testHand = [...opp.hand.filter(t => t !== undefined), discard]
       if (canWin(testHand, opp.exposedMelds.length, makeWT(opp)).canWin) {
-        // Win by discard
-        const score = calcScore(opp, false, false)
-        opp.score += score
-        player.score -= score
-        return { winner: other, huType: 'discard', scores: g.players.map(p => p.score) }
+        // Policy-driven discard win decision
+        let huChance = opp.policy.discardHuChance
+        const wildCount = opp.hand.filter(t => isWT(t, opp)).length
+        huChance -= wildCount * opp.policy.discardHuWildPenalty
+        if (opp.exposedMelds.length === 0) huChance -= opp.policy.discardHuMenQingPenalty
+        if (Math.random() < huChance) {
+          const score = calcScore(opp, false, false)
+          opp.score += score
+          player.score -= score
+          return { winner: other, huType: 'discard', scores: g.players.map(p => p.score) }
+        }
       }
     }
 
@@ -360,35 +470,42 @@ function runGame(): { winner: number; huType: string; scores: number[] } | null 
     for (const otherIdx of [nextPlayer, prevPlayer, oppositePlayer]) {
       const opp = g.players[otherIdx]
       if (canPeng(opp, discard)) {
-        applyPeng(opp, discard)
-        // Draw and discard again (if we're still in game)
-        const d = drawTile(g, opp)
-        if (!d) return null
-        if (canWin(opp.hand, opp.exposedMelds.length, makeWT(opp)).canWin) {
-          return { winner: otherIdx, huType: 'self_draw', scores: g.players.map(p => p.score) }
+        // Policy-driven peng decision
+        let pengChance = opp.policy.pengChance
+        if (opp.wildSuit && opp.wildValue && discard.suit === opp.wildSuit && discard.value === opp.wildValue) {
+          pengChance += opp.policy.pengWildBoost
         }
-        // AnKong check after draw
-        for (const ak of canAnKong(opp)) {
-          applyAnKong(opp, ak)
-          const extra = drawTile(g, opp)
-          if (extra && !isFlower(extra)) {
-            if (canWin(opp.hand, opp.exposedMelds.length, makeWT(opp)).canWin) {
-              return { winner: otherIdx, huType: 'self_draw', scores: g.players.map(p => p.score) }
+        if (Math.random() < pengChance) {
+          applyPeng(opp, discard)
+          // Draw and discard again (if we're still in game)
+          const d = drawTile(g, opp)
+          if (!d) return null
+          if (canWin(opp.hand, opp.exposedMelds.length, makeWT(opp)).canWin) {
+            return { winner: otherIdx, huType: 'self_draw', scores: g.players.map(p => p.score) }
+          }
+          // AnKong check after draw
+          for (const ak of canAnKong(opp)) {
+            applyAnKong(opp, ak)
+            const extra = drawTile(g, opp)
+            if (extra && !isFlower(extra)) {
+              if (canWin(opp.hand, opp.exposedMelds.length, makeWT(opp)).canWin) {
+                return { winner: otherIdx, huType: 'self_draw', scores: g.players.map(p => p.score) }
+              }
             }
           }
-        }
-        const pengDiscard = aiDiscard(opp)
-        opp.hand = opp.hand.filter(t => t.id !== pengDiscard.id)
-        g.discardPile.push(pengDiscard)
-        // Next turn: the person who just discarded becomes next
-        g.current = otherIdx
-        continue
+          const pengDiscard = aiDiscard(opp)
+          opp.hand = opp.hand.filter(t => t.id !== pengDiscard.id)
+          g.discardPile.push(pengDiscard)
+          // Next turn: the person who just discarded becomes next
+          g.current = otherIdx
+          continue
+        } // end pengChance check
       }
     }
 
-    // 3. Check chow (only next player in turn order)
-    if (canChow(g.players[nextPlayer], discard)) {
-      const nextP = g.players[nextPlayer]
+    // 3. Check chow (only next player in turn order) - policy driven
+    const nextP = g.players[nextPlayer]
+    if (canChow(nextP, discard) && Math.random() < nextP.policy.chowChance) {
       applyChow(nextP, discard)
       // Draw after chow
       const d = drawTile(g, nextP)
