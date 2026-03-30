@@ -45,7 +45,10 @@
                 <td class="highlight-col" :class="scoreClass(stat.effectiveScore)">
                   <strong>{{ formatSigned(stat.effectiveScore) }}</strong>
                 </td>
-                <td :class="scoreClass(stat.vsAIScore)">{{ formatSigned(stat.vsAIScore) }}</td>
+                <td :class="scoreClass(stat.vsAINet)">
+                  {{ formatSigned(stat.vsAINet) }}
+                  <span class="vs-ai-detail">赢{{ stat.vsAIWin }} 输{{ stat.vsAILose }}</span>
+                </td>
                 <td class="center">{{ stat.selfDrawCount }}</td>
                 <td class="center">{{ stat.catchDiscardCount }}</td>
                 <td class="score-positive">{{ stat.maxWin > 0 ? '+' + stat.maxWin : '-' }}</td>
@@ -148,7 +151,9 @@ interface PlayerStat {
   totalGames: number
   totalScore: number
   effectiveScore: number
-  vsAIScore: number
+  vsAIWin: number
+  vsAILose: number
+  vsAINet: number
   selfDrawCount: number
   catchDiscardCount: number
   maxWin: number
@@ -378,6 +383,13 @@ const scoreClass = (value: number) => {
   padding: 1px 6px;
   border-radius: 4px;
   font-weight: 700;
+}
+
+.vs-ai-detail {
+  display: block;
+  font-size: 0.7rem;
+  opacity: 0.7;
+  margin-top: 2px;
 }
 
 .name {
