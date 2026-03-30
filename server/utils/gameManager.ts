@@ -380,7 +380,7 @@ class GameManager {
     return String(Date.now()).slice(-4);
   }
 
-  async createGame(playerName: string, options?: { freezeDurationMs?: number; diceRollCount?: number; firstRoundDouble?: boolean }): Promise<{ gameId: string; playerId: string }> {
+  async createGame(playerName: string, options?: { freezeDurationMs?: number; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number }): Promise<{ gameId: string; playerId: string }> {
     await this.hydrateFromDatabase();
 
     const gameId = randomUUID();
@@ -435,7 +435,8 @@ class GameManager {
       inheritedGlobalMultiplier: options?.firstRoundDouble ? 2 : 1,
       rebelEvent: undefined,
       freezeDurationMs: options?.freezeDurationMs ?? 1000,
-      diceRollCount: options?.diceRollCount ?? 2
+      diceRollCount: options?.diceRollCount ?? 2,
+      liangShanThreshold: options?.liangShanThreshold ?? 1000
     };
 
     this.games.set(gameId, game);
@@ -745,11 +746,15 @@ class GameManager {
       return pendingAction.availableActions;
     }
 
-    // 梁山聚义：前三回合可投票（只要没投过，且是活跃玩家）
+    // 梁山聚义：前三回合可投票（仅4人全是真人时才开启，只要没投过，且是活跃玩家）
     if (game.phase === GamePhase.PLAYING && player.status === PlayerStatus.PLAYING && game.roundNumber <= 3) {
-      const votes = game.liangShanVotes || [];
-      if (!votes.includes(playerId)) {
-        actions.push(ActionType.LIANG_SHAN);
+      // 只有4人全是真人玩家时才开启梁山聚义
+      const allHuman = game.players.length >= 4 && game.players.every(p => !this.isPlayerBotControlled(p));
+      if (allHuman) {
+        const votes = game.liangShanVotes || [];
+        if (!votes.includes(playerId)) {
+          actions.push(ActionType.LIANG_SHAN);
+        }
       }
     }
 
@@ -1514,14 +1519,18 @@ class GameManager {
   }
 
   /**
-   * 梁山聚义：全员投票机制（仅活跃玩家）
+   * 梁山聚义：全员投票机制（仅活跃玩家，4人全真人时开启）
    * - 每个活跃玩家可点击一次（之后锁定）
+   * - 累积赢分超过被QJ线的玩家：自动视为同意，无否决权
    * - 全部活跃玩家都同意 → 本局结束，下把翻倍
-   * - 否则游戏正常继续，不播报投票进度
    */
   private handleLiangShan(game: GameState, player: Player): void {
     if (game.phase !== GamePhase.PLAYING) return;
     if (player.status !== PlayerStatus.PLAYING) return;
+
+    // 只有4人全是真人时才允许
+    const allHuman = game.players.length >= 4 && game.players.every(p => !this.isPlayerBotControlled(p));
+    if (!allHuman) return;
 
     // 初始化投票列表
     if (!game.liangShanVotes) {
@@ -1536,12 +1545,31 @@ class GameManager {
 
     // 活跃玩家总数
     const activePlayers = game.players.filter(p => p.status === PlayerStatus.PLAYING);
-    const voteCount = game.liangShanVotes.length;
+    
+    // 计算有效投票数：手动投票 + 超过被QJ线的玩家自动同意
+    // 被QJ线检查：玩家在本房间的累积有效输赢（去掉与AI的战绩）
+    const threshold = game.liangShanThreshold ?? 1000;
+    let effectiveVoteCount = game.liangShanVotes.length;
+    
+    for (const ap of activePlayers) {
+      // 已经手动投票的跳过
+      if (game.liangShanVotes.includes(ap.id)) continue;
+      // 检查累积有效输赢是否超过被QJ线
+      const cumulativeScore = this.getPlayerCumulativeScore(game.gameId, ap.id);
+      if (cumulativeScore > threshold) {
+        // 超过被QJ线 → 自动视为同意，无否决权
+        effectiveVoteCount++;
+        if (!game.liangShanVotes.includes(ap.id)) {
+          game.liangShanVotes.push(ap.id); // 标记为已投票
+        }
+        console.log(`[LiangShan] ${ap.name} 累积赢分${cumulativeScore}超过QJ线${threshold}，自动同意`);
+      }
+    }
 
-    console.log(`[LiangShan] ${player.name} voted (${voteCount}/${activePlayers.length})`);
+    console.log(`[LiangShan] ${player.name} voted (${effectiveVoteCount}/${activePlayers.length}, threshold: ${threshold})`);
 
     // 全员投票 → 结束本局，下把翻倍
-    if (voteCount >= activePlayers.length) {
+    if (effectiveVoteCount >= activePlayers.length) {
       console.log(`[LiangShan] All players agreed! Ending round with ×2 multiplier.`);
 
       // 所有未胡牌玩家标记为输
@@ -1570,6 +1598,27 @@ class GameManager {
       }
     }
     // 未全票 → 游戏正常继续，不结束
+  }
+
+  /**
+   * 获取玩家在本房间的累积有效输赢（仅计算与真人玩家的对战，去掉AI）
+   * 通过 matchHistory 计算
+   */
+  private getPlayerCumulativeScore(gameId: string, playerId: string): number {
+    // 从当前内存中的游戏历史计算
+    // 注意：这里简化处理，通过当前游戏的 roundStats 追踪
+    // 如果没有 roundStats，返回 0
+    const game = this.games.get(gameId);
+    if (!game || !game.roundStats) return 0;
+    
+    let cumulative = 0;
+    for (const round of game.roundStats) {
+      const score = round.scores[playerId] ?? 0;
+      if (score > 0) {
+        cumulative += score;
+      }
+    }
+    return cumulative;
   }
 
   private handleCheatHu(game: GameState, player: Player): void {

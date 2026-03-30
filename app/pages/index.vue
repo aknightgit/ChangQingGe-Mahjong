@@ -200,6 +200,13 @@
             <span class="create-hint">今天第一局全局倍数 ×2（默认开启）</span>
           </div>
 
+          <!-- 被聚义QJ线 -->
+          <div class="create-field">
+            <label>被聚义QJ线</label>
+            <input type="number" v-model.number="createParams.liangShanThreshold" min="0" max="99999" step="100" />
+            <span class="create-hint">累积赢分超过此值的玩家无否决权（默认1000，仅4人真人局生效）</span>
+          </div>
+
           <!-- AI玩家选择（可展开/收起） -->
           <div class="create-field">
             <button class="ai-toggle-btn" @click="showAISelection = !showAISelection">
@@ -255,7 +262,8 @@ const showCreateModal = ref(false)
 const createParams = reactive({
   maxDiceRolls: 2,
   freezeSeconds: 1,
-  firstRoundDouble: true
+  firstRoundDouble: true,
+  liangShanThreshold: 1000
 })
 
 // AI玩家选择
@@ -285,7 +293,8 @@ const confirmCreateGame = async () => {
       method: 'POST',
       body: {
         playerName: userName.value || 'Player 1',
-        firstRoundDouble: createParams.firstRoundDouble
+        firstRoundDouble: createParams.firstRoundDouble,
+        liangShanThreshold: createParams.liangShanThreshold
       },
       headers: { 'Cache-Control': 'no-cache' }
     })

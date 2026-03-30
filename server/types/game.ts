@@ -204,6 +204,7 @@ export interface GameState {
   // 可配置参数
   freezeDurationMs?: number;  // 冻结时长（毫秒），默认1000
   diceRollCount?: number;     // 掷骰次数，默认2
+  liangShanThreshold?: number;  // 梁山聚义被QJ线（累积赢分阈值），默认1000
 }
 
 export interface PendingAction {

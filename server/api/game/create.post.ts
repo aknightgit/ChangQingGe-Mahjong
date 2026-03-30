@@ -13,7 +13,8 @@ export default defineEventHandler(async (event) => {
 
   try {
     const result = await gameManager.createGame(playerName, {
-      firstRoundDouble: body.firstRoundDouble ?? true
+      firstRoundDouble: body.firstRoundDouble ?? true,
+      liangShanThreshold: body.liangShanThreshold ?? 1000
     });
     
     return {
