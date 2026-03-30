@@ -2096,10 +2096,32 @@ class GameManager {
       }
       game.pendingRemovals = [];
 
-      // 人数不足 → 回到等待状态
-      if (game.players.length < 2) {
+      // 人数不足 → 回到等待状态（麻将需要4人满桌）
+      if (game.players.length < 4) {
         game.phase = GamePhase.WAITING;
-        console.log(`[ApplyChanges] 玩家不足，回到等待状态`);
+        // 重置回合相关状态，准备新玩家加入
+        game.currentPlayerIndex = 0;
+        game.dealerIndex = 0;
+        game.pendingActions = [];
+        game.actionHistory = [];
+        game.discardPile = [];
+        game.winnersCount = 0;
+        game.roundNumber = 1;
+        // 清除所有玩家的游戏中状态，恢复为等待
+        for (const p of game.players) {
+          p.status = PlayerStatus.WAITING;
+          p.hand = { concealedTiles: [], exposedMelds: [], discardedTiles: [] };
+          p.isTing = false;
+          p.missingSuit = null;
+          p.windScore = 0;
+          p.rainScore = 0;
+          p.wonFan = 0;
+          p.winOrder = null;
+          p.winRound = null;
+          p.winTimestamp = null;
+          p.score = 0;
+        }
+        console.log(`[ApplyChanges] 玩家不足4人(${game.players.length})，回到等待状态`);
       }
     }
   }

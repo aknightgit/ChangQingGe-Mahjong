@@ -240,6 +240,71 @@ export function selectDiscardTile(player: Player, game: GameState): string {
 }
 
 /**
+ * Evaluate whether chowing is beneficial based on hand composition.
+ * Returns a score 0~1 indicating how desirable the chow is.
+ */
+function evaluateChowValue(
+  player: Player,
+  game: GameState,
+  chowTile: Tile
+): number {
+  const hand = player.hand.concealedTiles
+  const policy = getPolicyForPlayer(player)
+  let score = policy.chowChance // Start with base policy chance
+
+  // 1. 面子数惩罚：吃的越多，门清越差，胡牌难度越大
+  const meldCount = player.hand.exposedMelds.length
+  if (meldCount >= 2) {
+    score *= 0.5 // 已有2+面子，再吃风险大
+  }
+  if (meldCount === 0 && policy.bailoutHuPenaltyPerMeld > 0.05) {
+    // 门清玩家，保守型不太想吃
+    score *= (1 - policy.bailoutHuPenaltyPerMeld * 3)
+  }
+
+  // 2. 吃的牌是否能形成有效搭子
+  const v = chowTile.value
+  const suit = chowTile.suit
+  const groups = groupTiles(hand)
+
+  // 检查吃后是否能组成顺子搭子
+  const hasLeft = groups.has(`${suit}-${v - 1}`)
+  const hasRight = groups.has(`${suit}-${v + 1}`)
+  const hasLeftLeft = groups.has(`${suit}-${v - 2}`)
+  const hasRightRight = groups.has(`${suit}-${v + 2}`)
+
+  // 吃形成完整顺子的情况（如手里有6+7，吃8）
+  if (hasLeft && hasRight) {
+    score *= 1.5 // 两面搭子，很有价值
+  } else if (hasLeft || hasRight) {
+    score *= 1.2 // 单边搭子
+  } else if (hasLeftLeft || hasRightRight) {
+    score *= 0.8 // 间隔搭子，价值较低
+  }
+
+  // 3. 吃的牌是否是百搭
+  if (isWildTile(chowTile, game)) {
+    score *= (1 - (policy.chowWildPenalty || 0.1))
+  }
+
+  // 4. 做大牌风格：尽量不吃（保持门清）
+  if (policy.chowChance < 0.1) {
+    score *= 0.3 // 阿水型：极度不想吃
+  }
+
+  // 5. 进攻型风格：积极吃牌构建手牌
+  if (policy.chowChance > 0.5) {
+    score *= 1.3 // 老赵型：愿意吃
+  }
+
+  // 6. 如果已经听牌，不再吃
+  if (player.isTing) {
+    score = 0
+  }
+
+  return Math.max(0, Math.min(1, score))
+}
+/**
  * Determine if bot should claim a pending action (PENG/KONG/HU/PASS).
  * Returns the ActionType to execute.
  */
@@ -253,7 +318,7 @@ export function shouldClaimPendingAction(
   // Always take HU if available
   if (availableActions.includes(ActionType.HU)) return ActionType.HU
 
-  // KONG: usually take
+  // KONG: usually take (good for scoring)
   if (availableActions.includes(ActionType.KONG) && Math.random() < policy.kongChance) {
     return ActionType.KONG
   }
@@ -263,9 +328,15 @@ export function shouldClaimPendingAction(
     return ActionType.PENG
   }
 
-  // CHOW: take based on policy
-  if (availableActions.includes(ActionType.CHOW) && Math.random() < policy.chowChance) {
-    return ActionType.CHOW
+  // CHOW: smart evaluation based on hand composition
+  if (availableActions.includes(ActionType.CHOW)) {
+    const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id)
+    if (pendingAction?.tile) {
+      const chowValue = evaluateChowValue(player, game, pendingAction.tile)
+      if (Math.random() < chowValue) {
+        return ActionType.CHOW
+      }
+    }
   }
 
   // Default: PASS
