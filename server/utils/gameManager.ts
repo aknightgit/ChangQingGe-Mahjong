@@ -737,6 +737,14 @@ class GameManager {
       return pendingAction.availableActions;
     }
 
+    // 梁山聚义：任何时候都可以投票（只要没投过）
+    if (game.phase === GamePhase.PLAYING) {
+      const votes = game.liangShanVotes || [];
+      if (!votes.includes(playerId)) {
+        actions.push(ActionType.LIANG_SHAN);
+      }
+    }
+
     // If it's the player's turn, allow turn actions
     // freeze 百搭期间不能出牌/摸牌
     // 其他玩家有 pending claim 时，当前玩家等待（冻结窗口给抢牌机会）
@@ -917,6 +925,10 @@ class GameManager {
 
       case ActionType.REBEL:
         this.handleRebel(game, player);
+        break;
+
+      case ActionType.LIANG_SHAN:
+        this.handleLiangShan(game, player);
         break;
 
       case ActionType.PASS:
@@ -1491,6 +1503,65 @@ class GameManager {
 
     // 造反者成为庄家
     game.dealerIndex = player.position;
+  }
+
+  /**
+   * 梁山聚义：全员投票机制
+   * - 每个玩家可点击一次（之后锁定）
+   * - 4人全部同意 → 本局结束，下把翻倍
+   */
+  private handleLiangShan(game: GameState, player: Player): void {
+    if (game.phase !== GamePhase.PLAYING) return;
+
+    // 初始化投票列表
+    if (!game.liangShanVotes) {
+      game.liangShanVotes = [];
+    }
+
+    // 已投过票则忽略
+    if (game.liangShanVotes.includes(player.id)) return;
+
+    // 记录投票
+    game.liangShanVotes.push(player.id);
+
+    const totalPlayers = game.players.filter(p => p.status === PlayerStatus.PLAYING || p.status === PlayerStatus.WON).length;
+    const voteCount = game.liangShanVotes.length;
+
+    console.log(`[LiangShan] ${player.name} voted (${voteCount}/${totalPlayers})`);
+
+    // 广播投票进度（通过 actionHistory 记录，客户端检测生成广播消息）
+    // 全员投票 → 结束本局，下把翻倍
+    if (voteCount >= totalPlayers) {
+      console.log(`[LiangShan] All players agreed! Ending round with ×2 multiplier.`);
+
+      // 所有未胡牌玩家标记为输
+      for (const p of game.players) {
+        if (p.status !== PlayerStatus.WON) {
+          p.status = PlayerStatus.LOST;
+        }
+      }
+
+      // 下局全局倍数 ×2
+      const currentGlobal = game.globalMultiplier ?? 1;
+      game.inheritedGlobalMultiplier = calculateGlobalMultiplier(currentGlobal, '造反'); // 复用造反的 ×2 逻辑
+
+      // 结束本局
+      game.phase = GamePhase.CHA_JIAO;
+      game.endReason = GameEndReason.LAST_PLAYER;
+      game.endedAt = Date.now();
+      game.lastActionTime = Date.now();
+
+      // 计算最终分数
+      const winners = game.players.filter(p => p.status === PlayerStatus.WON);
+      const finalScores = calculateGameResult(game.players, winners);
+      game.finalScores = finalScores;
+      for (const p of game.players) {
+        p.score = finalScores[p.id] ?? 0;
+      }
+
+      // 庄家轮转（可选：保持当前庄家）
+      game.inheritedGlobalMultiplier = calculateGlobalMultiplier(currentGlobal, '造反');
+    }
   }
 
   private handleCheatHu(game: GameState, player: Player): void {

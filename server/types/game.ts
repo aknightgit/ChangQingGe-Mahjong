@@ -104,7 +104,8 @@ export enum ActionType {
   HU = 'hu',
   PASS = 'pass',
   CHEAT_HU = 'cheat_hu',
-  REBEL = 'rebel'  // 造反
+  REBEL = 'rebel',  // 造反
+  LIANG_SHAN = 'liang_shan',  // 梁山聚义（投票）
 }
 
 export interface GameAction {
@@ -186,6 +187,7 @@ export interface GameState {
   globalMultiplier?: number;
   inheritedGlobalMultiplier?: number;
   rebelEvent?: RebelEvent;
+  liangShanVotes?: string[];  // 梁山聚义投票者ID列表
   // 可配置参数
   freezeDurationMs?: number;  // 冻结时长（毫秒），默认1000
   diceRollCount?: number;     // 掷骰次数，默认2

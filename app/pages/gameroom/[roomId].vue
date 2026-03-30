@@ -373,6 +373,30 @@
           <!-- 牌局快讯 -->
           <GameBroadcast :messages="broadcastMessages" />
 
+          <!-- 梁山聚义 -->
+          <div class="ext-section" v-if="gameState?.phase === 'playing'">
+            <h3 class="ext-title">特殊行动</h3>
+            <button
+              class="liang-shan-btn"
+              :class="{ 'liang-shan-btn--voted': hasVotedLiangShan, 'liang-shan-btn--active': canLiangShan }"
+              :disabled="!canLiangShan || isInteractionLocked"
+              @click="onLiangShan"
+            >
+              <span class="liang-shan-flame">🔥</span>
+              <span class="liang-shan-text">梁山聚义</span>
+              <span v-if="liangShanVoteCount > 0" class="liang-shan-count">{{ liangShanVoteCount }}/4</span>
+            </button>
+            <p class="ext-meta" v-if="liangShanVoteCount > 0 && !hasVotedLiangShan">
+              {{ liangShanVoteCount }}名玩家已响应，点击加入！
+            </p>
+            <p class="ext-meta" v-else-if="hasVotedLiangShan">
+              已投票，等待其他玩家...
+            </p>
+            <p class="ext-meta" v-else>
+              全员同意则本局结束，下把翻倍！
+            </p>
+          </div>
+
           <!-- 功能菜单：紧贴战绩榜下方 -->
           <div class="ext-section ext-section--actions" v-if="gameState?.phase === 'playing'">
             <h3 class="ext-title">操作</h3>
@@ -1026,6 +1050,21 @@ const onPass = () => { resetAutoCount(); executeAction(ActionType.PASS) }
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); executeAction(ActionType.REBEL) }
 const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); executeAction(ActionType.CHEAT_HU) }
 
+// 梁山聚义
+const canLiangShan = computed(() => availableActions.value.includes(ActionType.LIANG_SHAN))
+const hasVotedLiangShan = computed(() => {
+  const votes = (gameState.value as any)?.liangShanVotes || []
+  return votes.includes(currentPlayer.value?.id)
+})
+const liangShanVoteCount = computed(() => {
+  return ((gameState.value as any)?.liangShanVotes || []).length
+})
+const onLiangShan = () => {
+  resetAutoCount()
+  playSound('tile-rebel')
+  executeAction(ActionType.LIANG_SHAN)
+}
+
 // 圆形操作按钮事件处理
 const handleCircularAction = (type: string) => {
   switch (type) {
@@ -1221,6 +1260,7 @@ const prevPhase = ref<string>('')
 const prevBailoutRelations = ref<string>('')
 const prevBotPlayers = ref<Set<string>>(new Set())
 const prevRebelEvent = ref<any>(null)
+const prevLiangShanVoteCount = ref(0)
 
 watch(() => gameState.value, (newState, oldState) => {
   if (!newState) return
@@ -1276,6 +1316,20 @@ watch(() => gameState.value, (newState, oldState) => {
       }
     }
   }
+
+  // 梁山聚义投票进度
+  const currentVotes = ((newState as any).liangShanVotes || []).length
+  if (currentVotes > prevLiangShanVoteCount.value) {
+    if (currentVotes === 1) {
+      const voter = newState.players?.find((p: any) => p.id === (newState as any).liangShanVotes?.[0])
+      addBroadcast(`🔥 ${voter?.name || '某玩家'} 发起了梁山聚义！`, 'special')
+    } else if (currentVotes >= (newState.players?.length || 4)) {
+      addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
+    } else {
+      addBroadcast(`🔥 有${currentVotes}名玩家响应了上梁山！`, 'special')
+    }
+  }
+  prevLiangShanVoteCount.value = currentVotes
 
   prevPhase.value = newState.phase
   prevWinnersCount.value = newState.winnersCount || 0
@@ -1573,6 +1627,74 @@ const forceDiscard = async (p: Player) => {
   font-size: 0.8rem;
   margin-bottom: 4px;
   opacity: 0.85;
+}
+
+/* 梁山聚义按钮 */
+.liang-shan-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 2px solid rgba(239, 83, 80, 0.6);
+  background: linear-gradient(135deg, rgba(198, 40, 40, 0.3), rgba(239, 83, 80, 0.2));
+  color: #ff8a80;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.liang-shan-btn--active {
+  border-color: rgba(239, 83, 80, 0.9);
+  background: linear-gradient(135deg, rgba(198, 40, 40, 0.5), rgba(239, 83, 80, 0.35));
+  color: #ff5252;
+  animation: liang-shan-pulse 2s ease-in-out infinite;
+}
+
+.liang-shan-btn--active:hover {
+  transform: scale(1.03);
+  box-shadow: 0 0 20px rgba(239, 83, 80, 0.4);
+}
+
+.liang-shan-btn--active:active {
+  transform: scale(0.97);
+}
+
+.liang-shan-btn--voted {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(40, 40, 40, 0.5);
+  color: rgba(255, 255, 255, 0.3);
+  cursor: default;
+  animation: none;
+}
+
+.liang-shan-btn:disabled {
+  cursor: default;
+}
+
+.liang-shan-flame {
+  font-size: 1.2rem;
+}
+
+.liang-shan-count {
+  background: rgba(239, 83, 80, 0.3);
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+}
+
+.liang-shan-btn--voted .liang-shan-count {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+@keyframes liang-shan-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(239, 83, 80, 0.2); }
+  50% { box-shadow: 0 0 20px rgba(239, 83, 80, 0.5); }
 }
 
 /* ===== 座位定位 ===== */
