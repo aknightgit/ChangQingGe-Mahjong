@@ -192,7 +192,46 @@
           </div>
         </section>
 
-        <!-- 六、杠与抢杠 -->
+        <!-- 六、梁山聚义 -->
+        <section :id="'liangshan'" class="rule-section">
+          <h2>🔥 梁山聚义</h2>
+          <div class="rule-grid">
+            <div class="rule-card special-card rebel-card">
+              <h3>📜 聚义规则</h3>
+              <ul>
+                <li>仅<strong>4人全是真人</strong>时开启</li>
+                <li>有AI参与的局<strong>不显示</strong>此按钮</li>
+                <li>仅前<strong>3个回合</strong>可投票</li>
+                <li>每个活跃玩家可点击一次</li>
+                <li>点击后不可撤回</li>
+              </ul>
+            </div>
+            <div class="rule-card special-card">
+              <h3>🎯 投票机制</h3>
+              <ul>
+                <li>全员同意 → 本局<strong>立即结束</strong></li>
+                <li>下局全局倍数 <strong>×2</strong></li>
+                <li>未胡牌玩家标记为输</li>
+                <li>已胡牌玩家正常结算</li>
+              </ul>
+              <p class="special-effect">🔥 第1人 → "XXX 发起了梁山聚义！"</p>
+              <p class="special-effect">🔥 N人 → "有N名玩家响应了梁山聚义！"</p>
+              <p class="special-effect">🔥🔥🔥 全员 → "全员响应梁山聚义！本局结束，下把翻倍！"</p>
+            </div>
+            <div class="rule-card special-card">
+              <h3>💰 被聚义QJ线</h3>
+              <ul>
+                <li>建房时可设置（默认 <strong>1000</strong>）</li>
+                <li>累积赢分超过QJ线的玩家</li>
+                <li><strong>无否决权</strong>，自动视为同意</li>
+                <li>仅计算有效战绩（纯人类对局）</li>
+              </ul>
+              <p class="special-effect">⚠️ 已经赢真人玩家超过设定数字的人类玩家，没有"梁山聚义"的否决权，只能被动接受。</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- 七、杠与抢杠 -->
         <section :id="'kong'" class="rule-section">
           <h2>🎯 杠与抢杠</h2>
           <div class="rule-grid">
@@ -328,6 +367,7 @@ const sections = [
   { id: 'patterns', title: '牌型', icon: '🏆' },
   { id: 'formula', title: '公式', icon: '🔢' },
   { id: 'special', title: '特殊', icon: '⚡' },
+  { id: 'liangshan', title: '聚义', icon: '🔥' },
   { id: 'kong', title: '杠', icon: '🎯' },
   { id: 'multiplier', title: '翻倍', icon: '✖️' },
   { id: 'bonus', title: '加成', icon: '🌟' },
