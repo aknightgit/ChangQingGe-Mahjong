@@ -55,6 +55,221 @@ export function buildWildTileChecker(wildTileId: string | null, wildTileGroup?: 
   };
 }
 
+/**
+ * Create a virtual hand with wild tiles replaced by assigned values.
+ */
+function makeVirtualHand(handTiles: Tile[], wildSuit: string, wildValue: number, assignments: Array<{suit: string, value: number}>): Tile[] {
+  const nonWild = handTiles.filter(t => !(t.suit === wildSuit && t.value === wildValue))
+  const virtualAssigned = assignments.map((a, i) => ({
+    ...handTiles.find(t => t.suit === wildSuit && t.value === wildValue)!,
+    id: `wild-virtual-${i}`,
+    suit: a.suit as TileSuit,
+    value: a.value,
+    isWild: false
+  }))
+  return [...nonWild, ...virtualAssigned]
+}
+
+/**
+ * Find the best wild tile assignment that maximizes hand type priority.
+ * Priority: FENG_PENG > QING_PENG > HUN_PENG > ALL_WIND > FULL_FLUSH > HALF_FLUSH > ALL_TRIPLETS > DA_DIAO
+ * Arrow triplets (中发白) get +2 fan, wind triplets get +1 fan.
+ */
+function findBestWildAssignment(
+  handTiles: Tile[],
+  exposedMelds: Meld[],
+  wildSuit: string,
+  wildValue: number,
+  isSelfDrawn: boolean,
+  flowerCount: number,
+  wildTileGroup?: string[]
+): { hand: Tile[]; types: HandType[] } {
+  const wilds = handTiles.filter(t => t.suit === wildSuit && t.value === wildValue)
+  const wildCount = wilds.length
+  if (wildCount === 0) {
+    return { hand: handTiles, types: detectHandTypesInternal(handTiles, exposedMelds, isSelfDrawn, flowerCount, null, wildTileGroup) }
+  }
+
+  const nonWild = handTiles.filter(t => !(t.suit === wildSuit && t.value === wildValue))
+  const groups = groupTiles(nonWild)
+  const isDragon = (t: Tile) => t.suit === TileSuit.DRAGON
+  const isWind = (t: Tile) => t.suit === TileSuit.WIND
+
+  // Generate candidate tiles to assign wilds to (sorted by priority)
+  const candidates: Array<{suit: string, value: number, priority: number}> = []
+  const seen = new Set<string>()
+
+  for (const [, group] of groups) {
+    if (group.length === 0) continue
+    const tile = group[0]
+    const key = `${tile.suit}-${tile.value}`
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    if (group.length === 1) {
+      // Need 2 wilds for triplet
+      const prio = isDragon(tile) ? 100 : isWind(tile) ? 90 : 50
+      candidates.push({ suit: tile.suit, value: tile.value, priority: prio })
+    } else if (group.length === 2) {
+      // Need 1 wild for triplet
+      const prio = isDragon(tile) ? 110 : isWind(tile) ? 100 : 60
+      candidates.push({ suit: tile.suit, value: tile.value, priority: prio })
+    }
+    // group.length >= 3: already a triplet, don't assign wild here
+  }
+
+  // Sort by priority descending
+  candidates.sort((a, b) => b.priority - a.priority)
+
+  // Try all valid assignments
+  let bestResult = { hand: handTiles, types: [] as HandType[] }
+  let bestScore = -1
+
+  function tryAssignments(remaining: number, assignIdx: number, current: Array<{suit: string, value: number}>) {
+    if (remaining === 0 || assignIdx >= candidates.length) {
+      // Pad remaining with first candidate (duplicate assignment)
+      while (current.length < wildCount && candidates.length > 0) {
+        current.push({ suit: candidates[0].suit, value: candidates[0].value })
+      }
+      if (current.length < wildCount) return
+
+      const vHand = makeVirtualHand(handTiles, wildSuit, wildValue, current)
+      const types = detectHandTypesInternal(vHand, exposedMelds, isSelfDrawn, flowerCount, null, wildTileGroup)
+      const score = scoreHandTypes(types)
+      if (score > bestScore) {
+        bestScore = score
+        bestResult = { hand: vHand, types }
+      }
+      return
+    }
+
+    const c = candidates[assignIdx]
+    // How many of this tile do we have in nonWild?
+    const count = nonWild.filter(t => t.suit === c.suit && t.value === c.value).length
+    const needed = Math.min(3 - count, remaining) // max wilds to assign to this tile
+
+    for (let use = 0; use <= needed; use++) {
+      const next = [...current]
+      for (let i = 0; i < use; i++) next.push({ suit: c.suit, value: c.value })
+      tryAssignments(remaining - use, assignIdx + 1, next)
+    }
+  }
+
+  tryAssignments(wildCount, 0, [])
+  return bestResult
+}
+
+function scoreHandTypes(types: HandType[]): number {
+  // Higher = better
+  const scores: Record<string, number> = {
+    'feng_peng': 7,
+    'qing_peng': 6,
+    'hun_peng': 5,
+    'all_wind': 4,
+    'full_flush': 3,
+    'half_flush': 2,
+    'all_triplets': 1,
+    'da_diao': 0,
+    'eight_flowers': 0,
+    'four_wild': 0,
+  }
+  let max = -1
+  for (const t of types) {
+    if ((scores[t] ?? -1) > max) max = scores[t] ?? -1
+  }
+  return max
+}
+
+/**
+ * Internal detectHandTypes that works on already-substituted virtual hand (no wild tiles).
+ */
+function detectHandTypesInternal(
+  handTiles: Tile[],
+  exposedMelds: Meld[],
+  isSelfDrawn: boolean,
+  flowerCount: number,
+  _wildTileId: string | null,
+  wildTileGroup?: string[]
+): HandType[] {
+  const types: HandType[] = []
+  const isWildTile = buildWildTileChecker(null, wildTileGroup)
+
+  const allTiles = [
+    ...handTiles,
+    ...exposedMelds.flatMap(m => m.tiles)
+  ]
+  const nonFlowerTiles = allTiles.filter(t => !isFlower(t))
+
+  // Check if standard win
+  const winResult = canWin(handTiles, exposedMelds.length, isWildTile)
+  if (!winResult.canWin) return []
+
+  // All triplets (碰碰胡) - no wild tiles in virtual hand, use simple check
+  if (isAllTripletsHandSimple(handTiles, exposedMelds)) {
+    types.push(HandType.ALL_TRIPLETS)
+  }
+
+  // 风一色
+  const isAllWindOrDragonTiles = nonFlowerTiles.every(t => isWind(t) || isDragon(t))
+  if (isAllWindOrDragonTiles) {
+    types.push(HandType.ALL_WIND)
+    if (types.includes(HandType.ALL_TRIPLETS)) {
+      types.push(HandType.FENG_PENG)
+    }
+  }
+
+  // 清一色
+  if (!types.includes(HandType.ALL_WIND) && isFullFlushHand(nonFlowerTiles)) {
+    types.push(HandType.FULL_FLUSH)
+    if (types.includes(HandType.ALL_TRIPLETS)) {
+      types.push(HandType.QING_PENG)
+    }
+  }
+
+  // 混一色
+  if (!types.includes(HandType.FULL_FLUSH) && !types.includes(HandType.ALL_WIND) && isHalfFlushHand(nonFlowerTiles)) {
+    types.push(HandType.HALF_FLUSH)
+    if (types.includes(HandType.ALL_TRIPLETS)) {
+      types.push(HandType.HUN_PENG)
+    }
+  }
+
+  // 八花自摸
+  if (isSelfDrawn && flowerCount >= 8) {
+    types.push(HandType.EIGHT_FLOWERS)
+  }
+
+  // 大吊
+  if (isDaDiao(handTiles, exposedMelds)) {
+    types.push(HandType.DA_DIAO)
+  }
+
+  return types.sort((a, b) => HAND_TYPE_PRIORITY[b] - HAND_TYPE_PRIORITY[a])
+}
+
+/**
+ * Simple all-triplets check for virtual hand (no wild tiles).
+ */
+function isAllTripletsHandSimple(handTiles: Tile[], exposedMelds: Meld[]): boolean {
+  for (const meld of exposedMelds) {
+    if (meld.type === MeldType.SEQUENCE) return false
+  }
+  const nonFlower = handTiles.filter(t => !isFlower(t))
+  const groups = groupTiles(nonFlower)
+  let triplets = 0
+  let pairs = 0
+  for (const [, group] of groups) {
+    if (group.length >= 3) triplets++
+    else if (group.length === 2) pairs++
+    else return false // single = not all triplets
+  }
+  const expectedTriplets = 4 - exposedMelds.length
+  return triplets >= expectedTriplets && pairs >= 1
+}
+
+/**
+ * 主入口：百搭最优替代 → 牌型判定
+ */
 export function detectHandTypes(
   handTiles: Tile[],
   exposedMelds: Meld[],
@@ -63,85 +278,26 @@ export function detectHandTypes(
   wildTileId: string | null,
   wildTileGroup?: string[]
 ): HandType[] {
-  const types: HandType[] = [];
-  const isWildTile = buildWildTileChecker(wildTileId, wildTileGroup);
-
-  // Combine hand tiles + exposed meld tiles for analysis
-  const allTiles = [
-    ...handTiles,
-    ...exposedMelds.flatMap(m => m.tiles)
-  ];
-  const nonFlowerTiles = allTiles.filter(t => !isFlower(t));
-
-  // Check if standard win (4面子1雀头)
-  const winResult = canWin(handTiles, exposedMelds.length, isWildTile);
-  if (!winResult.canWin) return []; // Not a winning hand at all
-
-  // Check for all triplets (碰碰胡)
-  // Pass wild tile info so 百搭 can substitute for missing tiles
-  let wildSuit: string | undefined;
-  let wildValue: number | undefined;
-  if (wildTileId) {
-    const [s, v] = wildTileId.split('-');
-    if (s && v) {
-      wildSuit = s;
-      wildValue = parseInt(v, 10);
-    }
-  }
-  if (isAllTripletsHand(handTiles, exposedMelds, wildSuit, wildValue)) {
-    types.push(HandType.ALL_TRIPLETS);
+  if (!wildTileId) {
+    // No wild tile, use internal directly
+    return detectHandTypesInternal(handTiles, exposedMelds, isSelfDrawn, flowerCount, null, wildTileGroup)
   }
 
-  // Check for all honor tiles (风一色) — 包括风牌+箭牌+百搭
-  const isWindOrDragon = isAllWindOrDragon(nonFlowerTiles, isWildTile);
+  const [s, v] = wildTileId.split('-')
+  if (!s || !v) return detectHandTypesInternal(handTiles, exposedMelds, isSelfDrawn, flowerCount, null, wildTileGroup)
 
-  if (isWindOrDragon) {
-    types.push(HandType.ALL_WIND);
-    if (types.includes(HandType.ALL_TRIPLETS)) {
-      types.push(HandType.FENG_PENG);
-    }
+  const wildSuit = s
+  const wildValue = parseInt(v, 10)
+  const wildCount = handTiles.filter(t => t.suit === wildSuit && t.value === wildValue).length
+
+  if (wildCount === 0) {
+    return detectHandTypesInternal(handTiles, exposedMelds, isSelfDrawn, flowerCount, wildTileId, wildTileGroup)
   }
 
-  // Check for full flush (清一色) - all same number suit
-  if (!types.includes(HandType.ALL_WIND) && isFullFlushHand(nonFlowerTiles)) {
-    types.push(HandType.FULL_FLUSH);
-
-    // 清碰 = 清一色 + 碰碰胡
-    if (types.includes(HandType.ALL_TRIPLETS)) {
-      types.push(HandType.QING_PENG);
-    }
-  }
-
-  // Check for half flush (混一色)
-  if (!types.includes(HandType.FULL_FLUSH) && !types.includes(HandType.ALL_WIND) && isHalfFlushHand(nonFlowerTiles, wildSuit, wildValue)) {
-    types.push(HandType.HALF_FLUSH);
-
-    // 混碰 = 混一色 + 碰碰胡
-    if (types.includes(HandType.ALL_TRIPLETS)) {
-      types.push(HandType.HUN_PENG);
-    }
-  }
-
-  // Eight flowers (八花自摸)
-  if (isSelfDrawn && flowerCount >= 8) {
-    types.push(HandType.EIGHT_FLOWERS);
-  }
-
-  // Four wild tiles (四百搭)
-  if (wildTileId && countWildTiles(handTiles, isWildTile) >= 4) {
-    types.push(HandType.FOUR_WILD);
-  }
-
-  // 大吊：手牌（不含门口）仅剩单张听牌
-  // 即 concealedTiles 在胡牌后为 14 张（4面子+1雀头=13张 + 胡牌1张=14张），
-  // 但胡牌前手牌只有 2 张（1张单听 + 1张胡来的牌），
-  // 更准确的判断：门口副露占了 3 组面子，手牌只剩 2 张（听牌+胡牌）= 大吊
-  // 或者：门口副露占了 4 组面子，手牌只剩 2 张（雀头，但只听其中一张）
-  if (isDaDiao(handTiles, exposedMelds)) {
-    types.push(HandType.DA_DIAO);
-  }
-
-  // Sort by priority
+  // Find best wild assignment, then detect types on virtual hand
+  const best = findBestWildAssignment(handTiles, exposedMelds, wildSuit, wildValue, isSelfDrawn, flowerCount, wildTileGroup)
+  return best.types
+}
   return types.sort((a, b) => HAND_TYPE_PRIORITY[b] - HAND_TYPE_PRIORITY[a]);
 }
 
@@ -225,17 +381,10 @@ function isFullFlushHand(tiles: Tile[]): boolean {
 
 /**
  * Check if tiles are one number suit + honors (混一色)
- * Wild tiles are excluded from suit check since they can represent any suit
+ * Called on virtual hand (wild tiles already substituted).
  */
-function isHalfFlushHand(tiles: Tile[], wildSuit?: string, wildValue?: number): boolean {
-  // Exclude wild tiles from suit check
-  const nonFlowerTiles = tiles.filter(t => {
-    if (isFlower(t)) return false;
-    if (wildSuit !== undefined && wildValue !== undefined) {
-      if (t.suit === wildSuit && t.value === wildValue) return false;
-    }
-    return true;
-  });
+function isHalfFlushHand(tiles: Tile[]): boolean {
+  const nonFlowerTiles = tiles.filter(t => !isFlower(t));
   if (nonFlowerTiles.length === 0) return false;
 
   const suits = getSuits(nonFlowerTiles);
