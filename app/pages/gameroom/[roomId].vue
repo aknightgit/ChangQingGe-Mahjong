@@ -32,6 +32,15 @@
       </header>
 
       <main class="room-main">
+        <!-- 梁山聚义成功弹窗 -->
+        <div v-if="showLiangShanOverlay" class="liang-shan-overlay">
+          <div class="liang-shan-card">
+            <div class="liang-shan-icon">🔥🔥🔥</div>
+            <p class="liang-shan-title">聚义成功，共上梁山！</p>
+            <p class="liang-shan-sub">本局结束 · 下把翻倍</p>
+          </div>
+        </div>
+
         <div v-if="isOverlayVisible" class="game-over-overlay">
           <div class="game-over-card">
             <p class="overlay-title">{{ overlayTitle }}</p>
@@ -1479,6 +1488,7 @@ const prevBailoutRelations = ref<string>('')
 const prevBotPlayers = ref<Set<string>>(new Set())
 const prevRebelEvent = ref<any>(null)
 const prevLiangShanVoteCount = ref(0)
+const showLiangShanOverlay = ref(false)
 const activePlayerCount = (state: any) => (state?.players || []).filter((p: any) => p.status === 'playing').length
 
 watch(() => gameState.value, (newState, oldState) => {
@@ -1544,6 +1554,11 @@ watch(() => gameState.value, (newState, oldState) => {
       addBroadcast(`🔥 ${voter?.name || '某玩家'} 发起了梁山聚义！`, 'special')
     } else if (currentVotes >= activePlayerCount(newState)) {
       addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
+      // 显示梁山聚义成功弹窗，0.2s 后消失
+      showLiangShanOverlay.value = true
+      setTimeout(() => {
+        showLiangShanOverlay.value = false
+      }, 200)
     } else {
       addBroadcast(`🔥 有${currentVotes}名玩家响应了梁山聚义！`, 'special')
     }
@@ -2281,6 +2296,59 @@ const forceDiscard = async (p: Player) => {
 
 .panel-button.danger:hover {
   background: rgba(160, 38, 38, 1);
+}
+
+/* ===== 梁山聚义成功弹窗 ===== */
+.liang-shan-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 10, 8, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  animation: liangShanFadeIn 0.1s ease-out;
+}
+
+.liang-shan-card {
+  background: linear-gradient(135deg, rgba(180, 40, 10, 0.95), rgba(120, 20, 5, 0.95));
+  border: 2px solid rgba(255, 180, 50, 0.6);
+  border-radius: 20px;
+  padding: 40px 48px;
+  text-align: center;
+  box-shadow: 0 0 60px rgba(255, 100, 20, 0.4), 0 12px 32px rgba(0, 0, 0, 0.6);
+  animation: liangShanPop 0.12s ease-out;
+}
+
+.liang-shan-icon {
+  font-size: 2.8rem;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 0 8px rgba(255, 150, 50, 0.8));
+}
+
+.liang-shan-title {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #ffe27a;
+  margin: 0 0 8px;
+  text-shadow: 0 0 12px rgba(255, 200, 50, 0.6);
+}
+
+.liang-shan-sub {
+  font-size: 1rem;
+  color: rgba(255, 220, 160, 0.9);
+  margin: 0;
+  font-weight: 600;
+}
+
+@keyframes liangShanFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes liangShanPop {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
 }
 
 /* ===== 游戏结束浮层 ===== */
