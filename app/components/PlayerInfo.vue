@@ -2,8 +2,10 @@
   <div class="player-info" :class="[{ 'player-info--active': isActive, 'player-info--winner': isWinner }, `player-info--${position}`]">
     <!-- 位置颜色圆圈 -->
     <span class="position-dot" :class="`dot--${positionColor}`"></span>
-    <!-- Q版头像（自己不需要） -->
-    <span v-if="avatar" class="avatar">{{ avatar }}</span>
+    <!-- Q版头像 SVG 组件 -->
+    <PlayerAvatar v-if="showAvatar" :name="name" :mood="avatarMood" :size="28" />
+    <!-- 旧 Emoji 头像（兼容） -->
+    <span v-else-if="avatar" class="avatar">{{ avatar }}</span>
     <span class="player-name">{{ name }}</span>
     <span v-if="isDealer" class="dealer-badge">庄</span>
     <span v-if="isWinner" class="win-badge">胡</span>
@@ -13,6 +15,8 @@
 </template>
 
 <script setup lang="ts">
+import PlayerAvatar, { type AvatarMood } from './PlayerAvatar.vue'
+
 const props = defineProps<{
   name: string
   score?: number
@@ -21,6 +25,8 @@ const props = defineProps<{
   isWinner?: boolean
   isDealer?: boolean
   avatar?: string
+  avatarMood?: AvatarMood
+  showAvatar?: boolean
 }>()
 
 const formattedScore = computed(() => {

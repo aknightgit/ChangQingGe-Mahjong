@@ -8,7 +8,7 @@
 
 import { Tile, Meld, MeldType, TileSuit, Player } from '../types/game';
 import { isFlower, isWind, isDragon, groupTiles, tilesEqual, getTileDisplayName } from './tiles';
-import { HandType, HAND_TYPE_PRIORITY, canWin } from './handValidator';
+import { HandType, HAND_TYPE_PRIORITY, canWin, canWinSevenPairs } from './handValidator';
 
 // ===== 固定番数牌型 =====
 const FIXED_FAN: Record<string, number> = {
