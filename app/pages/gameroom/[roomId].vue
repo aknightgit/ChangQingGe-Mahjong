@@ -298,7 +298,10 @@
             <span class="compass compass--e">{{ rightPlayer?.name || '东' }}</span>
             <!-- 状态消息（非中心显示） -->
             <div class="turn-indicator">
-              <span v-if="isWinner" class="turn-win">🎉 你赢了！</span>
+              <span v-if="thinkFreezeActive" class="think-freeze-indicator">
+                🧠 {{ thinkFreezePlayerName }} 在思考中... {{ thinkFreezeCountdown }}s
+              </span>
+              <span v-else-if="isWinner" class="turn-win">🎉 你赢了！</span>
               <span v-if="isWinner && gameState?.phase === 'playing'" class="spectator-bar">
                 <span class="spectator-label">👁 观战：</span>
                 <button
@@ -459,7 +462,14 @@
                     :disabled="isInteractionLocked"
                     @click="onRebel"
                   >🚨造反</button>
-                  <div v-if="!showDraw && !showChow && !showPeng && !showKong && !showHu && !showPass && !showConcealedKong && !showExtendedKong && !showRebel" class="inline-action-waiting">
+                  <button
+                    v-if="showThink"
+                    class="inline-action-btn inline-action-btn--think"
+                    :class="{ 'inline-action-btn--think-depleted': thinkRemaining <= 0 }"
+                    :disabled="isInteractionLocked || thinkRemaining <= 0"
+                    @click="onThink"
+                  >等*{{ thinkRemaining }}</button>
+                  <div v-if="!showDraw && !showChow && !showPeng && !showKong && !showHu && !showPass && !showConcealedKong && !showExtendedKong && !showRebel && !showThink" class="inline-action-waiting">
                     等待中…
                   </div>
                 </div>
@@ -1210,6 +1220,38 @@ const showKong = computed(() => availableActions.value.includes(ActionType.KONG)
 const showHu = computed(() => availableActions.value.includes(ActionType.HU))
 const showPass = computed(() => availableActions.value.includes(ActionType.PASS))
 const showRebel = computed(() => availableActions.value.includes(ActionType.REBEL))
+const showThink = computed(() => availableActions.value.includes(ActionType.THINK))
+const thinkRemaining = computed(() => {
+  if (!gameState.value || !currentPlayer.value) return 0
+  const maxChances = (gameState.value as any).thinkChances ?? 3
+  const used = (gameState.value as any).thinkUsage?.[currentPlayer.value.id] ?? 0
+  return maxChances - used
+})
+// 等我想一想冻结状态
+const thinkFreezeActive = computed(() => {
+  const until = (gameState.value as any)?.thinkFreezeUntil
+  return until && until > Date.now()
+})
+const thinkFreezePlayerName = computed(() => {
+  const pid = (gameState.value as any)?.thinkFreezePlayerId
+  if (!pid || !gameState.value) return ''
+  return gameState.value.players.find(p => p.id === pid)?.name || ''
+})
+const thinkFreezeCountdown = ref(0)
+let thinkCountdownTimer: any = null
+watch(thinkFreezeActive, (active) => {
+  if (thinkCountdownTimer) clearInterval(thinkCountdownTimer)
+  if (active) {
+    const update = () => {
+      const until = (gameState.value as any)?.thinkFreezeUntil || 0
+      thinkFreezeCountdown.value = Math.max(0, Math.ceil((until - Date.now()) / 1000))
+    }
+    update()
+    thinkCountdownTimer = setInterval(update, 500)
+  } else {
+    thinkFreezeCountdown.value = 0
+  }
+})
 
 // 胡牌面板状态
 const showHuPanel = ref(false)
@@ -1345,6 +1387,7 @@ const onPeng = () => { resetAutoCount(); playSound('tile-pong'); executeAction(A
 const onKong = () => { resetAutoCount(); playSound('tile-kong'); executeAction(ActionType.KONG) }
 const onPass = () => { resetAutoCount(); executeAction(ActionType.PASS) }
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); executeAction(ActionType.REBEL) }
+const onThink = () => { resetAutoCount(); executeAction(ActionType.THINK) }
 const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); executeAction(ActionType.CHEAT_HU) }
 
 // 退房结算
@@ -2270,6 +2313,37 @@ const forceDiscard = async (p: Player) => {
   color: #fff;
   border-color: #ffd700;
   animation: heartbeat 1.2s ease-in-out infinite;
+}
+
+.inline-action-btn--think {
+  background: linear-gradient(135deg, #7c3aed, #8b5cf6);
+  color: #fff;
+  border-color: rgba(139, 92, 246, 0.5);
+  font-size: 0.85rem;
+  animation: think-pulse 2s infinite;
+}
+
+.inline-action-btn--think-depleted {
+  background: rgba(100, 100, 100, 0.5);
+  color: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.1);
+  animation: none;
+}
+
+@keyframes think-pulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(139, 92, 246, 0.3); }
+  50% { box-shadow: 0 0 16px rgba(139, 92, 246, 0.7); }
+}
+
+.think-freeze-indicator {
+  color: #8b5cf6;
+  font-weight: 700;
+  animation: think-indicator-pulse 1s infinite;
+}
+
+@keyframes think-indicator-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 
 .inline-action-btn--comeback {

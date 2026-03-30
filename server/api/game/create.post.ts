@@ -14,7 +14,8 @@ export default defineEventHandler(async (event) => {
   try {
     const result = await gameManager.createGame(playerName, {
       firstRoundDouble: body.firstRoundDouble ?? true,
-      liangShanThreshold: body.liangShanThreshold ?? 1000
+      liangShanThreshold: body.liangShanThreshold ?? 1000,
+      thinkChances: body.thinkChances ?? 3
     });
     
     return {

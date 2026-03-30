@@ -207,6 +207,13 @@
             <span class="create-hint">累积赢分超过此值的玩家无否决权（默认1000，仅4人真人局生效）</span>
           </div>
 
+          <!-- 等我想一想机会次数 -->
+          <div class="create-field">
+            <label>等我想一想 次数</label>
+            <input type="number" v-model.number="createParams.thinkChances" min="0" max="10" />
+            <span class="create-hint">每局可用「等」冻结对手的次数（默认3次，每次8秒）</span>
+          </div>
+
           <!-- AI玩家选择（可展开/收起） -->
           <div class="create-field">
             <button class="ai-toggle-btn" @click="showAISelection = !showAISelection">
@@ -263,7 +270,8 @@ const createParams = reactive({
   maxDiceRolls: 2,
   freezeSeconds: 1,
   firstRoundDouble: true,
-  liangShanThreshold: 1000
+  liangShanThreshold: 1000,
+  thinkChances: 3
 })
 
 // AI玩家选择
@@ -294,7 +302,8 @@ const confirmCreateGame = async () => {
       body: {
         playerName: userName.value || 'Player 1',
         firstRoundDouble: createParams.firstRoundDouble,
-        liangShanThreshold: createParams.liangShanThreshold
+        liangShanThreshold: createParams.liangShanThreshold,
+        thinkChances: createParams.thinkChances
       },
       headers: { 'Cache-Control': 'no-cache' }
     })

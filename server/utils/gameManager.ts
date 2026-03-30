@@ -380,7 +380,7 @@ class GameManager {
     return String(Date.now()).slice(-4);
   }
 
-  async createGame(playerName: string, options?: { freezeDurationMs?: number; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number }): Promise<{ gameId: string; playerId: string }> {
+  async createGame(playerName: string, options?: { freezeDurationMs?: number; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number }): Promise<{ gameId: string; playerId: string }> {
     await this.hydrateFromDatabase();
 
     const gameId = randomUUID();
@@ -436,7 +436,9 @@ class GameManager {
       rebelEvent: undefined,
       freezeDurationMs: options?.freezeDurationMs ?? 1000,
       diceRollCount: options?.diceRollCount ?? 2,
-      liangShanThreshold: options?.liangShanThreshold ?? 1000
+      liangShanThreshold: options?.liangShanThreshold ?? 1000,
+      thinkChances: options?.thinkChances ?? 3,
+      thinkUsage: {}
     };
 
     this.games.set(gameId, game);
@@ -553,6 +555,9 @@ class GameManager {
     game.finalScores = undefined;
     game.customScoringMode = null;
     game.freezeDurationMs = options?.freezeDurationMs || 1000; // 默认冻结1秒
+    game.thinkUsage = {};  // 每局重置「等我想一想」使用次数
+    game.thinkFreezeUntil = undefined;
+    game.thinkFreezePlayerId = undefined;
 
     // 🎲 随机选位置：洗牌玩家座位
     const shuffledIndices = Array.from({ length: game.players.length }, (_, i) => i);
@@ -770,6 +775,19 @@ class GameManager {
       }
     }
 
+    // 等我想一想：有胡/碰/杠选项时可用，每局限定次数
+    const hasPriorityActions = actions.some(a =>
+      a === ActionType.HU || a === ActionType.PENG || a === ActionType.KONG ||
+      a === ActionType.CONCEALED_KONG || a === ActionType.EXTENDED_KONG
+    );
+    if (hasPriorityActions) {
+      const maxChances = game.thinkChances ?? 3;
+      const used = game.thinkUsage?.[playerId] ?? 0;
+      if (used < maxChances) {
+        actions.push(ActionType.THINK);
+      }
+    }
+
     // If it's the player's turn, allow turn actions
     // freeze 百搭期间不能出牌/摸牌
     // 其他玩家有 pending claim 时，当前玩家等待（冻结窗口给抢牌机会）
@@ -956,6 +974,10 @@ class GameManager {
 
       case ActionType.LIANG_SHAN:
         this.handleLiangShan(game, player);
+        break;
+
+      case ActionType.THINK:
+        this.handleThink(game, player);
         break;
 
       case ActionType.PASS:
@@ -1693,6 +1715,59 @@ class GameManager {
       }
     }
     // 未全票 → 游戏正常继续，不结束
+  }
+
+  /**
+   * 等我想一想：冻结其他玩家8秒，给自己思考时间
+   * - 每局限定次数（默认3次）
+   * - 只有有胡/碰/杠选项时可用
+   * - 冻结期间其他家不能操作
+   */
+  private handleThink(game: GameState, player: Player): void {
+    if (game.phase !== GamePhase.PLAYING) return;
+
+    const maxChances = game.thinkChances ?? 3;
+    if (!game.thinkUsage) game.thinkUsage = {};
+    const used = game.thinkUsage[player.id] ?? 0;
+    if (used >= maxChances) return;
+
+    // 扣减次数
+    game.thinkUsage[player.id] = used + 1;
+    const remaining = maxChances - used - 1;
+
+    // 冻结8秒
+    game.thinkFreezeUntil = Date.now() + 8000;
+    game.thinkFreezePlayerId = player.id;
+
+    console.log(`[Think] ${player.name} 使用「等我想一想」，剩余${remaining}次，冻结8秒`);
+
+    // 8秒后自动解冻
+    const gameId = game.gameId;
+    const expectedPlayerId = player.id;
+    setTimeout(async () => {
+      try {
+        const freshGame = await this.getGame(gameId);
+        if (!freshGame) return;
+        if (freshGame.thinkFreezePlayerId === expectedPlayerId) {
+          freshGame.thinkFreezeUntil = undefined;
+          freshGame.thinkFreezePlayerId = undefined;
+          await this.persistGame(freshGame);
+          this.broadcastGameState(gameId);
+          console.log(`[Think] ${player.name} 的思考时间结束`);
+        }
+      } catch (err) {
+        console.error('[Think] Error:', err);
+      }
+    }, 8000);
+
+    // 广播倒计时
+    if (this.wsManager) {
+      this.wsManager.broadcast(gameId, 'thinkFreeze', {
+        playerName: player.name,
+        remaining,
+        expiresAt: game.thinkFreezeUntil
+      });
+    }
   }
 
   /**

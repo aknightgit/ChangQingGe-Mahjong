@@ -77,7 +77,8 @@ export enum ActionType {
   PASS = 'pass',
   CHEAT_HU = 'cheat_hu',
   REBEL = 'rebel',  // 造反
-  LIANG_SHAN = 'liang_shan'  // 梁山聚义
+  LIANG_SHAN = 'liang_shan',  // 梁山聚义
+  THINK = 'think'  // 等我想一想
 }
 
 export interface GameAction {

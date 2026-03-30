@@ -106,6 +106,7 @@ export enum ActionType {
   CHEAT_HU = 'cheat_hu',
   REBEL = 'rebel',  // 造反
   LIANG_SHAN = 'liang_shan',  // 梁山聚义（投票）
+  THINK = 'think',  // 等我想一想
 }
 
 export interface GameAction {
@@ -205,6 +206,10 @@ export interface GameState {
   freezeDurationMs?: number;  // 冻结时长（毫秒），默认1000
   diceRollCount?: number;     // 掷骰次数，默认2
   liangShanThreshold?: number;  // 梁山聚义被QJ线（累积赢分阈值），默认1000
+  thinkChances?: number;      // 等我想一想机会次数，默认3
+  thinkUsage?: Record<string, number>;  // 每位玩家本局已使用「等」次数
+  thinkFreezeUntil?: number;  // 等我想一想冻结结束时间戳
+  thinkFreezePlayerId?: string;  // 触发等我想一想的玩家ID
   // 谢谢带头大哥追踪
   consecutiveDiscards?: { suit: string; value: number; playerIds: string[] } | null;
   leadingBrotherEvent?: { firstPlayerId: string; tileKey: string } | null;
