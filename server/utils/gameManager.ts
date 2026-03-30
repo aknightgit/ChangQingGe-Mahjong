@@ -1539,6 +1539,11 @@ class GameManager {
       return;
     }
 
+    // 胡牌后立即解冻：清除所有 pending actions 和冻结状态
+    game.pendingActions = [];
+    delete (game as any)._freezeUntil;
+    this.clearPendingActionTimer(game.gameId);
+
     // 一炮多响 / 抢杠多响：若还有同张牌可胡玩家，等待其继续响应
     if (!isSelfDrawn && game.pendingActions.length > 0) {
       return;
@@ -1551,7 +1556,7 @@ class GameManager {
       return;
     }
 
-    // Continue playing
+    // Continue playing from next active player
     if (!isSelfDrawn && game.multiHuStarterIndex !== undefined) {
       const starter = game.multiHuStarterIndex;
       game.multiHuStarterIndex = undefined;
@@ -1564,7 +1569,14 @@ class GameManager {
       }
     }
 
-    this.moveToNextPlayer(game);
+    // 从胡牌玩家的下家开始继续
+    const winnerIndex = game.players.findIndex(p => p.id === player.id);
+    const nextPlayer = this.getNextActivePlayer(game, winnerIndex);
+    if (nextPlayer) {
+      game.currentPlayerIndex = nextPlayer.position;
+      console.log(`[handleHu] ${player.name}胡牌，从${nextPlayer.name}继续牌局`);
+    }
+    await this.moveToNextPlayer(game);
   }
 
   /**
