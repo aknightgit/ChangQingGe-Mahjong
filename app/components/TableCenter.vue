@@ -1,30 +1,39 @@
 <template>
   <div class="table-center-zone">
-    <!-- 牌墙：双层2.5D效果 -->
-    <TileWall :remaining="remainingTiles" />
+    <!-- 左侧牌墙 -->
+    <div class="wall-side-container wall-left-container">
+      <TileWallSide :remaining="remainingTiles" side="left" />
+    </div>
 
-    <!-- 中心信息：总倍数 + 剩余牌数 -->
+    <!-- 中心信息区：垂直居中堆叠 -->
     <div class="center-info">
-      <div class="center-badges">
-        <span class="multiplier-badge">
-          🎲 总倍 ×{{ globalMultiplier || 1 }}
-        </span>
-        <span class="remaining-badge">
-          🀄 剩余 {{ remainingTiles }}
-        </span>
+      <div class="info-item multiplier-badge">
+        <span class="badge-icon">🎲</span>
+        <span class="badge-label">总倍</span>
+        <span class="badge-value">×{{ globalMultiplier || 1 }}</span>
       </div>
-      <!-- 百搭牌：图片 + 名称 -->
-      <div v-if="wildTile" class="wild-tile-row">
-        <MahjongTile :tile="wildTile" :size="32" />
+      <div class="info-item remaining-badge">
+        <span class="badge-icon">🀄</span>
+        <span class="badge-label">剩余</span>
+        <span class="badge-value">{{ remainingTiles }}</span>
+      </div>
+      <!-- 百搭牌 -->
+      <div v-if="wildTile" class="info-item wild-tile-row">
+        <MahjongTile :tile="wildTile" :size="36" />
         <span class="wild-name">{{ wildTileName }}</span>
       </div>
+    </div>
+
+    <!-- 右侧牌墙 -->
+    <div class="wall-side-container wall-right-container">
+      <TileWallSide :remaining="remainingTiles" side="right" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import MahjongTile from './MahjongTile.vue'
-import TileWall from './TileWall.vue'
+import TileWallSide from './TileWallSide.vue'
 import { TileSuit } from '../types/game'
 import type { Tile } from '../types/game'
 
@@ -77,7 +86,7 @@ const wildTileName = computed(() => {
   if (props.wildTile.suit === TileSuit.FLOWER) {
     return FLOWER_NAMES[props.wildTile.value] || `花${props.wildTile.value}`
   }
-  // 非花牌百搭：显示牌的中文名 + "百搭"
+  // 非花牌百搭：显示牌的中文名（不带"百搭"后缀）
   return getTileDisplayName(props.wildTile)
 })
 </script>
@@ -87,61 +96,127 @@ const wildTileName = computed(() => {
   position: absolute;
   inset: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 0;
   pointer-events: none;
 }
 
-/* 牌墙 */
-.tile-wall { opacity: 0.85; pointer-events: none; }
-
-/* 中心信息 - 只显示倍数/百搭 */
-.center-info {
-  text-align: center;
-  pointer-events: auto;
-}
-
-.center-badges {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.multiplier-badge {
-  background: rgba(255, 152, 0, 0.92);
-  color: #fff;
-  font-size: 0.78rem;
-  font-weight: 800;
-  padding: 4px 10px;
-  border-radius: 999px;
-  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.38);
-}
-
-.remaining-badge {
-  background: rgba(0, 120, 80, 0.85);
-  color: #fff;
-  font-size: 0.78rem;
-  font-weight: 800;
-  padding: 4px 10px;
-  border-radius: 999px;
-  box-shadow: 0 2px 8px rgba(0, 120, 80, 0.35);
-}
-
-.wild-tile-row {
+/* 侧边牌墙容器 */
+.wall-side-container {
+  flex: 0 0 auto;
+  width: 80px;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  margin-top: 6px;
+  pointer-events: none;
+}
+
+/* 中心信息区：垂直居中 */
+.center-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  pointer-events: auto;
+  padding: 20px 40px;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 70%, transparent 100%);
+  border-radius: 16px;
+  min-width: 180px;
+}
+
+/* 信息项通用样式 */
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+}
+
+/* 倍数徽章 */
+.multiplier-badge {
+  background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+  padding: 8px 20px;
+  border-radius: 999px;
+  font-size: 1rem;
+  font-weight: 800;
+  box-shadow: 0 3px 12px rgba(255, 152, 0, 0.45);
+}
+
+.multiplier-badge .badge-icon {
+  font-size: 1.1rem;
+}
+
+.multiplier-badge .badge-value {
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+
+/* 剩余牌数徽章 */
+.remaining-badge {
+  background: linear-gradient(135deg, #00796b 0%, #004d40 100%);
+  padding: 8px 20px;
+  border-radius: 999px;
+  font-size: 1rem;
+  font-weight: 800;
+  box-shadow: 0 3px 12px rgba(0, 121, 107, 0.4);
+}
+
+.remaining-badge .badge-icon {
+  font-size: 1.1rem;
+}
+
+.remaining-badge .badge-value {
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+
+/* 百搭牌行 */
+.wild-tile-row {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.2) 0%, rgba(255, 152, 0, 0.15) 100%);
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 215, 0, 0.3);
 }
 
 .wild-name {
   color: #ffd54f;
-  font-size: 0.82rem;
+  font-size: 1rem;
   font-weight: 800;
-  text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+
+/* 响应式 */
+@media (max-width: 1100px) {
+  .wall-side-container {
+    width: 60px;
+  }
+  .center-info {
+    padding: 16px 30px;
+    min-width: 150px;
+  }
+  .multiplier-badge, .remaining-badge {
+    padding: 6px 16px;
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 900px) {
+  .wall-side-container {
+    width: 45px;
+  }
+  .center-info {
+    padding: 12px 24px;
+    gap: 10px;
+  }
+  .multiplier-badge, .remaining-badge {
+    padding: 5px 12px;
+    font-size: 0.8rem;
+  }
+  .wild-tile-row {
+    padding: 6px 12px;
+  }
 }
 </style>

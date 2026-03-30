@@ -497,6 +497,14 @@
 
         <!-- 扩展信息区（右侧，高度=牌桌，宽度≈牌桌1/4） -->
         <aside class="extended-info-panel">
+          <!-- 退房结算（置顶） -->
+          <div class="ext-section" v-if="gameState?.phase === 'playing' || gameState?.phase === 'ended'">
+            <div class="settle-room-id">房间号：{{ gameState?.roomNumber || roomId }}</div>
+            <button class="settle-btn" @click="onRequestSettle">
+              📊 退房结算
+            </button>
+          </div>
+
           <!-- 战绩统计 -->
           <RoomStats
             :players="statsPlayers"
@@ -504,13 +512,6 @@
             :spectating-id="spectatingId"
             @spectate="handleSpectate"
           />
-
-          <!-- 退房结算 -->
-          <div class="ext-section" v-if="gameState?.phase === 'playing' || gameState?.phase === 'ended'">
-            <button class="settle-btn" @click="onRequestSettle">
-              📊 退房结算
-            </button>
-          </div>
 
           <!-- 牌局快讯 -->
           <GameBroadcast :messages="broadcastMessages" />
@@ -963,7 +964,15 @@ const setSpectateTarget = async (targetId: string) => {
 
 
 // ---- Table Center Data ----
-const remainingTileCount = computed(() => gameState.value?.wallRemaining ?? 0)
+const remainingTileCount = computed(() => {
+  const g = gameState.value as any
+  if (!g) return 0
+  // 支持两种格式：wallRemaining（直接数字）或 wall（数组）
+  if (typeof g.wallRemaining === 'number') return g.wallRemaining
+  if (typeof g.wallCount === 'number') return g.wallCount
+  if (Array.isArray(g.wall)) return g.wall.length
+  return 0
+})
 const currentRound = computed(() => gameState.value?.currentRound ?? 1)
 // Provide round number for MahjongTile to auto-select back scheme
 provide('roundNumber', currentRound)
@@ -3073,6 +3082,17 @@ const forceDiscard = async (p: Player) => {
 }
 .fade-fast-enter-active, .fade-fast-leave-active { transition: opacity 0.15s ease; }
 .fade-fast-enter-from, .fade-fast-leave-to { opacity: 0; }
+
+/* 退房结算房间号 */
+.settle-room-id {
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: #fff;
+  text-align: center;
+  padding: 8px 0 6px;
+  letter-spacing: 0.05em;
+  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+}
 
 /* 退房结算按钮 */
 .settle-btn {

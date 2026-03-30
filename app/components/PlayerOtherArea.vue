@@ -269,20 +269,19 @@ const getArrowChar = (sourcePos: number): string => {
   gap: 2px;
 }
 
-/* 左家/右家：横向排列（长边相连，旋转后形成纵向效果） */
+/* 左家/右家：纵向排列（长边相连） */
 .player-other--left .player-other-hand,
 .player-other--right .player-other-hand {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   gap: 0;
-  flex-wrap: nowrap;
-  align-items: flex-end;
+  align-items: center;
 }
-/* 左右手牌尺寸 */
+/* 左右手牌尺寸：宽40长边朝外，高28短边相连 */
 .player-other--left .player-other-hand :deep(.tile),
 .player-other--right .player-other-hand :deep(.tile) {
-  width: 28px;
-  height: 40px;
+  width: 40px;
+  height: 28px;
   flex-shrink: 0;
   margin: 0;
   padding: 0;

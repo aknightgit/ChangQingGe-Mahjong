@@ -1,0 +1,105 @@
+<template>
+  <div class="tile-wall-side" :class="`wall-${side}`">
+    <div class="wall-layer wall-layer--outer">
+      <div v-for="i in TILES_PER_SIDE" :key="`${side}-${i}`" 
+           class="tile-slot tile-slot--vertical"
+           :style="getTileStyle(i)">
+        <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back" />
+        <div v-if="showSideTile(i)" class="tile-side tile-side--bottom" />
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+const props = defineProps<{
+  remaining: number
+  side: 'left' | 'right'
+}>()
+
+const TILES_PER_SIDE = 18
+const V_OVERLAP = 28
+
+function getTileStyle(index: number) {
+  const offset = (TILES_PER_SIDE - index) * V_OVERLAP
+  const verticalPos = `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${offset}px)`
+  
+  if (props.side === 'left') {
+    return {
+      top: verticalPos,
+      left: 'calc(16%)',
+      transform: 'translateY(-50%)'
+    }
+  } else {
+    return {
+      top: verticalPos,
+      right: 'calc(16%)',
+      transform: 'translateY(-50%)'
+    }
+  }
+}
+
+function showSideTile(index: number) {
+  // 只在最底部显示侧边装饰
+  return index === 1
+}
+</script>
+
+<style scoped>
+.tile-wall-side {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tile-wall-side.wall-left {
+  left: 0;
+}
+
+.tile-wall-side.wall-right {
+  right: 0;
+}
+
+.tile-slot {
+  position: absolute;
+  width: 40px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.tile-slot--vertical {
+  width: 28px;
+  height: 40px;
+}
+
+.wall-back {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 3px;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5)) brightness(1.1);
+}
+
+.tile-side {
+  position: absolute;
+  pointer-events: none;
+  bottom: -5px;
+  left: 1px;
+  right: 1px;
+  height: 5px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(180deg, #1a4a28 0%, #1a4a28 33%, #f5efe0 33%, #e8e0d0 100%);
+  box-shadow: 0 2px 3px rgba(0,0,0,0.25);
+}
+
+@media (max-width: 1300px) {
+  .tile-slot { width: 32px; height: 22px; }
+  .tile-slot--vertical { width: 22px; height: 32px; }
+  .tile-side { height: 4px; bottom: -4px; }
+}
+@media (max-width: 900px) {
+  .tile-slot { width: 24px; height: 16px; }
+  .tile-slot--vertical { width: 16px; height: 24px; }
+  .tile-side { height: 3px; bottom: -3px; }
+}
+</style>
