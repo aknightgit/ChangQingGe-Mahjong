@@ -566,8 +566,20 @@ class GameManager {
       return p;
     });
 
-    // 🎰 随机选庄家
-    game.dealerIndex = Math.floor(Math.random() * game.players.length);
+    // 🎰 选庄家：上局首胡者掷骰（一炮多响则放冲者掷骰）
+    if (game.nextDealerId) {
+      const nextDealer = game.players.find(p => p.id === game.nextDealerId);
+      if (nextDealer) {
+        game.dealerIndex = nextDealer.position;
+        console.log(`[StartGame] 上局指定庄家: ${nextDealer.name}`);
+      } else {
+        game.dealerIndex = Math.floor(Math.random() * game.players.length);
+      }
+      game.nextDealerId = null;
+    } else {
+      // 首局或无指定 → 随机
+      game.dealerIndex = Math.floor(Math.random() * game.players.length);
+    }
     game.players.forEach((p, i) => { p.isDealer = (i === game.dealerIndex); });
 
     // 广播 STARTING 阶段（所有客户端显示骰子动画）
@@ -1444,6 +1456,25 @@ class GameManager {
     player.winRound = game.roundNumber;
     player.winTimestamp = Date.now();
     game.winnersCount++;
+
+    // 设置下局庄家
+    if (!game.nextDealerId) {
+      if (player.winOrder === 1) {
+        // 首胡者为庄
+        game.nextDealerId = player.id;
+        // 一炮多响：如果有人因放冲导致多胡，放冲者为庄
+        if (!isSelfDrawn) {
+          const discarderId = this.getLastDiscardPlayerId(game);
+          if (discarderId) {
+            game.nextDealerId = discarderId;
+            const discarder = game.players.find(p => p.id === discarderId);
+            console.log(`[handleHu] 一炮多响，放冲者 ${discarder?.name} 为下局庄家`);
+          }
+        } else {
+          console.log(`[handleHu] 自摸，${player.name} 为下局庄家`);
+        }
+      }
+    }
 
     const existingMelds = player.hand.exposedMelds.length;
     const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);

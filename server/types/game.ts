@@ -208,6 +208,10 @@ export interface GameState {
   // 谢谢带头大哥追踪
   consecutiveDiscards?: { suit: string; value: number; playerIds: string[] } | null;
   leadingBrotherEvent?: { firstPlayerId: string; tileKey: string } | null;
+  // 下局庄家（上局首胡者或一炮多响放冲者）
+  nextDealerId?: string | null;
+  // 胜者观战模式
+  spectatorMode?: { playerId: string; viewingPlayerId: string } | null;
 }
 
 export interface PendingAction {

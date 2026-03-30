@@ -299,6 +299,16 @@
             <!-- 状态消息（非中心显示） -->
             <div class="turn-indicator">
               <span v-if="isWinner" class="turn-win">🎉 你赢了！</span>
+              <span v-if="isWinner && gameState?.phase === 'playing'" class="spectator-bar">
+                <span class="spectator-label">👁 观战：</span>
+                <button
+                  v-for="p in spectatablePlayers"
+                  :key="p.id"
+                  class="spectator-chip"
+                  :class="{ 'spectator-chip--active': viewingPlayerId === p.id }"
+                  @click="setSpectateTarget(p.id)"
+                >{{ p.name }}</button>
+              </span>
               <span v-else-if="isAIControlled" class="turn-ai">🤖 AI托管中</span>
               <span v-else-if="showMobileActionNotice" class="turn-action">有可用操作</span>
               <span v-else>{{ turnMessage }}</span>
@@ -884,6 +894,32 @@ const playerHand = computed(() => currentPlayer.value?.hand.concealedTiles || []
 const playerMelds = computed(() => currentPlayer.value?.hand.exposedMelds || [])
 const playerDiscards = computed(() => currentPlayer.value?.hand.discardedTiles || [])
 const isWinner = computed(() => currentPlayer.value?.status === 'won')
+
+// 胜者观战模式
+const viewingPlayerId = ref<string | null>(null)
+const spectatablePlayers = computed(() => {
+  if (!gameState.value || !isWinner.value) return []
+  return gameState.value.players.filter(p =>
+    p.id !== currentPlayer.value?.id &&
+    (p.status === 'playing' || p.status === 'won')
+  )
+})
+const setSpectateTarget = async (targetId: string) => {
+  if (!gameState.value || !currentPlayer.value) return
+  viewingPlayerId.value = targetId
+  try {
+    await $fetch('/api/game/spectate', {
+      method: 'POST',
+      body: {
+        gameId: gameState.value.gameId,
+        playerId: currentPlayer.value.id,
+        viewingPlayerId: targetId
+      }
+    })
+  } catch (err) {
+    console.error('Spectate failed:', err)
+  }
+}
 
 
 
@@ -2379,6 +2415,44 @@ const forceDiscard = async (p: Player) => {
   color: #ffd700;
   font-weight: 700;
   text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+}
+
+/* 胜者观战栏 */
+.spectator-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  flex-wrap: wrap;
+}
+
+.spectator-label {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+.spectator-chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  color: #f5f5f5;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.spectator-chip:hover {
+  background: rgba(100, 200, 255, 0.15);
+  border-color: rgba(100, 200, 255, 0.3);
+}
+
+.spectator-chip--active {
+  background: rgba(100, 200, 255, 0.2);
+  border-color: rgba(100, 200, 255, 0.5);
+  color: #64c8ff;
 }
 
 .turn-action {
