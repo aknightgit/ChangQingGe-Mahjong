@@ -1512,39 +1512,26 @@ const forceDiscard = async (p: Player) => {
 
 /* ===== 弃牌区定位 ===== */
 /* 上家：靠近牌桌中心，旋转180° */
+/* 四个弃牌区居中对齐牌桌十字 */
 :deep(.discard-zone--top) {
-  top: 28%;
-  left: 20%;
-  width: 60%;
-  display: flex;
-  justify-content: center;
-  transform: rotate(180deg);
+  top: 26%;
+  left: 50%;
+  transform: translateX(-50%) rotate(180deg);
 }
-/* 下家（本家）：靠近牌桌中心 */
 :deep(.discard-zone--bottom) {
-  bottom: 28%;
-  left: 20%;
-  width: 60%;
-  display: flex;
-  justify-content: center;
+  bottom: 26%;
+  left: 50%;
+  transform: translateX(-50%);
 }
-/* 左家：旋转90° */
 :deep(.discard-zone--left) {
-  top: 32%;
-  left: 8%;
-  width: 60%;
-  display: flex;
-  justify-content: center;
-  transform: rotate(90deg);
+  top: 50%;
+  left: 10%;
+  transform: translateY(-50%) rotate(90deg);
 }
-/* 右家 */
 :deep(.discard-zone--right) {
-  top: 32%;
-  right: 8%;
-  width: 60%;
-  display: flex;
-  justify-content: center;
-  transform: rotate(-90deg);
+  top: 50%;
+  right: 10%;
+  transform: translateY(-50%) rotate(-90deg);
 }
 
 /* ===== 扩展信息区 ===== */
