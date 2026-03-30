@@ -14,6 +14,10 @@
       }
     ]"
     @click="onClick"
+    @pointerdown="$emit('pointerdown', $event)"
+    @pointerup="$emit('pointerup', $event)"
+    @pointercancel="$emit('pointercancel')"
+    @dragstart.prevent
   >
     <template v-if="!back">
       <!-- 风牌: 优先用 PNG，fallback 到文字 -->
@@ -69,6 +73,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'click', tile: Tile): void
   (e: 'dblclick', tile: Tile): void
+  (e: 'pointerdown', event: PointerEvent): void
+  (e: 'pointerup', event: PointerEvent): void
+  (e: 'pointercancel'): void
 }>()
 
 let clickTimer: ReturnType<typeof setTimeout> | null = null
