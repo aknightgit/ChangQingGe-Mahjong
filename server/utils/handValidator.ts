@@ -113,7 +113,7 @@ export function detectHandTypes(
   }
 
   // Check for half flush (混一色)
-  if (!types.includes(HandType.FULL_FLUSH) && !types.includes(HandType.ALL_WIND) && isHalfFlushHand(nonFlowerTiles)) {
+  if (!types.includes(HandType.FULL_FLUSH) && !types.includes(HandType.ALL_WIND) && isHalfFlushHand(nonFlowerTiles, wildSuit, wildValue)) {
     types.push(HandType.HALF_FLUSH);
 
     // 混碰 = 混一色 + 碰碰胡
@@ -155,49 +155,58 @@ function isAllTripletsHand(handTiles: Tile[], exposedMelds: Meld[], wildSuit?: s
   for (const meld of exposedMelds) {
     if (meld.type === MeldType.SEQUENCE) return false;
   }
-  
+
   const nonFlowerTiles = handTiles.filter(t => !isFlower(t));
   const isWild = (t: Tile) => wildSuit !== undefined && t.suit === wildSuit && t.value === wildValue;
   const regularTiles = nonFlowerTiles.filter(t => !isWild(t));
   const wildCount = nonFlowerTiles.filter(t => isWild(t)).length;
-  
+
   const groups = groupTiles(regularTiles);
   const expectedTriplets = 4 - exposedMelds.length;
-  
+
   // Count how many natural triplets and pairs we have
   let naturalTriplets = 0;
   let naturalPairs = 0;
   let singles = 0;
-  
+
   for (const [, group] of groups) {
     if (group.length >= 3) naturalTriplets++;
     else if (group.length === 2) naturalPairs++;
     else singles += group.length; // 1 or 4 (4th is a single for triplets)
   }
-  
-  // Use wilds optimally:
-  // Priority 1: Complete singles to triplets (need 2 wilds each)
-  // Priority 2: Complete a pair (need 0 wilds, already counted)
-  // Priority 3: Make triplets from remaining wilds (need 3 each)
-  // Priority 4: Make extra pair from remaining wilds (need 2 wilds)
-  
-  let wildsLeft = wildCount;
-  
-  // Fill singles to triplets
-  const tripletsFromSingles = Math.min(Math.floor(wildsLeft / 2), singles);
-  wildsLeft -= tripletsFromSingles * 2;
-  const totalTriplets = naturalTriplets + tripletsFromSingles;
-  
-  // Make more triplets from remaining wilds (3 wilds = 1 triplet)
-  const tripletsFromWilds = Math.floor(wildsLeft / 3);
-  wildsLeft -= tripletsFromWilds * 3;
-  const finalTriplets = totalTriplets + tripletsFromWilds;
-  
-  // Need exactly expectedTriplets triplets + 1 pair
-  // Pair can be: natural pair, or leftover wilds (2+), or leftover singles (should be 0 if we filled them all)
-  const hasPair = naturalPairs >= 1 || wildsLeft >= 2 || singles > tripletsFromSingles;
-  
-  return finalTriplets >= expectedTriplets && hasPair;
+
+  // Try all valid wild allocations and pick the one with most triplets
+  // Constraint: must end with exactly expectedTriplets triplets + at least 1 pair
+  let bestTriplets = -1;
+
+  // Strategy A: natural pair exists → fill singles with wilds first
+  if (naturalPairs >= 1) {
+    let w = wildCount;
+    const fromSingles = Math.min(Math.floor(w / 2), singles);
+    w -= fromSingles * 2;
+    const fromWilds = Math.floor(w / 3);
+    w -= fromWilds * 3;
+    const total = naturalTriplets + fromSingles + fromWilds;
+    if (total >= expectedTriplets) bestTriplets = total;
+  }
+
+  // Strategy B: no natural pair → try to form pair from leftover wilds
+  // Fill singles (needs 2 wilds each), then check pair
+  for (let fillCount = 0; fillCount <= Math.min(singles, Math.floor(wildCount / 2)); fillCount++) {
+    let w = wildCount - fillCount * 2;
+    // Form triplets from remaining wilds
+    const fromWilds = Math.floor(w / 3);
+    w -= fromWilds * 3;
+    const total = naturalTriplets + fillCount + fromWilds;
+    // Check if pair exists: natural pair, leftover wilds (>=2), or unfilled single
+    const unfilledSingles = singles - fillCount;
+    const hasPair = naturalPairs >= 1 || w >= 2 || unfilledSingles >= 1;
+    if (total >= expectedTriplets && hasPair && total > bestTriplets) {
+      bestTriplets = total;
+    }
+  }
+
+  return bestTriplets >= expectedTriplets;
 }
 
 /**
@@ -216,11 +225,19 @@ function isFullFlushHand(tiles: Tile[]): boolean {
 
 /**
  * Check if tiles are one number suit + honors (混一色)
+ * Wild tiles are excluded from suit check since they can represent any suit
  */
-function isHalfFlushHand(tiles: Tile[]): boolean {
-  const nonFlowerTiles = tiles.filter(t => !isFlower(t));
+function isHalfFlushHand(tiles: Tile[], wildSuit?: string, wildValue?: number): boolean {
+  // Exclude wild tiles from suit check
+  const nonFlowerTiles = tiles.filter(t => {
+    if (isFlower(t)) return false;
+    if (wildSuit !== undefined && wildValue !== undefined) {
+      if (t.suit === wildSuit && t.value === wildValue) return false;
+    }
+    return true;
+  });
   if (nonFlowerTiles.length === 0) return false;
-  
+
   const suits = getSuits(nonFlowerTiles);
   const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
   const honorSuits = [TileSuit.WIND, TileSuit.DRAGON];
