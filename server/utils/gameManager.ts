@@ -99,16 +99,15 @@ class GameManager {
         if (!game || game.phase !== GamePhase.PLAYING) return;
         if (!game.pendingActions.length) return;
 
-        // 自动让所有待响应玩家 PASS，推动流程
+        // 自动让所有待响应玩家 PASS，推动流程（包括卡住的bot）
         const pending = [...game.pendingActions];
         for (const pa of pending) {
           const player = game.players.find(p => p.id === pa.playerId);
           if (!player || player.status !== PlayerStatus.PLAYING) continue;
-          if (this.isPlayerBotControlled(player)) continue; // bot 已在 handleBotPendingActions 处理
           this.handlePass(game, player);
         }
 
-        // 清除所有 pending（兜底：handlePass 可能因为一炮多响等未全部清除）
+        // 清除所有 pending（兜底）
         game.pendingActions = [];
         await this.persistGame(game);
         this.broadcastGameState(gameId);
@@ -145,17 +144,39 @@ class GameManager {
           if (action === ActionType.PASS) {
             this.handlePass(game, player);
           } else if (action === ActionType.PENG) {
-            this.handlePeng(game, player);
-            claimedAction = true;
+            // 检查碰牌后是否超过14张
+            const pengExposedCount = player.hand.exposedMelds.reduce((sum, m) => sum + m.tiles.length, 0);
+            const pengTotalCount = player.hand.concealedTiles.length + pengExposedCount;
+            if (pengTotalCount + 3 <= 14) {
+              this.handlePeng(game, player);
+              claimedAction = true;
+            } else {
+              console.warn(`[BotPeng] ${player.name} blocked: would exceed 14 tiles`);
+              this.handlePass(game, player);
+            }
           } else if (action === ActionType.KONG) {
-            this.handleKong(game, player, pa.tile?.id || '');
-            claimedAction = true;
+            const kongExposedCount = player.hand.exposedMelds.reduce((sum, m) => sum + m.tiles.length, 0);
+            const kongTotalCount = player.hand.concealedTiles.length + kongExposedCount;
+            if (kongTotalCount + 3 <= 14) {
+              this.handleKong(game, player, pa.tile?.id || '');
+              claimedAction = true;
+            } else {
+              console.warn(`[BotKong] ${player.name} blocked: would exceed 14 tiles`);
+              this.handlePass(game, player);
+            }
           } else if (action === ActionType.HU) {
             this.handleHu(game, player);
             claimedAction = true;
           } else if (action === ActionType.CHOW) {
-            this.handleChow(game, player);
-            claimedAction = true;
+            const chowExposedCount = player.hand.exposedMelds.reduce((sum, m) => sum + m.tiles.length, 0);
+            const chowTotalCount = player.hand.concealedTiles.length + chowExposedCount;
+            if (chowTotalCount + 3 <= 14) {
+              this.handleChow(game, player);
+              claimedAction = true;
+            } else {
+              console.warn(`[BotChow] ${player.name} blocked: would exceed 14 tiles`);
+              this.handlePass(game, player);
+            }
           }
         }
 
