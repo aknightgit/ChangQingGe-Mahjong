@@ -50,6 +50,37 @@
           </div>
         </div>
 
+        <!-- 胡牌选择面板 -->
+        <div v-if="showHuPanel" class="hu-panel-overlay" @click.self="onCancelHu">
+          <div class="hu-panel">
+            <h3 class="hu-panel-title">🀄 选择胡牌牌型</h3>
+            <div class="hu-combos">
+              <div
+                v-for="(combo, idx) in huCombinations"
+                :key="idx"
+                class="hu-combo"
+                :class="{ 'hu-combo--selected': selectedHuCombo === idx }"
+                @click="selectedHuCombo = idx"
+              >
+                <div class="hu-combo-groups">
+                  <div v-for="(group, gi) in combo.groups" :key="gi" class="hu-group" :class="`hu-group--${group.type}`">
+                    <div v-for="tile in group.tiles" :key="tile.id" class="hu-mini-tile">
+                      <MahjongTile :tile="tile" :size="28" />
+                    </div>
+                    <span class="hu-group-label">{{ group.type === 'sequence' ? '顺' : group.type === 'triplet' ? '刻' : '对' }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="hu-panel-actions">
+              <button class="hu-confirm-btn" @click="onConfirmHu(selectedHuCombo ?? 0)" :disabled="selectedHuCombo === null">
+                🀄 确认胡牌
+              </button>
+              <button class="hu-cancel-btn" @click="onCancelHu">取消</button>
+            </div>
+          </div>
+        </div>
+
         <div v-if="isOverlayVisible" class="game-over-overlay">
           <div class="game-over-card">
             <p class="overlay-title">{{ overlayTitle }}</p>
@@ -1143,6 +1174,131 @@ const showKong = computed(() => availableActions.value.includes(ActionType.KONG)
 const showHu = computed(() => availableActions.value.includes(ActionType.HU))
 const showPass = computed(() => availableActions.value.includes(ActionType.PASS))
 const showRebel = computed(() => availableActions.value.includes(ActionType.REBEL))
+
+// 胡牌面板状态
+const showHuPanel = ref(false)
+
+// 计算胡牌组合：将手牌排列成 顺子/刻子 + 对子
+const huCombinations = computed(() => {
+  if (!showHu.value || !playerHand.value) return []
+  const hand = [...playerHand.value]
+  const melds = playerMelds.value || []
+  const combos = arrangeWinningHand(hand, melds)
+  // 按牌面大小排序
+  combos.forEach(c => {
+    c.groups.sort((a, b) => {
+      const minA = Math.min(...a.tiles.map(t => t.value))
+      const minB = Math.min(...b.tiles.map(t => t.value))
+      if (a.type === 'pair' && b.type !== 'pair') return 1
+      if (a.type !== 'pair' && b.type === 'pair') return -1
+      return minA - minB
+    })
+  })
+  return combos
+})
+
+// 排列手牌为顺子/刻子+对子的组合
+function arrangeWinningHand(hand: any[], existingMelds: any[]): any[] {
+  if (hand.length === 0 && existingMelds.length > 0) return [{ groups: [] }]
+
+  const sorted = [...hand].sort((a, b) => {
+    const suitOrder: Record<string, number> = { wan: 0, tiao: 1, dots: 2, feng: 3, jian: 4, hua: 5 }
+    const sA = suitOrder[a.suit] ?? 9
+    const sB = suitOrder[b.suit] ?? 9
+    if (sA !== sB) return sA - sB
+    return a.value - b.value
+  })
+
+  const results: any[] = []
+
+  function findCombinations(tiles: any[], groups: any[]): void {
+    if (tiles.length === 0) {
+      results.push({ groups: [...groups] })
+      return
+    }
+
+    // 尝试取对子（每种牌最多用一次作为对子）
+    if (tiles.length >= 2 && tiles.length % 3 === 2) {
+      for (let i = 0; i < tiles.length - 1; i++) {
+        if (tilesEqual(tiles[i], tiles[i + 1])) {
+          const remaining = tiles.filter((_, idx) => idx !== i && idx !== i + 1)
+          const pair = { type: 'pair', tiles: [tiles[i], tiles[i + 1]] }
+          findMelds(remaining, [...groups, pair])
+          break
+        }
+      }
+    } else {
+      findMelds(tiles, groups)
+    }
+  }
+
+  function findMelds(tiles: any[], groups: any[]): void {
+    if (tiles.length === 0) {
+      results.push({ groups: [...groups] })
+      return
+    }
+    if (tiles.length % 3 !== 0) return
+
+    // 尝试刻子
+    if (tiles.length >= 3 && tilesEqual(tiles[0], tiles[1]) && tilesEqual(tiles[1], tiles[2])) {
+      findCombinations(tiles.slice(3), [...groups, { type: 'triplet', tiles: tiles.slice(0, 3) }])
+    }
+
+    // 尝试顺子（仅数牌）
+    const first = tiles[0]
+    if (['wan', 'tiao', 'dots'].includes(first.suit)) {
+      const second = tiles.find(t => t.suit === first.suit && t.value === first.value + 1 && t.id !== first.id)
+      if (second) {
+        const third = tiles.find(t => t.suit === first.suit && t.value === first.value + 2 && t.id !== first.id && t.id !== second.id)
+        if (third) {
+          const remaining = tiles.filter(t => t.id !== first.id && t.id !== second.id && t.id !== third.id)
+          findCombinations(remaining, [...groups, { type: 'sequence', tiles: [first, second, third] }])
+        }
+      }
+    }
+  }
+
+  function tilesEqual(a: any, b: any): boolean {
+    return a.suit === b.suit && a.value === b.value
+  }
+
+  findCombinations(sorted, [])
+
+  // 去重
+  const seen = new Set<string>()
+  return results.filter(r => {
+    const key = r.groups.map((g: any) => `${g.type}:${g.tiles.map((t: any) => `${t.suit}${t.value}`).join(',')}`).sort().join('|')
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  }).slice(0, 5) // 最多显示5种排列
+}
+
+// 选择胡牌组合
+const selectedHuCombo = ref<number | null>(null)
+const onHu = () => {
+  if (huCombinations.value.length <= 1) {
+    // 只有一种组合，直接胡
+    resetAutoCount()
+    playSound('tile-hu')
+    executeAction(ActionType.HU)
+  } else {
+    // 多种组合，显示面板选择
+    showHuPanel.value = true
+    selectedHuCombo.value = 0
+  }
+}
+const onConfirmHu = (index: number) => {
+  resetAutoCount()
+  playSound('tile-hu')
+  showHuPanel.value = false
+  executeAction(ActionType.HU)
+}
+const onCancelHu = () => {
+  showHuPanel.value = false
+  selectedHuCombo.value = null
+}
+
 const canCheatHu = computed(
   () => isAdminUser.value && isMyTurn.value && gameState.value?.phase === GamePhase.PLAYING
 )
@@ -1151,7 +1307,6 @@ const onDraw = () => { resetAutoCount(); playSound('tile-draw'); executeAction(A
 const onChow = () => { resetAutoCount(); playSound('tile-chow'); executeAction(ActionType.CHOW) }
 const onPeng = () => { resetAutoCount(); playSound('tile-pong'); executeAction(ActionType.PENG) }
 const onKong = () => { resetAutoCount(); playSound('tile-kong'); executeAction(ActionType.KONG) }
-const onHu = () => { resetAutoCount(); playSound('tile-hu'); executeAction(ActionType.HU) }
 const onPass = () => { resetAutoCount(); executeAction(ActionType.PASS) }
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); executeAction(ActionType.REBEL) }
 const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); executeAction(ActionType.CHEAT_HU) }
@@ -2412,6 +2567,165 @@ const forceDiscard = async (p: Player) => {
 @keyframes lbPop {
   from { transform: scale(0.85); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
+}
+
+/* ===== 胡牌选择面板 ===== */
+.hu-panel-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 10, 8, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+  backdrop-filter: blur(4px);
+}
+
+.hu-panel {
+  background: rgba(10, 25, 18, 0.98);
+  border: 1px solid rgba(255, 215, 0, 0.25);
+  border-radius: 18px;
+  padding: 24px 28px;
+  width: min(520px, 92%);
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+}
+
+.hu-panel-title {
+  text-align: center;
+  font-size: 1.3rem;
+  margin: 0 0 16px;
+  color: #ffd700;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.3);
+}
+
+.hu-combos {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.hu-combo {
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hu-combo:hover {
+  border-color: rgba(255, 215, 0, 0.3);
+  background: rgba(255, 215, 0, 0.03);
+}
+
+.hu-combo--selected {
+  border-color: rgba(255, 215, 0, 0.6);
+  background: rgba(255, 215, 0, 0.06);
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.15);
+}
+
+.hu-combo-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.hu-group {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+.hu-group--sequence {
+  border-bottom: 2px solid rgba(100, 200, 255, 0.4);
+}
+
+.hu-group--triplet {
+  border-bottom: 2px solid rgba(255, 150, 50, 0.4);
+}
+
+.hu-group--pair {
+  border-bottom: 2px solid rgba(255, 215, 0, 0.5);
+}
+
+.hu-mini-tile {
+  flex-shrink: 0;
+}
+
+.hu-group-label {
+  position: absolute;
+  top: -10px;
+  right: 4px;
+  font-size: 0.6rem;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+
+.hu-group--sequence .hu-group-label {
+  background: rgba(100, 200, 255, 0.2);
+  color: #64c8ff;
+}
+
+.hu-group--triplet .hu-group-label {
+  background: rgba(255, 150, 50, 0.2);
+  color: #ff9632;
+}
+
+.hu-group--pair .hu-group-label {
+  background: rgba(255, 215, 0, 0.2);
+  color: #ffd700;
+}
+
+.hu-panel-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.hu-confirm-btn {
+  padding: 12px 32px;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 215, 0, 0.4);
+  background: linear-gradient(135deg, #c62828, #ef5350);
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hu-confirm-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(239, 83, 80, 0.4);
+}
+
+.hu-confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hu-cancel-btn {
+  padding: 12px 24px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  color: #f5f5f5;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hu-cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* ===== 游戏结束浮层 ===== */
