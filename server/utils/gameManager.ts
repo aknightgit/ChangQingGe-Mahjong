@@ -789,11 +789,13 @@ class GameManager {
       return pendingAction.availableActions;
     }
 
-    // 梁山聚义：前三回合可投票（仅4人全是真人时才开启，只要没投过，且是活跃玩家）
+    // 梁山聚义：前三回合可投票（仅4人全是真人时才开启，只要没投过，且是活跃玩家，且全局倍数未达8倍上限）
     if (game.phase === GamePhase.PLAYING && player.status === PlayerStatus.PLAYING && game.roundNumber <= 3) {
       // 只有4人全是真人玩家时才开启梁山聚义
       const allHuman = game.players.length >= 4 && game.players.every(p => !this.isPlayerBotControlled(p));
-      if (allHuman) {
+      // 全局倍数已达8倍上限时，禁止梁山聚义
+      const atMultiplierCap = (game.globalMultiplier ?? 1) >= 8;
+      if (allHuman && !atMultiplierCap) {
         const votes = game.liangShanVotes || [];
         if (!votes.includes(playerId)) {
           actions.push(ActionType.LIANG_SHAN);
@@ -1681,6 +1683,9 @@ class GameManager {
     if (game.phase !== GamePhase.PLAYING) return;
     if (player.status !== PlayerStatus.PLAYING) return;
 
+    // 全局倍数已达8倍上限时，禁止梁山聚义
+    if ((game.globalMultiplier ?? 1) >= 8) return;
+
     // 只有4人全是真人时才允许
     const allHuman = game.players.length >= 4 && game.players.every(p => !this.isPlayerBotControlled(p));
     if (!allHuman) return;
@@ -1738,7 +1743,8 @@ class GameManager {
       const doubled = Math.min((game.globalMultiplier ?? 1) * 2, 8);
       const roundMul = game.roundMultiplier ?? 1;
       const effective = doubled * roundMul;
-      game.inheritedGlobalMultiplier = effective > 8 ? Math.floor(effective / 8) : doubled;
+      // 全局倍数封顶8，溢出部分继承
+      game.inheritedGlobalMultiplier = Math.min(effective > 8 ? Math.floor(effective / 8) : doubled, 8);
 
       // 结束本局
       game.phase = GamePhase.CHA_JIAO;
@@ -2636,18 +2642,21 @@ class GameManager {
     // 规则：effective = globalMultiplier × roundMultiplier，封顶8，超出部分 = effective/8 继承给下把
     // 注意：聚义/造反已经自行设置 inheritedGlobalMultiplier，不要覆盖
     if (reason === GameEndReason.WALL_EXHAUSTED) {
-      // 流局：先翻倍，再算溢出
+      // 流局：先翻倍，再算溢出（但全局倍数封顶8）
       const currentGlobal = game.globalMultiplier ?? 1;
-      const newGlobal = Math.min(currentGlobal * 2, 8);
       const roundMul = game.roundMultiplier ?? 1;
-      const effective = newGlobal * roundMul;
-      game.inheritedGlobalMultiplier = effective > 8 ? Math.floor(effective / 8) : 1;
+      // 先翻倍，封顶8
+      const doubled = Math.min(currentGlobal * 2, 8);
+      const effective = doubled * roundMul;
+      // 全局倍数封顶8，溢出部分继承
+      game.inheritedGlobalMultiplier = Math.min(effective > 8 ? Math.floor(effective / 8) : 1, 8);
     } else if (game.inheritedGlobalMultiplier === undefined) {
       // 正常结算（有人胡了）且没有被聚义/造反提前设置
       const currentGlobal = game.globalMultiplier ?? 1;
       const roundMul = game.roundMultiplier ?? 1;
       const effective = currentGlobal * roundMul;
-      game.inheritedGlobalMultiplier = effective > 8 ? Math.floor(effective / 8) : 1;
+      // 全局倍数封顶8，溢出部分继承
+      game.inheritedGlobalMultiplier = Math.min(effective > 8 ? Math.floor(effective / 8) : 1, 8);
     }
     // else: inheritedGlobalMultiplier 已被聚义/造反设置，不覆盖
 
