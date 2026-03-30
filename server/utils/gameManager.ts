@@ -1650,6 +1650,8 @@ class GameManager {
       newDealerIndex: player.position
     };
     // 不在这里翻倍，startGame 会根据 rebelEvent 统一处理
+    // inheritedGlobalMultiplier 由上一轮 endRound 的溢出规则计算
+    // 本局结束后 startGame 读取 inheritedGlobalMultiplier 再 ×2（rebelEvent）
 
     // 造反者成为庄家
     game.dealerIndex = player.position;
@@ -1718,9 +1720,11 @@ class GameManager {
         }
       }
 
-      // 下局全局倍数 ×2
-      const currentGlobal = game.globalMultiplier ?? 1;
-      game.inheritedGlobalMultiplier = calculateGlobalMultiplier(currentGlobal, '造反');
+      // 下局全局倍数 ×2（溢出继承：effective = doubled × roundMultiplier, 超过8倍部分继承）
+      const doubled = Math.min((game.globalMultiplier ?? 1) * 2, 8);
+      const roundMul = game.roundMultiplier ?? 1;
+      const effective = doubled * roundMul;
+      game.inheritedGlobalMultiplier = effective > 8 ? Math.floor(effective / 8) : doubled;
 
       // 结束本局
       game.phase = GamePhase.CHA_JIAO;
@@ -2614,15 +2618,24 @@ class GameManager {
     // 检查被聚义QJ线（每局刷新）
     this.checkQJThresholdAlerts(game);
 
-    // 倍数继承链：流局/造反 → ×2 → 下局; 正常结局 → 重置×1
+    // 倍数继承链：溢出倍数继承（超过8倍封顶的部分传递给下一把）
+    // 规则：effective = globalMultiplier × roundMultiplier，封顶8，超出部分 = effective/8 继承给下把
+    // 注意：聚义/造反已经自行设置 inheritedGlobalMultiplier，不要覆盖
     if (reason === GameEndReason.WALL_EXHAUSTED) {
-      // 流局：下局全局倍数 ×2，封顶 8
+      // 流局：先翻倍，再算溢出
       const currentGlobal = game.globalMultiplier ?? 1;
-      game.inheritedGlobalMultiplier = calculateGlobalMultiplier(currentGlobal, '流局');
-    } else {
-      // 正常结算（有人胡了）或 OWNER_LEFT：倍数重置
-      game.inheritedGlobalMultiplier = 1;
+      const newGlobal = Math.min(currentGlobal * 2, 8);
+      const roundMul = game.roundMultiplier ?? 1;
+      const effective = newGlobal * roundMul;
+      game.inheritedGlobalMultiplier = effective > 8 ? Math.floor(effective / 8) : 1;
+    } else if (game.inheritedGlobalMultiplier === undefined) {
+      // 正常结算（有人胡了）且没有被聚义/造反提前设置
+      const currentGlobal = game.globalMultiplier ?? 1;
+      const roundMul = game.roundMultiplier ?? 1;
+      const effective = currentGlobal * roundMul;
+      game.inheritedGlobalMultiplier = effective > 8 ? Math.floor(effective / 8) : 1;
     }
+    // else: inheritedGlobalMultiplier 已被聚义/造反设置，不覆盖
 
     const endedAt = Date.now();
     game.phase = GamePhase.ENDED;
