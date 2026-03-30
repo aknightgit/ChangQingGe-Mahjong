@@ -191,6 +191,15 @@
             <span class="create-hint">上家打牌后，下家等待时间（默认1秒）</span>
           </div>
 
+          <!-- 首局翻倍 -->
+          <div class="create-field create-field--checkbox">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="createParams.firstRoundDouble" />
+              <span>首局翻倍</span>
+            </label>
+            <span class="create-hint">今天第一局全局倍数 ×2（默认开启）</span>
+          </div>
+
           <!-- AI玩家选择（可展开/收起） -->
           <div class="create-field">
             <button class="ai-toggle-btn" @click="showAISelection = !showAISelection">
@@ -245,7 +254,8 @@ const isCreatingGame = ref(false)
 const showCreateModal = ref(false)
 const createParams = reactive({
   maxDiceRolls: 2,
-  freezeSeconds: 1
+  freezeSeconds: 1,
+  firstRoundDouble: true
 })
 
 // AI玩家选择
@@ -273,7 +283,10 @@ const confirmCreateGame = async () => {
   try {
     const response = await $fetch('/api/game/create', {
       method: 'POST',
-      body: { playerName: userName.value || 'Player 1' },
+      body: {
+        playerName: userName.value || 'Player 1',
+        firstRoundDouble: createParams.firstRoundDouble
+      },
       headers: { 'Cache-Control': 'no-cache' }
     })
 
@@ -656,6 +669,35 @@ const logout = () => {
 
 .create-field input:focus {
   border-color: rgba(70, 197, 116, 0.6);
+}
+
+.create-field--checkbox {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.checkbox-label {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 600 !important;
+  margin-bottom: 0 !important;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 18px !important;
+  height: 18px;
+  accent-color: #46c574;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.create-field--checkbox .create-hint {
+  flex-basis: 100%;
+  margin-top: -8px;
 }
 
 .create-hint {

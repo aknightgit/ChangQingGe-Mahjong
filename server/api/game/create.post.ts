@@ -12,7 +12,9 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const result = await gameManager.createGame(playerName);
+    const result = await gameManager.createGame(playerName, {
+      firstRoundDouble: body.firstRoundDouble ?? true
+    });
     
     return {
       success: true,

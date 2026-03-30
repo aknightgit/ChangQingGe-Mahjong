@@ -372,7 +372,7 @@ class GameManager {
     return String(Date.now()).slice(-4);
   }
 
-  async createGame(playerName: string, options?: { freezeDurationMs?: number; diceRollCount?: number }): Promise<{ gameId: string; playerId: string }> {
+  async createGame(playerName: string, options?: { freezeDurationMs?: number; diceRollCount?: number; firstRoundDouble?: boolean }): Promise<{ gameId: string; playerId: string }> {
     await this.hydrateFromDatabase();
 
     const gameId = randomUUID();
@@ -424,7 +424,7 @@ class GameManager {
       dice: undefined,
       roundMultiplier: undefined,
       globalMultiplier: undefined,
-      inheritedGlobalMultiplier: undefined,
+      inheritedGlobalMultiplier: options?.firstRoundDouble ? 2 : 1,
       rebelEvent: undefined,
       freezeDurationMs: options?.freezeDurationMs ?? 1000,
       diceRollCount: options?.diceRollCount ?? 2
