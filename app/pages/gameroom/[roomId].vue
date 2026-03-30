@@ -979,6 +979,7 @@ const botAvatars = ['😎', '🤖', '🧠']
 
 const statsPlayers = computed(() => {
   if (!gameState.value) return []
+  const qjAlertIds = new Set((gameState.value as any).qjAlerts?.map((a: any) => a.playerId) || [])
   return gameState.value.players.map((p, i) => ({
     id: p.id,
     name: p.name,
@@ -987,6 +988,7 @@ const statsPlayers = computed(() => {
     losses: p.status === 'lost' ? 1 : 0,
     color: positionColors[p.position] || 'south',
     isMe: p.id === currentPlayer.value?.id,
+    isQJCrossed: qjAlertIds.has(p.id),
     // 累积/上局数据（暂无历史接口，先用占位）
     totalWins: p.status === 'won' ? 1 : 0,
     totalLosses: p.status === 'lost' ? 1 : 0,
