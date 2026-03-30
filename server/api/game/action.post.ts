@@ -60,11 +60,15 @@ export default defineEventHandler(async (event) => {
 
     const availableActions = await gameManager.getAvailableActions(gameId, playerId);
 
+    // 获取互包关系
+    const bailoutRelations = gameManager.getMutualBailoutRelations(gameId);
+
     return {
       success: true,
       data: {
         game: {
           ...game,
+          bailoutRelations,
           players: game!.players.map(p => ({
             ...p,
             hand: {

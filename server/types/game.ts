@@ -218,6 +218,8 @@ export interface GameState {
   nextDealerId?: string | null;
   // 被聚义QJ线突破提醒（每局刷新）
   qjAlerts?: { playerId: string; playerName: string; score: number }[];
+  // 互包关系（三口/四口）
+  bailoutRelations?: { player1: string; player2: string; type: '三口' | '四口' }[];
   // 胜者观战模式
   spectatorMode?: { playerId: string; viewingPlayerId: string } | null;
 }

@@ -50,6 +50,10 @@ export default defineEventHandler(async (event) => {
 
   const isAdminUser = await isAdminFromEvent(event);
 
+  // 获取互包关系（三口/四口）
+  const bailoutRelations = gameManager.getMutualBailoutRelations(normalizedGameId);
+  (game as any).bailoutRelations = bailoutRelations;
+
   const maskedPlayers = game.players.map((p) => {
     const shouldReveal = isAdminUser || p.id === normalizedPlayerId;
 

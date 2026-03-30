@@ -1760,9 +1760,16 @@ watch(() => gameState.value, (newState, oldState) => {
     const newWinners = (newState.players || []).filter(
       (p: any) => p.status === 'won' && p.winOrder === newState.winnersCount
     )
+    const bailoutRels = (newState as any).bailoutRelations || []
     for (const w of newWinners) {
       const method = w.winRound ? `第${w.winRound}轮` : ''
-      addBroadcast(`🏆 ${w.name} ${method}胡牌！`, 'win')
+      const fanInfo = w.wonFan ? `（${w.wonFan}番）` : ''
+      // 检查三口/四口关系
+      const rel = bailoutRels.find((r: any) => r.player1 === w.id || r.player2 === w.id)
+      const partnerId = rel ? (rel.player1 === w.id ? rel.player2 : rel.player1) : null
+      const partner = partnerId ? (newState.players || []).find((p: any) => p.id === partnerId) : null
+      const bailInfo = rel && partner ? ` · ${rel.type}包${partner.name}` : ''
+      addBroadcast(`🏆 ${w.name} ${method}胡牌${fanInfo}${bailInfo}`, 'win')
     }
   }
 
@@ -1775,7 +1782,7 @@ watch(() => gameState.value, (newState, oldState) => {
   }
 
   // 互包检测（通过 discard pile 变化 + pending 推断）
-  // 简化：检查 actionHistory 最近的吃/碰/杠
+  // 简化：检查 actionHistory 最近的动作（只保留造反）
   const history = (newState as any).actionHistory || []
   if (history.length > 0) {
     const lastAction = history[history.length - 1]
@@ -1783,18 +1790,6 @@ watch(() => gameState.value, (newState, oldState) => {
     const now = Date.now()
     // 只处理最近 3 秒内的动作
     if (now - lastTs < 3000) {
-      if (lastAction.type === 'peng') {
-        const player = newState.players?.find((p: any) => p.id === lastAction.playerId)
-        if (player) addBroadcast(`✋ ${player.name} 碰牌！`, 'info')
-      }
-      if (lastAction.type === 'kong') {
-        const player = newState.players?.find((p: any) => p.id === lastAction.playerId)
-        if (player) addBroadcast(`💪 ${player.name} 杠牌！`, 'info')
-      }
-      if (lastAction.type === 'chow') {
-        const player = newState.players?.find((p: any) => p.id === lastAction.playerId)
-        if (player) addBroadcast(`🍽️ ${player.name} 吃牌！`, 'info')
-      }
       if (lastAction.type === 'rebel') {
         const player = newState.players?.find((p: any) => p.id === lastAction.playerId)
         if (player) addBroadcast(`⚔️ ${player.name} 提议梁山聚义！造反！`, 'special')
