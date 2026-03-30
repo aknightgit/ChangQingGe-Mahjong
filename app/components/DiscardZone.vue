@@ -9,19 +9,11 @@
         :key="tile.id"
         class="discard-item"
       >
-        <!-- 最新弃牌箭头 -->
-        <span
-          v-if="tile.id === latestTileId && !isWinner"
-          class="latest-arrow"
-        >
-          <svg viewBox="0 0 10 8" class="arrow-svg">
-            <polygon points="5,8 0,0 10,0" fill="#f44336" />
-          </svg>
-        </span>
         <MahjongTile
           :tile="tile"
           :small="true"
           :dimmed="isWinner && tile.id !== latestTileId"
+          :class="{ 'latest-tile': tile.id === latestTileId && !isWinner }"
         />
       </div>
     </div>
@@ -61,25 +53,22 @@ const props = defineProps<{
   position: relative;
 }
 
-/* 最新弃牌箭头 */
-.latest-arrow {
-  position: absolute;
-  top: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 2;
-  animation: float-arrow 1.2s ease-in-out infinite;
+/* 最新弃牌：金黄色外框 + 亮度浮动 */
+.discard-item :deep(.latest-tile) {
+  border: 2px solid #ffd700 !important;
+  border-radius: 6px;
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.6), 0 0 16px rgba(255, 215, 0, 0.3);
+  animation: latest-glow 1.5s ease-in-out infinite;
 }
 
-.arrow-svg {
-  width: 8px;
-  height: 6px;
-  display: block;
-  filter: drop-shadow(0 0 3px rgba(244, 67, 54, 0.6));
-}
-
-@keyframes float-arrow {
-  0%, 100% { transform: translateX(-50%) translateY(0); opacity: 1; }
-  50% { transform: translateX(-50%) translateY(-4px); opacity: 0.6; }
+@keyframes latest-glow {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(255, 215, 0, 0.6), 0 0 16px rgba(255, 215, 0, 0.3);
+    border-color: #ffd700;
+  }
+  50% {
+    box-shadow: 0 0 14px rgba(255, 215, 0, 0.9), 0 0 28px rgba(255, 215, 0, 0.5);
+    border-color: #ffe44d;
+  }
 }
 </style>
