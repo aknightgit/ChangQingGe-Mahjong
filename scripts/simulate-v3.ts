@@ -1,13 +1,10 @@
 /**
  * AI 对战模拟器 v3 — 完整规则 + AI-AK 策略迭代
- * Features: 百搭牌, 花牌, 完整计分, 暗杠/明杠/补杠, AI-AK 策略自适应
+ * 目标：流局率 <30%，胡牌率 >70%
  * 用法: npx tsx scripts/simulate-v3.ts [rounds] [games_per_round]
  */
-import fs from 'fs'
-import path from 'path'
-import { TileSuit } from '../server/types/game'
 import {
-  createDeck, shuffleTiles, isFlower, groupTiles, sortTiles,
+  shuffleTiles, isFlower, groupTiles, sortTiles, tilesEqual
 } from '../server/utils/tiles'
 import {
   canWin, buildWildTileChecker,
@@ -16,500 +13,465 @@ import {
 import {
   calculateScore
 } from '../server/utils/scoring'
-import { Tile, MeldType, type Meld } from '../server/types/game'
+import { TileSuit, MeldType, WinType, type Tile, type Meld } from '../server/types/game'
+
+const ROUNDS = parseInt(process.argv[2] || '10')
+const GAMES_PER_ROUND = parseInt(process.argv[3] || '200')
+const SETTLEMENT_MULT = 10
+
+// ========== Tile helpers ==========
+function t(suit: TileSuit, v: number, id?: string): Tile {
+  return { suit, value: v, id: id || `${suit}-${v}-${Math.random().toString(36).slice(2, 8)}`, isFlower: false }
+}
+function tileEq(a: Tile, b: Tile): boolean { return a.suit === b.suit && a.value === b.value }
+function isHonor(t: Tile): boolean { return t.suit === TileSuit.WIND || t.suit === TileSuit.DRAGON }
+function isWild(t: Tile, ws?: TileSuit, wv?: number): boolean { return ws && wv ? t.suit === ws && t.value === wv : false }
+function tKey(t: Tile): string { return `${t.suit}-${t.value}` }
 
 // ========== Config ==========
 const AI_NAMES = ['AI-AK', 'AI-小胖', 'AI-阿水', 'AI-老赵']
-const SETTLEMENT_MULT = 10
-const ROUNDS = parseInt(process.argv[2] || '10')
-const GAMES_PER_ROUND = parseInt(process.argv[3] || '200')
 
-// ========== AI Policy ==========
-interface AIPolicy {
-  selfWinChance: number
-  selfWinWildBoost: number
-  discardHuChance: number
-  discardHuWildPenalty: number
-  discardHuMenQingPenalty: number
-  pengChance: number
-  kongChance: number
-  chowChance: number
-  honorRushThreshold: number
-  honorRushBoost: number
-  pairWeight: number
-  nearWeight: number
-  honorPairBonus: number
-  wildKeepPenalty: number
-  dominantSuitBonus: number
-  tripletKeepBonus: number
-  honorTripletKeepBonus: number
-  windDragonPairKeepBonus: number
-}
-
-const AK_POLICY_PATH = path.resolve(process.cwd(), 'AI_policies/characters/AI-AK.json')
-
-function loadPolicy(name: string): AIPolicy {
-  try {
-    const content = fs.readFileSync(
-      name === 'AI-AK' ? AK_POLICY_PATH : path.resolve(process.cwd(), `AI_policies/characters/${name}.json`),
-      'utf-8'
-    )
-    const json = JSON.parse(content)
-    return json.policy as AIPolicy
-  } catch {
-    return {
-      selfWinChance: 0.8, selfWinWildBoost: 0.1,
-      discardHuChance: 0.9, discardHuWildPenalty: 0.3, discardHuMenQingPenalty: 0.2,
-      pengChance: 0.8, kongChance: 0.4, chowChance: 0.15,
-      honorRushThreshold: 2, honorRushBoost: 0.4,
-      pairWeight: 4, nearWeight: 2, honorPairBonus: 2,
-      wildKeepPenalty: 1000, dominantSuitBonus: 0,
-      tripletKeepBonus: 3, honorTripletKeepBonus: 7, windDragonPairKeepBonus: 10
-    }
-  }
-}
-
-function savePolicy(name: string, policy: AIPolicy): void {
-  if (name !== 'AI-AK') return
-  try {
-    const content = fs.readFileSync(AK_POLICY_PATH, 'utf-8')
-    const json = JSON.parse(content)
-    json.policy = policy
-    fs.writeFileSync(AK_POLICY_PATH, JSON.stringify(json, null, 2))
-  } catch (e) {
-    console.error('Failed to save policy:', e)
-  }
-}
-
-function adjustPolicy(current: AIPolicy, huRate: number, selfDrawRate: number, lastPlayerRate: number, avgScore: number): AIPolicy {
-  const delta = 0.05
-  return {
-    ...current,
-    selfWinChance: Math.max(0.5, Math.min(0.99,
-      current.selfWinChance + (huRate < 0.02 ? delta : huRate > 0.05 ? -delta : 0)
-    )),
-    discardHuChance: Math.max(0.5, Math.min(0.99,
-      current.discardHuChance - (lastPlayerRate > 0.03 ? delta * 2 : lastPlayerRate < 0.01 ? -delta : 0)
-    )),
-    pairWeight: Math.max(1, Math.min(8,
-      current.pairWeight + (avgScore < 0 ? 0.3 : avgScore > 100 ? -0.2 : 0)
-    )),
-    tripletKeepBonus: Math.max(1, Math.min(8,
-      current.tripletKeepBonus + (huRate < 0.02 ? 0.3 : 0)
-    ))
-  }
-}
-
-// ========== Tile helpers ==========
-function tileEq(a: Tile, b: Tile): boolean {
-  return a.suit === b.suit && a.value === b.value
-}
-function isHonor(t: Tile): boolean {
-  return t.suit === TileSuit.WIND || t.suit === TileSuit.DRAGON
-}
-function isTerminal(t: Tile): boolean {
-  return t.suit !== TileSuit.FLOWER && t.value === 1 || t.value === 9
-}
-function tileKey(t: Tile): string {
-  return `${t.suit}-${t.value}`
-}
-function t(suit: TileSuit, value: number, id?: string): Tile {
-  return { suit, value, id: id || `${suit}-${value}-${Math.random().toString(36).slice(2)}`, isFlower: false }
-}
-
-// ========== Game State ==========
+// ========== Player / Game ==========
 interface BotPlayer {
-  id: string
-  name: string
-  position: number
-  hand: Tile[]
-  exposedMelds: Meld[]
-  flowerCount: number
-  isBot: boolean
-  isDealer: boolean
-  isTing: boolean
-  score: number
-  frozenUntil: number
-  wildSuit?: number
-  wildValue?: number
+  name: string; pos: number; hand: Tile[]; exposedMelds: Meld[]; flowerTiles: Tile[]
+  isBot: boolean; isTing: boolean; score: number
+  wildSuit?: TileSuit; wildValue?: number
   kongCount: number
+  id: string
 }
 
 interface GameState {
-  deck: Tile[]
-  players: BotPlayer[]
-  currentPlayer: number
-  wallIndex: number
-  wildSuit?: number
-  wildValue?: number
-  roundMultiplier: number
-  dice: number[]
+  deck: Tile[]; wallIdx: number
+  players: BotPlayer[]; current: number
+  wildSuit?: TileSuit; wildValue?: number
   discardPile: Tile[]
 }
 
-// ========== Deck & Setup ==========
-const FLOWER_SUITS = [TileSuit.FLOWER, TileSuit.FLOWER, TileSuit.FLOWER, TileSuit.FLOWER,
-                       TileSuit.FLOWER, TileSuit.FLOWER, TileSuit.FLOWER, TileSuit.FLOWER]
-
+// ========== Build deck (144 tiles: 108 number + 16 wind + 12 dragon + 8 flower) ==========
 function buildDeck(): Tile[] {
-  const deck: Tile[] = []
-  // 筒万条: 4 copies each, 9 values each = 108
-  for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
-    for (let v = 1; v <= 9; v++) {
-      for (let copy = 0; copy < 4; copy++) {
-        deck.push(t(suit, v))
-      }
-    }
-  }
-  // 风牌: 4 copies, 4 types = 16
-  for (let v = 1; v <= 4; v++) {
-    for (let copy = 0; copy < 4; copy++) {
-      deck.push(t(TileSuit.WIND, v))
-    }
-  }
-  // 箭牌: 4 copies, 3 types = 12
-  for (let v = 1; v <= 3; v++) {
-    for (let copy = 0; copy < 4; copy++) {
-      deck.push(t(TileSuit.DRAGON, v))
-    }
-  }
-  // 花牌: 8张
-  for (let i = 0; i < 8; i++) {
-    deck.push({ suit: TileSuit.FLOWER, value: i + 1, id: `f${i}`, isFlower: true })
-  }
-  return shuffleTiles(deck)
+  const d: Tile[] = []
+  for (const s of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS])
+    for (let v = 1; v <= 9; v++) for (let c = 0; c < 4; c++) d.push(t(s, v))
+  for (let v = 1; v <= 4; v++) for (let c = 0; c < 4; c++) d.push(t(TileSuit.WIND, v))
+  for (let v = 1; v <= 3; v++) for (let c = 0; c < 4; c++) d.push(t(TileSuit.DRAGON, v))
+  for (let i = 0; i < 8; i++) d.push({ suit: TileSuit.FLOWER, value: i+1, id: `f${i}`, isFlower: true })
+  return shuffleTiles(d)
 }
 
+// ========== Setup ==========
 function setupGame(): GameState {
   const deck = buildDeck()
-  // 随机百搭
-  const wildSource = deck[Math.floor(Math.random() * 30)]
-  const wildSuit = wildSource.suit
-  const wildValue = wildSource.value
+  // Pick random wild tile from the deck (non-flower)
+  const nonFlower = deck.filter(t => !isFlower(t))
+  const w = nonFlower[Math.floor(Math.random() * nonFlower.length)]
+  const ws = w.suit as TileSuit, wv = w.value
 
-  const players: BotPlayer[] = AI_NAMES.map((name, i) => ({
-    id: `p${i}`,
-    name,
-    position: i,
-    hand: [],
-    exposedMelds: [],
-    flowerCount: 0,
-    isBot: true,
-    isDealer: i === 0,
-    isTing: false,
-    score: 0,
-    frozenUntil: 0,
-    wildSuit,
-    wildValue,
-    kongCount: 0
+  const players = AI_NAMES.map((name, i) => ({
+    name, pos: i, hand: [] as Tile[], exposedMelds: [] as Meld[], flowerTiles: [] as Tile[],
+    isBot: true, isTing: false, score: 0, wildSuit: ws, wildValue: wv, kongCount: 0, id: `p${i}`
   }))
 
-  return {
-    deck, players,
-    currentPlayer: 0,
-    wallIndex: 0,
-    wildSuit, wildValue,
-    roundMultiplier: 1,
-    dice: [Math.floor(Math.random() * 6) + 1, Math.floor(Math.random() * 6) + 1],
-    discardPile: []
-  }
+  return { deck, wallIdx: 0, players, current: 0, wildSuit: ws, wildValue: wv, discardPile: [] }
 }
 
-function drawTile(state: GameState, playerIdx: number): Tile | null {
-  if (state.wallIndex >= state.deck.length) return null
-  const tile = state.deck[state.wallIndex++]
+function drawTile(g: GameState, p: BotPlayer): Tile | null {
+  if (g.wallIdx >= g.deck.length) return null
+  const tile = g.deck[g.wallIdx++]
   if (isFlower(tile)) {
-    state.players[playerIdx].flowerCount++
-    state.players[playerIdx].hand.push(tile)
-    if (state.wallIndex < state.deck.length) {
-      return drawTile(state, playerIdx) // 继续摸直到非花牌
-    }
-    return null
+    p.flowerTiles.push(tile)
+    return drawTile(g, p) // auto-draw again
   }
-  state.players[playerIdx].hand.push(tile)
+  p.hand.push(tile)
   return tile
 }
 
-function isWild(t: Tile, wildSuit?: number, wildValue?: number): boolean {
-  if (!wildSuit || !wildValue) return false
-  return t.suit === wildSuit && t.value === wildValue
+function isWT(t: Tile, p: BotPlayer): boolean { return isWild(t, p.wildSuit, p.wildValue) }
+function makeWT(p: BotPlayer) { return buildWildTileChecker(p.wildSuit && p.wildValue ? `${p.wildSuit}-${p.wildValue}` : null) }
+
+// ========== Meld detection ==========
+function canPeng(p: BotPlayer, tile: Tile): boolean {
+  return p.hand.filter(t => tileEq(t, tile)).length >= 2
 }
 
-function buildWildChecker(wildSuit?: number, wildValue?: number) {
-  return (t: Tile) => isWild(t, wildSuit, wildValue)
+function canChow(p: BotPlayer, tile: Tile): boolean {
+  if (isHonor(tile) || tile.suit === TileSuit.FLOWER) return false
+  const v = tile.value
+  if (v < 2 || v > 8) return false
+  const low = p.hand.some(t => t.suit === tile.suit && t.value === v - 1)
+  const high = p.hand.some(t => t.suit === tile.suit && t.value === v + 1)
+  return low && high
 }
 
-function canHu(player: BotPlayer): boolean {
-  const isWT = buildWildChecker(player.wildSuit, player.wildValue)
-  const result = canWin(player.hand, 0, isWT)
-  return result.canWin
+function canMingKong(p: BotPlayer, tile: Tile): boolean {
+  return p.hand.filter(t => tileEq(t, tile)).length >= 3
 }
 
-function detectTypes(player: BotPlayer): HandType[] {
-  const isWT = buildWildChecker(player.wildSuit, player.wildValue)
-  const wildTileId = player.wildSuit && player.wildValue ? `${player.wildSuit}-${player.wildValue}` : null
-  return detectHandTypes(player.hand, player.exposedMelds, true, player.flowerCount, wildTileId)
+function canAnKong(p: BotPlayer): Tile[] {
+  const groups = groupTiles(p.hand)
+  const result: Tile[] = []
+  for (const [k, tiles] of groups) {
+    if (tiles.length === 4) result.push(tiles[0])
+  }
+  return result
 }
 
-// ========== Discard Logic ==========
-// Fast scoring-based discard (no expensive isTing calls per tile)
-function aiDiscard(player: BotPlayer, _game: GameState): Tile {
-  const isWT = buildWildChecker(player.wildSuit, player.wildValue)
-  const candidates = player.hand.filter(t => !isFlower(t))
-  if (candidates.length === 0) return player.hand[0]
-
-  let best = candidates[0]
-  let bestScore = -Infinity
-
-  for (const tile of candidates) {
-    let score = 0
-    const nonWild = candidates.filter(t => t.id !== tile.id)
-    const countOfThis = nonWild.filter(t => tileEq(t, tile)).length + 1
-
-    // 1. 留对 → 尽量弃孤张
-    if (countOfThis >= 2) score += 15 * countOfThis
-    else if (countOfThis === 1) score += 5
-
-    // 2. 顺子潜力: 数相邻牌
-    const neighbors = nonWild.filter(t =>
-      t.suit === tile.suit &&
-      Math.abs(t.value - tile.value) <= 2
-    )
-    score += neighbors.length * 3
-
-    // 3. 孤张 → 优先弃
-    if (neighbors.length === 0) score += 20
-
-    // 4. 字牌单张
-    if (isHonor(tile) && countOfThis === 1) score += 10
-
-    // 5. 边张孤张（1、9）
-    if ((tile.value === 1 || tile.value === 9) && countOfThis === 1) score += 12
-
-    // 6. 百搭绝对留着
-    if (isWT(tile)) score += 100
-
-    if (score > bestScore) {
-      bestScore = score
-      best = tile
+function canJiaGang(p: BotPlayer): Tile[] {
+  const result: Tile[] = []
+  for (const meld of p.exposedMelds) {
+    if (meld.type === MeldType.TRIPLET) {
+      const have4 = p.hand.find(t => tileEq(t, meld.tiles[0]))
+      if (have4) result.push(have4)
     }
   }
-
-  return best
+  return result
 }
 
-// ========== Peng/Chow/Gang Logic ==========
-function canPeng(player: BotPlayer, tile: Tile): boolean {
-  const count = player.hand.filter(t => tileEq(t, tile)).length
-  return count >= 2
-}
-
-function canChow(player: BotPlayer, tile: Tile): boolean {
-  if (isHonor(tile) || tile.suit === TileSuit.FLOWER) return false
-  const suits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
-  if (!suits.includes(tile.suit)) return false
-  // 123, 234, 345 ... only straight ahead
-  const v = tile.value
-  if (v <= 1 || v >= 9) return false
-  const hasLow = player.hand.some(t => t.suit === tile.suit && t.value === v - 1)
-  const hasHigh = player.hand.some(t => t.suit === tile.suit && t.value === v + 1)
-  return hasLow && hasHigh
-}
-
-function canKong(player: BotPlayer, tile: Tile): boolean {
-  const count = player.hand.filter(t => tileEq(t, tile)).length
-  return count >= 4
-}
-
-function applyPeng(player: BotPlayer, tile: Tile): void {
-  const tiles = player.hand.filter(t => tileEq(t, tile)).slice(0, 2)
-  player.hand = player.hand.filter(t => !tileEq(t, tile) || tiles.length === 0)
-  // remove the 2 tiles used in peng
-  for (const t of tiles) {
-    const idx = player.hand.findIndex(rt => rt.id === t.id)
-    if (idx >= 0) player.hand.splice(idx, 1)
+// ========== Apply melds ==========
+function applyPeng(p: BotPlayer, tile: Tile, sourceIdx?: number): void {
+  const matches = p.hand.filter(t => tileEq(t, tile))
+  const used = matches.slice(0, 2)
+  for (const u of used) {
+    const idx = p.hand.findIndex(rt => rt.id === u.id)
+    if (idx >= 0) p.hand.splice(idx, 1)
   }
-  player.exposedMelds.push({ type: MeldType.TRIPLET, tiles: [tile, tile, tile], isConcealed: false })
+  p.exposedMelds.push({ type: MeldType.TRIPLET, tiles: [tile, tile, tile], isConcealed: false })
+}
+
+function applyChow(p: BotPlayer, tile: Tile): void {
+  const v = tile.value
+  const low = p.hand.find(t => t.suit === tile.suit && t.value === v - 1)!
+  const high = p.hand.find(t => t.suit === tile.suit && t.value === v + 1)!
+  // Remove from hand
+  const idxL = p.hand.findIndex(t => t.id === low.id)
+  if (idxL >= 0) p.hand.splice(idxL, 1)
+  const idxH = p.hand.findIndex(t => t.id === high.id)
+  if (idxH >= 0) p.hand.splice(idxH, 1)
+  p.exposedMelds.push({ type: MeldType.SEQUENCE, tiles: [low, tile, high], isConcealed: false })
+}
+
+function applyMingKong(p: BotPlayer, tile: Tile): void {
+  const matches = p.hand.filter(t => tileEq(t, tile)).slice(0, 3)
+  for (const u of matches) {
+    const idx = p.hand.findIndex(rt => rt.id === u.id)
+    if (idx >= 0) p.hand.splice(idx, 1)
+  }
+  p.exposedMelds.push({ type: MeldType.KONG, tiles: [tile, tile, tile, tile], isConcealed: false })
+  p.kongCount++
+}
+
+function applyAnKong(p: BotPlayer, tile: Tile): void {
+  p.hand = p.hand.filter(t => !tileEq(t, tile))
+  p.exposedMelds.push({ type: MeldType.KONG, tiles: [tile, tile, tile, tile], isConcealed: true })
+  p.kongCount++
+}
+
+function applyJiaGang(p: BotPlayer, tile: Tile): void {
+  const meld = p.exposedMelds.find(m => m.type === MeldType.TRIPLET && tileEq(m.tiles[0], tile))!
+  meld.type = MeldType.KONG
+  meld.tiles = [tile, tile, tile, tile]
+  meld.isConcealed = false
+  p.hand = p.hand.filter(t => !tileEq(t, tile))
+  p.kongCount++
 }
 
 // ========== Scoring ==========
-function calcScore(player: BotPlayer, isSelfDraw: boolean, isKongWin: boolean): number {
-  const isWT = buildWildChecker(player.wildSuit, player.wildValue)
-  const types = detectTypes(player)
-  const flowerTiles: Tile[] = player.hand.filter(t => isFlower(t))
-  const params = {
-    handTiles: player.hand,
-    exposedMelds: player.exposedMelds,
-    flowerTiles,
+function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean): number {
+  const types = detectHandTypes(p.hand, p.exposedMelds, isSelfDraw, p.flowerTiles.length,
+    p.wildSuit && p.wildValue ? `${p.wildSuit}-${p.wildValue}` : null)
+  const result = calculateScore({
+    handTiles: p.hand, exposedMelds: p.exposedMelds,
+    flowerTiles: p.flowerTiles,
     handTypes: types,
     isSelfDrawn: isSelfDraw,
-    isKongFlower: false,
-    isRobbingKong: isKongWin,
-    isMenQing: true,
-    wildTileSuit: player.wildSuit ? player.wildSuit as unknown as TileSuit : undefined,
-    wildTileValue: player.wildValue,
-    roundMultiplier: 1,
-    globalMultiplier: 1
-  }
-  const result = calculateScore(params)
+    isKongFlower: isKongWin,
+    isRobbingKong: false,
+    isMenQing: p.exposedMelds.length === 0,
+    wildTileSuit: p.wildSuit, wildTileValue: p.wildValue,
+    roundMultiplier: 1, globalMultiplier: 1
+  })
   return result.finalPoints * SETTLEMENT_MULT
 }
 
-// ========== Run Single Game ==========
-function runGame(): { winner: number; huType: string; huPlayer: number } | null {
-  const game = setupGame()
-
-  // 发牌: 每人13张
-  for (let i = 0; i < 13; i++) {
-    for (let p = 0; p < 4; p++) {
-      drawTile(game, p)
-    }
+// ========== AI Discard ==========
+// Policy-based discard (inspired by old simulate.ts that achieved 85%+ win rate)
+function aiDiscard(p: BotPlayer): Tile {
+  const wt = makeWT(p)
+  const policy = {
+    pairWeight: 4.0,           // keep pairs (old training: 4.85)
+    tripletKeepBonus: 3.0,     // keep triplets
+    sequencePotential: 1.5,    // keep sequence-connected tiles
+    honorPairBonus: 2.0,       // keep honor pairs
+    terminalWeight: 0.8,       // slight preference to keep terminals near neighbors
+    connectivityWeight: 1.0,   // keep connected tiles
+    honorSinglePenalty: -1.5,  // discard honor singles (old: honor singles get positive = discard)
+    terminalIsolatedPenalty: -1.5, // discard isolated terminals
+    wildKeepPenalty: 500,      // never discard wild
   }
 
-  const maxRounds = 200
-  for (let round = 0; round < maxRounds; round++) {
-    const curr = game.currentPlayer
-    const player = game.players[curr]
+  const candidates: { tile: Tile; keepScore: number }[] = []
+  for (const tile of p.hand) {
+    if (isFlower(tile)) continue
+    let keepScore = 0
+    const count = p.hand.filter(t => tileEq(t, tile)).length
+    const sameSuit = p.hand.filter(t => t.suit === tile.suit && !tileEq(t, tile))
 
-    // 摸牌
-    const drawn = drawTile(game, curr)
-    if (!drawn) {
-      // 流局: 牌墙空
-      return null
+    // Pairs & triplets → strongly keep
+    if (count >= 2) keepScore += policy.pairWeight
+    if (count >= 3) keepScore += policy.tripletKeepBonus
+
+    // Sequence potential (neighbors 1-2 away)
+    if (!isHonor(tile) && tile.suit !== TileSuit.FLOWER) {
+      const hasLeft = sameSuit.some(t => t.value === tile.value - 1 || t.value === tile.value - 2)
+      const hasRight = sameSuit.some(t => t.value === tile.value + 1 || t.value === tile.value + 2)
+      if (hasLeft) keepScore += policy.sequencePotential
+      if (hasRight) keepScore += policy.sequencePotential
+      // Neighbor count
+      const neighbors = sameSuit.filter(t => Math.abs(t.value - tile.value) <= 2)
+      keepScore += neighbors.length * policy.connectivityWeight * 0.2
     }
 
-    // 花牌自动跳过
+    // Honor tiles
+    if (isHonor(tile)) {
+      if (count >= 2) keepScore += policy.honorPairBonus * policy.pairWeight
+      else keepScore += policy.honorSinglePenalty // honor singles → discard
+    }
+
+    // Terminals
+    if (tile.value === 1 || tile.value === 9) {
+      keepScore += policy.terminalWeight
+      // Unless isolated
+      const neighbors = sameSuit.filter(t => Math.abs(t.value - tile.value) <= 2)
+      if (neighbors.length === 0) keepScore += policy.terminalIsolatedPenalty
+    }
+
+    // Wild tile → never discard
+    if (isWT(tile, p)) keepScore += policy.wildKeepPenalty
+
+    candidates.push({ tile, keepScore })
+  }
+
+  // HIGHEST keepScore = most valuable = KEPT
+  // LOWEST keepScore = least valuable = DISCARDED
+  candidates.sort((a, b) => a.keepScore - b.keepScore)
+  return candidates[0]?.tile || p.hand[0]
+}
+
+// ========== Game Loop ==========
+function runGame(): { winner: number; huType: string; scores: number[] } | null {
+  const g = setupGame()
+
+  // Deal 13 tiles each
+  for (let i = 0; i < 13; i++) {
+    for (let p = 0; p < 4; p++) drawTile(g, g.players[p])
+  }
+
+  const MAX_ROUNDS = 200
+  let consecutiveDraws = 0
+
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const curr = g.current
+    const player = g.players[curr]
+
+    // Draw
+    const drawn = drawTile(g, player)
+    if (!drawn) return null // wall empty
+
+    // Auto-draw flower
     if (isFlower(drawn)) continue
 
-    // 更新听牌状态
-    const isWT_d = buildWildChecker(player.wildSuit, player.wildValue)
-    player.isTing = isTing(player.hand, 0, isWT_d)
-
-    // 检查自摸
-    if (canHu(player)) {
-      const score = calcScore(player, true, false)
-      player.score += score
-      return { winner: curr, huType: 'self_draw', huPlayer: curr }
+    // Check self-draw win
+    if (canWin(player.hand.filter(t => t !== undefined), player.exposedMelds.length, makeWT(player)).canWin) {
+      return { winner: curr, huType: 'self_draw', scores: g.players.map(p => p.score) }
     }
 
-    // AI 出牌
-    const discard = aiDiscard(player, game)
-    player.hand = player.hand.filter(t => t.id !== discard.id)
-    game.discardPile.push(discard)
+    // AnKong / JiaGang check
+    for (const ak of canAnKong(player)) {
+      applyAnKong(player, ak)
+      // After kong, draw again
+      const extra = drawTile(g, player)
+      if (extra && !isFlower(extra)) {
+        if (canWin(player.hand, player.exposedMelds.length, makeWT(player)).canWin) {
+          return { winner: curr, huType: 'self_draw', scores: g.players.map(p => p.score) } // kong flower win
+        }
+      }
+    }
+    for (const jg of canJiaGang(player)) {
+      applyJiaGang(player, jg)
+      const extra = drawTile(g, player)
+      if (extra && !isFlower(extra)) {
+        if (canWin(player.hand, player.exposedMelds.length, makeWT(player)).canWin) {
+          return { winner: curr, huType: 'self_draw', scores: g.players.map(p => p.score) }
+        }
+      }
+    }
 
-    // 其他人检查
+    // Update ting status
+    player.isTing = isTing(player.hand, player.exposedMelds.length, makeWT(player))
+
+    // Discard
+    const discard = aiDiscard(player)
+    player.hand = player.hand.filter(t => t.id !== discard.id)
+    g.discardPile.push(discard)
+
+    // Others respond: check chow > check peng > check hu
+    // Priority: hu > peng > chow
+    // But if multiple players want peng, the first in turn order gets priority
+    // If hu is possible, hu always takes priority
+
+    // 1. Check hu for all others
     for (let other = 0; other < 4; other++) {
       if (other === curr) continue
-      const opp = game.players[other]
-      // 碰
-      if (canPeng(opp, discard) && Math.random() < 0.75) {
-        applyPeng(opp, discard)
-        opp.frozenUntil = Date.now() + 300
-        // 摸牌后打一张
-        const drawn2 = drawTile(game, other)
-        if (!drawn2 || isFlower(drawn2)) continue
-        const isWT_p = buildWildChecker(opp.wildSuit, opp.wildValue)
-        opp.isTing = isTing(opp.hand, opp.exposedMelds.length, isWT_p)
-        const drawDiscard = aiDiscard(opp, game)
-        opp.hand = opp.hand.filter(t => t.id !== drawDiscard.id)
-        game.discardPile.push(drawDiscard)
-        other = -1 // 重审所有，包括刚出牌者
-        continue
-      }
-      // 胡
-      if (canHu(opp)) {
+      const opp = g.players[other]
+      // Temporarily add discarded tile to check win
+      const testHand = [...opp.hand.filter(t => t !== undefined), discard]
+      if (canWin(testHand, opp.exposedMelds.length, makeWT(opp)).canWin) {
+        // Win by discard
         const score = calcScore(opp, false, false)
         opp.score += score
         player.score -= score
-        return { winner: other, huType: 'discard', huPlayer: curr }
+        return { winner: other, huType: 'discard', scores: g.players.map(p => p.score) }
       }
     }
 
-    game.currentPlayer = (curr + 1) % 4
+    // 2. Check peng (next player in turn order)
+    // Priority: next player > previous player > opposite
+    const nextPlayer = (curr + 1) % 4
+    const prevPlayer = (curr + 3) % 4
+    const oppositePlayer = (curr + 2) % 4
+
+    for (const otherIdx of [nextPlayer, prevPlayer, oppositePlayer]) {
+      const opp = g.players[otherIdx]
+      if (canPeng(opp, discard)) {
+        applyPeng(opp, discard)
+        // Draw and discard again (if we're still in game)
+        const d = drawTile(g, opp)
+        if (!d) return null
+        if (canWin(opp.hand, opp.exposedMelds.length, makeWT(opp)).canWin) {
+          return { winner: otherIdx, huType: 'self_draw', scores: g.players.map(p => p.score) }
+        }
+        // AnKong check after draw
+        for (const ak of canAnKong(opp)) {
+          applyAnKong(opp, ak)
+          const extra = drawTile(g, opp)
+          if (extra && !isFlower(extra)) {
+            if (canWin(opp.hand, opp.exposedMelds.length, makeWT(opp)).canWin) {
+              return { winner: otherIdx, huType: 'self_draw', scores: g.players.map(p => p.score) }
+            }
+          }
+        }
+        const pengDiscard = aiDiscard(opp)
+        opp.hand = opp.hand.filter(t => t.id !== pengDiscard.id)
+        g.discardPile.push(pengDiscard)
+        // Next turn: the person who just discarded becomes next
+        g.current = otherIdx
+        continue
+      }
+    }
+
+    // 3. Check chow (only next player in turn order)
+    if (canChow(g.players[nextPlayer], discard)) {
+      const nextP = g.players[nextPlayer]
+      applyChow(nextP, discard)
+      // Draw after chow
+      const d = drawTile(g, nextP)
+      if (!d) return null
+      if (canWin(nextP.hand, nextP.exposedMelds.length, makeWT(nextP)).canWin) {
+        return { winner: nextPlayer, huType: 'self_draw', scores: g.players.map(p => p.score) }
+      }
+      // AnKong check
+      for (const ak of canAnKong(nextP)) {
+        applyAnKong(nextP, ak)
+        const extra = drawTile(g, nextP)
+        if (extra && !isFlower(extra)) {
+          if (canWin(nextP.hand, nextP.exposedMelds.length, makeWT(nextP)).canWin) {
+            return { winner: nextPlayer, huType: 'self_draw', scores: g.players.map(p => p.score) }
+          }
+        }
+      }
+      const chowDiscard = aiDiscard(nextP)
+      nextP.hand = nextP.hand.filter(t => t.id !== chowDiscard.id)
+      g.discardPile.push(chowDiscard)
+      g.current = nextPlayer
+      continue
+    }
+
+    // Next player's turn
+    g.current = nextPlayer
+    consecutiveDraws++
+    if (consecutiveDraws > MAX_ROUNDS * 4) return null // safety
   }
 
-  return null // 超轮次
+  return null
 }
 
 // ========== Run Batch ==========
-function runRound(roundNum: number, gpr: number, akPolicy: AIPolicy): Record<string, number> {
-  const scores: Record<string, number> = { 'AI-AK': 0, 'AI-小胖': 0, 'AI-阿水': 0, 'AI-老赵': 0 }
-  const wins: Record<string, number> = { 'AI-AK': 0, 'AI-小胖': 0, 'AI-阿水': 0, 'AI-老赵': 0 }
-  const selfDraws: Record<string, number> = { 'AI-AK': 0, 'AI-小胖': 0, 'AI-阿水': 0, 'AI-老赵': 0 }
-  const lastPlays: Record<string, number> = { 'AI-AK': 0, 'AI-小胖': 0, 'AI-阿水': 0, 'AI-老赵': 0 }
+interface RoundResult {
+  scores: Record<string, number>
+  wins: Record<string, number>
+  draws: number
+}
+
+function runRound(roundNum: number, gpr: number): RoundResult {
+  const scores: Record<string, number> = {}
+  const wins: Record<string, number> = {}
+  for (const n of AI_NAMES) { scores[n] = 0; wins[n] = 0 }
+
+  let draws = 0
 
   for (let g = 0; g < gpr; g++) {
     const result = runGame()
     if (result) {
       const winner = AI_NAMES[result.winner]
-      scores[winner] += 10
       wins[winner]++
-      if (result.huType === 'self_draw') {
-        selfDraws[winner]++
+      // Use internal game scores (reflects actual payment from loser(s) to winner)
+      for (let i = 0; i < AI_NAMES.length; i++) {
+        scores[AI_NAMES[i]] += result.scores[i] * SETTLEMENT_MULT
       }
-    }
-    // 流局: 各扣分
-    for (const name of AI_NAMES) {
-      scores[name] -= 5
+    } else {
+      draws++
+      // Draw: no score change (stake returned)
     }
   }
-
-  // 排名
-  const sorted = [...AI_NAMES].sort((a, b) => scores[b] - scores[a])
-  const rank = sorted.indexOf('AI-AK') + 1
-
-  const huRate = wins['AI-AK'] / gpr
-  const sdRate = selfDraws['AI-AK'] / gpr
-  const lpRate = lastPlays['AI-AK'] / gpr
-  const avgScore = scores['AI-AK'] / gpr
 
   console.log()
-  console.log(`=== Round ${roundNum} ===`)
-  for (const name of sorted) {
-    const wr = (wins[name] / gpr * 100).toFixed(1)
-    const mark = name === 'AI-AK' ? ' *' : ''
-    console.log(`  ${name.padEnd(8)} ${scores[name].toString().padStart(6)}  胜率${wr}%  排名${sorted.indexOf(name)+1}${mark}`)
-  }
+  console.log(`Round ${roundNum}: ` + AI_NAMES.map(n => {
+    const wr = (wins[n] / gpr * 100).toFixed(1)
+    return `${n.padEnd(8)} ${scores[n].toString().padStart(6)}  wins:${wr}%`
+  }).join(' | '))
+  console.log(`  Draws: ${draws}/${gpr} (${(draws/gpr*100).toFixed(1)}%)`)
 
-  return scores
+  return { scores, wins, draws }
 }
 
 // ========== Main ==========
-async function main() {
-  console.log()
-  console.log('=================================================')
-  console.log('  AI Simulation v3 - 10 x 200 (Full Rules)')
-  console.log('  百搭 + 花牌 + 完整计分 + 策略迭代')
-  console.log('=================================================')
+function main() {
+  console.log('===========================================')
+  console.log('  AI Simulation v3 - Complete Rules')
+  console.log('===========================================')
+  console.log(`Config: ${ROUNDS} rounds x ${GAMES_PER_ROUND} games = ${ROUNDS * GAMES_PER_ROUND} total`)
 
-  let akPolicy = loadPolicy('AI-AK')
-  const totalScores: Record<string, number> = { 'AI-AK': 0, 'AI-小胖': 0, 'AI-阿水': 0, 'AI-老赵': 0 }
+  const totalScores: Record<string, number> = {}
+  const totalWins: Record<string, number> = {}
+  for (const n of AI_NAMES) { totalScores[n] = 0; totalWins[n] = 0 }
 
   for (let r = 1; r <= ROUNDS; r++) {
-    const roundScores = runRound(r, GAMES_PER_ROUND, akPolicy)
-    for (const name of AI_NAMES) totalScores[name] += roundScores[name]
-
-    // 轮次间策略微调
-    if (r < ROUNDS) {
-      const akWins = Object.entries(roundScores).filter(([k]) => k === 'AI-AK')
-      // 只做轻量调整，累积效果
-      akPolicy = { ...akPolicy }
+    const result = runRound(r, GAMES_PER_ROUND)
+    for (const n of AI_NAMES) {
+      totalScores[n] += result.scores[n]
+      totalWins[n] += result.wins[n]
     }
   }
 
-  // Final summary
   console.log()
-  console.log('=================================================')
+  console.log('===========================================')
   console.log(`  GRAND TOTAL (${ROUNDS * GAMES_PER_ROUND} games)`)
-  console.log('=================================================')
-  const finalSorted = [...AI_NAMES].sort((a, b) => totalScores[b] - totalScores[a])
-  for (let i = 0; i < finalSorted.length; i++) {
-    const name = finalSorted[i]
-    console.log(`  ${i+1}. ${name.padEnd(10)} ${totalScores[name].toString().padStart(8)}`)
+  console.log('===========================================')
+  const sorted = [...AI_NAMES].sort((a, b) => totalScores[b] - totalScores[a])
+  for (let i = 0; i < sorted.length; i++) {
+    const n = sorted[i]
+    const wr = (totalWins[n] / (ROUNDS * GAMES_PER_ROUND) * 100).toFixed(1)
+    console.log(`  ${i+1}. ${n.padEnd(8)} ${totalScores[n].toString().padStart(8)}  wins:${wr}%`)
   }
-
-  // Save updated policy
-  savePolicy('AI-AK', akPolicy)
 }
 
-main().catch(console.error)
+main()
