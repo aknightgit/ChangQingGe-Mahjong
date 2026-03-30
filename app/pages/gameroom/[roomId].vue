@@ -655,6 +655,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch, provide } from 'vue'
+
+// 游戏室高度交互，不需要SSR（避免TileSuit等enum在SSR时解析失败）
+definePageMeta({ ssr: false })
 import PlayerSelfArea from '~/components/PlayerSelfArea.vue'
 import PlayerOtherArea from '~/components/PlayerOtherArea.vue'
 import CircularActionButtons from '~/components/CircularActionButtons.vue'

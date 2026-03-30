@@ -25,8 +25,8 @@
 <script setup lang="ts">
 import MahjongTile from './MahjongTile.vue'
 import TileWall from './TileWall.vue'
-import { TileSuit } from '~/types/game'
-import type { Tile } from '~/types/game'
+import { TileSuit } from '../types/game'
+import type { Tile } from '../types/game'
 
 const props = defineProps<{
   remainingTiles: number
