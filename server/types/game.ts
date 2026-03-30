@@ -86,6 +86,7 @@ export interface Player {
   windScore: number; // Kong scores (刮风)
   rainScore: number; // Concealed kong scores (下雨)
   wonFan: number; // Fan count when won
+  winHandType?: string; // 胡牌牌型名称（如"普通胡"、"碰碰胡"、"清一色"等）
   winOrder: number | null;
   winRound: number | null;
   winTimestamp: number | null;

@@ -226,3 +226,16 @@ export interface RoomState {
   createdAt: Date;
   updatedAt: Date;
 }
+
+/**
+ * Game Messages Collection - Per-room game broadcast messages for history tracking
+ */
+export interface GameMessage {
+  _id?: ObjectId;
+  gameId: string;
+  roomId: string;
+  type: 'win' | 'special' | 'warn' | 'info';
+  text: string;
+  roundNumber: number;
+  createdAt: Date;
+}

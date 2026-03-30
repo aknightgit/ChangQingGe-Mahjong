@@ -1563,6 +1563,7 @@ class GameManager {
     });
 
     player.wonFan = scoreResult.baseFan;
+    player.winHandType = scoreResult.handTypeName;
 
     const remainingActive = game.players.filter(p => p.status === PlayerStatus.PLAYING).length;
     if (remainingActive <= 1) {
@@ -1639,15 +1640,13 @@ class GameManager {
     game.endReason = GameEndReason.LAST_PLAYER;
     game.endedAt = Date.now();
 
-    // 记录造反事件（下局倍数×2）
+    // 记录造反事件（下局倍数×2，由 startGame 统一处理）
     game.rebelEvent = {
       playerId: player.id,
       playerName: player.name,
       newDealerIndex: player.position
     };
-    // 造反：下局全局倍数 ×2（由 startGame 消费）
-    const currentGlobal = game.globalMultiplier ?? 1;
-    game.inheritedGlobalMultiplier = calculateGlobalMultiplier(currentGlobal, '造反');
+    // 不在这里翻倍，startGame 会根据 rebelEvent 统一处理
 
     // 造反者成为庄家
     game.dealerIndex = player.position;
