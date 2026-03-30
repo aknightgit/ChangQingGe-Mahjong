@@ -380,7 +380,7 @@ class GameManager {
     return String(Date.now()).slice(-4);
   }
 
-  async createGame(playerName: string, options?: { freezeDurationMs?: number; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number }): Promise<{ gameId: string; playerId: string }> {
+  async createGame(playerName: string, options?: { freezeDurationMs?: number; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number; maxBots?: number }): Promise<{ gameId: string; playerId: string }> {
     await this.hydrateFromDatabase();
 
     const gameId = randomUUID();
@@ -439,6 +439,7 @@ class GameManager {
       liangShanThreshold: options?.liangShanThreshold ?? 1000,
       thinkChances: options?.thinkChances ?? 3,
       settlementMultiplier: options?.settlementMultiplier ?? 10,
+      maxBots: options?.maxBots ?? 3,  // 默认允许最多3个AI
       thinkUsage: {}
     };
 
@@ -480,6 +481,16 @@ class GameManager {
 
     if (game.players.length >= 4) {
       throw new Error('Game is full');
+    }
+
+    // Bot上限检查：建房时的AI玩家上限全程有效
+    const isBotJoin = playerName.startsWith('AI-') || playerName.startsWith('电脑');
+    if (isBotJoin) {
+      const currentBots = game.players.filter(p => p.name.startsWith('AI-') || p.name.startsWith('电脑')).length;
+      const maxBots = game.maxBots ?? 3;
+      if (currentBots >= maxBots) {
+        throw new Error(`AI玩家数量已达上限(${maxBots}个)`);
+      }
     }
 
     const playerId = randomUUID();

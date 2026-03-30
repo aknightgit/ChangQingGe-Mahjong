@@ -16,7 +16,8 @@ export default defineEventHandler(async (event) => {
       firstRoundDouble: body.firstRoundDouble ?? true,
       liangShanThreshold: body.liangShanThreshold ?? 1000,
       thinkChances: body.thinkChances ?? 3,
-      settlementMultiplier: body.settlementMultiplier ?? 10
+      settlementMultiplier: body.settlementMultiplier ?? 10,
+      maxBots: body.maxBots ?? 3
     });
     
     return {

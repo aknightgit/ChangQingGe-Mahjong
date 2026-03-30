@@ -246,7 +246,16 @@
           <!-- AI玩家 -->
           <div class="param-group">
             <h3 class="param-group-title">🤖 AI玩家</h3>
-            <button class="ai-toggle-btn" @click="showAISelection = !showAISelection">
+            <div class="create-field">
+              <label>AI玩家上限</label>
+              <select v-model.number="createParams.maxBots">
+                <option :value="0">0 - 禁止AI加入</option>
+                <option :value="1">1个</option>
+                <option :value="2">2个</option>
+                <option :value="3">3个（默认）</option>
+              </select>
+            </div>
+            <button v-if="createParams.maxBots > 0" class="ai-toggle-btn" @click="showAISelection = !showAISelection">
               {{ showAISelection ? '▼ 收起' : '▶ 选择AI玩家' }}
               <span v-if="selectedBots.length" class="ai-count-badge">{{ selectedBots.length }}/3</span>
             </button>
@@ -307,7 +316,8 @@ const createParams = reactive({
   firstRoundDouble: true,
   liangShanThreshold: 4000,
   thinkChances: 3,
-  settlementMultiplier: 10
+  settlementMultiplier: 10,
+  maxBots: 3
 })
 
 // AI玩家选择
@@ -322,9 +332,17 @@ const allAIBots = [
 ]
 const selectedBots = ref<string[]>([])
 
+// maxBots变更时自动裁剪多余的AI选择
+watch(() => createParams.maxBots, (newMax) => {
+  if (selectedBots.value.length > newMax) {
+    selectedBots.value = selectedBots.value.slice(0, newMax)
+  }
+})
+
 const openCreateModal = (aiCount: number) => {
-  // 人机大战默认选满3个
-  selectedBots.value = aiCount > 0 ? allAIBots.slice(0, aiCount).map(b => b.id) : []
+  // 人机大战默认选满（不超过maxBots）
+  const effectiveCount = Math.min(aiCount, createParams.maxBots)
+  selectedBots.value = effectiveCount > 0 ? allAIBots.slice(0, effectiveCount).map(b => b.id) : []
   showCreateModal.value = true
 }
 
@@ -340,7 +358,8 @@ const confirmCreateGame = async () => {
         firstRoundDouble: createParams.firstRoundDouble,
         liangShanThreshold: createParams.liangShanThreshold,
         thinkChances: createParams.thinkChances,
-        settlementMultiplier: createParams.settlementMultiplier
+        settlementMultiplier: createParams.settlementMultiplier,
+        maxBots: createParams.maxBots
       },
       headers: { 'Cache-Control': 'no-cache' }
     })
@@ -354,8 +373,9 @@ const confirmCreateGame = async () => {
     const playerId = response.data?.playerId
     if (!gameId) return
 
-    // 加入选中的AI玩家
-    for (const botId of selectedBots.value) {
+    // 加入选中的AI玩家（不超过maxBots上限）
+    const botsToJoin = selectedBots.value.slice(0, createParams.maxBots);
+    for (const botId of botsToJoin) {
       try {
         await $fetch('/api/game/join', {
           method: 'POST',

@@ -208,6 +208,7 @@ export interface GameState {
   liangShanThreshold?: number;  // 梁山聚义被QJ线（累积赢分阈值），默认4000
   thinkChances?: number;      // 等我想一想机会次数，默认3
   settlementMultiplier?: number;  // 结算膨胀倍数，默认10
+  maxBots?: number;             // 最大AI玩家数，默认3（0=禁止AI加入）
   thinkUsage?: Record<string, number>;  // 每位玩家本局已使用「等」次数
   thinkFreezeUntil?: number;  // 等我想一想冻结结束时间戳
   thinkFreezePlayerId?: string;  // 触发等我想一想的玩家ID
