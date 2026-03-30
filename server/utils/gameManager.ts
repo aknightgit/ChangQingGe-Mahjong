@@ -2072,10 +2072,12 @@ class GameManager {
   }
 
   /**
-   * 超时自动接管：人类玩家长时间未操作 → 自动AI托管
+   * 超时自动接管：人类玩家连续2回合60秒未操作 → 自动AI托管
    * 仅本局结算减半，玩家回来后下一局恢复正常
    */
   private autoTakeoverTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  // 追踪每个玩家连续超时次数（gameId-playerId → count）
+  private consecutiveTimeouts: Map<string, number> = new Map();
 
   private scheduleAutoTakeover(gameId: string, playerId: string, expectedIndex: number): void {
     const key = `${gameId}-${playerId}`;
@@ -2094,23 +2096,31 @@ class GameManager {
         if (!player || player.id !== playerId) return;
         if (this.isPlayerBotControlled(player)) return; // 已经是AI控制了
 
-        console.log(`[AutoTakeover] ${player.name} 超时30秒，自动AI接管`);
+        // 累加连续超时次数
+        const currentCount = (this.consecutiveTimeouts.get(key) || 0) + 1;
+        this.consecutiveTimeouts.set(key, currentCount);
 
-        // 启用AI托管模式（会自动加入 botTakeoverPlayers → 本局减半）
-        this.enableBotMode(gameId, playerId);
-
-        await this.persistGame(game);
-        this.broadcastGameState(gameId);
+        if (currentCount >= 2) {
+          // 连续2回合超时 → 触发AI接管
+          console.log(`[AutoTakeover] ${player.name} 连续${currentCount}回合超时60秒，自动AI接管`);
+          this.consecutiveTimeouts.delete(key);
+          // 启用AI托管模式（会自动加入 botTakeoverPlayers → 本局减半）
+          this.enableBotMode(gameId, playerId);
+          await this.persistGame(game);
+          this.broadcastGameState(gameId);
+        } else {
+          console.log(`[AutoTakeover] ${player.name} 第${currentCount}次超时60秒（连续2次才接管）`);
+        }
       } catch (err) {
         console.error('[AutoTakeover] Error:', err);
       }
-    }, 30000); // 30秒超时
+    }, 60000); // 60秒超时
 
     this.autoTakeoverTimers.set(key, timer);
   }
 
   /**
-   * 取消超时自动接管（玩家已操作）
+   * 取消超时自动接管（玩家已操作），重置连续超时计数
    */
   private clearAutoTakeover(gameId: string, playerId: string): void {
     const key = `${gameId}-${playerId}`;
@@ -2119,6 +2129,8 @@ class GameManager {
       clearTimeout(timer);
       this.autoTakeoverTimers.delete(key);
     }
+    // 玩家已操作，重置连续超时计数
+    this.consecutiveTimeouts.delete(key);
   }
 
   /**
