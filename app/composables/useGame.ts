@@ -179,7 +179,7 @@ export const useGame = () => {
   // 防止并发 refresh + 防抖
   let isRefreshing = false
   let lastRefreshAt = 0
-  const DEBOUNCE_MS = 1500
+  const DEBOUNCE_MS = 800
 
   const refreshState = async () => {
     if (!gameId.value || !playerId.value) return
@@ -263,6 +263,14 @@ export const useGame = () => {
     }
   }
 
+  // 强制刷新（绕过debounce），用于关键操作后（如startGame）
+  const forceRefreshState = async () => {
+    if (!gameId.value || !playerId.value) return
+    lastRefreshAt = 0 // 重置debounce
+    isRefreshing = false
+    await refreshState()
+  }
+
   return {
     gameState,
     currentPlayer,
@@ -274,6 +282,7 @@ export const useGame = () => {
     executeAction,
     startGame,
     refreshState,
+    forceRefreshState,
     isActionPending,
     roomDismissedReason,
     lastStateChangeAt,

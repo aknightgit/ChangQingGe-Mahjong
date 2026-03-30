@@ -684,6 +684,7 @@ const {
   executeAction,
   startGame,
   refreshState,
+  forceRefreshState,
   roomDismissedReason,
   lastStateChangeAt,
   leadingBrotherEvent
@@ -833,6 +834,18 @@ const freezeDurationMs = ref((Number(route.query.freeze) || 1) * 1000) // 秒转
 const currentFreezeUntil = computed(() => {
   const fu = (gameState.value as any)?._freezeUntil
   return typeof fu === 'number' && fu > Date.now() ? fu : 0
+})
+
+// 冻结窗口结束后主动刷新（避免debounce导致客户端错过auto-draw）
+let freezeRefreshTimer: ReturnType<typeof setTimeout> | null = null
+watch(currentFreezeUntil, (until) => {
+  if (freezeRefreshTimer) { clearTimeout(freezeRefreshTimer); freezeRefreshTimer = null }
+  if (until > 0) {
+    const delay = until - Date.now() + 100 // 冻结结束后100ms刷新
+    freezeRefreshTimer = setTimeout(() => {
+      refreshState()
+    }, Math.max(delay, 0))
+  }
 })
 
 const onRerollDice = () => {
@@ -1789,8 +1802,9 @@ const onDealTiles = async () => {
   console.log('[onDealTiles] Calling startGame API...')
   try {
     await startGame({ freezeDurationMs: freezeDurationMs.value })
-    console.log('[onDealTiles] startGame done, refreshing state...')
-    await refreshState()
+    console.log('[onDealTiles] startGame done, forcing fresh state...')
+    // 强制刷新（绕过debounce），确保开局后立刻看到正确的可用操作
+    await forceRefreshState()
     console.log('[onDealTiles] Done, phase:', gameState.value?.phase)
   } finally {
     isGameStarting = false
