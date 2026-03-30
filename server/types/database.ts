@@ -9,6 +9,8 @@ export interface User {
   userId: string; // Unique user identifier
   email: string;
   name: string;
+  phone?: string;       // 手机号（国内11位）
+  passwordHash?: string; // 密码哈希（本地注册用户）
   avatar?: string;
   oauthProvider: 'google' | 'local'; // OAuth provider
   oauthId?: string; // Google ID
