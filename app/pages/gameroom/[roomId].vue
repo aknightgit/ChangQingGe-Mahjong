@@ -590,11 +590,20 @@
           :dice1="diceValues[0]"
           :dice2="diceValues[1]"
           :dealer-name="dealerName"
-          :max-rolls="maxDiceRolls"
+          :max-rolls="effectiveMaxRolls"
           :is-dealer="isDealer"
           @deal="onDealTiles"
           @roll="onRerollDice"
         />
+      </Teleport>
+
+      <!-- 翻倍局骰子提醒 -->
+      <Teleport to="body">
+        <Transition name="fade-fast">
+          <div v-if="showDoubleReminder" class="double-reminder-overlay">
+            <div class="double-reminder-msg">本局已经翻倍了！</div>
+          </div>
+        </Transition>
       </Teleport>
 
       <!-- 玩家操作卡片（AI + 自己） -->
@@ -804,6 +813,13 @@ watch(() => gameState.value?.phase, (newPhase, oldPhase) => {
 })
 const diceValues = ref<[number, number]>([1, 1])
 const maxDiceRolls = ref(Number(route.query.dice) || 2)
+// 如果本局已因造反/流局/聚义翻倍（inheritedGlobalMultiplier>=2），强制只掷一次骰子
+const isDoubleRound = computed(() => {
+  const igm = (gameState.value as any)?.inheritedGlobalMultiplier
+  return typeof igm === 'number' && igm >= 2
+})
+const effectiveMaxRolls = computed(() => isDoubleRound.value ? 1 : maxDiceRolls.value)
+const showDoubleReminder = ref(false)
 const freezeDurationMs = ref((Number(route.query.freeze) || 1) * 1000) // 秒转毫秒
 
 // 当前冻结截止时间（从游戏状态读取）
@@ -813,6 +829,12 @@ const currentFreezeUntil = computed(() => {
 })
 
 const onRerollDice = () => {
+  // 翻倍局不允许重掷骰子
+  if (isDoubleRound.value) {
+    showDoubleReminder.value = true
+    setTimeout(() => { showDoubleReminder.value = false }, 200)
+    return
+  }
   diceValues.value = [
     Math.floor(Math.random() * 6) + 1,
     Math.floor(Math.random() * 6) + 1
@@ -2920,6 +2942,33 @@ const forceDiscard = async (p: Player) => {
   opacity: 0.9;
   margin-bottom: 20px;
 }
+
+/* 翻倍局骰子提醒 */
+.double-reminder-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  pointer-events: none;
+}
+.double-reminder-msg {
+  background: rgba(239, 83, 80, 0.9);
+  color: #fff;
+  padding: 16px 32px;
+  border-radius: 12px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  box-shadow: 0 4px 20px rgba(239, 83, 80, 0.5);
+  animation: pulse-in 0.15s ease-out;
+}
+@keyframes pulse-in {
+  0% { transform: scale(0.8); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.fade-fast-enter-active, .fade-fast-leave-active { transition: opacity 0.15s ease; }
+.fade-fast-enter-from, .fade-fast-leave-to { opacity: 0; }
 
 /* 退房结算按钮 */
 .settle-btn {
