@@ -44,42 +44,42 @@ const delayStyle = computed(() =>
 
 <style scoped>
 .dice3d {
-  width: 72px;
-  height: 72px;
+  width: 96px;
+  height: 96px;
   position: relative;
   transform-style: preserve-3d;
+  filter: drop-shadow(0 8px 16px rgba(0,0,0,0.5));
 }
 
 .dice3d-face {
   position: absolute;
-  width: 72px;
-  height: 72px;
-  background: linear-gradient(145deg, #fefefe, #e8e0d0);
-  border-radius: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  width: 96px;
+  height: 96px;
+  border-radius: 16px;
+  border: 1.5px solid rgba(0, 0, 0, 0.12);
   box-sizing: border-box;
-  padding: 10px;
+  padding: 14px;
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   grid-template-rows: 1fr 1fr 1fr;
   backface-visibility: hidden;
 }
 
-.dice3d-face--front  { transform: translateZ(36px); }
-.dice3d-face--back   { transform: rotateY(180deg) translateZ(36px); }
-.dice3d-face--right  { transform: rotateY(90deg) translateZ(36px); }
-.dice3d-face--left   { transform: rotateY(-90deg) translateZ(36px); }
-.dice3d-face--top    { transform: rotateX(90deg) translateZ(36px); }
-.dice3d-face--bottom { transform: rotateX(-90deg) translateZ(36px); }
+/* 不同面不同的明暗度，增强立体感 */
+.dice3d-face--front  { transform: translateZ(48px); background: linear-gradient(145deg, #fffefa, #f0e8d8); box-shadow: inset 0 2px 0 rgba(255,255,255,0.7); }
+.dice3d-face--back   { transform: rotateY(180deg) translateZ(48px); background: linear-gradient(145deg, #e8e0d0, #d8d0c0); box-shadow: inset 0 1px 0 rgba(255,255,255,0.4); }
+.dice3d-face--right  { transform: rotateY(90deg) translateZ(48px); background: linear-gradient(145deg, #f0ead8, #e0d8c8); box-shadow: inset -1px 0 0 rgba(255,255,255,0.5); }
+.dice3d-face--left   { transform: rotateY(-90deg) translateZ(48px); background: linear-gradient(145deg, #f5efe0, #e5ddd0); box-shadow: inset 1px 0 0 rgba(255,255,255,0.5); }
+.dice3d-face--top    { transform: rotateX(90deg) translateZ(48px); background: linear-gradient(145deg, #fffff5, #f5f0e0); box-shadow: inset 0 1px 0 rgba(255,255,255,0.8); }
+.dice3d-face--bottom { transform: rotateX(-90deg) translateZ(48px); background: linear-gradient(145deg, #d8d0c0, #c8c0b0); }
 
 /* 点 */
 .dot {
-  width: 12px;
-  height: 12px;
-  background: radial-gradient(circle at 40% 35%, #2a2a2a, #0a0a0a);
+  width: 16px;
+  height: 16px;
+  background: radial-gradient(circle at 38% 32%, #333, #0a0a0a);
   border-radius: 50%;
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.15), 0 1px 2px rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 1px 3px rgba(255, 255, 255, 0.2), 0 2px 3px rgba(0, 0, 0, 0.4);
 }
 
 .dot--center { grid-area: 2/2/3/3; justify-self: center; align-self: center; }
@@ -90,15 +90,15 @@ const delayStyle = computed(() =>
 .dot--bl     { grid-area: 3/1/4/2; justify-self: start; align-self: end; }
 .dot--br     { grid-area: 3/3/4/4; justify-self: end; align-self: end; }
 
-/* ===== Idle: 浮动等待 ===== */
+/* ===== Idle: 浮动等待 + 慢转 ===== */
 .dice3d--idle {
-  opacity: 0.5;
+  opacity: 0.6;
   animation: idle-float 3s ease-in-out infinite;
 }
 
 @keyframes idle-float {
-  0%, 100% { transform: rotateX(-15deg) rotateY(-20deg) translateY(0); }
-  50% { transform: rotateX(-15deg) rotateY(-20deg) translateY(-8px); }
+  0%, 100% { transform: rotateX(-20deg) rotateY(-25deg) rotateZ(5deg) translateY(0); }
+  50% { transform: rotateX(-20deg) rotateY(-25deg) rotateZ(5deg) translateY(-12px); }
 }
 
 /* ===== Rolling: 0.8s 立体滚动+跳跃 ===== */
