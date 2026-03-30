@@ -1424,6 +1424,7 @@ const prevBailoutRelations = ref<string>('')
 const prevBotPlayers = ref<Set<string>>(new Set())
 const prevRebelEvent = ref<any>(null)
 const prevLiangShanVoteCount = ref(0)
+const activePlayerCount = (state: any) => (state?.players || []).filter((p: any) => p.status === 'playing').length
 
 watch(() => gameState.value, (newState, oldState) => {
   if (!newState) return
@@ -1480,8 +1481,18 @@ watch(() => gameState.value, (newState, oldState) => {
     }
   }
 
-  // 梁山聚义投票进度（仅追踪，不播报）
+  // 梁山聚义投票进度（播报但不透露具体谁投了）
   const currentVotes = ((newState as any).liangShanVotes || []).length
+  if (currentVotes > prevLiangShanVoteCount.value) {
+    if (currentVotes === 1) {
+      const voter = newState.players?.find((p: any) => p.id === (newState as any).liangShanVotes?.[0])
+      addBroadcast(`🔥 ${voter?.name || '某玩家'} 发起了梁山聚义！`, 'special')
+    } else if (currentVotes >= activePlayerCount(newState)) {
+      addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
+    } else {
+      addBroadcast(`🔥 有${currentVotes}名玩家响应了梁山聚义！`, 'special')
+    }
+  }
   prevLiangShanVoteCount.value = currentVotes
 
   prevPhase.value = newState.phase
