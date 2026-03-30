@@ -288,15 +288,48 @@ const getArrowChar = (sourcePos: number): string => {
   box-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
-/* 左家手牌：牌背朝中心（旋转90°） */
+/* 左家手牌：牌背朝中心（旋转90°）+ 2.5D效果 */
+.player-other-hand--left {
+  perspective: 400px;
+  perspective-origin: center bottom;
+}
 .player-other-hand--left :deep(.tile) {
   transform: rotate(90deg);
   filter: brightness(0.85);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-/* 右家手牌：牌背朝中心（旋转-90°） */
+/* 最底下一张牌：2.5D效果，露出白侧边 */
+.player-other-hand--left :deep(.tile:last-child) {
+  transform: rotate(90deg) translateZ(6px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.55),
+    1px 3px 0 #8a7a5a,
+    2px 5px 0 #6a5a3a,
+    0 4px 12px rgba(0,0,0,0.5);
+  border-bottom: 3px solid rgba(255,255,255,0.85);
+  border-right: 2px solid rgba(240,235,220,0.7);
+}
+
+/* 右家手牌：牌背朝中心（旋转-90°）+ 2.5D效果 */
+.player-other-hand--right {
+  perspective: 400px;
+  perspective-origin: center bottom;
+}
 .player-other-hand--right :deep(.tile) {
   transform: rotate(-90deg);
   filter: brightness(0.85);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+/* 最底下一张牌：2.5D效果，露出白侧边 */
+.player-other-hand--right :deep(.tile:last-child) {
+  transform: rotate(-90deg) translateZ(6px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.55),
+    -1px 3px 0 #8a7a5a,
+    -2px 5px 0 #6a5a3a,
+    0 4px 12px rgba(0,0,0,0.5);
+  border-bottom: 3px solid rgba(255,255,255,0.85);
+  border-left: 2px solid rgba(240,235,220,0.7);
 }
 
 /* 左家门口：靠边缘 */

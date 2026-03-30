@@ -722,6 +722,55 @@ class GameManager {
 
     await this.persistGame(game);
     this.broadcastGameState(gameId);
+
+    // 庄家首轮自动摸牌（模拟 moveToNextPlayer 的 freeze 机制）
+    const freezeMs = game.freezeDurationMs || 1000;
+    const dealer = game.players[game.currentPlayerIndex];
+    if (dealer) {
+      if (this.isPlayerBotControlled(dealer)) {
+        // Bot 庄家：freeze 后自动摸+出牌
+        setTimeout(async () => {
+          try {
+            const freshGame = await this.getGame(gameId);
+            if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
+            if (freshGame.currentPlayerIndex !== game.currentPlayerIndex) return;
+            this.replaceFlowers(freshGame, dealer);
+            this.handleDraw(freshGame, dealer);
+            this.scheduleBotDiscard(gameId, dealer.id);
+            await this.persistGame(freshGame);
+            this.broadcastGameState(gameId);
+          } catch (err) {
+            console.error('[start-bot-freeze] Error:', err);
+          }
+        }, freezeMs);
+      } else {
+        // Human 庄家：设置 freeze 让客户端显示冻结进度，到期自动摸
+        (game as any)._freezeUntil = Date.now() + freezeMs;
+        await this.persistGame(game);
+        this.broadcastGameState(gameId);
+
+        setTimeout(async () => {
+          try {
+            const freshGame = await this.getGame(gameId);
+            if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
+            if (freshGame.currentPlayerIndex !== game.currentPlayerIndex) return;
+            if (freshGame.pendingActions.length > 0) return;
+
+            delete (freshGame as any)._freezeUntil;
+            const nextPlayer = freshGame.players[freshGame.currentPlayerIndex];
+            if (nextPlayer && nextPlayer.status === PlayerStatus.PLAYING) {
+              this.replaceFlowers(freshGame, nextPlayer);
+              this.handleDraw(freshGame, nextPlayer);
+              console.log(`[start-freeze] Auto-draw for dealer ${nextPlayer.name}`);
+            }
+            await this.persistGame(freshGame);
+            this.broadcastGameState(gameId);
+          } catch (err) {
+            console.error('[start-freeze] Error:', err);
+          }
+        }, freezeMs);
+      }
+    }
   }
 
   /**

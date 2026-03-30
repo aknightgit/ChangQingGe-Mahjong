@@ -182,18 +182,25 @@
                 <template v-for="p in (settlementData?.playerStats || [])" :key="p.id + '-detail'">
                   <div class="settle-detail-row">
                     <span class="settle-detail-name">{{ p.name }}</span>
-                    <span class="settle-detail-stat">🏆 {{ p.wins }}胜</span>
-                    <span class="settle-detail-stat">🀄 {{ p.selfDraws }}自摸</span>
-                    <span class="settle-detail-stat settle-detail-stat--win">最大赢 +{{ p.maxWin }}</span>
-                    <span class="settle-detail-stat settle-detail-stat--loss">最大输 {{ p.maxLoss }}</span>
+                    <span class="settle-detail-stat settle-detail-stat--record" title="有效战绩">🏅 {{ p.effectiveScore ?? p.totalScore }}</span>
+                    <span class="settle-detail-stat" title="与AI战绩">🤖 {{ p.vsAiScore ?? 0 }}</span>
+                    <span class="settle-detail-stat">🀄 {{ p.selfDraws ?? 0 }}自摸</span>
+                    <span class="settle-detail-stat">🎯 {{ p.discards ?? 0 }}捉冲</span>
+                    <span class="settle-detail-stat settle-detail-stat--win">最大赢 +{{ p.maxWin ?? 0 }}</span>
+                    <span class="settle-detail-stat settle-detail-stat--loss">最大输 {{ p.maxLoss ?? 0 }}</span>
                   </div>
                 </template>
               </div>
             </div>
 
-            <button class="settle-save-btn" @click="onSaveSettle">
-              💾 结算保存，下回再战
-            </button>
+            <div class="settle-actions">
+              <button class="settle-back-btn" @click="showSettlement = false">
+                ← 返回牌桌
+              </button>
+              <button class="settle-save-btn" @click="onSaveSettle">
+                💾 结算保存，下回再战
+              </button>
+            </div>
           </div>
         </div>
 
@@ -469,7 +476,14 @@
                     :disabled="isInteractionLocked || thinkRemaining <= 0"
                     @click="onThink"
                   >等*{{ thinkRemaining }}</button>
-                  <div v-if="!showDraw && !showChow && !showPeng && !showKong && !showHu && !showPass && !showConcealedKong && !showExtendedKong && !showRebel && !showThink" class="inline-action-waiting">
+                  <button
+                    v-if="canLiangShan"
+                    class="inline-action-btn inline-action-btn--liangshan"
+                    :class="{ 'inline-action-btn--liangshan-voted': hasVotedLiangShan }"
+                    :disabled="!canLiangShan || isInteractionLocked || hasVotedLiangShan"
+                    @click="onLiangShan"
+                  >🔥{{ hasVotedLiangShan ? '已聚义' : '梁山聚义' }}</button>
+                  <div v-if="!showDraw && !showChow && !showPeng && !showKong && !showHu && !showPass && !showConcealedKong && !showExtendedKong && !showRebel && !showThink && !canLiangShan" class="inline-action-waiting">
                     等待中…
                   </div>
                 </div>
@@ -500,20 +514,6 @@
 
           <!-- 牌局快讯 -->
           <GameBroadcast :messages="broadcastMessages" />
-
-          <!-- 梁山聚义（前三回合可见） -->
-          <div class="ext-section" v-if="gameState?.phase === 'playing' && (currentRound || 0) <= 3">
-            <h3 class="ext-title">特殊行动</h3>
-            <button
-              class="liang-shan-btn"
-              :class="{ 'liang-shan-btn--voted': hasVotedLiangShan, 'liang-shan-btn--active': canLiangShan }"
-              :disabled="!canLiangShan || isInteractionLocked"
-              @click="onLiangShan"
-            >
-              <span class="liang-shan-flame">🔥</span>
-              <span class="liang-shan-text">{{ hasVotedLiangShan ? '已响应聚义' : '梁山聚义' }}</span>
-            </button>
-          </div>
 
           <!-- 功能菜单：紧贴战绩榜下方 -->
           <div class="ext-section ext-section--actions" v-if="gameState?.phase === 'playing'">
@@ -1049,6 +1049,8 @@ const isWaitingRoom = computed(() => {
   const hasDealtCards = (gameState.value.players || []).some(
     (p: any) => (p.hand?.concealedTiles?.length || 0) > 0
   )
+  // 如果骰子overlay正在显示，也不要显示等待房间
+  if (showDiceOverlay.value) return false
   return !hasDealtCards
 })
 
@@ -2445,6 +2447,28 @@ const forceDiscard = async (p: Player) => {
   font-size: 0.85rem;
 }
 
+.inline-action-btn--liangshan {
+  background: linear-gradient(135deg, rgba(198, 40, 40, 0.5), rgba(239, 83, 80, 0.35));
+  color: #ff8a80;
+  border-color: rgba(239, 83, 80, 0.6);
+  font-size: 0.75rem;
+  animation: liangshan-btn-pulse 2s ease-in-out infinite;
+}
+.inline-action-btn--liangshan:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 0 12px rgba(239, 83, 80, 0.4);
+}
+.inline-action-btn--liangshan-voted {
+  background: rgba(40, 40, 40, 0.5);
+  color: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.1);
+  animation: none;
+}
+@keyframes liangshan-btn-pulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(239, 83, 80, 0.2); }
+  50% { box-shadow: 0 0 16px rgba(239, 83, 80, 0.5); }
+}
+
 .think-freeze-indicator {
   color: #8b5cf6;
   font-weight: 700;
@@ -3181,6 +3205,39 @@ const forceDiscard = async (p: Player) => {
 
 .settle-detail-stat--win { color: #66bb6a; }
 .settle-detail-stat--loss { color: #ef5350; }
+
+/* 有效战绩：浅金黄色背景 */
+.settle-detail-stat--record {
+  background: rgba(255, 215, 0, 0.15);
+  color: #ffd700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+/* 结算操作按钮组 */
+.settle-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.settle-back-btn {
+  flex: 1;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #ccc;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.settle-back-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
 
 .settle-save-btn {
   width: 100%;

@@ -38,6 +38,8 @@ interface BotPlayer {
   wildSuit?: TileSuit; wildValue?: number
   kongCount: number
   id: string
+  status: 'playing' | 'won'
+  winMode?: 'self_draw' | 'discard' | 'kong_draw'
 }
 
 interface GameState {
@@ -68,7 +70,8 @@ function setupGame(): GameState {
 
   const players = AI_NAMES.map((name, i) => ({
     name, pos: i, hand: [] as Tile[], exposedMelds: [] as Meld[], flowerTiles: [] as Tile[],
-    isBot: true, isTing: false, score: 0, wildSuit: ws, wildValue: wv, kongCount: 0, id: `p${i}`
+    isBot: true, isTing: false, score: 0, wildSuit: ws, wildValue: wv, kongCount: 0, id: `p${i}`,
+    status: 'playing' as const
   }))
 
   return { deck, wallIdx: 0, players, current: 0, wildSuit: ws, wildValue: wv, discardPile: [] }
@@ -257,6 +260,21 @@ function aiDiscard(p: BotPlayer): Tile {
 }
 
 // ========== Game Loop ==========
+function nextPlaying(players: BotPlayer[], from: number): number {
+  for (let step = 1; step <= players.length; step++) {
+    const i = (from + step) % players.length
+    if (players[i].status === 'playing') return i
+  }
+  return from
+}
+
+interface GameResult {
+  winners: Array<{ index: number; huType: string }>
+  scores: number[]
+  reason: string
+  selfDrawCount: number
+  discardCount: number
+}
 function runGame(): { winner: number; huType: string; scores: number[] } | null {
   const g = setupGame()
 
