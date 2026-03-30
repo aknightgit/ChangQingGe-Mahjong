@@ -654,7 +654,7 @@
 </div></template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, provide } from 'vue'
 import PlayerSelfArea from '~/components/PlayerSelfArea.vue'
 import PlayerOtherArea from '~/components/PlayerOtherArea.vue'
 import CircularActionButtons from '~/components/CircularActionButtons.vue'
@@ -978,6 +978,8 @@ const setSpectateTarget = async (targetId: string) => {
 // ---- Table Center Data ----
 const remainingTileCount = computed(() => gameState.value?.wallRemaining ?? 0)
 const currentRound = computed(() => gameState.value?.currentRound ?? 1)
+// Provide round number for MahjongTile to auto-select back scheme
+provide('roundNumber', currentRound)
 const roundMultiplier = computed(() => gameState.value?.roundMultiplier ?? 1)
 
 // 圈方位 & 局数（用于显示"第1圈 东二局"格式）

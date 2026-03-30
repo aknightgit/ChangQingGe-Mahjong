@@ -298,8 +298,6 @@ export function detectHandTypes(
   const best = findBestWildAssignment(handTiles, exposedMelds, wildSuit, wildValue, isSelfDrawn, flowerCount, wildTileGroup)
   return best.types
 }
-  return types.sort((a, b) => HAND_TYPE_PRIORITY[b] - HAND_TYPE_PRIORITY[a]);
-}
 
 /**
  * Check if hand is all triplets (碰碰胡)

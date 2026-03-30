@@ -51,24 +51,30 @@
       </template>
     </template>
     <template v-else>
-      <!-- 牌背用 pomax_hq Back.png -->
-      <img src="/assets/tileset/pomax_hq/Back.png" class="tile-img" loading="lazy" />
+      <!-- 牌背：3套方案轮流使用 -->
+      <img v-if="effectiveBackScheme === 0" src="/assets/tileset/pomax_hq/Back.png" class="tile-img" loading="lazy" />
+      <div v-else-if="effectiveBackScheme === 1" class="tile-back-ivory" />
+      <div v-else class="tile-back-capri" />
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed, ref, inject } from 'vue'
 import type { Tile } from '~/types/game'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   tile: Tile
   selected?: boolean
   dimmed?: boolean
   small?: boolean
   back?: boolean
+  backScheme?: number  // 0=原版, 1=象牙白, 2=卡布里蓝（-1=自动轮流）
   justDrawn?: boolean
   claimHighlight?: boolean
-}>()
+}>(), {
+  backScheme: -1
+})
 
 const emit = defineEmits<{
   (e: 'click', tile: Tile): void
@@ -80,6 +86,14 @@ const emit = defineEmits<{
 
 let clickTimer: ReturnType<typeof setTimeout> | null = null
 let clickCount = 0
+
+// 自动牌背方案：默认按局数轮流 (0=原版, 1=象牙白, 2=卡布里蓝)
+// 父组件可通过 inject roundNumber 或手动传 backScheme
+const roundNumber = inject('roundNumber', ref(1))
+const effectiveBackScheme = computed(() => {
+  if (props.backScheme >= 0) return props.backScheme
+  return (roundNumber.value - 1) % 3  // 3套方案轮流
+})
 
 const onClick = () => {
   clickCount++
@@ -250,6 +264,97 @@ const chineseNum = computed(() => {
   border: 1px solid rgba(180, 220, 160, 0.12);
   border-radius: 2px;
   background: rgba(0, 0, 0, 0.15);
+}
+
+/* ===== 方案二：象牙白/米色 ===== */
+.tile-back-ivory {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px 4px 3px 3px;
+  background:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.3) 0%,
+      rgba(255,255,255,0.1) 30%,
+      transparent 55%,
+      rgba(0,0,0,0.15) 100%),
+    linear-gradient(155deg,
+      #FFFFF0 0%,
+      #F5F5DC 30%,
+      #E8DCC8 60%,
+      #D4C4A8 100%);
+  border: 0.8px solid rgba(180, 160, 120, 0.35);
+  box-shadow:
+    inset 0 1px 3px rgba(255,255,255,0.5),
+    inset 0 -1px 2px rgba(0,0,0,0.15),
+    0 1px 3px rgba(0,0,0,0.25);
+  position: relative;
+}
+.tile-back-ivory::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 48%;
+  height: 52%;
+  border: 1px solid rgba(160, 140, 100, 0.25);
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* ===== 方案三：卡布里蓝 + 波光粼粼 ===== */
+.tile-back-capri {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px 4px 3px 3px;
+  background:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.25) 0%,
+      rgba(255,255,255,0.08) 25%,
+      transparent 50%,
+      rgba(0,0,40,0.3) 100%),
+    linear-gradient(155deg,
+      #00BFFF 0%,
+      #009ACD 25%,
+      #0077A8 50%,
+      #005580 75%,
+      #003B5C 100%);
+  border: 0.8px solid rgba(100, 200, 255, 0.3);
+  box-shadow:
+    inset 0 1px 4px rgba(100, 220, 255, 0.35),
+    inset 0 -1px 3px rgba(0,0,40,0.3),
+    0 1px 3px rgba(0,0,0,0.3);
+  position: relative;
+  overflow: hidden;
+}
+/* 波光粼粼效果 */
+.tile-back-capri::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.25) 0%, transparent 40%),
+    radial-gradient(ellipse at 70% 60%, rgba(255,255,255,0.15) 0%, transparent 35%),
+    radial-gradient(ellipse at 50% 80%, rgba(100,220,255,0.2) 0%, transparent 30%);
+  animation: shimmer 3s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+.tile-back-capri::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 48%;
+  height: 52%;
+  border: 1px solid rgba(100, 200, 255, 0.2);
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.08);
+}
+@keyframes shimmer {
+  0% { opacity: 0.6; transform: translateX(-2px) translateY(-1px); }
+  50% { opacity: 1; transform: translateX(1px) translateY(1px); }
+  100% { opacity: 0.7; transform: translateX(2px) translateY(-1px); }
 }
 
 /* ==================== 万子 ==================== */
