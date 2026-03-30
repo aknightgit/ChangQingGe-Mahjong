@@ -4,21 +4,20 @@
  */
 import { GameState, Player, Tile, TileSuit, MeldType, PlayerStatus, ActionType } from '../types/game'
 import { groupTiles, tilesEqual, isFlower, isHonor, isWind, isDragon } from '../utils/tiles'
+import fs from 'fs'
+import path from 'path'
 
 // ===== Policy loading (per-character) =====
 let _policies: Record<string, any> = {}
 
 function loadCharacterPolicy(botName: string): any {
   if (_policies[botName]) return _policies[botName]
-
-  const fs = require('fs')
-  const path = require('path')
   
   // Try loading character-specific policy first
   const characterPaths = [
     path.resolve(process.cwd(), `AI_policies/characters/${botName}.json`),
     path.resolve(process.cwd(), `training-output/policies/characters/${botName}.json`),
-    path.resolve(__dirname, `../../AI_policies/characters/${botName}.json`),
+    path.resolve(process.cwd(), `../../AI_policies/characters/${botName}.json`),
   ]
   
   for (const p of characterPaths) {
@@ -41,8 +40,8 @@ function loadCharacterPolicy(botName: string): any {
       path.resolve(process.cwd(), 'AI_policies/best-policy.json'),
       path.resolve(process.cwd(), 'training-output/best-policy.json'),
       path.resolve(process.cwd(), 'training/best-policy.json'),
-      path.resolve(__dirname, '../../AI_policies/best-policy.json'),
-      path.resolve(__dirname, '../../training-output/best-policy.json'),
+      path.resolve(process.cwd(), '../../AI_policies/best-policy.json'),
+      path.resolve(process.cwd(), '../../training-output/best-policy.json'),
     ]
     
     for (const p of defaultPaths) {
