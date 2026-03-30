@@ -92,18 +92,22 @@ export function calculateScore(params: {
   }
 
   // 3. 检查无花自摸（碰碰胡/混一色 + 自摸 + 门口无花 + 无风向刻杠）
+  //    特殊规则：如果百搭牌是花牌，本局不触发"无花自摸"，用普通公式结算
   if (baseFan === 0 || baseFan < 10) {
     if (isSelfDrawn && !isKongFlower) {
-      const hasNoFlowers = flowerTiles.length === 0 && 
-        exposedMelds.every(m => m.tiles.every(t => !isFlower(t)));
-      const hasNoWindMelds = !hasWindMelds(exposedMelds, handTiles);
-      
-      if (hasNoFlowers && hasNoWindMelds) {
-        const isPengOrHun = handTypes.includes(HandType.ALL_TRIPLETS) || 
-                            handTypes.includes(HandType.HALF_FLUSH);
-        if (isPengOrHun) {
-          baseFan = Math.max(baseFan, 10);
-          details.push('无花自摸 = 10番');
+      const isWildFlower = wildTileGroup && wildTileGroup.length > 0;
+      if (!isWildFlower) {
+        const hasNoFlowers = flowerTiles.length === 0 && 
+          exposedMelds.every(m => m.tiles.every(t => !isFlower(t)));
+        const hasNoWindMelds = !hasWindMelds(exposedMelds, handTiles);
+        
+        if (hasNoFlowers && hasNoWindMelds) {
+          const isPengOrHun = handTypes.includes(HandType.ALL_TRIPLETS) || 
+                              handTypes.includes(HandType.HALF_FLUSH);
+          if (isPengOrHun) {
+            baseFan = Math.max(baseFan, 10);
+            details.push('无花自摸 = 10番');
+          }
         }
       }
     }
