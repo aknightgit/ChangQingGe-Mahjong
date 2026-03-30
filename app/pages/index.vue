@@ -230,7 +230,7 @@
                 <button class="help-btn" @click="toggleHelp('qj')">?</button>
               </div>
               <input type="number" v-model.number="createParams.liangShanThreshold" min="0" max="99999" step="100" />
-              <span v-if="activeHelp === 'qj'" class="help-bubble">累积赢分超过此值的玩家，在「梁山聚义」投票时无否决权，自动视为同意。仅4人真人局生效。默认1000。</span>
+              <span v-if="activeHelp === 'qj'" class="help-bubble">累积赢分（已乘膨胀倍数）超过此值的玩家，在「梁山聚义」投票时无否决权，自动视为同意。仅4人真人局生效。默认4000。</span>
             </div>
 
             <div class="create-field">
@@ -305,7 +305,7 @@ const createParams = reactive({
   maxDiceRolls: 2,
   freezeSeconds: 1,
   firstRoundDouble: true,
-  liangShanThreshold: 1000,
+  liangShanThreshold: 4000,
   thinkChances: 3,
   settlementMultiplier: 10
 })
