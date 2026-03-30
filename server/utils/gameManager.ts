@@ -587,7 +587,7 @@ class GameManager {
     game.endedAt = undefined;
     game.finalScores = undefined;
     game.customScoringMode = null;
-    game.freezeDurationMs = options?.freezeDurationMs || 2000; // 默认冻结2秒，给玩家反应时间
+    game.freezeDurationMs = options?.freezeDurationMs || 1000; // 默认冻结1秒
     game.thinkUsage = {};  // 每局重置「等我想一想」使用次数
     game.thinkFreezeUntil = undefined;
     game.thinkFreezePlayerId = undefined;
@@ -2377,6 +2377,13 @@ class GameManager {
             return;
           }
           console.log(`[bot-freeze] Freeze expired for ${nextPlayer.name}, drawing...`);
+          // 牌墙已空 → 流局
+          if (freshGame.wall.length === 0) {
+            this.endRound(freshGame, GameEndReason.WALL_EXHAUSTED);
+            await this.persistGame(freshGame);
+            this.broadcastGameState(game.gameId);
+            return;
+          }
           this.replaceFlowers(freshGame, nextPlayer);
           this.handleDraw(freshGame, nextPlayer);
           console.log(`[bot-freeze] Draw done, hand: ${nextPlayer.hand.concealedTiles.length} tiles, scheduling discard`);
@@ -2408,11 +2415,21 @@ class GameManager {
             return;
           }
 
-          // 冻结窗口结束 → 人类玩家手动摸牌（不自动draw），广播状态让前端显示"摸"按钮
+          // 冻结窗口结束且没人抢牌 → 自动摸牌（人类和AI都自动摸）
           const nextPlayer = freshGame.players[freshGame.currentPlayerIndex];
           if (nextPlayer && nextPlayer.status === PlayerStatus.PLAYING) {
-            console.log(`[freeze] Freeze expired for human ${nextPlayer.name}, waiting for manual draw`);
-            // 超时自动接管：人类玩家30秒未操作 → 自动AI托管
+            // 牌墙已空 → 流局
+            if (freshGame.wall.length === 0) {
+              this.endRound(freshGame, GameEndReason.WALL_EXHAUSTED);
+              await this.persistGame(freshGame);
+              this.broadcastGameState(game.gameId);
+              return;
+            }
+            this.replaceFlowers(freshGame, nextPlayer);
+            this.handleDraw(freshGame, nextPlayer);
+            console.log(`[freeze] Auto-draw for ${nextPlayer.name} (freeze expired, no pending)`);
+
+            // 超时自动接管：人类玩家连续2回合未操作 → 自动AI托管
             if (!this.isPlayerBotControlled(nextPlayer)) {
               this.scheduleAutoTakeover(game.gameId, nextPlayer.id, freezeCurrentIndex);
             }
@@ -2576,6 +2593,12 @@ class GameManager {
     }
 
     player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
+
+    // 补花后检查牌墙是否空了
+    if (game.wall.length === 0 && game.phase === GamePhase.PLAYING) {
+      console.log(`[replaceFlowers] Wall exhausted after flower replacement`);
+      this.endRound(game, GameEndReason.WALL_EXHAUSTED);
+    }
   }
 
   private updateRoundNumber(game: GameState): void {

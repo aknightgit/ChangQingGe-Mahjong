@@ -815,7 +815,7 @@ const isDoubleRound = computed(() => {
 })
 const effectiveMaxRolls = computed(() => isDoubleRound.value ? 1 : maxDiceRolls.value)
 const showDoubleReminder = ref(false)
-const freezeDurationMs = ref((Number(route.query.freeze) || 2) * 1000) // 默认2秒
+const freezeDurationMs = ref((Number(route.query.freeze) || 1) * 1000) // 默认1秒
 
 // 当前冻结截止时间（从游戏状态读取）
 const currentFreezeUntil = computed(() => {
