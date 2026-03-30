@@ -1114,14 +1114,14 @@ class GameManager {
       throw new Error('Can only chow from the previous player (上家)');
     }
 
-    // Find all possible sequences
+    // Find all possible sequences and select the best one
     const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile, game);
     if (sequences.length === 0) {
       throw new Error('No valid sequence found for chow');
     }
 
-    // Use the first valid sequence (client can specify which one via tileIds in future)
-    const sequence = sequences[0];
+    // 智能选择最优吃牌组合（夹张 > 单边 > 两面）
+    const sequence = this.selectBestChowSequence(sequences, discardedTile);
     const handTiles = sequence.filter(t => t.id !== discardedTile.id);
 
     // Record bailout action
@@ -1763,7 +1763,7 @@ class GameManager {
    */
   private findChowSequences(hand: Tile[], discardedTile: Tile, game?: GameState): Tile[][] {
     const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-    if (!numberSuits.includes(discardedTile.suit)) [];
+    if (!numberSuits.includes(discardedTile.suit)) return [];
 
     // 如果弃牌本身是百搭，不能被吃
     if (game && this.isWildTile(game, discardedTile)) return [];
@@ -1805,6 +1805,72 @@ class GameManager {
     }
 
     return sequences;
+  }
+
+  /**
+   * 对吃牌组合评分，选择最优吃法
+   * 评分规则：
+   * - 夹张（弃牌在中间）：最高优先，完成搭子
+   * - 单边（弃牌在边且手牌是1,2或8,9）：次优先，完成边搭
+   * - 两面（弃牌在边且手牌连号）：最低优先，留下灵活搭子
+   */
+  private scoreChowSequence(sequence: Tile[], discardedTile: Tile): number {
+    const sorted = [...sequence].sort((a, b) => a.value - b.value);
+    const values = sorted.map(t => t.value);
+    const discardIdx = sorted.findIndex(t => t.id === discardedTile.id);
+
+    let score = 0;
+
+    // 夹张：弃牌在中间 [1,2吃3] 不是夹张，[1,3吃2] 是夹张
+    if (discardIdx === 1) {
+      // 弃牌在中间位置
+      const gap = values[2] - values[0];
+      if (gap === 2) {
+        // 真正的夹张：如 [1,3吃2]，[2,4吃3]
+        score += 10;
+      }
+    }
+
+    // 单边：弃牌在边缘，且剩余牌在边角（1,2 或 8,9）
+    if (discardIdx === 0 || discardIdx === 2) {
+      const remaining = discardIdx === 0 ? [values[1], values[2]] : [values[0], values[1]];
+      if ((remaining[0] === 1 && remaining[1] === 2) || 
+          (remaining[0] === 8 && remaining[1] === 9)) {
+        // 单边搭子：如 吃3留下1,2 或 吃7留下8,9
+        score += 8;
+      } else {
+        // 两面搭子：如 吃1留下2,3 → 留下灵活搭子，不太想吃
+        score += 2;
+      }
+    }
+
+    // 附加：如果完成的顺子在手牌中形成更大组合（如 1,2,3,4），加分
+    const hand = [...sequence].filter(t => t.id !== discardedTile.id);
+    if (hand.length === 2 && Math.abs(hand[0].value - hand[1].value) === 1) {
+      score += 1; // 手牌本身是连号，吃完后更完整
+    }
+
+    return score;
+  }
+
+  /**
+   * 从多个吃牌组合中选择最优组合
+   */
+  private selectBestChowSequence(sequences: Tile[][], discardedTile: Tile): Tile[] {
+    if (sequences.length === 1) return sequences[0];
+
+    let best = sequences[0];
+    let bestScore = this.scoreChowSequence(sequences[0], discardedTile);
+
+    for (let i = 1; i < sequences.length; i++) {
+      const score = this.scoreChowSequence(sequences[i], discardedTile);
+      if (score > bestScore) {
+        bestScore = score;
+        best = sequences[i];
+      }
+    }
+
+    return best;
   }
 
   private async moveToNextPlayer(game: GameState): Promise<void> {

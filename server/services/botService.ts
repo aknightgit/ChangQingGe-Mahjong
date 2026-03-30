@@ -262,24 +262,28 @@ function evaluateChowValue(
     score *= (1 - policy.bailoutHuPenaltyPerMeld * 3)
   }
 
-  // 2. 吃的牌是否能形成有效搭子
+  // 2. 判断吃牌类型：夹张 > 单边 > 两面
   const v = chowTile.value
   const suit = chowTile.suit
   const groups = groupTiles(hand)
 
-  // 检查吃后是否能组成顺子搭子
   const hasLeft = groups.has(`${suit}-${v - 1}`)
   const hasRight = groups.has(`${suit}-${v + 1}`)
   const hasLeftLeft = groups.has(`${suit}-${v - 2}`)
   const hasRightRight = groups.has(`${suit}-${v + 2}`)
 
-  // 吃形成完整顺子的情况（如手里有6+7，吃8）
   if (hasLeft && hasRight) {
-    score *= 1.5 // 两面搭子，很有价值
+    // 夹张：手里有1+3，吃2 → 填补缺口，最有价值
+    score *= 1.8
+  } else if ((hasLeft && v - 1 === 1) || (hasRight && v + 1 === 9)) {
+    // 单边：手里有1+2吃3，或7+8吃9 → 完成边搭，优先吃
+    score *= 1.5
   } else if (hasLeft || hasRight) {
-    score *= 1.2 // 单边搭子
+    // 两面：手里有2+3吃1或4 → 留下灵活搭子，不太想吃
+    score *= 0.9
   } else if (hasLeftLeft || hasRightRight) {
-    score *= 0.8 // 间隔搭子，价值较低
+    // 间隔搭子：价值较低
+    score *= 0.7
   }
 
   // 3. 吃的牌是否是百搭
