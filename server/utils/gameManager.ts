@@ -852,6 +852,8 @@ class GameManager {
 
     // 玩家已响应，取消当前自动超时推进
     this.clearPendingActionTimer(gameId);
+    // 取消超时自动接管（玩家已操作）
+    this.clearAutoTakeover(gameId, playerId);
 
     const gameAction: GameAction = {
       playerId,
@@ -2003,6 +2005,11 @@ class GameManager {
             this.replaceFlowers(freshGame, nextPlayer);
             this.handleDraw(freshGame, nextPlayer);
             console.log(`[freeze] Auto-draw for ${nextPlayer.name} (freeze expired, no pending)`);
+
+            // 超时自动接管：人类玩家30秒未操作 → 自动AI托管（仅本局减半）
+            if (!this.isPlayerBotControlled(nextPlayer)) {
+              this.scheduleAutoTakeover(game.gameId, nextPlayer.id, freezeCurrentIndex);
+            }
           }
 
           await this.persistGame(freshGame);
@@ -2011,6 +2018,56 @@ class GameManager {
           console.error('[freeze] Error clearing freeze:', err);
         }
       }, freezeMs);
+    }
+  }
+
+  /**
+   * 超时自动接管：人类玩家长时间未操作 → 自动AI托管
+   * 仅本局结算减半，玩家回来后下一局恢复正常
+   */
+  private autoTakeoverTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
+  private scheduleAutoTakeover(gameId: string, playerId: string, expectedIndex: number): void {
+    const key = `${gameId}-${playerId}`;
+    // 清除已有计时器
+    const existing = this.autoTakeoverTimers.get(key);
+    if (existing) clearTimeout(existing);
+
+    const timer = setTimeout(async () => {
+      this.autoTakeoverTimers.delete(key);
+      try {
+        const game = await this.getGame(gameId);
+        if (!game || game.phase !== GamePhase.PLAYING) return;
+        // 检查是否还是该玩家的回合
+        if (game.currentPlayerIndex !== expectedIndex) return;
+        const player = game.players[game.currentPlayerIndex];
+        if (!player || player.id !== playerId) return;
+        if (this.isPlayerBotControlled(player)) return; // 已经是AI控制了
+
+        console.log(`[AutoTakeover] ${player.name} 超时30秒，自动AI接管`);
+
+        // 启用AI托管模式（会自动加入 botTakeoverPlayers → 本局减半）
+        this.enableBotMode(gameId, playerId);
+
+        await this.persistGame(game);
+        this.broadcastGameState(gameId);
+      } catch (err) {
+        console.error('[AutoTakeover] Error:', err);
+      }
+    }, 30000); // 30秒超时
+
+    this.autoTakeoverTimers.set(key, timer);
+  }
+
+  /**
+   * 取消超时自动接管（玩家已操作）
+   */
+  private clearAutoTakeover(gameId: string, playerId: string): void {
+    const key = `${gameId}-${playerId}`;
+    const timer = this.autoTakeoverTimers.get(key);
+    if (timer) {
+      clearTimeout(timer);
+      this.autoTakeoverTimers.delete(key);
     }
   }
 
