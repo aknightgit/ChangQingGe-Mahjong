@@ -194,7 +194,7 @@
 
             <div class="create-field">
               <div class="field-header">
-                <label>迟滞摸牌</label>
+                <label>迟滞摸牌秒数</label>
                 <button class="help-btn" @click="toggleHelp('freeze')">?</button>
               </div>
               <input type="number" v-model.number="createParams.freezeSeconds" min="0" max="10" step="0.5" />

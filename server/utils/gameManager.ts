@@ -2408,20 +2408,18 @@ class GameManager {
     }
     
     // AI接管玩家：赢分减半，输分照常
-    // 同时配对调整：AI赢 → 对手输分也减半（保证总赢=总输）
+    // 注意：player.score 已包含带头大哥赔付，基于当前值计算
     const botAffected = game.botTakeoverPlayers || [];
     
     for (const player of game.players) {
-      let score = finalScores[player.id] ?? 0;
       if (botAffected.includes(player.id)) {
-        if (score > 0) {
-          const half = Math.floor(score / 2);
-          console.log(`[BotPenalty] ${player.name}(AI接管) 赢分减半: ${score} → ${half}`);
-          score = half;
+        if (player.score > 0) {
+          const half = Math.floor(player.score / 2);
+          console.log(`[BotPenalty] ${player.name}(AI接管) 赢分减半: ${player.score} → ${half}`);
+          player.score = half;
         }
         // 输分照常，不减
       }
-      player.score = score;
     }
     
     // 平衡总分：如果AI赢分减半导致总赢≠总输，按比例缩小输家支付
@@ -2449,23 +2447,6 @@ class GameManager {
       }
     }
     
-    // 谢谢带头大哥：第一个出该牌的玩家赔付其余三家每家10分
-    if (game.leadingBrotherEvent) {
-      const { firstPlayerId } = game.leadingBrotherEvent;
-      const firstPlayer = game.players.find(p => p.id === firstPlayerId);
-      if (firstPlayer) {
-        const penalty = 30; // 赔付3家 × 10分
-        firstPlayer.score -= penalty;
-        for (const p of game.players) {
-          if (p.id !== firstPlayerId) {
-            p.score += 10;
-          }
-        }
-        console.log(`[LeadingBrother] ${firstPlayer.name} 赔付30分（每家10分）`);
-      }
-      game.leadingBrotherEvent = null;
-    }
-
     // 清除本局AI接管记录
     game.botTakeoverPlayers = [];
 
