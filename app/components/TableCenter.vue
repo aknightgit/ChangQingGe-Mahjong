@@ -13,10 +13,10 @@
           🀄 剩余 {{ remainingTiles }}
         </span>
       </div>
-      <!-- 百搭牌：图片 + 名称 横向排列 -->
+      <!-- 百搭牌：图片 + 名称 -->
       <div v-if="wildTile" class="wild-tile-row">
         <MahjongTile :tile="wildTile" :size="32" />
-        <span class="wild-name">{{ wildTileName }}百搭</span>
+        <span class="wild-name">{{ wildTileName }}</span>
       </div>
     </div>
   </div>

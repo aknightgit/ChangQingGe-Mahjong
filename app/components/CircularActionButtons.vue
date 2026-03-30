@@ -223,20 +223,22 @@ const freezeProgress = computed(() => {
   background: rgba(10, 25, 18, 0.95);
   cursor: default;
   overflow: hidden;
+  position: relative;
 }
 
 .freeze-progress-ring {
   position: absolute;
-  inset: 0;
+  inset: -2px;
   border-radius: 50%;
   background: conic-gradient(
     rgba(33, 150, 243, 0.6) calc(var(--freeze-progress, 0) * 360deg),
     transparent calc(var(--freeze-progress, 0) * 360deg)
   );
-  mask: radial-gradient(circle, transparent 58%, black 60%);
-  -webkit-mask: radial-gradient(circle, transparent 58%, black 60%);
+  mask: radial-gradient(circle, transparent 55%, black 58%);
+  -webkit-mask: radial-gradient(circle, transparent 55%, black 58%);
   pointer-events: none;
   transition: background 0.1s linear;
+  clip-path: circle(50%);
 }
 
 .draw-label {

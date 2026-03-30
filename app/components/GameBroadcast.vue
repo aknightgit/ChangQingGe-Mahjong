@@ -1,10 +1,11 @@
 <template>
-  <div class="broadcast-panel" v-if="messages.length > 0">
+  <div class="broadcast-panel">
     <div class="broadcast-header">
       <span class="broadcast-icon">📢</span>
       <span class="broadcast-title">牌局快讯</span>
     </div>
     <div class="broadcast-scroll" ref="scrollContainer">
+      <div v-if="messages.length === 0" class="broadcast-empty">暂无消息</div>
       <TransitionGroup name="broadcast-slide">
         <div
           v-for="msg in visibleMessages"
@@ -130,6 +131,14 @@ watch(() => props.messages.length, () => {
 
 .broadcast-msg--info {
   border-left: 2px solid rgba(33, 150, 243, 0.4);
+}
+
+.broadcast-empty {
+  text-align: center;
+  padding: 16px 8px;
+  font-size: 0.75rem;
+  opacity: 0.35;
+  color: rgba(255,255,255,0.5);
 }
 
 .broadcast-time {
