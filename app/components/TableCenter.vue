@@ -13,6 +13,11 @@
           🀄 剩余 {{ remainingTiles }}
         </span>
       </div>
+      <!-- 百搭牌：图片 + 名称 横向排列 -->
+      <div v-if="wildTile" class="wild-tile-row">
+        <MahjongTile :tile="wildTile" :size="32" />
+        <span class="wild-name">{{ wildTileName }}百搭</span>
+      </div>
     </div>
   </div>
 </template>
@@ -93,5 +98,20 @@ const wildTileName = computed(() => {
   padding: 4px 10px;
   border-radius: 999px;
   box-shadow: 0 2px 8px rgba(0, 120, 80, 0.35);
+}
+
+.wild-tile-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.wild-name {
+  color: #ffd54f;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.6);
 }
 </style>

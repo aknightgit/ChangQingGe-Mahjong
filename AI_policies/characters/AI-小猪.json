@@ -2,7 +2,7 @@
   "name": "AI-小猪",
   "style": "风险规避型",
   "desc": "偏保守，风险规避，尽量提前捉冲走人",
-  "savedAt": "2026-03-29T19:10:34.885Z",
+  "savedAt": "2026-03-29T19:24:12.160Z",
   "baseId": "champion-r10",
   "metrics": {
     "huRate": 0,
@@ -37,6 +37,6 @@
     "tripletComboBonus": 1,
     "flushChaseBonus": 0.8,
     "id": "AI-小猪-风险规避型",
-    "savedAt": "2026-03-29T19:10:34.885Z"
+    "savedAt": "2026-03-29T19:24:12.160Z"
   }
 }

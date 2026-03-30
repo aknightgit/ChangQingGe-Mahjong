@@ -2,7 +2,7 @@
   "name": "AI-AK",
   "style": "默认型",
   "desc": "指向当前默认的best policy（训练最优）",
-  "savedAt": "2026-03-29T19:10:34.885Z",
+  "savedAt": "2026-03-29T19:24:12.159Z",
   "baseId": "champion-r10",
   "metrics": {
     "huRate": 0,
@@ -37,6 +37,6 @@
     "tripletComboBonus": 2.7776,
     "flushChaseBonus": 1.3572,
     "id": "AI-AK-默认型",
-    "savedAt": "2026-03-29T19:10:34.885Z"
+    "savedAt": "2026-03-29T19:24:12.159Z"
   }
 }

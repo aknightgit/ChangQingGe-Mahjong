@@ -2,7 +2,7 @@
   "name": "AI-老赵",
   "style": "进攻型",
   "desc": "不怕三口，勇敢进攻，甚至主动制造三口四口",
-  "savedAt": "2026-03-29T19:10:34.884Z",
+  "savedAt": "2026-03-29T19:24:12.158Z",
   "baseId": "champion-r10",
   "metrics": {
     "huRate": 0,
@@ -37,6 +37,6 @@
     "tripletComboBonus": 4.5,
     "flushChaseBonus": 1.3572,
     "id": "AI-老赵-进攻型",
-    "savedAt": "2026-03-29T19:10:34.884Z"
+    "savedAt": "2026-03-29T19:24:12.158Z"
   }
 }
