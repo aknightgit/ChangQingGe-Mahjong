@@ -370,6 +370,9 @@
             @spectate="handleSpectate"
           />
 
+          <!-- 牌局快讯 -->
+          <GameBroadcast :messages="broadcastMessages" />
+
           <!-- 功能菜单：紧贴战绩榜下方 -->
           <div class="ext-section ext-section--actions" v-if="gameState?.phase === 'playing'">
             <h3 class="ext-title">操作</h3>
@@ -464,6 +467,7 @@ import TableCenter from '~/components/TableCenter.vue'
 import DiceAnimation from '~/components/DiceAnimation.vue'
 import PlayerInfo from '~/components/PlayerInfo.vue'
 import RoomStats from '~/components/RoomStats.vue'
+import GameBroadcast from '~/components/GameBroadcast.vue'
 import DiscardZone from '~/components/DiscardZone.vue'
 import { useGame, ACTION_HIGHLIGHT_DELAY_MS } from '~/composables/useGame'
 import { useSound } from '~/composables/useSound'
@@ -1187,6 +1191,104 @@ const onDealTiles = async () => {
     console.log('[onDealTiles] Done, phase:', gameState.value?.phase)
   } finally {
     isGameStarting = false
+  }
+}
+
+// ---- 牌局快讯（广播消息） ----
+interface BroadcastMsg {
+  id: number
+  text: string
+  type: 'info' | 'warn' | 'special' | 'win'
+  timestamp: number
+  timeLabel: string
+}
+const broadcastMessages = ref<BroadcastMsg[]>([])
+let broadcastId = 0
+const addBroadcast = (text: string, type: BroadcastMsg['type'] = 'info') => {
+  const now = Date.now()
+  const d = new Date(now)
+  const timeLabel = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+  broadcastMessages.value.push({ id: ++broadcastId, text, type, timestamp: now, timeLabel })
+  // 最多保留 20 条
+  if (broadcastMessages.value.length > 20) {
+    broadcastMessages.value = broadcastMessages.value.slice(-20)
+  }
+}
+
+// 追踪上一轮游戏状态，检测变化生成广播
+const prevWinnersCount = ref(0)
+const prevPhase = ref<string>('')
+const prevBailoutRelations = ref<string>('')
+const prevBotPlayers = ref<Set<string>>(new Set())
+const prevRebelEvent = ref<any>(null)
+
+watch(() => gameState.value, (newState, oldState) => {
+  if (!newState) return
+
+  // 游戏开始
+  if (newState.phase === 'playing' && prevPhase.value === 'waiting') {
+    addBroadcast('🎉 房间满员，正式开干啦！', 'info')
+  }
+
+  // 有人胡牌
+  if (newState.winnersCount > prevWinnersCount.value && prevPhase.value === 'playing') {
+    const newWinners = (newState.players || []).filter(
+      (p: any) => p.status === 'won' && p.winOrder === newState.winnersCount
+    )
+    for (const w of newWinners) {
+      const method = w.winRound ? `第${w.winRound}轮` : ''
+      addBroadcast(`🏆 ${w.name} ${method}胡牌！`, 'win')
+    }
+  }
+
+  // 流局
+  if (newState.phase === 'ended' && oldState?.phase === 'playing') {
+    const reason = (newState as any).endReason
+    if (reason === 'wall_exhausted') {
+      addBroadcast('💨 牌墙摸完，流局！倍数翻倍！', 'warn')
+    }
+  }
+
+  // 互包检测（通过 discard pile 变化 + pending 推断）
+  // 简化：检查 actionHistory 最近的吃/碰/杠
+  const history = (newState as any).actionHistory || []
+  if (history.length > 0) {
+    const lastAction = history[history.length - 1]
+    const lastTs = lastAction?.timestamp || 0
+    const now = Date.now()
+    // 只处理最近 3 秒内的动作
+    if (now - lastTs < 3000) {
+      if (lastAction.type === 'peng') {
+        const player = newState.players?.find((p: any) => p.id === lastAction.playerId)
+        if (player) addBroadcast(`✋ ${player.name} 碰牌！`, 'info')
+      }
+      if (lastAction.type === 'kong') {
+        const player = newState.players?.find((p: any) => p.id === lastAction.playerId)
+        if (player) addBroadcast(`💪 ${player.name} 杠牌！`, 'info')
+      }
+      if (lastAction.type === 'chow') {
+        const player = newState.players?.find((p: any) => p.id === lastAction.playerId)
+        if (player) addBroadcast(`🍽️ ${player.name} 吃牌！`, 'info')
+      }
+      if (lastAction.type === 'rebel') {
+        const player = newState.players?.find((p: any) => p.id === lastAction.playerId)
+        if (player) addBroadcast(`⚔️ ${player.name} 提议梁山聚义！造反！`, 'special')
+      }
+    }
+  }
+
+  prevPhase.value = newState.phase
+  prevWinnersCount.value = newState.winnersCount || 0
+}, { deep: true })
+
+// AI 接管检测（通过轮询检查 botModePlayers）
+const checkAITakeover = () => {
+  if (!gameState.value?.players) return
+  const currentBotPlayers = new Set<string>()
+  // 检查是否有玩家进入 AI 托管（通过玩家状态推断）
+  for (const p of gameState.value.players) {
+    // 这里通过 isAIControlled 状态检测（如果有的话）
+    // 暂时跳过，因为 bot 状态在客户端不易获取
   }
 }
 
