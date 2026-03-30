@@ -121,7 +121,6 @@ export interface GameAction {
 // Winning hand types
 export enum WinType {
   STANDARD = 'standard',           // 4 melds + 1 pair
-  SEVEN_PAIRS = 'seven_pairs'      // 七对
 }
 
 // Fan types

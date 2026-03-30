@@ -35,7 +35,7 @@ export const HAND_TYPE_PRIORITY: Record<HandType, number> = {
 /**
  * Detect all hand types for a winning hand
  * Returns array of detected types sorted by priority (highest first)
- * Note: 七对/普通胡 不作为独立牌型，只用于基础胡牌验证
+ * Note: 普通胡（4面子1雀头）作为基础胡牌验证
  */
 export type WildTileChecker = (tile: Tile) => boolean;
 
@@ -73,7 +73,7 @@ export function detectHandTypes(
   ];
   const nonFlowerTiles = allTiles.filter(t => !isFlower(t));
 
-  // Check if standard win first (4面子1雀头 or 七对)
+  // Check if standard win (4面子1雀头)
   const winResult = canWin(handTiles, exposedMelds.length, isWildTile);
   if (!winResult.canWin) return []; // Not a winning hand at all
 
@@ -445,45 +445,11 @@ function canFormMelds(tiles: Tile[], n: number, isWildTile: WildTileChecker): bo
 }
 
 /**
- * Check if a hand can win with seven pairs (七对)
- */
-export function canWinSevenPairs(tiles: Tile[], existingMelds = 0, isWildTile: WildTileChecker = () => false): boolean {
-  if (existingMelds > 0) return false;
-  if (tiles.length !== 14) return false;
-
-  const nonFlowerTiles = tiles.filter(t => !isFlower(t));
-  const wildCount = nonFlowerTiles.filter(t => isWildTile(t)).length;
-  const normalTiles = nonFlowerTiles.filter(t => !isWildTile(t));
-
-  const groups = groupTiles(normalTiles);
-  let pairs = 0;
-  let singles = 0;
-
-  for (const group of groups.values()) {
-    pairs += Math.floor(group.length / 2);
-    singles += group.length % 2;
-  }
-
-  // singles each need one wild to pair
-  if (singles > wildCount) return false;
-  let remainingWild = wildCount - singles;
-
-  pairs += singles;
-  pairs += Math.floor(remainingWild / 2);
-
-  return pairs >= 7;
-}
-
-/**
- * Check if hand can win (either standard or seven pairs)
+ * Check if hand can win (standard pattern: 4面子 + 1雀头)
  */
 export function canWin(tiles: Tile[], existingMelds = 0, isWildTile: WildTileChecker = () => false): { canWin: boolean; winType: WinType | null } {
   if (canWinStandard(tiles, existingMelds, isWildTile)) {
     return { canWin: true, winType: WinType.STANDARD };
-  }
-
-  if (canWinSevenPairs(tiles, existingMelds, isWildTile)) {
-    return { canWin: true, winType: WinType.SEVEN_PAIRS };
   }
 
   return { canWin: false, winType: null };
@@ -583,16 +549,6 @@ export function extractMelds(tiles: Tile[], existingMelds: Meld[] = [], isWildTi
         ...melds
       ];
     }
-  }
-
-  // Try seven pairs
-  if (canWinSevenPairs(tiles)) {
-    const melds: Meld[] = [];
-    const sg = groupTiles(tiles);
-    for (const group of sg.values()) {
-      melds.push({ type: MeldType.PAIR, tiles: group, isConcealed: true });
-    }
-    return melds;
   }
 
   return null;

@@ -8,7 +8,7 @@
 
 import { Tile, Meld, MeldType, TileSuit, Player } from '../types/game';
 import { isFlower, isWind, isDragon, groupTiles, tilesEqual, getTileDisplayName } from './tiles';
-import { HandType, HAND_TYPE_PRIORITY, canWin, canWinSevenPairs } from './handValidator';
+import { HandType, HAND_TYPE_PRIORITY, canWin } from './handValidator';
 
 // ===== 固定番数牌型 =====
 const FIXED_FAN: Record<string, number> = {
@@ -268,39 +268,7 @@ export function generateWinOptions(params: {
     type: 'discard'
   });
 
-  // 方案3: 如果可以七对，且没有已经在 handTypes 中，也尝试七对
-  const canSevenPairs = canWinSevenPairs(params.handTiles, params.exposedMelds.length,
-    (t: Tile) => params.wildTileSuit !== undefined && t.suit === params.wildTileSuit && t.value === params.wildTileValue);
-  const alreadySevenPairs = params.handTypes.includes(HandType.SEVEN_PAIRS);
-  if (canSevenPairs && !alreadySevenPairs) {
-    const sevenSelfDraw = calculateScore({
-      ...baseParams,
-      handTypes: [HandType.SEVEN_PAIRS, ...params.handTypes.filter(h => h !== HandType.ALL_TRIPLETS && h !== HandType.HALF_FLUSH && h !== HandType.FULL_FLUSH)],
-      isSelfDrawn: true,
-      globalIncludesRound: true,
-    });
-    options.push({
-      label: `七对·自摸`,
-      score: sevenSelfDraw.finalPoints,
-      details: [...sevenSelfDraw.details],
-      type: 'self_draw'
-    });
-
-    const sevenDiscard = calculateScore({
-      ...baseParams,
-      handTypes: [HandType.SEVEN_PAIRS, ...params.handTypes.filter(h => h !== HandType.ALL_TRIPLETS && h !== HandType.HALF_FLUSH && h !== HandType.FULL_FLUSH)],
-      isSelfDrawn: false,
-      globalIncludesRound: true,
-    });
-    options.push({
-      label: `七对·捉冲`,
-      score: sevenDiscard.finalPoints,
-      details: [...sevenDiscard.details],
-      type: 'discard'
-    });
-  }
-
-  // 方案4: 如果百搭当原牌能胡（无百搭 ×2），也尝试
+  // 方案3: 如果百搭当原牌能胡（无百搭 ×2），也尝试
   if (params.wildTileSuit !== undefined && params.wildTileValue !== undefined) {
     const wildCount = countWildTiles(params.handTiles, params.wildTileSuit, params.wildTileValue, params.wildTileGroup);
     if (wildCount > 0) {

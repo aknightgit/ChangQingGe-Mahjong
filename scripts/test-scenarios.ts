@@ -3,7 +3,7 @@
  * 覆盖：胡牌检测、牌型识别、算番、特殊规则、极端场景
  * 用法: npx tsx scripts/test-scenarios.ts
  */
-import { canWin, canWinStandard, canWinSevenPairs, detectHandTypes, HandType, buildWildTileChecker, isTing, getListeningTiles } from '../server/utils/handValidator'
+import { canWin, canWinStandard, detectHandTypes, HandType, buildWildTileChecker, isTing, getListeningTiles } from '../server/utils/handValidator'
 import { calculateScore, generateWinOptions } from '../server/utils/scoring'
 import { Tile, TileSuit, MeldType, type Meld } from '../server/types/game'
 
@@ -43,17 +43,6 @@ console.log('\n🔍 模块1: 胡牌检测 (canWin)')
     tile('万',9), tile('万',9)
   ]
   assert(canWin(hand).canWin, '1.1 标准胡 3刻1顺1对')
-}
-
-// 1.2 七对
-{
-  const hand = [
-    tile('筒',1), tile('筒',1), tile('筒',2), tile('筒',2),
-    tile('条',3), tile('条',3), tile('万',4), tile('万',4),
-    tile('万',5), tile('万',5), tile('万',6), tile('万',6),
-    tile('万',7), tile('万',7)
-  ]
-  assert(canWin(hand).canWin, '1.2 七对')
 }
 
 // 1.3 不能胡: 万1×3 + 万2-7连续 + 万8×3 + 万9×2 + 万3（万3变成4张，多余）
@@ -383,22 +372,10 @@ console.log('\n🔍 模块4: 听牌检测 (isTing/getListeningTiles)')
   assert(listening.some(t => t.suit === TileSuit.DOTS && t.value === 9), '4.1 听筒9')
 }
 
-// 4.2 七对听牌
-{
-  const hand = [
-    tile('筒',1), tile('筒',1), tile('筒',2), tile('筒',2),
-    tile('条',3), tile('条',3), tile('万',4), tile('万',4),
-    tile('万',5), tile('万',5), tile('万',6), tile('万',6),
-    tile('万',7)  // 听万7
-  ]
-  const listening = getListeningTiles(hand)
-  assert(listening.some(t => t.suit === TileSuit.CHARACTERS && t.value === 7), '4.2 七对听万7')
-}
-
-// 4.3 极端: 11张散牌 → 不听
+// 4.2 极端: 11张散牌 → 不听
 {
   const hand = Array(11).fill(null).map((_, i) => tile('筒', (i % 9) + 1))
-  assert(!isTing(hand), '4.3 11张散牌不听')
+  assert(!isTing(hand), '4.2 11张散牌不听')
 }
 
 // ========== 模块5: 极端场景 ==========
