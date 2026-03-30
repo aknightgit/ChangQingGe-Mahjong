@@ -64,9 +64,9 @@
           </div>
         </section>
 
-        <!-- 三、冻结机制 -->
+        <!-- 三、迟滞摸牌（抢牌窗口） -->
         <section :id="'freeze'" class="rule-section">
-          <h2>❄️ 冻结机制（抢牌窗口）</h2>
+          <h2>❄️ 迟滞摸牌（抢牌窗口）</h2>
           <div class="freeze-flow">
             <div class="freeze-step">
               <div class="freeze-icon">🀄</div>
@@ -363,7 +363,7 @@ const activeSection = ref('basic')
 const sections = [
   { id: 'basic', title: '基础', icon: '📋' },
   { id: 'actions', title: '操作', icon: '🎮' },
-  { id: 'freeze', title: '冻结', icon: '❄️' },
+  { id: 'freeze', title: '迟滞', icon: '❄️' },
   { id: 'patterns', title: '牌型', icon: '🏆' },
   { id: 'formula', title: '公式', icon: '🔢' },
   { id: 'special', title: '特殊', icon: '⚡' },

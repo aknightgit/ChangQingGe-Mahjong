@@ -742,6 +742,14 @@ class GameManager {
     const player = game.players.find(p => p.id === playerId);
     if (!player || player.status !== PlayerStatus.PLAYING) return [];
 
+    // 等我想一想冻结：非触发玩家在冻结期间不能操作
+    if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now()) {
+      if (game.thinkFreezePlayerId !== playerId) {
+        return [];  // 其他玩家被冻结
+      }
+      // 触发者可以继续操作（碰/胡/过等）
+    }
+
     const actions: ActionType[] = [];
     const currentPlayer = game.players[game.currentPlayerIndex];
 
@@ -1561,14 +1569,23 @@ class GameManager {
       return;
     }
 
-    // 胡牌后立即解冻：清除所有 pending actions 和冻结状态
-    game.pendingActions = [];
-    delete (game as any)._freezeUntil;
-    this.clearPendingActionTimer(game.gameId);
+    // 一炮多响 / 抢杠多响：若还有同张牌可胡玩家，等待其继续响应（在清空pending之前检查）
+    const hadPendingForMultiHu = !isSelfDrawn && game.pendingActions.some(
+      pa => pa.playerId !== player.id && pa.availableActions.includes(ActionType.HU)
+    );
 
-    // 一炮多响 / 抢杠多响：若还有同张牌可胡玩家，等待其继续响应
-    if (!isSelfDrawn && game.pendingActions.length > 0) {
-      return;
+    // 胡牌后解冻：清除其他家的pending（保留可胡的pending给一炮多响）
+    if (!hadPendingForMultiHu) {
+      game.pendingActions = [];
+      delete (game as any)._freezeUntil;
+      this.clearPendingActionTimer(game.gameId);
+    } else {
+      // 一炮多响：只移除已胡玩家的pending，保留其他人
+      game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
+    }
+
+    if (hadPendingForMultiHu) {
+      return;  // 等待其他可胡玩家响应
     }
 
     // 抢杠：若有人胡牌则补杠作废；否则恢复补杠
@@ -2372,6 +2389,24 @@ class GameManager {
     }
 
     game.finalScores = finalScores;
+    
+    // 谢谢带头大哥：第一个出该牌的玩家赔付其余三家每家10分（在平衡之前）
+    if (game.leadingBrotherEvent) {
+      const { firstPlayerId } = game.leadingBrotherEvent;
+      const firstPlayer = game.players.find(p => p.id === firstPlayerId);
+      if (firstPlayer) {
+        const penalty = 30; // 赔付3家 × 10分
+        firstPlayer.score -= penalty;
+        for (const p of game.players) {
+          if (p.id !== firstPlayerId) {
+            p.score += 10;
+          }
+        }
+        console.log(`[LeadingBrother] ${firstPlayer.name} 赔付30分（每家10分）`);
+      }
+      game.leadingBrotherEvent = null;
+    }
+    
     // AI接管玩家：赢分减半，输分照常
     // 同时配对调整：AI赢 → 对手输分也减半（保证总赢=总输）
     const botAffected = game.botTakeoverPlayers || [];

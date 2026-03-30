@@ -194,11 +194,11 @@
 
             <div class="create-field">
               <div class="field-header">
-                <label>冻结秒数</label>
+                <label>迟滞摸牌</label>
                 <button class="help-btn" @click="toggleHelp('freeze')">?</button>
               </div>
               <input type="number" v-model.number="createParams.freezeSeconds" min="0" max="10" step="0.5" />
-              <span v-if="activeHelp === 'freeze'" class="help-bubble">上家打出牌后，下家的等待时间。窗口内其他人可抢碰/杠/胡。默认1秒。</span>
+              <span v-if="activeHelp === 'freeze'" class="help-bubble">上家打出牌后，下家摸牌前的等待窗口。窗口内其他人可抢碰/杠/胡。默认1秒。</span>
             </div>
 
             <div class="create-field create-field--checkbox">
