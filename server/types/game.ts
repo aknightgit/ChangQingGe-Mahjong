@@ -221,6 +221,9 @@ export interface GameState {
   qjAlerts?: { playerId: string; playerName: string; score: number }[];
   // 互包关系（三口/四口）
   bailoutRelations?: { player1: string; player2: string; type: '三口' | '四口' }[];
+  // 输家换位置
+  swapRequests?: { playerId: string; targetId: string; requestedAt: number }[];  // 待生效换位请求
+  swapChances?: Record<string, number>;  // 每位玩家剩余换位次数
   // 胜者观战模式
   spectatorMode?: { playerId: string; viewingPlayerId: string } | null;
 }

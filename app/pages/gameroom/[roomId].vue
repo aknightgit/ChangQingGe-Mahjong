@@ -637,6 +637,13 @@
                   <span class="ai-card-hint">下局由你接替</span>
                 </button>
               </template>
+              <!-- 其他真人玩家的操作（输家换位置） -->
+              <template v-else-if="canSwap && playerCardPlayer?.id !== currentPlayer?.id">
+                <button class="ai-card-btn ai-card-btn--swap" @click="onSwapPosition">
+                  🔄 跟TA换位置
+                  <span class="ai-card-hint">剩余 {{ mySwapInfo.remaining }} 次机会</span>
+                </button>
+              </template>
             </div>
             <button class="ai-card-close" @click="showPlayerCard = false">✕</button>
           </div>
@@ -1467,10 +1474,13 @@ const isSpectator = computed(() => {
   if (!gameState.value?.players || !currentPlayer.value) return true
   return !gameState.value.players.some((p: any) => p.id === currentPlayer.value?.id)
 })
+// 换位置相关
+const mySwapInfo = ref<{ totalChances: number; usedChances: number; remaining: number }>({ totalChances: 0, usedChances: 0, remaining: 0 })
+const canSwap = computed(() => mySwapInfo.value.remaining > 0)
 const onPlayerNameClick = (player: any) => {
   if (!player) return
-  // 只允许点击自己或AI玩家
-  if (player.id !== currentPlayer.value?.id && !isBotPlayer(player)) return
+  // 允许点击自己、AI玩家、或（满足换位置条件时）其他真人玩家
+  if (player.id !== currentPlayer.value?.id && !isBotPlayer(player) && !canSwap.value) return
   playerCardPlayer.value = player
   showPlayerCard.value = true
 }
@@ -1552,6 +1562,56 @@ const onBotMode = async () => {
     await refreshState()
   } catch (e) {
     console.error('[BotMode] Failed:', e)
+  }
+}
+
+// 换位置
+const onSwapPosition = async () => {
+  if (!playerCardPlayer.value || !currentPlayer.value) return
+  const targetName = playerCardPlayer.value.name
+  const myName = currentPlayer.value.name
+  showPlayerCard.value = false
+  try {
+    const resp = await $fetch('/api/game/swap-position', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: currentPlayer.value.id,
+        targetId: playerCardPlayer.value.id
+      }
+    }) as any
+    if (resp?.success) {
+      addBroadcast(`🔄 ${myName} 下一局开始将与 ${targetName} 互换位置！`, 'special')
+      await refreshState()
+      await updateSwapInfo()
+    }
+  } catch (e: any) {
+    console.error('[Swap] Failed:', e)
+  }
+}
+
+const updateSwapInfo = async () => {
+  if (!currentPlayer.value || !gameState.value) return
+  // 从 game state 计算换位信息
+  const threshold = (gameState.value as any).liangShanThreshold ?? 4000
+  const sm = (gameState.value as any).settlementMultiplier ?? 1
+  const alerts = (gameState.value as any).qjAlerts || []
+  const myAlert = alerts.find((a: any) => a.playerId === currentPlayer.value?.id)
+  // 计算负向得分
+  const roundStats = (gameState.value as any).roundStats || []
+  let myCumulative = 0
+  for (const rs of roundStats) {
+    const s = rs.scores?.[currentPlayer.value.id] ?? 0
+    if (s > 0) myCumulative += s
+  }
+  const myEffective = myCumulative * sm
+  if (myEffective < 0) {
+    const absScore = Math.abs(myEffective)
+    const totalChances = Math.min(Math.floor(absScore / threshold), 10)
+    const used = ((gameState.value as any).swapRequests || []).filter((r: any) => r.playerId === currentPlayer.value?.id).length
+    mySwapInfo.value = { totalChances, usedChances: used, remaining: totalChances - used }
+  } else {
+    mySwapInfo.value = { totalChances: 0, usedChances: 0, remaining: 0 }
   }
 }
 
@@ -1764,6 +1824,7 @@ const prevBotPlayers = ref<Set<string>>(new Set())
 const prevRebelEvent = ref<any>(null)
 const prevLiangShanVoteCount = ref(0)
 const prevQjAlertIds = ref<Set<string>>(new Set())
+const prevSwapRequestIds = ref<Set<string>>(new Set())
 const showLiangShanOverlay = ref(false)
 const activePlayerCount = (state: any) => (state?.players || []).filter((p: any) => p.status === 'playing').length
 
@@ -1854,6 +1915,22 @@ watch(() => gameState.value, (newState, oldState) => {
     }
   }
   prevQjAlertIds.value = currentAlertIds as Set<string>
+
+  // 换位置请求广播
+  const currentSwapRequests = (newState as any).swapRequests || []
+  const currentSwapIds = new Set<string>(currentSwapRequests.map((r: any) => `${r.playerId}-${r.targetId}`))
+  for (const req of currentSwapRequests) {
+    const key = `${req.playerId}-${req.targetId}`
+    if (!prevSwapRequestIds.value.has(key)) {
+      const from = (newState.players || []).find((p: any) => p.id === req.playerId)
+      const to = (newState.players || []).find((p: any) => p.id === req.targetId)
+      if (from && to) addBroadcast(`🔄 ${from.name} 下一局开始将与 ${to.name} 互换位置`, 'special')
+    }
+  }
+  prevSwapRequestIds.value = currentSwapIds as Set<string>
+
+  // 更新换位置信息
+  updateSwapInfo()
 
   prevPhase.value = newState.phase
   prevWinnersCount.value = newState.winnersCount || 0
@@ -3206,6 +3283,15 @@ const forceDiscard = async (p: Player) => {
 }
 .ai-card-btn--replace:hover {
   background: rgba(33, 150, 243, 0.15);
+}
+
+.ai-card-btn--swap {
+  border-color: rgba(239, 83, 80, 0.3);
+  background: rgba(239, 83, 80, 0.08);
+  color: #ef5350;
+}
+.ai-card-btn--swap:hover {
+  background: rgba(239, 83, 80, 0.15);
 }
 
 .ai-card-hint {

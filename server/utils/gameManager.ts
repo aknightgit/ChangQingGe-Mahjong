@@ -560,6 +560,9 @@ class GameManager {
     game.thinkFreezeUntil = undefined;
     game.thinkFreezePlayerId = undefined;
 
+    // 🔄 应用待生效的换位置请求（在随机选位置之前）
+    this.applySwapRequests(game);
+
     // 🎲 随机选位置：洗牌玩家座位
     const shuffledIndices = Array.from({ length: game.players.length }, (_, i) => i);
     for (let i = shuffledIndices.length - 1; i > 0; i--) {
@@ -902,7 +905,7 @@ class GameManager {
 
     switch (action) {
       case ActionType.DISCARD:
-        this.handleDiscard(game, player, tileId!);
+        this.handleDiscard(game, player, tileId!).catch(console.error);
         gameAction.tile = findTileById(player.hand.concealedTiles, tileId!);
         break;
 
@@ -970,7 +973,7 @@ class GameManager {
         break;
 
       case ActionType.HU:
-        this.handleHu(game, player);
+        await this.handleHu(game, player);
         break;
 
       case ActionType.CHEAT_HU:
@@ -1012,7 +1015,7 @@ class GameManager {
     this.broadcastGameState(gameId);
   }
 
-  private handleDiscard(game: GameState, player: Player, tileId: string): void {
+  private async handleDiscard(game: GameState, player: Player, tileId: string): Promise<void> {
     const tile = findTileById(player.hand.concealedTiles, tileId);
     if (!tile) throw new Error('Tile not found');
 
@@ -1457,7 +1460,7 @@ class GameManager {
     return true;
   }
 
-  private handleHu(game: GameState, player: Player): void {
+  private async handleHu(game: GameState, player: Player): Promise<void> {
     const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
     const winningTile = pendingAction?.tile;
 
@@ -1831,6 +1834,109 @@ class GameManager {
     if (alerts.length > 0) {
       console.log(`[QJ Alert] ${alerts.map(a => `${a.playerName}(${a.score})`).join(', ')} 已突破被聚义QJ线${threshold}`);
     }
+  }
+
+  /**
+   * 计算玩家换位置次数（基于累积输分）
+   * 每输一个QJ线距离，获得1次机会
+   * 默认QJ线4000：输4000→1次，输8000→2次，输12000→3次
+   */
+  private computeSwapChances(game: GameState, playerId: string): number {
+    const threshold = game.liangShanThreshold ?? 4000;
+    const sm = game.settlementMultiplier ?? 1;
+    const cumulativeScore = this.getPlayerCumulativeScore(game.gameId, playerId);
+    const effectiveScore = cumulativeScore * sm;
+    if (effectiveScore >= 0) return 0;
+    const absScore = Math.abs(effectiveScore);
+    return Math.min(Math.floor(absScore / threshold), 10);
+  }
+
+  /**
+   * 请求换位置
+   */
+  public requestSwapPosition(gameId: string, playerId: string, targetId: string): { success: boolean; message: string } {
+    const game = this.games.get(gameId);
+    if (!game) throw new Error('Game not found');
+    if (game.phase !== GamePhase.PLAYING && game.phase !== GamePhase.ENDED) {
+      throw new Error('Can only swap during or after a round');
+    }
+
+    // 找到两个玩家
+    const player = game.players.find(p => p.id === playerId);
+    const target = game.players.find(p => p.id === targetId);
+    if (!player || !target) throw new Error('Player not found');
+
+    // 检查是否真人玩家
+    if (this.isPlayerBotControlled(player)) throw new Error('AI players cannot swap positions');
+
+    // 计算剩余机会
+    const totalChances = this.computeSwapChances(game, playerId);
+    const usedChances = (game.swapRequests || []).filter(r => r.playerId === playerId).length;
+    const remainingChances = totalChances - usedChances;
+
+    if (remainingChances <= 0) {
+      throw new Error('没有换位置机会了（积分未达标或已用完）');
+    }
+
+    // 检查是否已有待生效的换位请求
+    if (!game.swapRequests) game.swapRequests = [];
+    const existing = game.swapRequests.find(r => r.playerId === playerId && r.targetId === targetId);
+    if (existing) throw new Error('已提交过换位请求，等待生效中');
+
+    // 记录请求
+    game.swapRequests.push({
+      playerId,
+      targetId,
+      requestedAt: Date.now()
+    });
+
+    console.log(`[Swap] ${player.name} 请求与 ${target.name} 换位置 (剩余${remainingChances - 1}次)`);
+
+    return {
+      success: true,
+      message: `${player.name} 下一局开始将与 ${target.name} 互换位置`
+    };
+  }
+
+  /**
+   * 应用待生效的换位请求（在startGame中调用）
+   */
+  private applySwapRequests(game: GameState): void {
+    if (!game.swapRequests || game.swapRequests.length === 0) return;
+
+    for (const req of game.swapRequests) {
+      const p1Idx = game.players.findIndex(p => p.id === req.playerId);
+      const p2Idx = game.players.findIndex(p => p.id === req.targetId);
+      if (p1Idx < 0 || p2Idx < 0) continue;
+
+      const p1 = game.players[p1Idx];
+      const p2 = game.players[p2Idx];
+
+      // 交换 position
+      const tmpPos = p1.position;
+      p1.position = p2.position;
+      p2.position = tmpPos;
+
+      // 交换在数组中的位置
+      game.players[p1Idx] = p2;
+      game.players[p2Idx] = p1;
+
+      console.log(`[Swap] ${p1.name} ↔ ${p2.name} 位置已互换`);
+    }
+
+    // 清空已生效的请求
+    game.swapRequests = [];
+  }
+
+  /**
+   * 获取玩家剩余换位置次数信息
+   */
+  public getSwapInfo(gameId: string, playerId: string): { totalChances: number; usedChances: number; remaining: number } {
+    const game = this.games.get(gameId);
+    if (!game) return { totalChances: 0, usedChances: 0, remaining: 0 };
+    const totalChances = this.computeSwapChances(game, playerId);
+    const usedChances = (game.swapRequests || []).filter(r => r.playerId === playerId).length;
+    return { totalChances, usedChances, remaining: totalChances - usedChances };
   }
 
   private handleCheatHu(game: GameState, player: Player): void {
