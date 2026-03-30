@@ -269,18 +269,21 @@ const getArrowChar = (sourcePos: number): string => {
   gap: 2px;
 }
 
-/* 左家/右家：纵向排列 */
+/* 左家/右家：横向排列（长边相连，旋转后形成纵向效果） */
 .player-other--left .player-other-hand,
 .player-other--right .player-other-hand {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 0;
+  flex-wrap: nowrap;
+  align-items: flex-end;
 }
-/* 左右手牌：旋转后交换宽高，消除缝隙 */
+/* 左右手牌尺寸 */
 .player-other--left .player-other-hand :deep(.tile),
 .player-other--right .player-other-hand :deep(.tile) {
-  width: 40px;
-  height: 28px;
+  width: 28px;
+  height: 40px;
+  flex-shrink: 0;
   margin: 0;
   padding: 0;
   border: none;

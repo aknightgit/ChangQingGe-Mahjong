@@ -515,22 +515,6 @@
           <!-- 牌局快讯 -->
           <GameBroadcast :messages="broadcastMessages" />
 
-          <!-- 功能菜单：紧贴战绩榜下方 -->
-          <div class="ext-section ext-section--actions" v-if="gameState?.phase === 'playing'">
-            <h3 class="ext-title">操作</h3>
-            <CircularActionButtons
-              :available-actions="availableActions"
-              :is-connected="isConnected"
-              :is-interaction-locked="isInteractionLocked"
-              :last-state-change-at="lastStateChangeAt"
-              :now-ts="nowTs"
-              :highlight-delay-ms="ACTION_HIGHLIGHT_DELAY_MS"
-              :freeze-until="currentFreezeUntil"
-              :freeze-duration-ms="freezeDurationMs"
-              @action="handleCircularAction"
-            />
-          </div>
-
           <!-- 房间控制 / 管理面板 -->
           <div class="ext-section" v-if="canStartGame">
             <h3 class="ext-title">房间控制</h3>
@@ -831,7 +815,7 @@ const isDoubleRound = computed(() => {
 })
 const effectiveMaxRolls = computed(() => isDoubleRound.value ? 1 : maxDiceRolls.value)
 const showDoubleReminder = ref(false)
-const freezeDurationMs = ref((Number(route.query.freeze) || 1) * 1000) // 秒转毫秒
+const freezeDurationMs = ref((Number(route.query.freeze) || 2) * 1000) // 默认2秒
 
 // 当前冻结截止时间（从游戏状态读取）
 const currentFreezeUntil = computed(() => {
