@@ -64,7 +64,40 @@
           </div>
         </section>
 
-        <!-- 三、胡牌牌型 -->
+        <!-- 三、冻结机制 -->
+        <section :id="'freeze'" class="rule-section">
+          <h2>❄️ 冻结机制（抢牌窗口）</h2>
+          <div class="freeze-flow">
+            <div class="freeze-step">
+              <div class="freeze-icon">🀄</div>
+              <div>
+                <strong>上家出牌</strong>
+                <p>系统立即广播，碰/杠/胡按钮高亮</p>
+              </div>
+            </div>
+            <div class="freeze-arrow">→</div>
+            <div class="freeze-step freeze-parallel">
+              <div class="freeze-icon">⚡</div>
+              <div>
+                <strong>两个并行流程</strong>
+                <p>① 抢牌窗口：其他人可碰/杠/胡<br>② 下家冻结：等待决策窗口</p>
+              </div>
+            </div>
+            <div class="freeze-arrow">→</div>
+            <div class="freeze-step">
+              <div class="freeze-icon">🏁</div>
+              <div>
+                <strong>谁先完成谁赢</strong>
+                <p>有人抢 → 接管回合<br>没人抢 → 下家自动摸牌</p>
+              </div>
+            </div>
+          </div>
+          <div class="rule-note">
+            <strong>💡 核心</strong>：碰/杠/胡是<strong>抢的机会</strong>，不是必须等待的环节。没有"过"按钮，不响应 = 放弃。
+          </div>
+        </section>
+
+        <!-- 四、胡牌牌型 -->
         <section :id="'patterns'" class="rule-section">
           <h2>🏆 胡牌牌型</h2>
           <div class="pattern-table">
@@ -235,7 +268,7 @@
       </div>
 
       <footer class="rules-footer">
-        <p>长清阁麻将 · 需求文档 v2.3</p>
+        <p>长清阁麻将 · 规则速查 v2.4</p>
         <button class="ghost-button" @click="goBack">返回</button>
       </footer>
     </div>
@@ -259,6 +292,7 @@ const activeSection = ref('basic')
 const sections = [
   { id: 'basic', title: '基础', icon: '📋' },
   { id: 'actions', title: '操作', icon: '🎮' },
+  { id: 'freeze', title: '冻结', icon: '❄️' },
   { id: 'patterns', title: '牌型', icon: '🏆' },
   { id: 'formula', title: '公式', icon: '🔢' },
   { id: 'special', title: '特殊', icon: '⚡' },
@@ -483,6 +517,51 @@ const handPatterns = [
   padding: 10px 14px;
   font-size: 0.85rem;
   margin-top: 10px;
+}
+
+/* 冻结机制流程 */
+.freeze-flow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.freeze-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px 16px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.freeze-parallel {
+  border-color: rgba(33, 150, 243, 0.3);
+  background: rgba(33, 150, 243, 0.06);
+}
+
+.freeze-icon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+
+.freeze-step p {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  opacity: 0.7;
+  line-height: 1.5;
+}
+
+.freeze-arrow {
+  font-size: 1.2rem;
+  opacity: 0.4;
+  font-weight: 700;
 }
 
 /* 牌型表格 */
