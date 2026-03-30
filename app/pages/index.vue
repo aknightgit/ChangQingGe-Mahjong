@@ -185,6 +185,15 @@
 
             <div class="create-field">
               <div class="field-header">
+                <label>结算膨胀倍数</label>
+                <button class="help-btn" @click="toggleHelp('settle')">?</button>
+              </div>
+              <input type="number" v-model.number="createParams.settlementMultiplier" min="1" max="10" />
+              <span v-if="activeHelp === 'settle'" class="help-bubble">最终结算时，所有分数额外乘以此倍数。增大数字增加刺激感。默认10倍。</span>
+            </div>
+
+            <div class="create-field">
+              <div class="field-header">
                 <label>掷骰子次数</label>
                 <button class="help-btn" @click="toggleHelp('dice')">?</button>
               </div>
@@ -297,7 +306,8 @@ const createParams = reactive({
   freezeSeconds: 1,
   firstRoundDouble: true,
   liangShanThreshold: 1000,
-  thinkChances: 3
+  thinkChances: 3,
+  settlementMultiplier: 10
 })
 
 // AI玩家选择
@@ -329,7 +339,8 @@ const confirmCreateGame = async () => {
         playerName: userName.value || 'Player 1',
         firstRoundDouble: createParams.firstRoundDouble,
         liangShanThreshold: createParams.liangShanThreshold,
-        thinkChances: createParams.thinkChances
+        thinkChances: createParams.thinkChances,
+        settlementMultiplier: createParams.settlementMultiplier
       },
       headers: { 'Cache-Control': 'no-cache' }
     })

@@ -380,7 +380,7 @@ class GameManager {
     return String(Date.now()).slice(-4);
   }
 
-  async createGame(playerName: string, options?: { freezeDurationMs?: number; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number }): Promise<{ gameId: string; playerId: string }> {
+  async createGame(playerName: string, options?: { freezeDurationMs?: number; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number }): Promise<{ gameId: string; playerId: string }> {
     await this.hydrateFromDatabase();
 
     const gameId = randomUUID();
@@ -438,6 +438,7 @@ class GameManager {
       diceRollCount: options?.diceRollCount ?? 2,
       liangShanThreshold: options?.liangShanThreshold ?? 1000,
       thinkChances: options?.thinkChances ?? 3,
+      settlementMultiplier: options?.settlementMultiplier ?? 10,
       thinkUsage: {}
     };
 
@@ -2447,6 +2448,21 @@ class GameManager {
       }
     }
     
+    // 结算膨胀倍数：所有分数乘以倍数
+    const sm = game.settlementMultiplier ?? 1;
+    if (sm > 1) {
+      for (const p of game.players) {
+        p.score = p.score * sm;
+      }
+      // 重新平衡（乘法不会破坏平衡，但以防万一）
+      const smTotal = game.players.reduce((s, p) => s + p.score, 0);
+      if (smTotal !== 0) {
+        const minP = game.players.reduce((a, b) => a.score < b.score ? a : b);
+        minP.score -= smTotal;
+      }
+      console.log(`[Settlement] 结算膨胀倍数 ×${sm}`);
+    }
+
     // 清除本局AI接管记录
     game.botTakeoverPlayers = [];
 
