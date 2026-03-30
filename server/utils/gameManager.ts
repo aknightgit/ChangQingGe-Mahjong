@@ -345,7 +345,8 @@ class GameManager {
       currentPlayerIndex: game.currentPlayerIndex,
       discardPile: game.discardPile,
       wallCount: game.wall.length,
-      winnersCount: game.winnersCount
+      winnersCount: game.winnersCount,
+      _freezeUntil: (game as any)._freezeUntil || 0
     });
   }
 

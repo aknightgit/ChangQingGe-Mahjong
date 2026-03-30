@@ -40,10 +40,18 @@
     <!-- 右侧 大圆：摸 -->
     <button
       class="action-btn action-btn--draw"
-      :class="{ 'action-btn--active': canDraw, 'action-btn--highlight': canDraw && !isDelaying }"
+      :class="{
+        'action-btn--active': canDraw,
+        'action-btn--highlight': canDraw && !isDelaying,
+        'action-btn--freezing': isFreezing
+      }"
+      :style="isFreezing ? { '--freeze-progress': freezeProgress } : {}"
       :disabled="!canDraw || isDelaying || isInteractionLocked || !isConnected"
       @click="$emit('action', 'draw')"
-    >摸</button>
+    >
+      <span v-if="isFreezing" class="freeze-progress-ring"></span>
+      <span class="draw-label">摸</span>
+    </button>
   </div>
 </template>
 
@@ -59,6 +67,8 @@ interface Props {
   nowTs: number
   highlightDelayMs: number
   compact?: boolean
+  freezeUntil?: number
+  freezeDurationMs?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -84,6 +94,18 @@ const hasAnyAction = computed(() => hasAnyPriorityAction.value || canDraw.value)
 const isDelaying = computed(() => {
   if (props.lastStateChangeAt === 0) return false
   return props.nowTs - props.lastStateChangeAt < props.highlightDelayMs
+})
+
+// 冻结进度
+const isFreezing = computed(() => {
+  return !!props.freezeUntil && props.nowTs < props.freezeUntil
+})
+const freezeProgress = computed(() => {
+  if (!props.freezeUntil || !props.freezeDurationMs) return '0'
+  const total = props.freezeDurationMs
+  const remaining = Math.max(0, props.freezeUntil - props.nowTs)
+  const elapsed = total - remaining
+  return String(Math.min(1, Math.max(0, elapsed / total)))
 })
 </script>
 
@@ -193,6 +215,33 @@ const isDelaying = computed(() => {
   background: linear-gradient(135deg, #1f8a52, #46c574);
   border-color: rgba(70, 197, 116, 0.9);
   box-shadow: 0 0 20px rgba(70, 197, 116, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* 冻结进度动画 */
+.action-btn--freezing {
+  border-color: rgba(33, 150, 243, 0.5);
+  background: rgba(10, 25, 18, 0.95);
+  cursor: default;
+  overflow: hidden;
+}
+
+.freeze-progress-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    rgba(33, 150, 243, 0.6) calc(var(--freeze-progress, 0) * 360deg),
+    transparent calc(var(--freeze-progress, 0) * 360deg)
+  );
+  mask: radial-gradient(circle, transparent 58%, black 60%);
+  -webkit-mask: radial-gradient(circle, transparent 58%, black 60%);
+  pointer-events: none;
+  transition: background 0.1s linear;
+}
+
+.draw-label {
+  position: relative;
+  z-index: 1;
 }
 
 /* 胡牌特殊色 */

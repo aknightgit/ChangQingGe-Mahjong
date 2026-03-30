@@ -380,6 +380,8 @@
               :last-state-change-at="lastStateChangeAt"
               :now-ts="nowTs"
               :highlight-delay-ms="ACTION_HIGHLIGHT_DELAY_MS"
+              :freeze-until="currentFreezeUntil"
+              :freeze-duration-ms="freezeDurationMs"
               @action="handleCircularAction"
             />
           </div>
@@ -432,6 +434,8 @@
         :last-state-change-at="lastStateChangeAt"
         :now-ts="nowTs"
         :highlight-delay-ms="ACTION_HIGHLIGHT_DELAY_MS"
+        :freeze-until="currentFreezeUntil"
+        :freeze-duration-ms="freezeDurationMs"
         @action="handleCircularAction"
       />
 
@@ -616,6 +620,12 @@ watch(() => gameState.value?.phase, (newPhase, oldPhase) => {
 const diceValues = ref<[number, number]>([1, 1])
 const maxDiceRolls = ref(Number(route.query.dice) || 2)
 const freezeDurationMs = ref((Number(route.query.freeze) || 1) * 1000) // 秒转毫秒
+
+// 当前冻结截止时间（从游戏状态读取）
+const currentFreezeUntil = computed(() => {
+  const fu = (gameState.value as any)?._freezeUntil
+  return typeof fu === 'number' && fu > Date.now() ? fu : 0
+})
 
 const onRerollDice = () => {
   diceValues.value = [
