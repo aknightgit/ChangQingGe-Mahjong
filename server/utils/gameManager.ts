@@ -56,6 +56,14 @@ class GameManager {
    */
   enableBotMode(gameId: string, playerId: string): void {
     this.botModePlayers.add(playerId);
+    // 记录本局被AI接管的玩家（用于结算减半）
+    const game = this.games.get(gameId);
+    if (game) {
+      if (!game.botTakeoverPlayers) game.botTakeoverPlayers = [];
+      if (!game.botTakeoverPlayers.includes(playerId)) {
+        game.botTakeoverPlayers.push(playerId);
+      }
+    }
     // 立即由 AI 开始出牌
     this.scheduleBotDiscard(gameId, playerId);
   }
@@ -2003,9 +2011,18 @@ class GameManager {
     }
 
     game.finalScores = finalScores;
+    // AI接管玩家赢分减半
+    const botAffected = game.botTakeoverPlayers || [];
     for (const player of game.players) {
-      player.score = finalScores[player.id] ?? 0;
+      let score = finalScores[player.id] ?? 0;
+      if (botAffected.includes(player.id) && score > 0) {
+        score = Math.floor(score / 2);
+        console.log(`[BotPenalty] ${player.name} 被AI接管，赢分减半: ${finalScores[player.id]} → ${score}`);
+      }
+      player.score = score;
     }
+    // 清除本局AI接管记录
+    game.botTakeoverPlayers = [];
 
     // 记录本局统计
     if (!game.roundStats) game.roundStats = [];

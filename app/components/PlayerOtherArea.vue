@@ -7,7 +7,7 @@
     <div class="player-other-header" v-if="position === 'top'">
       <span class="position-dot" :class="`dot--${posColor}`"></span>
       <span v-if="avatar" class="player-avatar">{{ avatar }}</span>
-      <span class="player-other-name" :class="{ 'player-other-name--clickable': isBot }" @click.stop="$emit('nameClick')">
+      <span class="player-other-name player-other-name--clickable" @click.stop="$emit('nameClick')">
         {{ name }}
         <span v-if="isWinner" class="winner-tag">胡</span>
       </span>

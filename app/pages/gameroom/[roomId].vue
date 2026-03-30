@@ -528,25 +528,39 @@
         />
       </Teleport>
 
-      <!-- AI 玩家操作卡片 -->
+      <!-- 玩家操作卡片（AI + 自己） -->
       <Teleport to="body">
-        <div v-if="showAICard" class="ai-card-overlay" @click.self="showAICard = false">
+        <div v-if="showPlayerCard" class="ai-card-overlay" @click.self="showPlayerCard = false">
           <div class="ai-card">
             <div class="ai-card-header">
-              <span class="ai-card-avatar">🤖</span>
-              <span class="ai-card-name">{{ aiCardPlayer?.name }}</span>
+              <span class="ai-card-avatar">{{ isBotPlayer(playerCardPlayer) ? '🤖' : '🀄' }}</span>
+              <span class="ai-card-name">{{ playerCardPlayer?.name }}</span>
             </div>
             <div class="ai-card-body">
-              <button class="ai-card-btn ai-card-btn--leave" @click="onAILeave">
-                🚪 出局
-                <span class="ai-card-hint">下局移除该AI</span>
-              </button>
-              <button v-if="isSpectator" class="ai-card-btn ai-card-btn--replace" @click="onAIReplace">
-                🙋 换我上
-                <span class="ai-card-hint">下局由你接替</span>
-              </button>
+              <!-- 自己的操作 -->
+              <template v-if="playerCardPlayer?.id === currentPlayer?.id">
+                <button class="ai-card-btn ai-card-btn--leave" @click="onTempLeave">
+                  🪑 暂时离席
+                  <span class="ai-card-hint">下把起身，位置空出</span>
+                </button>
+                <button class="ai-card-btn ai-card-btn--replace" @click="onBotMode">
+                  🤖 托管
+                  <span class="ai-card-hint">AI接管，继续游戏</span>
+                </button>
+              </template>
+              <!-- AI的操作（任何人可点） -->
+              <template v-else-if="isBotPlayer(playerCardPlayer)">
+                <button class="ai-card-btn ai-card-btn--leave" @click="onAILeave">
+                  🚪 出局
+                  <span class="ai-card-hint">下局移除该AI</span>
+                </button>
+                <button v-if="isSpectator" class="ai-card-btn ai-card-btn--replace" @click="onAIReplace">
+                  🙋 换我上
+                  <span class="ai-card-hint">下局由你接替</span>
+                </button>
+              </template>
             </div>
-            <button class="ai-card-close" @click="showAICard = false">✕</button>
+            <button class="ai-card-close" @click="showPlayerCard = false">✕</button>
           </div>
         </div>
       </Teleport>
@@ -1161,31 +1175,32 @@ const onSaveSettle = async () => {
   }
 }
 
-// AI 玩家操作卡片
-const showAICard = ref(false)
-const aiCardPlayer = ref<any>(null)
+// 玩家操作卡片
+const showPlayerCard = ref(false)
+const playerCardPlayer = ref<any>(null)
 const isBotPlayer = (p: any) => p?.name?.startsWith('AI-') || false
 const isSpectator = computed(() => {
-  // 观围者 = 不在当前游戏的活跃玩家列表中
   if (!gameState.value?.players || !currentPlayer.value) return true
   return !gameState.value.players.some((p: any) => p.id === currentPlayer.value?.id)
 })
 const onPlayerNameClick = (player: any) => {
-  if (!player || !isBotPlayer(player)) return
-  aiCardPlayer.value = player
-  showAICard.value = true
+  if (!player) return
+  // 只允许点击自己或AI玩家
+  if (player.id !== currentPlayer.value?.id && !isBotPlayer(player)) return
+  playerCardPlayer.value = player
+  showPlayerCard.value = true
 }
 const onAILeave = async () => {
-  if (!aiCardPlayer.value) return
-  const aiName = aiCardPlayer.value.name
-  showAICard.value = false
+  if (!playerCardPlayer.value) return
+  const aiName = playerCardPlayer.value.name
+  showPlayerCard.value = false
   try {
     await $fetch('/api/game/kick-player', {
       method: 'POST',
       body: {
         gameId: roomId.value,
         playerId: currentPlayer.value?.id,
-        targetPlayerId: aiCardPlayer.value.id
+        targetPlayerId: playerCardPlayer.value.id
       }
     })
     addBroadcast(`🚪 ${aiName} 下局将被移除！`, 'warn')
@@ -1195,17 +1210,17 @@ const onAILeave = async () => {
   }
 }
 const onAIReplace = async () => {
-  if (!aiCardPlayer.value) return
-  const aiName = aiCardPlayer.value.name
+  if (!playerCardPlayer.value) return
+  const aiName = playerCardPlayer.value.name
   const myName = userName.value || currentPlayer.value?.name || '某玩家'
-  showAICard.value = false
+  showPlayerCard.value = false
   try {
     await $fetch('/api/game/replace-player', {
       method: 'POST',
       body: {
         gameId: roomId.value,
         playerId: currentPlayer.value?.id,
-        targetPlayerId: aiCardPlayer.value.id,
+        targetPlayerId: playerCardPlayer.value.id,
         spectatorName: myName
       }
     })
@@ -1213,6 +1228,46 @@ const onAIReplace = async () => {
     await refreshState()
   } catch (e) {
     console.error('[AI Replace] Failed:', e)
+  }
+}
+
+// 暂时离席
+const onTempLeave = async () => {
+  if (!playerCardPlayer.value) return
+  showPlayerCard.value = false
+  try {
+    await $fetch('/api/game/kick-player', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: currentPlayer.value?.id,
+        targetPlayerId: currentPlayer.value?.id
+      }
+    })
+    addBroadcast(`🪑 ${currentPlayer.value?.name} 下局暂时离席`, 'info')
+    await refreshState()
+  } catch (e) {
+    console.error('[TempLeave] Failed:', e)
+  }
+}
+
+// 托管
+const onBotMode = async () => {
+  if (!playerCardPlayer.value) return
+  showPlayerCard.value = false
+  try {
+    await $fetch('/api/game/bot-mode', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: currentPlayer.value?.id,
+        enabled: true
+      }
+    })
+    addBroadcast(`🤖 ${currentPlayer.value?.name} 已托管给AI！`, 'warn')
+    await refreshState()
+  } catch (e) {
+    console.error('[BotMode] Failed:', e)
   }
 }
 

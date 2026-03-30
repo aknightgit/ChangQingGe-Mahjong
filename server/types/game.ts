@@ -198,6 +198,7 @@ export interface GameState {
   pendingRemovals?: string[];  // 下局要移除的AI玩家ID
   pendingReplacements?: { spectatorId: string; aiPlayerId: string; spectatorName?: string }[];  // 下局替换AI的请求
   settleRequested?: boolean;  // 是否已请求退房结算
+  botTakeoverPlayers?: string[];  // 本局被AI接管的玩家ID
   // 每局统计追踪
   roundStats?: RoundStat[];
   // 可配置参数

@@ -267,6 +267,38 @@
         </section>
       </div>
 
+      <!-- 九、AI与超时规则 -->
+      <section :id="'ai'" class="rule-section">
+        <h2>🤖 AI与超时规则</h2>
+        <div class="rule-grid">
+          <div class="rule-card special-card">
+            <h3>⏱️ 超时规则</h3>
+            <ul>
+              <li>出牌倒计时 <strong>60秒</strong></li>
+              <li>超时自动打出摸到的牌</li>
+              <li>连续 2次 超时 → AI接管</li>
+            </ul>
+          </div>
+          <div class="rule-card special-card rebel-card">
+            <h3>⚠️ AI接管惩罚</h3>
+            <ul>
+              <li>本局被AI接管的玩家</li>
+              <li>赢牌时得分 <strong>÷2</strong>（少收一半）</li>
+              <li>惩罚仅对<strong>赢方</strong>生效</li>
+              <li>手动点击"托管"也触发此惩罚</li>
+            </ul>
+          </div>
+          <div class="rule-card special-card">
+            <h3>🪑 离席与托管</h3>
+            <ul>
+              <li><strong>暂时离席</strong>：下把起身，位置空出</li>
+              <li><strong>托管</strong>：AI接管出牌，继续游戏</li>
+              <li>托管中可点击"我回来了"恢复</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
       <footer class="rules-footer">
         <p>长清阁麻将 · 规则速查 v2.4</p>
         <button class="ghost-button" @click="goBack">返回</button>
@@ -299,6 +331,7 @@ const sections = [
   { id: 'kong', title: '杠', icon: '🎯' },
   { id: 'multiplier', title: '翻倍', icon: '✖️' },
   { id: 'bonus', title: '加成', icon: '🌟' },
+  { id: 'ai', title: 'AI规则', icon: '🤖' },
 ]
 
 const scrollTo = (id: string) => {
