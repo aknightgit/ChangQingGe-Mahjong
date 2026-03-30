@@ -737,8 +737,8 @@ class GameManager {
       return pendingAction.availableActions;
     }
 
-    // 梁山聚义：任何时候都可以投票（只要没投过）
-    if (game.phase === GamePhase.PLAYING) {
+    // 梁山聚义：任何时候都可以投票（只要没投过，且是活跃玩家）
+    if (game.phase === GamePhase.PLAYING && player.status === PlayerStatus.PLAYING) {
       const votes = game.liangShanVotes || [];
       if (!votes.includes(playerId)) {
         actions.push(ActionType.LIANG_SHAN);
@@ -1506,12 +1506,14 @@ class GameManager {
   }
 
   /**
-   * 梁山聚义：全员投票机制
-   * - 每个玩家可点击一次（之后锁定）
-   * - 4人全部同意 → 本局结束，下把翻倍
+   * 梁山聚义：全员投票机制（仅活跃玩家）
+   * - 每个活跃玩家可点击一次（之后锁定）
+   * - 全部活跃玩家都同意 → 本局结束，下把翻倍
+   * - 否则游戏正常继续，不播报投票进度
    */
   private handleLiangShan(game: GameState, player: Player): void {
     if (game.phase !== GamePhase.PLAYING) return;
+    if (player.status !== PlayerStatus.PLAYING) return;
 
     // 初始化投票列表
     if (!game.liangShanVotes) {
@@ -1524,14 +1526,14 @@ class GameManager {
     // 记录投票
     game.liangShanVotes.push(player.id);
 
-    const totalPlayers = game.players.filter(p => p.status === PlayerStatus.PLAYING || p.status === PlayerStatus.WON).length;
+    // 活跃玩家总数
+    const activePlayers = game.players.filter(p => p.status === PlayerStatus.PLAYING);
     const voteCount = game.liangShanVotes.length;
 
-    console.log(`[LiangShan] ${player.name} voted (${voteCount}/${totalPlayers})`);
+    console.log(`[LiangShan] ${player.name} voted (${voteCount}/${activePlayers.length})`);
 
-    // 广播投票进度（通过 actionHistory 记录，客户端检测生成广播消息）
     // 全员投票 → 结束本局，下把翻倍
-    if (voteCount >= totalPlayers) {
+    if (voteCount >= activePlayers.length) {
       console.log(`[LiangShan] All players agreed! Ending round with ×2 multiplier.`);
 
       // 所有未胡牌玩家标记为输
@@ -1543,7 +1545,7 @@ class GameManager {
 
       // 下局全局倍数 ×2
       const currentGlobal = game.globalMultiplier ?? 1;
-      game.inheritedGlobalMultiplier = calculateGlobalMultiplier(currentGlobal, '造反'); // 复用造反的 ×2 逻辑
+      game.inheritedGlobalMultiplier = calculateGlobalMultiplier(currentGlobal, '造反');
 
       // 结束本局
       game.phase = GamePhase.CHA_JIAO;
@@ -1558,10 +1560,8 @@ class GameManager {
       for (const p of game.players) {
         p.score = finalScores[p.id] ?? 0;
       }
-
-      // 庄家轮转（可选：保持当前庄家）
-      game.inheritedGlobalMultiplier = calculateGlobalMultiplier(currentGlobal, '造反');
     }
+    // 未全票 → 游戏正常继续，不结束
   }
 
   private handleCheatHu(game: GameState, player: Player): void {

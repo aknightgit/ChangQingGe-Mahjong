@@ -383,17 +383,10 @@
               @click="onLiangShan"
             >
               <span class="liang-shan-flame">🔥</span>
-              <span class="liang-shan-text">梁山聚义</span>
-              <span v-if="liangShanVoteCount > 0" class="liang-shan-count">{{ liangShanVoteCount }}/4</span>
+              <span class="liang-shan-text">{{ hasVotedLiangShan ? '已响应聚义' : '梁山聚义' }}</span>
             </button>
-            <p class="ext-meta" v-if="liangShanVoteCount > 0 && !hasVotedLiangShan">
-              {{ liangShanVoteCount }}名玩家已响应，点击加入！
-            </p>
-            <p class="ext-meta" v-else-if="hasVotedLiangShan">
-              已投票，等待其他玩家...
-            </p>
-            <p class="ext-meta" v-else>
-              全员同意则本局结束，下把翻倍！
+            <p class="ext-meta">
+              {{ hasVotedLiangShan ? '等待其他人...' : '全员响应则本局结束，下把翻倍！' }}
             </p>
           </div>
 
@@ -1056,9 +1049,6 @@ const hasVotedLiangShan = computed(() => {
   const votes = (gameState.value as any)?.liangShanVotes || []
   return votes.includes(currentPlayer.value?.id)
 })
-const liangShanVoteCount = computed(() => {
-  return ((gameState.value as any)?.liangShanVotes || []).length
-})
 const onLiangShan = () => {
   resetAutoCount()
   playSound('tile-rebel')
@@ -1317,18 +1307,8 @@ watch(() => gameState.value, (newState, oldState) => {
     }
   }
 
-  // 梁山聚义投票进度
+  // 梁山聚义投票进度（仅追踪，不播报）
   const currentVotes = ((newState as any).liangShanVotes || []).length
-  if (currentVotes > prevLiangShanVoteCount.value) {
-    if (currentVotes === 1) {
-      const voter = newState.players?.find((p: any) => p.id === (newState as any).liangShanVotes?.[0])
-      addBroadcast(`🔥 ${voter?.name || '某玩家'} 发起了梁山聚义！`, 'special')
-    } else if (currentVotes >= (newState.players?.length || 4)) {
-      addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
-    } else {
-      addBroadcast(`🔥 有${currentVotes}名玩家响应了上梁山！`, 'special')
-    }
-  }
   prevLiangShanVoteCount.value = currentVotes
 
   prevPhase.value = newState.phase
@@ -1679,17 +1659,6 @@ const forceDiscard = async (p: Player) => {
 
 .liang-shan-flame {
   font-size: 1.2rem;
-}
-
-.liang-shan-count {
-  background: rgba(239, 83, 80, 0.3);
-  padding: 2px 8px;
-  border-radius: 8px;
-  font-size: 0.8rem;
-}
-
-.liang-shan-btn--voted .liang-shan-count {
-  background: rgba(255, 255, 255, 0.08);
 }
 
 @keyframes liang-shan-pulse {
