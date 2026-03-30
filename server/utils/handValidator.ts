@@ -156,55 +156,48 @@ function isAllTripletsHand(handTiles: Tile[], exposedMelds: Meld[], wildSuit?: s
     if (meld.type === MeldType.SEQUENCE) return false;
   }
   
-  // Separate wild tiles from regular tiles
   const nonFlowerTiles = handTiles.filter(t => !isFlower(t));
   const isWild = (t: Tile) => wildSuit !== undefined && t.suit === wildSuit && t.value === wildValue;
   const regularTiles = nonFlowerTiles.filter(t => !isWild(t));
   const wildCount = nonFlowerTiles.filter(t => isWild(t)).length;
   
   const groups = groupTiles(regularTiles);
-  
-  let tripletCount = 0;
-  let pairCount = 0;
-  let spareTiles = 0;
-  
-  for (const [, group] of groups) {
-    if (group.length >= 3) tripletCount++;
-    else if (group.length === 2) pairCount++;
-    else spareTiles += group.length; // single tiles need wilds to fill
-  }
-  
   const expectedTriplets = 4 - exposedMelds.length;
   
-  // Use wild tiles to fill gaps: first fill singles into triplets, then extra pair
-  let wildsAvailable = wildCount;
+  // Count how many natural triplets and pairs we have
+  let naturalTriplets = 0;
+  let naturalPairs = 0;
+  let singles = 0;
   
-  // Fill singles into triplets (each single needs 2 wilds to make a triplet)
-  // But actually, a single + 2 wilds = triplet, OR a single + 1 wild + existing pair = not valid for 碰碰胡
-  // Simpler: count how many wilds needed to complete triplets and pair
-  let neededForTriplets = 0;
   for (const [, group] of groups) {
-    if (group.length === 1) neededForTriplets += 2; // single needs 2 wilds for triplet
-    // group.length === 2 is already a pair, doesn't need wilds for 碰碰胡
-    // group.length >= 3 is already a triplet
+    if (group.length >= 3) naturalTriplets++;
+    else if (group.length === 2) naturalPairs++;
+    else singles += group.length; // 1 or 4 (4th is a single for triplets)
   }
   
-  // Also: wild + wild + wild = triplet (3 wilds make a triplet)
-  // Or wild + wild + regular(1) = triplet (already counted above)
+  // Use wilds optimally:
+  // Priority 1: Complete singles to triplets (need 2 wilds each)
+  // Priority 2: Complete a pair (need 0 wilds, already counted)
+  // Priority 3: Make triplets from remaining wilds (need 3 each)
+  // Priority 4: Make extra pair from remaining wilds (need 2 wilds)
   
-  const totalTriplets = tripletCount + Math.min(Math.floor(wildsAvailable / 3), neededForTriplets > 0 ? 0 : 999);
-  const wildsAfterTriplets = wildsAvailable - (totalTriplets - tripletCount) * 3;
+  let wildsLeft = wildCount;
   
-  // Actually, let's use a simpler approach:
-  // Count non-wild groups: triplets, pairs, singles
-  // Use wilds to: (1) complete singles to triplets (2 wilds each), (2) make extra triplets from leftover wilds (3 each)
-  const wildsForSingles = Math.min(wildCount, spareTiles * 2);
-  const completedTriplets = tripletCount + Math.floor(wildsForSingles / 2); // each pair of wilds completes one single to triplet (rough)
-  const remainingWilds = wildCount - wildsForSingles;
-  const extraTriplets = Math.floor(remainingWilds / 3);
-  const finalTriplets = tripletCount + Math.floor(wildsForSingles / 2) + extraTriplets;
+  // Fill singles to triplets
+  const tripletsFromSingles = Math.min(Math.floor(wildsLeft / 2), singles);
+  wildsLeft -= tripletsFromSingles * 2;
+  const totalTriplets = naturalTriplets + tripletsFromSingles;
   
-  return finalTriplets >= expectedTriplets && (pairCount >= 1 || (remainingWilds % 3) >= 2);
+  // Make more triplets from remaining wilds (3 wilds = 1 triplet)
+  const tripletsFromWilds = Math.floor(wildsLeft / 3);
+  wildsLeft -= tripletsFromWilds * 3;
+  const finalTriplets = totalTriplets + tripletsFromWilds;
+  
+  // Need exactly expectedTriplets triplets + 1 pair
+  // Pair can be: natural pair, or leftover wilds (2+), or leftover singles (should be 0 if we filled them all)
+  const hasPair = naturalPairs >= 1 || wildsLeft >= 2 || singles > tripletsFromSingles;
+  
+  return finalTriplets >= expectedTriplets && hasPair;
 }
 
 /**
@@ -287,16 +280,13 @@ function countWildTiles(tiles: Tile[], isWildTile: WildTileChecker): number {
 }
 
 /**
- * 大吊判断：手牌（不含门口副露）仅剩单张听牌
- * 
- * 规则（长清阁）：
- * 大吊 = 胡牌时，门口副露数 >= 3，且手牌（含胡牌）仅剩 2 张
- * 即：胡牌前仅 1 张在手 = 单吊胡牌
+ * 大吊判断：胡牌时，门口副露数 >= 3，且手牌仅剩2张且恰好是1对
+ * （即胡牌前手里只有1张，胡来的那张凑成对 = 单吊胡牌）
  */
 function isDaDiao(handTiles: Tile[], exposedMelds: Meld[]): boolean {
-  // 大吊条件：胡牌后手牌仅 2 张（胡牌前仅 1 张在手 = 单吊）
-  // 且至少有门口副露（避免把普通闭门手误判为大吊）
-  return exposedMelds.length >= 1 && handTiles.length === 2;
+  if (exposedMelds.length < 1 || handTiles.length !== 2) return false;
+  // 额外校验：2张必须是对子（相同的牌）
+  return handTiles[0].suit === handTiles[1].suit && handTiles[0].value === handTiles[1].value;
 }
 
 /**
