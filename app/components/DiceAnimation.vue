@@ -180,6 +180,8 @@ const onDeal = () => {
   justify-content: center;
   z-index: 200;
   backdrop-filter: blur(6px);
+  perspective: 1200px;
+  transform-style: preserve-3d;
 }
 
 /* ===== 粒子 ===== */
@@ -267,7 +269,9 @@ const onDeal = () => {
   gap: 48px;
   justify-content: center;
   margin-bottom: 24px;
-  perspective: 600px;
+  perspective: 800px;
+  perspective-origin: 50% 50%;
+  transform-style: preserve-3d;
 }
 
 .dice-row--clickable {
