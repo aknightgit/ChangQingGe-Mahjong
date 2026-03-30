@@ -737,8 +737,8 @@ class GameManager {
       return pendingAction.availableActions;
     }
 
-    // 梁山聚义：任何时候都可以投票（只要没投过，且是活跃玩家）
-    if (game.phase === GamePhase.PLAYING && player.status === PlayerStatus.PLAYING) {
+    // 梁山聚义：前三回合可投票（只要没投过，且是活跃玩家）
+    if (game.phase === GamePhase.PLAYING && player.status === PlayerStatus.PLAYING && game.roundNumber <= 3) {
       const votes = game.liangShanVotes || [];
       if (!votes.includes(playerId)) {
         actions.push(ActionType.LIANG_SHAN);

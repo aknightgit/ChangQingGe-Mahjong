@@ -432,8 +432,8 @@
           <!-- 牌局快讯 -->
           <GameBroadcast :messages="broadcastMessages" />
 
-          <!-- 梁山聚义 -->
-          <div class="ext-section" v-if="gameState?.phase === 'playing'">
+          <!-- 梁山聚义（前三回合可见） -->
+          <div class="ext-section" v-if="gameState?.phase === 'playing' && (currentRound || 0) <= 3">
             <h3 class="ext-title">特殊行动</h3>
             <button
               class="liang-shan-btn"
@@ -444,9 +444,6 @@
               <span class="liang-shan-flame">🔥</span>
               <span class="liang-shan-text">{{ hasVotedLiangShan ? '已响应聚义' : '梁山聚义' }}</span>
             </button>
-            <p class="ext-meta">
-              {{ hasVotedLiangShan ? '等待其他人...' : '全员响应则本局结束，下把翻倍！' }}
-            </p>
           </div>
 
           <!-- 功能菜单：紧贴战绩榜下方 -->
