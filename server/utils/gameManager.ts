@@ -100,11 +100,11 @@ class GameManager {
           this.handlePass(game, player);
         }
 
-        // 所有 pending 都已处理 → 进入下家
+        // 清除所有 pending（兜底：handlePass 可能因为一炮多响等未全部清除）
         game.pendingActions = [];
         await this.persistGame(game);
         this.broadcastGameState(gameId);
-        await this.moveToNextPlayer(game);
+        // 不再调用 moveToNextPlayer — freeze timer 已并行处理下家流转
       } catch (err) {
         console.error('Failed to auto-resolve pending actions:', err);
       } finally {
@@ -700,9 +700,18 @@ class GameManager {
       return pendingAction.availableActions;
     }
 
-    // If it's the player's turn and no one else has pending reactions, allow turn actions
-    // Note: freeze does NOT block the player's own draw+discard cycle
-    if (currentPlayer.id === playerId && game.pendingActions.length === 0) {
+    // If it's the player's turn, allow turn actions
+    // freeze 百搭期间不能出牌/摸牌
+    // 其他玩家有 pending claim 时，当前玩家等待（冻结窗口给抢牌机会）
+    if (currentPlayer.id === playerId) {
+      // 百搭冻结期间：不响应出牌/摸牌
+      if (game.freezeRound && game.roundNumber <= game.freezeRound) {
+        return [];
+      }
+      // 有其他玩家在抢牌（pending claim），当前玩家等待决策窗口
+      if (game.pendingActions.length > 0) {
+        return [];
+      }
 
       // 自动补花：如果门口有未替换的花牌，先补花
       const unreplacedFlowers = player.hand.exposedMelds.filter(
@@ -881,13 +890,14 @@ class GameManager {
     game.actionHistory.push(gameAction);
     game.lastActionTime = Date.now();
 
-    // 如果所有 pending actions 都处理完了，推进到下家
-    if (game.pendingActions.length === 0 && action !== ActionType.DISCARD) {
-      await this.persistGame(game);
-      this.broadcastGameState(gameId);
-      this.clearPendingActionTimer(gameId); // 取消 timeout
-      await this.moveToNextPlayer(game);
-      return;
+    // DISCARD 的 moveToNextPlayer 已在 handleDiscard 中处理
+    // Claim 动作（PENG/KONG/HU/CHOW）执行后，claiming player 接管回合，不需要 moveToNextPlayer
+    // 但如果新当前玩家是 bot，需要调度出牌
+    if (action !== ActionType.DISCARD && game.pendingActions.length === 0) {
+      const currentP = game.players[game.currentPlayerIndex];
+      if (currentP && this.isPlayerBotControlled(currentP) && currentP.status === PlayerStatus.PLAYING) {
+        this.scheduleBotDiscard(gameId, currentP.id);
+      }
     }
 
     // Broadcast game state update
@@ -922,26 +932,23 @@ class GameManager {
       game.pendingActions = [];
       await this.persistGame(game);
       this.broadcastGameState(game.gameId);
-      this.moveToNextPlayer(game);
+      await this.moveToNextPlayer(game);
       return;
     }
 
     // 检查其他玩家是否可以碰/杠/胡/吃
     this.checkPendingActions(game, tile);
 
-    if (game.pendingActions.length > 0) {
-      // 有人可以响应 → 广播状态，不立即进入下家
-      // pending action 完成后会自动调用 moveToNextPlayer
-      await this.persistGame(game);
-      this.broadcastGameState(game.gameId);
-      this.schedulePendingActionTimeout(game.gameId);
-      this.handleBotPendingActions(game.gameId);
-      return;
-    }
-
-    // 无人响应 → 直接进入下家
+    // 无论是否有 pending action，都立即进入下家（并行推进）
+    // pending action = 抢牌窗口，freeze timer = 决策窗口，谁先完成谁赢
     await this.persistGame(game);
     this.broadcastGameState(game.gameId);
+
+    if (game.pendingActions.length > 0) {
+      this.schedulePendingActionTimeout(game.gameId);
+      this.handleBotPendingActions(game.gameId);
+    }
+
     await this.moveToNextPlayer(game);
   }
 
@@ -1707,11 +1714,26 @@ class GameManager {
     this.replaceFlowers(game, nextPlayer);
 
     if (this.isPlayerBotControlled(nextPlayer)) {
-      setTimeout(() => {
-        console.log(`[bot-freeze] Freeze expired for ${nextPlayer.name}, drawing...`);
-        this.handleDraw(game, nextPlayer);
-        console.log(`[bot-freeze] Draw done, hand: ${nextPlayer.hand.concealedTiles.length} tiles, scheduling discard`);
-        this.scheduleBotDiscard(game.gameId, nextPlayer.id);
+      const freezeBotIndex = game.currentPlayerIndex;
+      setTimeout(async () => {
+        try {
+          const freshGame = await this.getGame(game.gameId);
+          if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
+          if (freshGame.currentPlayerIndex !== freezeBotIndex) return; // 已被 claim 接管
+          if (freshGame.pendingActions.length > 0) {
+            console.log(`[bot-freeze] Pending actions exist, skipping auto-draw for bot ${nextPlayer.name}`);
+            return;
+          }
+          console.log(`[bot-freeze] Freeze expired for ${nextPlayer.name}, drawing...`);
+          this.replaceFlowers(freshGame, nextPlayer);
+          this.handleDraw(freshGame, nextPlayer);
+          console.log(`[bot-freeze] Draw done, hand: ${nextPlayer.hand.concealedTiles.length} tiles, scheduling discard`);
+          this.scheduleBotDiscard(game.gameId, nextPlayer.id);
+          await this.persistGame(freshGame);
+          this.broadcastGameState(game.gameId);
+        } catch (err) {
+          console.error('[bot-freeze] Error:', err);
+        }
       }, freezeMs);
     } else {
       (game as any)._freezeUntil = Date.now() + freezeMs;
@@ -1722,11 +1744,29 @@ class GameManager {
       setTimeout(async () => {
         try {
           const freshGame = await this.getGame(game.gameId);
-          if (freshGame && freshGame.currentPlayerIndex === freezeCurrentIndex) {
-            delete (freshGame as any)._freezeUntil;
+          if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
+          if (freshGame.currentPlayerIndex !== freezeCurrentIndex) return; // 已被 claim 接管
+
+          delete (freshGame as any)._freezeUntil;
+
+          if (freshGame.pendingActions.length > 0) {
+            // 还有人在抢牌中，不自动摸牌，等他们响应
+            console.log(`[freeze] Pending actions exist, skipping auto-draw for ${freshGame.players[freezeCurrentIndex]?.name}`);
             await this.persistGame(freshGame);
             this.broadcastGameState(game.gameId);
+            return;
           }
+
+          // 冻结窗口结束且没人抢牌 → 自动摸牌
+          const nextPlayer = freshGame.players[freshGame.currentPlayerIndex];
+          if (nextPlayer && nextPlayer.status === PlayerStatus.PLAYING) {
+            this.replaceFlowers(freshGame, nextPlayer);
+            this.handleDraw(freshGame, nextPlayer);
+            console.log(`[freeze] Auto-draw for ${nextPlayer.name} (freeze expired, no pending)`);
+          }
+
+          await this.persistGame(freshGame);
+          this.broadcastGameState(game.gameId);
         } catch (err) {
           console.error('[freeze] Error clearing freeze:', err);
         }
