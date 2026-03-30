@@ -22,7 +22,7 @@
         <span class="rank-dot" :class="`dot--${player.color}`"></span>
         <span class="rank-name" :class="{ 'rank-name--me': player.isMe }">{{ player.name }}</span>
         <span v-if="i === 0 && player.score > 0" class="rank-star">⭐</span>
-        <span v-if="player.isQJCrossed" class="rank-qj-icon" title="已突破被聚义QJ线">👑</span>
+        <span v-if="player.isQJCrossed" class="rank-qj-icon" :class="{ 'rank-qj-icon--glow': player.qjGlow }" title="已突破被聚义QJ线">🤑</span>
         <span class="rank-score" :class="player.score > 0 ? 'sc-pos' : player.score < 0 ? 'sc-neg' : ''">
           {{ player.score > 0 ? '+' : '' }}{{ player.score }}
         </span>
@@ -84,6 +84,8 @@ interface PlayerStat {
   color: string
   isMe: boolean
   isQJCrossed?: boolean
+  qjScore?: number
+  qjGlow?: boolean
   catchRate?: number
   catchAvg?: number
   selfDrawRate?: number
@@ -180,9 +182,10 @@ const rankedPlayers = computed(() =>
 .rank-name { flex: 1; font-weight: 600; }
 .rank-name--me { color: #ffd700; }
 .rank-star { font-size: 0.8rem; animation: glow 1.5s infinite; }
-.rank-qj-icon { font-size: 0.85rem; animation: qj-glow 2s infinite; cursor: help; }
+.rank-qj-icon { font-size: 0.85rem; cursor: help; }
+.rank-qj-icon--glow { animation: qj-glow 2s infinite; }
 @keyframes glow { 0%, 100% { text-shadow: 0 0 4px rgba(255,215,0,0.4); } 50% { text-shadow: 0 0 12px rgba(255,215,0,0.8); } }
-@keyframes qj-glow { 0%, 100% { filter: drop-shadow(0 0 3px rgba(239,83,80,0.6)); } 50% { filter: drop-shadow(0 0 8px rgba(239,83,80,0.9)); } }
+@keyframes qj-glow { 0%, 100% { filter: drop-shadow(0 0 3px rgba(239,83,80,0.6)); } 50% { filter: drop-shadow(0 0 10px rgba(239,83,80,1)); } }
 
 .rank-score { font-weight: 700; font-size: 0.85rem; }
 .sc-pos { color: #66bb6a; }

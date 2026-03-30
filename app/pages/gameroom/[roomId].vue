@@ -980,20 +980,27 @@ const botAvatars = ['😎', '🤖', '🧠']
 const statsPlayers = computed(() => {
   if (!gameState.value) return []
   const qjAlertIds = new Set((gameState.value as any).qjAlerts?.map((a: any) => a.playerId) || [])
-  return gameState.value.players.map((p, i) => ({
-    id: p.id,
-    name: p.name,
-    score: p.score || 0,
-    wins: p.status === 'won' ? 1 : 0,
-    losses: p.status === 'lost' ? 1 : 0,
-    color: positionColors[p.position] || 'south',
-    isMe: p.id === currentPlayer.value?.id,
-    isQJCrossed: qjAlertIds.has(p.id),
-    // 累积/上局数据（暂无历史接口，先用占位）
-    totalWins: p.status === 'won' ? 1 : 0,
-    totalLosses: p.status === 'lost' ? 1 : 0,
-    lastRoundStatus: null as 'won' | 'lost' | 'none' | null,
-  }))
+  const qjThreshold = (gameState.value as any).liangShanThreshold ?? 4000
+  return gameState.value.players.map((p, i) => {
+    const alert = (gameState.value as any).qjAlerts?.find((a: any) => a.playerId === p.id)
+    const qjScore = alert?.score || 0
+    return {
+      id: p.id,
+      name: p.name,
+      score: p.score || 0,
+      wins: p.status === 'won' ? 1 : 0,
+      losses: p.status === 'lost' ? 1 : 0,
+      color: positionColors[p.position] || 'south',
+      isMe: p.id === currentPlayer.value?.id,
+      isQJCrossed: qjAlertIds.has(p.id),
+      qjScore,
+      qjGlow: qjScore > qjThreshold * 3,
+      // 累积/上局数据（暂无历史接口，先用占位）
+      totalWins: p.status === 'won' ? 1 : 0,
+      totalLosses: p.status === 'lost' ? 1 : 0,
+      lastRoundStatus: null as 'won' | 'lost' | 'none' | null,
+    }
+  })
 })
 
 const handleSpectate = (id: string) => {
