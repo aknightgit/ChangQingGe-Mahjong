@@ -2139,7 +2139,8 @@ const forceDiscard = async (p: Player) => {
 .seat-bottom {
   bottom: 0;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) scale(1.2);
+  transform-origin: bottom center;
   width: 62%;
   height: auto;
 }
