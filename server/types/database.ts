@@ -178,6 +178,7 @@ export interface MatchHistoryResult {
   winOrder: number | null;
   winRound: number | null;
   winTimestamp: number | null;
+  winType: 'self_draw' | 'catch_discard' | 'rob_kong' | null; // 胡牌类型
   wonFan: number;
   windScore: number;
   rainScore: number;

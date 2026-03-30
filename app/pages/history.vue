@@ -7,10 +7,54 @@
           <h1>对局记录</h1>
           <p class="subtitle">所有房间的近期对局</p>
         </div>
-        <button class="ghost-button" @click="loadHistory" :disabled="isLoading">
+        <button class="ghost-button" @click="loadAll" :disabled="isLoading">
           刷新
         </button>
       </header>
+
+      <!-- 战绩统计表格 -->
+      <section class="stats-section">
+        <h2 class="section-title">📊 战绩统计</h2>
+        <p v-if="statsLoading" class="loading">加载统计中…</p>
+        <p v-else-if="!playerStats.length" class="empty">暂无统计数据。</p>
+        <div v-else class="stats-table-wrap">
+          <table class="stats-table">
+            <thead>
+              <tr>
+                <th>玩家</th>
+                <th>总输赢</th>
+                <th class="highlight-col">有效战绩</th>
+                <th>与AI战绩</th>
+                <th>自摸</th>
+                <th>捉冲</th>
+                <th>最大赢</th>
+                <th>最大输</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="stat in playerStats"
+                :key="stat.playerId"
+                :class="{ 'ai-row': stat.isAI, 'me-row': stat.playerId === userIdCookie }"
+              >
+                <td class="player-cell">
+                  <span v-if="stat.isAI" class="ai-badge">AI</span>
+                  <span class="name">{{ stat.name }}</span>
+                </td>
+                <td :class="scoreClass(stat.totalScore)">{{ formatSigned(stat.totalScore) }}</td>
+                <td class="highlight-col" :class="scoreClass(stat.effectiveScore)">
+                  <strong>{{ formatSigned(stat.effectiveScore) }}</strong>
+                </td>
+                <td :class="scoreClass(stat.vsAIScore)">{{ formatSigned(stat.vsAIScore) }}</td>
+                <td class="center">{{ stat.selfDrawCount }}</td>
+                <td class="center">{{ stat.catchDiscardCount }}</td>
+                <td class="score-positive">{{ stat.maxWin > 0 ? '+' + stat.maxWin : '-' }}</td>
+                <td class="score-negative">{{ stat.maxLoss < 0 ? stat.maxLoss : '-' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section class="filter-bar">
         <label class="toggle">
@@ -45,13 +89,18 @@
                 :class="['player-row', { winner: player.status === 'won', me: player.playerId === userIdCookie }]"
               >
                 <div>
-                  <p class="player-name">{{ player.name }}</p>
+                  <p class="player-name">
+                    {{ player.name }}
+                    <span v-if="player.winType === 'self_draw'" class="win-tag self-draw">自摸</span>
+                    <span v-else-if="player.winType === 'catch_discard'" class="win-tag catch">捉冲</span>
+                    <span v-else-if="player.winType === 'rob_kong'" class="win-tag rob">抢杠</span>
+                  </p>
                   <p class="player-meta">
                     {{ player.status === 'won' ? '赢家' : '参与者' }} · 第 {{ player.position + 1 }} 位
                   </p>
                 </div>
                 <div class="player-score" :class="scoreClass(player.finalScore ?? match.finalScores?.[player.playerId] ?? 0)">
-                  {{ formatScore(player.finalScore ?? match.finalScores?.[player.playerId] ?? 0) }}
+                  {{ formatSigned(player.finalScore ?? match.finalScores?.[player.playerId] ?? 0) }}
                 </div>
               </li>
             </ul>
@@ -73,6 +122,7 @@ interface MatchHistoryResult {
   winOrder: number | null
   winRound: number | null
   winTimestamp: number | null
+  winType: 'self_draw' | 'catch_discard' | 'rob_kong' | null
   wonFan: number
   windScore: number
   rainScore: number
@@ -91,8 +141,24 @@ interface MatchHistoryItem {
   results: MatchHistoryResult[]
 }
 
+interface PlayerStat {
+  playerId: string
+  name: string
+  isAI: boolean
+  totalGames: number
+  totalScore: number
+  effectiveScore: number
+  vsAIScore: number
+  selfDrawCount: number
+  catchDiscardCount: number
+  maxWin: number
+  maxLoss: number
+}
+
 const histories = ref<MatchHistoryItem[]>([])
+const playerStats = ref<PlayerStat[]>([])
 const isLoading = ref(false)
+const statsLoading = ref(false)
 const errorMessage = ref<string | null>(null)
 const showOnlyMine = ref(false)
 const userIdCookie = useCookie<string | null>('user_id')
@@ -126,12 +192,34 @@ const loadHistory = async () => {
   }
 }
 
+const loadStats = async () => {
+  statsLoading.value = true
+  try {
+    const response = await $fetch<{ success: boolean; data: PlayerStat[] }>('/api/history/stats', {
+      query: { limit: 100 },
+      cache: 'no-cache'
+    })
+    if (response?.success) {
+      playerStats.value = response.data || []
+    }
+  } catch (err) {
+    console.warn('Failed to load stats:', err)
+  } finally {
+    statsLoading.value = false
+  }
+}
+
+const loadAll = () => {
+  loadHistory()
+  loadStats()
+}
+
 watch(queryUserId, () => {
   loadHistory()
 })
 
 onMounted(() => {
-  loadHistory()
+  loadAll()
 })
 
 const goBack = () => navigateTo('/')
@@ -141,7 +229,8 @@ const formatDate = (value: string | Date) => {
   return date.toLocaleString()
 }
 
-const formatScore = (value: number) => {
+const formatSigned = (value: number) => {
+  if (value === 0) return '0'
   const sign = value > 0 ? '+' : ''
   return `${sign}${value}`
 }
@@ -206,6 +295,100 @@ const scoreClass = (value: number) => {
   cursor: not-allowed;
 }
 
+/* === Stats Section === */
+.stats-section {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 1.1rem;
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+
+.stats-table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.stats-table th,
+.stats-table td {
+  padding: 10px 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.stats-table th {
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 600;
+  text-align: right;
+  position: sticky;
+  top: 0;
+}
+
+.stats-table th:first-child,
+.stats-table td:first-child {
+  text-align: left;
+}
+
+.stats-table tbody tr {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.stats-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.highlight-col {
+  background: rgba(255, 226, 122, 0.08) !important;
+  border-left: 2px solid rgba(255, 226, 122, 0.3);
+  border-right: 2px solid rgba(255, 226, 122, 0.3);
+}
+
+.stats-table thead .highlight-col {
+  background: rgba(255, 226, 122, 0.15) !important;
+  color: #ffe27a;
+}
+
+.ai-row {
+  opacity: 0.7;
+}
+
+.me-row {
+  box-shadow: inset 0 0 0 1px rgba(95, 255, 176, 0.3);
+}
+
+.player-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ai-badge {
+  background: rgba(255, 157, 157, 0.2);
+  color: #ff9d9d;
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.name {
+  font-weight: 600;
+}
+
+.center {
+  text-align: center !important;
+}
+
+/* === Filter Bar === */
 .filter-bar {
   display: flex;
   align-items: center;
@@ -317,6 +500,31 @@ const scoreClass = (value: number) => {
 .player-name {
   margin: 0;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.win-tag {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.win-tag.self-draw {
+  background: rgba(95, 255, 176, 0.2);
+  color: #5fffb0;
+}
+
+.win-tag.catch {
+  background: rgba(255, 226, 122, 0.2);
+  color: #ffe27a;
+}
+
+.win-tag.rob {
+  background: rgba(255, 157, 157, 0.2);
+  color: #ff9d9d;
 }
 
 .player-meta {
@@ -358,6 +566,12 @@ const scoreClass = (value: number) => {
 
   .meta {
     flex-direction: row;
+  }
+
+  .stats-table th,
+  .stats-table td {
+    padding: 8px 6px;
+    font-size: 0.8rem;
   }
 }
 </style>
