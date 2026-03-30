@@ -4,11 +4,54 @@
       <header class="join-header">
         <div>
           <h1 class="mahjong-title">加入牌局</h1>
-          <p class="mahjong-subtitle">输入房间号加入，或从下方列表选择空闲牌桌。</p>
+          <p class="mahjong-subtitle">输入房间号加入，或从下方列表选择。</p>
         </div>
         <button class="mahjong-button secondary" @click="backToLobby">返回大厅</button>
       </header>
 
+      <!-- 我的牌局（置顶） -->
+      <section v-if="myGames.length > 0" class="my-games-section">
+        <div class="available-header">
+          <h2>🪑 我的牌局</h2>
+          <button class="mahjong-button small" :disabled="isLoadingMy" @click="fetchMyGames">
+            {{ isLoadingMy ? '加载中…' : '刷新' }}
+          </button>
+        </div>
+        <ul class="available-list">
+          <li v-for="game in myGames" :key="game.gameId" class="available-item my-game-item">
+            <div class="available-details">
+              <span class="available-id">
+                #{{ game.roomNumber }}
+                <span v-if="game.isBotMode" class="bot-badge">AI托管中</span>
+                <span v-if="game.phase === 'waiting'" class="phase-badge waiting">等待中</span>
+                <span v-if="game.phase === 'playing'" class="phase-badge playing">进行中</span>
+              </span>
+              <span class="available-meta">
+                {{ game.playerCount }}/4人
+                <span v-if="game.isMyTurn"> · 轮到你了！</span>
+              </span>
+            </div>
+            <div class="my-game-actions">
+              <button
+                v-if="game.isBotMode"
+                class="mahjong-button comeback"
+                @click="handleComeback(game)"
+                :disabled="isComingBack"
+              >
+                我要回来
+              </button>
+              <button
+                class="mahjong-button primary"
+                @click="enterGame(game)"
+              >
+                进入
+              </button>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <!-- 输入房间号 -->
       <section class="manual-join">
         <label for="manual-id">输入4位房间号</label>
         <div class="manual-controls">
@@ -32,6 +75,7 @@
         <p v-if="joinError" class="available-error">{{ joinError }}</p>
       </section>
 
+      <!-- 空闲牌桌 -->
       <section class="mahjong-available">
         <div class="available-header">
           <h2>空闲牌桌</h2>
@@ -65,6 +109,7 @@
 import { onMounted, ref } from 'vue'
 
 const userName = useCookie('user_name')
+const userId = useCookie('user_id')
 const waitingGames = ref<any[]>([])
 const waitingGamesError = ref<string | null>(null)
 const isWaitingLoading = ref(false)
@@ -72,8 +117,54 @@ const manualGameId = ref('')
 const joinError = ref<string | null>(null)
 const isJoining = ref(false)
 
+// 我的牌局
+const myGames = ref<any[]>([])
+const isLoadingMy = ref(false)
+const isComingBack = ref(false)
+
 const backToLobby = () => navigateTo('/')
 
+// 获取我的活跃牌局
+const fetchMyGames = async () => {
+  isLoadingMy.value = true
+  try {
+    const res = await $fetch<{ success: boolean; data: { games: any[] } }>('/api/game/my-games', {
+      cache: 'no-cache'
+    })
+    if (res?.success) {
+      myGames.value = res.data.games || []
+    }
+  } catch (err) {
+    console.warn('Failed to fetch my games:', err)
+  } finally {
+    isLoadingMy.value = false
+  }
+}
+
+// 我要回来
+const handleComeback = async (game: any) => {
+  if (isComingBack.value) return
+  isComingBack.value = true
+  try {
+    await $fetch('/api/game/comeback', {
+      method: 'POST',
+      body: { gameId: game.gameId, playerId: game.myPlayerId }
+    })
+    // 进入房间
+    await navigateTo(`/gameroom/${game.gameId}?playerId=${game.myPlayerId}`)
+  } catch (err) {
+    console.error('Comeback failed:', err)
+  } finally {
+    isComingBack.value = false
+  }
+}
+
+// 进入已有牌局
+const enterGame = (game: any) => {
+  navigateTo(`/gameroom/${game.gameId}?playerId=${game.myPlayerId}`)
+}
+
+// 获取空闲牌桌
 const fetchWaitingGames = async () => {
   isWaitingLoading.value = true
   waitingGamesError.value = null
@@ -82,13 +173,11 @@ const fetchWaitingGames = async () => {
       method: 'GET',
       cache: 'no-cache'
     })
-
     if (error.value) {
       waitingGamesError.value = error.value.message || '加载房间列表失败'
       waitingGames.value = []
       return
     }
-
     waitingGames.value = data.value?.data?.games || []
   } catch (err) {
     waitingGamesError.value = err instanceof Error ? err.message : '加载房间列表失败'
@@ -119,13 +208,10 @@ const joinGame = async (gameId: string) => {
       method: 'POST',
       body: { gameId, playerName: userName.value || 'Player ' + Math.floor(Math.random() * 1000) }
     })
-
     if (error.value) {
-      console.error('Failed to join game:', error.value)
       joinError.value = error.value.message || '加入失败'
       return
     }
-
     if (data.value?.success) {
       const { playerId } = data.value.data
       await navigateTo(`/gameroom/${gameId}?playerId=${playerId}`)
@@ -133,7 +219,6 @@ const joinGame = async (gameId: string) => {
       joinError.value = '无法加入牌局，请重试。'
     }
   } catch (err) {
-    console.error('Error joining game:', err)
     joinError.value = err instanceof Error ? err.message : '加入失败，请重试'
   } finally {
     isJoining.value = false
@@ -141,6 +226,7 @@ const joinGame = async (gameId: string) => {
 }
 
 onMounted(() => {
+  fetchMyGames()
   fetchWaitingGames()
 })
 </script>
@@ -176,6 +262,70 @@ onMounted(() => {
   gap: 16px;
 }
 
+/* 我的牌局 */
+.my-games-section {
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  border-radius: 14px;
+  padding: 16px;
+  background: rgba(255, 215, 0, 0.03);
+}
+
+.my-games-section h2 {
+  color: #ffd700;
+}
+
+.my-game-item {
+  border-left: 3px solid rgba(255, 215, 0, 0.3);
+}
+
+.bot-badge {
+  display: inline-block;
+  background: rgba(255, 100, 100, 0.2);
+  color: #ff9d9d;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+  font-weight: 700;
+}
+
+.phase-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-left: 8px;
+  font-weight: 700;
+}
+
+.phase-badge.waiting {
+  background: rgba(100, 200, 255, 0.15);
+  color: #64c8ff;
+}
+
+.phase-badge.playing {
+  background: rgba(100, 255, 100, 0.15);
+  color: #64ff64;
+}
+
+.my-game-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.comeback {
+  background: linear-gradient(135deg, #ff8c00, #ffa726);
+  color: #fff;
+  font-weight: 700;
+  animation: comeback-pulse 2s infinite;
+}
+
+@keyframes comeback-pulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(255, 140, 0, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(255, 140, 0, 0.6); }
+}
+
+/* 输入房间号 */
 .manual-join label {
   display: block;
   font-size: 0.9rem;
@@ -198,6 +348,7 @@ onMounted(() => {
   font-size: 1rem;
 }
 
+/* 空闲牌桌 */
 .mahjong-available {
   text-align: left;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -253,6 +404,7 @@ onMounted(() => {
   opacity: 0.85;
 }
 
+/* 按钮 */
 .mahjong-button {
   padding: 12px 24px;
   border-radius: 999px;
@@ -282,5 +434,10 @@ onMounted(() => {
   background: rgba(22, 51, 40, 0.95);
   color: #e0f2e9;
   border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mahjong-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>
