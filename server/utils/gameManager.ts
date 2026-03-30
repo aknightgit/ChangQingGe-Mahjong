@@ -1683,21 +1683,23 @@ class GameManager {
     
     // 计算有效投票数：手动投票 + 超过被QJ线的玩家自动同意
     // 被QJ线检查：玩家在本房间的累积有效输赢（去掉与AI的战绩）
-    const threshold = game.liangShanThreshold ?? 1000;
+    const threshold = game.liangShanThreshold ?? 4000;
     let effectiveVoteCount = game.liangShanVotes.length;
     
     for (const ap of activePlayers) {
       // 已经手动投票的跳过
       if (game.liangShanVotes.includes(ap.id)) continue;
-      // 检查累积有效输赢是否超过被QJ线
+      // 检查累积有效输赢是否超过被QJ线（已乘膨胀倍数）
       const cumulativeScore = this.getPlayerCumulativeScore(game.gameId, ap.id);
-      if (cumulativeScore > threshold) {
+      const sm = game.settlementMultiplier ?? 1;
+      const effectiveScore = cumulativeScore * sm;
+      if (effectiveScore > threshold) {
         // 超过被QJ线 → 自动视为同意，无否决权
         effectiveVoteCount++;
         if (!game.liangShanVotes.includes(ap.id)) {
           game.liangShanVotes.push(ap.id); // 标记为已投票
         }
-        console.log(`[LiangShan] ${ap.name} 累积赢分${cumulativeScore}超过QJ线${threshold}，自动同意`);
+        console.log(`[LiangShan] ${ap.name} 累积赢分${cumulativeScore}×${sm}=${effectiveScore}超过QJ线${threshold}，自动同意`);
       }
     }
 
@@ -1807,6 +1809,29 @@ class GameManager {
       }
     }
     return cumulative;
+  }
+
+  /**
+   * 检查各玩家是否突破被聚义QJ线，更新 qjAlerts（每局独立刷新）
+   */
+  private checkQJThresholdAlerts(game: GameState): void {
+    const threshold = game.liangShanThreshold ?? 4000;
+    const sm = game.settlementMultiplier ?? 1;
+    const alerts: { playerId: string; playerName: string; score: number }[] = [];
+
+    for (const player of game.players) {
+      if (this.isPlayerBotControlled(player)) continue; // 跳过AI
+      const cumulativeScore = this.getPlayerCumulativeScore(game.gameId, player.id);
+      const effectiveScore = cumulativeScore * sm;
+      if (effectiveScore > threshold) {
+        alerts.push({ playerId: player.id, playerName: player.name, score: effectiveScore });
+      }
+    }
+
+    game.qjAlerts = alerts;
+    if (alerts.length > 0) {
+      console.log(`[QJ Alert] ${alerts.map(a => `${a.playerName}(${a.score})`).join(', ')} 已突破被聚义QJ线${threshold}`);
+    }
   }
 
   private handleCheatHu(game: GameState, player: Player): void {
@@ -2480,6 +2505,9 @@ class GameManager {
         })
         .map(w => w.id)
     });
+
+    // 检查被聚义QJ线（每局刷新）
+    this.checkQJThresholdAlerts(game);
 
     // 倍数继承链：流局/造反 → ×2 → 下局; 正常结局 → 重置×1
     if (reason === GameEndReason.WALL_EXHAUSTED) {

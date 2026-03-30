@@ -1732,6 +1732,7 @@ const prevBailoutRelations = ref<string>('')
 const prevBotPlayers = ref<Set<string>>(new Set())
 const prevRebelEvent = ref<any>(null)
 const prevLiangShanVoteCount = ref(0)
+const prevQjAlertIds = ref<Set<string>>(new Set())
 const showLiangShanOverlay = ref(false)
 const activePlayerCount = (state: any) => (state?.players || []).filter((p: any) => p.status === 'playing').length
 
@@ -1808,6 +1809,16 @@ watch(() => gameState.value, (newState, oldState) => {
     }
   }
   prevLiangShanVoteCount.value = currentVotes
+
+  // 被聚义QJ线突破提醒（红色高亮）
+  const currentAlerts = (newState as any).qjAlerts || []
+  const currentAlertIds = new Set<string>(currentAlerts.map((a: any) => a.playerId))
+  for (const alert of currentAlerts) {
+    if (!prevQjAlertIds.value.has(alert.playerId)) {
+      addBroadcast(`📢 ${alert.playerName} 已达被聚义QJ线，特此广而告之！`, 'special')
+    }
+  }
+  prevQjAlertIds.value = currentAlertIds as Set<string>
 
   prevPhase.value = newState.phase
   prevWinnersCount.value = newState.winnersCount || 0
