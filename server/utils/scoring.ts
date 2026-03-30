@@ -8,7 +8,7 @@
 
 import { Tile, Meld, MeldType, TileSuit, Player } from '../types/game';
 import { isFlower, isWind, isDragon, groupTiles, tilesEqual, getTileDisplayName } from './tiles';
-import { HandType, HAND_TYPE_PRIORITY } from './handValidator';
+import { HandType, HAND_TYPE_PRIORITY, canWin } from './handValidator';
 
 // ===== 固定番数牌型 =====
 const FIXED_FAN: Record<string, number> = {
@@ -153,19 +153,23 @@ export function calculateScore(params: {
       // 手牌无百搭
       extraMultipliers *= 2;
       details.push('无百搭 ×2');
-    } else if (isWindOrDragonWild && isWindHand) {
-      // 百搭是风/箭 + 风一色/风碰 → 可算无百搭
-      // 风碰还需验证: 去掉百搭功能后牌面仍满足碰碰胡
-      if (handTypes.includes(HandType.FENG_PENG)) {
-        // 风碰: 检查去掉百搭后是否仍满足碰碰胡
-        if (checkAllTripletsWithoutWild(handTiles, exposedMelds, wildTileSuit, wildTileValue)) {
-          extraMultipliers *= 2;
-          details.push('无百搭(风碰,百搭归位) ×2');
-        }
-      } else {
-        // 风一色: 直接算无百搭
+    } else {
+      // 手上有百搭，但百搭当原牌仍能胡 → 也算无百搭
+      const noWildCheck = canWin(handTiles, exposedMelds.length, () => false);
+      if (noWildCheck.canWin) {
         extraMultipliers *= 2;
-        details.push('无百搭(风一色,百搭归位) ×2');
+        details.push('无百搭(百搭归位) ×2');
+      } else if (isWindOrDragonWild && isWindHand) {
+        // 百搭是风/箭 + 风一色/风碰 → 可算无百搭
+        if (handTypes.includes(HandType.FENG_PENG)) {
+          if (checkAllTripletsWithoutWild(handTiles, exposedMelds, wildTileSuit, wildTileValue)) {
+            extraMultipliers *= 2;
+            details.push('无百搭(风碰,百搭归位) ×2');
+          }
+        } else {
+          extraMultipliers *= 2;
+          details.push('无百搭(风一色,百搭归位) ×2');
+        }
       }
     }
   }
@@ -206,6 +210,136 @@ export function calculateScore(params: {
     handTypeName,
     details
   };
+}
+
+// ===== 胡牌可选牌型生成 =====
+
+export interface WinOption {
+  label: string;
+  score: number;
+  details: string[];
+  type: 'self_draw' | 'discard';
+}
+
+/**
+ * 生成所有可能的胡牌方案（按最大番数倒序排列）
+ * 返回 [{label: "碰碰胡·自摸", score: 80, details: [...]}]
+ */
+export function generateWinOptions(params: {
+  handTiles: Tile[];
+  exposedMelds: Meld[];
+  flowerTiles: Tile[];
+  handTypes: HandType[];
+  isKongFlower: boolean;
+  isRobbingKong: boolean;
+  isMenQing: boolean;
+  wildTileSuit?: TileSuit;
+  wildTileValue?: number;
+  wildTileGroup?: string[];
+  roundMultiplier?: number;
+  globalMultiplier?: number;
+}): WinOption[] {
+  const options: WinOption[] = [];
+  const baseParams = { ...params };
+
+  // 方案1: 自摸（如果可以自摸）
+  const selfDrawResult = calculateScore({
+    ...baseParams,
+    isSelfDrawn: true,
+    globalIncludesRound: true,
+  });
+  options.push({
+    label: `${selfDrawResult.handTypeName}·自摸`,
+    score: selfDrawResult.finalPoints,
+    details: [...selfDrawResult.details],
+    type: 'self_draw'
+  });
+
+  // 方案2: 捉冲
+  const discardResult = calculateScore({
+    ...baseParams,
+    isSelfDrawn: false,
+    globalIncludesRound: true,
+  });
+  options.push({
+    label: `${discardResult.handTypeName}·捉冲`,
+    score: discardResult.finalPoints,
+    details: [...discardResult.details],
+    type: 'discard'
+  });
+
+  // 方案3: 如果可以七对，且没有已经在 handTypes 中，也尝试七对
+  const canSevenPairs = canWinSevenPairs(params.handTiles, params.exposedMelds.length,
+    (t: Tile) => params.wildTileSuit !== undefined && t.suit === params.wildTileSuit && t.value === params.wildTileValue);
+  const alreadySevenPairs = params.handTypes.includes(HandType.SEVEN_PAIRS);
+  if (canSevenPairs && !alreadySevenPairs) {
+    const sevenSelfDraw = calculateScore({
+      ...baseParams,
+      handTypes: [HandType.SEVEN_PAIRS, ...params.handTypes.filter(h => h !== HandType.ALL_TRIPLETS && h !== HandType.HALF_FLUSH && h !== HandType.FULL_FLUSH)],
+      isSelfDrawn: true,
+      globalIncludesRound: true,
+    });
+    options.push({
+      label: `七对·自摸`,
+      score: sevenSelfDraw.finalPoints,
+      details: [...sevenSelfDraw.details],
+      type: 'self_draw'
+    });
+
+    const sevenDiscard = calculateScore({
+      ...baseParams,
+      handTypes: [HandType.SEVEN_PAIRS, ...params.handTypes.filter(h => h !== HandType.ALL_TRIPLETS && h !== HandType.HALF_FLUSH && h !== HandType.FULL_FLUSH)],
+      isSelfDrawn: false,
+      globalIncludesRound: true,
+    });
+    options.push({
+      label: `七对·捉冲`,
+      score: sevenDiscard.finalPoints,
+      details: [...sevenDiscard.details],
+      type: 'discard'
+    });
+  }
+
+  // 方案4: 如果百搭当原牌能胡（无百搭 ×2），也尝试
+  if (params.wildTileSuit !== undefined && params.wildTileValue !== undefined) {
+    const wildCount = countWildTiles(params.handTiles, params.wildTileSuit, params.wildTileValue, params.wildTileGroup);
+    if (wildCount > 0) {
+      const noWildCheck = canWin(params.handTiles, params.exposedMelds.length, () => false);
+      if (noWildCheck.canWin) {
+        const noWildSelfDraw = calculateScore({
+          ...baseParams,
+          isSelfDrawn: true,
+          globalIncludesRound: true,
+        });
+        // 无百搭的方案已经在 standard 中（canWin 时 wildCount 可能 > 0 但无百搭仍适用）
+        // 这里标记为特殊选项
+        const noWildLabel = `${noWildSelfDraw.handTypeName}·自摸(百搭归位)`;
+        if (!options.some(o => o.label === noWildLabel)) {
+          options.push({
+            label: noWildLabel,
+            score: noWildSelfDraw.finalPoints,
+            details: [...noWildSelfDraw.details],
+            type: 'self_draw'
+          });
+        }
+      }
+    }
+  }
+
+  // 去重（相同 score 和 type 只保留第一个）
+  const uniqueOptions: WinOption[] = [];
+  const seen = new Set<string>();
+  for (const opt of options) {
+    const key = `${opt.label}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueOptions.push(opt);
+    }
+  }
+
+  // 按分数倒序排列
+  uniqueOptions.sort((a, b) => b.score - a.score);
+  return uniqueOptions;
 }
 
 // ===== 公式计算（碰碰胡/混一色）=====
