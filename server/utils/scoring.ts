@@ -310,10 +310,16 @@ function calculateFormulaFan(
   // 计算组合牌点数（使用虚拟分配后的手牌）
   const allMelds = [...exposedMelds];
   
-  // 从虚拟手牌中提取暗杠
+  // 从虚拟手牌中提取暗杠（仅限真正的暗杠，排除门口已有刻子的第4张牌）
   const groups = groupTiles(virtualHand);
   for (const [, group] of groups) {
     if (group.length === 4) {
+      // 检查：如果门口已经有该牌的刻子/杠，则这张牌的4张不是暗杠（玩家选择不杠）
+      const alreadyExposed = exposedMelds.some(m =>
+        (m.type === MeldType.TRIPLET || m.type === MeldType.KONG) &&
+        tilesEqual(m.tiles[0], group[0])
+      );
+      if (alreadyExposed) continue;
       allMelds.push({
         type: MeldType.CONCEALED_KONG,
         tiles: group,
