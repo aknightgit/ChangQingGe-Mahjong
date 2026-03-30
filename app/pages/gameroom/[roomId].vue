@@ -56,6 +56,52 @@
           </div>
         </div>
 
+        <!-- 等待房间 -->
+        <div v-if="isWaitingRoom" class="waiting-overlay">
+          <div class="waiting-card">
+            <h2 class="waiting-title">🀄 长清阁麻将</h2>
+            <p class="waiting-subtitle">房间 #{{ roomId }}</p>
+
+            <div class="waiting-players">
+              <div
+                v-for="slot in 4"
+                :key="slot"
+                class="waiting-slot"
+                :class="{ 'waiting-slot--filled': waitingPlayers[slot - 1], 'waiting-slot--dealer': waitingPlayers[slot - 1]?.isDealer }"
+              >
+                <template v-if="waitingPlayers[slot - 1]">
+                  <span class="waiting-avatar">{{ waitingPlayers[slot - 1].isBot ? '🤖' : '🀄' }}</span>
+                  <span class="waiting-name">{{ waitingPlayers[slot - 1].name }}</span>
+                  <span v-if="waitingPlayers[slot - 1].isDealer" class="waiting-dealer-badge">庄</span>
+                </template>
+                <template v-else>
+                  <span class="waiting-avatar waiting-avatar--empty">👤</span>
+                  <span class="waiting-name waiting-name--empty">等待加入...</span>
+                </template>
+              </div>
+            </div>
+
+            <div class="waiting-status">
+              <div class="waiting-spinner"></div>
+              <p>等待 <strong>{{ 4 - waitingPlayers.length }}</strong> 名玩家加入</p>
+            </div>
+
+            <div v-if="isDealerUser && waitingPlayers.length >= 2" class="waiting-actions">
+              <button class="mahjong-button primary waiting-start-btn" @click="onStartGame">
+                🎲 开始游戏（{{ waitingPlayers.length }}/4 人）
+              </button>
+              <p class="waiting-hint">人数不足时可带电脑玩家开局</p>
+            </div>
+            <div v-else-if="!isDealerUser" class="waiting-actions">
+              <p class="waiting-hint">等待庄家 {{ dealerName }} 开始游戏...</p>
+            </div>
+
+            <button class="mahjong-button secondary waiting-leave-btn" @click="backToLobby">
+              退出房间
+            </button>
+          </div>
+        </div>
+
         <!-- 设置面板 -->
         <Transition name="settings-slide">
           <div v-if="showSettings" class="settings-overlay" @click.self="showSettings = false">
@@ -557,6 +603,16 @@ const isMyTurn = computed(() => currentTurnPlayer.value?.id === currentPlayer.va
 
 // 骰子动画状态
 const showDiceOverlay = ref(false)
+
+// 阶段变化时自动显示骰子动画（所有客户端）
+// 庄家：STARTING 广播 → isWaitingRoom=false + showDice → 进入骰子动画
+// 非庄家：STARTING 广播 → isWaitingRoom=false + showDice → 进入骰子动画
+watch(() => gameState.value?.phase, (newPhase, oldPhase) => {
+  if (newPhase === 'starting' && oldPhase === 'waiting') {
+    console.log('[phase-watcher] Game starting, showing dice for all clients')
+    showDiceOverlay.value = true
+  }
+})
 const diceValues = ref<[number, number]>([1, 1])
 const maxDiceRolls = ref(Number(route.query.dice) || 2)
 const freezeDurationMs = ref((Number(route.query.freeze) || 1) * 1000) // 秒转毫秒
@@ -598,18 +654,8 @@ const toggleShowAllCards = () => {
 onMounted(async () => {
   if (roomId.value && playerId.value) {
     await connect(roomId.value, playerId.value)
-
-    // 游戏未开始 → 自动显示掷骰子
-    await nextTick()
-    if (gameState.value && gameState.value.phase !== GamePhase.PLAYING && gameState.value.phase !== GamePhase.ENDED) {
-      // 等 Socket.IO 连接完成后检查玩家数
-      setTimeout(() => {
-        if (gameState.value?.players?.length >= 2 && gameState.value.phase !== GamePhase.PLAYING) {
-          console.log('[gameroom] Auto-showing dice overlay for game setup')
-          onStartGame()
-        }
-      }, 500)
-    }
+    // 等待房间会自动显示（isWaitingRoom computed），不需要自动弹骰子
+    // 庄家在等待房间点击"开始游戏"才会弹出骰子
   }
 
   if (process.client) {
@@ -731,7 +777,31 @@ const handleSpectate = (id: string) => {
   spectatingId.value = spectatingId.value === id ? null : id
 }
 const isDealer = computed(() => currentPlayer.value?.isDealer)
+const isDealerUser = computed(() => isDealer.value)
 const isGameEnded = computed(() => gameState.value?.phase === GamePhase.ENDED)
+
+// 等待房间状态
+const isWaitingRoom = computed(() => {
+  if (!gameState.value) return false
+  const phase = gameState.value.phase
+  // 只在 waiting 阶段显示等待房间
+  if (phase !== 'waiting') return false
+  // 如果牌已发（有人有手牌），说明正在发牌中，不显示等待房间
+  const hasDealtCards = (gameState.value.players || []).some(
+    (p: any) => (p.hand?.concealedTiles?.length || 0) > 0
+  )
+  return !hasDealtCards
+})
+
+const waitingPlayers = computed(() => {
+  if (!gameState.value?.players) return []
+  return gameState.value.players.map((p: any) => ({
+    id: p.id,
+    name: p.name?.replace(/^AI-/, '🤖 ') || '???',
+    isBot: p.name?.startsWith('AI-') || false,
+    isDealer: p.isDealer
+  }))
+})
 const overlayReason = computed(() => roomDismissedReason.value || gameState.value?.endReason || null)
 const isOverlayVisible = computed(() => isGameEnded.value || !!roomDismissedReason.value)
 const overlayTitle = computed(() => {
@@ -1058,24 +1128,38 @@ const onExtendedKong = () => {
 // 防重复点击标志
 let isGameStarting = false
 
-const onStartGame = () => {
+const onStartGame = async () => {
   if (isGameStarting) return
   if (gameState.value?.phase === GamePhase.PLAYING) {
-    console.warn('[onStartGame] Game already in PLAYING phase, skipping dice overlay')
+    console.warn('[onStartGame] Game already in PLAYING phase, skipping')
     return
   }
-  console.log('[onStartGame] Showing dice overlay, phase:', gameState.value?.phase)
-  diceValues.value = [
-    Math.floor(Math.random() * 6) + 1,
-    Math.floor(Math.random() * 6) + 1
-  ]
-  playSound('dice-roll')
-  // 强制先关闭再打开，确保 DiceAnimation 组件重新 mount
-  showDiceOverlay.value = false
-  nextTick(() => {
-    showDiceOverlay.value = true
-    console.log('[onStartGame] showDiceOverlay set to true')
-  })
+  console.log('[onStartGame] Setting STARTING phase on server...')
+
+  try {
+    // 先通知服务器进入 STARTING 阶段（广播给所有客户端）
+    await $fetch('/api/game/start', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: playerId.value,
+        phaseOnly: true
+      }
+    })
+    // 服务器广播 STARTING 后，phase watcher 会自动显示骰子
+    // 同时也立即显示（防止 watcher 延迟）
+    diceValues.value = [
+      Math.floor(Math.random() * 6) + 1,
+      Math.floor(Math.random() * 6) + 1
+    ]
+    playSound('dice-roll')
+    showDiceOverlay.value = false
+    nextTick(() => {
+      showDiceOverlay.value = true
+    })
+  } catch (err) {
+    console.error('[onStartGame] Failed:', err)
+  }
 }
 
 const onDealTiles = async () => {
@@ -1801,6 +1885,145 @@ const forceDiscard = async (p: Player) => {
   font-size: 1rem;
   opacity: 0.9;
   margin-bottom: 20px;
+}
+
+/* 等待房间 */
+.waiting-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 10, 8, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(6px);
+  z-index: 10;
+}
+
+.waiting-card {
+  background: rgba(4, 16, 11, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 36px;
+  width: min(420px, 92%);
+  text-align: center;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+}
+
+.waiting-title {
+  font-size: 1.5rem;
+  margin: 0 0 4px;
+}
+
+.waiting-subtitle {
+  font-size: 0.9rem;
+  opacity: 0.6;
+  margin: 0 0 24px;
+}
+
+.waiting-players {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.waiting-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  transition: all 0.3s ease;
+}
+
+.waiting-slot--filled {
+  border-color: rgba(70, 197, 116, 0.25);
+  background: rgba(31, 138, 82, 0.08);
+}
+
+.waiting-slot--dealer {
+  border-color: rgba(255, 215, 0, 0.3);
+  background: rgba(255, 215, 0, 0.06);
+}
+
+.waiting-avatar {
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.waiting-avatar--empty {
+  opacity: 0.3;
+}
+
+.waiting-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.waiting-name--empty {
+  opacity: 0.35;
+  font-weight: 400;
+}
+
+.waiting-dealer-badge {
+  background: rgba(255, 215, 0, 0.2);
+  color: #ffd700;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.waiting-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+.waiting-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #46c574;
+  border-radius: 50%;
+  animation: waiting-spin 0.8s linear infinite;
+}
+
+@keyframes waiting-spin {
+  to { transform: rotate(360deg); }
+}
+
+.waiting-actions {
+  margin-bottom: 16px;
+}
+
+.waiting-start-btn {
+  width: 100%;
+  padding: 14px 24px;
+  font-size: 1.05rem;
+}
+
+.waiting-hint {
+  font-size: 0.8rem;
+  opacity: 0.5;
+  margin: 8px 0 0;
+}
+
+.waiting-leave-btn {
+  width: 100%;
+  padding: 10px 24px;
+  font-size: 0.85rem;
+  opacity: 0.7;
 }
 
 .overlay-button {

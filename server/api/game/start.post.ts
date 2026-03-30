@@ -3,7 +3,7 @@ import { emitToRoom } from '../../utils/socket';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
-  const { gameId, playerId, freezeDurationMs } = body;
+  const { gameId, playerId, freezeDurationMs, phaseOnly } = body;
 
   if (!gameId || !playerId) {
     throw createError({
@@ -37,13 +37,19 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
+    // phaseOnly=true: 只设 STARTING 阶段（等待房间点"开始"），不发牌
+    if (phaseOnly) {
+      await gameManager.setStartingPhase(gameId);
+      return { success: true, phase: 'starting' };
+    }
+
     await gameManager.startGame(gameId, { freezeDurationMs: freezeDurationMs || 1000 });
     emitToRoom(gameId, 'game:state-changed', {
       gameId,
       phase: 'playing',
       source: 'start'
     });
-    
+
     return {
       success: true,
       message: 'Game started'

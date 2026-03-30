@@ -510,6 +510,22 @@ class GameManager {
   }
 
   /**
+   * Set game to STARTING phase (broadcast to all clients for dice animation)
+   * Called when dealer clicks "开始游戏" in waiting room, before actual dealing
+   */
+  async setStartingPhase(gameId: string): Promise<void> {
+    await this.hydrateFromDatabase();
+    const game = await this.ensureGameLoaded(gameId);
+    if (!game) throw new Error('Game not found');
+    if (game.phase !== GamePhase.WAITING) return;
+    if (game.players.length < 2) throw new Error('Need at least 2 players');
+
+    game.phase = GamePhase.STARTING;
+    await this.persistGame(game);
+    this.broadcastGameState(gameId);
+  }
+
+  /**
    * Start the game
    */
   public async startGame(gameId: string, options?: { freezeDurationMs?: number }): Promise<void> {
@@ -522,12 +538,32 @@ class GameManager {
       throw new Error('Need at least 2 players to start');
     }
 
-    game.phase = GamePhase.STARTING;
     game.endReason = null;
     game.endedAt = undefined;
     game.finalScores = undefined;
     game.customScoringMode = null;
     game.freezeDurationMs = options?.freezeDurationMs || 1000; // 默认冻结1秒
+
+    // 🎲 随机选位置：洗牌玩家座位
+    const shuffledIndices = Array.from({ length: game.players.length }, (_, i) => i);
+    for (let i = shuffledIndices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledIndices[i], shuffledIndices[j]] = [shuffledIndices[j], shuffledIndices[i]];
+    }
+    game.players = shuffledIndices.map((origIdx, newPos) => {
+      const p = game.players[origIdx];
+      p.position = newPos;
+      return p;
+    });
+
+    // 🎰 随机选庄家
+    game.dealerIndex = Math.floor(Math.random() * game.players.length);
+    game.players.forEach((p, i) => { p.isDealer = (i === game.dealerIndex); });
+
+    // 广播 STARTING 阶段（所有客户端显示骰子动画）
+    game.phase = GamePhase.STARTING;
+    await this.persistGame(game);
+    this.broadcastGameState(gameId);
 
     // Create and shuffle deck
     const deck = createDeck();
