@@ -2011,16 +2011,48 @@ class GameManager {
     }
 
     game.finalScores = finalScores;
-    // AI接管玩家赢分减半
+    // AI接管玩家：赢分减半，输分照常
+    // 同时配对调整：AI赢 → 对手输分也减半（保证总赢=总输）
     const botAffected = game.botTakeoverPlayers || [];
+    
     for (const player of game.players) {
       let score = finalScores[player.id] ?? 0;
-      if (botAffected.includes(player.id) && score > 0) {
-        score = Math.floor(score / 2);
-        console.log(`[BotPenalty] ${player.name} 被AI接管，赢分减半: ${finalScores[player.id]} → ${score}`);
+      if (botAffected.includes(player.id)) {
+        if (score > 0) {
+          const half = Math.floor(score / 2);
+          console.log(`[BotPenalty] ${player.name}(AI接管) 赢分减半: ${score} → ${half}`);
+          score = half;
+        }
+        // 输分照常，不减
       }
       player.score = score;
     }
+    
+    // 平衡总分：如果AI赢分减半导致总赢≠总输，按比例缩小输家支付
+    const totalScore = game.players.reduce((s, p) => s + p.score, 0);
+    if (totalScore !== 0) {
+      // 有AI赢了且赢分减半 → 总赢 < 总输（totalScore < 0）
+      // 需要减少输家的支付来平衡
+      const losers = game.players.filter(p => p.score < 0);
+      const totalLoss = losers.reduce((s, p) => s + Math.abs(p.score), 0);
+      const deficit = Math.abs(totalScore); // 需要减少的总输分
+      
+      if (totalLoss > 0) {
+        for (const loser of losers) {
+          const ratio = Math.abs(loser.score) / totalLoss;
+          const reduction = Math.floor(deficit * ratio);
+          loser.score += reduction; // 少输一点
+        }
+      }
+      
+      // 兜底：取整差额加到最大输家
+      const finalTotal = game.players.reduce((s, p) => s + p.score, 0);
+      if (finalTotal !== 0) {
+        const minP = game.players.reduce((a, b) => a.score < b.score ? a : b);
+        minP.score -= finalTotal;
+      }
+    }
+    
     // 清除本局AI接管记录
     game.botTakeoverPlayers = [];
 
