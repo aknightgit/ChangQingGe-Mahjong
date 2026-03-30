@@ -188,6 +188,8 @@ export interface GameState {
   inheritedGlobalMultiplier?: number;
   rebelEvent?: RebelEvent;
   liangShanVotes?: string[];  // 梁山聚义投票者ID列表
+  pendingRemovals?: string[];  // 下局要移除的AI玩家ID
+  pendingReplacements?: { spectatorId: string; aiPlayerId: string; spectatorName?: string }[];  // 下局替换AI的请求
   // 可配置参数
   freezeDurationMs?: number;  // 冻结时长（毫秒），默认1000
   diceRollCount?: number;     // 掷骰次数，默认2

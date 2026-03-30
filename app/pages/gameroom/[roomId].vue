@@ -260,6 +260,8 @@
                 :melds="northMelds"
                 :is-winner="northIsWinner"
                 :reveal-hand="shouldRevealOpponents"
+                :is-bot="isBotPlayer(topPlayer)"
+                @name-click="onPlayerNameClick(topPlayer)"
               />
             </div>
 
@@ -272,6 +274,8 @@
                 :melds="westMelds"
                 :is-winner="westIsWinner"
                 :reveal-hand="shouldRevealOpponents"
+                :is-bot="isBotPlayer(leftPlayer)"
+                @name-click="onPlayerNameClick(leftPlayer)"
               />
             </div>
 
@@ -284,6 +288,8 @@
                 :melds="eastMelds"
                 :is-winner="eastIsWinner"
                 :reveal-hand="shouldRevealOpponents"
+                :is-bot="isBotPlayer(rightPlayer)"
+                @name-click="onPlayerNameClick(rightPlayer)"
               />
             </div>
 
@@ -471,6 +477,29 @@
           @roll="onRerollDice"
         />
       </Teleport>
+
+      <!-- AI 玩家操作卡片 -->
+      <Teleport to="body">
+        <div v-if="showAICard" class="ai-card-overlay" @click.self="showAICard = false">
+          <div class="ai-card">
+            <div class="ai-card-header">
+              <span class="ai-card-avatar">🤖</span>
+              <span class="ai-card-name">{{ aiCardPlayer?.name }}</span>
+            </div>
+            <div class="ai-card-body">
+              <button class="ai-card-btn ai-card-btn--leave" @click="onAILeave">
+                🚪 出局
+                <span class="ai-card-hint">下局移除该AI</span>
+              </button>
+              <button v-if="isSpectator" class="ai-card-btn ai-card-btn--replace" @click="onAIReplace">
+                🙋 换我上
+                <span class="ai-card-hint">下局由你接替</span>
+              </button>
+            </div>
+            <button class="ai-card-close" @click="showAICard = false">✕</button>
+          </div>
+        </div>
+      </Teleport>
     </div>
   </div>
 </div></template>
@@ -491,6 +520,7 @@ import { useSound } from '~/composables/useSound'
 import { ActionType, GamePhase, GameEndReason, type Tile, type Meld, type Player } from '~/types/game'
 
 const route = useRoute()
+const userName = useCookie('user_name')
 const roomId = computed(() => String(route.params.roomId || ''))
 const playerId = computed(() => String(route.query.playerId || ''))
 
@@ -1042,6 +1072,61 @@ const onHu = () => { resetAutoCount(); playSound('tile-hu'); executeAction(Actio
 const onPass = () => { resetAutoCount(); executeAction(ActionType.PASS) }
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); executeAction(ActionType.REBEL) }
 const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); executeAction(ActionType.CHEAT_HU) }
+
+// AI 玩家操作卡片
+const showAICard = ref(false)
+const aiCardPlayer = ref<any>(null)
+const isBotPlayer = (p: any) => p?.name?.startsWith('AI-') || false
+const isSpectator = computed(() => {
+  // 观围者 = 不在当前游戏的活跃玩家列表中
+  if (!gameState.value?.players || !currentPlayer.value) return true
+  return !gameState.value.players.some((p: any) => p.id === currentPlayer.value?.id)
+})
+const onPlayerNameClick = (player: any) => {
+  if (!player || !isBotPlayer(player)) return
+  aiCardPlayer.value = player
+  showAICard.value = true
+}
+const onAILeave = async () => {
+  if (!aiCardPlayer.value) return
+  const aiName = aiCardPlayer.value.name
+  showAICard.value = false
+  try {
+    await $fetch('/api/game/kick-player', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: currentPlayer.value?.id,
+        targetPlayerId: aiCardPlayer.value.id
+      }
+    })
+    addBroadcast(`🚪 ${aiName} 下局将被移除！`, 'warn')
+    await refreshState()
+  } catch (e) {
+    console.error('[AI Leave] Failed:', e)
+  }
+}
+const onAIReplace = async () => {
+  if (!aiCardPlayer.value) return
+  const aiName = aiCardPlayer.value.name
+  const myName = userName.value || currentPlayer.value?.name || '某玩家'
+  showAICard.value = false
+  try {
+    await $fetch('/api/game/replace-player', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: currentPlayer.value?.id,
+        targetPlayerId: aiCardPlayer.value.id,
+        spectatorName: myName
+      }
+    })
+    addBroadcast(`🙋 ${myName} 下局将接替 ${aiName}！`, 'info')
+    await refreshState()
+  } catch (e) {
+    console.error('[AI Replace] Failed:', e)
+  }
+}
 
 // 梁山聚义
 const canLiangShan = computed(() => availableActions.value.includes(ActionType.LIANG_SHAN))
@@ -2075,6 +2160,114 @@ const forceDiscard = async (p: Player) => {
   font-size: 1rem;
   opacity: 0.9;
   margin-bottom: 20px;
+}
+
+/* AI 玩家操作卡片 */
+.ai-card-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+}
+
+.ai-card {
+  background: rgba(8, 20, 15, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 24px;
+  width: min(280px, 90%);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+  position: relative;
+  animation: ai-card-in 0.2s ease;
+}
+
+@keyframes ai-card-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.ai-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.ai-card-avatar {
+  font-size: 2rem;
+}
+
+.ai-card-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #f5f5f5;
+}
+
+.ai-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-card-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f5f5f5;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.ai-card-btn:hover {
+  transform: translateX(4px);
+}
+
+.ai-card-btn--leave {
+  border-color: rgba(239, 83, 80, 0.3);
+}
+.ai-card-btn--leave:hover {
+  background: rgba(239, 83, 80, 0.15);
+}
+
+.ai-card-btn--replace {
+  border-color: rgba(33, 150, 243, 0.3);
+}
+.ai-card-btn--replace:hover {
+  background: rgba(33, 150, 243, 0.15);
+}
+
+.ai-card-hint {
+  font-size: 0.7rem;
+  font-weight: 400;
+  opacity: 0.5;
+  margin-left: auto;
+}
+
+.ai-card-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.ai-card-close:hover {
+  color: #fff;
 }
 
 /* 等待房间 */

@@ -2028,6 +2028,48 @@ class GameManager {
     MatchHistoryService.recordMatch(game, finalScores, reason).catch((error) => {
       console.error('Failed to persist match history:', error);
     });
+
+    // 处理下局移除/替换请求
+    this.applyPendingChanges(game);
+  }
+
+  /**
+   * 应用出局/替换请求（在每局结束后调用）
+   */
+  private applyPendingChanges(game: GameState): void {
+    // 处理替换请求（优先）
+    if (game.pendingReplacements?.length) {
+      for (const req of game.pendingReplacements) {
+        const aiIdx = game.players.findIndex(p => p.id === req.aiPlayerId);
+        if (aiIdx === -1) continue;
+        const aiName = game.players[aiIdx].name;
+        // 替换 AI 玩家：保留位置，改名+改ID
+        game.players[aiIdx].id = req.spectatorId;
+        game.players[aiIdx].name = req.spectatorName || '替补玩家';
+        console.log(`[ApplyChanges] ${aiName} → ${req.spectatorName || '替补玩家'} 接替`);
+      }
+      game.pendingReplacements = [];
+    }
+
+    // 处理移除请求
+    if (game.pendingRemovals?.length) {
+      for (const removeId of game.pendingRemovals) {
+        const idx = game.players.findIndex(p => p.id === removeId);
+        if (idx === -1) continue;
+        const name = game.players[idx].name;
+        game.players.splice(idx, 1);
+        // 更新位置
+        game.players.forEach((p, i) => { p.position = i; });
+        console.log(`[ApplyChanges] ${name} 已移除`);
+      }
+      game.pendingRemovals = [];
+
+      // 人数不足 → 回到等待状态
+      if (game.players.length < 2) {
+        game.phase = GamePhase.WAITING;
+        console.log(`[ApplyChanges] 玩家不足，回到等待状态`);
+      }
+    }
   }
 
   async endGameForEmptyRoom(gameId: string, reason: GameEndReason = GameEndReason.EMPTY_ROOM): Promise<void> {

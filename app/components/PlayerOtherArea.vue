@@ -7,7 +7,7 @@
     <div class="player-other-header" v-if="position === 'top'">
       <span class="position-dot" :class="`dot--${posColor}`"></span>
       <span v-if="avatar" class="player-avatar">{{ avatar }}</span>
-      <span class="player-other-name">
+      <span class="player-other-name" :class="{ 'player-other-name--clickable': isBot }" @click.stop="$emit('nameClick')">
         {{ name }}
         <span v-if="isWinner" class="winner-tag">胡</span>
       </span>
@@ -102,6 +102,11 @@ const props = defineProps<{
   isWinner?: boolean
   revealHand?: boolean
   avatar?: string
+  isBot?: boolean
+}>()
+
+const emit = defineEmits<{
+  (e: 'nameClick'): void
 }>()
 
 const posColor = computed(() => {
@@ -165,6 +170,18 @@ const getArrowChar = (sourcePos: number): string => {
 .player-other-name {
   font-weight: 600;
   letter-spacing: 0.04em;
+}
+
+.player-other-name--clickable {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(255, 255, 255, 0.25);
+}
+
+.player-other-name--clickable:hover {
+  text-decoration-color: rgba(255, 215, 0, 0.6);
 }
 
 .winner-tag {
