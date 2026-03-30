@@ -560,20 +560,23 @@ class GameManager {
     game.thinkFreezeUntil = undefined;
     game.thinkFreezePlayerId = undefined;
 
-    // 🔄 应用待生效的换位置请求（在随机选位置之前）
+    // 🔄 换位置请求：每局都可以生效
     this.applySwapRequests(game);
 
-    // 🎲 随机选位置：洗牌玩家座位
-    const shuffledIndices = Array.from({ length: game.players.length }, (_, i) => i);
-    for (let i = shuffledIndices.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffledIndices[i], shuffledIndices[j]] = [shuffledIndices[j], shuffledIndices[i]];
+    // 🎲 随机选位置：仅首次开局时随机，后续座位固定（除非换位置）
+    const isFirstRound = (game.roundStats || []).length === 0;
+    if (isFirstRound) {
+      const shuffledIndices = Array.from({ length: game.players.length }, (_, i) => i);
+      for (let i = shuffledIndices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledIndices[i], shuffledIndices[j]] = [shuffledIndices[j], shuffledIndices[i]];
+      }
+      game.players = shuffledIndices.map((origIdx, newPos) => {
+        const p = game.players[origIdx];
+        p.position = newPos;
+        return p;
+      });
     }
-    game.players = shuffledIndices.map((origIdx, newPos) => {
-      const p = game.players[origIdx];
-      p.position = newPos;
-      return p;
-    });
 
     // 🎰 选庄家：上局首胡者掷骰（一炮多响则放冲者掷骰）
     if (game.nextDealerId) {
