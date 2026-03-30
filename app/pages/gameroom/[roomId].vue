@@ -2316,23 +2316,10 @@ const forceDiscard = async (p: Player) => {
 }
 
 .inline-action-btn--think {
-  background: linear-gradient(135deg, #7c3aed, #8b5cf6);
-  color: #fff;
-  border-color: rgba(139, 92, 246, 0.5);
+  background: rgba(124, 58, 237, 0.3);
+  color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(139, 92, 246, 0.3);
   font-size: 0.85rem;
-  animation: think-pulse 2s infinite;
-}
-
-.inline-action-btn--think-depleted {
-  background: rgba(100, 100, 100, 0.5);
-  color: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.1);
-  animation: none;
-}
-
-@keyframes think-pulse {
-  0%, 100% { box-shadow: 0 0 6px rgba(139, 92, 246, 0.3); }
-  50% { box-shadow: 0 0 16px rgba(139, 92, 246, 0.7); }
 }
 
 .think-freeze-indicator {
