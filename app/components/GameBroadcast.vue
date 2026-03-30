@@ -38,6 +38,16 @@ const MAX_VISIBLE = 6
 const visibleMessages = computed(() => {
   return props.messages.slice(-MAX_VISIBLE)
 })
+
+const scrollContainer = ref<HTMLElement | null>(null)
+
+watch(() => props.messages.length, () => {
+  nextTick(() => {
+    if (scrollContainer.value) {
+      scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
+    }
+  })
+})
 </script>
 
 <style scoped>
@@ -72,8 +82,23 @@ const visibleMessages = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 200px;
-  overflow: hidden;
+  max-height: 250px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.broadcast-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.broadcast-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.broadcast-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
 }
 
 .broadcast-msg {

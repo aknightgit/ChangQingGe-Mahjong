@@ -25,7 +25,7 @@
 <script setup lang="ts">
 import MahjongTile from './MahjongTile.vue'
 import TileWall from './TileWall.vue'
-import type { Tile } from '~/types/game'
+import type { Tile, TileSuit } from '~/types/game'
 
 const props = defineProps<{
   remainingTiles: number
@@ -43,12 +43,41 @@ const FLOWER_NAMES: Record<number, string> = {
   5: '梅', 6: '兰', 7: '竹', 8: '菊',
 }
 
+// 风牌中文名称
+const WIND_NAMES: Record<number, string> = {
+  1: '东', 2: '南', 3: '西', 4: '北',
+}
+
+// 箭牌中文名称
+const DRAGON_NAMES: Record<number, string> = {
+  1: '中', 2: '发', 3: '白',
+}
+
+// 数字中文名称
+const NUM_NAMES = ['一', '二', '三', '四', '五', '六', '七', '八', '九']
+
+// 花色中文名称
+const SUIT_NAMES: Record<string, string> = {
+  [TileSuit.DOTS]: '筒',
+  [TileSuit.CHARACTERS]: '万',
+  [TileSuit.BAMBOOS]: '条',
+}
+
+// 获取牌的中文显示名称
+function getTileDisplayName(tile: Tile): string {
+  if (tile.suit === TileSuit.WIND) return WIND_NAMES[tile.value] || `风${tile.value}`
+  if (tile.suit === TileSuit.DRAGON) return DRAGON_NAMES[tile.value] || `箭${tile.value}`
+  if (tile.suit === TileSuit.FLOWER) return FLOWER_NAMES[tile.value] || `花${tile.value}`
+  return `${NUM_NAMES[tile.value - 1]}${SUIT_NAMES[tile.suit]}`
+}
+
 const wildTileName = computed(() => {
   if (!props.wildTile) return ''
-  if (props.wildTile.suit === 'hua') {
+  if (props.wildTile.suit === TileSuit.FLOWER) {
     return FLOWER_NAMES[props.wildTile.value] || `花${props.wildTile.value}`
   }
-  return ''
+  // 非花牌百搭：显示牌的中文名 + "百搭"
+  return getTileDisplayName(props.wildTile)
 })
 </script>
 
