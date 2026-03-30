@@ -1743,6 +1743,15 @@ watch(() => gameState.value, (newState, oldState) => {
   if (newState.phase === 'playing' && prevPhase.value === 'waiting') {
     addBroadcast('🎉 房间满员，正式开干啦！', 'info')
   }
+  // 每把开局时重新播报 QJ 线突破提醒，确保所有人看到
+  if (newState.phase === 'playing' && prevPhase.value !== 'playing') {
+    const existingAlerts = (newState as any).qjAlerts || []
+    for (const alert of existingAlerts) {
+      addBroadcast(`📢 ${alert.playerName} 已达被聚义QJ线，特此广而告之！`, 'special')
+    }
+    // 重置 prevQjAlertIds，确保后续结算时能再次检测新增
+    prevQjAlertIds.value = new Set<string>(existingAlerts.map((a: any) => a.playerId))
+  }
 
   // 有人胡牌
   if (newState.winnersCount > prevWinnersCount.value && prevPhase.value === 'playing') {
