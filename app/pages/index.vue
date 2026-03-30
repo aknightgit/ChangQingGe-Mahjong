@@ -373,12 +373,19 @@ const confirmCreateGame = async () => {
 
     if (!response || !response.success) {
       console.error('[Create] Unexpected response:', response)
+      alert('创建失败，请重试')
       return
     }
 
     const gameId = response.data?.gameId
     const playerId = response.data?.playerId
-    if (!gameId) return
+    if (!gameId || !playerId) {
+      console.error('[Create] Missing gameId/playerId:', response)
+      alert('创建失败：服务端未返回有效数据')
+      return
+    }
+
+    console.log('[Create] Game created:', gameId, 'playerId:', playerId)
 
     // 加入选中的AI玩家（不超过maxBots上限）
     const botsToJoin = selectedBots.value.slice(0, createParams.maxBots);
@@ -389,14 +396,18 @@ const confirmCreateGame = async () => {
           body: { gameId, playerName: botId },
           headers: { 'Cache-Control': 'no-cache' }
         })
+        console.log('[Create] Bot joined:', botId)
       } catch (e) {
         console.error('[Create] Bot join failed:', botId, e)
       }
     }
 
-    navigateTo(`/gameroom/${gameId}?playerId=${playerId}&dice=${createParams.maxDiceRolls}&freeze=${createParams.freezeSeconds}`)
+    const targetUrl = `/gameroom/${gameId}?playerId=${playerId}&dice=${createParams.maxDiceRolls}&freeze=${createParams.freezeSeconds}`
+    console.log('[Create] Navigating to:', targetUrl)
+    await navigateTo(targetUrl)
   } catch (e) {
     console.error('[Create] Error:', e)
+    alert('创建房间失败：' + (e?.message || '未知错误'))
   } finally {
     isCreatingGame.value = false
   }
@@ -703,7 +714,7 @@ const logout = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 9999;
   backdrop-filter: blur(4px);
 }
 

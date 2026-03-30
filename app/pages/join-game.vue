@@ -204,16 +204,13 @@ const joinGame = async (gameId: string) => {
   joinError.value = null
   isJoining.value = true
   try {
-    const { data, error } = await useFetch('/api/game/join', {
+    const data = await $fetch('/api/game/join', {
       method: 'POST',
       body: { gameId, playerName: userName.value || 'Player ' + Math.floor(Math.random() * 1000) }
     })
-    if (error.value) {
-      joinError.value = error.value.message || '加入失败'
-      return
-    }
-    if (data.value?.success) {
-      const { playerId } = data.value.data
+    if (data?.success) {
+      const { playerId } = data.data
+      console.log('[Join] Joined game:', gameId, 'playerId:', playerId)
       await navigateTo(`/gameroom/${gameId}?playerId=${playerId}`)
     } else {
       joinError.value = '无法加入牌局，请重试。'
