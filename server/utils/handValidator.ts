@@ -351,87 +351,97 @@ export function canWinStandard(tiles: Tile[], existingMelds = 0, isWildTile: Wil
 
 /**
  * Check if tiles can form exactly n melds (sequences or triplets)
+ * Uses value-count approach for correct backtracking
  */
 function canFormMelds(tiles: Tile[], n: number, isWildTile: WildTileChecker): boolean {
-  if (n === 0) {
-    return tiles.length === 0;
-  }
+  if (n === 0) return tiles.length === 0;
+  if (tiles.length < n * 3) return false;
 
-  if (tiles.length < n * 3) {
+  const wildCount = tiles.filter(t => isWildTile(t)).length;
+  const nonWild = tiles.filter(t => !isWildTile(t));
+
+  // Build value-count map by suit (sorted by suit then value)
+  const countMap = new Map<string, number>();
+  for (const t of nonWild) {
+    const key = `${t.suit}-${t.value}`;
+    countMap.set(key, (countMap.get(key) || 0) + 1);
+  }
+  // Sort: number suits first (by suit name then value), then honor suits
+  const sortedEntries = [...countMap.entries()].sort((a, b) => {
+    const [suitA, valA] = [a[0].substring(0, a[0].indexOf('-')), parseInt(a[0].substring(a[0].indexOf('-') + 1))];
+    const [suitB, valB] = [b[0].substring(0, b[0].indexOf('-')), parseInt(b[0].substring(b[0].indexOf('-') + 1))];
+    const isNumA = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS].includes(suitA as TileSuit) ? 0 : 1;
+    const isNumB = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS].includes(suitB as TileSuit) ? 0 : 1;
+    if (isNumA !== isNumB) return isNumA - isNumB;
+    if (suitA !== suitB) return suitA.localeCompare(suitB);
+    return valA - valB;
+  });
+  const sortedMap = new Map(sortedEntries);
+
+  function backtrack(remainingN: number, remainingWild: number, map: Map<string, number>): boolean {
+    if (remainingN === 0) {
+      // All non-wild tiles must be used
+      for (const c of map.values()) if (c > 0) return false;
+      return remainingWild === 0;
+    }
+
+    // Find first non-zero slot
+    let minKey: string | null = null;
+    let minSuit = '';
+    let minValue = 0;
+    for (const [k, c] of map) {
+      if (c > 0) {
+        minKey = k;
+        const dashIdx = k.indexOf('-');
+        minSuit = k.substring(0, dashIdx);
+        minValue = parseInt(k.substring(dashIdx + 1));
+        break;
+      }
+    }
+
+    if (!minKey) {
+      // All natural tiles used — remaining melds must come from wilds
+      return remainingWild >= remainingN * 3 && backtrack(0, remainingWild - remainingN * 3, map);
+    }
+
+    // Option 1: triplet from minKey
+    const cnt = map.get(minKey)!;
+    const needTriplet = 3 - cnt;
+    if (needTriplet <= remainingWild) {
+      map.set(minKey, 0);
+      if (backtrack(remainingN - 1, remainingWild - needTriplet, map)) return true;
+      map.set(minKey, cnt);
+    }
+
+    // Option 2: sequence starting from minKey (number suits only)
+    const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+    if (numberSuits.includes(minSuit as TileSuit) && minValue <= 7) {
+      const k2 = `${minSuit}-${minValue + 1}`;
+      const k3 = `${minSuit}-${minValue + 2}`;
+      const c2 = map.get(k2) || 0;
+      const c3 = map.get(k3) || 0;
+      const missing = (c2 > 0 ? 0 : 1) + (c3 > 0 ? 0 : 1);
+
+      if (missing <= remainingWild) {
+        const orig2 = c2, orig3 = c3;
+        map.set(minKey, 0);
+        if (c2 > 0) map.set(k2, c2 - 1);
+        if (c3 > 0) map.set(k3, c3 - 1);
+        if (backtrack(remainingN - 1, remainingWild - missing, map)) return true;
+        // Undo
+        map.set(minKey, cnt);
+        if (c2 > 0) map.set(k2, orig2);
+        if (c3 > 0) map.set(k3, orig3);
+      }
+    }
+
+    // Option 3: use wild tiles for the first position
+    // (count-0 slots with remaining wilds already handled above)
+
     return false;
   }
 
-  const sorted = sortTiles(tiles);
-  const wildTiles = sorted.filter(t => isWildTile(t));
-  const nonWildTiles = sorted.filter(t => !isWildTile(t));
-
-  // 如果剩下的全部是百搭，必然可组成面子
-  if (nonWildTiles.length === 0) {
-    return wildTiles.length === n * 3;
-  }
-
-  const firstTile = nonWildTiles[0];
-
-  // Try forming a triplet with first tile + wildcards
-  const sameTiles = nonWildTiles.filter(t => tilesEqual(t, firstTile));
-  const needForTriplet = 3 - sameTiles.length;
-  if (needForTriplet <= wildTiles.length) {
-    const remaining = [...sorted];
-
-    // remove natural same tiles (up to 3)
-    for (let i = 0; i < Math.min(3, sameTiles.length); i++) {
-      const idx = remaining.findIndex(t => t.id === sameTiles[i].id);
-      if (idx >= 0) remaining.splice(idx, 1);
-    }
-
-    // remove wild tiles to fill
-    for (let i = 0; i < Math.max(0, needForTriplet); i++) {
-      const idx = remaining.findIndex(t => isWildTile(t));
-      if (idx >= 0) remaining.splice(idx, 1);
-    }
-
-    if (canFormMelds(remaining, n - 1, isWildTile)) {
-      return true;
-    }
-  }
-
-  // Try forming a sequence with first tile + wildcards (only number suits)
-  const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-  if (numberSuits.includes(firstTile.suit)) {
-    const neededValues = [firstTile.value + 1, firstTile.value + 2];
-    if (neededValues[1] <= 9) {
-      const secondTile = nonWildTiles.find(t => t.suit === firstTile.suit && t.value === neededValues[0]);
-      const thirdTile = nonWildTiles.find(t => t.suit === firstTile.suit && t.value === neededValues[1]);
-
-      const missing = [secondTile, thirdTile].filter(t => !t).length;
-      if (missing <= wildTiles.length) {
-        const remaining = [...sorted];
-        const idx1 = remaining.findIndex(t => t.id === firstTile.id);
-        if (idx1 >= 0) remaining.splice(idx1, 1);
-
-        if (secondTile) {
-          const idx2 = remaining.findIndex(t => t.id === secondTile.id);
-          if (idx2 >= 0) remaining.splice(idx2, 1);
-        }
-
-        if (thirdTile) {
-          const idx3 = remaining.findIndex(t => t.id === thirdTile.id);
-          if (idx3 >= 0) remaining.splice(idx3, 1);
-        }
-
-        for (let i = 0; i < missing; i++) {
-          const idxW = remaining.findIndex(t => isWildTile(t));
-          if (idxW >= 0) remaining.splice(idxW, 1);
-        }
-
-        if (canFormMelds(remaining, n - 1, isWildTile)) {
-          return true;
-        }
-      }
-    }
-  }
-
-  return false;
+  return backtrack(n, wildCount, sortedMap);
 }
 
 /**
@@ -530,105 +540,145 @@ export function isTing(tiles: Tile[], existingMelds = 0, isWildTile: WildTileChe
 }
 
 /**
- * Extract melds from a winning hand
+ * Extract melds from a winning hand (supports wild tiles and backtracking)
  */
-export function extractMelds(tiles: Tile[]): Meld[] | null {
-  if (tiles.length !== 14) return null;
-  
+export function extractMelds(tiles: Tile[], existingMelds: Meld[] = [], isWildTile: WildTileChecker = () => false): Meld[] | null {
+  const nonFlower = tiles.filter(t => !isFlower(t));
+  if (nonFlower.length !== 14 && nonFlower.length !== 11 && nonFlower.length !== 8 && nonFlower.length !== 5 && nonFlower.length !== 2) return null;
+
   // Try standard win
-  const groups = groupTiles(tiles);
-  
-  for (const [key, groupTiles] of groups) {
-    if (groupTiles.length >= 2) {
-      const remainingTiles = [...tiles];
-      const pairTile1 = groupTiles[0];
-      const pairTile2 = groupTiles[1];
-      
-      const idx1 = remainingTiles.findIndex(t => t.id === pairTile1.id);
-      remainingTiles.splice(idx1, 1);
-      const idx2 = remainingTiles.findIndex(t => t.id === pairTile2.id);
-      remainingTiles.splice(idx2, 1);
-      
-      const melds = extractMeldsRecursive(remainingTiles);
+  const groups = groupTiles(nonFlower.filter(t => !isWildTile(t)));
+  const wildTiles = nonFlower.filter(t => isWildTile(t));
+
+  for (const [, group] of groups) {
+    if (group.length >= 2) {
+      const remaining = [...nonFlower];
+      const idx1 = remaining.findIndex(t => t.id === group[0].id);
+      remaining.splice(idx1, 1);
+      const idx2 = remaining.findIndex(t => t.id === group[1].id);
+      remaining.splice(idx2, 1);
+
+      const melds = extractMeldsRecursive(remaining, isWildTile);
       if (melds) {
         return [
-          { type: MeldType.PAIR, tiles: [pairTile1, pairTile2], isConcealed: true },
+          { type: MeldType.PAIR, tiles: [group[0], group[1]], isConcealed: true },
           ...melds
         ];
       }
     }
   }
-  
+
+  // Try wild pair
+  if (wildTiles.length >= 2) {
+    const remaining = [...nonFlower];
+    const idx1 = remaining.findIndex(t => t.id === wildTiles[0].id);
+    remaining.splice(idx1, 1);
+    const idx2 = remaining.findIndex(t => t.id === wildTiles[1].id);
+    remaining.splice(idx2, 1);
+
+    const melds = extractMeldsRecursive(remaining, isWildTile);
+    if (melds) {
+      return [
+        { type: MeldType.PAIR, tiles: [wildTiles[0], wildTiles[1]], isConcealed: true },
+        ...melds
+      ];
+    }
+  }
+
   // Try seven pairs
   if (canWinSevenPairs(tiles)) {
     const melds: Meld[] = [];
-    const groups = groupTiles(tiles);
-    for (const group of groups.values()) {
+    const sg = groupTiles(tiles);
+    for (const group of sg.values()) {
       melds.push({ type: MeldType.PAIR, tiles: group, isConcealed: true });
     }
     return melds;
   }
-  
+
   return null;
 }
 
-function extractMeldsRecursive(tiles: Tile[]): Meld[] | null {
-  if (tiles.length === 0) {
-    return [];
-  }
-  
-  if (tiles.length < 3) {
-    return null;
-  }
-  
+/**
+ * Recursively extract melds from remaining tiles with backtracking
+ */
+function extractMeldsRecursive(tiles: Tile[], isWildTile: WildTileChecker = () => false): Meld[] | null {
+  if (tiles.length === 0) return [];
+  if (tiles.length < 3) return null;
+
   const sorted = sortTiles(tiles);
-  const firstTile = sorted[0];
-  
+  const nonWild = sorted.filter(t => !isWildTile(t));
+  const wildCount = sorted.filter(t => isWildTile(t)).length;
+
+  if (nonWild.length === 0) return null; // only wilds left — handled by caller
+
+  const firstTile = nonWild[0];
+
   // Try triplet
-  const tripletTiles = sorted.filter(t => tilesEqual(t, firstTile));
-  if (tripletTiles.length >= 3) {
+  const sameTiles = nonWild.filter(t => tilesEqual(t, firstTile));
+  const needTriplet = 3 - sameTiles.length;
+  if (needTriplet <= wildCount) {
     const remaining = [...sorted];
-    for (let i = 0; i < 3; i++) {
-      const idx = remaining.findIndex(t => t.id === tripletTiles[i].id);
-      remaining.splice(idx, 1);
+    for (const st of sameTiles) {
+      const idx = remaining.findIndex(t => t.id === st.id);
+      if (idx >= 0) remaining.splice(idx, 1);
     }
-    
-    const restMelds = extractMeldsRecursive(remaining);
-    if (restMelds) {
+    for (let i = 0; i < needTriplet; i++) {
+      const idx = remaining.findIndex(t => isWildTile(t));
+      if (idx >= 0) remaining.splice(idx, 1);
+    }
+
+    const meldTiles = [...sameTiles];
+    const meldType = MeldType.TRIPLET;
+
+    const restMelds = extractMeldsRecursive(remaining, isWildTile);
+    if (restMelds !== null) {
       return [
-        { type: MeldType.TRIPLET, tiles: tripletTiles.slice(0, 3), isConcealed: true },
+        { type: meldType, tiles: meldTiles.slice(0, 3), isConcealed: true },
         ...restMelds
       ];
     }
   }
-  
-  // Try sequence
-  const nextValue = firstTile.value + 1;
-  const nextNextValue = firstTile.value + 2;
-  
-  if (nextValue <= 9 && nextNextValue <= 9) {
-    const secondTile = sorted.find(t => t.suit === firstTile.suit && t.value === nextValue);
-    const thirdTile = sorted.find(t => t.suit === firstTile.suit && t.value === nextNextValue);
-    
-    if (secondTile && thirdTile) {
+
+  // Try sequence (number suits only)
+  const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+  if (numberSuits.includes(firstTile.suit) && firstTile.value <= 7) {
+    const k2 = firstTile.value + 1;
+    const k3 = firstTile.value + 2;
+    const secondTile = nonWild.find(t => t.suit === firstTile.suit && t.value === k2);
+    const thirdTile = nonWild.find(t => t.suit === firstTile.suit && t.value === k3);
+    const missing = (secondTile ? 0 : 1) + (thirdTile ? 0 : 1);
+
+    if (missing <= wildCount) {
       const remaining = [...sorted];
       const idx1 = remaining.findIndex(t => t.id === firstTile.id);
-      remaining.splice(idx1, 1);
-      const idx2 = remaining.findIndex(t => t.id === secondTile.id);
-      remaining.splice(idx2, 1);
-      const idx3 = remaining.findIndex(t => t.id === thirdTile.id);
-      remaining.splice(idx3, 1);
-      
-      const restMelds = extractMeldsRecursive(remaining);
-      if (restMelds) {
+      if (idx1 >= 0) remaining.splice(idx1, 1);
+      if (secondTile) {
+        const idx2 = remaining.findIndex(t => t.id === secondTile.id);
+        if (idx2 >= 0) remaining.splice(idx2, 1);
+      }
+      if (thirdTile) {
+        const idx3 = remaining.findIndex(t => t.id === thirdTile.id);
+        if (idx3 >= 0) remaining.splice(idx3, 1);
+      }
+      for (let i = 0; i < missing; i++) {
+        const idxW = remaining.findIndex(t => isWildTile(t));
+        if (idxW >= 0) remaining.splice(idxW, 1);
+      }
+
+      const meldTiles: Tile[] = [firstTile];
+      if (secondTile) meldTiles.push(secondTile);
+      if (thirdTile) meldTiles.push(thirdTile);
+
+      const restMelds = extractMeldsRecursive(remaining, isWildTile);
+      if (restMelds !== null) {
         return [
-          { type: MeldType.SEQUENCE, tiles: [firstTile, secondTile, thirdTile], isConcealed: true },
+          { type: MeldType.SEQUENCE, tiles: meldTiles, isConcealed: true },
           ...restMelds
         ];
       }
     }
   }
-  
+
   return null;
 }
 
