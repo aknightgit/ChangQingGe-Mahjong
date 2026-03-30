@@ -158,6 +158,13 @@ export interface RebelEvent {
   newDealerIndex: number;
 }
 
+export interface RoundStat {
+  roundNumber: number;
+  scores: Record<string, number>;  // playerId → 本局得分
+  winners: string[];  // 胡牌玩家ID
+  selfDraws: string[];  // 自摸玩家ID
+}
+
 export interface GameState {
   gameId: string;
   roomNumber?: string; // 4位随机房间号
@@ -190,6 +197,9 @@ export interface GameState {
   liangShanVotes?: string[];  // 梁山聚义投票者ID列表
   pendingRemovals?: string[];  // 下局要移除的AI玩家ID
   pendingReplacements?: { spectatorId: string; aiPlayerId: string; spectatorName?: string }[];  // 下局替换AI的请求
+  settleRequested?: boolean;  // 是否已请求退房结算
+  // 每局统计追踪
+  roundStats?: RoundStat[];
   // 可配置参数
   freezeDurationMs?: number;  // 冻结时长（毫秒），默认1000
   diceRollCount?: number;     // 掷骰次数，默认2

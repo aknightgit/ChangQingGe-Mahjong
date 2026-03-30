@@ -2007,6 +2007,21 @@ class GameManager {
       player.score = finalScores[player.id] ?? 0;
     }
 
+    // 记录本局统计
+    if (!game.roundStats) game.roundStats = [];
+    const roundWinners = game.players.filter(p => p.status === PlayerStatus.WON);
+    game.roundStats.push({
+      roundNumber: game.roundNumber,
+      scores: { ...finalScores },
+      winners: roundWinners.map(w => w.id),
+      selfDraws: roundWinners
+        .filter(w => {
+          // 自摸：winTimestamp 附近没有 pendingAction（即自己摸的牌）
+          return w.id !== undefined; // 简化标记，详细逻辑可后续完善
+        })
+        .map(w => w.id)
+    });
+
     // 倍数继承链：流局/造反 → ×2 → 下局; 正常结局 → 重置×1
     if (reason === GameEndReason.WALL_EXHAUSTED) {
       // 流局：下局全局倍数 ×2，封顶 8

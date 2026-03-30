@@ -102,6 +102,52 @@
           </div>
         </div>
 
+        <!-- 结算面板 -->
+        <div v-if="showSettlement" class="settle-overlay">
+          <div class="settle-panel">
+            <h2 class="settle-title">📊 最终结算</h2>
+            <p class="settle-meta">房间 #{{ roomId }} · 共 {{ settlementData?.totalRounds || 0 }} 局</p>
+
+            <div class="settle-ranking">
+              <div
+                v-for="(p, i) in (settlementData?.playerStats || [])"
+                :key="p.id"
+                class="settle-row"
+                :class="{ 'settle-row--top': i === 0 }"
+              >
+                <span class="settle-rank">
+                  <span v-if="i === 0">🥇</span>
+                  <span v-else-if="i === 1">🥈</span>
+                  <span v-else-if="i === 2">🥉</span>
+                  <span v-else>{{ i + 1 }}</span>
+                </span>
+                <span class="settle-name">{{ p.name }}</span>
+                <span class="settle-total" :class="p.totalScore > 0 ? 'sc-pos' : p.totalScore < 0 ? 'sc-neg' : ''">
+                  {{ p.totalScore > 0 ? '+' : '' }}{{ p.totalScore }}
+                </span>
+              </div>
+            </div>
+
+            <div class="settle-details">
+              <div class="settle-detail-grid">
+                <template v-for="p in (settlementData?.playerStats || [])" :key="p.id + '-detail'">
+                  <div class="settle-detail-row">
+                    <span class="settle-detail-name">{{ p.name }}</span>
+                    <span class="settle-detail-stat">🏆 {{ p.wins }}胜</span>
+                    <span class="settle-detail-stat">🀄 {{ p.selfDraws }}自摸</span>
+                    <span class="settle-detail-stat settle-detail-stat--win">最大赢 +{{ p.maxWin }}</span>
+                    <span class="settle-detail-stat settle-detail-stat--loss">最大输 {{ p.maxLoss }}</span>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <button class="settle-save-btn" @click="onSaveSettle">
+              💾 结算保存，下回再战
+            </button>
+          </div>
+        </div>
+
         <!-- 设置面板 -->
         <Transition name="settings-slide">
           <div v-if="showSettings" class="settings-overlay" @click.self="showSettings = false">
@@ -375,6 +421,13 @@
             :spectating-id="spectatingId"
             @spectate="handleSpectate"
           />
+
+          <!-- 退房结算 -->
+          <div class="ext-section" v-if="gameState?.phase === 'playing' || gameState?.phase === 'ended'">
+            <button class="settle-btn" @click="onRequestSettle">
+              📊 退房结算
+            </button>
+          </div>
 
           <!-- 牌局快讯 -->
           <GameBroadcast :messages="broadcastMessages" />
@@ -1072,6 +1125,44 @@ const onHu = () => { resetAutoCount(); playSound('tile-hu'); executeAction(Actio
 const onPass = () => { resetAutoCount(); executeAction(ActionType.PASS) }
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); executeAction(ActionType.REBEL) }
 const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); executeAction(ActionType.CHEAT_HU) }
+
+// 退房结算
+const showSettlement = ref(false)
+const settlementData = ref<any>(null)
+const onRequestSettle = async () => {
+  try {
+    const res = await $fetch('/api/game/settle', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: currentPlayer.value?.id,
+        action: 'request'
+      }
+    })
+    if ((res as any)?.success) {
+      settlementData.value = (res as any).data
+      showSettlement.value = true
+    }
+  } catch (e) {
+    console.error('[Settle] Failed:', e)
+  }
+}
+const onSaveSettle = async () => {
+  try {
+    await $fetch('/api/game/settle', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: currentPlayer.value?.id,
+        action: 'save'
+      }
+    })
+    showSettlement.value = false
+    backToLobby()
+  } catch (e) {
+    console.error('[Settle Save] Failed:', e)
+  }
+}
 
 // AI 玩家操作卡片
 const showAICard = ref(false)
@@ -2160,6 +2251,158 @@ const forceDiscard = async (p: Player) => {
   font-size: 1rem;
   opacity: 0.9;
   margin-bottom: 20px;
+}
+
+/* 退房结算按钮 */
+.settle-btn {
+  width: 100%;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  background: rgba(255, 152, 0, 0.08);
+  color: #ffb74d;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.settle-btn:hover {
+  background: rgba(255, 152, 0, 0.15);
+  border-color: rgba(255, 152, 0, 0.5);
+}
+
+/* 结算面板 */
+.settle-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: rgba(3, 10, 8, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(6px);
+}
+
+.settle-panel {
+  background: rgba(4, 16, 11, 0.97);
+  border: 1px solid rgba(255, 215, 0, 0.15);
+  border-radius: 20px;
+  padding: 32px;
+  width: min(480px, 92%);
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  animation: settle-in 0.3s ease;
+}
+
+@keyframes settle-in {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.settle-title {
+  font-size: 1.4rem;
+  margin: 0 0 4px;
+  text-align: center;
+}
+
+.settle-meta {
+  text-align: center;
+  font-size: 0.8rem;
+  opacity: 0.5;
+  margin: 0 0 20px;
+}
+
+.settle-ranking {
+  margin-bottom: 20px;
+}
+
+.settle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.settle-row--top {
+  background: rgba(255, 215, 0, 0.06);
+  border-color: rgba(255, 215, 0, 0.2);
+}
+
+.settle-rank {
+  width: 28px;
+  text-align: center;
+  font-size: 1.1rem;
+}
+
+.settle-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.settle-total {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.sc-pos { color: #66bb6a; }
+.sc-neg { color: #ef5350; }
+
+.settle-details {
+  margin-bottom: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 16px;
+}
+
+.settle-detail-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settle-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.settle-detail-name {
+  font-weight: 600;
+  min-width: 60px;
+}
+
+.settle-detail-stat {
+  opacity: 0.7;
+}
+
+.settle-detail-stat--win { color: #66bb6a; }
+.settle-detail-stat--loss { color: #ef5350; }
+
+.settle-save-btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, #1f8a52, #46c574);
+  color: #03100a;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.settle-save-btn:hover {
+  transform: scale(1.02);
+  box-shadow: 0 0 20px rgba(70, 197, 116, 0.4);
 }
 
 /* AI 玩家操作卡片 */
