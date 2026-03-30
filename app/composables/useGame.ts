@@ -13,6 +13,7 @@ export const useGame = () => {
   const socket = ref<Socket | null>(null)
   const isConnected = ref(false)
   const error = ref<string | null>(null)
+  const leadingBrotherEvent = ref<{ firstPlayerName: string; tileKey: string } | null>(null)
   const isActionPending = ref(false)
   const roomDismissedReason = ref<string | null>(null)
   // 延迟高亮：记录最后一次 state-changed 的时间戳
@@ -152,6 +153,16 @@ export const useGame = () => {
         await refreshState()
       })
 
+      // 谢谢带头大哥事件
+      socket.value.on('leadingBrother', (data: { firstPlayerName: string; tileKey: string }) => {
+        console.log('🔥 谢谢带头大哥！', data)
+        leadingBrotherEvent.value = data
+        // 0.1s 后自动清除
+        setTimeout(() => {
+          leadingBrotherEvent.value = null
+        }, 100)
+      })
+
     } catch (e: any) {
       error.value = e.message || 'Failed to connect'
     }
@@ -265,6 +276,7 @@ export const useGame = () => {
     refreshState,
     isActionPending,
     roomDismissedReason,
-    lastStateChangeAt
+    lastStateChangeAt,
+    leadingBrotherEvent
   }
 }

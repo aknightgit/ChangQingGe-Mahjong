@@ -978,6 +978,9 @@ class GameManager {
     player.hand.discardedTiles.push(tile);
     game.discardPile.push(tile);
 
+    // 谢谢带头大哥：检测连续出同一张牌
+    this.checkLeadingBrother(game, tile, player);
+
     this.updateRoundNumber(game);
 
     // Check if player is missing one suit after discard
@@ -1014,6 +1017,53 @@ class GameManager {
     }
 
     await this.moveToNextPlayer(game);
+  }
+
+  /**
+   * 谢谢带头大哥：一回合内四名玩家连续打出同一张牌
+   * 第一个打出该牌的玩家，结算时额外赔付其余三家每家10分
+   */
+  private checkLeadingBrother(game: GameState, tile: Tile, currentPlayer: Player): void {
+    const tileKey = `${tile.suit}-${tile.value}`;
+
+    // 初始化或重置追踪
+    if (!game.consecutiveDiscards || game.consecutiveDiscards.suit !== tile.suit || game.consecutiveDiscards.value !== tile.value) {
+      game.consecutiveDiscards = { suit: tile.suit, value: tile.value, playerIds: [currentPlayer.id] };
+      return;
+    }
+
+    // 同一牌型继续追加
+    const cd = game.consecutiveDiscards;
+    // 避免同一玩家连续出同一张牌重复计数
+    if (!cd.playerIds.includes(currentPlayer.id)) {
+      cd.playerIds.push(currentPlayer.id);
+    } else {
+      // 同一玩家又出了同样的牌，重置为从该玩家开始
+      game.consecutiveDiscards = { suit: tile.suit, value: tile.value, playerIds: [currentPlayer.id] };
+      return;
+    }
+
+    // 检查是否4个不同玩家都连续出了同一张牌
+    const activePlayers = game.players.filter(p => p.status === PlayerStatus.PLAYING || p.status === PlayerStatus.WON);
+    if (cd.playerIds.length >= activePlayers.length && activePlayers.length >= 4) {
+      // 触发！第一个出该牌的玩家是带头大哥
+      const firstPlayerId = cd.playerIds[0];
+      game.leadingBrotherEvent = { firstPlayerId, tileKey };
+
+      const firstPlayer = game.players.find(p => p.id === firstPlayerId);
+      console.log(`[LeadingBrother] ${firstPlayer?.name} 是带头大哥！连续出 ${tileKey}`);
+
+      // 广播给所有客户端显示弹窗
+      if (this.wsManager) {
+        this.wsManager.broadcast(game.gameId, 'leadingBrother', {
+          firstPlayerName: firstPlayer?.name || '未知',
+          tileKey
+        });
+      }
+
+      // 重置追踪
+      game.consecutiveDiscards = null;
+    }
   }
 
   private handleDraw(game: GameState, player: Player): void {
@@ -2234,6 +2284,23 @@ class GameManager {
       }
     }
     
+    // 谢谢带头大哥：第一个出该牌的玩家赔付其余三家每家10分
+    if (game.leadingBrotherEvent) {
+      const { firstPlayerId } = game.leadingBrotherEvent;
+      const firstPlayer = game.players.find(p => p.id === firstPlayerId);
+      if (firstPlayer) {
+        const penalty = 30; // 赔付3家 × 10分
+        firstPlayer.score -= penalty;
+        for (const p of game.players) {
+          if (p.id !== firstPlayerId) {
+            p.score += 10;
+          }
+        }
+        console.log(`[LeadingBrother] ${firstPlayer.name} 赔付30分（每家10分）`);
+      }
+      game.leadingBrotherEvent = null;
+    }
+
     // 清除本局AI接管记录
     game.botTakeoverPlayers = [];
 

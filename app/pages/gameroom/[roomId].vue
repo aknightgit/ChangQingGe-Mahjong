@@ -41,6 +41,15 @@
           </div>
         </div>
 
+        <!-- 谢谢带头大哥弹窗 -->
+        <div v-if="leadingBrotherEvent" class="leading-brother-overlay">
+          <div class="leading-brother-card">
+            <div class="lb-icon">🙏💰</div>
+            <p class="lb-title">谢谢带头大哥！</p>
+            <p class="lb-sub">{{ leadingBrotherEvent.firstPlayerName }} 连打同张，赔付三家各10分</p>
+          </div>
+        </div>
+
         <div v-if="isOverlayVisible" class="game-over-overlay">
           <div class="game-over-card">
             <p class="overlay-title">{{ overlayTitle }}</p>
@@ -609,7 +618,8 @@ const {
   startGame,
   refreshState,
   roomDismissedReason,
-  lastStateChangeAt
+  lastStateChangeAt,
+  leadingBrotherEvent
 } = useGame()
 
 const backToLobby = () => navigateTo('/')
@@ -2348,6 +2358,59 @@ const forceDiscard = async (p: Player) => {
 
 @keyframes liangShanPop {
   from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ===== 谢谢带头大哥弹窗 ===== */
+.leading-brother-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 10, 8, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 25;
+  animation: lbFadeIn 0.03s ease-out;
+}
+
+.leading-brother-card {
+  background: linear-gradient(135deg, rgba(200, 150, 30, 0.95), rgba(180, 100, 10, 0.95));
+  border: 2px solid rgba(255, 220, 100, 0.7);
+  border-radius: 20px;
+  padding: 36px 44px;
+  text-align: center;
+  box-shadow: 0 0 50px rgba(255, 180, 50, 0.4), 0 12px 32px rgba(0, 0, 0, 0.5);
+  animation: lbPop 0.04s ease-out;
+}
+
+.lb-icon {
+  font-size: 2.4rem;
+  margin-bottom: 8px;
+}
+
+.lb-title {
+  font-size: 2rem;
+  font-weight: 900;
+  color: #fff;
+  margin: 0 0 6px;
+  text-shadow: 0 0 10px rgba(255, 200, 50, 0.6);
+  letter-spacing: 0.1em;
+}
+
+.lb-sub {
+  font-size: 0.95rem;
+  color: rgba(255, 240, 200, 0.9);
+  margin: 0;
+  font-weight: 600;
+}
+
+@keyframes lbFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes lbPop {
+  from { transform: scale(0.85); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }
 

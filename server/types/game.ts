@@ -205,6 +205,9 @@ export interface GameState {
   freezeDurationMs?: number;  // 冻结时长（毫秒），默认1000
   diceRollCount?: number;     // 掷骰次数，默认2
   liangShanThreshold?: number;  // 梁山聚义被QJ线（累积赢分阈值），默认1000
+  // 谢谢带头大哥追踪
+  consecutiveDiscards?: { suit: string; value: number; playerIds: string[] } | null;
+  leadingBrotherEvent?: { firstPlayerId: string; tileKey: string } | null;
 }
 
 export interface PendingAction {
