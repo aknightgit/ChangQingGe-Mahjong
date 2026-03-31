@@ -906,13 +906,30 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
 
 // ========== 游戏明细记录 ==========
 interface GameEvent { turn: number; player: string; action: string; detail: string }
-interface GameResult { winner: number; scores: number[]; events: GameEvent[]; multiplier: number }
+interface SettlementEntry { from: string; to: string; amount: number; reason: string; mult?: number }
+interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers: string[]; meldSources: number[] }
+interface GameResult {
+  winner: number; scores: number[]; events: GameEvent[]; multiplier: number
+  settlementLog: SettlementEntry[]; snapshots: PlayerSnapshot[]; roundNum: number
+}
 
 // ========== Game Loop ==========
 function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | null {
   const g = setupGame(akPolicy, otherPolicies)
   const events: GameEvent[] = []
+  const settlementLog: SettlementEntry[] = []
   let turn = 0
+  const recordPayment = (from: string, to: string, amount: number, reason: string, mult?: number) => {
+    settlementLog.push({ from, to, amount, reason, mult })
+  }
+  const recordSnapshots = (): PlayerSnapshot[] => {
+    return g.players.map(p => ({
+      name: p.name, hand: p.hand.map(t => tileStr(t)).join(' '),
+      melds: p.exposedMelds.map(m => `${m.type===MeldType.TRIPLET?'碰':m.type===MeldType.SEQUENCE?'吃':m.type===MeldType.KONG?'杠':'?'}:${m.tiles.map(t=>tileStr(t)).join(' ')}`),
+      flowers: p.flowerTiles.map(t => tileStr(t)),
+      meldSources: [...p.meldSources]
+    }))
+  }
   const log = (player: string, action: string, detail: string) => { events.push({ turn, player, action, detail }) }
 
   for (let i = 0; i < 13; i++) { for (let p = 0; p < 4; p++) drawTile(g, g.players[p]) }
@@ -944,8 +961,9 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
         // 互包结算
         applyBaoSettlement(g, curr, true, null, baseScore)
+        for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore, '自摸') }
         log(player.name, '自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
-        return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier }
+        return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
       }
     }
 
@@ -961,7 +979,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
             applyBaoSettlement(g, curr, true, null, baseScore)
             log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
-            return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier }
+            return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
           }
         }
       }
@@ -977,7 +995,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
             applyBaoSettlement(g, curr, true, null, baseScore)
             log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
-            return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier }
+            return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
           }
         }
       }
@@ -1007,8 +1025,9 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           opp.score += score; player.score -= score
           // 互包结算：如果有人对opp有包三，且放炮者不是包家
           applyBaoSettlement(g, other, false, curr, score)
+          recordPayment(player.name, opp.name, score, '放炮')
           log(opp.name, '放炮胡', `${player.name}出${tileStr(discard)}→${opp.hand.map(t => tileStr(t)).join(' ')} [${score}]`)
-          return { winner: other, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier }
+          return { winner: other, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
         }
       }
     }
@@ -1035,7 +1054,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= baseScore }
             applyBaoSettlement(g, otherIdx, true, null, baseScore)
             log(opp.name, '碰后自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
-            return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier }
+            return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
           }
           for (const ak of canAnKong(opp)) {
             applyAnKong(opp, ak)
@@ -1047,7 +1066,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
                 for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
                 applyBaoSettlement(g, otherIdx, true, null, kongBaseScore)
                 log(opp.name, '碰杠后自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3=${kongBaseScore*3}]`)
-                return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier }
+                return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
               }
             }
           }
@@ -1074,7 +1093,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= baseScore }
         applyBaoSettlement(g, nextPlayer, true, null, baseScore)
         log(nextP.name, '吃后自摸', `${nextP.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
-        return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier }
+        return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
       }
       for (const ak of canAnKong(nextP)) {
         applyAnKong(nextP, ak)
@@ -1086,7 +1105,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= kongBaseScore }
             applyBaoSettlement(g, nextPlayer, true, null, kongBaseScore)
             log(nextP.name, '吃杠后自摸', `${nextP.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3=${kongBaseScore*3}]`)
-            return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier }
+            return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
           }
         }
       }
