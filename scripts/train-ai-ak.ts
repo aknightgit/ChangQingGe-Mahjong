@@ -465,16 +465,16 @@ function canPeng(p: BotPlayer, tile: Tile): boolean {
 function canChow(p: BotPlayer, tile: Tile): boolean {
   if (!tile || isHonor(tile) || tile.suit === TileSuit.FLOWER) return false
   const v = tile.value
-  // 三种吃牌方式（含花色所有牌值1-9）：
-  // 1) 中间牌：需要 v-1 和 v+1（如 3+5 吃 4）
-  // 2) 最低牌：需要 v+1 和 v+2（如 3+4 吃 5）
-  // 3) 最高牌：需要 v-1 和 v-2（如 4+5 吃 3）
+  // 三种吃牌方式：
+  // 1) 中间牌：需要 v-1 和 v+1（如 3+5 吃 4），v范围2-8
+  // 2) 最低牌（tile是最大的）：需要 v-1 和 v-2（如 3+4 吃 5），v范围3-9
+  // 3) 最高牌（tile是最小的）：需要 v+1 和 v+2（如 4+5 吃 3），v范围1-7
   const has = (val: number) => p.hand.some(t => t.suit === tile.suit && t.value === val)
   // 中间牌
   if (v >= 2 && v <= 8 && has(v - 1) && has(v + 1)) return true
-  // 最低牌（被吃牌是最大的）
+  // 最低牌：tile是被吃序列中最大的
   if (v >= 3 && has(v - 1) && has(v - 2)) return true
-  // 最高牌（被吃牌是最小的）
+  // 最高牌：tile是被吃序列中最小的
   if (v <= 7 && has(v + 1) && has(v + 2)) return true
   return false
 }
@@ -511,19 +511,19 @@ function applyChow(p: BotPlayer, tile: Tile, sourcePos?: number): void {
   const findTile = (suit: TileSuit, val: number) => p.hand.find(t => t && t.suit === suit && t.value === val)
   const removeTile = (t: Tile) => { const idx = p.hand.findIndex(h => h && h.id === t.id); if (idx >= 0) p.hand.splice(idx, 1) }
 
-  // 三种吃牌模式，优先选择能吃的组合
+  // 三种吃牌模式，与canChow一致
   let t1: Tile | undefined, t2: Tile | undefined
-  // 1) 中间牌：tile是中间，需要v-1和v+1
+  // 1) 中间牌：tile是中间，需要v-1和v+1，v范围2-8
   if (v >= 2 && v <= 8) {
     t1 = findTile(tile.suit, v - 1)
     t2 = findTile(tile.suit, v + 1)
   }
-  // 2) 最低牌：tile是最大的，需要v-1和v-2
+  // 2) 最低牌：tile是最大的，需要v-1和v-2，v范围3-9
   if ((!t1 || !t2) && v >= 3) {
     t1 = findTile(tile.suit, v - 1)
     t2 = findTile(tile.suit, v - 2)
   }
-  // 3) 最高牌：tile是最小的，需要v+1和v+2
+  // 3) 最高牌：tile是最小的，需要v+1和v+2，v范围1-7
   if ((!t1 || !t2) && v <= 7) {
     t1 = findTile(tile.suit, v + 1)
     t2 = findTile(tile.suit, v + 2)
