@@ -136,20 +136,17 @@ export const useGame = () => {
       // Game Events
       socket.value.on('game:state-changed', async (data) => {
         console.log('Game state update:', data)
-        lastStateChangeAt.value = Date.now()
         await refreshState()
       })
 
       // Listen for server's broadcastGameState events (different name from action-triggered events)
       socket.value.on('gameStateUpdate', async (data) => {
         console.log('GameStateUpdate from server:', data)
-        lastStateChangeAt.value = Date.now()
         await refreshState()
       })
 
       socket.value.on('game:action-received', async (data) => {
         console.log('Action received:', data)
-        lastStateChangeAt.value = Date.now()
         await refreshState()
       })
 
@@ -201,7 +198,13 @@ export const useGame = () => {
   const updateState = (data: any) => {
     gameState.value = data.game
     playerView.value = data.playerView
-    availableActions.value = data.availableActions
+    // 只在availableActions实际变化时才更新lastStateChangeAt
+    const oldActions = availableActions.value
+    const newActions = data.availableActions || []
+    availableActions.value = newActions
+    if (JSON.stringify(oldActions.sort()) !== JSON.stringify(newActions.sort())) {
+      lastStateChangeAt.value = Date.now()
+    }
   }
 
   const executeAction = async (action: ActionType, tileId?: string, tileIds?: string[]) => {

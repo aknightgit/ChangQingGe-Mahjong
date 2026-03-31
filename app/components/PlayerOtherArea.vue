@@ -316,7 +316,7 @@ const getArrowChar = (sourcePos: number): string => {
   gap: 2px;
 }
 
-/* 左家/右家：整体旋转，内部和对家一样水平排列 */
+/* 左家/右家：水平排列，平行于牌桌边缘 */
 .player-other--left .player-other-hand,
 .player-other--right .player-other-hand {
   display: flex;
@@ -325,19 +325,9 @@ const getArrowChar = (sourcePos: number): string => {
   gap: 2px;
   align-items: center;
 }
-/* 左家手牌：整体顺时针旋转90° */
-.player-other--left .player-other-hand {
-  transform: rotate(90deg);
-  transform-origin: center center;
-}
-/* 右家手牌：整体逆时针旋转90° */
-.player-other--right .player-other-hand {
-  transform: rotate(-90deg);
-  transform-origin: center center;
-}
-/* 左右手牌尺寸：和对家一样 */
-.player-other--left .player-other-hand :deep(.tile),
-.player-other--right .player-other-hand :deep(.tile) {
+
+/* 左家手牌：水平排列，牌横置（宽>高），平行于牌桌边缘 */
+.player-other--left .player-other-hand :deep(.tile) {
   width: 40px;
   height: 28px;
   flex-shrink: 0;
@@ -348,12 +338,16 @@ const getArrowChar = (sourcePos: number): string => {
   box-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
-/* 左家手牌：已改为容器整体旋转，不需要逐张rotate */
-.player-other-hand--left {
-}
-
-/* 右家手牌：已改为容器整体旋转，不需要逐张rotate */
-.player-other-hand--right {
+/* 右家手牌：水平排列，牌横置（宽>高），平行于牌桌边缘 */
+.player-other--right .player-other-hand :deep(.tile) {
+  width: 40px;
+  height: 28px;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
 /* 左家门口：靠边缘 */

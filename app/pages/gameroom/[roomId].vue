@@ -124,7 +124,7 @@
                 </template>
                 <template v-else>
                   <span class="waiting-avatar waiting-avatar--empty">👤</span>
-                  <span class="waiting-name waiting-name--empty">等待加入...</span>
+                  <span class="waiting-name waiting-name--empty">虚位以待</span>
                 </template>
               </div>
             </div>
@@ -1551,7 +1551,7 @@ const onSaveSettle = async () => {
 // 玩家操作卡片
 const showPlayerCard = ref(false)
 const playerCardPlayer = ref<any>(null)
-const isBotPlayer = (p: any) => p?.name?.startsWith('AI-') || false
+const isBotPlayer = (p: any) => p?.name?.startsWith('AI-') || p?.name?.startsWith('电脑') || false
 const isSpectator = computed(() => {
   if (!gameState.value?.players || !currentPlayer.value) return true
   return !gameState.value.players.some((p: any) => p.id === currentPlayer.value?.id)
@@ -2167,16 +2167,17 @@ const forceDiscard = async (p: Player) => {
 }
 .settle-btn-header {
   flex: 0 0 auto;
-  padding: 2px 10px;
+  padding: 2px 15px;
   font-size: 0.7rem;
   border-radius: 6px;
-  background: rgba(60, 60, 60, 0.85);
-  color: #ccc;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #e53935;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   cursor: pointer;
   white-space: nowrap;
+  min-width: 108px;
 }
-.settle-btn-header:hover { background: rgba(80, 80, 80, 0.9); color: #fff; }
+.settle-btn-header:hover { background: #c62828; color: #fff; }
 
 .mahjong-title {
   font-size: 1.4rem;
