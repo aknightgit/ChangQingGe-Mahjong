@@ -1,10 +1,8 @@
 {
-  "savedAt": "2026-03-31T05:15:21.164Z",
-  "round": 0,
   "metrics": {
-    "fitness": 39200,
-    "huRate": 0.068,
-    "drawRate": 0.747,
+    "fitness": 13400,
+    "huRate": 0.055,
+    "drawRate": 0.773,
     "totalGames": 3,
     "note": "AI-AK iterative training - 1x3"
   },

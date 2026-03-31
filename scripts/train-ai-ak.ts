@@ -1260,6 +1260,59 @@ interface EvalResult {
   worstSingleLoss: { loser: string; score: number; gameIdx: number; result: GameResult } | null
 }
 
+function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy: BotPolicy): string {
+  const ts = new Date().toISOString()
+  const drawGames = evalResult.totalGames - evalResult.winGames
+  const loss = evalResult.worstSingleLoss
+  const lines: string[] = []
+
+  lines.push(`## Round ${roundNo} (${ts})`)
+  lines.push('')
+  lines.push('### 训练指标')
+  lines.push(`- Games: ${evalResult.totalGames}`)
+  lines.push(`- 胡牌局: ${evalResult.winGames} (${(evalResult.winGames / Math.max(1, evalResult.totalGames) * 100).toFixed(2)}%)`)
+  lines.push(`- 流局: ${drawGames} (${(drawGames / Math.max(1, evalResult.totalGames) * 100).toFixed(2)}%)`)
+  lines.push(`- 自摸率(胡牌中): ${(evalResult.selfDrawGames / Math.max(1, evalResult.winGames) * 100).toFixed(2)}%`)
+  lines.push(`- Fitness: ${evalResult.akScore.toFixed(4)}`)
+  lines.push('')
+
+  lines.push('### 本轮最佳策略参数')
+  lines.push('```json')
+  lines.push(JSON.stringify(bestPolicy, null, 2))
+  lines.push('```')
+  lines.push('')
+
+  lines.push('### 最大单人亏损局明细（本轮）')
+  if (!loss) {
+    lines.push('- 本轮无有效对局数据')
+    return lines.join('\n')
+  }
+
+  lines.push(`- 最大亏损: ${loss.loser} ${loss.score} 点（绝对值 ${Math.abs(loss.score)}）`)
+  lines.push(`- 局号: ${loss.gameIdx}`)
+  lines.push(`- 倍数: ×${loss.result.multiplier}`)
+  lines.push('- snapshots:')
+  for (const snap of loss.result.snapshots || []) {
+    lines.push(`  - ${snap.name}`)
+    lines.push(`    - hand: ${snap.hand || '(空)'}`)
+    lines.push(`    - melds: ${snap.melds.length > 0 ? snap.melds.join(' ; ') : '(无)'}`)
+    lines.push(`    - flowers: ${snap.flowers.length > 0 ? snap.flowers.join(' ') : '(无)'}`)
+    lines.push(`    - meldSources: [${snap.meldSources.join(', ')}]`)
+  }
+
+  lines.push('- settlementLog:')
+  if (loss.result.settlementLog && loss.result.settlementLog.length > 0) {
+    for (const s of loss.result.settlementLog) {
+      const multStr = s.mult ? ` (${s.mult}x)` : ''
+      lines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
+    }
+  } else {
+    lines.push('  - (无)')
+  }
+
+  return lines.join('\n')
+}
+
 function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: number): EvalResult {
   const scores: Record<string, number> = {}
   const wins: Record<string, number> = {}
@@ -1454,45 +1507,9 @@ function main() {
     console.log(roundLines.join('\n'))
     logLines.push(...roundLines)
 
-    // 模板格式输出
     if (bestEvalResult) {
-      const er = bestEvalResult
-      const ts = new Date().toISOString()
-      logLines.push(`\n## Round ${round} (${ts})\n`)
-      logLines.push('### 训练指标')
-      logLines.push(`- Games: ${er.totalGames}`)
-      logLines.push(`- 胡牌局: ${er.winGames} (${(er.winGames/er.totalGames*100).toFixed(1)}%)`)
-      logLines.push(`- 流局: ${er.draws} (${(er.draws/er.totalGames*100).toFixed(1)}%)`)
-      logLines.push(`- 自摸率(胡牌中): ${(er.selfDrawGames/Math.max(1,er.winGames)*100).toFixed(1)}%`)
-      logLines.push(`- Fitness: ${er.akScore}\n`)
-
-      // 最大单人亏损局明细
-      if (roundWorstLoss) {
-        const wl = roundWorstLoss
-        logLines.push('### 最大单人亏损局明细（本轮）')
-        logLines.push(`- 最大亏损: ${wl.loser} ${wl.score} 点（绝对值 ${Math.abs(wl.score)}）`)
-        logLines.push(`- 局号: ${wl.gameIdx}`)
-        logLines.push(`- 倍数: ×${wl.result.multiplier}`)
-        logLines.push('')
-        logLines.push('- 胡牌玩家明细:')
-        if (wl.result.snapshots) {
-          for (const snap of wl.result.snapshots) {
-            logLines.push(`  - ${snap.name}: 手牌 ${snap.hand}`)
-            if (snap.melds.length > 0) logLines.push(`    副露: ${snap.melds.join(' ; ')}`)
-            if (snap.flowers.length > 0) logLines.push(`    花牌: ${snap.flowers.join(' ')}`)
-          }
-        }
-        logLines.push('')
-        if (wl.result.settlementLog && wl.result.settlementLog.length > 0) {
-          logLines.push('- 结算逐笔明细:')
-          for (const s of wl.result.settlementLog) {
-            const multStr = s.mult ? ` (${s.mult}x)` : ''
-            logLines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
-          }
-        }
-        logLines.push('')
-      }
-    }  // End if bestEvalResult
+      logLines.push('', formatRoundMarkdown(round, bestEvalResult, roundBestPolicy), '')
+    }
   }  // End round loop
 
   // Final evaluation
@@ -1549,6 +1566,32 @@ function main() {
 
   console.log(finalLines.join('\n'))
   logLines.push(...finalLines)
+
+  if (finalEval.worstSingleLoss) {
+    const gl = finalEval.worstSingleLoss
+    logLines.push('')
+    logLines.push('## 全局最大单人亏损局（跨所有轮次）')
+    logLines.push(`- 最大亏损: ${gl.loser} ${gl.score} 点（绝对值 ${Math.abs(gl.score)}）`)
+    logLines.push(`- 局号: ${gl.gameIdx}`)
+    logLines.push(`- 倍数: ×${gl.result.multiplier}`)
+    logLines.push('- snapshots:')
+    for (const snap of gl.result.snapshots || []) {
+      logLines.push(`  - ${snap.name}`)
+      logLines.push(`    - hand: ${snap.hand || '(空)'}`)
+      logLines.push(`    - melds: ${snap.melds.length > 0 ? snap.melds.join(' ; ') : '(无)'}`)
+      logLines.push(`    - flowers: ${snap.flowers.length > 0 ? snap.flowers.join(' ') : '(无)'}`)
+      logLines.push(`    - meldSources: [${snap.meldSources.join(', ')}]`)
+    }
+    logLines.push('- settlementLog:')
+    if (gl.result.settlementLog && gl.result.settlementLog.length > 0) {
+      for (const s of gl.result.settlementLog) {
+        const multStr = s.mult ? ` (${s.mult}x)` : ''
+        logLines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
+      }
+    } else {
+      logLines.push('  - (无)')
+    }
+  }
 
   // Save
   const metrics = {
