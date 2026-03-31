@@ -1086,13 +1086,18 @@ const overlayTitle = computed(() => {
   if (roomDismissedReason.value === GameEndReason.OWNER_LEFT) {
     return '房间已关闭'
   }
+  if (overlayReason.value === GameEndReason.WALL_EXHAUSTED) {
+    return '🀄 流局'
+  }
   return '游戏结束'
 })
 const overlayMessage = computed(() => {
   const reason = overlayReason.value
   switch (reason) {
-    case GameEndReason.WALL_EXHAUSTED:
-      return '牌墙已空，无法继续摸牌。'
+    case GameEndReason.WALL_EXHAUSTED: {
+      const gMul = gameState.value?.globalMultiplier ?? 1
+      return `牌墙已空，全局倍数翻倍（当前 ×${gMul}）`
+    }
     case GameEndReason.LAST_PLAYER:
       return '只剩一名玩家，本轮结束。'
     case GameEndReason.OWNER_LEFT:

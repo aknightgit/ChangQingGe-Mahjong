@@ -96,6 +96,8 @@ class GameManager {
   private schedulePendingActionTimeout(gameId: string): void {
     this.clearPendingActionTimer(gameId);
 
+    // 等freeze延迟（1000ms）结束后才开始pending计时
+    // 这样human玩家在freeze期间看清UI后，还有完整的1s反应时间
     const timer = setTimeout(async () => {
       try {
         const game = await this.getGame(gameId);
@@ -120,19 +122,22 @@ class GameManager {
       } finally {
         this.pendingActionTimers.delete(gameId);
       }
-    }, 1000); // 1秒窗口
+    }, 2500); // 2.5秒窗口（debounce 1000ms + human反应 1000ms + 保险 500ms）
 
     this.pendingActionTimers.set(gameId, timer);
   }
 
   /**
    * 让 bot 处理自己的 pending action（碰/杠/胡/吃/过）
+   * 延迟300-600ms模拟"思考时间"，给人类玩家反应窗口
    */
   private handleBotPendingActions(gameId: string): void {
+    const botThinkMs = 300 + Math.floor(Math.random() * 300); // 300-600ms 思考延迟
     setTimeout(async () => {
       try {
         const game = await this.getGame(gameId);
         if (!game || game.phase !== GamePhase.PLAYING) return;
+        if (game.pendingActions.length === 0) return; // 已被人类玩家抢先
 
         let claimedAction = false;
 
