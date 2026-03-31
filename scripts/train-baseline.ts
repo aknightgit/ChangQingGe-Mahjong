@@ -1,0 +1,1865 @@
+/**
+ * AI-AK 策略迭代训练器
+ * 4个bot: AI-AK(优化目标), AI-小胖, AI-阿水, AI-老赵(固定)
+ * 运行 10 rounds × 500 games
+ * 每轮只调AI-AK参数，目标: 最高盈利总分
+ * 输出到 training-output/
+ */
+import {
+  shuffleTiles, isFlower, groupTiles, sortTiles, tilesEqual
+} from '../server/utils/tiles'
+import {
+  canWin, buildWildTileChecker,
+  detectHandTypes, HandType, isTing
+} from '../server/utils/handValidator'
+import {
+  calculateScore
+} from '../server/utils/scoring'
+import { TileSuit, MeldType, WinType, type Tile, type Meld } from '../server/types/game'
+import * as fs from 'fs'
+import * as path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+const ROUNDS = parseInt(process.argv[2] || '10')
+const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000')
+const BASELINE_MODE = process.argv[4] === '--baseline'  // 基线训练：优化指标而非得分
+const SETTLEMENT_MULT = 10
+const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
+const OUT_DIR = path.resolve(__dirname, '..', 'training-output')
+
+// ========== Bot Policy (长清阁规则) ==========
+interface BotPolicy {
+  id: string
+  selfWinChance: number; discardHuChance: number
+  selfWinWildBoost: number; discardHuWildPenalty: number; discardHuMenQingPenalty: number
+  pengChance: number; kongChance: number; chowChance: number; anKongChance: number
+  pengWildBoost: number; kongWildBoost: number; chowWildPenalty: number
+  menqingKeepBonus: number; meldPenalty: number
+  allPungsPursuit: number; pureFlushPursuit: number; halfFlushWeight: number
+  sevenPairsPursuit: number; allHonorsPursuit: number; allHonorsPungsPursuit: number
+  qingPengPursuit: number; hunPengPursuit: number
+  windEastKeep: number; windSouthKeep: number; windWestKeep: number; windNorthKeep: number
+  windGeneralKeep: number
+  dragonRedKeep: number; dragonGreenKeep: number; dragonWhiteKeep: number; dragonGeneralKeep: number
+  pairWeight: number; nearWeight: number; tripletKeepBonus: number; terminalPenalty: number
+  wildKeepPenalty: number; wildBailoutThreshold: number
+  wild0Aggression: number; wild1Aggression: number; wild2Aggression: number; wild3PlusAggression: number
+  wild1RouteMeldPush: number; wild2RouteMeldPush: number; wild3RouteMeldPush: number
+  wild1RouteFlushBoost: number; wild2RouteFlushBoost: number; wild3RouteFlushBoost: number
+  wild1RouteHonorsBoost: number; wild2RouteHonorsBoost: number; wild3RouteHonorsBoost: number
+  wild1RouteAllPungsBoost: number; wild2RouteAllPungsBoost: number; wild3RouteAllPungsBoost: number
+  wildMultLowAggression: number; wildMultMidAggression: number; wildMultHighAggression: number
+  wild0MenqingKeep: number; wild1MenqingKeep: number; wild2MenqingKeep: number
+  wild1BaoPush: number; wild2BaoPush: number; wild3BaoPush: number
+  multLowSpeedBias: number; multHighValueBias: number
+  discardObsFlushBoost: number; discardObsWeight: number
+
+  // ====== 互包追踪 ======
+  bao2ClaimPenalty: number        // 同家2口后的吃碰惩罚（即将触发包三）
+  bao3AvoidThreshold: number      // 同家3口后的吃碰完全规避阈值
+  baoSelfClaimCaution: number     // 自己被别人吃的口数对策略的影响
+
+  // ====== 牌墙剩余 ======
+  wallEarlySpeedPush: number      // 牌墙早期（>80张）：可以慢做牌
+  wallMidBalance: number          // 牌墙中期（40-80张）：平衡
+  wallLateDefense: number         // 牌墙晚期（<40张）：防守优先
+
+  // ====== 对手听牌/出牌分析 ======
+  oppTingDetection: number        // 对手听牌检测敏感度
+  safeTilePriority: number        // 安全牌优先级（对手听牌时打安全牌）
+  terminalDiscardTingSignal: number // 对手打出幺九→可能已听牌的信号权重
+  wildDiaoKeepBonus: number         // 百搭大吊保留奖励（留百搭做最后1张→听所有牌）
+  wildDiaoFlushBoost: number        // 百搭大吊+混一色路线加成
+  wildDiaoPungBoost: number         // 百搭大吊+碰碰胡路线加成
+  // ====== 积分榜动态策略 ======
+  scoreBehindRiskBoost: number      // 积分落后时的冒险意愿增强（越落后越激进）
+  scoreLeadDefenseBoost: number     // 积分领先时的防守意识增强
+  hand5RouteBias: number; hand6RouteBias: number; hand7RouteBias: number
+  multLowHand5AllPungs: number; multLowHand5HalfFlush: number
+  multHighHand5AllPungs: number; multHighHand5HalfFlush: number
+  multLowHand6AllPungs: number; multLowHand6HalfFlush: number; multLowHand6PureFlush: number
+  multHighHand6AllPungs: number; multHighHand6HalfFlush: number; multHighHand6PureFlush: number
+  multLowHand7AllPungs: number; multLowHand7HalfFlush: number; multLowHand7PureFlush: number
+  multHighHand7AllPungs: number; multHighHand7HalfFlush: number; multHighHand7PureFlush: number
+  multHighHonorStart: number
+  speedVsValueBalance: number; defenseRiskAversion: number; wallTilesImpact: number
+  baoRiskAversion: number; baoThreshold: number
+  anKongAggression: number; minkanAggression: number; kakanAggression: number; robKongAwareness: number
+  noWildDoubleAwareness: number; menqingDoubleAwareness: number
+  flushVsPungsBalance: number; honorVsSuitedBalance: number; sequenceVsTripletBias: number
+}
+
+const DEFAULT_POLICY: BotPolicy = {
+  id: 'default',
+  selfWinChance: 0.8, discardHuChance: 0.8,
+  selfWinWildBoost: 0.1, discardHuWildPenalty: 0.4, discardHuMenQingPenalty: 0.14,
+  pengChance: 0.79, kongChance: 0.47, chowChance: 0.03, anKongChance: 0.95,
+  pengWildBoost: 0.06, kongWildBoost: 0.14, chowWildPenalty: 0.18,
+  menqingKeepBonus: 5.0, meldPenalty: 0.05,
+  allPungsPursuit: 0.5, pureFlushPursuit: 0.3, halfFlushWeight: 0.4,
+  sevenPairsPursuit: 0.2, allHonorsPursuit: 0.1, allHonorsPungsPursuit: 0.05,
+  qingPengPursuit: 0.15, hunPengPursuit: 0.3,
+  windEastKeep: 2.0, windSouthKeep: 1.0, windWestKeep: 1.0, windNorthKeep: 1.0,
+  windGeneralKeep: 1.5,
+  dragonRedKeep: 3.0, dragonGreenKeep: 3.0, dragonWhiteKeep: 2.5, dragonGeneralKeep: 3.0,
+  pairWeight: 4.0, nearWeight: 3.6, tripletKeepBonus: 4.7, terminalPenalty: 1.0,
+  wildKeepPenalty: 1400, wildBailoutThreshold: 3,
+  wild0Aggression: 0.3, wild1Aggression: 0.5, wild2Aggression: 0.7, wild3PlusAggression: 0.9,
+  wild1RouteMeldPush: 0.3, wild2RouteMeldPush: 0.6, wild3RouteMeldPush: 0.9,
+  wild1RouteFlushBoost: 0.1, wild2RouteFlushBoost: 0.3, wild3RouteFlushBoost: 0.5,
+  wild1RouteHonorsBoost: 0.05, wild2RouteHonorsBoost: 0.2, wild3RouteHonorsBoost: 0.4,
+  wild1RouteAllPungsBoost: 0.1, wild2RouteAllPungsBoost: 0.3, wild3RouteAllPungsBoost: 0.5,
+  wildMultLowAggression: 0.6, wildMultMidAggression: 0.5, wildMultHighAggression: 0.8,
+  wild0MenqingKeep: 3.0, wild1MenqingKeep: 2.0, wild2MenqingKeep: 1.0,
+  wild1BaoPush: 0.2, wild2BaoPush: 0.5, wild3BaoPush: 0.8,
+  multLowSpeedBias: 0.6, multHighValueBias: 0.8,
+  discardObsFlushBoost: 0.5, discardObsWeight: 0.3,
+  bao2ClaimPenalty: 0.5, bao3AvoidThreshold: 0.8, baoSelfClaimCaution: 0.3,
+  wallEarlySpeedPush: 0.3, wallMidBalance: 0.5, wallLateDefense: 0.8,
+  oppTingDetection: 0.5, safeTilePriority: 0.7, terminalDiscardTingSignal: 0.3,
+  wildDiaoKeepBonus: 3.0, wildDiaoFlushBoost: 2.0, wildDiaoPungBoost: 2.0,
+  scoreBehindRiskBoost: 1.5, scoreLeadDefenseBoost: 1.0,
+  hand5RouteBias: 0.3, hand6RouteBias: 0.6, hand7RouteBias: 0.9,
+  multLowHand5AllPungs: 0.4, multLowHand5HalfFlush: 0.3,
+  multHighHand5AllPungs: 0.3, multHighHand5HalfFlush: 0.5,
+  multLowHand6AllPungs: 0.3, multLowHand6HalfFlush: 0.4, multLowHand6PureFlush: 0.2,
+  multHighHand6AllPungs: 0.2, multHighHand6HalfFlush: 0.5, multHighHand6PureFlush: 0.4,
+  multLowHand7AllPungs: 0.2, multLowHand7HalfFlush: 0.4, multLowHand7PureFlush: 0.3,
+  multHighHand7AllPungs: 0.1, multHighHand7HalfFlush: 0.4, multHighHand7PureFlush: 0.7,
+  multHighHonorStart: 0.5,
+  speedVsValueBalance: 0.5, defenseRiskAversion: 0.3, wallTilesImpact: 0.2,
+  baoRiskAversion: 0.5, baoThreshold: 2,
+  anKongAggression: 0.95, minkanAggression: 0.3, kakanAggression: 0.5, robKongAwareness: 0.6,
+  noWildDoubleAwareness: 0.5, menqingDoubleAwareness: 0.5,
+  flushVsPungsBalance: 0.0, honorVsSuitedBalance: 0.0, sequenceVsTripletBias: 0.0,
+}
+
+// ========== Mutatable parameters for AI-AK (长清阁规则) ==========
+const MUTATE_KEYS: (keyof BotPolicy)[] = [
+  'selfWinChance', 'discardHuChance',
+  'selfWinWildBoost', 'discardHuWildPenalty', 'discardHuMenQingPenalty',
+  'pengChance', 'kongChance', 'chowChance', 'anKongChance',
+  'pengWildBoost', 'kongWildBoost', 'chowWildPenalty',
+  'menqingKeepBonus', 'meldPenalty',
+  'allPungsPursuit', 'pureFlushPursuit', 'halfFlushWeight',
+  'sevenPairsPursuit', 'allHonorsPursuit', 'allHonorsPungsPursuit',
+  'qingPengPursuit', 'hunPengPursuit',
+  'windEastKeep', 'windSouthKeep', 'windWestKeep', 'windNorthKeep', 'windGeneralKeep',
+  'dragonRedKeep', 'dragonGreenKeep', 'dragonWhiteKeep', 'dragonGeneralKeep',
+  'pairWeight', 'nearWeight', 'tripletKeepBonus', 'terminalPenalty',
+  'wildKeepPenalty', 'wildBailoutThreshold',
+  'wild0Aggression', 'wild1Aggression', 'wild2Aggression', 'wild3PlusAggression',
+  'wild1RouteMeldPush', 'wild2RouteMeldPush', 'wild3RouteMeldPush',
+  'wild1RouteFlushBoost', 'wild2RouteFlushBoost', 'wild3RouteFlushBoost',
+  'wild1RouteHonorsBoost', 'wild2RouteHonorsBoost', 'wild3RouteHonorsBoost',
+  'wild1RouteAllPungsBoost', 'wild2RouteAllPungsBoost', 'wild3RouteAllPungsBoost',
+  'wildMultLowAggression', 'wildMultMidAggression', 'wildMultHighAggression',
+  'wild0MenqingKeep', 'wild1MenqingKeep', 'wild2MenqingKeep',
+  'wild1BaoPush', 'wild2BaoPush', 'wild3BaoPush',
+  'multLowSpeedBias', 'multHighValueBias',
+  'discardObsFlushBoost', 'discardObsWeight',
+  'bao2ClaimPenalty', 'bao3AvoidThreshold', 'baoSelfClaimCaution',
+  'wallEarlySpeedPush', 'wallMidBalance', 'wallLateDefense',
+  'oppTingDetection', 'safeTilePriority', 'terminalDiscardTingSignal',
+  'wildDiaoKeepBonus', 'wildDiaoFlushBoost', 'wildDiaoPungBoost',
+  'scoreBehindRiskBoost', 'scoreLeadDefenseBoost',
+  'hand5RouteBias', 'hand6RouteBias', 'hand7RouteBias',
+  'multLowHand5AllPungs', 'multLowHand5HalfFlush',
+  'multHighHand5AllPungs', 'multHighHand5HalfFlush',
+  'multLowHand6AllPungs', 'multLowHand6HalfFlush', 'multLowHand6PureFlush',
+  'multHighHand6AllPungs', 'multHighHand6HalfFlush', 'multHighHand6PureFlush',
+  'multLowHand7AllPungs', 'multLowHand7HalfFlush', 'multLowHand7PureFlush',
+  'multHighHand7AllPungs', 'multHighHand7HalfFlush', 'multHighHand7PureFlush',
+  'multHighHonorStart',
+  'speedVsValueBalance', 'defenseRiskAversion', 'wallTilesImpact',
+  'baoRiskAversion', 'baoThreshold',
+  'anKongAggression', 'minkanAggression', 'kakanAggression', 'robKongAwareness',
+  'noWildDoubleAwareness', 'menqingDoubleAwareness',
+  'flushVsPungsBalance', 'honorVsSuitedBalance', 'sequenceVsTripletBias',
+]
+
+const PARAM_RANGES: Record<string, { min: number; max: number; step: number }> = {
+  selfWinChance:              { min: 0.3,  max: 1.0,  step: 0.05 },
+  discardHuChance:            { min: 0.3,  max: 1.0,  step: 0.05 },
+  selfWinWildBoost:           { min: 0.0,  max: 0.3,  step: 0.02 },
+  discardHuWildPenalty:       { min: 0.0,  max: 0.8,  step: 0.03 },
+  discardHuMenQingPenalty:    { min: 0.0,  max: 0.4,  step: 0.02 },
+  pengChance:                 { min: 0.3,  max: 1.0,  step: 0.05 },
+  kongChance:                 { min: 0.1,  max: 1.0,  step: 0.05 },
+  chowChance:                 { min: 0.0,  max: 0.5,  step: 0.02 },
+  anKongChance:               { min: 0.5,  max: 1.0,  step: 0.05 },
+  pengWildBoost:              { min: 0.0,  max: 0.3,  step: 0.02 },
+  kongWildBoost:              { min: 0.0,  max: 0.4,  step: 0.02 },
+  chowWildPenalty:            { min: 0.0,  max: 0.5,  step: 0.02 },
+  menqingKeepBonus:           { min: 0.0,  max: 15.0, step: 0.5 },
+  meldPenalty:                { min: 0.0,  max: 0.3,  step: 0.02 },
+  allPungsPursuit:            { min: 0.0,  max: 2.0,  step: 0.1 },
+  pureFlushPursuit:           { min: 0.0,  max: 2.0,  step: 0.1 },
+  halfFlushWeight:            { min: 0.0,  max: 2.0,  step: 0.1 },
+  sevenPairsPursuit:          { min: 0.0,  max: 2.0,  step: 0.1 },
+  allHonorsPursuit:           { min: 0.0,  max: 2.0,  step: 0.1 },
+  allHonorsPungsPursuit:      { min: 0.0,  max: 2.0,  step: 0.1 },
+  qingPengPursuit:            { min: 0.0,  max: 2.0,  step: 0.1 },
+  hunPengPursuit:             { min: 0.0,  max: 2.0,  step: 0.1 },
+  windEastKeep:               { min: 0.0,  max: 5.0,  step: 0.3 },
+  windSouthKeep:              { min: 0.0,  max: 5.0,  step: 0.3 },
+  windWestKeep:               { min: 0.0,  max: 5.0,  step: 0.3 },
+  windNorthKeep:              { min: 0.0,  max: 5.0,  step: 0.3 },
+  windGeneralKeep:            { min: 0.0,  max: 5.0,  step: 0.3 },
+  dragonRedKeep:              { min: 0.0,  max: 8.0,  step: 0.3 },
+  dragonGreenKeep:            { min: 0.0,  max: 8.0,  step: 0.3 },
+  dragonWhiteKeep:            { min: 0.0,  max: 8.0,  step: 0.3 },
+  dragonGeneralKeep:          { min: 0.0,  max: 8.0,  step: 0.3 },
+  pairWeight:                 { min: 1.0,  max: 10.0, step: 0.3 },
+  nearWeight:                 { min: 1.0,  max: 8.0,  step: 0.2 },
+  tripletKeepBonus:           { min: 1.0,  max: 12.0, step: 0.3 },
+  terminalPenalty:            { min: 0.0,  max: 4.0,  step: 0.2 },
+  wildKeepPenalty:            { min: 500,  max: 3000, step: 100 },
+  wildBailoutThreshold:       { min: 1,    max: 5,    step: 1 },
+  wild0Aggression:            { min: 0.0,  max: 1.0,  step: 0.05 },
+  wild1Aggression:            { min: 0.0,  max: 1.0,  step: 0.05 },
+  wild2Aggression:            { min: 0.0,  max: 1.0,  step: 0.05 },
+  wild3PlusAggression:        { min: 0.0,  max: 1.0,  step: 0.05 },
+  wild1RouteMeldPush:         { min: 0.0,  max: 1.0,  step: 0.05 },
+  wild2RouteMeldPush:         { min: 0.0,  max: 1.0,  step: 0.05 },
+  wild3RouteMeldPush:         { min: 0.0,  max: 1.0,  step: 0.05 },
+  wild1RouteFlushBoost:       { min: 0.0,  max: 1.0,  step: 0.05 },
+  wild2RouteFlushBoost:       { min: 0.0,  max: 1.0,  step: 0.05 },
+  wild3RouteFlushBoost:       { min: 0.0,  max: 1.0,  step: 0.05 },
+  wild1RouteHonorsBoost:      { min: 0.0,  max: 1.0,  step: 0.05 },
+  wild2RouteHonorsBoost:      { min: 0.0,  max: 1.0,  step: 0.05 },
+  wild3RouteHonorsBoost:      { min: 0.0,  max: 1.0,  step: 0.05 },
+  wild1RouteAllPungsBoost:    { min: 0.0,  max: 1.0,  step: 0.05 },
+  wild2RouteAllPungsBoost:    { min: 0.0,  max: 1.0,  step: 0.05 },
+  wild3RouteAllPungsBoost:    { min: 0.0,  max: 1.0,  step: 0.05 },
+  wildMultLowAggression:      { min: 0.0,  max: 1.0,  step: 0.05 },
+  wildMultMidAggression:      { min: 0.0,  max: 1.0,  step: 0.05 },
+  wildMultHighAggression:     { min: 0.0,  max: 1.0,  step: 0.05 },
+  wild0MenqingKeep:           { min: 0.0,  max: 8.0,  step: 0.3 },
+  wild1MenqingKeep:           { min: 0.0,  max: 8.0,  step: 0.3 },
+  wild2MenqingKeep:           { min: 0.0,  max: 8.0,  step: 0.3 },
+  wild1BaoPush:               { min: 0.0,  max: 2.0,  step: 0.1 },
+  wild2BaoPush:               { min: 0.0,  max: 2.0,  step: 0.1 },
+  wild3BaoPush:               { min: 0.0,  max: 2.0,  step: 0.1 },
+  multLowSpeedBias:           { min: 0.0,  max: 1.0,  step: 0.05 },
+  multHighValueBias:          { min: 0.0,  max: 1.0,  step: 0.05 },
+  discardObsFlushBoost:       { min: 0.0,  max: 2.0,  step: 0.1 },
+  discardObsWeight:           { min: 0.0,  max: 1.0,  step: 0.05 },
+  bao2ClaimPenalty:           { min: 0.0,  max: 2.0,  step: 0.1 },
+  bao3AvoidThreshold:         { min: 0.0,  max: 1.0,  step: 0.05 },
+  baoSelfClaimCaution:        { min: 0.0,  max: 1.0,  step: 0.05 },
+  wallEarlySpeedPush:         { min: 0.0,  max: 1.0,  step: 0.05 },
+  wallMidBalance:             { min: 0.0,  max: 1.0,  step: 0.05 },
+  wallLateDefense:            { min: 0.0,  max: 1.0,  step: 0.05 },
+  oppTingDetection:           { min: 0.0,  max: 1.0,  step: 0.05 },
+  safeTilePriority:           { min: 0.0,  max: 1.0,  step: 0.05 },
+  terminalDiscardTingSignal:  { min: 0.0,  max: 1.0,  step: 0.05 },
+  wildDiaoKeepBonus:          { min: 0.0,  max: 10.0, step: 0.5 },
+  wildDiaoFlushBoost:         { min: 0.0,  max: 5.0,  step: 0.25 },
+  wildDiaoPungBoost:          { min: 0.0,  max: 5.0,  step: 0.25 },
+  scoreBehindRiskBoost:       { min: 0.0,  max: 5.0,  step: 0.25 },
+  scoreLeadDefenseBoost:      { min: 0.0,  max: 3.0,  step: 0.25 },
+  hand5RouteBias:             { min: 0.0,  max: 1.0,  step: 0.05 },
+  hand6RouteBias:             { min: 0.0,  max: 1.0,  step: 0.05 },
+  hand7RouteBias:             { min: 0.0,  max: 1.0,  step: 0.05 },
+  multLowHand5AllPungs:       { min: 0.0,  max: 1.0,  step: 0.05 },
+  multLowHand5HalfFlush:      { min: 0.0,  max: 1.0,  step: 0.05 },
+  multHighHand5AllPungs:      { min: 0.0,  max: 1.0,  step: 0.05 },
+  multHighHand5HalfFlush:     { min: 0.0,  max: 1.0,  step: 0.05 },
+  multLowHand6AllPungs:       { min: 0.0,  max: 1.0,  step: 0.05 },
+  multLowHand6HalfFlush:      { min: 0.0,  max: 1.0,  step: 0.05 },
+  multLowHand6PureFlush:      { min: 0.0,  max: 1.0,  step: 0.05 },
+  multHighHand6AllPungs:      { min: 0.0,  max: 1.0,  step: 0.05 },
+  multHighHand6HalfFlush:     { min: 0.0,  max: 1.0,  step: 0.05 },
+  multHighHand6PureFlush:     { min: 0.0,  max: 1.0,  step: 0.05 },
+  multLowHand7AllPungs:       { min: 0.0,  max: 1.0,  step: 0.05 },
+  multLowHand7HalfFlush:      { min: 0.0,  max: 1.0,  step: 0.05 },
+  multLowHand7PureFlush:      { min: 0.0,  max: 1.0,  step: 0.05 },
+  multHighHand7AllPungs:      { min: 0.0,  max: 1.0,  step: 0.05 },
+  multHighHand7HalfFlush:     { min: 0.0,  max: 1.0,  step: 0.05 },
+  multHighHand7PureFlush:     { min: 0.0,  max: 1.0,  step: 0.05 },
+  multHighHonorStart:         { min: 0.0,  max: 2.0,  step: 0.1 },
+  speedVsValueBalance:        { min: 0.0,  max: 1.0,  step: 0.05 },
+  defenseRiskAversion:        { min: 0.0,  max: 1.0,  step: 0.05 },
+  wallTilesImpact:            { min: 0.0,  max: 1.0,  step: 0.05 },
+  baoRiskAversion:            { min: 0.0,  max: 2.0,  step: 0.1 },
+  baoThreshold:               { min: 1,    max: 4,    step: 1 },
+  anKongAggression:           { min: 0.5,  max: 1.0,  step: 0.05 },
+  minkanAggression:           { min: 0.0,  max: 1.0,  step: 0.05 },
+  kakanAggression:            { min: 0.0,  max: 1.0,  step: 0.05 },
+  robKongAwareness:           { min: 0.0,  max: 1.0,  step: 0.05 },
+  noWildDoubleAwareness:      { min: 0.0,  max: 2.0,  step: 0.1 },
+  menqingDoubleAwareness:     { min: 0.0,  max: 2.0,  step: 0.1 },
+  flushVsPungsBalance:        { min: -2.0, max: 2.0,  step: 0.1 },
+  honorVsSuitedBalance:       { min: -2.0, max: 2.0,  step: 0.1 },
+  sequenceVsTripletBias:      { min: -2.0, max: 2.0,  step: 0.1 },
+}
+
+function loadCharacter(name: string): BotPolicy {
+  const filePath = path.join(CHAR_DIR, `${name}.json`)
+  try {
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+    return { ...DEFAULT_POLICY, ...data.policy, id: data.policy?.id || name }
+  } catch (e) {
+    console.warn(`[Character] Failed to load ${name}, using default`)
+    return { ...DEFAULT_POLICY, id: name }
+  }
+}
+
+function saveCharacter(name: string, policy: BotPolicy, metrics: any): void {
+  const filePath = path.join(CHAR_DIR, `${name}.json`)
+  const data = { savedAt: new Date().toISOString(), round: 0, metrics, policy }
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')
+}
+
+// ========== Mutate AI-AK policy ==========
+function mutatePolicy(base: BotPolicy, intensity: number = 1.0): BotPolicy {
+  const mutated = { ...base }
+  // Mutate 3-6 random parameters each round
+  const numChanges = 3 + Math.floor(Math.random() * 4)
+  const keys = [...MUTATE_KEYS].sort(() => Math.random() - 0.5).slice(0, numChanges)
+
+  for (const key of keys) {
+    const range = PARAM_RANGES[key]
+    if (!range) { console.error('[DEBUG] key not in PARAM_RANGES:', key); continue }
+    const rMin = Number(range.min)
+    const rMax = Number(range.max)
+    if (!Number.isFinite(rMin) || !Number.isFinite(rMax)) {
+      console.error('[DEBUG] BAD min/max for', key, ':', range)
+      continue
+    }
+    const current = Number(base[key])
+    if (!Number.isFinite(current)) { console.error('[DEBUG] base[key] not finite:', key, '=', current); continue }
+    const delta = (Math.random() * 2 - 1) * range.step * intensity * (1 + Math.random())
+    let newVal = current + delta
+    if (newVal > rMax) {
+      newVal = rMax
+    }
+    if (newVal < rMin) {
+      newVal = rMin
+    }
+    (mutated as any)[key] = newVal
+  }
+  return mutated
+}
+
+function crossoverPolicy(a: BotPolicy, b: BotPolicy): BotPolicy {
+  const child = { ...a }
+  for (const key of MUTATE_KEYS) {
+    if (Math.random() < 0.5) {
+      (child as any)[key] = (b as any)[key]
+    }
+    // Slight noise
+    if (Math.random() < 0.15) {
+      const range = PARAM_RANGES[key]
+      if (range) {
+        const rMin = Number(range.min)
+        const rMax = Number(range.max)
+        if (Number.isFinite(rMin) && Number.isFinite(rMax)) {
+          const noise = (Math.random() * 2 - 1) * range.step * 0.5
+          let noisy = Number((child as any)[key]) + noise
+          noisy = Math.min(rMax, Math.max(rMin, noisy))
+          ;(child as any)[key] = noisy
+        }
+      }
+    }
+  }
+  return child
+}
+
+// ========== Tile helpers ==========
+function t(suit: TileSuit, v: number, id?: string): Tile {
+  return { suit, value: v, id: id || `${suit}-${v}-${Math.random().toString(36).slice(2, 8)}`, isFlower: false }
+}
+function tileEq(a: Tile, b: Tile): boolean { if (!a || !b) return false; return a.suit === b.suit && a.value === b.value }
+// 数字→中文
+const NUM_CN = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九']
+// suit枚举值→中文（注意TileSuit枚举值是 'wan' 不是 'characters'，'tiao' 不是 'bamboos'）
+const SUIT_CN: Record<string, string> = { dots: '筒', wan: '万', tiao: '条', feng: '风', jian: '箭', hua: '花' }
+const WIND_CN: Record<number, string> = { 1: '东', 2: '南', 3: '西', 4: '北' }
+const DRAGON_CN: Record<number, string> = { 1: '中', 2: '发', 3: '白' }
+const FLOWER_CN: Record<number, string> = { 1: '春', 2: '夏', 3: '秋', 4: '冬', 5: '梅', 6: '兰', 7: '竹', 8: '菊' }
+
+function tileStr(t: Tile): string {
+  if (!t) return '??'
+  if (t.suit === TileSuit.FLOWER) return FLOWER_CN[t.value] || `花${t.value}`
+  if (t.suit === TileSuit.WIND) return WIND_CN[t.value] || '?'
+  if (t.suit === TileSuit.DRAGON) return DRAGON_CN[t.value] || '?'
+  return `${NUM_CN[t.value] || t.value}${SUIT_CN[t.suit] || t.suit}`
+}
+function isHonor(t: Tile): boolean { return t.suit === TileSuit.WIND || t.suit === TileSuit.DRAGON }
+function isWild(t: Tile, ws?: TileSuit, wv?: number): boolean { return ws && wv ? t.suit === ws && t.value === wv : false }
+
+// ========== Config ==========
+const AI_NAMES = ['AI-AK', 'AI-小胖', 'AI-阿水', 'AI-老赵']
+const AK_IDX = 0
+
+// ========== Player / Game ==========
+interface BotPlayer {
+  name: string; pos: number; hand: Tile[]; exposedMelds: Meld[]; flowerTiles: Tile[]
+  isBot: boolean; isTing: boolean; score: number
+  wildSuit?: TileSuit; wildValue?: number
+  kongCount: number; id: string; status: 'playing' | 'won'
+  winMode?: 'self_draw' | 'discard' | 'kong_draw'
+  policy: BotPolicy
+  // 互包追踪：每个对手被我吃了几口（index=对手pos）
+  meldSources: number[]
+  // 我打过的牌（用于安全牌分析）
+  discardedTiles: Tile[]
+}
+
+interface GameState {
+  deck: Tile[]; wallIdx: number
+  players: BotPlayer[]; current: number
+  wildSuit?: TileSuit; wildValue?: number
+  discardPile: Tile[]
+  gameMultiplier: number
+  // 每个玩家的出牌记录（用于对手分析）
+  playerDiscards: Tile[][]
+}
+
+function buildDeck(): Tile[] {
+  const d: Tile[] = []
+  for (const s of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS])
+    for (let v = 1; v <= 9; v++) for (let c = 0; c < 4; c++) d.push(t(s, v))
+  for (let v = 1; v <= 4; v++) for (let c = 0; c < 4; c++) d.push(t(TileSuit.WIND, v))
+  for (let v = 1; v <= 3; v++) for (let c = 0; c < 4; c++) d.push(t(TileSuit.DRAGON, v))
+  for (let i = 0; i < 8; i++) d.push({ suit: TileSuit.FLOWER, value: i+1, id: `f${i}`, isFlower: true })
+  return shuffleTiles(d)
+}
+
+function setupGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameState {
+  const deck = buildDeck()
+  const nonFlower = deck.filter(t => !isFlower(t))
+  const w = nonFlower[Math.floor(Math.random() * nonFlower.length)]
+  const ws = w.suit as TileSuit, wv = w.value
+
+  const policies = [akPolicy, otherPolicies[0], otherPolicies[1], otherPolicies[2]]
+
+  const players = AI_NAMES.map((name, i) => ({
+    name, pos: i, hand: [] as Tile[], exposedMelds: [] as Meld[], flowerTiles: [] as Tile[],
+    isBot: true, isTing: false, score: 0, wildSuit: ws, wildValue: wv, kongCount: 0, id: `p${i}`,
+    status: 'playing' as const, policy: policies[i],
+    meldSources: [0, 0, 0, 0], discardedTiles: [] as Tile[]
+  }))
+
+  const gameMultiplier = nextGameMultiplier()
+
+  return { deck, wallIdx: 0, players, current: 0, wildSuit: ws, wildValue: wv, discardPile: [],
+    gameMultiplier, playerDiscards: [[], [], [], []] }
+}
+
+function drawTile(g: GameState, p: BotPlayer): Tile | null {
+  if (g.wallIdx >= g.deck.length) return null
+  const tile = g.deck[g.wallIdx++]
+  if (!tile) return drawTile(g, p)
+  if (isFlower(tile)) { p.flowerTiles.push(tile); return drawTile(g, p) }
+  p.hand.push(tile)
+  // 诊断：追踪手牌，摸牌后手牌长度
+  // const kongC = p.exposedMelds.filter(m => m.type === MeldType.KONG).length
+  // const exp = 14 - (p.exposedMelds.length - kongC) * 3 - kongC * 4
+  // if (p.hand.length !== exp) console.error(`DRAW: ${p.name} hand=${p.hand.length} expected=${exp} melds=${p.exposedMelds.length} kongs=${kongC}`)
+  return tile
+}
+
+function isWT(t: Tile, p: BotPlayer): boolean { return isWild(t, p.wildSuit, p.wildValue) }
+function makeWT(p: BotPlayer) { return buildWildTileChecker(p.wildSuit && p.wildValue ? `${p.wildSuit}-${p.wildValue}` : null) }
+
+// ========== Meld detection ==========
+function canPeng(p: BotPlayer, tile: Tile): boolean {
+  if (!tile) return false
+  return p.hand.filter(t => t && tileEq(t, tile)).length >= 2
+}
+function canChow(p: BotPlayer, tile: Tile): boolean {
+  if (!tile || isHonor(tile) || tile.suit === TileSuit.FLOWER) return false
+  const v = tile.value
+  // 三种吃牌方式：
+  // 1) 中间牌：需要 v-1 和 v+1（如 3+5 吃 4），v范围2-8
+  // 2) 最低牌（tile是最大的）：需要 v-1 和 v-2（如 3+4 吃 5），v范围3-9
+  // 3) 最高牌（tile是最小的）：需要 v+1 和 v+2（如 4+5 吃 3），v范围1-7
+  const has = (val: number) => p.hand.some(t => t.suit === tile.suit && t.value === val)
+  // 中间牌
+  if (v >= 2 && v <= 8 && has(v - 1) && has(v + 1)) return true
+  // 最低牌：tile是被吃序列中最大的
+  if (v >= 3 && has(v - 1) && has(v - 2)) return true
+  // 最高牌：tile是被吃序列中最小的
+  if (v <= 7 && has(v + 1) && has(v + 2)) return true
+  return false
+}
+function canMingKong(p: BotPlayer, tile: Tile): boolean {
+  if (!tile) return false
+  return p.hand.filter(t => t && tileEq(t, tile)).length >= 3
+}
+function canAnKong(p: BotPlayer): Tile[] {
+  const groups = groupTiles(p.hand.filter(t => t))
+  const result: Tile[] = []
+  for (const [k, tiles] of groups) { if (tiles.length === 4 && tiles[0]) result.push(tiles[0]) }
+  return result
+}
+function canJiaGang(p: BotPlayer): Tile[] {
+  const result: Tile[] = []
+  for (const meld of p.exposedMelds) {
+    if (meld.type === MeldType.TRIPLET) {
+      const found = p.hand.find(t => t && tileEq(t, meld.tiles[0]))
+      if (found) result.push(found)
+    }
+  }
+  return result
+}
+
+// ========== Apply melds ==========
+function applyPeng(p: BotPlayer, tile: Tile, sourcePos?: number): void {
+  const before = p.hand.length
+  const matches = p.hand.filter(t => t && tileEq(t, tile)).slice(0, 2)
+  if (before !== 13 && before !== 11) console.error(`PENG_STATE: ${p.name} hand=${before} tile=${tileStr(tile)}`)
+  for (const u of matches) { const idx = p.hand.findIndex(rt => rt && rt.id === u.id); if (idx >= 0) p.hand.splice(idx, 1) }
+  const after = p.hand.length
+  if (after !== before - 2) console.error(`BUG applyPeng: ${p.name} before=${before} matches=${matches.length} after=${after} (expected ${before-2}) tile=${tileStr(tile)}`)
+  p.exposedMelds.push({ type: MeldType.TRIPLET, tiles: [tile, tile, tile], isConcealed: false })
+  if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
+}
+function applyChow(p: BotPlayer, tile: Tile, sourcePos?: number): void {
+  const before = p.hand.length
+  const v = tile.value
+  const findTile = (suit: TileSuit, val: number) => p.hand.find(t => t && t.suit === suit && t.value === val)
+  const removeTile = (t: Tile) => { const idx = p.hand.findIndex(h => h && h.id === t.id); if (idx >= 0) p.hand.splice(idx, 1) }
+
+  // 三种吃牌模式，与canChow一致
+  let t1: Tile | undefined, t2: Tile | undefined
+  // 1) 中间牌：tile是中间，需要v-1和v+1，v范围2-8
+  if (v >= 2 && v <= 8) {
+    t1 = findTile(tile.suit, v - 1)
+    t2 = findTile(tile.suit, v + 1)
+  }
+  // 2) 最低牌：tile是最大的，需要v-1和v-2，v范围3-9
+  if ((!t1 || !t2) && v >= 3) {
+    t1 = findTile(tile.suit, v - 1)
+    t2 = findTile(tile.suit, v - 2)
+  }
+  // 3) 最高牌：tile是最小的，需要v+1和v+2，v范围1-7
+  if ((!t1 || !t2) && v <= 7) {
+    t1 = findTile(tile.suit, v + 1)
+    t2 = findTile(tile.suit, v + 2)
+  }
+
+  if (!t1 || !t2) return
+  if (t1.id === t2.id) { console.error(`BUG applyChow: same tile! ${p.name} tile=${tileStr(tile)} t1=t2=${t1.id}`); return }
+  removeTile(t1); removeTile(t2)
+  const after = p.hand.length
+  if (after !== before - 2) console.error(`BUG applyChow: ${p.name} before=${before} after=${after} (expected ${before-2}) tile=${tileStr(tile)} t1=${t1.id} t2=${t2.id}`)
+  // 排序tiles为从小到大
+  const meldTiles = [t1, tile, t2].sort((a, b) => a.value - b.value)
+  p.exposedMelds.push({ type: MeldType.SEQUENCE, tiles: meldTiles, isConcealed: false })
+  if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
+}
+function applyMingKong(p: BotPlayer, tile: Tile, sourcePos?: number): void {
+  const matches = p.hand.filter(t => t && tileEq(t, tile)).slice(0, 3)
+  for (const u of matches) { const idx = p.hand.findIndex(rt => rt && rt.id === u.id); if (idx >= 0) p.hand.splice(idx, 1) }
+  p.exposedMelds.push({ type: MeldType.KONG, tiles: [tile, tile, tile, tile], isConcealed: false })
+  p.kongCount++
+  if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
+}
+function applyAnKong(p: BotPlayer, tile: Tile): void {
+  p.hand = p.hand.filter(t => t && !tileEq(t, tile))
+  p.exposedMelds.push({ type: MeldType.KONG, tiles: [tile, tile, tile, tile], isConcealed: true })
+  p.kongCount++
+}
+function applyJiaGang(p: BotPlayer, tile: Tile): void {
+  const meld = p.exposedMelds.find(m => m.type === MeldType.TRIPLET && tileEq(m.tiles[0], tile))
+  if (!meld) return
+  meld.type = MeldType.KONG; meld.tiles = [tile, tile, tile, tile]; meld.isConcealed = false
+  p.hand = p.hand.filter(t => t && !tileEq(t, tile)); p.kongCount++
+}
+
+// ========== Scoring (with multiplier simulation) ==========
+// 长清阁倍数：骰子对子(1+1/4+4=×4, 其他对子=×2, 其他=×1)
+// 加上流局/造反继承倍数
+function rollMultiplier(): number {
+  const d1 = Math.floor(Math.random() * 6) + 1
+  const d2 = Math.floor(Math.random() * 6) + 1
+  const isPair = d1 === d2
+  const isBigPair = isPair && (d1 === 1 || d1 === 4)
+  if (isBigPair) return 4  // 1+1 or 4+4 = ×4
+  if (isPair) return 2     // other doubles = ×2
+  return 1
+}
+
+// 模拟全局倍数（流局/造反继承）
+let prevRoundWasDraw = false
+function nextGameMultiplier(): number {
+  const diceMult = rollMultiplier()
+  const flowMult = prevRoundWasDraw ? 2 : 1
+  // 全局倍数 = min(8, 骰子 × 流局)
+  const globalMult = Math.min(8, diceMult * flowMult)
+  return globalMult
+}
+
+function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean, gameMultiplier: number): number {
+  const types = detectHandTypes(p.hand, p.exposedMelds, isSelfDraw, p.flowerTiles.length,
+    p.wildSuit && p.wildValue ? `${p.wildSuit}-${p.wildValue}` : null)
+  const result = calculateScore({
+    handTiles: p.hand, exposedMelds: p.exposedMelds,
+    flowerTiles: p.flowerTiles, handTypes: types,
+    isSelfDrawn: isSelfDraw, isKongFlower: isKongWin,
+    isRobbingKong: false, isMenQing: p.exposedMelds.length === 0,
+    wildTileSuit: p.wildSuit, wildTileValue: p.wildValue,
+    roundMultiplier: 1, globalMultiplier: gameMultiplier
+  })
+  return result.finalPoints * SETTLEMENT_MULT
+}
+
+// ========== 互包结算 ==========
+// ========== 互包结算 ==========
+// 包三：同一家吃了/碰了/杠了≥3口 → 当"目标玩家"胡牌时，包家替所有人赔付
+// 包四：同一家≥4口 → 包家赔付加倍（×2）
+//
+// 真实规则：
+//   自摸：包家赔全部（3倍base），其他2家不赔不赚
+//   放炮：包家赔全部（3倍base），放炮者不赔不赚
+//   放炮者就是包家：正常赔付（已经赔了）
+function applyBaoSettlement(
+  g: GameState, winnerIdx: number, isSelfDraw: boolean,
+  discarderIdx: number | null, baseScore: number
+): void {
+  const winner = g.players[winnerIdx]
+
+  for (let ci = 0; ci < 4; ci++) {
+    if (ci === winnerIdx) continue
+    const meldCount = winner.meldSources[ci]
+    if (meldCount < 3) continue
+
+    const isBao4 = meldCount >= 4
+    const mult = isBao4 ? 2 : 1
+    const baoPay = baseScore * 3 * mult  // 包家赔付总额（覆盖所有输家）
+
+    if (isSelfDraw) {
+      // 自摸：包家赔全部3倍base，其他2家退回
+      for (let i = 0; i < 4; i++) {
+        if (i === winnerIdx) continue
+        if (i === ci) {
+          g.players[i].score += baseScore  // 退回之前的1倍
+          g.players[i].score -= baoPay     // 赔付3倍（包四时6倍）
+        } else {
+          g.players[i].score += baseScore  // 退回之前的1倍，不赔了
+        }
+      }
+    } else {
+      // 放炮
+      if (discarderIdx !== null && discarderIdx !== ci) {
+        // 放炮者不是包家 → 包家替放炮者赔付
+        g.players[discarderIdx].score += baseScore  // 退回放炮者已扣的
+        g.players[ci].score -= baoPay               // 包家赔付全部3倍
+      }
+      // 放炮者就是包家 → 不变（已经赔了，但赔的是1倍 → 修正为3倍）
+      if (discarderIdx === ci) {
+        g.players[ci].score += baseScore  // 退回1倍
+        g.players[ci].score -= baoPay     // 赔付3倍
+      }
+    }
+  }
+}
+
+// ========== 百搭最优利用：全局评分 ==========
+// 根据手牌评估不同百搭使用方式的得分，选择最高分
+// 长清阁牌型固定/公式得分：
+//   清一色=10, 风一色=20, 风碰=40, 清碰=20, 混碰=公式, 碰碰胡=公式(max10), 混一色=公式
+//   无百搭×2, 门清×2
+function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
+  flowerCount: number): { bestType: string; bestScore: number; keepWildScore: number } {
+
+  // 牌型基础分查找
+  const typeScore: Record<string, number> = {
+    '清一色': 10, '风一色': 20, '风碰': 40, '清碰': 20,
+    '混碰': Math.min(10, 2 + flowerCount), '碰碰胡': Math.min(10, 2 + flowerCount),
+    '混一色': Math.min(10, 2 + flowerCount),
+  }
+
+  if (wildCount === 0) {
+    const types = detectHandTypes(hand, [], false, flowerCount, null)
+    const base = types.length > 0 ? (typeScore[types[0]] || 0) : 0
+    const final = base * 2  // 无百搭×2
+    return { bestType: types[0] || '基础胡', bestScore: final, keepWildScore: final }
+  }
+
+  const nonWild = hand.filter(t => !isWild(t, undefined, undefined))
+
+  // 评估1：保留百搭不使用（无百搭翻倍×2）
+  const typesNoWild = detectHandTypes(nonWild, [], false, flowerCount, null)
+  const baseNoWild = typesNoWild.length > 0 ? (typeScore[typesNoWild[0]] || 0) : 0
+  const keepWildScore = baseNoWild * 2
+
+  // 评估2：百搭做清一色（最长花色+百搭>=13张）
+  let flushScore = 0
+  if (meldCount === 0) {
+    for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+      const suitTiles = nonWild.filter(t => t.suit === suit)
+      const wilds = hand.filter(t => isWild(t, undefined, undefined))
+      if (suitTiles.length + wilds.length >= 13) { flushScore = 10; break }
+    }
+  }
+
+  // 评估3：百搭做风碰/箭碰（固定高分40）
+  const honorCount = nonWild.filter(t => isHonor(t)).length
+  let fengPengScore = 0
+  if (honorCount + wildCount >= 13) fengPengScore = 40  // 风碰=40
+
+  // 评估4：百搭做碰碰胡
+  const groups = groupTiles(nonWild)
+  let pairPotential = 0
+  for (const [, tiles] of groups) { if (tiles.length >= 2) pairPotential++ }
+  const pungScore = (pairPotential + wildCount >= 4) ? Math.min(10, 2 + flowerCount) : 0
+
+  // 取最高分
+  const options = [
+    { type: '保留百搭', score: keepWildScore },
+    { type: '清一色', score: flushScore },
+    { type: '风碰', score: fengPengScore },
+    { type: '碰碰胡', score: pungScore }
+  ]
+  options.sort((a, b) => b.score - a.score)
+
+  return { bestType: options[0].type, bestScore: options[0].score, keepWildScore }
+}
+
+// ========== AI Discard (长清阁规则) ==========
+function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[] = [],
+  wallIdx: number = 0, deckLen: number = 144, allPlayers: BotPlayer[] = [], myPos: number = 0): Tile {
+  const policy = p.policy
+  const hand = p.hand
+  const wildCount = hand.filter(t => isWT(t, p)).length
+  const isMenqing = p.exposedMelds.length === 0
+  const totalMelds = p.exposedMelds.length
+  const suits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
+  const suitCounts = suits.map(s => hand.filter(t => t.suit === s).length)
+  const maxSuitIdx = suitCounts.indexOf(Math.max(...suitCounts))
+  const maxSuitCount = suitCounts[maxSuitIdx]
+  const honorCount = hand.filter(t => isHonor(t)).length
+
+  // 百搭全局最优评估
+  const wildEval = wildCount > 0 ? evalWildDeployment(hand, totalMelds, wildCount, p.flowerTiles.length) : null
+  const wildIsOptimal = wildEval && wildEval.bestType !== '保留百搭' && wildEval.bestScore > wildEval.keepWildScore
+
+  // ====== 对手出牌观察：前N轮别人打的牌 ======
+  // 统计对手打出的各花色数量（排除自己的出牌近似处理）
+  const oppDiscardBySuit: Record<string, number> = { [TileSuit.DOTS]: 0, [TileSuit.CHARACTERS]: 0, [TileSuit.BAMBOOS]: 0 }
+  // 取最近的出牌（约前20张 = 前5轮）
+  const recentDiscards = discardPile.slice(-Math.min(20, discardPile.length))
+  for (const t of recentDiscards) {
+    if (t.suit === TileSuit.DOTS || t.suit === TileSuit.CHARACTERS || t.suit === TileSuit.BAMBOOS) {
+      oppDiscardBySuit[t.suit]++
+    }
+  }
+  // 对手都不要的花色 → 我做这一门更容易
+  const discardObsBoost: Record<string, number> = {}
+  for (const s of suits) {
+    const othersDiscard = oppDiscardBySuit[s]
+    // 如果其他三家都大量打某一门，说明没人要做这一门 → 我做这一门概率更高
+    discardObsBoost[s] = othersDiscard >= 6 ? policy.discardObsFlushBoost * (othersDiscard / 10) * policy.discardObsWeight : 0
+  }
+
+  // ====== 互包追踪：同家被吃几口 ======
+  const maxMeldFromOnePlayer = Math.max(...p.meldSources)
+  const isNearBao3 = maxMeldFromOnePlayer >= 2  // 即将触发包三
+  const isBao3 = maxMeldFromOnePlayer >= 3       // 已触发包三
+
+  // ====== 牌墙剩余感知 ======
+  const wallRemaining = deckLen - wallIdx
+  const wallPhase = wallRemaining > 80 ? 'early' : wallRemaining > 40 ? 'mid' : 'late'
+
+  // ====== 对手听牌/出牌分析 ======
+  // 简化：对手打出幺九牌越多 → 可能在清理手牌 → 更可能已听牌
+  let oppTingSignal = 0
+  if (allPlayers.length > 0) {
+    for (let i = 0; i < allPlayers.length; i++) {
+      if (i === myPos) continue
+      const opp = allPlayers[i]
+      // 对手副露多（3+）→ 可能快听
+      if (opp.exposedMelds.length >= 3) oppTingSignal += 0.3
+      // 对手出过幺九 → 可能在清理 → 可能已听
+      const termDiscards = opp.discardedTiles.filter(t =>
+        !isHonor(t) && (t.value === 1 || t.value === 9)).length
+      oppTingSignal += termDiscards * policy.terminalDiscardTingSignal * 0.1
+    }
+  }
+  const oppLikelyTing = oppTingSignal > 0.5
+  const groups = groupTiles(hand)
+  let pairCount = 0, tripletCount = 0, quadCount = 0
+  for (const [k, tiles] of groups) {
+    if (tiles.length === 2) pairCount++
+    if (tiles.length === 3) tripletCount++
+    if (tiles.length === 4) quadCount++
+  }
+  const isPureFlushRoute = maxSuitCount >= hand.length * 0.7 && maxSuitCount >= 8
+  const isHalfFlushRoute = maxSuitCount >= hand.length * 0.5 && honorCount >= 2
+  const isAllHonorsRoute = honorCount >= hand.length * 0.6 && honorCount >= 6
+  const isAllPungsRoute = (tripletCount * 3 + quadCount * 4) >= hand.length * 0.6
+  const isSevenPairsRoute = pairCount >= 4 && totalMelds === 0
+
+  // 倍数×起手牌质量联合路线
+  const handQuality = maxSuitCount >= 7 ? 7 : maxSuitCount >= 6 ? 6 : maxSuitCount >= 5 ? 5 : 0
+  // 使用实际游戏倍数（≥4为高倍数）
+  const isHighMult = gameMultiplier >= 4
+  const isMidMult = gameMultiplier >= 2
+  let mHA = 0, mHH = 0, mHP = 0, mHHo = 0
+  if (handQuality === 5) {
+    mHA = isHighMult ? policy.multHighHand5AllPungs : policy.multLowHand5AllPungs
+    mHH = isHighMult ? policy.multHighHand5HalfFlush : policy.multLowHand5HalfFlush
+  } else if (handQuality === 6) {
+    mHA = isHighMult ? policy.multHighHand6AllPungs : policy.multLowHand6AllPungs
+    mHH = isHighMult ? policy.multHighHand6HalfFlush : policy.multLowHand6HalfFlush
+    mHP = isHighMult ? policy.multHighHand6PureFlush : policy.multLowHand6PureFlush
+  } else if (handQuality >= 7) {
+    mHA = isHighMult ? policy.multHighHand7AllPungs : policy.multLowHand7AllPungs
+    mHH = isHighMult ? policy.multHighHand7HalfFlush : policy.multLowHand7HalfFlush
+    mHP = isHighMult ? policy.multHighHand7PureFlush : policy.multLowHand7PureFlush
+  }
+  const hQB = handQuality >= 7 ? policy.hand7RouteBias : handQuality >= 6 ? policy.hand6RouteBias : handQuality >= 5 ? policy.hand5RouteBias : 0
+  if (isHighMult && honorCount >= 5) mHHo = policy.multHighHonorStart
+
+  // ====== 积分榜动态策略 ======
+  let scorePosition = 0  // 0=中游, >0=领先, <0=落后
+  let isLoser = false
+  let isBigLeader = false
+  if (allPlayers.length > 0) {
+    const myScore = p.score
+    const allScores = allPlayers.map(ap => ap.score)
+    const maxScore = Math.max(...allScores)
+    const minScore = Math.min(...allScores)
+    const avgScore = allScores.reduce((a, b) => a + b, 0) / allScores.length
+    scorePosition = myScore - avgScore  // 正=领先，负=落后
+    const gap = maxScore - minScore
+    // 排名倒数第一/第二 → 冒险意愿增强
+    isLoser = myScore <= allScores.sort((a, b) => a - b)[1]  // 倒数前二
+    // 大幅领先 → 降低进攻，增强防守
+    isBigLeader = myScore > avgScore + gap * 0.5  // 领先超过差距一半
+  }
+
+  const candidates: { tile: Tile; keepScore: number }[] = []
+  for (const tile of hand) {
+    if (isFlower(tile)) continue
+    let keepScore = 0
+    const count = hand.filter(t => tileEq(t, tile)).length
+    const sameSuit = hand.filter(t => t.suit === tile.suit && !tileEq(t, tile))
+
+    if (count >= 2) keepScore += policy.pairWeight
+    if (count >= 3) keepScore += policy.tripletKeepBonus
+    if (count >= 4) keepScore += policy.tripletKeepBonus * 2
+
+    if (!isHonor(tile) && tile.suit !== TileSuit.FLOWER) {
+      const hasLeft = sameSuit.some(t => t.value === tile.value - 1 || t.value === tile.value - 2)
+      const hasRight = sameSuit.some(t => t.value === tile.value + 1 || t.value === tile.value + 2)
+      if (hasLeft) keepScore += policy.nearWeight
+      if (hasRight) keepScore += policy.nearWeight
+      const neighbors = sameSuit.filter(t => Math.abs(t.value - tile.value) <= 2)
+      keepScore += neighbors.length * policy.nearWeight * 0.2
+      if (policy.sequenceVsTripletBias > 0 && count >= 2)
+        keepScore += policy.sequenceVsTripletBias * 2
+    }
+
+    if ((tile.value === 1 || tile.value === 9) && !isHonor(tile)) {
+      const neighbors = sameSuit.filter(t => Math.abs(t.value - tile.value) <= 2)
+      if (neighbors.length === 0) keepScore -= policy.terminalPenalty
+    }
+
+    if (tile.suit === TileSuit.WIND) {
+      let wk = policy.windGeneralKeep
+      if (tile.value === 1) wk += policy.windEastKeep
+      else if (tile.value === 2) wk += policy.windSouthKeep
+      else if (tile.value === 3) wk += policy.windWestKeep
+      else if (tile.value === 4) wk += policy.windNorthKeep
+      if (count >= 2) keepScore += wk * policy.pairWeight
+      if (count >= 3) keepScore += wk * 3
+      if (count >= 4) keepScore += wk * 5
+      if (count === 1) keepScore -= wk * 0.5
+      if (isAllHonorsRoute) keepScore += policy.allHonorsPursuit * 10 * (count >= 2 ? 2 : 1)
+      if (isAllHonorsRoute && isAllPungsRoute) keepScore += policy.allHonorsPungsPursuit * 20
+    }
+
+    if (tile.suit === TileSuit.DRAGON) {
+      let dk = policy.dragonGeneralKeep
+      if (tile.value === 1) dk += policy.dragonRedKeep
+      else if (tile.value === 2) dk += policy.dragonGreenKeep
+      else if (tile.value === 3) dk += policy.dragonWhiteKeep
+      if (count >= 2) keepScore += dk * policy.pairWeight
+      if (count >= 3) keepScore += dk * 4
+      if (count >= 4) keepScore += dk * 6
+      if (count === 1) keepScore -= dk * 0.3
+      if (isAllHonorsRoute) keepScore += policy.allHonorsPursuit * 10 * (count >= 2 ? 2 : 1)
+      if (isAllHonorsRoute && isAllPungsRoute) keepScore += policy.allHonorsPungsPursuit * 20
+    }
+
+    if (policy.pureFlushPursuit > 0 && !isHonor(tile)) {
+      if (tile.suit === suits[maxSuitIdx]) keepScore += policy.pureFlushPursuit * 3 * (maxSuitCount / hand.length)
+      else keepScore -= policy.pureFlushPursuit * 2
+    }
+
+    // ====== 对手出牌观察：对手都不要的花色 → 我做这一门更容易 ======
+    if (!isHonor(tile)) {
+      const obsBoost = discardObsBoost[tile.suit] || 0
+      if (obsBoost > 0) keepScore += obsBoost * 5
+      // 如果我正在做的花色就是对手都不要的，额外加分
+      if (tile.suit === suits[maxSuitIdx] && obsBoost > 0) keepScore += obsBoost * 3
+    }
+
+    // 倍数×起手牌质量联合加成
+    if (handQuality >= 5 && !isHonor(tile)) {
+      if (tile.suit === suits[maxSuitIdx]) {
+        if (mHA > 0 && count >= 2) keepScore += mHA * 5 * hQB
+        if (mHH > 0) keepScore += mHH * 3 * hQB
+        if (mHP > 0) keepScore += mHP * 6 * hQB
+      } else {
+        if (mHP > 0.3) keepScore -= mHP * 4 * hQB
+      }
+    }
+    if (mHHo > 0 && isHonor(tile)) keepScore += mHHo * 5 * (count >= 2 ? 2 : 1)
+
+    if (policy.halfFlushWeight > 0 && isHalfFlushRoute) {
+      if (tile.suit === suits[maxSuitIdx] || isHonor(tile)) keepScore += policy.halfFlushWeight * 2
+      else keepScore -= policy.halfFlushWeight * 1.5
+    }
+    if (policy.allPungsPursuit > 0 && isAllPungsRoute) {
+      if (count >= 2) keepScore += policy.allPungsPursuit * 5
+      if (count === 1 && !isHonor(tile)) keepScore -= policy.allPungsPursuit * 2
+    }
+    if (policy.sevenPairsPursuit > 0 && isSevenPairsRoute) {
+      if (count === 2) keepScore += policy.sevenPairsPursuit * 8
+      if (count >= 3) keepScore -= policy.sevenPairsPursuit * 3
+      if (count === 1) keepScore -= policy.sevenPairsPursuit * 1
+    }
+
+    if (isMenqing) {
+      const mv = wildCount === 0 ? policy.wild0MenqingKeep : wildCount === 1 ? policy.wild1MenqingKeep : policy.wild2MenqingKeep
+      keepScore += mv * policy.menqingDoubleAwareness
+    }
+    if (wildCount === 0 && policy.noWildDoubleAwareness > 0) keepScore += policy.noWildDoubleAwareness * 2
+
+    // 百搭全局最优部署影响
+    if (wildIsOptimal && wildEval) {
+      // 最优部署说用百搭比保留更赚 → 增强对应牌型的出牌保留
+      if (wildEval.bestType === '风碰' && isHonor(tile)) keepScore += 8  // 保留风/箭牌
+      if (wildEval.bestType === '清一色' && !isHonor(tile) && tile.suit === suits[maxSuitIdx]) keepScore += 6
+      if (wildEval.bestType === '碰碰胡' && count >= 2) keepScore += 5
+    }
+    if (wildEval && !wildIsOptimal && wildCount > 0) {
+      // 最优部署是保留百搭 → 不使用百搭更赚（×2）
+      if (isWT(tile, p)) keepScore += 10  // 百搭绝对不打
+    }
+
+    // ====== 百搭大吊：留百搭做最后1张 → 听所有牌 ======
+    // hand.length ≈ 需要胡的牌数 → 接近胡牌时，百搭做最后1张价值极高
+    const meldsNeeded = 4 - totalMelds
+    const tilesNeeded = meldsNeeded * 3 + 2  // 还需要多少张牌
+    if (wildCount >= 1 && tilesNeeded <= 3 && policy.wildDiaoKeepBonus > 0) {
+      // 接近胡牌（只差1-2张），百搭做最后1张 → 听全部牌
+      if (isWT(tile, p)) keepScore += policy.wildDiaoKeepBonus * 5  // 百搭绝不打
+      // 碰碰胡路线 + 百搭大吊
+      if (count >= 2 && policy.wildDiaoPungBoost > 0) keepScore += policy.wildDiaoPungBoost * 3
+      // 混一色路线 + 百搭大吊（风箭+主花色都能胡）
+      if (!isHonor(tile) && tile.suit === suits[maxSuitIdx] && policy.wildDiaoFlushBoost > 0)
+        keepScore += policy.wildDiaoFlushBoost * 3
+    }
+
+    // 百搭分级激进度
+    const aggression = wildCount === 0 ? policy.wild0Aggression
+      : wildCount === 1 ? policy.wild1Aggression
+      : wildCount === 2 ? policy.wild2Aggression : policy.wild3PlusAggression
+
+    // 百搭分级：三口四口推进
+    const meldPush = wildCount <= 0 ? 0 : wildCount === 1 ? policy.wild1RouteMeldPush
+      : wildCount === 2 ? policy.wild2RouteMeldPush : policy.wild3RouteMeldPush
+    if (meldPush > 0 && (count >= 2 || isHonor(tile))) keepScore += meldPush * 5 * aggression
+
+    // 百搭分级：清一色路线
+    if (!isHonor(tile) && tile.suit === suits[maxSuitIdx]) {
+      const fb = wildCount === 1 ? policy.wild1RouteFlushBoost : wildCount === 2 ? policy.wild2RouteFlushBoost : wildCount >= 3 ? policy.wild3RouteFlushBoost : 0
+      if (fb > 0) keepScore += fb * 4 * aggression
+    }
+
+    // 百搭分级：风一色/风碰
+    if (isHonor(tile)) {
+      const hb = wildCount === 1 ? policy.wild1RouteHonorsBoost : wildCount === 2 ? policy.wild2RouteHonorsBoost : wildCount >= 3 ? policy.wild3RouteHonorsBoost : 0
+      if (hb > 0 && count >= 2) keepScore += hb * 6 * aggression
+    }
+
+    // 百搭分级：碰碰胡
+    if (count >= 2) {
+      const pb = wildCount === 1 ? policy.wild1RouteAllPungsBoost : wildCount === 2 ? policy.wild2RouteAllPungsBoost : wildCount >= 3 ? policy.wild3RouteAllPungsBoost : 0
+      if (pb > 0) keepScore += pb * 4 * aggression
+    }
+
+    // 百搭分级：包三包四推进
+    const baoPush = wildCount === 1 ? policy.wild1BaoPush : wildCount === 2 ? policy.wild2BaoPush : wildCount >= 3 ? policy.wild3BaoPush : 0
+    if (baoPush > 0 && totalMelds >= policy.baoThreshold) keepScore += baoPush * 4 * aggression
+    if (wildCount >= 1) keepScore += aggression * 2
+
+    // 速度vs大牌
+    if (policy.speedVsValueBalance > 0.5) {
+      if (count >= 3) keepScore -= (policy.speedVsValueBalance - 0.5) * 3
+      if (!isHonor(tile) && count === 1) {
+        const neighbors = sameSuit.filter(t => Math.abs(t.value - tile.value) <= 2)
+        keepScore += neighbors.length * (policy.speedVsValueBalance - 0.5) * policy.nearWeight * 0.3
+      }
+    }
+
+    // 包三四风险（无百搭加持时更保守）
+    if (policy.baoRiskAversion > 0 && totalMelds >= policy.baoThreshold && baoPush < 0.3)
+      keepScore += policy.baoRiskAversion * 3
+
+    // ====== 0百搭特殊策略 ======
+    if (wildCount === 0) {
+      // 无百搭×2翻倍 → 碰碰胡更快成型更有价值
+      if (count >= 2) keepScore += policy.allPungsPursuit * 3
+      // 更低的门清意愿：无百搭已经×2了，门清额外×2收益相对变小，不如快成型
+      if (isMenqing) keepScore -= policy.menqingKeepBonus * 0.5
+      // 速度优先：快听牌收无百搭翻倍
+      if (!isHonor(tile) && count === 1) {
+        const neighbors = sameSuit.filter(t => Math.abs(t.value - tile.value) <= 2)
+        keepScore += neighbors.length * policy.speedVsValueBalance * policy.nearWeight * 0.4
+      }
+    }
+
+    // ====== 倍数感知：高倍数+好牌才做大牌，高倍数+烂牌要防守 ======
+    const hasGoodHand = wildCount >= 2 || maxSuitCount >= 6 || (wildCount >= 1 && maxSuitCount >= 5)
+
+    if (isHighMult && hasGoodHand) {
+      // 高倍+好牌 → 冲大牌！清一色/混一色/清碰更积极
+      if (count >= 2) keepScore += policy.multHighValueBias * 4
+      if (!isHonor(tile) && tile.suit === suits[maxSuitIdx]) {
+        keepScore += policy.multHighValueBias * 3 * (maxSuitCount / hand.length)
+      }
+      // 门清保持：清碰/清一色需要门清翻倍
+      if (isMenqing && wildCount >= 1) keepScore += policy.menqingKeepBonus * 0.5
+      // 风箭也想留（冲风一色/风碰）
+      if (isHonor(tile) && count >= 2) keepScore += policy.multHighValueBias * 2
+    } else if (isHighMult && !hasGoodHand) {
+      // 高倍+烂牌 → 严密防守！不要给对手机会
+      // 降低吃碰意愿（减少损失面）
+      keepScore += policy.defenseRiskAversion * 2
+      // 碰碰胡路线优先（快速成型，减少被大牌击败的风险）
+      if (count >= 2) keepScore += policy.allPungsPursuit * 2
+      // 打安全牌
+      if (count === 1 && !isHonor(tile)) {
+        const neighbors = sameSuit.filter(t => Math.abs(t.value - tile.value) <= 2)
+        if (neighbors.length === 0) keepScore += policy.defenseRiskAversion * 2
+      }
+    } else if (!isMidMult) {
+      // ×1局 → 偏速度，快胡
+      keepScore -= 0.5
+    }
+
+    if (isWT(tile, p)) keepScore += policy.wildKeepPenalty
+
+    // ====== 互包追踪：同家快触发包三 → 慎重吃碰 ======
+    if (isNearBao3 && !isBao3) {
+      keepScore += policy.bao2ClaimPenalty * 3  // 降低吃碰意愿
+    }
+    if (isBao3) {
+      keepScore += policy.bao3AvoidThreshold * 10  // 强烈避免再吃碰同家
+    }
+
+    // ====== 牌墙剩余感知 ======
+    if (wallPhase === 'early') {
+      // 牌墙早期：可以慢做牌，追求大牌
+      keepScore += policy.wallEarlySpeedPush * 2
+    } else if (wallPhase === 'late') {
+      // 牌墙晚期：防守优先，降低大牌追求
+      keepScore += policy.wallLateDefense * 3
+      if (count === 1 && !isHonor(tile)) keepScore += policy.wallLateDefense * 2 // 打出孤立牌
+    }
+
+    // ====== 对手听牌时的安全牌优先 ======
+    if (oppLikelyTing && policy.safeTilePriority > 0) {
+      // 对手可能在听牌 → 优先打安全牌（已出过的牌更安全）
+      const inDiscardPile = discardPile.some(d => tileEq(d, tile))
+      if (inDiscardPile) keepScore += policy.safeTilePriority * 5  // 已出过的牌很安全
+      else keepScore -= policy.safeTilePriority * 2  // 未出过的牌有风险
+    }
+
+    // ====== 积分榜动态调整 ======
+    if (isLoser && policy.scoreBehindRiskBoost > 0) {
+      // 落后→冒险！百搭更值钱，大牌更值得冲
+      if (isWT(tile, p)) keepScore += policy.scoreBehindRiskBoost * 3  // 百搭绝对保留
+      if (count >= 2) keepScore += policy.scoreBehindRiskBoost * 2     // 保留对子做碰碰胡
+      if (!isHonor(tile) && tile.suit === suits[maxSuitIdx]) keepScore += policy.scoreBehindRiskBoost * 1.5  // 保留主花色做清一色
+    }
+    if (isBigLeader && policy.scoreLeadDefenseBoost > 0) {
+      // 大幅领先→防守！降低大牌追求，快胡收分
+      if (count <= 1 && !isHonor(tile)) keepScore += policy.scoreLeadDefenseBoost * 2  // 打孤立牌
+      keepScore -= policy.scoreLeadDefenseBoost  // 整体降低保留度
+    }
+
+    candidates.push({ tile, keepScore })
+  }
+  candidates.sort((a, b) => a.keepScore - b.keepScore)
+  const validTile = candidates[0]?.tile || hand.find(t => t) || hand[0]
+  if (!validTile) {
+    // Emergency fallback: return any tile from deck
+    const allTiles = Object.values(TileSuit).flatMap(s => 
+      s === TileSuit.FLOWER ? [] : Array.from({length: 9}, (_, i) => ({ suit: s, value: i + 1, id: `fallback-${s}-${i+1}` }))
+    )
+    return allTiles[0]
+  }
+  return validTile
+}
+
+// ========== 游戏明细记录 ==========
+interface GameEvent { turn: number; player: string; action: string; detail: string }
+interface SettlementEntry { from: string; to: string; amount: number; reason: string; mult?: number }
+interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers: string[]; meldSources: number[] }
+interface GameResult {
+  winner: number; scores: number[]; events: GameEvent[]; multiplier: number
+  settlementLog: SettlementEntry[]; snapshots: PlayerSnapshot[]; roundNum: number
+}
+
+// ========== 手牌规范化（胡牌前必调） ==========
+function normalizeHand(hand: Tile[]): Tile[] {
+  return hand.filter(t => t && !isFlower(t))
+}
+
+// ========== 血战到最后一人 ==========
+// 每局有人胡牌后，记录赢家，剩余玩家继续开新局，直到最后1人
+// 注意：每局都是完整4人局（runGame不改），通过记录哪些玩家已赢来模拟"退出"
+function runGameWithFightToLast(policy: BotPolicy): {
+  winners: { idx: number; selfDraw: boolean; score: number; snapshot: PlayerSnapshot }[]
+  totalSubGames: number
+  allEvents: GameEvent[]
+  drawCount: number
+} {
+  const winners: { idx: number; selfDraw: boolean; score: number; snapshot: PlayerSnapshot }[] = []
+  const allEvents: GameEvent[] = []
+  let drawCount = 0
+  // 已赢的玩家：在后续局中"不积极"（但仍参与，因为runGame固定4人）
+  // 简化：4人同策略，每局赢的人都记录，最多3局（3个赢家+1个输家）
+  for (let subGame = 0; subGame < 3; subGame++) {
+    const result = runGame(policy, [policy, policy, policy])
+    if (!result) {
+      drawCount++
+      continue
+    }
+    const winnerIdx = result.winner
+    const winEvents = result.events.filter(e => e.action.includes('自摸'))
+    const isSelfDraw = winEvents.length > 0
+    const snapshot = result.snapshots?.[winnerIdx] || { name: AI_NAMES[winnerIdx], hand: '', melds: [], flowers: [], meldSources: [0,0,0,0] }
+    winners.push({ idx: winnerIdx, selfDraw: isSelfDraw, score: result.scores[winnerIdx], snapshot })
+    allEvents.push(...result.events)
+    // 如果已经产生3个赢家（血战到最后一人），结束
+    if (winners.length >= 3) break
+  }
+  return { winners, totalSubGames: winners.length + drawCount, allEvents, drawCount }
+}
+
+// ========== Game Loop ==========
+function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | null {
+  const g = setupGame(akPolicy, otherPolicies)
+  const events: GameEvent[] = []
+  const settlementLog: SettlementEntry[] = []
+  let turn = 0
+  const recordPayment = (from: string, to: string, amount: number, reason: string, mult?: number) => {
+    settlementLog.push({ from, to, amount, reason, mult })
+  }
+  const recordSnapshots = (): PlayerSnapshot[] => {
+    return g.players.map(p => ({
+      name: p.name, hand: p.hand.map(t => tileStr(t)).join(' '),
+      melds: p.exposedMelds.map(m => `${m.type===MeldType.TRIPLET?'碰':m.type===MeldType.SEQUENCE?'吃':m.type===MeldType.KONG?'杠':'?'}:${m.tiles.map(t=>tileStr(t)).join(' ')}`),
+      flowers: p.flowerTiles.map(t => tileStr(t)),
+      meldSources: [...p.meldSources]
+    }))
+  }
+  const log = (player: string, action: string, detail: string) => { events.push({ turn, player, action, detail }) }
+
+  for (let i = 0; i < 13; i++) { for (let p = 0; p < 4; p++) drawTile(g, g.players[p]) }
+  // 发牌完成后AI-小胖手牌验证
+  for (const p of g.players) {
+    const km = p.exposedMelds.filter(m => m.type === MeldType.KONG).length
+    const exp = 14 - (p.exposedMelds.length - km) * 3 - km * 4
+    if (p.name === 'AI-小胖' && p.hand.length !== exp) {
+      console.error(`初始手牌错误: ${p.name} hand=${p.hand.length} expected=${exp}`)
+    }
+  }
+  // 发牌完成日志
+  for (const p of g.players) log(p.name, '发牌', p.hand.map(t => tileStr(t)).join(' '))
+
+  const MAX_ROUNDS = 200
+  let consecutiveDraws = 0
+
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const curr = g.current
+    const player = g.players[curr]
+    turn = round
+    const drawn = drawTile(g, player)
+    if (!drawn) { console.error(`⚠️ 流局: 牌墙耗尽 round=${round} wallIdx=${g.wallIdx}/${g.deck.length}`); return null }
+    if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); continue }
+    log(player.name, '摸牌', tileStr(drawn))
+
+    // Self-draw win check
+    const normalizedHand = normalizeHand(player.hand)
+    const kongCount = player.exposedMelds.filter(m => m.type === MeldType.KONG).length
+    const expectedLen = 14 - (player.exposedMelds.length - kongCount) * 3 - kongCount * 4
+    if (normalizedHand.length !== expectedLen) {
+      console.error(`⚠️ 手牌长度异常: ${player.name} round=${round} hand=${normalizedHand.length} expected=${expectedLen} melds=${player.exposedMelds.length} kongs=${kongCount} wall=${g.deck.length - g.wallIdx}`)
+    }
+    const winCheck = canWin(normalizedHand, player.exposedMelds.length, makeWT(player), kongCount)
+    if (winCheck.canWin) {
+      // 调试：记录有生成功会的游戏
+      if (round >= 30) console.error(`DEBUG: ${player.name}可胡 at round=${round} hand=${normalizedHand.length} melds=${player.exposedMelds.length} kong=${kongCount}`)
+      let winChance = player.policy.selfWinChance
+      const wildCount = player.hand.filter(t => isWT(t, player)).length
+      winChance += wildCount * player.policy.selfWinWildBoost
+      winChance -= player.exposedMelds.length * player.policy.meldPenalty
+      if (Math.random() < winChance) {
+        const baseScore = calcScore(player, true, false, g.gameMultiplier)
+        // 自摸：每人赔baseScore，赢家得3倍
+        player.score += baseScore * 3
+        for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
+        // 互包结算
+        applyBaoSettlement(g, curr, true, null, baseScore)
+        for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore, '自摸') }
+        log(player.name, '自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}] [手牌${normalizedHand.length}张+副露${player.exposedMelds.length}]`)
+        return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+      }
+    }
+
+    // AnKong / JiaGang (policy-driven)
+    for (const ak of canAnKong(player)) {
+      if (Math.random() < player.policy.anKongChance) {
+        applyAnKong(player, ak)
+        const extra = drawTile(g, player)
+        if (extra && !isFlower(extra)) {
+          if (canWin(normalizeHand(player.hand), player.exposedMelds.length, makeWT(player), player.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
+            const baseScore = calcScore(player, true, true, g.gameMultiplier)
+            player.score += baseScore * 3
+            for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
+            applyBaoSettlement(g, curr, true, null, baseScore)
+            log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
+            return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+          }
+        }
+      }
+    }
+    for (const jg of canJiaGang(player)) {
+      if (Math.random() < player.policy.kakanAggression) {
+        applyJiaGang(player, jg)
+        const extra = drawTile(g, player)
+        if (extra && !isFlower(extra)) {
+          if (canWin(normalizeHand(player.hand), player.exposedMelds.length, makeWT(player), player.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
+            const baseScore = calcScore(player, true, true, g.gameMultiplier)
+            player.score += baseScore * 3
+            for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
+            applyBaoSettlement(g, curr, true, null, baseScore)
+            log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
+            return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+          }
+        }
+      }
+    }
+
+    player.isTing = isTing(player.hand, player.exposedMelds.length, makeWT(player))
+
+    const discard = aiDiscard(player, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, curr)
+    player.hand = player.hand.filter(t => t && t.id !== discard.id)
+    player.discardedTiles.push(discard)
+    g.discardPile.push(discard)
+    g.playerDiscards[curr].push(discard)
+    log(player.name, '出牌', `${tileStr(discard)} [手牌: ${player.hand.map(t => tileStr(t)).join(' ')}]`)
+
+    // Others check hu
+    for (let other = 0; other < 4; other++) {
+      if (other === curr) continue
+      const opp = g.players[other]
+      const testHand = [...opp.hand.filter(t => t !== undefined), discard]
+      if (canWin(testHand, opp.exposedMelds.length, makeWT(opp), opp.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
+        let huChance = opp.policy.discardHuChance
+        const wildCount = opp.hand.filter(t => isWT(t, opp)).length
+        huChance -= wildCount * opp.policy.discardHuWildPenalty
+        if (opp.exposedMelds.length === 0) huChance -= opp.policy.discardHuMenQingPenalty
+        if (Math.random() < huChance) {
+          const score = calcScore(opp, false, false, g.gameMultiplier)
+          opp.score += score; player.score -= score
+          // 互包结算：如果有人对opp有包三，且放炮者不是包家
+          applyBaoSettlement(g, other, false, curr, score)
+          recordPayment(player.name, opp.name, score, '放炮')
+          log(opp.name, '放炮胡', `${player.name}出${tileStr(discard)}→${opp.hand.map(t => tileStr(t)).join(' ')} [${score}]`)
+          return { winner: other, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+        }
+      }
+    }
+
+    // Check peng
+    const nextPlayer = (curr + 1) % 4
+    const prevPlayer = (curr + 3) % 4
+    const oppositePlayer = (curr + 2) % 4
+
+    let meldTaken = false
+    for (const otherIdx of [nextPlayer, prevPlayer, oppositePlayer]) {
+      const opp = g.players[otherIdx]
+      if (opp.exposedMelds.length >= 4) continue  // 最多4组牌
+      if (canPeng(opp, discard)) {
+        let pengChance = opp.policy.pengChance
+        if (opp.wildSuit && opp.wildValue && discard.suit === opp.wildSuit && discard.value === opp.wildValue)
+          pengChance += opp.policy.pengWildBoost
+        if (Math.random() < pengChance) {
+          // AI-小胖专诊断：追踪pong claim全流程
+          if (opp.name === 'AI-小胖') {
+            const km = opp.exposedMelds.filter(m => m.type === MeldType.KONG).length
+            const expBefore = 14 - (opp.exposedMelds.length - km) * 3 - km * 4
+            console.error(`小胖_CLAIM: hand=${opp.hand.length} melds=${opp.exposedMelds.length} kong=${km} exp=${expBefore} tile=${tileStr(discard)}`)
+          }
+          applyPeng(opp, discard, curr)
+          // 放炮胡检查（claim后draw前，手牌=expectedLen）
+          const handAfterPeng = normalizeHand(opp.hand)
+          const kongAfterPeng = opp.exposedMelds.filter(m => m.type === MeldType.KONG).length
+          const expAfterPeng = 14 - (opp.exposedMelds.length - kongAfterPeng) * 3 - kongAfterPeng * 4
+          console.error(`PENG_HU_CHECK: ${opp.name} hand=${handAfterPeng.length} expected=${expAfterPeng} melds=${opp.exposedMelds.length}`)
+          if (canWin(handAfterPeng, opp.exposedMelds.length, makeWT(opp), kongAfterPeng).canWin) {
+            const huChance = opp.policy.discardHuChance
+            if (Math.random() < huChance) {
+              const score = calcScore(opp, false, false, g.gameMultiplier)
+              opp.score += score; g.players[curr].score -= score
+              applyBaoSettlement(g, otherIdx, false, curr, score)
+              recordPayment(g.players[curr].name, opp.name, score, '碰后放炮')
+              log(opp.name, '碰后放炮胡', `${tileStr(discard)} [${score}]`)
+              return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+            }
+          }
+          const d = drawTile(g, opp)
+          if (!d) return null
+          if (canWin(normalizeHand(opp.hand), opp.exposedMelds.length, makeWT(opp), opp.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
+            const baseScore = calcScore(opp, true, false, g.gameMultiplier)
+            opp.score += baseScore * 3
+            for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= baseScore }
+            applyBaoSettlement(g, otherIdx, true, null, baseScore)
+            log(opp.name, '碰后自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
+            return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+          }
+          for (const ak of canAnKong(opp)) {
+            applyAnKong(opp, ak)
+            const extra = drawTile(g, opp)
+            if (extra && !isFlower(extra)) {
+              if (canWin(normalizeHand(opp.hand), opp.exposedMelds.length, makeWT(opp), opp.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
+                const kongBaseScore = calcScore(opp, true, true, g.gameMultiplier)
+                opp.score += kongBaseScore * 3
+                for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
+                applyBaoSettlement(g, otherIdx, true, null, kongBaseScore)
+                log(opp.name, '碰杠后自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3=${kongBaseScore*3}]`)
+                return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+              }
+            }
+          }
+          const pengDiscard = aiDiscard(opp, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, otherIdx)
+          opp.hand = opp.hand.filter(t => t.id !== pengDiscard.id)
+          g.discardPile.push(pengDiscard)
+          g.current = otherIdx
+          meldTaken = true
+          break
+        }
+      }
+    }
+    if (meldTaken) continue
+
+    // Check chow (only next player)
+    const nextP = g.players[nextPlayer]
+    if (canChow(nextP, discard) && Math.random() < nextP.policy.chowChance) {
+      applyChow(nextP, discard, curr)
+      // 放炮胡检查（claim后draw前，手牌=expectedLen）
+      const handAfterChow = normalizeHand(nextP.hand)
+      const kongAfterChow = nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length
+      if (canWin(handAfterChow, nextP.exposedMelds.length, makeWT(nextP), kongAfterChow).canWin) {
+        const huChance = nextP.policy.discardHuChance
+        if (Math.random() < huChance) {
+          const score = calcScore(nextP, false, false, g.gameMultiplier)
+          nextP.score += score; g.players[curr].score -= score
+          applyBaoSettlement(g, nextPlayer, false, curr, score)
+          recordPayment(g.players[curr].name, nextP.name, score, '吃后放炮')
+          log(nextP.name, '吃后放炮胡', `${tileStr(discard)} [${score}]`)
+          return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+        }
+      }
+      const d = drawTile(g, nextP)
+      if (!d) return null
+      if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds.length, makeWT(nextP), nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
+        const baseScore = calcScore(nextP, true, false, g.gameMultiplier)
+        nextP.score += baseScore * 3
+        for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= baseScore }
+        applyBaoSettlement(g, nextPlayer, true, null, baseScore)
+        log(nextP.name, '吃后自摸', `${nextP.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
+        return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+      }
+      for (const ak of canAnKong(nextP)) {
+        applyAnKong(nextP, ak)
+        const extra = drawTile(g, nextP)
+        if (extra && !isFlower(extra)) {
+          if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds.length, makeWT(nextP), nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
+            const kongBaseScore = calcScore(nextP, true, true, g.gameMultiplier)
+            nextP.score += kongBaseScore * 3
+            for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= kongBaseScore }
+            applyBaoSettlement(g, nextPlayer, true, null, kongBaseScore)
+            log(nextP.name, '吃杠后自摸', `${nextP.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3=${kongBaseScore*3}]`)
+            return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+          }
+        }
+      }
+      const chowDiscard = aiDiscard(nextP, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, nextPlayer)
+      nextP.hand = nextP.hand.filter(t => t.id !== chowDiscard.id)
+      g.discardPile.push(chowDiscard)
+      g.current = nextPlayer
+      continue
+    }
+
+    g.current = nextPlayer
+    consecutiveDraws++
+    if (consecutiveDraws > MAX_ROUNDS * 4) return null
+  }
+  return null
+}
+
+// ========== Batch Evaluation ==========
+interface EvalResult {
+  akScore: number; akWins: number
+  winRates: Record<string, number>; scores: Record<string, number>
+  draws: number
+  bigWin: { gameIdx: number; result: GameResult; score: number } | null
+  bigLoss: { gameIdx: number; result: GameResult; score: number } | null
+  // 模板输出用
+  totalGames: number; winGames: number; selfDrawGames: number; discardWinGames: number
+  fightToLastGames: number  // 血战到最后一人（多赢家局）
+  bigWinGames: number       // 大牌局数（清碰/风一色/风碰/门清清一色）
+  menqingWinGames: number  // 门清胡牌局数
+  metricsFitness: number    // 指标导向fitness（用于基线训练）
+  worstSingleLoss: { loser: string; score: number; gameIdx: number; result: GameResult } | null
+}
+
+function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy: BotPolicy): string {
+  const ts = new Date().toISOString()
+  const drawGames = evalResult.totalGames - evalResult.winGames
+  const loss = evalResult.worstSingleLoss
+  const lines: string[] = []
+
+  lines.push(`## Round ${roundNo} (${ts})`)
+  lines.push('')
+  lines.push('### 训练指标')
+  lines.push(`- Games: ${evalResult.totalGames}`)
+  lines.push(`- 胡牌局: ${evalResult.winGames} (${(evalResult.winGames / Math.max(1, evalResult.totalGames) * 100).toFixed(2)}%)`)
+  lines.push(`- 流局: ${drawGames} (${(drawGames / Math.max(1, evalResult.totalGames) * 100).toFixed(2)}%)`)
+  const fightRate = evalResult.winGames > 0 ? (evalResult.fightToLastGames / evalResult.winGames * 100).toFixed(2) : '0.00'
+  lines.push(`- 血战到最后一人: ${evalResult.fightToLastGames} (${fightRate}%)`)
+  lines.push(`- 自摸率(胡牌中): ${(evalResult.selfDrawGames / Math.max(1, evalResult.winGames) * 100).toFixed(2)}%`)
+  lines.push(`- 捉冲率(胡牌中): ${(evalResult.discardWinGames / Math.max(1, evalResult.winGames) * 100).toFixed(2)}%`)
+  lines.push(`- 大牌率(胡牌中): ${(evalResult.bigWinGames / Math.max(1, evalResult.winGames) * 100).toFixed(2)}%`)
+  lines.push(`- 门清胡牌率(胡牌中): ${(evalResult.menqingWinGames / Math.max(1, evalResult.winGames) * 100).toFixed(2)}%`)
+  lines.push(`- Fitness: ${evalResult.akScore.toFixed(4)}`)
+  lines.push('')
+
+  lines.push('### 本轮最佳策略参数')
+  lines.push('```json')
+  lines.push(JSON.stringify(bestPolicy, null, 2))
+  lines.push('```')
+  lines.push('')
+
+  lines.push('### 最大单人亏损局明细（本轮）')
+  if (!loss) {
+    lines.push('- 本轮无有效对局数据')
+    return lines.join('\n')
+  }
+
+  const r = loss.result
+  const gm = r.gameMultiplier
+  lines.push(`- 最大亏损: ${loss.loser} ${loss.score} 点（绝对值 ${Math.abs(loss.score)}）`)
+  lines.push(`- 局号: ${loss.gameIdx}`)
+  lines.push(`- 回合: ${r.roundNum}`)
+  lines.push(`- 总筹码: ${Math.abs(loss.score)}`)
+  lines.push(`- 百搭: ${r.snapshots?.[0]?.hand ? '见手牌' : '未知'}`)
+  lines.push(`- 回合/全局倍数信息:`)
+  lines.push(`  - 全局倍数: x${gm}`)
+
+  // 胡牌玩家明细
+  lines.push('')
+  lines.push('- 输出该局所有胡牌玩家明细')
+  const winnerSnap = r.snapshots?.[r.winner]
+  if (winnerSnap) {
+    lines.push(`  - 玩家: ${winnerSnap.name}`)
+    // 从events推断胡牌方式
+    const winEvent = r.events.find(e => e.action.includes('自摸') || e.action.includes('放炮胡') || e.action.includes('胡'))
+    const winType = winEvent?.action?.includes('自摸') ? '自摸' : winEvent?.action?.includes('放炮') ? '放冲' : '胡牌'
+    lines.push(`    - 胡牌方式: ${winType}`)
+    lines.push(`    - 手牌牌面: ${winnerSnap.hand || '(空)'}`)
+    lines.push(`    - 门口牌（吃/碰/杠）: ${winnerSnap.melds.length > 0 ? winnerSnap.melds.join(' ; ') : '(无)'}`)
+    lines.push(`    - 花牌: ${winnerSnap.flowers.length > 0 ? winnerSnap.flowers.join(' ') : '(无)'}`)
+  }
+
+  // 三口/四口关系
+  const baoRelations: string[] = []
+  for (const snap of r.snapshots || []) {
+    for (let ci = 0; ci < 4; ci++) {
+      if (snap.meldSources[ci] >= 3) {
+        const partner = r.snapshots?.[ci]
+        if (partner) {
+          const level = snap.meldSources[ci] >= 4 ? '四口' : '三口'
+          baoRelations.push(`  - ${snap.name} <-> ${partner.name}: ${level} (A->B:${snap.meldSources[ci]}, B->A:${partner.meldSources?.[r.snapshots.indexOf(snap)] || 0})`)
+        }
+      }
+    }
+  }
+  if (baoRelations.length > 0) {
+    lines.push('')
+    lines.push('- 三口/四口关系')
+    lines.push(...baoRelations)
+  }
+
+  // 结算逐笔明细
+  lines.push('')
+  lines.push('- 结算逐笔明细（谁付给谁、倍率和金额）')
+  if (r.settlementLog && r.settlementLog.length > 0) {
+    for (const s of r.settlementLog) {
+      const multStr = s.mult ? ` (${s.amount / s.mult}x${s.mult})` : ''
+      lines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
+    }
+  } else {
+    lines.push('  - (无)')
+  }
+
+  return lines.join('\n')
+}
+
+// 检测大牌类型（清碰/风一色/风碰/混碰）
+function isBigHand(result: GameResult, winnerIdx: number): boolean {
+  try {
+    const snap = result.snapshots?.[winnerIdx]
+    if (!snap) return false
+    const ws = `${g_wildSuit}-${g_wildValue}`
+    const types = detectHandTypes(
+      // 从snapshot重建手牌有困难，改用events判断
+      [], [], false, 0, null
+    )
+    // 备选方案：从结算倍数判断（大牌倍数通常很高）
+    return result.multiplier >= 4  // 简化判断：高倍局视为大牌
+  } catch { return false }
+}
+
+function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
+  const scores: Record<string, number> = {}
+  const wins: Record<string, number> = {}
+  for (const n of AI_NAMES) { scores[n] = 0; wins[n] = 0 }
+  let draws = 0
+  let winGames = 0
+  let selfDrawGames = 0
+  let discardWinGames = 0
+  let fightToLastGames = 0
+  let bigWinGames = 0
+  let menqingWinGames = 0
+  let bigWin: EvalResult['bigWin'] = null
+  let bigLoss: EvalResult['bigLoss'] = null
+  let worstSingleLoss: EvalResult['worstSingleLoss'] = null
+  prevRoundWasDraw = false
+
+  for (let g = 0; g < games; g++) {
+    const bloodResult = runGameWithFightToLast(policy)
+
+    // 全流局
+    if (bloodResult.winners.length === 0) {
+      draws++
+      prevRoundWasDraw = true
+      continue
+    }
+    prevRoundWasDraw = false
+
+    // 血战到最后一人（≥2个赢家）
+    if (bloodResult.winners.length >= 2) {
+      fightToLastGames++
+    }
+
+    // 每个赢家都算一局胡牌
+    for (const w of bloodResult.winners) {
+      winGames++
+      wins[AI_NAMES[w.idx]] = (wins[AI_NAMES[w.idx]] || 0) + 1
+
+      // 自摸 vs 捉冲
+      if (w.selfDraw) {
+        selfDrawGames++
+      } else {
+        discardWinGames++
+      }
+
+      // 门清检查（snapshot中melds为空 → 门清胡牌）
+      if (w.snapshot && w.snapshot.melds.length === 0) {
+        menqingWinGames++
+      }
+
+      // 大牌检查（从最后一个子局的events中找赢家的手牌类型）
+      // 简化：高倍局(≥4)视为大牌
+      if (bloodResult.allEvents.length > 0) {
+        const lastResult = bloodResult.winners.length  // 用赢家得分判断
+        if (Math.abs(w.score) >= 2000) {  // 高分视为大牌（约4倍以上）
+          bigWinGames++
+        }
+      }
+    }
+
+    // 用最后一个子局的result来做输赢明细
+    // 重新跑一局拿完整的GameResult（用于snapshot和settlement明细）
+    const detailResult = runGame(policy, [policy, policy, policy])
+
+    if (detailResult) {
+      for (let i = 0; i < AI_NAMES.length; i++) {
+        scores[AI_NAMES[i]] += detailResult.scores[i] * SETTLEMENT_MULT
+      }
+      const maxScore = Math.max(...detailResult.scores.map(Math.abs))
+      const maxIdx = detailResult.scores.indexOf(Math.max(...detailResult.scores))
+      const minIdx = detailResult.scores.indexOf(Math.min(...detailResult.scores))
+
+      if (!bigWin || detailResult.scores[maxIdx] * SETTLEMENT_MULT > bigWin.score) {
+        bigWin = { gameIdx: g, result: detailResult, score: detailResult.scores[maxIdx] * SETTLEMENT_MULT }
+      }
+      if (!bigLoss || detailResult.scores[minIdx] * SETTLEMENT_MULT < bigLoss.score) {
+        bigLoss = { gameIdx: g, result: detailResult, score: detailResult.scores[minIdx] * SETTLEMENT_MULT }
+      }
+      for (let i = 0; i < 4; i++) {
+        const delta = detailResult.scores[i] * SETTLEMENT_MULT
+        if (!worstSingleLoss || delta < worstSingleLoss.score) {
+          worstSingleLoss = { loser: AI_NAMES[i], score: delta, gameIdx: g, result: detailResult }
+        }
+      }
+    }
+  }
+
+  const winRates: Record<string, number> = {}
+  for (const n of AI_NAMES) winRates[n] = (wins[n] || 0) / games
+
+  // 计算指标导向fitness
+  const drawRate = draws / games
+  const selfDrawRate = winGames > 0 ? selfDrawGames / winGames : 0
+  const discardWinRate = winGames > 0 ? discardWinGames / winGames : 0
+  const fightToLastRate = winGames > 0 ? fightToLastGames / Math.max(1, games - draws) : 0
+  const bigHandRate = winGames > 0 ? bigWinGames / winGames : 0
+  const menqingWinRate = winGames > 0 ? menqingWinGames / winGames : 0
+
+  let mf = 0
+  // 胡牌率 = 1 - drawRate（目标≥90%）
+  const huRate = 1 - drawRate
+  mf -= Math.max(0, drawRate - 0.10) * 1000       // 流局率惩罚（目标<10%）
+  mf += Math.max(0, huRate - 0.90) * 500           // 胡牌率奖励
+  // 自摸率（目标40-60%，中心50%）
+  mf -= Math.max(0, Math.abs(selfDrawRate - 0.50) - 0.10) * 400
+  // 捉冲率（目标40-60%，中心50%）
+  mf -= Math.max(0, Math.abs(discardWinRate - 0.50) - 0.10) * 400
+  // 血战率（目标>80%）
+  mf -= Math.max(0, 0.80 - fightToLastRate) * 500
+  // 大牌率（目标3-8%）
+  if (bigHandRate < 0.03) mf -= (0.03 - bigHandRate) * 500
+  if (bigHandRate > 0.08) mf -= (bigHandRate - 0.08) * 500
+  // 门清胡牌率（目标7-12%）
+  if (menqingWinRate < 0.07) mf -= (0.07 - menqingWinRate) * 400
+  if (menqingWinRate > 0.12) mf -= (menqingWinRate - 0.12) * 400
+
+  return {
+    akScore: scores['AI-AK'] || 0, akWins: wins['AI-AK'] || 0, winRates, scores, draws,
+    bigWin, bigLoss, totalGames: games, winGames, selfDrawGames, discardWinGames,
+    fightToLastGames, bigWinGames, menqingWinGames, metricsFitness: mf, worstSingleLoss
+  }
+}
+
+// ========== Main Training Loop (全员收敛) ==========
+function main() {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  const mdFile = path.join(OUT_DIR, `baseline-training-${timestamp}.md`)
+  const policyFile = path.join(OUT_DIR, `best-policy-baseline-${timestamp}.json`)
+  const policyLatest = path.join(OUT_DIR, 'best-policy.json')
+
+  if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true })
+
+  // 4人共用同一个策略
+  let bestPolicy = loadCharacter('AI-AK')
+  let bestScore = -Infinity
+  let logLines: string[] = []
+
+  const header = [
+    '# 长清阁麻将 全员基线收敛训练日志',
+    '',
+    `- 创建时间: ${new Date().toISOString()}`,
+    `- 训练脚本: train-baseline.ts`,
+    `- Config: ${ROUNDS} rounds × ${GAMES_PER_ROUND} games = ${ROUNDS * GAMES_PER_ROUND} total`,
+    `- 模式: 4人共用同一策略，血战到最后一人`,
+    `- 目标指标:`,
+    `  - 胡牌率 ≥90% (流局 <10%)`,
+    `  - 血战率 >80%`,
+    `  - 自摸率 40-60%`,
+    `  - 捉冲率 40-60%`,
+    `  - 大牌率 3-8%`,
+    `  - 门清胡牌率 7-12%`,
+    '',
+    '> 每轮记录训练指标 + 策略参数 + 最大输赢局明细 + 结算逐笔',
+  ]
+  console.log(header.join('\n'))
+  logLines.push(...header)
+
+  // Round 0: baseline evaluation
+  console.log('\n## 基线成绩（第0轮）')
+  logLines.push('\n## 基线成绩（第0轮）')
+  const baseline = evaluatePolicy(bestPolicy, GAMES_PER_ROUND)
+  bestScore = baseline.metricsFitness
+  const baseLine = [
+    `| 指标 | 值 | 目标 |`,
+    `|------|-----|------|`,
+    `| 胡牌率 | ${((1-baseline.draws/GAMES_PER_ROUND)*100).toFixed(1)}% | ≥90% |`,
+    `| 流局率 | ${(baseline.draws/GAMES_PER_ROUND*100).toFixed(1)}% | <10% |`,
+    `| 自摸率 | ${(baseline.selfDrawGames/Math.max(1,baseline.winGames)*100).toFixed(1)}% | 40-60% |`,
+    `| 捉冲率 | ${(baseline.discardWinGames/Math.max(1,baseline.winGames)*100).toFixed(1)}% | 40-60% |`,
+    `| 血战率 | ${(baseline.fightToLastGames/Math.max(1,GAMES_PER_ROUND-baseline.draws)*100).toFixed(1)}% | >80% |`,
+    `| 大牌率 | ${(baseline.bigWinGames/Math.max(1,baseline.winGames)*100).toFixed(1)}% | 3-8% |`,
+    `| 门清率 | ${(baseline.menqingWinGames/Math.max(1,baseline.winGames)*100).toFixed(1)}% | 7-12% |`,
+    `| Fitness | ${baseline.metricsFitness.toFixed(1)} | ↑ |`,
+  ].join('\n')
+  console.log(baseLine)
+  logLines.push(baseLine)
+
+  const scoreHistory: number[] = [bestScore]
+  let plateauCount = 0
+
+  for (let round = 1; round <= ROUNDS; round++) {
+    let intensity = 1.0
+    if (plateauCount >= 2) intensity = 1.8
+    if (plateauCount >= 4) intensity = 2.5
+
+    const candidates: BotPolicy[] = []
+    for (let i = 0; i < 4; i++) {
+      candidates.push(mutatePolicy(bestPolicy, intensity))
+    }
+    // 轻度变异保底
+    candidates.push(mutatePolicy(bestPolicy, intensity * 0.3))
+
+    let roundBestScore = -Infinity
+    let roundBestPolicy = bestPolicy
+    let roundBigWin: EvalResult['bigWin'] = null
+    let roundBigLoss: EvalResult['bigLoss'] = null
+    let roundWorstLoss: EvalResult['worstSingleLoss'] = null
+    let bestEvalResult: EvalResult | null = null
+
+    const roundLines: string[] = []
+    roundLines.push(`\n### 第${round}轮 (强度=${intensity.toFixed(1)}, 停滞=${plateauCount})`)
+
+    for (let c = 0; c < candidates.length; c++) {
+      const result = evaluatePolicy(candidates[c], GAMES_PER_ROUND)
+      const score = result.metricsFitness
+      const huRate = ((1 - result.draws / GAMES_PER_ROUND) * 100).toFixed(0)
+      const selfDR = result.winGames > 0 ? (result.selfDrawGames/result.winGames*100).toFixed(0) : '0'
+      const discardR = result.winGames > 0 ? (result.discardWinGames/result.winGames*100).toFixed(0) : '0'
+      roundLines.push(`  C${c+1}: fitness=${score.toFixed(0)} hu=${huRate}% self=${selfDR}% disc=${discardR}% draws=${result.draws}`)
+
+      if (score > roundBestScore) {
+        roundBestScore = score
+        roundBestPolicy = candidates[c]
+        roundBigWin = result.bigWin
+        roundBigLoss = result.bigLoss
+        roundWorstLoss = result.worstSingleLoss
+        bestEvalResult = result
+      }
+    }
+
+    let improved = false
+    if (roundBestScore > bestScore) {
+      bestScore = roundBestScore
+      bestPolicy = { ...roundBestPolicy }
+      improved = true
+      plateauCount = 0
+    } else {
+      plateauCount++
+    }
+
+    scoreHistory.push(roundBestScore)
+    if (scoreHistory.length > 10) scoreHistory.shift()
+
+    const statusLine = improved
+      ? `  ★ NEW BEST! fitness=${bestScore.toFixed(0)}`
+      : `  Best: ${roundBestScore.toFixed(0)} (overall: ${bestScore.toFixed(0)}) [plateau: ${plateauCount}]`
+    roundLines.push(statusLine)
+
+    if (bestEvalResult) {
+      const dr = bestEvalResult.draws / GAMES_PER_ROUND
+      roundLines.push(`  指标: hu=${((1-dr)*100).toFixed(0)}% self=${(bestEvalResult.selfDrawGames/Math.max(1,bestEvalResult.winGames)*100).toFixed(0)}% disc=${(bestEvalResult.discardWinGames/Math.max(1,bestEvalResult.winGames)*100).toFixed(0)}% big=${(bestEvalResult.bigWinGames/Math.max(1,bestEvalResult.winGames)*100).toFixed(0)}% mq=${(bestEvalResult.menqingWinGames/Math.max(1,bestEvalResult.winGames)*100).toFixed(0)}%`)
+    }
+
+    console.log(roundLines.join('\n'))
+    logLines.push(...roundLines)
+
+    if (bestEvalResult) {
+      logLines.push('', formatRoundMarkdown(round, bestEvalResult, roundBestPolicy), '')
+    }
+  }
+
+  // Final evaluation
+  console.log('\n--- 最终评估 ---')
+  logLines.push('\n--- 最终评估 ---')
+
+  const finalEval = evaluatePolicy(bestPolicy, 1000)
+  const finalLines = [
+    `| 指标 | 值 | 目标 | 达标 |`,
+    `|------|-----|------|------|`,
+    `| 胡牌率 | ${((1-finalEval.draws/1000)*100).toFixed(1)}% | ≥90% | ${((1-finalEval.draws/1000)>=0.9?'✅':'❌')} |`,
+    `| 流局率 | ${(finalEval.draws/1000*100).toFixed(1)}% | <10% | ${(finalEval.draws/1000<0.1?'✅':'❌')} |`,
+    `| 自摸率 | ${(finalEval.selfDrawGames/Math.max(1,finalEval.winGames)*100).toFixed(1)}% | 40-60% | ${(finalEval.selfDrawGames/Math.max(1,finalEval.winGames)>=0.4&&finalEval.selfDrawGames/Math.max(1,finalEval.winGames)<=0.6?'✅':'❌')} |`,
+    `| 捉冲率 | ${(finalEval.discardWinGames/Math.max(1,finalEval.winGames)*100).toFixed(1)}% | 40-60% | ${(finalEval.discardWinGames/Math.max(1,finalEval.winGames)>=0.4&&finalEval.discardWinGames/Math.max(1,finalEval.winGames)<=0.6?'✅':'❌')} |`,
+    `| 血战率 | ${(finalEval.fightToLastGames/Math.max(1,1000-finalEval.draws)*100).toFixed(1)}% | >80% | ${(finalEval.fightToLastGames/Math.max(1,1000-finalEval.draws)>0.8?'✅':'❌')} |`,
+    `| 大牌率 | ${(finalEval.bigWinGames/Math.max(1,finalEval.winGames)*100).toFixed(1)}% | 3-8% | ${((finalEval.bigWinGames/Math.max(1,finalEval.winGames))>=0.03&&(finalEval.bigWinGames/Math.max(1,finalEval.winGames))<=0.08?'✅':'❌')} |`,
+    `| 门清率 | ${(finalEval.menqingWinGames/Math.max(1,finalEval.winGames)*100).toFixed(1)}% | 7-12% | ${((finalEval.menqingWinGames/Math.max(1,finalEval.winGames))>=0.07&&(finalEval.menqingWinGames/Math.max(1,finalEval.winGames))<=0.12?'✅':'❌')} |`,
+    ``,
+    `Fitness: ${finalEval.metricsFitness.toFixed(0)}`,
+  ]
+  finalLines.push(`\n  最佳策略参数 (关键):`)
+  const keyParams: (keyof BotPolicy)[] = [
+    'selfWinChance', 'discardHuChance', 'pengChance', 'chowChance', 'anKongChance',
+    'allPungsPursuit', 'pureFlushPursuit', 'halfFlushWeight', 'sevenPairsPursuit',
+    'menqingKeepBonus', 'noWildDoubleAwareness',
+    'wild0Aggression', 'wild1Aggression', 'wild2Aggression', 'wild3PlusAggression',
+    'wild0MenqingKeep', 'wild1MenqingKeep', 'wild2MenqingKeep',
+    'multHighValueBias', 'wallLateDefense', 'safeTilePriority',
+  ]
+  for (const k of keyParams) {
+    const val = (bestPolicy as any)[k]
+    finalLines.push(`    ${k}: ${typeof val === 'number' ? (Number.isInteger(val) ? val : val.toFixed(4)) : val}`)
+  }
+
+  // 最大输赢局明细
+  if (finalEval.bigWin) {
+    const evs = finalEval.bigWin.result.events
+    finalLines.push(`\n  【最大赢局】+${finalEval.bigWin.score} (倍×${finalEval.bigWin.result.multiplier})`)
+    for (const e of evs) finalLines.push(`    ${e.player} ${e.action}: ${e.detail}`)
+  }
+  if (finalEval.bigLoss) {
+    const evs = finalEval.bigLoss.result.events
+    finalLines.push(`\n  【最大输局】${finalEval.bigLoss.score} (倍×${finalEval.bigLoss.result.multiplier})`)
+    for (const e of evs) finalLines.push(`    ${e.player} ${e.action}: ${e.detail}`)
+  }
+
+  console.log(finalLines.join('\n'))
+  logLines.push(...finalLines)
+
+  // Save all 4 AIs with same policy
+  const metrics = {
+    fitness: finalEval.metricsFitness,
+    huRate: 1 - finalEval.draws / 1000,
+    drawRate: finalEval.draws / 1000,
+    selfDrawRate: finalEval.selfDrawGames / Math.max(1, finalEval.winGames),
+    discardWinRate: finalEval.discardWinGames / Math.max(1, finalEval.winGames),
+    fightToLastRate: finalEval.fightToLastGames / Math.max(1, 1000 - finalEval.draws),
+    bigHandRate: finalEval.bigWinGames / Math.max(1, finalEval.winGames),
+    menqingWinRate: finalEval.menqingWinGames / Math.max(1, finalEval.winGames),
+    totalGames: ROUNDS * GAMES_PER_ROUND,
+    note: `Baseline convergence - ${ROUNDS}x${GAMES_PER_ROUND}`
+  }
+
+  for (const name of AI_NAMES) {
+    saveCharacter(name, { ...bestPolicy, id: name }, metrics)
+  }
+  console.log(`\nAll 4 AIs saved: ${AI_NAMES.join(', ')}`)
+
+  fs.writeFileSync(mdFile, logLines.join('\n'), 'utf-8')
+  fs.writeFileSync(policyFile, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
+  fs.writeFileSync(policyLatest, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
+
+  console.log(`\nLog: ${mdFile}`)
+  console.log(`Policy: ${policyFile}`)
+}
+
+main()

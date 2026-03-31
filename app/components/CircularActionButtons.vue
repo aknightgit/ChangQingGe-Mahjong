@@ -52,6 +52,15 @@
       <span v-if="isFreezing" class="freeze-progress-ring"></span>
       <span class="draw-label">摸</span>
     </button>
+
+    <!-- 过 -->
+    <button
+      v-if="hasPass"
+      class="action-btn action-btn--pass"
+      :class="{ 'action-btn--highlight': hasPass && !isDelaying }"
+      :disabled="!hasPass || isDelaying || isInteractionLocked || !isConnected"
+      @click="$emit('action', 'pass')"
+    >过</button>
   </div>
 </template>
 
@@ -87,6 +96,7 @@ const hasKong = computed(() =>
   props.availableActions.includes(ActionType.EXTENDED_KONG)
 )
 const hasHu = computed(() => props.availableActions.includes(ActionType.HU))
+const hasPass = computed(() => props.availableActions.includes(ActionType.PASS))
 
 const hasAnyPriorityAction = computed(() => hasChow.value || hasPeng.value || hasKong.value || hasHu.value)
 const hasAnyAction = computed(() => hasAnyPriorityAction.value || canDraw.value)
@@ -274,6 +284,15 @@ const freezeProgress = computed(() => {
 .action-panel--compact .action-btn--small { width: 36px; height: 36px; font-size: 0.75rem; }
 .action-panel--compact .action-btn--draw { width: 56px; height: 56px; font-size: 1rem; }
 .action-panel--compact .action-grid { gap: 4px; }
+
+/* 过按钮 */
+.action-btn--pass {
+  width: 44px; height: 44px; border-radius: 50%; font-size: 0.85rem;
+  background: rgba(80, 80, 80, 0.6); color: #ccc;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+}
+.action-btn--pass.action-btn--highlight { border-color: rgba(255, 200, 50, 0.6); color: #ffd36a; }
+.action-btn--pass:disabled { opacity: 0.3; cursor: not-allowed; }
 
 @media (max-width: 768px) {
   .action-btn--small { width: 40px; height: 40px; }

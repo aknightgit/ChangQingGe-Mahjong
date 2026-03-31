@@ -283,10 +283,6 @@
           <div class="mahjong-table">
             <!-- 绿色桌布内层 -->
             <div class="table-felt">
-            <!-- 房间号 -->
-            <div class="room-number" v-if="gameState?.roomNumber">
-              #{{ gameState.roomNumber }}
-            </div>
             <!-- 左上角: 轮次信息 -->
             <div class="round-info" v-if="gameState?.phase === 'playing'">
               {{ roundDisplay }}
@@ -434,7 +430,7 @@
                     @click="onPlayerBack"
                   >我回来了</button>
                 </div>
-                <div class="inline-action-buttons" v-else-if="isConnected && !isInteractionLocked">
+                <div class="inline-action-buttons" v-else-if="isConnected && !isInteractionLocked" style="display:none">
                   <div v-if="actionWindowText" class="inline-action-timer">{{ actionWindowText }}</div>
                   <button
                     v-if="showChow"
@@ -560,7 +556,6 @@
       </main>
 
       <CircularActionButtons
-        v-if="shouldRotateView"
         :available-actions="availableActions"
         :is-connected="isConnected"
         :is-interaction-locked="isInteractionLocked"
