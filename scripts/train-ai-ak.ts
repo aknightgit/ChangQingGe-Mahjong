@@ -1295,6 +1295,7 @@ interface EvalResult {
   bigLoss: { gameIdx: number; result: GameResult; score: number } | null
   // 模板输出用
   totalGames: number; winGames: number; selfDrawGames: number
+  fightToLastGames: number  // 血战到最后一人（多赢家局）
   worstSingleLoss: { loser: string; score: number; gameIdx: number; result: GameResult } | null
 }
 
@@ -1358,6 +1359,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   let draws = 0
   let winGames = 0
   let selfDrawGames = 0
+  let fightToLastGames = 0
   let bigWin: EvalResult['bigWin'] = null
   let bigLoss: EvalResult['bigLoss'] = null
   let worstSingleLoss: EvalResult['worstSingleLoss'] = null
