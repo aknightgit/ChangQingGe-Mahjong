@@ -1,10 +1,5 @@
 <template>
   <div class="table-center-zone">
-    <!-- 左侧牌墙 -->
-    <div class="wall-side-container wall-left-container">
-      <TileWallSide :remaining="remainingTiles" side="left" />
-    </div>
-
     <!-- 中心信息区：垂直居中堆叠 -->
     <div class="center-info">
       <div class="info-item multiplier-badge">
@@ -24,16 +19,11 @@
       </div>
     </div>
 
-    <!-- 右侧牌墙 -->
-    <div class="wall-side-container wall-right-container">
-      <TileWallSide :remaining="remainingTiles" side="right" />
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import MahjongTile from './MahjongTile.vue'
-import TileWallSide from './TileWallSide.vue'
 import { TileSuit } from '../types/game'
 import type { Tile } from '../types/game'
 

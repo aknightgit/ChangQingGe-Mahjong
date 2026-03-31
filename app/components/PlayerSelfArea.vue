@@ -1,5 +1,14 @@
 <template>
   <div class="player-area" :class="{ 'player-area--winner': isWinner }">
+    <!-- 玩家头像 -->
+    <div class="self-player-header">
+      <PlayerAvatar :name="name" class="self-avatar" :is-active="false" />
+      <span class="self-player-name">
+        {{ name }}
+        <span v-if="isWinner" class="winner-tag">胡</span>
+      </span>
+    </div>
+
     <!-- 互包警告 -->
     <div v-if="bailoutCounts && Object.keys(bailoutCounts).length" class="bailout-warning">
       ⚠️ 互包:
@@ -63,9 +72,11 @@
 
 <script setup lang="ts">
 import MahjongTile from './MahjongTile.vue'
+import PlayerAvatar from './PlayerAvatar.vue'
 import type { Tile, Meld } from '~/types/game'
 
 const props = defineProps<{
+  name?: string
   hand: Tile[]
   melds: Meld[]
   selectedTileId?: string | null
@@ -156,6 +167,34 @@ const onPointerCancel = () => {
 
 .player-area--winner {
   background: transparent;
+}
+
+/* 自家玩家头像区域 */
+.self-player-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.self-avatar {
+  width: 40px;
+  height: 40px;
+}
+
+.self-player-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #f5f5f5;
+}
+
+.winner-tag {
+  margin-left: 3px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: #f44336;
+  color: #fff;
+  font-size: 0.6rem;
 }
 
 /* 主行：melds 左 + 手牌右 */

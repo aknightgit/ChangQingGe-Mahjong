@@ -338,6 +338,9 @@
               :wild-tile="wildTile"
             />
 
+            <!-- 牌墙（四面）：对家和自家的牌墙需要 TileWall -->
+            <TileWall :remaining="remainingTileCount" />
+
             <!-- 弃牌区（4个独立位置） -->
             <DiscardZone
               position="bottom"
@@ -647,6 +650,7 @@ import PlayerSelfArea from '~/components/PlayerSelfArea.vue'
 import PlayerOtherArea from '~/components/PlayerOtherArea.vue'
 import CircularActionButtons from '~/components/CircularActionButtons.vue'
 import TableCenter from '~/components/TableCenter.vue'
+import TileWall from '~/components/TileWall.vue'
 import DiceAnimation from '~/components/DiceAnimation.vue'
 import PlayerInfo from '~/components/PlayerInfo.vue'
 import RoomStats from '~/components/RoomStats.vue'
@@ -748,22 +752,22 @@ const resetAutoCount = () => {
 const handleAutoAction = () => {
   consecutiveAutoCount++
 
-  // 1. 有摸到的牌但没出 → 自动打出摸到的牌
-  if (currentPlayer.value?.hand?.concealedTiles?.length) {
-    const lastTile = currentPlayer.value.hand.concealedTiles.at(-1)
-    if (lastTile) {
-      playSound('tile-discard')
-      executeAction(ActionType.DISCARD, lastTile.id)
-    }
+  // 1. 轮到摸牌 → 自动摸
+  if (showDraw.value) {
+    playSound('tile-draw')
+    executeAction(ActionType.DRAW)
   }
   // 2. 有优先操作（吃/碰/杠/胡）→ 自动过
   else if (showPass.value) {
     onPass()
   }
-  // 3. 轮到摸牌 → 自动摸
-  else if (showDraw.value) {
-    playSound('tile-draw')
-    executeAction(ActionType.DRAW)
+  // 3. 有摸到的牌但没出 → 自动打出摸到的牌
+  else if (currentPlayer.value?.hand?.concealedTiles?.length) {
+    const lastTile = currentPlayer.value.hand.concealedTiles.at(-1)
+    if (lastTile) {
+      playSound('tile-discard')
+      executeAction(ActionType.DISCARD, lastTile.id)
+    }
   }
 
   // 检查是否达到连续阈值 → AI托管
@@ -1242,6 +1246,11 @@ const handleTileDblclick = (tile: Tile) => {
 
 const handleTileClick = (tile: Tile) => {
   if (isWinner.value || isInteractionLocked.value) return
+  
+  // 如果需要摸牌（showDraw为true），禁止点击手牌出牌
+  if (showDraw.value) {
+    return
+  }
   
   // If it's our turn and we can discard
   const canDiscard = availableActions.value.includes(ActionType.DISCARD)

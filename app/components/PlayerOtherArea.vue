@@ -6,7 +6,7 @@
   >
     <div class="player-other-header" v-if="position === 'top'">
       <span class="position-dot" :class="`dot--${posColor}`"></span>
-      <span v-if="avatar" class="player-avatar">{{ avatar }}</span>
+      <PlayerAvatar :name="name" class="player-avatar" :is-active="false" />
       <span class="player-other-name player-other-name--clickable" @click.stop="$emit('nameClick')">
         {{ name }}
         <span v-if="isWinner" class="winner-tag">胡</span>
@@ -20,6 +20,13 @@
     <div class="player-area" :class="`player-area--${position}`">
       <!-- left: hand在上(边缘), melds在下(靠近牌桌中心/蓝圈位置) -->
       <template v-if="position === 'left'">
+        <div class="player-other-header-left">
+          <PlayerAvatar :name="name" class="player-avatar-left" :is-active="false" />
+          <span class="player-other-name player-other-name--clickable" @click.stop="$emit('nameClick')">
+            {{ name }}
+            <span v-if="isWinner" class="winner-tag">胡</span>
+          </span>
+        </div>
         <div class="player-other-hand player-other-hand--left">
           <MahjongTile
             v-for="tile in hand"
@@ -53,6 +60,14 @@
 
       <!-- right/top: melds在前 -->
       <template v-else>
+        <!-- right 位置：头像放在 melds 上方 -->
+        <div v-if="position === 'right'" class="player-other-header-right">
+          <PlayerAvatar :name="name" class="player-avatar-right" :is-active="false" />
+          <span class="player-other-name player-other-name--clickable" @click.stop="$emit('nameClick')">
+            {{ name }}
+            <span v-if="isWinner" class="winner-tag">胡</span>
+          </span>
+        </div>
         <div class="player-other-melds" v-if="melds.length">
           <div
             v-for="(meld, i) in melds"
@@ -92,6 +107,7 @@
 
 <script setup lang="ts">
 import MahjongTile from './MahjongTile.vue'
+import PlayerAvatar from './PlayerAvatar.vue'
 import type { Tile, Meld } from '~/types/game'
 
 const props = defineProps<{
@@ -149,6 +165,34 @@ const getArrowChar = (sourcePos: number): string => {
   align-items: center;
   gap: 4px;
   opacity: 0.9;
+}
+
+/* 左家头像区域：垂直排列 */
+.player-other-header-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.player-avatar-left {
+  width: 36px;
+  height: 36px;
+}
+
+/* 右家头像区域：垂直排列 */
+.player-other-header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.player-avatar-right {
+  width: 36px;
+  height: 36px;
 }
 
 .position-dot {
