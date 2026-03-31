@@ -1058,6 +1058,8 @@ const isWaitingRoom = computed(() => {
   const phase = gameState.value.phase
   // 只在 waiting 阶段显示等待房间
   if (phase !== 'waiting') return false
+  // 如果正在启动游戏（点了创建新局），不显示等待房间
+  if (isGameStarting) return false
   // 如果牌已发（有人有手牌），说明正在发牌中，不显示等待房间
   const hasDealtCards = (gameState.value.players || []).some(
     (p: any) => (p.hand?.concealedTiles?.length || 0) > 0
@@ -1758,10 +1760,10 @@ const onExtendedKong = () => {
 
 // ---- 开局流程：掷骰子 → 发牌 ----
 // 防重复点击标志
-let isGameStarting = false
+const isGameStarting = ref(false)
 
 const onStartGame = async () => {
-  if (isGameStarting) return
+  if (isGameStarting.value) return
   if (gameState.value?.phase === GamePhase.PLAYING) {
     console.warn('[onStartGame] Game already in PLAYING phase, skipping')
     return
@@ -1796,8 +1798,8 @@ const onStartGame = async () => {
 
 const onDealTiles = async () => {
   // 防止重复调用：只有当 overlay 可见时才处理
-  if (!showDiceOverlay.value || isGameStarting) return
-  isGameStarting = true
+  if (!showDiceOverlay.value || isGameStarting.value) return
+  isGameStarting.value = true
   showDiceOverlay.value = false
   // 等 DiceAnimation 的 Leave 动画完成（约 300ms）再正式开始
   await new Promise(resolve => setTimeout(resolve, 350))
@@ -1809,7 +1811,7 @@ const onDealTiles = async () => {
     await forceRefreshState()
     console.log('[onDealTiles] Done, phase:', gameState.value?.phase)
   } finally {
-    isGameStarting = false
+    isGameStarting.value = false
   }
 }
 
