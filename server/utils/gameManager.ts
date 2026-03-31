@@ -131,6 +131,15 @@ class GameManager {
    * 让 bot 处理自己的 pending action（碰/杠/胡/吃/过）
    * 延迟300-600ms模拟"思考时间"，给人类玩家反应窗口
    */
+
+
+  private countExposedTilesExcludingFlowerMelds(player: Player): number {
+    return player.hand.exposedMelds.reduce((sum, m) => {
+      if (m.tiles.length === 1 && isFlower(m.tiles[0])) return sum;
+      return sum + m.tiles.length;
+    }, 0);
+  }
+
   private handleBotPendingActions(gameId: string): void {
     const botThinkMs = 300 + Math.floor(Math.random() * 300); // 300-600ms 思考延迟
     setTimeout(async () => {
@@ -153,9 +162,9 @@ class GameManager {
             this.handlePass(game, player);
           } else if (action === ActionType.PENG) {
             // 检查碰牌后是否超过14张
-            const pengExposedCount = player.hand.exposedMelds.reduce((sum, m) => sum + m.tiles.length, 0);
+            const pengExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
             const pengTotalCount = player.hand.concealedTiles.length + pengExposedCount;
-            if (pengTotalCount + 3 <= 14) {
+            if (pengTotalCount - 2 + 3 <= 14) {
               this.handlePeng(game, player);
               claimedAction = true;
             } else {
@@ -163,9 +172,9 @@ class GameManager {
               this.handlePass(game, player);
             }
           } else if (action === ActionType.KONG) {
-            const kongExposedCount = player.hand.exposedMelds.reduce((sum, m) => sum + m.tiles.length, 0);
+            const kongExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
             const kongTotalCount = player.hand.concealedTiles.length + kongExposedCount;
-            if (kongTotalCount + 3 <= 14) {
+            if (kongTotalCount - 3 + 4 <= 14) {
               this.handleKong(game, player, pa.tile?.id || '');
               claimedAction = true;
             } else {
@@ -176,9 +185,9 @@ class GameManager {
             this.handleHu(game, player);
             claimedAction = true;
           } else if (action === ActionType.CHOW) {
-            const chowExposedCount = player.hand.exposedMelds.reduce((sum, m) => sum + m.tiles.length, 0);
+            const chowExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
             const chowTotalCount = player.hand.concealedTiles.length + chowExposedCount;
-            if (chowTotalCount + 3 <= 14) {
+            if (chowTotalCount - 2 + 3 <= 14) {
               this.handleChow(game, player);
               claimedAction = true;
             } else {
@@ -747,12 +756,12 @@ class GameManager {
       this.replaceInitialFlowers(game, p);
       // 循环补花直到没有普通花牌或牌墙空
       let flowers = p.hand.exposedMelds.filter(
-        m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
+        m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
       );
       while (flowers.length > 0 && game.wall.length > 0) {
         this.replaceInitialFlowers(game, p);
         flowers = p.hand.exposedMelds.filter(
-          m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
+          m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
         );
       }
     }
@@ -926,7 +935,7 @@ class GameManager {
 
       // 自动补花：如果门口有未替换的花牌，先补花
       const unreplacedFlowers = player.hand.exposedMelds.filter(
-        m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
+        m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
       )
       if (unreplacedFlowers.length > 0 && game.wall.length > 0) {
         actions.push(ActionType.DRAW);
@@ -945,11 +954,7 @@ class GameManager {
       }
 
       // 摸牌：手牌+门口（不含花牌）< 14张时可以摸
-      const exposedTileCount = player.hand.exposedMelds.reduce((sum, meld) => {
-        // 单张花牌不计入（待补牌）
-        if (meld.tiles.length === 1 && isFlower(meld.tiles[0])) return sum;
-        return sum + meld.tiles.length;
-      }, 0);
+      const exposedTileCount = this.countExposedTilesExcludingFlowerMelds(player);
       const totalTileCount = player.hand.concealedTiles.length + exposedTileCount;
       if (totalTileCount < 14 && game.wall.length > 0) {
         actions.push(ActionType.DRAW);
@@ -1052,9 +1057,9 @@ class GameManager {
       case ActionType.PENG:
         // 防止超限：碰牌后手牌不能超过14张
         {
-          const pengExposedCount = player.hand.exposedMelds.reduce((sum, m) => sum + m.tiles.length, 0);
+          const pengExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
           const pengTotalCount = player.hand.concealedTiles.length + pengExposedCount;
-          if (pengTotalCount + 3 > 14) { // 碰牌增加一个3张meld
+          if (pengTotalCount - 2 + 3 > 14) { // 碰牌从手牌拿2张+弃牌1张组成3张meld
             console.warn(`[PENG] Blocked: player ${player.id} would exceed 14 tiles`);
             break;
           }
@@ -1065,9 +1070,9 @@ class GameManager {
       case ActionType.CHOW:
         // 防止超限：吃牌后手牌不能超过14张
         {
-          const chowExposedCount = player.hand.exposedMelds.reduce((sum, m) => sum + m.tiles.length, 0);
+          const chowExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
           const chowTotalCount = player.hand.concealedTiles.length + chowExposedCount;
-          if (chowTotalCount + 3 > 14) { // 吃牌增加一个3张meld
+          if (chowTotalCount - 2 + 3 > 14) { // 吃牌从手牌拿2张+弃牌1张组成3张meld
             console.warn(`[CHOW] Blocked: player ${player.id} would exceed 14 tiles`);
             break;
           }
@@ -1077,9 +1082,9 @@ class GameManager {
 
       case ActionType.KONG:
         {
-          const kongExposedCount = player.hand.exposedMelds.reduce((sum, m) => sum + m.tiles.length, 0);
+          const kongExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
           const kongTotalCount = player.hand.concealedTiles.length + kongExposedCount;
-          if (kongTotalCount + 4 > 14) {
+          if (kongTotalCount - 3 + 4 > 14) {
             console.warn(`[KONG] Blocked: player ${player.id} would exceed 14 tiles`);
             break;
           }
@@ -1250,7 +1255,7 @@ class GameManager {
         tiles: [tile],
         isConcealed: false
       });
-      console.log(`[FLOWER] ${player.name} 摸到花牌: ${tile.id}, 门口花牌数: ${player.hand.exposedMelds.filter(m => m.tiles.length === 1 && isFlower(m.tiles[0])).length}`);
+      console.log(`[FLOWER] ${player.name} 摸到花牌: ${tile.id}, 门口花牌数: ${player.hand.exposedMelds.filter(m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])).length}`);
       if (game.wall.length === 0) {
         this.endRound(game, GameEndReason.WALL_EXHAUSTED);
         return;
@@ -1273,7 +1278,7 @@ class GameManager {
    */
   private replaceInitialFlowers(game: GameState, player: Player): void {
     const flowerMelds = player.hand.exposedMelds.filter(
-      m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
+      m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
     );
     if (flowerMelds.length === 0) return;
 
@@ -2197,34 +2202,7 @@ class GameManager {
       }
     }
 
-    if (game.pendingActions.length > 0) {
-      this.schedulePendingActionTimeout(game.gameId);
-
-      // 调度 bot 玩家的自动响应（优先于1秒超时）
-      for (const pa of game.pendingActions) {
-        const player = game.players.find(p => p.id === pa.playerId);
-        if (player && this.isPlayerBotControlled(player)) {
-          const delay = 300 + Math.floor(Math.random() * 400); // 300-700ms 随机延迟
-          setTimeout(() => {
-            // 重新检查是否还有这个玩家的 pending action
-            const currentPa = game.pendingActions.find(p => p.playerId === player.id);
-            if (!currentPa) return; // 已经被处理过了
-
-            const action = shouldClaimPendingAction(player, currentPa.availableActions, game);
-            if (action !== ActionType.PASS) {
-              // Bot 决定要碰/杠/胡 → 执行动作
-              this.executeAction(game.gameId, player.id, action)
-                .catch(err => console.error('[BotService] Pending action error:', err));
-            } else {
-              // PASS
-              this.handlePass(game, player);
-              this.persistGame(game);
-              this.broadcastGameState(game.gameId);
-            }
-          }, delay);
-        }
-      }
-    } else {
+    if (game.pendingActions.length === 0) {
       this.clearPendingActionTimer(game.gameId);
     }
   }
@@ -2600,14 +2578,14 @@ class GameManager {
   private replaceFlowers(game: GameState, player: Player): void {
     // 找到门口的花牌meld（只有1张牌的meld就是花牌）
     const flowerMelds = player.hand.exposedMelds.filter(
-      m => m.tiles.length === 1 && isFlower(m.tiles[0])
+      m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
     );
 
     if (flowerMelds.length === 0) return;
 
     // 从 exposedMelds 中移除这些花牌 meld（处理完再加回来）
     player.hand.exposedMelds = player.hand.exposedMelds.filter(
-      m => !(m.tiles.length === 1 && isFlower(m.tiles[0]))
+      m => !(m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]))
     );
 
     const newFlowers: Tile[] = [];
@@ -2618,7 +2596,7 @@ class GameManager {
       let replacement = game.wall.pop()!;
 
       // 如果补到花牌，继续从牌墙补
-      while (isFlower(replacement)) {
+      while (isFlower(replacement) && !this.isWildTile(game, replacement)) {
         newFlowers.push(replacement);
         if (game.wall.length === 0) {
           replacement = null as any;
