@@ -2224,6 +2224,13 @@ const forceDiscard = async (p: Player) => {
   max-height: 80vh;
 }
 
+/* 操作按钮区：与战绩榜同宽，底部对齐牌桌 */
+.action-buttons-panel {
+  margin-top: auto;
+  flex-shrink: 0;
+  width: 100%;
+}
+
 /* 桌面端严格 1/4 宽 */
 @media (min-width: 1101px) {
   .extended-info-panel {

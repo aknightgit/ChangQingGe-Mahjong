@@ -186,6 +186,7 @@ const onPointerCancel = () => {
   font-weight: 600;
   font-size: 0.85rem;
   color: #f5f5f5;
+  display: none; /* 头像已替代名字 */
 }
 
 .winner-tag {
