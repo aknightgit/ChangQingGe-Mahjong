@@ -1017,17 +1017,29 @@ class GameManager {
 
       case ActionType.DRAW:
         // 防止重复摸牌：检查手牌+门口（不含花牌）是否已满14张
-        const drawExposedCount = player.hand.exposedMelds.reduce((sum, m) => {
-          if (m.tiles.length === 1 && isFlower(m.tiles[0])) return sum;
-          return sum + m.tiles.length;
-        }, 0);
-        const drawTotalCount = player.hand.concealedTiles.length + drawExposedCount;
-        if (drawTotalCount >= 14) {
-          console.warn(`[DRAW] Blocked: player ${player.id} already has ${drawTotalCount} tiles`);
-          break;
+        {
+          const countExposed = (p: Player) => p.hand.exposedMelds.reduce((sum, m) => {
+            if (m.tiles.length === 1 && isFlower(m.tiles[0])) return sum;
+            return sum + m.tiles.length;
+          }, 0);
+          if (player.hand.concealedTiles.length + countExposed(player) >= 14) {
+            console.warn(`[DRAW] Blocked: player ${player.id} already has ${player.hand.concealedTiles.length + countExposed(player)} tiles`);
+            break;
+          }
         }
         // 先处理门口的初始花牌（发牌时放门口的）
         this.replaceInitialFlowers(game, player);
+        // 补花后重新检查是否已满14张
+        {
+          const afterCount = player.hand.concealedTiles.length + player.hand.exposedMelds.reduce((sum, m) => {
+            if (m.tiles.length === 1 && isFlower(m.tiles[0])) return sum;
+            return sum + m.tiles.length;
+          }, 0);
+          if (afterCount >= 14) {
+            console.warn(`[DRAW] Blocked after flower replace: player ${player.id} has ${afterCount} tiles`);
+            break;
+          }
+        }
         // 再正常摸牌（摸到花牌会递归补花）
         this.handleDraw(game, player);
         break;
