@@ -205,9 +205,15 @@ class GameManager {
         await this.persistGame(game);
         this.broadcastGameState(gameId);
 
-        // 如果没人碰/杠，进入下家；如果有人碰了，其回合已设好
         if (!claimedAction) {
+          // 没人碰/杠，进入下家
           await this.moveToNextPlayer(game);
+        } else {
+          // 有人碰/杠/吃，其回合已设好 → 调度出牌
+          const claimingPlayer = game.players[game.currentPlayerIndex];
+          if (claimingPlayer && this.isPlayerBotControlled(claimingPlayer)) {
+            this.scheduleBotDiscard(gameId, claimingPlayer.id);
+          }
         }
       } catch (err) {
         console.error('[BotService] Pending action error:', err);
