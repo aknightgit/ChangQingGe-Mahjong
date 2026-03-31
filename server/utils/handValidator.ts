@@ -456,11 +456,13 @@ function isDaDiao(handTiles: Tile[], exposedMelds: Meld[]): boolean {
 /**
  * Check if a hand can win with standard pattern (4 melds + 1 pair)
  */
-export function canWinStandard(tiles: Tile[], existingMelds = 0, isWildTile: WildTileChecker = () => false): boolean {
+export function canWinStandard(tiles: Tile[], existingMelds = 0, isWildTile: WildTileChecker = () => false, kongCount = 0): boolean {
   const requiredMelds = Math.max(0, 4 - existingMelds);
   const nonFlowerTiles = tiles.filter(t => !isFlower(t));
-  // 新增：手牌张数校验
-  if (nonFlowerTiles.length !== requiredMelds * 3 + 2) return false
+  // 手牌张数校验（考虑杠牌4张 vs 普通副露3张）
+  const normalMelds = existingMelds - kongCount
+  const expectedHandSize = 14 - normalMelds * 3 - kongCount * 4
+  if (nonFlowerTiles.length !== expectedHandSize) return false
 
   // Try each possible pair as the eyes (including 1 wild + 1 natural)
   const groups = groupTiles(nonFlowerTiles.filter(t => !isWildTile(t)));
@@ -613,8 +615,10 @@ function canFormMelds(tiles: Tile[], n: number, isWildTile: WildTileChecker): bo
 /**
  * Check if hand can win (standard pattern: 4面子 + 1雀头)
  */
-export function canWin(tiles: Tile[], existingMelds = 0, isWildTile: WildTileChecker = () => false): { canWin: boolean; winType: WinType | null } {
-  if (canWinStandard(tiles, existingMelds, isWildTile)) {
+export function canWin(tiles: Tile[], existingMelds = 0, isWildTile: WildTileChecker = () => false, kongCount = 0): { canWin: boolean; winType: WinType | null } {
+  if (canWinStandard(tiles, existingMelds, isWildTile, kongCount)) {
+    return { canWin: true, winType: WinType.STANDARD };
+  }
     return { canWin: true, winType: WinType.STANDARD };
   }
 

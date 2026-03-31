@@ -955,11 +955,12 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
 
     // Self-draw win check
     const normalizedHand = normalizeHand(player.hand)
-    const expectedLen = 14 - player.exposedMelds.length * 3  // 自摸14张-副露占用
+    const kongCount = player.exposedMelds.filter(m => m.type === MeldType.KONG).length
+    const expectedLen = 14 - (player.exposedMelds.length - kongCount) * 3 - kongCount * 4
     if (normalizedHand.length !== expectedLen) {
-      console.error(`⚠️ 手牌长度异常: ${player.name} hand=${normalizedHand.length} expected=${expectedLen} melds=${player.exposedMelds.length}`)
+      console.error(`⚠️ 手牌长度异常: ${player.name} hand=${normalizedHand.length} expected=${expectedLen} (melds=${player.exposedMelds.length} kongs=${kongCount})`)
     }
-    if (canWin(normalizedHand, player.exposedMelds.length, makeWT(player)).canWin) {
+    if (canWin(normalizedHand, player.exposedMelds.length, makeWT(player), player.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
       let winChance = player.policy.selfWinChance
       const wildCount = player.hand.filter(t => isWT(t, player)).length
       winChance += wildCount * player.policy.selfWinWildBoost
@@ -983,7 +984,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         applyAnKong(player, ak)
         const extra = drawTile(g, player)
         if (extra && !isFlower(extra)) {
-          if (canWin(normalizeHand(player.hand), player.exposedMelds.length, makeWT(player)).canWin) {
+          if (canWin(normalizeHand(player.hand), player.exposedMelds.length, makeWT(player), player.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
             const baseScore = calcScore(player, true, true, g.gameMultiplier)
             player.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
@@ -999,7 +1000,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         applyJiaGang(player, jg)
         const extra = drawTile(g, player)
         if (extra && !isFlower(extra)) {
-          if (canWin(normalizeHand(player.hand), player.exposedMelds.length, makeWT(player)).canWin) {
+          if (canWin(normalizeHand(player.hand), player.exposedMelds.length, makeWT(player), player.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
             const baseScore = calcScore(player, true, true, g.gameMultiplier)
             player.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
@@ -1025,7 +1026,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       if (other === curr) continue
       const opp = g.players[other]
       const testHand = [...opp.hand.filter(t => t !== undefined), discard]
-      if (canWin(testHand, opp.exposedMelds.length, makeWT(opp)).canWin) {
+      if (canWin(testHand, opp.exposedMelds.length, makeWT(opp), opp.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
         let huChance = opp.policy.discardHuChance
         const wildCount = opp.hand.filter(t => isWT(t, opp)).length
         huChance -= wildCount * opp.policy.discardHuWildPenalty
@@ -1058,7 +1059,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           applyPeng(opp, discard, curr)
           const d = drawTile(g, opp)
           if (!d) return null
-          if (canWin(normalizeHand(opp.hand), opp.exposedMelds.length, makeWT(opp)).canWin) {
+          if (canWin(normalizeHand(opp.hand), opp.exposedMelds.length, makeWT(opp), opp.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
             const baseScore = calcScore(opp, true, false, g.gameMultiplier)
             opp.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= baseScore }
@@ -1070,7 +1071,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             applyAnKong(opp, ak)
             const extra = drawTile(g, opp)
             if (extra && !isFlower(extra)) {
-              if (canWin(normalizeHand(opp.hand), opp.exposedMelds.length, makeWT(opp)).canWin) {
+              if (canWin(normalizeHand(opp.hand), opp.exposedMelds.length, makeWT(opp), opp.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
                 const kongBaseScore = calcScore(opp, true, true, g.gameMultiplier)
                 opp.score += kongBaseScore * 3
                 for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
@@ -1097,7 +1098,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       applyChow(nextP, discard, curr)
       const d = drawTile(g, nextP)
       if (!d) return null
-      if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds.length, makeWT(nextP)).canWin) {
+      if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds.length, makeWT(nextP), nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
         const baseScore = calcScore(nextP, true, false, g.gameMultiplier)
         nextP.score += baseScore * 3
         for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= baseScore }
@@ -1109,7 +1110,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         applyAnKong(nextP, ak)
         const extra = drawTile(g, nextP)
         if (extra && !isFlower(extra)) {
-          if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds.length, makeWT(nextP)).canWin) {
+          if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds.length, makeWT(nextP), nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
             const kongBaseScore = calcScore(nextP, true, true, g.gameMultiplier)
             nextP.score += kongBaseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= kongBaseScore }
