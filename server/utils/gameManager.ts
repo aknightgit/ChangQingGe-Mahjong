@@ -36,6 +36,9 @@ class GameManager {
   // Pending action超时处理（自动推进）
   private pendingActionTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
+  // Freeze/dealer auto-draw timers（需要在新局开始时清除）
+  private freezeTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
   // AI托管模式：玩家ID集合，被标记的玩家由AI自动出牌
   private botModePlayers: Set<string> = new Set();
 
@@ -592,6 +595,14 @@ class GameManager {
     game.thinkFreezeUntil = undefined;
     game.thinkFreezePlayerId = undefined;
 
+    // 清除上一局残留的freeze/dealer auto-draw timer，防止旧timer覆盖新游戏状态
+    const oldFreezeTimer = this.freezeTimers.get(gameId);
+    if (oldFreezeTimer) {
+      clearTimeout(oldFreezeTimer);
+      this.freezeTimers.delete(gameId);
+      console.log(`[WallDebug] Cleared stale freeze timer for game ${gameId}`);
+    }
+
     // 🔄 换位置请求：每局都可以生效
     this.applySwapRequests(game);
 
@@ -755,8 +766,9 @@ class GameManager {
     if (dealer) {
       if (this.isPlayerBotControlled(dealer)) {
         // Bot 庄家：freeze 后自动摸+出牌
-        setTimeout(async () => {
+        const botTimer = setTimeout(async () => {
           try {
+            this.freezeTimers.delete(gameId);
             const freshGame = await this.getGame(gameId);
             if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
             if (freshGame.currentPlayerIndex !== game.currentPlayerIndex) return;
@@ -769,14 +781,16 @@ class GameManager {
             console.error('[start-bot-freeze] Error:', err);
           }
         }, freezeMs);
+        this.freezeTimers.set(gameId, botTimer);
       } else {
         // Human 庄家：设置 freeze 让客户端显示冻结进度，到期自动摸
         (game as any)._freezeUntil = Date.now() + freezeMs;
         await this.persistGame(game);
         this.broadcastGameState(gameId);
 
-        setTimeout(async () => {
+        const humanTimer = setTimeout(async () => {
           try {
+            this.freezeTimers.delete(gameId);
             const freshGame = await this.getGame(gameId);
             if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
             if (freshGame.currentPlayerIndex !== game.currentPlayerIndex) return;
@@ -795,6 +809,7 @@ class GameManager {
             console.error('[start-freeze] Error:', err);
           }
         }, freezeMs);
+        this.freezeTimers.set(gameId, humanTimer);
       }
     }
   }
@@ -2375,8 +2390,9 @@ class GameManager {
 
     if (this.isPlayerBotControlled(nextPlayer)) {
       const freezeBotIndex = game.currentPlayerIndex;
-      setTimeout(async () => {
+      const botFreezeTimer = setTimeout(async () => {
         try {
+          this.freezeTimers.delete(game.gameId);
           const freshGame = await this.getGame(game.gameId);
           if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
           if (freshGame.currentPlayerIndex !== freezeBotIndex) return; // 已被 claim 接管
@@ -2402,14 +2418,16 @@ class GameManager {
           console.error('[bot-freeze] Error:', err);
         }
       }, freezeMs);
+      this.freezeTimers.set(game.gameId, botFreezeTimer);
     } else {
       (game as any)._freezeUntil = Date.now() + freezeMs;
       await this.persistGame(game);
       this.broadcastGameState(game.gameId);
 
       const freezeCurrentIndex = game.currentPlayerIndex;
-      setTimeout(async () => {
+      const humanFreezeTimer = setTimeout(async () => {
         try {
+          this.freezeTimers.delete(game.gameId);
           const freshGame = await this.getGame(game.gameId);
           if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
           if (freshGame.currentPlayerIndex !== freezeCurrentIndex) return; // 已被 claim 接管
@@ -2455,6 +2473,7 @@ class GameManager {
           console.error('[freeze] Error clearing freeze:', err);
         }
       }, freezeMs);
+      this.freezeTimers.set(game.gameId, humanFreezeTimer);
     }
   }
 
