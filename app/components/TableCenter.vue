@@ -14,7 +14,7 @@
       </div>
       <!-- 百搭牌 -->
       <div v-if="wildTile" class="info-item wild-tile-row">
-        <MahjongTile :tile="wildTile" :size="36" />
+        <MahjongTile :tile="wildTile" :size="18" />
         <span class="wild-name">{{ wildTileName }}</span>
       </div>
     </div>
@@ -166,14 +166,14 @@ const wildTileName = computed(() => {
 /* 百搭牌行 */
 .wild-tile-row {
   background: linear-gradient(135deg, rgba(255, 215, 0, 0.2) 0%, rgba(255, 152, 0, 0.15) 100%);
-  padding: 8px 16px;
-  border-radius: 12px;
+  padding: 4px 8px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 215, 0, 0.3);
 }
 
 .wild-name {
   color: #ffd54f;
-  font-size: 1rem;
+  font-size: 0.5rem;
   font-weight: 800;
   text-shadow: 0 1px 4px rgba(0,0,0,0.5);
 }
@@ -206,7 +206,7 @@ const wildTileName = computed(() => {
     font-size: 0.8rem;
   }
   .wild-tile-row {
-    padding: 6px 12px;
+    padding: 3px 6px;
   }
 }
 </style>
