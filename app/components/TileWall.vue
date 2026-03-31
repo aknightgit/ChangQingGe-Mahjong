@@ -12,7 +12,7 @@
         <div v-for="i in TILES_PER_SIDE" :key="`to-${i}`" class="tile-slot"
           :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: `calc(16% - 10px + ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back wall-back--outer" />
-          <div class="tile-side tile-side--top" />
+          <div class="tile-side tile-side--bottom" />
         </div>
       </div>
     </div>
