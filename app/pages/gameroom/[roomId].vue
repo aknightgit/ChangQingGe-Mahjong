@@ -5,9 +5,18 @@
       <header class="room-header">
         <div class="room-info">
           <h1 class="mahjong-title">长清阁麻将</h1>
-          <p class="mahjong-subtitle">
-            房间 #{{ roomId }}
-          </p>
+          <div class="room-header-row">
+            <p class="mahjong-subtitle">
+              房间 #{{ gameState?.roomNumber || roomId }}
+            </p>
+            <button
+              v-if="gameState?.phase === 'playing' || gameState?.phase === 'ended'"
+              class="settle-btn-header"
+              @click="onRequestSettle"
+            >
+              📊 退房结算
+            </button>
+          </div>
         </div>
 
         <div class="header-actions">
