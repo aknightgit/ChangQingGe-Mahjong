@@ -2089,8 +2089,8 @@ const forceDiscard = async (p: Player) => {
 
 .header-broadcast-wrap {
   flex: 1;
-  min-width: 220px;
-  max-width: 560px;
+  min-width: 440px;
+  max-width: 1120px;
 }
 
 /* 房间号+退房结算同行布局 */
