@@ -360,6 +360,7 @@ function t(suit: TileSuit, v: number, id?: string): Tile {
 }
 function tileEq(a: Tile, b: Tile): boolean { return a.suit === b.suit && a.value === b.value }
 function tileStr(t: Tile): string {
+  if (!t) return '??'
   const suits: Record<string, string> = { dots: '筒', characters: '万', bamboos: '条', wind: '风', dragon: '箭', flower: '花' }
   const honors: Record<string, Record<number, string>> = { wind: { 1: '东', 2: '南', 3: '西', 4: '北' }, dragon: { 1: '中', 2: '发', 3: '白' } }
   if (t.suit === TileSuit.FLOWER) return `花${t.value}`
