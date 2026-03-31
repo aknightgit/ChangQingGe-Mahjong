@@ -100,23 +100,23 @@ const delayStyle = computed(() => ({
   backface-visibility: hidden;
 }
 
-/* 6面颜色不同，模拟真实骰子的光影 */
-.dice-face--front  { transform: rotateY(0deg)   translateZ(40px); background: linear-gradient(135deg, #fffcf0 0%, #f5ead0 50%, #e8dcc0 100%); border: 1px solid rgba(180,160,120,0.4); box-shadow: inset 0 1px 3px rgba(255,255,255,0.6), inset 0 -1px 2px rgba(0,0,0,0.1); }
-.dice-face--back   { transform: rotateY(180deg) translateZ(40px); background: linear-gradient(135deg, #f0e8d0 0%, #e0d4b8 50%, #d4c8a8 100%); border: 1px solid rgba(160,140,100,0.4); box-shadow: inset 0 1px 2px rgba(255,255,255,0.4); }
-.dice-face--right  { transform: rotateY(90deg)  translateZ(40px); background: linear-gradient(135deg, #f8f0d8 0%, #e8dcc0 50%, #dcd0a8 100%); border: 1px solid rgba(170,150,110,0.4); box-shadow: inset -1px 0 2px rgba(255,255,255,0.5); }
-.dice-face--left   { transform: rotateY(-90deg) translateZ(40px); background: linear-gradient(135deg, #fff8e0 0%, #f0e4c8 50%, #e4d8b0 100%); border: 1px solid rgba(170,150,110,0.4); box-shadow: inset 1px 0 2px rgba(255,255,255,0.5); }
-.dice-face--top    { transform: rotateX(90deg)  translateZ(40px); background: linear-gradient(135deg, #fffff0 0%, #faf4e0 50%, #f0e8d0 100%); border: 1px solid rgba(180,160,120,0.35); box-shadow: inset 0 1px 3px rgba(255,255,255,0.7); }
-.dice-face--bottom { transform: rotateX(-90deg) translateZ(40px); background: linear-gradient(135deg, #e8e0c8 0%, #d8d0b8 50%, #c8c0a8 100%); border: 1px solid rgba(150,130,90,0.4); }
+/* 经典红白麻将骰：红色骰面 + 白色点数 */
+.dice-face--front  { transform: rotateY(0deg)   translateZ(40px); background: linear-gradient(135deg, #e53935 0%, #c62828 50%, #b71c1c 100%); border: 1px solid rgba(255,100,100,0.5); box-shadow: inset 0 1px 3px rgba(255,200,200,0.4), inset 0 -1px 2px rgba(0,0,0,0.2); }
+.dice-face--back   { transform: rotateY(180deg) translateZ(40px); background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 50%, #a51515 100%); border: 1px solid rgba(230,80,80,0.5); box-shadow: inset 0 1px 2px rgba(255,180,180,0.3); }
+.dice-face--right  { transform: rotateY(90deg)  translateZ(40px); background: linear-gradient(135deg, #e04040 0%, #c62828 50%, #b01818 100%); border: 1px solid rgba(240,90,90,0.5); box-shadow: inset -1px 0 2px rgba(255,180,180,0.4); }
+.dice-face--left   { transform: rotateY(-90deg) translateZ(40px); background: linear-gradient(135deg, #ef5350 0%, #d32f2f 50%, #b71c1c 100%); border: 1px solid rgba(255,100,100,0.5); box-shadow: inset 1px 0 2px rgba(255,200,200,0.4); }
+.dice-face--top    { transform: rotateX(90deg)  translateZ(40px); background: linear-gradient(135deg, #ef5350 0%, #e53935 50%, #c62828 100%); border: 1px solid rgba(255,120,120,0.45); box-shadow: inset 0 1px 3px rgba(255,220,220,0.5); }
+.dice-face--bottom { transform: rotateX(-90deg) translateZ(40px); background: linear-gradient(135deg, #c62828 0%, #b71c1c 50%, #a51515 100%); border: 1px solid rgba(200,60,60,0.5); }
 
-/* 骰子点 */
+/* 白色点数 */
 .dot {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #444, #111);
+  background: radial-gradient(circle at 35% 30%, #fff, #f0e8e0);
   box-shadow:
-    inset 0 1px 2px rgba(255,255,255,0.25),
-    0 1px 2px rgba(0,0,0,0.45);
+    inset 0 1px 2px rgba(0,0,0,0.1),
+    0 1px 2px rgba(0,0,0,0.3);
 }
 .dot--center { grid-area: 2/2/3/3; justify-self: center; align-self: center; }
 .dot--tl     { grid-area: 1/1/2/2; justify-self: start; align-self: start; }

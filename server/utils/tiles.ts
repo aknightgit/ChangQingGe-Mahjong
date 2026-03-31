@@ -183,7 +183,7 @@ export function isDragon(tile: Tile): boolean {
  * Check if tile is a flower tile
  */
 export function isFlower(tile: Tile): boolean {
-  return tile.suit === TileSuit.FLOWER || tile.isFlower === true;
+  return !!tile && (tile.suit === TileSuit.FLOWER || tile.isFlower === true);
 }
 
 /**
