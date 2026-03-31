@@ -73,6 +73,9 @@ interface BotPolicy {
   wildDiaoKeepBonus: number         // 百搭大吊保留奖励（留百搭做最后1张→听所有牌）
   wildDiaoFlushBoost: number        // 百搭大吊+混一色路线加成
   wildDiaoPungBoost: number         // 百搭大吊+碰碰胡路线加成
+  // ====== 积分榜动态策略 ======
+  scoreBehindRiskBoost: number      // 积分落后时的冒险意愿增强（越落后越激进）
+  scoreLeadDefenseBoost: number     // 积分领先时的防守意识增强
   hand5RouteBias: number; hand6RouteBias: number; hand7RouteBias: number
   multLowHand5AllPungs: number; multLowHand5HalfFlush: number
   multHighHand5AllPungs: number; multHighHand5HalfFlush: number
@@ -117,6 +120,7 @@ const DEFAULT_POLICY: BotPolicy = {
   wallEarlySpeedPush: 0.3, wallMidBalance: 0.5, wallLateDefense: 0.8,
   oppTingDetection: 0.5, safeTilePriority: 0.7, terminalDiscardTingSignal: 0.3,
   wildDiaoKeepBonus: 3.0, wildDiaoFlushBoost: 2.0, wildDiaoPungBoost: 2.0,
+  scoreBehindRiskBoost: 1.5, scoreLeadDefenseBoost: 1.0,
   hand5RouteBias: 0.3, hand6RouteBias: 0.6, hand7RouteBias: 0.9,
   multLowHand5AllPungs: 0.4, multLowHand5HalfFlush: 0.3,
   multHighHand5AllPungs: 0.3, multHighHand5HalfFlush: 0.5,
@@ -160,6 +164,7 @@ const MUTATE_KEYS: (keyof BotPolicy)[] = [
   'wallEarlySpeedPush', 'wallMidBalance', 'wallLateDefense',
   'oppTingDetection', 'safeTilePriority', 'terminalDiscardTingSignal',
   'wildDiaoKeepBonus', 'wildDiaoFlushBoost', 'wildDiaoPungBoost',
+  'scoreBehindRiskBoost', 'scoreLeadDefenseBoost',
   'hand5RouteBias', 'hand6RouteBias', 'hand7RouteBias',
   'multLowHand5AllPungs', 'multLowHand5HalfFlush',
   'multHighHand5AllPungs', 'multHighHand5HalfFlush',
@@ -254,6 +259,8 @@ const PARAM_RANGES: Record<string, { min: number; max: number; step: number }> =
   wildDiaoKeepBonus:          { min: 0.0,  max: 10.0, step: 0.5 },
   wildDiaoFlushBoost:         { min: 0.0,  max: 5.0,  step: 0.25 },
   wildDiaoPungBoost:          { min: 0.0,  max: 5.0,  step: 0.25 },
+  scoreBehindRiskBoost:       { min: 0.0,  max: 5.0,  step: 0.25 },
+  scoreLeadDefenseBoost:      { min: 0.0,  max: 3.0,  step: 0.25 },
   hand5RouteBias:             { min: 0.0,  max: 1.0,  step: 0.05 },
   hand6RouteBias:             { min: 0.0,  max: 1.0,  step: 0.05 },
   hand7RouteBias:             { min: 0.0,  max: 1.0,  step: 0.05 },
@@ -763,6 +770,24 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   const hQB = handQuality >= 7 ? policy.hand7RouteBias : handQuality >= 6 ? policy.hand6RouteBias : handQuality >= 5 ? policy.hand5RouteBias : 0
   if (isHighMult && honorCount >= 5) mHHo = policy.multHighHonorStart
 
+  // ====== 积分榜动态策略 ======
+  let scorePosition = 0  // 0=中游, >0=领先, <0=落后
+  let isLoser = false
+  let isBigLeader = false
+  if (allPlayers.length > 0) {
+    const myScore = p.score
+    const allScores = allPlayers.map(ap => ap.score)
+    const maxScore = Math.max(...allScores)
+    const minScore = Math.min(...allScores)
+    const avgScore = allScores.reduce((a, b) => a + b, 0) / allScores.length
+    scorePosition = myScore - avgScore  // 正=领先，负=落后
+    const gap = maxScore - minScore
+    // 排名倒数第一/第二 → 冒险意愿增强
+    isLoser = myScore <= allScores.sort((a, b) => a - b)[1]  // 倒数前二
+    // 大幅领先 → 降低进攻，增强防守
+    isBigLeader = myScore > avgScore + gap * 0.5  // 领先超过差距一半
+  }
+
   const candidates: { tile: Tile; keepScore: number }[] = []
   for (const tile of hand) {
     if (isFlower(tile)) continue
@@ -1002,6 +1027,19 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
       const inDiscardPile = discardPile.some(d => tileEq(d, tile))
       if (inDiscardPile) keepScore += policy.safeTilePriority * 5  // 已出过的牌很安全
       else keepScore -= policy.safeTilePriority * 2  // 未出过的牌有风险
+    }
+
+    // ====== 积分榜动态调整 ======
+    if (isLoser && policy.scoreBehindRiskBoost > 0) {
+      // 落后→冒险！百搭更值钱，大牌更值得冲
+      if (isWT(tile, p)) keepScore += policy.scoreBehindRiskBoost * 3  // 百搭绝对保留
+      if (count >= 2) keepScore += policy.scoreBehindRiskBoost * 2     // 保留对子做碰碰胡
+      if (!isHonor(tile) && tile.suit === suits[maxSuitIdx]) keepScore += policy.scoreBehindRiskBoost * 1.5  // 保留主花色做清一色
+    }
+    if (isBigLeader && policy.scoreLeadDefenseBoost > 0) {
+      // 大幅领先→防守！降低大牌追求，快胡收分
+      if (count <= 1 && !isHonor(tile)) keepScore += policy.scoreLeadDefenseBoost * 2  // 打孤立牌
+      keepScore -= policy.scoreLeadDefenseBoost  // 整体降低保留度
     }
 
     candidates.push({ tile, keepScore })
