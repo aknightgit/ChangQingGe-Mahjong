@@ -619,8 +619,6 @@ export function canWin(tiles: Tile[], existingMelds = 0, isWildTile: WildTileChe
   if (canWinStandard(tiles, existingMelds, isWildTile, kongCount)) {
     return { canWin: true, winType: WinType.STANDARD };
   }
-    return { canWin: true, winType: WinType.STANDARD };
-  }
 
   return { canWin: false, winType: null };
 }

@@ -592,6 +592,68 @@ function applyBaoSettlement(
   }
 }
 
+// ========== 百搭最优利用：全局评分 ==========
+// 根据手牌评估不同百搭使用方式的得分，选择最高分
+// 长清阁牌型固定/公式得分：
+//   清一色=10, 风一色=20, 风碰=40, 清碰=20, 混碰=公式, 碰碰胡=公式(max10), 混一色=公式
+//   无百搭×2, 门清×2
+function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
+  flowerCount: number): { bestType: string; bestScore: number; keepWildScore: number } {
+
+  // 牌型基础分查找
+  const typeScore: Record<string, number> = {
+    '清一色': 10, '风一色': 20, '风碰': 40, '清碰': 20,
+    '混碰': Math.min(10, 2 + flowerCount), '碰碰胡': Math.min(10, 2 + flowerCount),
+    '混一色': Math.min(10, 2 + flowerCount),
+  }
+
+  if (wildCount === 0) {
+    const types = detectHandTypes(hand, [], false, flowerCount, null)
+    const base = types.length > 0 ? (typeScore[types[0]] || 0) : 0
+    const final = base * 2  // 无百搭×2
+    return { bestType: types[0] || '基础胡', bestScore: final, keepWildScore: final }
+  }
+
+  const nonWild = hand.filter(t => !isWild(t, undefined, undefined))
+
+  // 评估1：保留百搭不使用（无百搭翻倍×2）
+  const typesNoWild = detectHandTypes(nonWild, [], false, flowerCount, null)
+  const baseNoWild = typesNoWild.length > 0 ? (typeScore[typesNoWild[0]] || 0) : 0
+  const keepWildScore = baseNoWild * 2
+
+  // 评估2：百搭做清一色（最长花色+百搭>=13张）
+  let flushScore = 0
+  if (meldCount === 0) {
+    for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+      const suitTiles = nonWild.filter(t => t.suit === suit)
+      const wilds = hand.filter(t => isWild(t, undefined, undefined))
+      if (suitTiles.length + wilds.length >= 13) { flushScore = 10; break }
+    }
+  }
+
+  // 评估3：百搭做风碰/箭碰（固定高分40）
+  const honorCount = nonWild.filter(t => isHonor(t)).length
+  let fengPengScore = 0
+  if (honorCount + wildCount >= 13) fengPengScore = 40  // 风碰=40
+
+  // 评估4：百搭做碰碰胡
+  const groups = groupTiles(nonWild)
+  let pairPotential = 0
+  for (const [, tiles] of groups) { if (tiles.length >= 2) pairPotential++ }
+  const pungScore = (pairPotential + wildCount >= 4) ? Math.min(10, 2 + flowerCount) : 0
+
+  // 取最高分
+  const options = [
+    { type: '保留百搭', score: keepWildScore },
+    { type: '清一色', score: flushScore },
+    { type: '风碰', score: fengPengScore },
+    { type: '碰碰胡', score: pungScore }
+  ]
+  options.sort((a, b) => b.score - a.score)
+
+  return { bestType: options[0].type, bestScore: options[0].score, keepWildScore }
+}
+
 // ========== AI Discard (长清阁规则) ==========
 function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[] = [],
   wallIdx: number = 0, deckLen: number = 144, allPlayers: BotPlayer[] = [], myPos: number = 0): Tile {
@@ -605,6 +667,10 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   const maxSuitIdx = suitCounts.indexOf(Math.max(...suitCounts))
   const maxSuitCount = suitCounts[maxSuitIdx]
   const honorCount = hand.filter(t => isHonor(t)).length
+
+  // 百搭全局最优评估
+  const wildEval = wildCount > 0 ? evalWildDeployment(hand, totalMelds, wildCount, p.flowerTiles.length) : null
+  const wildIsOptimal = wildEval && wildEval.bestType !== '保留百搭' && wildEval.bestScore > wildEval.keepWildScore
 
   // ====== 对手出牌观察：前N轮别人打的牌 ======
   // 统计对手打出的各花色数量（排除自己的出牌近似处理）
@@ -781,6 +847,18 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
       keepScore += mv * policy.menqingDoubleAwareness
     }
     if (wildCount === 0 && policy.noWildDoubleAwareness > 0) keepScore += policy.noWildDoubleAwareness * 2
+
+    // 百搭全局最优部署影响
+    if (wildIsOptimal && wildEval) {
+      // 最优部署说用百搭比保留更赚 → 增强对应牌型的出牌保留
+      if (wildEval.bestType === '风碰' && isHonor(tile)) keepScore += 8  // 保留风/箭牌
+      if (wildEval.bestType === '清一色' && !isHonor(tile) && tile.suit === suits[maxSuitIdx]) keepScore += 6
+      if (wildEval.bestType === '碰碰胡' && count >= 2) keepScore += 5
+    }
+    if (wildEval && !wildIsOptimal && wildCount > 0) {
+      // 最优部署是保留百搭 → 不使用百搭更赚（×2）
+      if (isWT(tile, p)) keepScore += 10  // 百搭绝对不打
+    }
 
     // 百搭分级激进度
     const aggression = wildCount === 0 ? policy.wild0Aggression
