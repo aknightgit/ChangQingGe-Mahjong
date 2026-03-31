@@ -459,6 +459,8 @@ function isDaDiao(handTiles: Tile[], exposedMelds: Meld[]): boolean {
 export function canWinStandard(tiles: Tile[], existingMelds = 0, isWildTile: WildTileChecker = () => false): boolean {
   const requiredMelds = Math.max(0, 4 - existingMelds);
   const nonFlowerTiles = tiles.filter(t => !isFlower(t));
+  // 新增：手牌张数校验
+  if (nonFlowerTiles.length !== requiredMelds * 3 + 2) return false
 
   // Try each possible pair as the eyes (including 1 wild + 1 natural)
   const groups = groupTiles(nonFlowerTiles.filter(t => !isWildTile(t)));
