@@ -45,7 +45,7 @@
         'action-btn--highlight': canDraw && !isDelaying,
         'action-btn--freezing': isFreezing
       }"
-      :style="isFreezing ? { '--freeze-progress': freezeProgress } : {}"
+      :style="isFreezing ? { '--freeze-progress': freezeProgress, '--freeze-duration-ms': `${safeFreezeDurationMs}ms` } : {}"
       :disabled="!canDraw || isDelaying || isInteractionLocked || !isConnected"
       @click="$emit('action', 'draw')"
     >
@@ -101,9 +101,14 @@ const isDelaying = computed(() => {
 const isFreezing = computed(() => {
   return !!props.freezeUntil && props.nowTs < props.freezeUntil
 })
+const safeFreezeDurationMs = computed(() => {
+  const v = Number(props.freezeDurationMs)
+  return Number.isFinite(v) && v > 0 ? v : 1000
+})
+
 const freezeProgress = computed(() => {
-  if (!props.freezeUntil || !props.freezeDurationMs) return '0'
-  const total = props.freezeDurationMs
+  if (!props.freezeUntil) return '0'
+  const total = safeFreezeDurationMs.value
   const remaining = Math.max(0, props.freezeUntil - props.nowTs)
   const elapsed = total - remaining
   return String(Math.min(1, Math.max(0, elapsed / total)))
@@ -238,7 +243,7 @@ const freezeProgress = computed(() => {
   mask: radial-gradient(circle, transparent 55%, black 58%);
   -webkit-mask: radial-gradient(circle, transparent 55%, black 58%);
   pointer-events: none;
-  transition: background 0.1s linear;
+  transition: background var(--freeze-duration-ms, 1000ms) linear;
   clip-path: circle(50%);
 }
 
