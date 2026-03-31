@@ -149,24 +149,29 @@ class GameManager {
         if (game.pendingActions.length === 0) return; // 已被人类玩家抢先
 
         let claimedAction = false;
+        let claimedHigherPriority = false; // 碰/杠/胡是否已被执行
 
+        // 第一轮：处理碰/杠/胡（优先级高的先执行）
         for (const pa of [...game.pendingActions]) {
           const player = game.players.find(p => p.id === pa.playerId);
           if (!player || player.status !== PlayerStatus.PLAYING) continue;
           if (!this.isPlayerBotControlled(player)) continue;
 
-          const action = shouldClaimPendingAction(player, pa.availableActions, game);
-          console.log(`[BotService] ${player.name} pending action: ${action} (from ${pa.availableActions})`);
+          const higherActions = pa.availableActions.filter(
+            a => a === ActionType.PENG || a === ActionType.KONG || a === ActionType.HU
+          );
+          if (higherActions.length === 0) continue;
 
-          if (action === ActionType.PASS) {
-            this.handlePass(game, player);
-          } else if (action === ActionType.PENG) {
-            // 检查碰牌后是否超过14张
+          const action = shouldClaimPendingAction(player, higherActions, game);
+          console.log(`[BotService] ${player.name} priority action: ${action} (from ${higherActions})`);
+
+          if (action === ActionType.PENG) {
             const pengExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
             const pengTotalCount = player.hand.concealedTiles.length + pengExposedCount;
             if (pengTotalCount - 2 + 3 <= 14) {
               this.handlePeng(game, player);
               claimedAction = true;
+              claimedHigherPriority = true;
             } else {
               console.warn(`[BotPeng] ${player.name} blocked: would exceed 14 tiles`);
               this.handlePass(game, player);
@@ -177,6 +182,7 @@ class GameManager {
             if (kongTotalCount - 3 + 4 <= 14) {
               this.handleKong(game, player, pa.tile?.id || '');
               claimedAction = true;
+              claimedHigherPriority = true;
             } else {
               console.warn(`[BotKong] ${player.name} blocked: would exceed 14 tiles`);
               this.handlePass(game, player);
@@ -184,15 +190,33 @@ class GameManager {
           } else if (action === ActionType.HU) {
             this.handleHu(game, player);
             claimedAction = true;
-          } else if (action === ActionType.CHOW) {
-            const chowExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
-            const chowTotalCount = player.hand.concealedTiles.length + chowExposedCount;
-            if (chowTotalCount - 2 + 3 <= 14) {
-              this.handleChow(game, player);
-              claimedAction = true;
-            } else {
-              console.warn(`[BotChow] ${player.name} blocked: would exceed 14 tiles`);
-              this.handlePass(game, player);
+            claimedHigherPriority = true;
+          }
+        }
+
+        // 第二轮：只在没人碰/杠/胡时，处理吃
+        if (!claimedHigherPriority) {
+          for (const pa of [...game.pendingActions]) {
+            const player = game.players.find(p => p.id === pa.playerId);
+            if (!player || player.status !== PlayerStatus.PLAYING) continue;
+            if (!this.isPlayerBotControlled(player)) continue;
+
+            const chowActions = pa.availableActions.filter(a => a === ActionType.CHOW);
+            if (chowActions.length === 0) continue;
+
+            const action = shouldClaimPendingAction(player, chowActions, game);
+            console.log(`[BotService] ${player.name} chow action: ${action}`);
+
+            if (action === ActionType.CHOW) {
+              const chowExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
+              const chowTotalCount = player.hand.concealedTiles.length + chowExposedCount;
+              if (chowTotalCount - 2 + 3 <= 14) {
+                this.handleChow(game, player);
+                claimedAction = true;
+              } else {
+                console.warn(`[BotChow] ${player.name} blocked: would exceed 14 tiles`);
+                this.handlePass(game, player);
+              }
             }
           }
         }
@@ -1329,6 +1353,15 @@ class GameManager {
   }
 
   private handleChow(game: GameState, player: Player): void {
+    // 碰优先级高于吃：如果其他玩家有碰/杠/胡的pending，拒绝吃
+    const higherPriorityPending = game.pendingActions.find(
+      pa => pa.playerId !== player.id &&
+      pa.availableActions.some(a => a === ActionType.PENG || a === ActionType.KONG || a === ActionType.HU)
+    );
+    if (higherPriorityPending) {
+      console.warn(`[CHOW] Blocked: player ${higherPriorityPending.playerId} has higher priority action available`);
+      return;
+    }
     const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
     if (!pendingAction || !pendingAction.tile) return;
 
@@ -2178,12 +2211,18 @@ class GameManager {
     }
 
     // Check for CHOW (吃) - only the next active player (下家) can chow
-    // Chow has lowest priority: only check if no one else claimed the discard
-    if (game.pendingActions.length === 0) {
-      const chowPlayer = this.getNextActivePlayer(game, game.currentPlayerIndex);
-      if (chowPlayer) {
-        const sequences = this.findChowSequences(chowPlayer.hand.concealedTiles, discardedTile, game);
-        if (sequences.length > 0) {
+    // 吃和碰同时进入pending池，碰优先级高于吃
+    const chowPlayer = this.getNextActivePlayer(game, game.currentPlayerIndex);
+    if (chowPlayer) {
+      const sequences = this.findChowSequences(chowPlayer.hand.concealedTiles, discardedTile, game);
+      if (sequences.length > 0) {
+        // 检查该玩家是否已有碰/杠/胡的pending（如果有，追加吃选项）
+        const existing = game.pendingActions.find(pa => pa.playerId === chowPlayer.id);
+        if (existing) {
+          if (!existing.availableActions.includes(ActionType.CHOW)) {
+            existing.availableActions.push(ActionType.CHOW);
+          }
+        } else {
           game.pendingActions.push({
             playerId: chowPlayer.id,
             availableActions: [ActionType.CHOW, ActionType.PASS],
