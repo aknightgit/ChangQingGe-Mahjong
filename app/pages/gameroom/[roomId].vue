@@ -4,7 +4,12 @@
       <div class="room-container" :class="{ 'room-container--rotated': shouldRotateView }">
       <header class="room-header">
         <div class="room-info">
-          <h1 class="mahjong-title">长清阁麻将</h1>
+          <div class="room-title-line">
+            <h1 class="mahjong-title">长清阁麻将</h1>
+            <div class="header-broadcast-wrap">
+              <GameBroadcast :messages="broadcastMessages" />
+            </div>
+          </div>
           <div class="room-header-row">
             <p class="mahjong-subtitle">
               房间 #{{ gameState?.roomNumber || roomId }}
@@ -515,8 +520,7 @@
             @spectate="handleSpectate"
           />
 
-          <!-- 牌局快讯 -->
-          <GameBroadcast :messages="broadcastMessages" />
+
 
           <!-- 房间控制 / 管理面板 -->
           <div class="ext-section" v-if="canStartGame">
@@ -2079,10 +2083,24 @@ const forceDiscard = async (p: Player) => {
   opacity: 0.5;
 }
 
+.room-title-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.header-broadcast-wrap {
+  flex: 1;
+  min-width: 220px;
+  max-width: 560px;
+}
+
 .mahjong-title {
   font-size: 1.4rem;
   margin-bottom: 2px;
   letter-spacing: 0.04em;
+  flex-shrink: 0;
 }
 
 .mahjong-subtitle {
@@ -3641,6 +3659,18 @@ const forceDiscard = async (p: Player) => {
   .room-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .room-title-line {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .header-broadcast-wrap {
+    min-width: 0;
+    width: 100%;
+    max-width: none;
   }
 
   .mahjong-title {
