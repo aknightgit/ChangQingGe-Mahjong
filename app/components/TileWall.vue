@@ -12,7 +12,7 @@
         <div v-for="i in TILES_PER_SIDE" :key="`to-${i}`" class="tile-slot"
           :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: `calc(16% - 10px + ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
           <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back wall-back--outer" />
-          <div class="tile-side tile-side--bottom" />
+          <div class="tile-side tile-side--top" />
         </div>
       </div>
     </div>
@@ -118,14 +118,24 @@ const LAYER_OFFSET = 1
   box-shadow: 0 2px 3px rgba(0,0,0,0.25);
 }
 
+.tile-side--top {
+  top: -5px;
+  bottom: auto;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(0deg, #1a4a28 0%, #1a4a28 33%, #f5efe0 33%, #e8e0d0 100%);
+  box-shadow: 0 -2px 3px rgba(0,0,0,0.25);
+}
+
 @media (max-width: 1300px) {
   .tile-slot { width: 22px; height: 32px; }
   .tile-slot--vertical { width: 32px; height: 22px; }
   .tile-side { height: 4px; bottom: -4px; }
+  .tile-side--top { top: -4px; }
 }
 @media (max-width: 900px) {
   .tile-slot { width: 16px; height: 24px; }
   .tile-slot--vertical { width: 24px; height: 16px; }
   .tile-side { height: 3px; bottom: -3px; }
+  .tile-side--top { top: -3px; }
 }
 </style>
