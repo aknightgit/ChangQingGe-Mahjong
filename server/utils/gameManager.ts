@@ -968,8 +968,14 @@ class GameManager {
         m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
       )
       if (unreplacedFlowers.length > 0 && game.wall.length > 0) {
-        actions.push(ActionType.DRAW);
-        return actions;
+        // 仅在手牌未满14张时允许“摸”(执行 replaceFlowers+handleDraw)
+        // 若补花后已到14张，应直接允许出牌，不能继续高亮“摸”
+        const exposedTileCount = this.countExposedTilesExcludingFlowerMelds(player);
+        const totalTileCount = player.hand.concealedTiles.length + exposedTileCount;
+        if (totalTileCount < 14) {
+          actions.push(ActionType.DRAW);
+          return actions;
+        }
       }
       // 检查造反（五毒散）- 仅第一圈有效
       const wildParts = game.customScoringMode?.split('-');
