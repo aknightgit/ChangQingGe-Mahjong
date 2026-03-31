@@ -465,9 +465,18 @@ function canPeng(p: BotPlayer, tile: Tile): boolean {
 function canChow(p: BotPlayer, tile: Tile): boolean {
   if (!tile || isHonor(tile) || tile.suit === TileSuit.FLOWER) return false
   const v = tile.value
-  if (v < 2 || v > 8) return false
-  return p.hand.some(t => t.suit === tile.suit && t.value === v - 1) &&
-         p.hand.some(t => t.suit === tile.suit && t.value === v + 1)
+  // 三种吃牌方式（含花色所有牌值1-9）：
+  // 1) 中间牌：需要 v-1 和 v+1（如 3+5 吃 4）
+  // 2) 最低牌：需要 v+1 和 v+2（如 3+4 吃 5）
+  // 3) 最高牌：需要 v-1 和 v-2（如 4+5 吃 3）
+  const has = (val: number) => p.hand.some(t => t.suit === tile.suit && t.value === val)
+  // 中间牌
+  if (v >= 2 && v <= 8 && has(v - 1) && has(v + 1)) return true
+  // 最低牌（被吃牌是最大的）
+  if (v >= 3 && has(v - 1) && has(v - 2)) return true
+  // 最高牌（被吃牌是最小的）
+  if (v <= 7 && has(v + 1) && has(v + 2)) return true
+  return false
 }
 function canMingKong(p: BotPlayer, tile: Tile): boolean {
   if (!tile) return false
@@ -499,12 +508,32 @@ function applyPeng(p: BotPlayer, tile: Tile, sourcePos?: number): void {
 }
 function applyChow(p: BotPlayer, tile: Tile, sourcePos?: number): void {
   const v = tile.value
-  const low = p.hand.find(t => t && t.suit === tile.suit && t.value === v - 1)
-  const high = p.hand.find(t => t && t.suit === tile.suit && t.value === v + 1)
-  if (!low || !high) return
-  const idxL = p.hand.findIndex(t => t && t.id === low.id); if (idxL >= 0) p.hand.splice(idxL, 1)
-  const idxH = p.hand.findIndex(t => t && t.id === high.id); if (idxH >= 0) p.hand.splice(idxH, 1)
-  p.exposedMelds.push({ type: MeldType.SEQUENCE, tiles: [low, tile, high], isConcealed: false })
+  const findTile = (suit: TileSuit, val: number) => p.hand.find(t => t && t.suit === suit && t.value === val)
+  const removeTile = (t: Tile) => { const idx = p.hand.findIndex(h => h && h.id === t.id); if (idx >= 0) p.hand.splice(idx, 1) }
+
+  // 三种吃牌模式，优先选择能吃的组合
+  let t1: Tile | undefined, t2: Tile | undefined
+  // 1) 中间牌：tile是中间，需要v-1和v+1
+  if (v >= 2 && v <= 8) {
+    t1 = findTile(tile.suit, v - 1)
+    t2 = findTile(tile.suit, v + 1)
+  }
+  // 2) 最低牌：tile是最大的，需要v-1和v-2
+  if ((!t1 || !t2) && v >= 3) {
+    t1 = findTile(tile.suit, v - 1)
+    t2 = findTile(tile.suit, v - 2)
+  }
+  // 3) 最高牌：tile是最小的，需要v+1和v+2
+  if ((!t1 || !t2) && v <= 7) {
+    t1 = findTile(tile.suit, v + 1)
+    t2 = findTile(tile.suit, v + 2)
+  }
+
+  if (!t1 || !t2) return
+  removeTile(t1); removeTile(t2)
+  // 排序tiles为从小到大
+  const meldTiles = [t1, tile, t2].sort((a, b) => a.value - b.value)
+  p.exposedMelds.push({ type: MeldType.SEQUENCE, tiles: meldTiles, isConcealed: false })
   if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
 }
 function applyMingKong(p: BotPlayer, tile: Tile, sourcePos?: number): void {
