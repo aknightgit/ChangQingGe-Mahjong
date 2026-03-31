@@ -466,12 +466,6 @@
                     @click="onHu"
                   >胡</button>
                   <button
-                    v-if="showPass && hasPriorityActions"
-                    class="inline-action-btn inline-action-btn--pass"
-                    :disabled="isInteractionLocked"
-                    @click="onPass"
-                  >过</button>
-                  <button
                     v-if="showRebel"
                     class="inline-action-btn inline-action-btn--rebel"
                     :disabled="isInteractionLocked"
@@ -491,7 +485,7 @@
                     :disabled="!canLiangShan || isInteractionLocked || hasVotedLiangShan"
                     @click="onLiangShan"
                   >🔥{{ hasVotedLiangShan ? '已聚义' : '梁山聚义' }}</button>
-                  <div v-if="!showDraw && !showChow && !showPeng && !showKong && !showHu && !showPass && !showConcealedKong && !showExtendedKong && !showRebel && !showThink && !canLiangShan" class="inline-action-waiting">
+                  <div v-if="!showDraw && !showChow && !showPeng && !showKong && !showHu && !showConcealedKong && !showExtendedKong && !showRebel && !showThink && !canLiangShan" class="inline-action-waiting">
                     等待中…
                   </div>
                 </div>
@@ -1680,9 +1674,6 @@ const handleCircularAction = (type: string) => {
       break
     case 'hu':
       onHu()
-      break
-    case 'pass':
-      onPass()
       break
   }
 }

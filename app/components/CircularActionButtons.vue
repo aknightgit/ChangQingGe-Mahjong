@@ -53,14 +53,6 @@
       <span class="draw-label">摸</span>
     </button>
 
-    <!-- 过 -->
-    <button
-      v-if="hasPass"
-      class="action-btn action-btn--pass"
-      :class="{ 'action-btn--highlight': hasPass && !isDelaying }"
-      :disabled="!hasPass || isDelaying || isInteractionLocked || !isConnected"
-      @click="$emit('action', 'pass')"
-    >过</button>
   </div>
 </template>
 
@@ -96,7 +88,6 @@ const hasKong = computed(() =>
   props.availableActions.includes(ActionType.EXTENDED_KONG)
 )
 const hasHu = computed(() => props.availableActions.includes(ActionType.HU))
-const hasPass = computed(() => props.availableActions.includes(ActionType.PASS))
 
 const hasAnyPriorityAction = computed(() => hasChow.value || hasPeng.value || hasKong.value || hasHu.value)
 const hasAnyAction = computed(() => hasAnyPriorityAction.value || canDraw.value)
