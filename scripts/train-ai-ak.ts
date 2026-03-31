@@ -534,43 +534,52 @@ function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean, gameMu
 }
 
 // ========== 互包结算 ==========
-// 包三：同一家吃了/碰了/杠了≥3口 → 当"目标玩家"胡牌时，包家替其他人赔付
-// 包四：同一家≥4口 → 赔付更重（通常×2）
+// ========== 互包结算 ==========
+// 包三：同一家吃了/碰了/杠了≥3口 → 当"目标玩家"胡牌时，包家替所有人赔付
+// 包四：同一家≥4口 → 包家赔付加倍（×2）
+//
+// 真实规则：
+//   自摸：包家赔全部（3倍base），其他2家不赔不赚
+//   放炮：包家赔全部（3倍base），放炮者不赔不赚
+//   放炮者就是包家：正常赔付（已经赔了）
 function applyBaoSettlement(
   g: GameState, winnerIdx: number, isSelfDraw: boolean,
   discarderIdx: number | null, baseScore: number
 ): void {
   const winner = g.players[winnerIdx]
 
-  // 找出谁对winner有3+口（包三）或4+口（包四）
   for (let ci = 0; ci < 4; ci++) {
     if (ci === winnerIdx) continue
     const meldCount = winner.meldSources[ci]
     if (meldCount < 3) continue
 
-    // ci 触发了对 winner 的包三/包四
     const isBao4 = meldCount >= 4
-    const multiplier = isBao4 ? 2 : 1  // 包四赔付加倍
+    const mult = isBao4 ? 2 : 1
+    const baoPay = baseScore * 3 * mult  // 包家赔付总额（覆盖所有输家）
 
     if (isSelfDraw) {
-      // 自摸：包家赔付全部（其他2家不赔）
+      // 自摸：包家赔全部3倍base，其他2家退回
       for (let i = 0; i < 4; i++) {
         if (i === winnerIdx) continue
         if (i === ci) {
-          g.players[i].score -= baseScore * multiplier  // 包家赔全部
+          g.players[i].score += baseScore  // 退回之前的1倍
+          g.players[i].score -= baoPay     // 赔付3倍（包四时6倍）
         } else {
-          g.players[i].score += baseScore / 3  // 非包家退回之前扣的
+          g.players[i].score += baseScore  // 退回之前的1倍，不赔了
         }
       }
-      // 注意：不需要改winner得分，得分已经在调用方处理
     } else {
-      // 放炮：包家替放炮者赔付
+      // 放炮
       if (discarderIdx !== null && discarderIdx !== ci) {
         // 放炮者不是包家 → 包家替放炮者赔付
         g.players[discarderIdx].score += baseScore  // 退回放炮者已扣的
-        g.players[ci].score -= baseScore * multiplier  // 包家赔付
+        g.players[ci].score -= baoPay               // 包家赔付全部3倍
       }
-      // 如果放炮者就是包家 → 不变（已经赔了）
+      // 放炮者就是包家 → 不变（已经赔了，但赔的是1倍 → 修正为3倍）
+      if (discarderIdx === ci) {
+        g.players[ci].score += baseScore  // 退回1倍
+        g.players[ci].score -= baoPay     // 赔付3倍
+      }
     }
   }
 }
@@ -910,12 +919,12 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
       winChance += wildCount * player.policy.selfWinWildBoost
       winChance -= player.exposedMelds.length * player.policy.bailoutHuPenaltyPerMeld
       if (Math.random() < winChance) {
-        const score = calcScore(player, true, false, g.gameMultiplier)
-        player.score += score
-        // 自摸：其他三家赔付
-        for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= score / 3 }
+        const baseScore = calcScore(player, true, false, g.gameMultiplier)
+        // 自摸：每人赔baseScore，赢家得3倍
+        player.score += baseScore * 3
+        for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
         // 互包结算
-        applyBaoSettlement(g, curr, true, null, score)
+        applyBaoSettlement(g, curr, true, null, baseScore)
         return { winner: curr, scores: g.players.map(p => p.score) }
       }
     }
@@ -927,10 +936,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
         const extra = drawTile(g, player)
         if (extra && !isFlower(extra)) {
           if (canWin(player.hand.filter(t => t !== undefined), player.exposedMelds.length, makeWT(player)).canWin) {
-            const score = calcScore(player, true, true, g.gameMultiplier)
-            player.score += score
-            for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= score / 3 }
-            applyBaoSettlement(g, curr, true, null, score)
+            const baseScore = calcScore(player, true, true, g.gameMultiplier)
+            player.score += baseScore * 3
+            for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
+            applyBaoSettlement(g, curr, true, null, baseScore)
             return { winner: curr, scores: g.players.map(p => p.score) }
           }
         }
@@ -942,10 +951,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
         const extra = drawTile(g, player)
         if (extra && !isFlower(extra)) {
           if (canWin(player.hand.filter(t => t !== undefined), player.exposedMelds.length, makeWT(player)).canWin) {
-            const score = calcScore(player, true, true, g.gameMultiplier)
-            player.score += score
-            for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= score / 3 }
-            applyBaoSettlement(g, curr, true, null, score)
+            const baseScore = calcScore(player, true, true, g.gameMultiplier)
+            player.score += baseScore * 3
+            for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
+            applyBaoSettlement(g, curr, true, null, baseScore)
             return { winner: curr, scores: g.players.map(p => p.score) }
           }
         }
@@ -997,10 +1006,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
           const d = drawTile(g, opp)
           if (!d) return null
           if (canWin(opp.hand.filter(t => t !== undefined), opp.exposedMelds.length, makeWT(opp)).canWin) {
-            const score = calcScore(opp, true, false, g.gameMultiplier)
-            opp.score += score
-            for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= score / 3 }
-            applyBaoSettlement(g, otherIdx, true, null, score)
+            const baseScore = calcScore(opp, true, false, g.gameMultiplier)
+            opp.score += baseScore * 3
+            for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= baseScore }
+            applyBaoSettlement(g, otherIdx, true, null, baseScore)
             return { winner: otherIdx, scores: g.players.map(p => p.score) }
           }
           for (const ak of canAnKong(opp)) {
@@ -1008,10 +1017,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
             const extra = drawTile(g, opp)
             if (extra && !isFlower(extra)) {
               if (canWin(opp.hand.filter(t => t !== undefined), opp.exposedMelds.length, makeWT(opp)).canWin) {
-                const kongScore = calcScore(opp, true, true, g.gameMultiplier)
-                opp.score += kongScore
-                for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongScore / 3 }
-                applyBaoSettlement(g, otherIdx, true, null, kongScore)
+                const kongBaseScore = calcScore(opp, true, true, g.gameMultiplier)
+                opp.score += kongBaseScore * 3
+                for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
+                applyBaoSettlement(g, otherIdx, true, null, kongBaseScore)
                 return { winner: otherIdx, scores: g.players.map(p => p.score) }
               }
             }
@@ -1034,10 +1043,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
       const d = drawTile(g, nextP)
       if (!d) return null
       if (canWin(nextP.hand.filter(t => t !== undefined), nextP.exposedMelds.length, makeWT(nextP)).canWin) {
-        const score = calcScore(nextP, true, false, g.gameMultiplier)
-        nextP.score += score
-        for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= score / 3 }
-        applyBaoSettlement(g, nextPlayer, true, null, score)
+        const baseScore = calcScore(nextP, true, false, g.gameMultiplier)
+        nextP.score += baseScore * 3
+        for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= baseScore }
+        applyBaoSettlement(g, nextPlayer, true, null, baseScore)
         return { winner: nextPlayer, scores: g.players.map(p => p.score) }
       }
       for (const ak of canAnKong(nextP)) {
@@ -1045,10 +1054,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
         const extra = drawTile(g, nextP)
         if (extra && !isFlower(extra)) {
           if (canWin(nextP.hand.filter(t => t !== undefined), nextP.exposedMelds.length, makeWT(nextP)).canWin) {
-            const kongScore = calcScore(nextP, true, true, g.gameMultiplier)
-            nextP.score += kongScore
-            for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= kongScore / 3 }
-            applyBaoSettlement(g, nextPlayer, true, null, kongScore)
+            const kongBaseScore = calcScore(nextP, true, true, g.gameMultiplier)
+            nextP.score += kongBaseScore * 3
+            for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= kongBaseScore }
+            applyBaoSettlement(g, nextPlayer, true, null, kongBaseScore)
             return { winner: nextPlayer, scores: g.players.map(p => p.score) }
           }
         }

@@ -1,10 +1,10 @@
 {
   "metrics": {
-    "fitness": 92300,
-    "huRate": 0.187,
-    "drawRate": 0.264,
-    "totalGames": 5,
-    "note": "AI-AK iterative training - 1x5"
+    "fitness": 28466.666666666675,
+    "huRate": 0.183,
+    "drawRate": 0.282,
+    "totalGames": 10000,
+    "note": "AI-AK iterative training - 10x1000"
   },
   "policy": {
     "id": "AI-AK",
@@ -15,7 +15,7 @@
     "discardHuMenQingPenalty": 0.14825109469160136,
     "pengChance": 0.7879843399876654,
     "kongChance": 0.4622819094701664,
-    "chowChance": 0.0020771892633456024,
+    "chowChance": 0.029233146770383394,
     "anKongChance": 0.95,
     "pengWildBoost": 0.046013926284403345,
     "kongWildBoost": 0.11194833974037734,
@@ -32,7 +32,7 @@
     "hunPengPursuit": 0.28547582997065624,
     "windEastKeep": 2,
     "windSouthKeep": 1,
-    "windWestKeep": 1.3089797704300203,
+    "windWestKeep": 1,
     "windNorthKeep": 0,
     "windGeneralKeep": 1.5,
     "dragonRedKeep": 3,
@@ -41,7 +41,7 @@
     "dragonGeneralKeep": 3.4018401346075193,
     "pairWeight": 3.8627551046431843,
     "nearWeight": 3.3809464202147033,
-    "tripletKeepBonus": 4.511988263281959,
+    "tripletKeepBonus": 4.709633963783557,
     "terminalPenalty": 1,
     "wildKeepPenalty": 1398.9156572399816,
     "wildBailoutThreshold": 3,
