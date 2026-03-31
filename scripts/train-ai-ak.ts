@@ -913,6 +913,11 @@ interface GameResult {
   settlementLog: SettlementEntry[]; snapshots: PlayerSnapshot[]; roundNum: number
 }
 
+// ========== 手牌规范化（胡牌前必调） ==========
+function normalizeHand(hand: Tile[]): Tile[] {
+  return hand.filter(t => t !== undefined && !isFlower(t))
+}
+
 // ========== Game Loop ==========
 function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | null {
   const g = setupGame(akPolicy, otherPolicies)
@@ -949,11 +954,16 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     log(player.name, '摸牌', tileStr(drawn))
 
     // Self-draw win check
-    if (canWin(player.hand.filter(t => t !== undefined), player.exposedMelds.length, makeWT(player)).canWin) {
+    const normalizedHand = normalizeHand(player.hand)
+    const expectedLen = 14 - player.exposedMelds.length * 3  // 自摸14张-副露占用
+    if (normalizedHand.length !== expectedLen) {
+      console.error(`⚠️ 手牌长度异常: ${player.name} hand=${normalizedHand.length} expected=${expectedLen} melds=${player.exposedMelds.length}`)
+    }
+    if (canWin(normalizedHand, player.exposedMelds.length, makeWT(player)).canWin) {
       let winChance = player.policy.selfWinChance
       const wildCount = player.hand.filter(t => isWT(t, player)).length
       winChance += wildCount * player.policy.selfWinWildBoost
-      winChance -= player.exposedMelds.length * player.policy.bailoutHuPenaltyPerMeld
+      winChance -= player.exposedMelds.length * player.policy.meldPenalty
       if (Math.random() < winChance) {
         const baseScore = calcScore(player, true, false, g.gameMultiplier)
         // 自摸：每人赔baseScore，赢家得3倍
@@ -962,7 +972,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         // 互包结算
         applyBaoSettlement(g, curr, true, null, baseScore)
         for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore, '自摸') }
-        log(player.name, '自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
+        log(player.name, '自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}] [手牌${normalizedHand.length}张+副露${player.exposedMelds.length}]`)
         return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
       }
     }
@@ -973,7 +983,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         applyAnKong(player, ak)
         const extra = drawTile(g, player)
         if (extra && !isFlower(extra)) {
-          if (canWin(player.hand.filter(t => t !== undefined), player.exposedMelds.length, makeWT(player)).canWin) {
+          if (canWin(normalizeHand(player.hand), player.exposedMelds.length, makeWT(player)).canWin) {
             const baseScore = calcScore(player, true, true, g.gameMultiplier)
             player.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
@@ -989,7 +999,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         applyJiaGang(player, jg)
         const extra = drawTile(g, player)
         if (extra && !isFlower(extra)) {
-          if (canWin(player.hand.filter(t => t !== undefined), player.exposedMelds.length, makeWT(player)).canWin) {
+          if (canWin(normalizeHand(player.hand), player.exposedMelds.length, makeWT(player)).canWin) {
             const baseScore = calcScore(player, true, true, g.gameMultiplier)
             player.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
@@ -1048,7 +1058,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           applyPeng(opp, discard, curr)
           const d = drawTile(g, opp)
           if (!d) return null
-          if (canWin(opp.hand.filter(t => t !== undefined), opp.exposedMelds.length, makeWT(opp)).canWin) {
+          if (canWin(normalizeHand(opp.hand), opp.exposedMelds.length, makeWT(opp)).canWin) {
             const baseScore = calcScore(opp, true, false, g.gameMultiplier)
             opp.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= baseScore }
@@ -1060,7 +1070,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             applyAnKong(opp, ak)
             const extra = drawTile(g, opp)
             if (extra && !isFlower(extra)) {
-              if (canWin(opp.hand.filter(t => t !== undefined), opp.exposedMelds.length, makeWT(opp)).canWin) {
+              if (canWin(normalizeHand(opp.hand), opp.exposedMelds.length, makeWT(opp)).canWin) {
                 const kongBaseScore = calcScore(opp, true, true, g.gameMultiplier)
                 opp.score += kongBaseScore * 3
                 for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
@@ -1087,7 +1097,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       applyChow(nextP, discard, curr)
       const d = drawTile(g, nextP)
       if (!d) return null
-      if (canWin(nextP.hand.filter(t => t !== undefined), nextP.exposedMelds.length, makeWT(nextP)).canWin) {
+      if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds.length, makeWT(nextP)).canWin) {
         const baseScore = calcScore(nextP, true, false, g.gameMultiplier)
         nextP.score += baseScore * 3
         for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= baseScore }
@@ -1099,7 +1109,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         applyAnKong(nextP, ak)
         const extra = drawTile(g, nextP)
         if (extra && !isFlower(extra)) {
-          if (canWin(nextP.hand.filter(t => t !== undefined), nextP.exposedMelds.length, makeWT(nextP)).canWin) {
+          if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds.length, makeWT(nextP)).canWin) {
             const kongBaseScore = calcScore(nextP, true, true, g.gameMultiplier)
             nextP.score += kongBaseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= kongBaseScore }
