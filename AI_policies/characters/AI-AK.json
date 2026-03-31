@@ -1,10 +1,10 @@
 {
-  "savedAt": "2026-03-31T04:49:03.929Z",
+  "savedAt": "2026-03-31T05:04:19.532Z",
   "round": 0,
   "metrics": {
-    "fitness": 200,
-    "huRate": 0.057,
-    "drawRate": 0.771,
+    "fitness": 37400,
+    "huRate": 0.065,
+    "drawRate": 0.78,
     "totalGames": 3,
     "note": "AI-AK iterative training - 1x3"
   },
@@ -85,6 +85,9 @@
     "oppTingDetection": 0.5,
     "safeTilePriority": 0.7,
     "terminalDiscardTingSignal": 0.3,
+    "wildDiaoKeepBonus": 3,
+    "wildDiaoFlushBoost": 2,
+    "wildDiaoPungBoost": 2,
     "hand5RouteBias": 0.3,
     "hand6RouteBias": 0.6,
     "hand7RouteBias": 0.9,

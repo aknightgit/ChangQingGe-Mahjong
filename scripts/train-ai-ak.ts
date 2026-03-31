@@ -70,6 +70,9 @@ interface BotPolicy {
   oppTingDetection: number        // 对手听牌检测敏感度
   safeTilePriority: number        // 安全牌优先级（对手听牌时打安全牌）
   terminalDiscardTingSignal: number // 对手打出幺九→可能已听牌的信号权重
+  wildDiaoKeepBonus: number         // 百搭大吊保留奖励（留百搭做最后1张→听所有牌）
+  wildDiaoFlushBoost: number        // 百搭大吊+混一色路线加成
+  wildDiaoPungBoost: number         // 百搭大吊+碰碰胡路线加成
   hand5RouteBias: number; hand6RouteBias: number; hand7RouteBias: number
   multLowHand5AllPungs: number; multLowHand5HalfFlush: number
   multHighHand5AllPungs: number; multHighHand5HalfFlush: number
@@ -113,6 +116,7 @@ const DEFAULT_POLICY: BotPolicy = {
   bao2ClaimPenalty: 0.5, bao3AvoidThreshold: 0.8, baoSelfClaimCaution: 0.3,
   wallEarlySpeedPush: 0.3, wallMidBalance: 0.5, wallLateDefense: 0.8,
   oppTingDetection: 0.5, safeTilePriority: 0.7, terminalDiscardTingSignal: 0.3,
+  wildDiaoKeepBonus: 3.0, wildDiaoFlushBoost: 2.0, wildDiaoPungBoost: 2.0,
   hand5RouteBias: 0.3, hand6RouteBias: 0.6, hand7RouteBias: 0.9,
   multLowHand5AllPungs: 0.4, multLowHand5HalfFlush: 0.3,
   multHighHand5AllPungs: 0.3, multHighHand5HalfFlush: 0.5,
@@ -155,6 +159,7 @@ const MUTATE_KEYS: (keyof BotPolicy)[] = [
   'bao2ClaimPenalty', 'bao3AvoidThreshold', 'baoSelfClaimCaution',
   'wallEarlySpeedPush', 'wallMidBalance', 'wallLateDefense',
   'oppTingDetection', 'safeTilePriority', 'terminalDiscardTingSignal',
+  'wildDiaoKeepBonus', 'wildDiaoFlushBoost', 'wildDiaoPungBoost',
   'hand5RouteBias', 'hand6RouteBias', 'hand7RouteBias',
   'multLowHand5AllPungs', 'multLowHand5HalfFlush',
   'multHighHand5AllPungs', 'multHighHand5HalfFlush',
@@ -246,6 +251,9 @@ const PARAM_RANGES: Record<string, { min: number; max: number; step: number }> =
   oppTingDetection:           { min: 0.0,  max: 1.0,  step: 0.05 },
   safeTilePriority:           { min: 0.0,  max: 1.0,  step: 0.05 },
   terminalDiscardTingSignal:  { min: 0.0,  max: 1.0,  step: 0.05 },
+  wildDiaoKeepBonus:          { min: 0.0,  max: 10.0, step: 0.5 },
+  wildDiaoFlushBoost:         { min: 0.0,  max: 5.0,  step: 0.25 },
+  wildDiaoPungBoost:          { min: 0.0,  max: 5.0,  step: 0.25 },
   hand5RouteBias:             { min: 0.0,  max: 1.0,  step: 0.05 },
   hand6RouteBias:             { min: 0.0,  max: 1.0,  step: 0.05 },
   hand7RouteBias:             { min: 0.0,  max: 1.0,  step: 0.05 },
@@ -358,7 +366,7 @@ function crossoverPolicy(a: BotPolicy, b: BotPolicy): BotPolicy {
 function t(suit: TileSuit, v: number, id?: string): Tile {
   return { suit, value: v, id: id || `${suit}-${v}-${Math.random().toString(36).slice(2, 8)}`, isFlower: false }
 }
-function tileEq(a: Tile, b: Tile): boolean { return a.suit === b.suit && a.value === b.value }
+function tileEq(a: Tile, b: Tile): boolean { if (!a || !b) return false; return a.suit === b.suit && a.value === b.value }
 function tileStr(t: Tile): string {
   if (!t) return '??'
   const suits: Record<string, string> = { dots: '筒', characters: '万', bamboos: '条', wind: '风', dragon: '箭', flower: '花' }
@@ -432,6 +440,7 @@ function setupGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameState {
 function drawTile(g: GameState, p: BotPlayer): Tile | null {
   if (g.wallIdx >= g.deck.length) return null
   const tile = g.deck[g.wallIdx++]
+  if (!tile) return drawTile(g, p)
   if (isFlower(tile)) { p.flowerTiles.push(tile); return drawTile(g, p) }
   p.hand.push(tile)
   return tile
@@ -442,29 +451,32 @@ function makeWT(p: BotPlayer) { return buildWildTileChecker(p.wildSuit && p.wild
 
 // ========== Meld detection ==========
 function canPeng(p: BotPlayer, tile: Tile): boolean {
-  return p.hand.filter(t => tileEq(t, tile)).length >= 2
+  if (!tile) return false
+  return p.hand.filter(t => t && tileEq(t, tile)).length >= 2
 }
 function canChow(p: BotPlayer, tile: Tile): boolean {
-  if (isHonor(tile) || tile.suit === TileSuit.FLOWER) return false
+  if (!tile || isHonor(tile) || tile.suit === TileSuit.FLOWER) return false
   const v = tile.value
   if (v < 2 || v > 8) return false
   return p.hand.some(t => t.suit === tile.suit && t.value === v - 1) &&
          p.hand.some(t => t.suit === tile.suit && t.value === v + 1)
 }
 function canMingKong(p: BotPlayer, tile: Tile): boolean {
-  return p.hand.filter(t => tileEq(t, tile)).length >= 3
+  if (!tile) return false
+  return p.hand.filter(t => t && tileEq(t, tile)).length >= 3
 }
 function canAnKong(p: BotPlayer): Tile[] {
-  const groups = groupTiles(p.hand)
+  const groups = groupTiles(p.hand.filter(t => t))
   const result: Tile[] = []
-  for (const [k, tiles] of groups) { if (tiles.length === 4) result.push(tiles[0]) }
+  for (const [k, tiles] of groups) { if (tiles.length === 4 && tiles[0]) result.push(tiles[0]) }
   return result
 }
 function canJiaGang(p: BotPlayer): Tile[] {
   const result: Tile[] = []
   for (const meld of p.exposedMelds) {
     if (meld.type === MeldType.TRIPLET) {
-      if (p.hand.find(t => tileEq(t, meld.tiles[0]))) result.push(p.hand.find(t => tileEq(t, meld.tiles[0]))!)
+      const found = p.hand.find(t => t && tileEq(t, meld.tiles[0]))
+      if (found) result.push(found)
     }
   }
   return result
@@ -472,36 +484,38 @@ function canJiaGang(p: BotPlayer): Tile[] {
 
 // ========== Apply melds ==========
 function applyPeng(p: BotPlayer, tile: Tile, sourcePos?: number): void {
-  const matches = p.hand.filter(t => tileEq(t, tile)).slice(0, 2)
-  for (const u of matches) { const idx = p.hand.findIndex(rt => rt.id === u.id); if (idx >= 0) p.hand.splice(idx, 1) }
+  const matches = p.hand.filter(t => t && tileEq(t, tile)).slice(0, 2)
+  for (const u of matches) { const idx = p.hand.findIndex(rt => rt && rt.id === u.id); if (idx >= 0) p.hand.splice(idx, 1) }
   p.exposedMelds.push({ type: MeldType.TRIPLET, tiles: [tile, tile, tile], isConcealed: false })
   if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
 }
 function applyChow(p: BotPlayer, tile: Tile, sourcePos?: number): void {
   const v = tile.value
-  const low = p.hand.find(t => t.suit === tile.suit && t.value === v - 1)!
-  const high = p.hand.find(t => t.suit === tile.suit && t.value === v + 1)!
-  const idxL = p.hand.findIndex(t => t.id === low.id); if (idxL >= 0) p.hand.splice(idxL, 1)
-  const idxH = p.hand.findIndex(t => t.id === high.id); if (idxH >= 0) p.hand.splice(idxH, 1)
+  const low = p.hand.find(t => t && t.suit === tile.suit && t.value === v - 1)
+  const high = p.hand.find(t => t && t.suit === tile.suit && t.value === v + 1)
+  if (!low || !high) return
+  const idxL = p.hand.findIndex(t => t && t.id === low.id); if (idxL >= 0) p.hand.splice(idxL, 1)
+  const idxH = p.hand.findIndex(t => t && t.id === high.id); if (idxH >= 0) p.hand.splice(idxH, 1)
   p.exposedMelds.push({ type: MeldType.SEQUENCE, tiles: [low, tile, high], isConcealed: false })
   if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
 }
 function applyMingKong(p: BotPlayer, tile: Tile, sourcePos?: number): void {
-  const matches = p.hand.filter(t => tileEq(t, tile)).slice(0, 3)
-  for (const u of matches) { const idx = p.hand.findIndex(rt => rt.id === u.id); if (idx >= 0) p.hand.splice(idx, 1) }
+  const matches = p.hand.filter(t => t && tileEq(t, tile)).slice(0, 3)
+  for (const u of matches) { const idx = p.hand.findIndex(rt => rt && rt.id === u.id); if (idx >= 0) p.hand.splice(idx, 1) }
   p.exposedMelds.push({ type: MeldType.KONG, tiles: [tile, tile, tile, tile], isConcealed: false })
   p.kongCount++
   if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
 }
 function applyAnKong(p: BotPlayer, tile: Tile): void {
-  p.hand = p.hand.filter(t => !tileEq(t, tile))
+  p.hand = p.hand.filter(t => t && !tileEq(t, tile))
   p.exposedMelds.push({ type: MeldType.KONG, tiles: [tile, tile, tile, tile], isConcealed: true })
   p.kongCount++
 }
 function applyJiaGang(p: BotPlayer, tile: Tile): void {
-  const meld = p.exposedMelds.find(m => m.type === MeldType.TRIPLET && tileEq(m.tiles[0], tile))!
+  const meld = p.exposedMelds.find(m => m.type === MeldType.TRIPLET && tileEq(m.tiles[0], tile))
+  if (!meld) return
   meld.type = MeldType.KONG; meld.tiles = [tile, tile, tile, tile]; meld.isConcealed = false
-  p.hand = p.hand.filter(t => !tileEq(t, tile)); p.kongCount++
+  p.hand = p.hand.filter(t => t && !tileEq(t, tile)); p.kongCount++
 }
 
 // ========== Scoring (with multiplier simulation) ==========
@@ -860,6 +874,20 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
       if (isWT(tile, p)) keepScore += 10  // 百搭绝对不打
     }
 
+    // ====== 百搭大吊：留百搭做最后1张 → 听所有牌 ======
+    // hand.length ≈ 需要胡的牌数 → 接近胡牌时，百搭做最后1张价值极高
+    const meldsNeeded = 4 - totalMelds
+    const tilesNeeded = meldsNeeded * 3 + 2  // 还需要多少张牌
+    if (wildCount >= 1 && tilesNeeded <= 3 && policy.wildDiaoKeepBonus > 0) {
+      // 接近胡牌（只差1-2张），百搭做最后1张 → 听全部牌
+      if (isWT(tile, p)) keepScore += policy.wildDiaoKeepBonus * 5  // 百搭绝不打
+      // 碰碰胡路线 + 百搭大吊
+      if (count >= 2 && policy.wildDiaoPungBoost > 0) keepScore += policy.wildDiaoPungBoost * 3
+      // 混一色路线 + 百搭大吊（风箭+主花色都能胡）
+      if (!isHonor(tile) && tile.suit === suits[maxSuitIdx] && policy.wildDiaoFlushBoost > 0)
+        keepScore += policy.wildDiaoFlushBoost * 3
+    }
+
     // 百搭分级激进度
     const aggression = wildCount === 0 ? policy.wild0Aggression
       : wildCount === 1 ? policy.wild1Aggression
@@ -979,7 +1007,15 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     candidates.push({ tile, keepScore })
   }
   candidates.sort((a, b) => a.keepScore - b.keepScore)
-  return candidates[0]?.tile || hand[0]
+  const validTile = candidates[0]?.tile || hand.find(t => t) || hand[0]
+  if (!validTile) {
+    // Emergency fallback: return any tile from deck
+    const allTiles = Object.values(TileSuit).flatMap(s => 
+      s === TileSuit.FLOWER ? [] : Array.from({length: 9}, (_, i) => ({ suit: s, value: i + 1, id: `fallback-${s}-${i+1}` }))
+    )
+    return allTiles[0]
+  }
+  return validTile
 }
 
 // ========== 游戏明细记录 ==========
@@ -993,7 +1029,7 @@ interface GameResult {
 
 // ========== 手牌规范化（胡牌前必调） ==========
 function normalizeHand(hand: Tile[]): Tile[] {
-  return hand.filter(t => t !== undefined && !isFlower(t))
+  return hand.filter(t => t && !isFlower(t))
 }
 
 // ========== Game Loop ==========
@@ -1093,7 +1129,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     player.isTing = isTing(player.hand, player.exposedMelds.length, makeWT(player))
 
     const discard = aiDiscard(player, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, curr)
-    player.hand = player.hand.filter(t => t.id !== discard.id)
+    player.hand = player.hand.filter(t => t && t.id !== discard.id)
     player.discardedTiles.push(discard)
     g.discardPile.push(discard)
     g.playerDiscards[curr].push(discard)
