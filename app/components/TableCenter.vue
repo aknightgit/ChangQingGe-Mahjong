@@ -109,12 +109,12 @@ const wildTileName = computed(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 6px;
   pointer-events: auto;
-  padding: 20px 40px;
+  padding: 10px 20px;
   background: radial-gradient(ellipse at center, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 70%, transparent 100%);
-  border-radius: 16px;
-  min-width: 180px;
+  border-radius: 8px;
+  min-width: 90px;
 }
 
 /* 信息项通用样式 */
@@ -128,38 +128,38 @@ const wildTileName = computed(() => {
 /* 倍数徽章 */
 .multiplier-badge {
   background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
-  padding: 8px 20px;
+  padding: 4px 10px;
   border-radius: 999px;
-  font-size: 1rem;
+  font-size: 0.5rem;
   font-weight: 800;
   box-shadow: 0 3px 12px rgba(255, 152, 0, 0.45);
 }
 
 .multiplier-badge .badge-icon {
-  font-size: 1.1rem;
+  font-size: 0.55rem;
 }
 
 .multiplier-badge .badge-value {
-  font-size: 1.2rem;
+  font-size: 0.6rem;
   font-weight: 900;
 }
 
 /* 剩余牌数徽章 */
 .remaining-badge {
   background: linear-gradient(135deg, #00796b 0%, #004d40 100%);
-  padding: 8px 20px;
+  padding: 4px 10px;
   border-radius: 999px;
-  font-size: 1rem;
+  font-size: 0.5rem;
   font-weight: 800;
   box-shadow: 0 3px 12px rgba(0, 121, 107, 0.4);
 }
 
 .remaining-badge .badge-icon {
-  font-size: 1.1rem;
+  font-size: 0.55rem;
 }
 
 .remaining-badge .badge-value {
-  font-size: 1.2rem;
+  font-size: 0.6rem;
   font-weight: 900;
 }
 
