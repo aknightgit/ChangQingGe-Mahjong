@@ -1214,13 +1214,14 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
 
 // ========== Batch Evaluation ==========
 interface EvalResult {
-  akScore: number
-  akWins: number
-  winRates: Record<string, number>
-  scores: Record<string, number>
+  akScore: number; akWins: number
+  winRates: Record<string, number>; scores: Record<string, number>
   draws: number
   bigWin: { gameIdx: number; result: GameResult; score: number } | null
   bigLoss: { gameIdx: number; result: GameResult; score: number } | null
+  // 模板输出用
+  totalGames: number; winGames: number; selfDrawGames: number
+  worstSingleLoss: { loser: string; score: number; gameIdx: number; result: GameResult } | null
 }
 
 function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: number): EvalResult {
@@ -1228,33 +1229,52 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   const wins: Record<string, number> = {}
   for (const n of AI_NAMES) { scores[n] = 0; wins[n] = 0 }
   let draws = 0
+  let winGames = 0
+  let selfDrawGames = 0
   let bigWin: EvalResult['bigWin'] = null
   let bigLoss: EvalResult['bigLoss'] = null
-  prevRoundWasDraw = false  // 重置流局追踪
+  let worstSingleLoss: EvalResult['worstSingleLoss'] = null
+  prevRoundWasDraw = false
 
   for (let g = 0; g < games; g++) {
     const result = runGame(akPolicy, otherPolicies)
     if (result) {
       const winner = AI_NAMES[result.winner]
       wins[winner]++
+      winGames++
       prevRoundWasDraw = false
+
+      // 判断是否自摸
+      const winEvents = result.events.filter(e => e.action.includes('自摸'))
+      if (winEvents.length > 0) selfDrawGames++
+
       const akDelta = result.scores[0] * SETTLEMENT_MULT
       for (let i = 0; i < AI_NAMES.length; i++) {
         scores[AI_NAMES[i]] += result.scores[i] * SETTLEMENT_MULT
       }
-      // Track AK biggest win/loss
       if (akDelta > 0 && (!bigWin || akDelta > bigWin.score)) bigWin = { gameIdx: g, result, score: akDelta }
       if (akDelta < 0 && (!bigLoss || akDelta < bigLoss.score)) bigLoss = { gameIdx: g, result, score: akDelta }
+
+      // 找全局最大单人亏损
+      for (let i = 0; i < 4; i++) {
+        const delta = result.scores[i] * SETTLEMENT_MULT
+        if (!worstSingleLoss || delta < worstSingleLoss.score) {
+          worstSingleLoss = { loser: AI_NAMES[i], score: delta, gameIdx: g, result }
+        }
+      }
     } else {
       draws++
-      prevRoundWasDraw = true  // 流局→下局倍数×2
+      prevRoundWasDraw = true
     }
   }
 
   const winRates: Record<string, number> = {}
   for (const n of AI_NAMES) winRates[n] = wins[n] / games
 
-  return { akScore: scores['AI-AK'], akWins: wins['AI-AK'], winRates, scores, draws, bigWin, bigLoss }
+  return {
+    akScore: scores['AI-AK'], akWins: wins['AI-AK'], winRates, scores, draws,
+    bigWin, bigLoss, totalGames: games, winGames, selfDrawGames, worstSingleLoss
+  }
 }
 
 // ========== Main Training Loop ==========
@@ -1332,9 +1352,12 @@ function main() {
     let roundBestPolicy = bestPolicy
     let roundBigWin: EvalResult['bigWin'] = null
     let roundBigLoss: EvalResult['bigLoss'] = null
+    let roundWorstLoss: EvalResult['worstSingleLoss'] = null
 
     const roundLines: string[] = []
     roundLines.push(`\n--- Round ${round}/${ROUNDS} (intensity=${intensity.toFixed(1)}, plateau=${plateauCount}) ---`)
+
+    let bestEvalResult: EvalResult | null = null
 
     for (let c = 0; c < candidates.length; c++) {
       const result = evaluatePolicy(candidates[c], fixedPolicies, GAMES_PER_ROUND)
@@ -1346,6 +1369,8 @@ function main() {
         roundBestPolicy = candidates[c]
         roundBigWin = result.bigWin
         roundBigLoss = result.bigLoss
+        roundWorstLoss = result.worstSingleLoss
+        bestEvalResult = result
       }
     }
 
@@ -1392,7 +1417,47 @@ function main() {
 
     console.log(roundLines.join('\n'))
     logLines.push(...roundLines)
-  }
+
+    // 模板格式输出
+    if (bestEvalResult) {
+      const er = bestEvalResult
+      const ts = new Date().toISOString()
+      logLines.push(`\n## Round ${round} (${ts})\n`)
+      logLines.push('### 训练指标')
+      logLines.push(`- Games: ${er.totalGames}`)
+      logLines.push(`- 胡牌局: ${er.winGames} (${(er.winGames/er.totalGames*100).toFixed(1)}%)`)
+      logLines.push(`- 流局: ${er.draws} (${(er.draws/er.totalGames*100).toFixed(1)}%)`)
+      logLines.push(`- 自摸率(胡牌中): ${(er.selfDrawGames/Math.max(1,er.winGames)*100).toFixed(1)}%`)
+      logLines.push(`- Fitness: ${er.akScore}\n`)
+
+      // 最大单人亏损局明细
+      if (roundWorstLoss) {
+        const wl = roundWorstLoss
+        logLines.push('### 最大单人亏损局明细（本轮）')
+        logLines.push(`- 最大亏损: ${wl.loser} ${wl.score} 点（绝对值 ${Math.abs(wl.score)}）`)
+        logLines.push(`- 局号: ${wl.gameIdx}`)
+        logLines.push(`- 倍数: ×${wl.result.multiplier}`)
+        logLines.push('')
+        logLines.push('- 胡牌玩家明细:')
+        if (wl.result.snapshots) {
+          for (const snap of wl.result.snapshots) {
+            logLines.push(`  - ${snap.name}: 手牌 ${snap.hand}`)
+            if (snap.melds.length > 0) logLines.push(`    副露: ${snap.melds.join(' ; ')}`)
+            if (snap.flowers.length > 0) logLines.push(`    花牌: ${snap.flowers.join(' ')}`)
+          }
+        }
+        logLines.push('')
+        if (wl.result.settlementLog && wl.result.settlementLog.length > 0) {
+          logLines.push('- 结算逐笔明细:')
+          for (const s of wl.result.settlementLog) {
+            const multStr = s.mult ? ` (${s.mult}x)` : ''
+            logLines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
+          }
+        }
+        logLines.push('')
+      }
+    }  // End if bestEvalResult
+  }  // End round loop
 
   // Final evaluation
   console.log('\n============================================')
