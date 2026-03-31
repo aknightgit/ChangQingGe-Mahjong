@@ -10,9 +10,10 @@
         <thead>
           <tr>
             <th>玩家名</th>
-            <th>胡牌次数</th>
-            <th>点炮次数</th>
-            <th>自摸次数</th>
+            <th>胡牌</th>
+            <th>点炮</th>
+            <th>自摸</th>
+            <th>单局最高</th>
             <th>总分</th>
           </tr>
         </thead>
@@ -35,6 +36,7 @@
             <td>{{ player.winCount ?? player.wins ?? 0 }}</td>
             <td>{{ player.discardCount ?? player.losses ?? 0 }}</td>
             <td>{{ player.selfDrawCount ?? 0 }}</td>
+            <td>{{ player.bestRound ?? '-' }}</td>
             <td class="td-score" :class="player.score > 0 ? 'sc-pos' : player.score < 0 ? 'sc-neg' : ''">
               {{ player.score > 0 ? '+' : '' }}{{ player.score }}
             </td>
@@ -74,6 +76,7 @@ interface PlayerStat {
   winCount?: number
   discardCount?: number
   selfDrawCount?: number
+  bestRound?: number | null
 }
 
 const props = defineProps<{

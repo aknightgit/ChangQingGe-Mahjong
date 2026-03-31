@@ -1038,6 +1038,7 @@ const statsPlayers = computed(() => {
       isQJCrossed: qjAlertIds.has(p.id),
       qjScore,
       qjGlow: qjScore > qjThreshold * 3,
+      bestRound: null as number | null,
       // 累积/上局数据（暂无历史接口，先用占位）
       totalWins: p.status === 'won' ? 1 : 0,
       totalLosses: p.status === 'lost' ? 1 : 0,
