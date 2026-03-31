@@ -65,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { ActionType } from '~/types/game'
 
 interface Props {
@@ -133,12 +133,37 @@ const safeFreezeDurationMs = computed(() => {
   return Number.isFinite(v) && v > 0 ? v : 1000
 })
 
-const freezeProgress = computed(() => {
-  if (!props.freezeUntil) return '0'
+const freezeProgress = ref('0')
+let freezeProgressTimer: ReturnType<typeof setInterval> | null = null
+
+const updateFreezeProgress = () => {
+  if (!props.freezeUntil) {
+    freezeProgress.value = '0'
+    return
+  }
   const total = safeFreezeDurationMs.value
-  const remaining = Math.max(0, props.freezeUntil - props.nowTs)
+  const remaining = Math.max(0, props.freezeUntil - Date.now())
   const elapsed = total - remaining
-  return String(Math.min(1, Math.max(0, elapsed / total)))
+  freezeProgress.value = String(Math.min(1, Math.max(0, elapsed / total)))
+}
+
+watch(
+  () => [props.freezeUntil, safeFreezeDurationMs.value],
+  () => {
+    updateFreezeProgress()
+  },
+  { immediate: true }
+)
+
+onMounted(() => {
+  freezeProgressTimer = setInterval(updateFreezeProgress, 50)
+})
+
+onUnmounted(() => {
+  if (freezeProgressTimer) {
+    clearInterval(freezeProgressTimer)
+    freezeProgressTimer = null
+  }
 })
 </script>
 

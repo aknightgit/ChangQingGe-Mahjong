@@ -1022,6 +1022,57 @@ const spectatingId = ref<string | null>(null)
 const positionColors = ['east', 'south', 'west', 'north']
 const botAvatars = ['😎', '🤖', '🧠']
 
+// Track today's best hand (max wonFan) per room
+const todayBestFan = ref(0)
+
+watch(() => gameState.value?.players, (players) => {
+  if (!players) return
+  for (const p of players) {
+    if (p.status === 'won' && p.wonFan > todayBestFan.value) {
+      todayBestFan.value = p.wonFan
+    }
+  }
+}, { deep: true })
+
+const todayBestHandName = computed(() => {
+  const fan = todayBestFan.value
+  if (fan <= 0) return null
+  if (fan >= 8) return `${fan}番 · 满贯`
+  if (fan >= 5) return `${fan}番 · 高番`
+  if (fan >= 3) return `${fan}番 · 中番`
+  return `${fan}番 · 基础`
+})
+
+const todayBestHand = computed(() => {
+  if (todayBestHandName.value) {
+    return { name: todayBestHandName.value, tiles: [] as Tile[] }
+  }
+  return null
+})
+
+// Track cumulative wins/losses per player within this room session
+const roomCumulative = ref<Record<string, { wins: number; losses: number; lastStatus: 'won' | 'lost' | 'none' }>>({})
+
+watch(() => gameState.value?.players, (players) => {
+  if (!players) return
+  for (const p of players) {
+    if (!roomCumulative.value[p.id]) {
+      roomCumulative.value[p.id] = { wins: 0, losses: 0, lastStatus: 'none' }
+    }
+    if (p.status === 'won') {
+      if (roomCumulative.value[p.id].lastStatus !== 'won') {
+        roomCumulative.value[p.id].wins++
+        roomCumulative.value[p.id].lastStatus = 'won'
+      }
+    } else if (p.status === 'lost') {
+      if (roomCumulative.value[p.id].lastStatus !== 'lost') {
+        roomCumulative.value[p.id].losses++
+        roomCumulative.value[p.id].lastStatus = 'lost'
+      }
+    }
+  }
+}, { deep: true })
+
 const statsPlayers = computed(() => {
   if (!gameState.value) return []
   const qjAlertIds = new Set((gameState.value as any).qjAlerts?.map((a: any) => a.playerId) || [])
@@ -1029,6 +1080,7 @@ const statsPlayers = computed(() => {
   return gameState.value.players.map((p, i) => {
     const alert = (gameState.value as any).qjAlerts?.find((a: any) => a.playerId === p.id)
     const qjScore = alert?.score || 0
+    const cumulative = roomCumulative.value[p.id] || { wins: 0, losses: 0, lastStatus: 'none' }
     return {
       id: p.id,
       name: p.name,
@@ -1041,10 +1093,9 @@ const statsPlayers = computed(() => {
       qjScore,
       qjGlow: qjScore > qjThreshold * 3,
       bestRound: null as number | null,
-      // 累积/上局数据（暂无历史接口，先用占位）
-      totalWins: p.status === 'won' ? 1 : 0,
-      totalLosses: p.status === 'lost' ? 1 : 0,
-      lastRoundStatus: null as 'won' | 'lost' | 'none' | null,
+      totalWins: cumulative.wins,
+      totalLosses: cumulative.losses,
+      lastRoundStatus: cumulative.lastStatus,
     }
   })
 })
