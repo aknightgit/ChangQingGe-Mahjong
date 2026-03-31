@@ -359,6 +359,13 @@ function t(suit: TileSuit, v: number, id?: string): Tile {
   return { suit, value: v, id: id || `${suit}-${v}-${Math.random().toString(36).slice(2, 8)}`, isFlower: false }
 }
 function tileEq(a: Tile, b: Tile): boolean { return a.suit === b.suit && a.value === b.value }
+function tileStr(t: Tile): string {
+  const suits: Record<string, string> = { dots: '筒', characters: '万', bamboos: '条', wind: '风', dragon: '箭', flower: '花' }
+  const honors: Record<string, Record<number, string>> = { wind: { 1: '东', 2: '南', 3: '西', 4: '北' }, dragon: { 1: '中', 2: '发', 3: '白' } }
+  if (t.suit === TileSuit.FLOWER) return `花${t.value}`
+  if (honors[t.suit]) return honors[t.suit][t.value] || '?'
+  return `${t.value}${suits[t.suit] || t.suit}`
+}
 function isHonor(t: Tile): boolean { return t.suit === TileSuit.WIND || t.suit === TileSuit.DRAGON }
 function isWild(t: Tile, ws?: TileSuit, wv?: number): boolean { return ws && wv ? t.suit === ws && t.value === wv : false }
 
@@ -896,11 +903,20 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   return candidates[0]?.tile || hand[0]
 }
 
+// ========== 游戏明细记录 ==========
+interface GameEvent { turn: number; player: string; action: string; detail: string }
+interface GameResult { winner: number; scores: number[]; events: GameEvent[]; multiplier: number }
+
 // ========== Game Loop ==========
-function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: number; scores: number[] } | null {
+function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | null {
   const g = setupGame(akPolicy, otherPolicies)
+  const events: GameEvent[] = []
+  let turn = 0
+  const log = (player: string, action: string, detail: string) => { events.push({ turn, player, action, detail }) }
 
   for (let i = 0; i < 13; i++) { for (let p = 0; p < 4; p++) drawTile(g, g.players[p]) }
+  // 发牌完成日志
+  for (const p of g.players) log(p.name, '发牌', p.hand.map(t => tileStr(t)).join(' '))
 
   const MAX_ROUNDS = 200
   let consecutiveDraws = 0
@@ -908,9 +924,11 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const curr = g.current
     const player = g.players[curr]
+    turn = round
     const drawn = drawTile(g, player)
     if (!drawn) return null
-    if (isFlower(drawn)) continue
+    if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); continue }
+    log(player.name, '摸牌', tileStr(drawn))
 
     // Self-draw win check
     if (canWin(player.hand.filter(t => t !== undefined), player.exposedMelds.length, makeWT(player)).canWin) {
@@ -925,7 +943,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
         for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
         // 互包结算
         applyBaoSettlement(g, curr, true, null, baseScore)
-        return { winner: curr, scores: g.players.map(p => p.score) }
+        log(player.name, '自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
+        return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier }
       }
     }
 
@@ -940,7 +959,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
             player.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
             applyBaoSettlement(g, curr, true, null, baseScore)
-            return { winner: curr, scores: g.players.map(p => p.score) }
+            log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
+            return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier }
           }
         }
       }
@@ -955,7 +975,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
             player.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
             applyBaoSettlement(g, curr, true, null, baseScore)
-            return { winner: curr, scores: g.players.map(p => p.score) }
+            log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
+            return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier }
           }
         }
       }
@@ -968,6 +989,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
     player.discardedTiles.push(discard)
     g.discardPile.push(discard)
     g.playerDiscards[curr].push(discard)
+    log(player.name, '出牌', `${tileStr(discard)} [手牌: ${player.hand.map(t => tileStr(t)).join(' ')}]`)
 
     // Others check hu
     for (let other = 0; other < 4; other++) {
@@ -984,7 +1006,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
           opp.score += score; player.score -= score
           // 互包结算：如果有人对opp有包三，且放炮者不是包家
           applyBaoSettlement(g, other, false, curr, score)
-          return { winner: other, scores: g.players.map(p => p.score) }
+          log(opp.name, '放炮胡', `${player.name}出${tileStr(discard)}→${opp.hand.map(t => tileStr(t)).join(' ')} [${score}]`)
+          return { winner: other, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier }
         }
       }
     }
@@ -1010,7 +1033,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
             opp.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= baseScore }
             applyBaoSettlement(g, otherIdx, true, null, baseScore)
-            return { winner: otherIdx, scores: g.players.map(p => p.score) }
+            log(opp.name, '碰后自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
+            return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier }
           }
           for (const ak of canAnKong(opp)) {
             applyAnKong(opp, ak)
@@ -1021,7 +1045,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
                 opp.score += kongBaseScore * 3
                 for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
                 applyBaoSettlement(g, otherIdx, true, null, kongBaseScore)
-                return { winner: otherIdx, scores: g.players.map(p => p.score) }
+                log(opp.name, '碰杠后自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3=${kongBaseScore*3}]`)
+                return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier }
               }
             }
           }
@@ -1047,7 +1072,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
         nextP.score += baseScore * 3
         for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= baseScore }
         applyBaoSettlement(g, nextPlayer, true, null, baseScore)
-        return { winner: nextPlayer, scores: g.players.map(p => p.score) }
+        log(nextP.name, '吃后自摸', `${nextP.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
+        return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier }
       }
       for (const ak of canAnKong(nextP)) {
         applyAnKong(nextP, ak)
@@ -1058,7 +1084,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): { winner: num
             nextP.score += kongBaseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= kongBaseScore }
             applyBaoSettlement(g, nextPlayer, true, null, kongBaseScore)
-            return { winner: nextPlayer, scores: g.players.map(p => p.score) }
+            log(nextP.name, '吃杠后自摸', `${nextP.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3=${kongBaseScore*3}]`)
+            return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier }
           }
         }
       }
@@ -1083,6 +1110,8 @@ interface EvalResult {
   winRates: Record<string, number>
   scores: Record<string, number>
   draws: number
+  bigWin: { gameIdx: number; result: GameResult; score: number } | null
+  bigLoss: { gameIdx: number; result: GameResult; score: number } | null
 }
 
 function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: number): EvalResult {
@@ -1090,6 +1119,8 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   const wins: Record<string, number> = {}
   for (const n of AI_NAMES) { scores[n] = 0; wins[n] = 0 }
   let draws = 0
+  let bigWin: EvalResult['bigWin'] = null
+  let bigLoss: EvalResult['bigLoss'] = null
   prevRoundWasDraw = false  // 重置流局追踪
 
   for (let g = 0; g < games; g++) {
@@ -1098,9 +1129,13 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
       const winner = AI_NAMES[result.winner]
       wins[winner]++
       prevRoundWasDraw = false
+      const akDelta = result.scores[0] * SETTLEMENT_MULT
       for (let i = 0; i < AI_NAMES.length; i++) {
         scores[AI_NAMES[i]] += result.scores[i] * SETTLEMENT_MULT
       }
+      // Track AK biggest win/loss
+      if (akDelta > 0 && (!bigWin || akDelta > bigWin.score)) bigWin = { gameIdx: g, result, score: akDelta }
+      if (akDelta < 0 && (!bigLoss || akDelta < bigLoss.score)) bigLoss = { gameIdx: g, result, score: akDelta }
     } else {
       draws++
       prevRoundWasDraw = true  // 流局→下局倍数×2
@@ -1110,7 +1145,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   const winRates: Record<string, number> = {}
   for (const n of AI_NAMES) winRates[n] = wins[n] / games
 
-  return { akScore: scores['AI-AK'], akWins: wins['AI-AK'], winRates, scores, draws }
+  return { akScore: scores['AI-AK'], akWins: wins['AI-AK'], winRates, scores, draws, bigWin, bigLoss }
 }
 
 // ========== Main Training Loop ==========
@@ -1186,6 +1221,8 @@ function main() {
     // Evaluate each candidate
     let roundBestScore = -Infinity
     let roundBestPolicy = bestPolicy
+    let roundBigWin: EvalResult['bigWin'] = null
+    let roundBigLoss: EvalResult['bigLoss'] = null
 
     const roundLines: string[] = []
     roundLines.push(`\n--- Round ${round}/${ROUNDS} (intensity=${intensity.toFixed(1)}, plateau=${plateauCount}) ---`)
@@ -1198,6 +1235,8 @@ function main() {
       if (result.akScore > roundBestScore) {
         roundBestScore = result.akScore
         roundBestPolicy = candidates[c]
+        roundBigWin = result.bigWin
+        roundBigLoss = result.bigLoss
       }
     }
 
@@ -1227,6 +1266,20 @@ function main() {
       `${n}:${evalResult.scores[n]}(${(evalResult.winRates[n]*100).toFixed(0)}%)`
     ).join('  ')
     roundLines.push(summaryLine)
+
+    // 每轮最大赢/输明细
+    if (roundBigWin) {
+      const evs = roundBigWin.result.events
+      const winner = AI_NAMES[roundBigWin.result.winner]
+      roundLines.push(`\n  【本轮AK最大赢局】+${roundBigWin.score} (局次${roundBigWin.gameIdx}, 倍×${roundBigWin.result.multiplier})`)
+      for (const e of evs.slice(-8)) roundLines.push(`    ${e.player} ${e.action}: ${e.detail}`)
+    }
+    if (roundBigLoss) {
+      const evs = roundBigLoss.result.events
+      const winner = AI_NAMES[roundBigLoss.result.winner]
+      roundLines.push(`\n  【本轮AK最大输局】${roundBigLoss.score} (局次${roundBigLoss.gameIdx}, 倍×${roundBigLoss.result.multiplier})`)
+      for (const e of evs.slice(-8)) roundLines.push(`    ${e.player} ${e.action}: ${e.detail}`)
+    }
 
     console.log(roundLines.join('\n'))
     logLines.push(...roundLines)
@@ -1269,6 +1322,19 @@ function main() {
   for (const k of keyParams) {
     const val = (bestPolicy as any)[k]
     finalLines.push(`    ${k}: ${typeof val === 'number' ? (Number.isInteger(val) ? val : val.toFixed(4)) : val}`)
+  }
+
+  // 最终评估最大赢/输明细
+  if (finalEval.bigWin) {
+    const evs = finalEval.bigWin.result.events
+    const winner = AI_NAMES[finalEval.bigWin.result.winner]
+    finalLines.push(`\n  【最终评估AK最大赢局】+${finalEval.bigWin.score} (倍×${finalEval.bigWin.result.multiplier})`)
+    for (const e of evs) finalLines.push(`    ${e.player} ${e.action}: ${e.detail}`)
+  }
+  if (finalEval.bigLoss) {
+    const evs = finalEval.bigLoss.result.events
+    finalLines.push(`\n  【最终评估AK最大输局】${finalEval.bigLoss.score} (倍×${finalEval.bigLoss.result.multiplier})`)
+    for (const e of evs) finalLines.push(`    ${e.player} ${e.action}: ${e.detail}`)
   }
 
   console.log(finalLines.join('\n'))
