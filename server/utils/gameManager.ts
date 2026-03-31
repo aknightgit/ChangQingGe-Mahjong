@@ -626,16 +626,16 @@ class GameManager {
     }
     game.players.forEach((p, i) => { p.isDealer = (i === game.dealerIndex); });
 
-    // 广播 STARTING 阶段（所有客户端显示骰子动画）
-    game.phase = GamePhase.STARTING;
-    await this.persistGame(game);
-    this.broadcastGameState(gameId);
-
     // Create and shuffle deck
     const deck = createDeck();
     console.log(`[WallDebug] createDeck: ${deck.length} tiles`);
     game.wall = shuffleTiles(deck);
     console.log(`[WallDebug] after shuffle: ${game.wall.length} tiles`);
+
+    // 广播 STARTING 阶段（所有客户端显示骰子动画）
+    game.phase = GamePhase.STARTING;
+    await this.persistGame(game);
+    this.broadcastGameState(gameId);
 
     // 从全部144种牌型中随机选百搭
     const allTileTypes: Array<{ suit: TileSuit; value: number }> = [];
