@@ -821,7 +821,7 @@ const isDoubleRound = computed(() => {
 })
 const effectiveMaxRolls = computed(() => isDoubleRound.value ? 1 : maxDiceRolls.value)
 const showDoubleReminder = ref(false)
-const freezeDurationMs = ref((Number(route.query.freeze) || 1) * 1000) // 默认1秒
+const freezeDurationMs = ref(Math.max(1000, (Number(route.query.freeze) || 1) * 1000)) // 最低1秒
 
 // 当前冻结截止时间（从游戏状态读取）
 const currentFreezeUntil = computed(() => {
@@ -1063,7 +1063,7 @@ const isWaitingRoom = computed(() => {
   // 只在 waiting 阶段显示等待房间
   if (phase !== 'waiting') return false
   // 如果正在启动游戏（点了创建新局），不显示等待房间
-  if (isGameStarting) return false
+  if (isGameStarting.value) return false
   // 如果牌已发（有人有手牌），说明正在发牌中，不显示等待房间
   const hasDealtCards = (gameState.value.players || []).some(
     (p: any) => (p.hand?.concealedTiles?.length || 0) > 0
@@ -1097,8 +1097,8 @@ const overlayMessage = computed(() => {
   const reason = overlayReason.value
   switch (reason) {
     case GameEndReason.WALL_EXHAUSTED: {
-      const gMul = gameState.value?.globalMultiplier ?? 1
-      return `牌墙已空，全局倍数翻倍（当前 ×${gMul}）`
+      const nextMul = (gameState.value as any)?.inheritedGlobalMultiplier ?? gameState.value?.globalMultiplier ?? 1
+      return `牌墙已空，全局倍数翻倍（下局倍数 ×${nextMul}）`
     }
     case GameEndReason.LAST_PLAYER:
       return '只剩一名玩家，本轮结束。'
@@ -1773,6 +1773,7 @@ const isGameStarting = ref(false)
 
 const onStartGame = async () => {
   if (isGameStarting.value) return
+  isGameStarting.value = true
   if (gameState.value?.phase === GamePhase.PLAYING) {
     console.warn('[onStartGame] Game already in PLAYING phase, skipping')
     return
@@ -1802,6 +1803,8 @@ const onStartGame = async () => {
     })
   } catch (err) {
     console.error('[onStartGame] Failed:', err)
+  } finally {
+    isGameStarting.value = false
   }
 }
 

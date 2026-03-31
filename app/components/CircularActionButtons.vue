@@ -10,14 +10,22 @@
     <div class="action-grid">
       <button
         class="action-btn action-btn--small"
-        :class="{ 'action-btn--active': hasChow, 'action-btn--highlight': hasChow && !isDelaying }"
+        :class="{
+          'action-btn--active': hasChow,
+          'action-btn--highlight': hasChow && !isDelaying,
+          'action-btn--highlight-pulse': hasChow && shouldPulseHighlight
+        }"
         :disabled="!hasChow || isDelaying || isInteractionLocked || !isConnected"
         @click="$emit('action', 'chow')"
       >吃</button>
 
       <button
         class="action-btn action-btn--small"
-        :class="{ 'action-btn--active': hasPeng, 'action-btn--highlight': hasPeng && !isDelaying }"
+        :class="{
+          'action-btn--active': hasPeng,
+          'action-btn--highlight': hasPeng && !isDelaying,
+          'action-btn--highlight-pulse': hasPeng && shouldPulseHighlight
+        }"
         :disabled="!hasPeng || isDelaying || isInteractionLocked || !isConnected"
         @click="$emit('action', 'peng')"
       >碰</button>
@@ -57,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ActionType } from '~/types/game'
 
 interface Props {
@@ -92,8 +100,27 @@ const hasHu = computed(() => props.availableActions.includes(ActionType.HU))
 const hasAnyPriorityAction = computed(() => hasChow.value || hasPeng.value || hasKong.value || hasHu.value)
 const hasAnyAction = computed(() => hasAnyPriorityAction.value || canDraw.value)
 
+const HIGHLIGHT_MIN_MS = 1000
+const highlightHoldUntil = ref(0)
+
+watch(
+  () => ({ hasChow: hasChow.value, hasPeng: hasPeng.value }),
+  (next, prev) => {
+    const becameActive = (!prev?.hasChow && next.hasChow) || (!prev?.hasPeng && next.hasPeng)
+    if (becameActive) {
+      highlightHoldUntil.value = props.nowTs + HIGHLIGHT_MIN_MS
+    }
+  },
+  { immediate: true }
+)
+
+const shouldPulseHighlight = computed(() => {
+  return props.nowTs < highlightHoldUntil.value
+})
+
 const isDelaying = computed(() => {
   if (props.lastStateChangeAt === 0) return false
+  if (shouldPulseHighlight.value && (hasChow.value || hasPeng.value)) return false
   return props.nowTs - props.lastStateChangeAt < props.highlightDelayMs
 })
 
@@ -268,6 +295,22 @@ const freezeProgress = computed(() => {
   0% { transform: scale(0.8); opacity: 0.5; }
   60% { transform: scale(1.08); }
   100% { transform: scale(1); opacity: 1; }
+}
+
+.action-btn--highlight-pulse {
+  transform: scale(1.08);
+  animation: claim-pulse-glow 1s ease-in-out infinite;
+}
+
+@keyframes claim-pulse-glow {
+  0%, 100% {
+    transform: scale(1.04);
+    box-shadow: 0 0 14px rgba(70, 197, 116, 0.4), 0 0 22px rgba(70, 197, 116, 0.25);
+  }
+  50% {
+    transform: scale(1.14);
+    box-shadow: 0 0 22px rgba(70, 197, 116, 0.65), 0 0 36px rgba(70, 197, 116, 0.45);
+  }
 }
 
 /* 离线 */

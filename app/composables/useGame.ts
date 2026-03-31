@@ -179,7 +179,7 @@ export const useGame = () => {
   // 防止并发 refresh + 防抖
   let isRefreshing = false
   let lastRefreshAt = 0
-  const DEBOUNCE_MS = 800
+  const DEBOUNCE_MS = 100
 
   const refreshState = async () => {
     if (!gameId.value || !playerId.value) return
@@ -246,7 +246,7 @@ export const useGame = () => {
         body: {
           gameId: gameId.value,
           playerId: playerId.value,
-          freezeDurationMs: options?.freezeDurationMs || 1000
+          freezeDurationMs: Math.max(1000, options?.freezeDurationMs || 1000)
         }
       })
 
