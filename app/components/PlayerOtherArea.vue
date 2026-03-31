@@ -217,6 +217,7 @@ const getArrowChar = (sourcePos: number): string => {
   font-weight: 600;
   letter-spacing: 0.04em;
   display: none; /* 头像已替代名字 */
+}
 
 .player-other-name--clickable {
   cursor: pointer;
