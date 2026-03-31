@@ -40,8 +40,8 @@
         <!-- 阶段1: 掷骰子动画中 -->
         <template v-if="phase === 'rolling'">
           <div class="dice-row">
-            <Dice3D :value="1" :state="'rolling'" :delay="0" />
-            <Dice3D :value="1" :state="'rolling'" :delay="0.1" />
+            <Dice3D :value="1" :state="'rolling'" :delay="0" :roll-seed="rollingSeed" />
+            <Dice3D :value="1" :state="'rolling'" :delay="0.1" :roll-seed="rollingSeed + 97" />
           </div>
           <p class="dice-rolling-label">🎲 掷骰子...</p>
         </template>
@@ -93,6 +93,7 @@ const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
 
 const visible = ref(true)
 const phase = ref<'idle' | 'rolling' | 'result'>('idle')
+const rollingSeed = ref(Date.now() % 997)
 const currentRoll = ref(0)
 const maxRollsLimit = computed(() => props.maxRolls || 1)
 const canReroll = computed(() => currentRoll.value < maxRollsLimit.value && phase.value === 'result')
@@ -119,6 +120,7 @@ const particleStyle = (n: number) => {
 
 const onRoll = () => {
   currentRoll.value++
+  rollingSeed.value = Date.now() % 100000
   emit('roll')
   phase.value = 'rolling'
   showQuadBurst.value = false
@@ -142,6 +144,7 @@ const onReroll = () => onRoll()
 // 一键掷骰+发牌（idle阶段点击"掷骰+发牌"按钮）
 const onRollAndDeal = () => {
   currentRoll.value++
+  rollingSeed.value = Date.now() % 100000
   emit('roll')
   phase.value = 'rolling'
   showQuadBurst.value = false

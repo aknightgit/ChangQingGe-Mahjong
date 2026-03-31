@@ -40,6 +40,7 @@ const props = defineProps<{
   value: number
   state: 'idle' | 'rolling' | 'landed'
   delay?: number
+  rollSeed?: number
 }>()
 
 // 每面的骰子点布局
@@ -52,9 +53,16 @@ const DOT_LAYOUTS: Record<number, string[]> = {
   6: ['tl', 'tr', 'ml', 'mr', 'bl', 'br'],
 }
 
-const delayStyle = computed(() =>
-  props.delay ? { animationDelay: `${props.delay}s` } : {}
-)
+const delayStyle = computed(() => ({
+  ...(props.delay ? { animationDelay: `${props.delay}s` } : {}),
+  ...(props.state === 'rolling'
+    ? {
+        '--spin-x': `${1080 + (props.rollSeed ?? 0) % 540}deg`,
+        '--spin-y': `${1260 + ((props.rollSeed ?? 0) * 7) % 720}deg`,
+        '--spin-z': `${720 + ((props.rollSeed ?? 0) * 11) % 540}deg`,
+      }
+    : {}),
+}))
 </script>
 
 <style scoped>
@@ -130,19 +138,44 @@ const delayStyle = computed(() =>
 
 /* ===== Rolling: 抛起旋转落地 ===== */
 .dice-cube--rolling {
-  animation: dice-throw 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  animation: dice-throw-v2 0.82s cubic-bezier(0.18, 0.85, 0.26, 1) forwards;
 }
-@keyframes dice-throw {
-  0%   { transform: translateZ(-40px) translateY(-200px) rotateX(0deg)   rotateY(0deg)   rotateZ(0deg)   scale(0.5); opacity: 0; }
-  5%   { opacity: 1; }
-  20%  { transform: translateZ(-40px) translateY(0)      rotateX(270deg) rotateY(180deg) rotateZ(90deg)  scale(1.08); }
-  35%  { transform: translateZ(-40px) translateY(-90px)  rotateX(540deg) rotateY(360deg) rotateZ(180deg) scale(0.95); }
-  50%  { transform: translateZ(-40px) translateY(0)      rotateX(810deg) rotateY(540deg) rotateZ(270deg) scale(1.04); }
-  62%  { transform: translateZ(-40px) translateY(-35px)  rotateX(990deg) rotateY(660deg) rotateZ(330deg) scale(0.98); }
-  72%  { transform: translateZ(-40px) translateY(0)      rotateX(1080deg) rotateY(720deg) rotateZ(360deg) scale(1.02); }
-  82%  { transform: translateZ(-40px) translateY(-10px)  rotateX(1110deg) rotateY(740deg) rotateZ(370deg) scale(0.99); }
-  90%  { transform: translateZ(-40px) translateY(0)      rotateX(1125deg) rotateY(750deg) rotateZ(375deg) scale(1.01); }
-  100% { transform: translateZ(-40px) translateY(0)      rotateX(0deg)   rotateY(0deg)   rotateZ(0deg)   scale(1); }
+@keyframes dice-throw-v2 {
+  0% {
+    transform: translateZ(-40px) translateY(-26px) rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(0.84);
+    opacity: 0;
+    filter: blur(1.8px);
+  }
+  10% {
+    opacity: 1;
+    filter: blur(0.4px);
+  }
+  35% {
+    transform: translateZ(-40px) translateY(-78px)
+      rotateX(var(--spin-x, 1200deg))
+      rotateY(var(--spin-y, 1440deg))
+      rotateZ(var(--spin-z, 900deg))
+      scale(1.06);
+  }
+  62% {
+    transform: translateZ(-40px) translateY(0)
+      rotateX(calc(var(--spin-x, 1200deg) * 0.92))
+      rotateY(calc(var(--spin-y, 1440deg) * 0.92))
+      rotateZ(calc(var(--spin-z, 900deg) * 0.92))
+      scale(0.98);
+  }
+  78% {
+    transform: translateZ(-40px) translateY(-12px)
+      rotateX(calc(var(--spin-x, 1200deg) * 0.96))
+      rotateY(calc(var(--spin-y, 1440deg) * 0.96))
+      rotateZ(calc(var(--spin-z, 900deg) * 0.96))
+      scale(1.01);
+  }
+  100% {
+    transform: translateZ(-40px) translateY(0) rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(1);
+    opacity: 1;
+    filter: blur(0);
+  }
 }
 
 /* ===== Landed: 定格在正确的面 ===== */

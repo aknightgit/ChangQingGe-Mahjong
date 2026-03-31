@@ -385,24 +385,33 @@ const confirmCreateGame = async () => {
 
     console.log('[Create] Game created:', gameId, 'playerId:', playerId)
 
-    // 加入选中的AI玩家（不超过maxBots上限）
-    const botsToJoin = selectedBots.value.slice(0, createParams.maxBots);
-    for (const botId of botsToJoin) {
-      try {
-        await $fetch('/api/game/join', {
-          method: 'POST',
-          body: { gameId, playerName: botId },
-          headers: { 'Cache-Control': 'no-cache' }
-        })
-        console.log('[Create] Bot joined:', botId)
-      } catch (e) {
-        console.error('[Create] Bot join failed:', botId, e)
-      }
-    }
-
+    // 先进入房间，避免用户等待机器人加入导致“点击后很慢”
     const targetUrl = `/gameroom/${gameId}?playerId=${playerId}&dice=${createParams.maxDiceRolls}&freeze=${createParams.freezeSeconds}`
     console.log('[Create] Navigating to:', targetUrl)
     await navigateTo(targetUrl)
+
+    // 后台并行加入选中的AI（不阻塞首屏响应）
+    const botsToJoin = selectedBots.value.slice(0, createParams.maxBots)
+    if (botsToJoin.length) {
+      Promise.allSettled(
+        botsToJoin.map(botId =>
+          $fetch('/api/game/join', {
+            method: 'POST',
+            body: { gameId, playerName: botId },
+            headers: { 'Cache-Control': 'no-cache' }
+          })
+        )
+      ).then(results => {
+        results.forEach((result, idx) => {
+          const botId = botsToJoin[idx]
+          if (result.status === 'fulfilled') {
+            console.log('[Create] Bot joined:', botId)
+          } else {
+            console.error('[Create] Bot join failed:', botId, result.reason)
+          }
+        })
+      })
+    }
   } catch (e) {
     console.error('[Create] Error:', e)
     alert('创建房间失败：' + (e?.message || '未知错误'))
