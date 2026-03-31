@@ -1,12 +1,12 @@
 {
-  "savedAt": "2026-03-31T05:40:49.153Z",
+  "savedAt": "2026-03-31T06:13:14.094Z",
   "round": 0,
   "metrics": {
-    "fitness": -66600,
-    "huRate": 0.04,
-    "drawRate": 0.816,
-    "totalGames": 10000,
-    "note": "AI-AK iterative training - 10x1000"
+    "fitness": 51000,
+    "huRate": 0.046,
+    "drawRate": 0.836,
+    "totalGames": 3,
+    "note": "AI-AK iterative training - 1x3"
   },
   "policy": {
     "id": "AI-AK",
@@ -22,7 +22,7 @@
     "pengWildBoost": 0.06282849518815241,
     "kongWildBoost": 0.11194833974037734,
     "chowWildPenalty": 0.18034095942711378,
-    "menqingKeepBonus": 2.0,
+    "menqingKeepBonus": 2,
     "meldPenalty": 0.05,
     "allPungsPursuit": 0.5,
     "pureFlushPursuit": 0.3,
@@ -88,6 +88,8 @@
     "wildDiaoKeepBonus": 3,
     "wildDiaoFlushBoost": 2,
     "wildDiaoPungBoost": 2,
+    "scoreBehindRiskBoost": 1.5,
+    "scoreLeadDefenseBoost": 1,
     "hand5RouteBias": 0.3,
     "hand6RouteBias": 0.6,
     "hand7RouteBias": 0.9,

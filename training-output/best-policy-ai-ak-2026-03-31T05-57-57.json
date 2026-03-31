@@ -1,8 +1,8 @@
 {
   "metrics": {
-    "fitness": 51000,
-    "huRate": 0.046,
-    "drawRate": 0.836,
+    "fitness": 50400,
+    "huRate": 0.051,
+    "drawRate": 0.83,
     "totalGames": 3,
     "note": "AI-AK iterative training - 1x3"
   },

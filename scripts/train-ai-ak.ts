@@ -25,6 +25,7 @@ const __dirname = path.dirname(__filename)
 
 const ROUNDS = parseInt(process.argv[2] || '10')
 const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000')
+const BASELINE_MODE = process.argv[4] === '--baseline'  // 基线训练：优化指标而非得分
 const SETTLEMENT_MULT = 10
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
 const OUT_DIR = path.resolve(__dirname, '..', 'training-output')
@@ -1070,6 +1071,56 @@ function normalizeHand(hand: Tile[]): Tile[] {
   return hand.filter(t => t && !isFlower(t))
 }
 
+// ========== 血战到最后一人 ==========
+// 每局有人胡牌后，已胡玩家退出，剩余玩家继续打，直到最后1人
+function runGameWithFightToLast(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): {
+  winners: { idx: number; selfDraw: boolean; score: number }[]
+  finalScores: number[]
+  totalGames: number  // 实际打了几局（含血战续局）
+  events: GameEvent[]
+} | null {
+  // 简化实现：每局结束后，赢家退出，剩余玩家重开新局
+  // （真实血战应延续牌局，但重开局也能近似模拟）
+  const activePolicies = AI_NAMES.map((_, i) => i === 0 ? akPolicy : otherPolicies[i-1])
+  const winners: { idx: number; selfDraw: boolean; score: number }[] = []
+  const active = [0, 1, 2, 3]  // 还在打的玩家
+  const allEvents: GameEvent[] = []
+  let gameNum = 0
+
+  while (active.length > 1 && gameNum < 4) {
+    // 用活跃玩家的策略建局
+    const policies = active.map(i => activePolicies[i])
+    // 映射原始pos到新的0-based pos
+    const posMap: Record<number, number> = {}
+    active.forEach((orig, newP) => posMap[orig] = newP)
+
+    const g = setupGame(policies[0], policies.slice(1))
+    // ... 这里需要完整运行一局游戏
+    // 简化：直接调用runGame，然后处理赢家
+    const result = runGame(policies[0], policies.slice(1))
+    if (!result) {
+      // 流局，所有人还在
+      gameNum++
+      continue
+    }
+    // 有人赢了
+    const winnerOrigPos = active[result.winner]
+    const winEvents = result.events.filter(e => e.action.includes('自摸') || e.action.includes('放炮胡') || e.action.includes('吃后自摸') || e.action.includes('碰后自摸') || e.action.includes('杠上自摸'))
+    const isSelfDraw = winEvents.some(e => e.action.includes('自摸'))
+    winners.push({ idx: winnerOrigPos, selfDraw: isSelfDraw, score: result.scores[0] })
+    allEvents.push(...result.events)
+    // 赢家退出
+    active.splice(active.indexOf(winnerOrigPos), 1)
+    gameNum++
+  }
+  // 最后1人自动算输
+  if (active.length === 1) {
+    winners.push({ idx: active[0], selfDraw: false, score: 0 })
+  }
+
+  return { winners, finalScores: [0, 0, 0, 0], totalGames: gameNum, events: allEvents }
+}
+
 // ========== Game Loop ==========
 function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | null {
   const g = setupGame(akPolicy, otherPolicies)
@@ -1296,6 +1347,7 @@ interface EvalResult {
   // 模板输出用
   totalGames: number; winGames: number; selfDrawGames: number
   fightToLastGames: number  // 血战到最后一人（多赢家局）
+  metricsFitness: number    // 指标导向fitness（用于基线训练）
   worstSingleLoss: { loser: string; score: number; gameIdx: number; result: GameResult } | null
 }
 
@@ -1400,9 +1452,20 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   const winRates: Record<string, number> = {}
   for (const n of AI_NAMES) winRates[n] = wins[n] / games
 
+  // 计算指标导向fitness
+  const drawRate = draws / games
+  const selfDrawRate = winGames > 0 ? selfDrawGames / winGames : 0
+  const discardWinRate = winGames > 0 ? (winGames - selfDrawGames) / winGames : 0
+  let mf = 0
+  mf -= Math.max(0, drawRate - 0.10) * 1000  // 流局率惩罚（目标<10%）
+  mf -= Math.abs(selfDrawRate - 0.50) * 200    // 自摸率偏差（目标50%）
+  mf -= Math.abs(discardWinRate - 0.50) * 200  // 捉冲率偏差（目标50%）
+  mf += (1 - drawRate) * 100                   // 胡牌率奖励
+
   return {
     akScore: scores['AI-AK'], akWins: wins['AI-AK'], winRates, scores, draws,
-    bigWin, bigLoss, totalGames: games, winGames, selfDrawGames, worstSingleLoss
+    bigWin, bigLoss, totalGames: games, winGames, selfDrawGames,
+    fightToLastGames: 0, metricsFitness: mf, worstSingleLoss
   }
 }
 
@@ -1443,8 +1506,11 @@ function main() {
   console.log('\n--- Round 0: Baseline ---')
   logLines.push('\n--- Round 0: Baseline ---')
   const baseline = evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
-  bestScore = baseline.akScore
-  const baseLine = `AI-AK baseline: score=${baseline.akScore}  wins=${baseline.akWins}/${GAMES_PER_ROUND} (${(baseline.winRates['AI-AK']*100).toFixed(1)}%)  draws=${baseline.draws}`
+  bestScore = BASELINE_MODE ? baseline.metricsFitness : baseline.akScore
+  const selfDRate = baseline.winGames > 0 ? (baseline.selfDrawGames/baseline.winGames*100).toFixed(1) : '0'
+  const baseLine = BASELINE_MODE
+    ? `Baseline: draws=${baseline.draws}/${GAMES_PER_ROUND} (${(baseline.draws/GAMES_PER_ROUND*100).toFixed(1)}%)  selfDraw=${selfDRate}%  metricsFitness=${baseline.metricsFitness.toFixed(1)}`
+    : `AI-AK baseline: score=${baseline.akScore}  wins=${baseline.akWins}/${GAMES_PER_ROUND} (${(baseline.winRates['AI-AK']*100).toFixed(1)}%)  draws=${baseline.draws}`
   console.log(baseLine)
   logLines.push(baseLine)
 
@@ -1490,11 +1556,15 @@ function main() {
 
     for (let c = 0; c < candidates.length; c++) {
       const result = evaluatePolicy(candidates[c], fixedPolicies, GAMES_PER_ROUND)
-      const line = `  Candidate ${c+1}: score=${result.akScore}  wins=${result.akWins}/${GAMES_PER_ROUND} (${(result.winRates['AI-AK']*100).toFixed(1)}%)  draws=${result.draws}`
+      const score = BASELINE_MODE ? result.metricsFitness : result.akScore
+      const selfDR = result.winGames > 0 ? (result.selfDrawGames/result.winGames*100).toFixed(0) : '0'
+      const line = BASELINE_MODE
+        ? `  Candidate ${c+1}: fitness=${score.toFixed(1)}  draws=${result.draws}(${(result.draws/GAMES_PER_ROUND*100).toFixed(0)}%)  selfDraw=${selfDR}%`
+        : `  Candidate ${c+1}: score=${result.akScore}  wins=${result.akWins}/${GAMES_PER_ROUND} (${(result.winRates['AI-AK']*100).toFixed(1)}%)  draws=${result.draws}`
       roundLines.push(line)
 
-      if (result.akScore > roundBestScore) {
-        roundBestScore = result.akScore
+      if (score > roundBestScore) {
+        roundBestScore = score
         roundBestPolicy = candidates[c]
         roundBigWin = result.bigWin
         roundBigLoss = result.bigLoss
@@ -1642,7 +1712,15 @@ function main() {
     note: `AI-AK iterative training - ${ROUNDS}x${GAMES_PER_ROUND}`
   }
 
-  saveCharacter('AI-AK', bestPolicy, metrics)
+  if (BASELINE_MODE) {
+    // 基线模式：四家同步保存
+    for (const name of AI_NAMES) {
+      saveCharacter(name, bestPolicy, metrics)
+    }
+    console.log(`Baseline saved to all 4 AIs: ${AI_NAMES.join(', ')}`)
+  } else {
+    saveCharacter('AI-AK', bestPolicy, metrics)
+  }
 
   fs.writeFileSync(logFile, logLines.join('\n'), 'utf-8')
   fs.writeFileSync(policyFile, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
