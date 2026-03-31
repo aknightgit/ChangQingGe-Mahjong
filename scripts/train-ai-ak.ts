@@ -451,6 +451,10 @@ function drawTile(g: GameState, p: BotPlayer): Tile | null {
   if (!tile) return drawTile(g, p)
   if (isFlower(tile)) { p.flowerTiles.push(tile); return drawTile(g, p) }
   p.hand.push(tile)
+  // 诊断：追踪手牌，摸牌后手牌长度
+  // const kongC = p.exposedMelds.filter(m => m.type === MeldType.KONG).length
+  // const exp = 14 - (p.exposedMelds.length - kongC) * 3 - kongC * 4
+  // if (p.hand.length !== exp) console.error(`DRAW: ${p.name} hand=${p.hand.length} expected=${exp} melds=${p.exposedMelds.length} kongs=${kongC}`)
   return tile
 }
 
@@ -501,12 +505,17 @@ function canJiaGang(p: BotPlayer): Tile[] {
 
 // ========== Apply melds ==========
 function applyPeng(p: BotPlayer, tile: Tile, sourcePos?: number): void {
+  const before = p.hand.length
   const matches = p.hand.filter(t => t && tileEq(t, tile)).slice(0, 2)
+  if (before !== 13 && before !== 11) console.error(`PENG_STATE: ${p.name} hand=${before} tile=${tileStr(tile)}`)
   for (const u of matches) { const idx = p.hand.findIndex(rt => rt && rt.id === u.id); if (idx >= 0) p.hand.splice(idx, 1) }
+  const after = p.hand.length
+  if (after !== before - 2) console.error(`BUG applyPeng: ${p.name} before=${before} matches=${matches.length} after=${after} (expected ${before-2}) tile=${tileStr(tile)}`)
   p.exposedMelds.push({ type: MeldType.TRIPLET, tiles: [tile, tile, tile], isConcealed: false })
   if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
 }
 function applyChow(p: BotPlayer, tile: Tile, sourcePos?: number): void {
+  const before = p.hand.length
   const v = tile.value
   const findTile = (suit: TileSuit, val: number) => p.hand.find(t => t && t.suit === suit && t.value === val)
   const removeTile = (t: Tile) => { const idx = p.hand.findIndex(h => h && h.id === t.id); if (idx >= 0) p.hand.splice(idx, 1) }
@@ -530,7 +539,10 @@ function applyChow(p: BotPlayer, tile: Tile, sourcePos?: number): void {
   }
 
   if (!t1 || !t2) return
+  if (t1.id === t2.id) { console.error(`BUG applyChow: same tile! ${p.name} tile=${tileStr(tile)} t1=t2=${t1.id}`); return }
   removeTile(t1); removeTile(t2)
+  const after = p.hand.length
+  if (after !== before - 2) console.error(`BUG applyChow: ${p.name} before=${before} after=${after} (expected ${before-2}) tile=${tileStr(tile)} t1=${t1.id} t2=${t2.id}`)
   // 排序tiles为从小到大
   const meldTiles = [t1, tile, t2].sort((a, b) => a.value - b.value)
   p.exposedMelds.push({ type: MeldType.SEQUENCE, tiles: meldTiles, isConcealed: false })
@@ -1170,6 +1182,14 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
   const log = (player: string, action: string, detail: string) => { events.push({ turn, player, action, detail }) }
 
   for (let i = 0; i < 13; i++) { for (let p = 0; p < 4; p++) drawTile(g, g.players[p]) }
+  // 发牌完成后AI-小胖手牌验证
+  for (const p of g.players) {
+    const km = p.exposedMelds.filter(m => m.type === MeldType.KONG).length
+    const exp = 14 - (p.exposedMelds.length - km) * 3 - km * 4
+    if (p.name === 'AI-小胖' && p.hand.length !== exp) {
+      console.error(`初始手牌错误: ${p.name} hand=${p.hand.length} expected=${exp}`)
+    }
+  }
   // 发牌完成日志
   for (const p of g.players) log(p.name, '发牌', p.hand.map(t => tileStr(t)).join(' '))
 
@@ -1181,7 +1201,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     const player = g.players[curr]
     turn = round
     const drawn = drawTile(g, player)
-    if (!drawn) return null
+    if (!drawn) { console.error(`⚠️ 流局: 牌墙耗尽 round=${round} wallIdx=${g.wallIdx}/${g.deck.length}`); return null }
     if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); continue }
     log(player.name, '摸牌', tileStr(drawn))
 
@@ -1190,9 +1210,12 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     const kongCount = player.exposedMelds.filter(m => m.type === MeldType.KONG).length
     const expectedLen = 14 - (player.exposedMelds.length - kongCount) * 3 - kongCount * 4
     if (normalizedHand.length !== expectedLen) {
-      console.error(`⚠️ 手牌长度异常: ${player.name} hand=${normalizedHand.length} expected=${expectedLen} (melds=${player.exposedMelds.length} kongs=${kongCount})`)
+      console.error(`⚠️ 手牌长度异常: ${player.name} round=${round} hand=${normalizedHand.length} expected=${expectedLen} melds=${player.exposedMelds.length} kongs=${kongCount} wall=${g.deck.length - g.wallIdx}`)
     }
-    if (canWin(normalizedHand, player.exposedMelds.length, makeWT(player), player.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
+    const winCheck = canWin(normalizedHand, player.exposedMelds.length, makeWT(player), kongCount)
+    if (winCheck.canWin) {
+      // 调试：记录有生成功会的游戏
+      if (round >= 30) console.error(`DEBUG: ${player.name}可胡 at round=${round} hand=${normalizedHand.length} melds=${player.exposedMelds.length} kong=${kongCount}`)
       let winChance = player.policy.selfWinChance
       const wildCount = player.hand.filter(t => isWT(t, player)).length
       winChance += wildCount * player.policy.selfWinWildBoost
@@ -1283,12 +1306,35 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     let meldTaken = false
     for (const otherIdx of [nextPlayer, prevPlayer, oppositePlayer]) {
       const opp = g.players[otherIdx]
+      if (opp.exposedMelds.length >= 4) continue  // 最多4组牌
       if (canPeng(opp, discard)) {
         let pengChance = opp.policy.pengChance
         if (opp.wildSuit && opp.wildValue && discard.suit === opp.wildSuit && discard.value === opp.wildValue)
           pengChance += opp.policy.pengWildBoost
         if (Math.random() < pengChance) {
+          // AI-小胖专诊断：追踪pong claim全流程
+          if (opp.name === 'AI-小胖') {
+            const km = opp.exposedMelds.filter(m => m.type === MeldType.KONG).length
+            const expBefore = 14 - (opp.exposedMelds.length - km) * 3 - km * 4
+            console.error(`小胖_CLAIM: hand=${opp.hand.length} melds=${opp.exposedMelds.length} kong=${km} exp=${expBefore} tile=${tileStr(discard)}`)
+          }
           applyPeng(opp, discard, curr)
+          // 放炮胡检查（claim后draw前，手牌=expectedLen）
+          const handAfterPeng = normalizeHand(opp.hand)
+          const kongAfterPeng = opp.exposedMelds.filter(m => m.type === MeldType.KONG).length
+          const expAfterPeng = 14 - (opp.exposedMelds.length - kongAfterPeng) * 3 - kongAfterPeng * 4
+          console.error(`PENG_HU_CHECK: ${opp.name} hand=${handAfterPeng.length} expected=${expAfterPeng} melds=${opp.exposedMelds.length}`)
+          if (canWin(handAfterPeng, opp.exposedMelds.length, makeWT(opp), kongAfterPeng).canWin) {
+            const huChance = opp.policy.discardHuChance
+            if (Math.random() < huChance) {
+              const score = calcScore(opp, false, false, g.gameMultiplier)
+              opp.score += score; g.players[curr].score -= score
+              applyBaoSettlement(g, otherIdx, false, curr, score)
+              recordPayment(g.players[curr].name, opp.name, score, '碰后放炮')
+              log(opp.name, '碰后放炮胡', `${tileStr(discard)} [${score}]`)
+              return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+            }
+          }
           const d = drawTile(g, opp)
           if (!d) return null
           if (canWin(normalizeHand(opp.hand), opp.exposedMelds.length, makeWT(opp), opp.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
@@ -1328,6 +1374,20 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     const nextP = g.players[nextPlayer]
     if (canChow(nextP, discard) && Math.random() < nextP.policy.chowChance) {
       applyChow(nextP, discard, curr)
+      // 放炮胡检查（claim后draw前，手牌=expectedLen）
+      const handAfterChow = normalizeHand(nextP.hand)
+      const kongAfterChow = nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length
+      if (canWin(handAfterChow, nextP.exposedMelds.length, makeWT(nextP), kongAfterChow).canWin) {
+        const huChance = nextP.policy.discardHuChance
+        if (Math.random() < huChance) {
+          const score = calcScore(nextP, false, false, g.gameMultiplier)
+          nextP.score += score; g.players[curr].score -= score
+          applyBaoSettlement(g, nextPlayer, false, curr, score)
+          recordPayment(g.players[curr].name, nextP.name, score, '吃后放炮')
+          log(nextP.name, '吃后放炮胡', `${tileStr(discard)} [${score}]`)
+          return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+        }
+      }
       const d = drawTile(g, nextP)
       if (!d) return null
       if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds.length, makeWT(nextP), nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {

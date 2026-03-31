@@ -633,7 +633,9 @@ class GameManager {
 
     // Create and shuffle deck
     const deck = createDeck();
+    console.log(`[WallDebug] createDeck: ${deck.length} tiles`);
     game.wall = shuffleTiles(deck);
+    console.log(`[WallDebug] after shuffle: ${game.wall.length} tiles`);
 
     // 从全部144种牌型中随机选百搭
     const allTileTypes: Array<{ suit: TileSuit; value: number }> = [];
@@ -699,6 +701,8 @@ class GameManager {
       );
     }
 
+    console.log(`[WallDebug] after dealing (13×4+1): wall=${game.wall.length} tiles`);
+
     for (const player of game.players) {
       player.winOrder = null;
       player.winRound = null;
@@ -741,6 +745,7 @@ class GameManager {
     game.phase = GamePhase.PLAYING;
     game.lastActionTime = Date.now();
 
+    console.log(`[WallDebug] after flower replacement: wall=${game.wall.length} tiles, PLAYING phase`);
     await this.persistGame(game);
     this.broadcastGameState(gameId);
 
@@ -1240,6 +1245,8 @@ class GameManager {
     );
     if (flowerMelds.length === 0) return;
 
+    console.log(`[WallDebug] replaceInitialFlowers: ${player.name} has ${flowerMelds.length} flowers, wall=${game.wall.length}`);
+
     // 先从exposedMelds中移除这些花牌
     player.hand.exposedMelds = player.hand.exposedMelds.filter(
       m => !(m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]))
@@ -1248,6 +1255,7 @@ class GameManager {
     for (const meld of flowerMelds) {
       if (game.wall.length === 0) break;
       const replacement = game.wall.pop()!;
+      console.log(`[WallDebug] flower replace: drew ${replacement.id}, wall now=${game.wall.length}`);
       if (isFlower(replacement) && !this.isWildTile(game, replacement)) {
         // 补到的又是花牌 → 加到门口，递归补
         player.hand.exposedMelds.push({

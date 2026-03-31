@@ -459,9 +459,8 @@ function isDaDiao(handTiles: Tile[], exposedMelds: Meld[]): boolean {
 export function canWinStandard(tiles: Tile[], existingMelds = 0, isWildTile: WildTileChecker = () => false, kongCount = 0): boolean {
   const requiredMelds = Math.max(0, 4 - existingMelds);
   const nonFlowerTiles = tiles.filter(t => !isFlower(t));
-  // 手牌张数校验（考虑杠牌4张 vs 普通副露3张）
-  const normalMelds = existingMelds - kongCount
-  const expectedHandSize = 14 - normalMelds * 3 - kongCount * 4
+  // 手牌张数校验：每次摸牌后手牌 = 14 - 2*melds - kongs（每组牌从手牌消耗2张，杠从手牌消耗3张）
+  const expectedHandSize = 14 - 2 * existingMelds - kongCount
   if (nonFlowerTiles.length !== expectedHandSize) return false
 
   // Try each possible pair as the eyes (including 1 wild + 1 natural)
