@@ -6,21 +6,6 @@
         <div class="room-info">
           <div class="room-title-line">
             <h1 class="mahjong-title">长清阁麻将</h1>
-            <div class="header-broadcast-wrap">
-              <GameBroadcast :messages="broadcastMessages" />
-            </div>
-          </div>
-          <div class="room-header-row">
-            <p class="mahjong-subtitle">
-              房间 #{{ gameState?.roomNumber || roomId }}
-            </p>
-            <button
-              v-if="gameState?.phase === 'playing' || gameState?.phase === 'ended'"
-              class="settle-btn-header"
-              @click="onRequestSettle"
-            >
-              📊 退房结算
-            </button>
           </div>
         </div>
 
@@ -505,6 +490,20 @@
         <!-- 扩展信息区（右侧，高度=牌桌，宽度≈牌桌1/4） -->
         <aside class="extended-info-panel">
 
+          <!-- 房间号 + 退房结算 -->
+          <div class="room-header-row panel-room-header-row">
+            <p class="mahjong-subtitle panel-room-number">
+              房间 #{{ gameState?.roomNumber || roomId }}
+            </p>
+            <button
+              v-if="gameState?.phase === 'playing' || gameState?.phase === 'ended'"
+              class="settle-btn-header"
+              @click="onRequestSettle"
+            >
+              📊 退房结算
+            </button>
+          </div>
+
           <!-- 战绩统计 -->
           <RoomStats
             :players="statsPlayers"
@@ -512,6 +511,9 @@
             :spectating-id="spectatingId"
             @spectate="handleSpectate"
           />
+
+          <!-- 牌局快讯 -->
+          <GameBroadcast :messages="broadcastMessages" />
 
 
 
@@ -2606,6 +2608,22 @@ const forceDiscard = async (p: Player) => {
   padding: 2px 8px;
   border-radius: 999px;
   letter-spacing: 0.5px;
+}
+
+/* 侧边面板的房间号行（与战绩榜同宽） */
+.panel-room-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: rgba(5, 14, 10, 0.9);
+}
+.panel-room-number {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
 }
 
 .round-info {
