@@ -1347,6 +1347,8 @@ interface EvalResult {
   // 模板输出用
   totalGames: number; winGames: number; selfDrawGames: number
   fightToLastGames: number  // 血战到最后一人（多赢家局）
+  bigWinGames: number       // 大牌局数（清碰/风一色/风碰/门清清一色）
+  menqingWinGames: number  // 门清胡牌局数
   metricsFitness: number    // 指标导向fitness（用于基线训练）
   worstSingleLoss: { loser: string; score: number; gameIdx: number; result: GameResult } | null
 }
@@ -1412,6 +1414,8 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   let winGames = 0
   let selfDrawGames = 0
   let fightToLastGames = 0
+  let bigWinGames = 0
+  let menqingWinGames = 0
   let bigWin: EvalResult['bigWin'] = null
   let bigLoss: EvalResult['bigLoss'] = null
   let worstSingleLoss: EvalResult['worstSingleLoss'] = null
@@ -1456,16 +1460,29 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   const drawRate = draws / games
   const selfDrawRate = winGames > 0 ? selfDrawGames / winGames : 0
   const discardWinRate = winGames > 0 ? (winGames - selfDrawGames) / winGames : 0
+  const fightToLastRate = winGames > 0 ? fightToLastGames / winGames : 0  // TODO: 血战需要多赢家支持
+  const bigHandRate = winGames > 0 ? bigWinGames / winGames : 0  // TODO: 大牌率需要手牌分析
+  const menqingWinRate = winGames > 0 ? menqingWinGames / winGames : 0  // TODO: 门清需要判定
+
   let mf = 0
   mf -= Math.max(0, drawRate - 0.10) * 1000  // 流局率惩罚（目标<10%）
+  mf += Math.max(0, (1 - drawRate) - 0.90) * 500  // 胡牌率奖励（目标>=90%）
   mf -= Math.abs(selfDrawRate - 0.50) * 200    // 自摸率偏差（目标50%）
   mf -= Math.abs(discardWinRate - 0.50) * 200  // 捉冲率偏差（目标50%）
-  mf += (1 - drawRate) * 100                   // 胡牌率奖励
+  // 血战率（目标>80%）
+  mf += Math.max(0, fightToLastRate - 0.80) * 300
+  mf -= Math.max(0, 0.80 - fightToLastRate) * 500
+  // 大牌率（目标3-8%）
+  if (bigHandRate < 0.03) mf -= (0.03 - bigHandRate) * 500
+  if (bigHandRate > 0.08) mf -= (bigHandRate - 0.08) * 500
+  // 门清胡牌率（目标7-12%）
+  if (menqingWinRate < 0.07) mf -= (0.07 - menqingWinRate) * 400
+  if (menqingWinRate > 0.12) mf -= (menqingWinRate - 0.12) * 400
 
   return {
     akScore: scores['AI-AK'], akWins: wins['AI-AK'], winRates, scores, draws,
     bigWin, bigLoss, totalGames: games, winGames, selfDrawGames,
-    fightToLastGames: 0, metricsFitness: mf, worstSingleLoss
+    fightToLastGames, bigWinGames, menqingWinGames, metricsFitness: mf, worstSingleLoss
   }
 }
 
