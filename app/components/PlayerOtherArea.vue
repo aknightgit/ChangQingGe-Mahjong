@@ -207,6 +207,8 @@ const getArrowChar = (sourcePos: number): string => {
 .dot--north { background: #ffc107; box-shadow: 0 0 3px rgba(255,193,7,.5); }
 
 .player-avatar {
+  width: 36px;
+  height: 36px;
   font-size: 0.85rem;
   line-height: 1;
 }
@@ -214,7 +216,7 @@ const getArrowChar = (sourcePos: number): string => {
 .player-other-name {
   font-weight: 600;
   letter-spacing: 0.04em;
-}
+  display: none; /* 头像已替代名字 */
 
 .player-other-name--clickable {
   cursor: pointer;
@@ -313,15 +315,26 @@ const getArrowChar = (sourcePos: number): string => {
   gap: 2px;
 }
 
-/* 左家/右家：纵向排列（长边相连） */
+/* 左家/右家：整体旋转，内部和对家一样水平排列 */
 .player-other--left .player-other-hand,
 .player-other--right .player-other-hand {
   display: flex;
-  flex-direction: column;
-  gap: 0;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 2px;
   align-items: center;
 }
-/* 左右手牌尺寸：宽40长边朝外，高28短边相连 */
+/* 左家手牌：整体顺时针旋转90° */
+.player-other--left .player-other-hand {
+  transform: rotate(90deg);
+  transform-origin: center center;
+}
+/* 右家手牌：整体逆时针旋转90° */
+.player-other--right .player-other-hand {
+  transform: rotate(-90deg);
+  transform-origin: center center;
+}
+/* 左右手牌尺寸：和对家一样 */
 .player-other--left .player-other-hand :deep(.tile),
 .player-other--right .player-other-hand :deep(.tile) {
   width: 40px;
@@ -334,48 +347,12 @@ const getArrowChar = (sourcePos: number): string => {
   box-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
-/* 左家手牌：牌背朝中心（旋转90°）+ 2.5D效果 */
+/* 左家手牌：已改为容器整体旋转，不需要逐张rotate */
 .player-other-hand--left {
-  perspective: 400px;
-  perspective-origin: center bottom;
-}
-.player-other-hand--left :deep(.tile) {
-  transform: rotate(90deg);
-  filter: brightness(0.85);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-/* 最底下一张牌：2.5D效果，露出白侧边 */
-.player-other-hand--left :deep(.tile:last-child) {
-  transform: rotate(90deg) translateZ(6px);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.55),
-    1px 3px 0 #8a7a5a,
-    2px 5px 0 #6a5a3a,
-    0 4px 12px rgba(0,0,0,0.5);
-  border-bottom: 3px solid rgba(255,255,255,0.85);
-  border-right: 2px solid rgba(240,235,220,0.7);
 }
 
-/* 右家手牌：牌背朝中心（旋转-90°）+ 2.5D效果 */
+/* 右家手牌：已改为容器整体旋转，不需要逐张rotate */
 .player-other-hand--right {
-  perspective: 400px;
-  perspective-origin: center bottom;
-}
-.player-other-hand--right :deep(.tile) {
-  transform: rotate(-90deg);
-  filter: brightness(0.85);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-/* 最底下一张牌：2.5D效果，露出白侧边 */
-.player-other-hand--right :deep(.tile:last-child) {
-  transform: rotate(-90deg) translateZ(6px);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.55),
-    -1px 3px 0 #8a7a5a,
-    -2px 5px 0 #6a5a3a,
-    0 4px 12px rgba(0,0,0,0.5);
-  border-bottom: 3px solid rgba(255,255,255,0.85);
-  border-left: 2px solid rgba(240,235,220,0.7);
 }
 
 /* 左家门口：靠边缘 */

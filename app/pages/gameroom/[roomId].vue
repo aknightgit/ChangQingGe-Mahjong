@@ -504,13 +504,6 @@
 
         <!-- 扩展信息区（右侧，高度=牌桌，宽度≈牌桌1/4） -->
         <aside class="extended-info-panel">
-          <!-- 退房结算（置顶） -->
-          <div class="ext-section" v-if="gameState?.phase === 'playing' || gameState?.phase === 'ended'">
-            <div class="settle-room-id">房间号：{{ gameState?.roomNumber || roomId }}</div>
-            <button class="settle-btn" @click="onRequestSettle">
-              📊 退房结算
-            </button>
-          </div>
 
           <!-- 战绩统计 -->
           <RoomStats
@@ -559,20 +552,24 @@
               测试胡牌
             </button>
           </div>
+
+          <!-- 操作按钮区：与战绩榜同宽，底部对齐牌桌 -->
+          <div class="action-buttons-panel">
+              <CircularActionButtons
+                :available-actions="availableActions"
+                :is-connected="isConnected"
+                :is-interaction-locked="isInteractionLocked"
+                :last-state-change-at="lastStateChangeAt"
+                :now-ts="nowTs"
+                :highlight-delay-ms="ACTION_HIGHLIGHT_DELAY_MS"
+                :freeze-until="currentFreezeUntil"
+                :freeze-duration-ms="freezeDurationMs"
+                @action="handleCircularAction"
+              />
+          </div>
         </aside>
       </main>
 
-      <CircularActionButtons
-        :available-actions="availableActions"
-        :is-connected="isConnected"
-        :is-interaction-locked="isInteractionLocked"
-        :last-state-change-at="lastStateChangeAt"
-        :now-ts="nowTs"
-        :highlight-delay-ms="ACTION_HIGHLIGHT_DELAY_MS"
-        :freeze-until="currentFreezeUntil"
-        :freeze-duration-ms="freezeDurationMs"
-        @action="handleCircularAction"
-      />
 
       <Teleport to="body">
         <DiceAnimation
@@ -2095,6 +2092,29 @@ const forceDiscard = async (p: Player) => {
   min-width: 220px;
   max-width: 560px;
 }
+
+/* 房间号+退房结算同行布局 */
+.room-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.room-header-row .mahjong-subtitle {
+  flex: 1;
+  margin: 0;
+}
+.settle-btn-header {
+  flex: 0 0 auto;
+  padding: 2px 10px;
+  font-size: 0.7rem;
+  border-radius: 6px;
+  background: rgba(60, 60, 60, 0.85);
+  color: #ccc;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.settle-btn-header:hover { background: rgba(80, 80, 80, 0.9); color: #fff; }
 
 .mahjong-title {
   font-size: 1.4rem;
