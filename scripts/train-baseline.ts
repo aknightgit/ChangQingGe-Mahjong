@@ -1285,14 +1285,9 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     }
   }
 
-  // 带牌型校验的胡牌判断：不允许"普通胡"
-  // player参数用于获取exposedMelds/flowerTiles
+  // 胡牌判断：用canWin（兼容普通胡）
   const canWinWithType = (tiles: Tile[], p: BotPlayer, makeWT: (p: BotPlayer) => WildTileChecker, kongCount = 0): boolean => {
-    const win = canWin(tiles, p.exposedMelds.length, makeWT(p), kongCount)
-    if (!win.canWin) return false
-    // 必须有有效牌型（不允许普通胡）
-    const types = detectHandTypes(tiles, p.exposedMelds, true, p.flowerTiles.length, null, g.wildTileGroup || [])
-    return types.length > 0
+    return canWin(tiles, p.exposedMelds.length, makeWT(p), kongCount).canWin
   }
 
   const log = (player: string, action: string, detail: string) => { events.push({ turn, player, action, detail }) }
@@ -1320,13 +1315,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     }
     const winCheck = canWinWithType(normalizedHand, player, makeWT, kongCount)
     if (winCheck) {
-      // 牌型校验：必须有有效牌型才能胡（不允许"普通胡"）
-      const handTypes = detectHandTypes(normalizedHand, player.exposedMelds, true, player.flowerTiles.length, null, g.wildTileGroup || [])
-      if (handTypes.length === 0) {
-        // 无有效牌型，不能胡
-      } else {
-      // 调试：记录有生成功会的游戏
-      // removed: if (round >= 30) console.error DEBUG
+      // 普通胡也可以自摸（不需要特殊牌型）
       let winChance = player.policy.selfWinChance
       const wildCount = player.hand.filter(t => isWT(t, player)).length
       winChance += wildCount * player.policy.selfWinWildBoost
@@ -1343,7 +1332,6 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         const winInfo = getWinInfo(player, true, false)
         return buildResult(curr, '自摸', winInfo.finalPoints, winInfo.handType, winInfo.baseFan)
       }
-      } // end else (has valid hand type)
     }
 
     // AnKong / JiaGang (policy-driven)
