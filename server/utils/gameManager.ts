@@ -453,7 +453,7 @@ class GameManager {
     return String(Date.now()).slice(-4);
   }
 
-  async createGame(playerName: string, options?: { freezeDurationMs?: number; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number; maxBots?: number }): Promise<{ gameId: string; playerId: string }> {
+  async createGame(playerName: string, options?: { freezeDurationMs?: number; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number; maxBots?: number; hesitationWindow?: number }): Promise<{ gameId: string; playerId: string }> {
     await this.hydrateFromDatabase();
 
     const gameId = randomUUID();
@@ -513,6 +513,7 @@ class GameManager {
       thinkChances: options?.thinkChances ?? 3,
       settlementMultiplier: options?.settlementMultiplier ?? 10,
       maxBots: options?.maxBots ?? 3,  // 默认允许最多3个AI
+      hesitationWindow: options?.hesitationWindow ?? 2000, // 决策犹豫期，默认2秒
       thinkUsage: {}
     };
 

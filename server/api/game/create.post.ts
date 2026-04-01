@@ -17,7 +17,8 @@ export default defineEventHandler(async (event) => {
       liangShanThreshold: body.liangShanThreshold ?? 1000,
       thinkChances: body.thinkChances ?? 3,
       settlementMultiplier: body.settlementMultiplier ?? 10,
-      maxBots: body.maxBots ?? 3
+      maxBots: body.maxBots ?? 3,
+      hesitationWindow: body.hesitationWindow ?? 2000 // 默认2秒
     });
     
     return {

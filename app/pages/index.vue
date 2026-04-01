@@ -205,11 +205,20 @@
 
                 <div class="create-field">
                   <div class="field-header">
-                    <label>迟滞摸牌秒数</label>
+                    <label>决策犹豫期（秒）</label>
                     <button class="help-btn" @click="toggleHelp('freeze')">?</button>
                   </div>
                   <input type="number" v-model.number="createParams.freezeSeconds" min="0" max="10" step="0.5" />
-                  <span v-if="activeHelp === 'freeze'" class="help-bubble">上家打出牌后，下家摸牌前的等待窗口。窗口内其他人可抢碰/杠/胡。默认1秒。</span>
+                  <span v-if="activeHelp === 'freeze'" class="help-bubble">上家打出牌后，玩家决策的时间窗口。窗口内可吃/碰/杠/胡，默认1秒。</span>
+                </div>
+
+                <div class="create-field">
+                  <div class="field-header">
+                    <label>迟滞摸牌秒数</label>
+                    <button class="help-btn" @click="toggleHelp('hesitation')">?</button>
+                  </div>
+                  <input type="number" v-model.number="createParams.hesitationSeconds" min="0.5" max="10" step="0.5" />
+                  <span v-if="activeHelp === 'hesitation'" class="help-bubble">决策犹豫期：玩家做出吃/碰/杠/胡决策的时间。默认2秒。</span>
                 </div>
 
                 <div class="create-field create-field--checkbox">
@@ -318,6 +327,7 @@ const toggleHelp = (key: string) => {
 const createParams = reactive({
   maxDiceRolls: 2,
   freezeSeconds: 1,
+  hesitationSeconds: 2, // 决策犹豫期（秒），默认2秒
   firstRoundDouble: true,
   liangShanThreshold: 4000,
   thinkChances: 3,
@@ -364,7 +374,8 @@ const confirmCreateGame = async () => {
         liangShanThreshold: createParams.liangShanThreshold,
         thinkChances: createParams.thinkChances,
         settlementMultiplier: createParams.settlementMultiplier,
-        maxBots: createParams.maxBots
+        maxBots: createParams.maxBots,
+        hesitationWindow: Math.round(createParams.hesitationSeconds * 1000) // 秒→毫秒
       },
       headers: { 'Cache-Control': 'no-cache' }
     })
