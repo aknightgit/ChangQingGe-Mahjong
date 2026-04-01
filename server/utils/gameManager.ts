@@ -1690,10 +1690,6 @@ class GameManager {
     this.executeKongDirectly(game, player, tileId);
   }
 
-    // Player must discard
-    game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
-  }
-
   private handleConcealedKong(game: GameState, player: Player, tileIds: string[]): void {
     if (tileIds.length !== 4) return;
 

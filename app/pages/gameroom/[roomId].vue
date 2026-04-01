@@ -55,19 +55,27 @@
             <h3 class="hu-panel-title">🀄 选择胡牌牌型</h3>
             <div class="hu-combos">
               <div
-                v-for="(combo, idx) in huCombinations"
+                v-for="(opt, idx) in winOptions"
                 :key="idx"
                 class="hu-combo"
                 :class="{ 'hu-combo--selected': selectedHuCombo === idx }"
                 @click="selectedHuCombo = idx"
               >
-                <div class="hu-combo-groups">
-                  <div v-for="(group, gi) in combo.groups" :key="gi" class="hu-group" :class="`hu-group--${group.type}`">
-                    <div v-for="tile in group.tiles" :key="tile.id" class="hu-mini-tile">
-                      <MahjongTile :tile="tile" :size="28" />
+                <div class="hu-combo-header">
+                  <span class="hu-combo-label">{{ opt.label.replace(/·自摸|·捉冲/, '') }}</span>
+                  <span class="hu-combo-score">{{ opt.score > 0 ? '+' : '' }}{{ opt.score }}分</span>
+                </div>
+                <div class="hu-combo-tiles" v-if="opt.tileGroups">
+                  <div v-for="(group, gi) in opt.tileGroups" :key="gi" class="hu-tile-group">
+                    <div v-for="(tile, ti) in group.tiles" :key="ti" class="hu-tile-item">
+                      <MahjongTile :tile="tile" :size="22" />
+                      <span v-if="tile.isWild" class="hu-wild-label">百搭</span>
                     </div>
-                    <span class="hu-group-label">{{ group.type === 'sequence' ? '顺' : group.type === 'triplet' ? '刻' : '对' }}</span>
+                    <span class="hu-group-type">{{ group.type === 'sequence' ? '顺' : group.type === 'triplet' ? '刻' : group.type === 'pair' ? '对' : '' }}</span>
                   </div>
+                </div>
+                <div class="hu-combo-details" v-if="opt.details && opt.details.length">
+                  <span v-for="(d, di) in opt.details" :key="di" class="hu-detail">{{ d }}</span>
                 </div>
               </div>
             </div>
@@ -1472,19 +1480,50 @@ function arrangeWinningHand(hand: any[], existingMelds: any[]): any[] {
   }).slice(0, 5) // 最多显示5种排列
 }
 
+// 胡牌选项（从后端获取，含分数和牌型）
+const winOptions = ref<any[]>([])
+const fetchWinOptions = async () => {
+  try {
+    const res = await $fetch<any>('/api/game/win-options', {
+      query: { gameId: roomId.value, playerId: currentPlayer.value?.id }
+    })
+    // 合并后端分数和前端牌面排列
+    const options = res.winOptions || []
+    const hand = playerHand.value || []
+    const melds = playerMelds.value || []
+    const combos = arrangeWinningHand(hand, melds)
+    // 给每个选项附加牌面组合
+    for (let i = 0; i < options.length && i < combos.length; i++) {
+      options[i].tileGroups = combos[i % combos.length]?.groups || []
+    }
+    // 如果选项多于组合，复用第一个组合
+    for (let i = combos.length; i < options.length; i++) {
+      options[i].tileGroups = combos[0]?.groups || []
+    }
+    winOptions.value = options
+  } catch (err) {
+    console.error('Failed to fetch win options:', err)
+    winOptions.value = []
+  }
+}
+
+// 自摸时自动弹面板
+let autoHuShown = false
+watch(() => [showHu.value, isMyTurn.value], ([canHu, myTurn]) => {
+  if (canHu && myTurn && !showHuPanel.value && !autoHuShown) {
+    autoHuShown = true
+    onHu()
+  }
+  if (!canHu) autoHuShown = false
+})
+
 // 选择胡牌组合
 const selectedHuCombo = ref<number | null>(null)
-const onHu = () => {
-  if (huCombinations.value.length <= 1) {
-    // 只有一种组合，直接胡
-    resetAutoCount()
-    playSound('tile-hu')
-    executeAction(ActionType.HU)
-  } else {
-    // 多种组合，显示面板选择
-    showHuPanel.value = true
-    selectedHuCombo.value = 0
-  }
+const onHu = async () => {
+  // 不管自摸还是捉冲，都弹面板
+  await fetchWinOptions()
+  showHuPanel.value = true
+  selectedHuCombo.value = 0
 }
 const onConfirmHu = (index: number) => {
   resetAutoCount()
@@ -3052,6 +3091,79 @@ const forceDiscard = async (p: Player) => {
   box-shadow: 0 0 12px rgba(255, 215, 0, 0.15);
 }
 
+.hu-combo-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.hu-combo-label {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+}
+.hu-combo-score {
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: #FFD700;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+}
+.hu-combo-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0;
+  align-items: flex-end;
+}
+.hu-tile-group {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  padding: 3px 5px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  position: relative;
+}
+.hu-tile-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.hu-wild-label {
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.5rem;
+  color: #FFD700;
+  font-weight: 900;
+  background: rgba(0,0,0,0.7);
+  padding: 0 2px;
+  border-radius: 2px;
+  white-space: nowrap;
+  z-index: 2;
+}
+.hu-group-type {
+  font-size: 0.55rem;
+  color: rgba(255,255,255,0.45);
+  position: absolute;
+  bottom: -9px;
+  right: 2px;
+}
+.hu-combo-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.hu-detail {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
 .hu-combo-groups {
   display: flex;
   flex-wrap: wrap;
