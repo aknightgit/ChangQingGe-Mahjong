@@ -200,9 +200,21 @@ function detectHandTypesInternal(
   ]
   const nonFlowerTiles = allTiles.filter(t => !isFlower(t))
 
-  // Check if standard win
+  // 特殊牌型优先检查（不受标准胡牌限制）
+  // 四百搭：手牌中有4张百搭牌
+  const wildCount = nonFlowerTiles.filter(t => isWildTile(t)).length;
+  if (wildCount >= 4) {
+    types.push(HandType.FOUR_WILD)
+  }
+
+  // 八花自摸
+  if (isSelfDrawn && flowerCount >= 8) {
+    types.push(HandType.EIGHT_FLOWERS)
+  }
+
+  // Check if standard win (特殊牌型已检测，不跳过)
   const winResult = canWin(handTiles, exposedMelds.length, isWildTile)
-  if (!winResult.canWin) return []
+  if (!winResult.canWin && types.length === 0) return []
 
   // All triplets (碰碰胡) - no wild tiles in virtual hand, use simple check
   if (isAllTripletsHandSimple(handTiles, exposedMelds)) {
@@ -232,11 +244,6 @@ function detectHandTypesInternal(
     if (types.includes(HandType.ALL_TRIPLETS)) {
       types.push(HandType.HUN_PENG)
     }
-  }
-
-  // 八花自摸
-  if (isSelfDrawn && flowerCount >= 8) {
-    types.push(HandType.EIGHT_FLOWERS)
   }
 
   // 大吊
