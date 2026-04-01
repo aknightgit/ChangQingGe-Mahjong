@@ -250,7 +250,7 @@
                     <button class="help-btn" @click="toggleHelp('think')">?</button>
                   </div>
                   <input type="number" v-model.number="createParams.thinkChances" min="0" max="10" />
-                  <span v-if="activeHelp === 'think'" class="help-bubble">有胡/碰/杠选项时，可用「等」按钮冻结所有对手8秒给自己思考。每局限N次，默认3次。用完变灰。</span>
+                  <span v-if="activeHelp === 'think'" class="help-bubble">有胡/碰/杠选项时，可用「慢」按钮让所有对手进入决策犹豫期。每局限N次，默认3次。用完变灰。</span>
                 </div>
               </div>
             </div>

@@ -66,7 +66,7 @@
 
         <!-- 三、迟滞摸牌（抢牌窗口） -->
         <section :id="'freeze'" class="rule-section">
-          <h2>❄️ 迟滞摸牌（抢牌窗口）</h2>
+          <h2>⏰ 决策犹豫期（抢牌窗口）</h2>
           <div class="freeze-flow">
             <div class="freeze-step">
               <div class="freeze-icon">🀄</div>
@@ -80,7 +80,7 @@
               <div class="freeze-icon">⚡</div>
               <div>
                 <strong>两个并行流程</strong>
-                <p>① 抢牌窗口：其他人可碰/杠/胡<br>② 下家冻结：等待决策窗口</p>
+                <p>① 抢牌窗口：其他人可碰/杠/胡<br>② 下家等待决策期结束</p>
               </div>
             </div>
             <div class="freeze-arrow">→</div>
@@ -592,7 +592,7 @@ const handPatterns = [
   margin-top: 10px;
 }
 
-/* 冻结机制流程 */
+/* 决策犹豫期流程 */
 .freeze-flow {
   display: flex;
   align-items: center;

@@ -897,18 +897,18 @@ const effectiveMaxRolls = computed(() => isDoubleRound.value ? 1 : maxDiceRolls.
 const showDoubleReminder = ref(false)
 const freezeDurationMs = ref(Math.max(1000, (Number(route.query.freeze) || 1) * 1000)) // 最低1秒
 
-// 当前冻结截止时间（从游戏状态读取）
+// 当前决策犹豫期截止时间（从游戏状态读取）
 const currentFreezeUntil = computed(() => {
   const fu = (gameState.value as any)?._freezeUntil
   return typeof fu === 'number' && fu > Date.now() ? fu : 0
 })
 
-// 冻结窗口结束后主动刷新（避免debounce导致客户端错过auto-draw）
+// 决策犹豫期结束后主动刷新（避免debounce导致客户端错过auto-draw）
 let freezeRefreshTimer: ReturnType<typeof setTimeout> | null = null
 watch(currentFreezeUntil, (until) => {
   if (freezeRefreshTimer) { clearTimeout(freezeRefreshTimer); freezeRefreshTimer = null }
   if (until > 0) {
-    const delay = until - Date.now() + 100 // 冻结结束后100ms刷新
+    const delay = until - Date.now() + 100 // 决策犹豫期结束后100ms刷新
     freezeRefreshTimer = setTimeout(() => {
       refreshState()
     }, Math.max(delay, 0))
@@ -1426,7 +1426,7 @@ const thinkRemaining = computed(() => {
   return maxChances - used
 })
 const canUseThink = computed(() => thinkRemaining.value > 0)
-// 等我想一想冻结状态
+// 等我想一想决策犹豫期
 const thinkFreezeActive = computed(() => {
   const until = (gameState.value as any)?.thinkFreezeUntil
   return until && until > Date.now()
@@ -2757,7 +2757,7 @@ const forceDiscard = async (p: Player) => {
   animation: none;
 }
 
-/* 冻结状态：按钮显示但变灰禁用 */
+/* 决策犹豫期状态：按钮显示但变灰禁用 */
 .inline-action-btn--frozen {
   opacity: 0.5;
   filter: grayscale(0.7);
