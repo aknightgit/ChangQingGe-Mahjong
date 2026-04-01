@@ -1285,9 +1285,12 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     }
   }
 
-  // 胡牌判断：用canWin（兼容普通胡）
+  // 带牌型校验的胡牌判断：不允许"普通胡"
   const canWinWithType = (tiles: Tile[], p: BotPlayer, makeWT: (p: BotPlayer) => WildTileChecker, kongCount = 0): boolean => {
-    return canWin(tiles, p.exposedMelds.length, makeWT(p), kongCount).canWin
+    const win = canWin(tiles, p.exposedMelds.length, makeWT(p), kongCount)
+    if (!win.canWin) return false
+    const types = detectHandTypes(tiles, p.exposedMelds, true, p.flowerTiles.length, null, g.wildTileGroup || [])
+    return types.length > 0
   }
 
   const log = (player: string, action: string, detail: string) => { events.push({ turn, player, action, detail }) }

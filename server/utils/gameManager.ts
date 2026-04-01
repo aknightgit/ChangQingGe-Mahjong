@@ -2804,7 +2804,7 @@ class GameManager {
       } catch (err) {
         console.error('[bot-discard] Error:', err);
       }
-    }, 500 + Math.floor(Math.random() * 1500));
+    }, this.getHesitationWindow(gameId) + Math.floor(Math.random() * 500));  // 使用配置的犹豫期 + 随机0-500ms
 
     this.botTimers.set(gameId, timer);
   }
