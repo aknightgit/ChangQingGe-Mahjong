@@ -215,6 +215,8 @@ export interface GameState {
   // 谢谢带头大哥追踪
   consecutiveDiscards?: { suit: string; value: number; playerIds: string[] } | null;
   leadingBrotherEvent?: { firstPlayerId: string; tileKey: string } | null;
+  /** 通用审批流程：低优先级玩家请求，高优先级玩家确认 */
+  pengChowConflict?: { requesterId: string; requesterAction: 'chow' | 'peng' | 'kong'; tile: Tile; timestamp: number } | null;
   // 下局庄家（上局首胡者或一炮多响放冲者）
   nextDealerId?: string | null;
   // 被聚义QJ线突破提醒（每局刷新）

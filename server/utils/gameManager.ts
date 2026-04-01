@@ -122,7 +122,7 @@ class GameManager {
       } finally {
         this.pendingActionTimers.delete(gameId);
       }
-    }, 2500); // 2.5秒窗口（debounce 1000ms + human反应 1000ms + 保险 500ms）
+    }, 2000); // 2秒决策犹豫期（human反应 1500ms + 保险 500ms）
 
     this.pendingActionTimers.set(gameId, timer);
   }
@@ -638,6 +638,8 @@ class GameManager {
     game.thinkUsage = {};  // 每局重置「等我想一想」使用次数
     game.thinkFreezeUntil = undefined;
     game.thinkFreezePlayerId = undefined;
+    game.consecutiveDiscards = null;  // 每局重置「谢谢带头大哥」追踪
+    game.leadingBrotherEvent = null;  // 每局重置「谢谢带头大哥」事件
 
     // 清除上一局残留的freeze/dealer auto-draw timer，防止旧timer覆盖新游戏状态
     const oldFreezeTimer = this.freezeTimers.get(gameId);
@@ -895,9 +897,18 @@ class GameManager {
     if (!player || player.status !== PlayerStatus.PLAYING) return [];
 
     // 等我想一想冻结：非触发玩家在冻结期间不能操作
+    // 返回正常actions，但前端通过 thinkFreezeUntil 判断冻结状态来禁用按钮
+    // 不再返回空数组，避免按钮消失
     if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now()) {
       if (game.thinkFreezePlayerId !== playerId) {
-        return [];  // 其他玩家被冻结
+        // 冻结期间：返回 pending actions（如果有的话）让前端显示但禁用
+        // 不返回 turn actions（摸牌/出牌），因为这些在冻结期间不应该操作
+        const pendingAction = game.pendingActions.find(pa => pa.playerId === playerId);
+        if (pendingAction) {
+          return pendingAction.availableActions; // 前端会因 thinkFreezeActive 禁用这些按钮
+        }
+        // 没有pending时，返回空（确实没有可操作的）
+        return [];
       }
       // 触发者可以继续操作（碰/胡/过等）
     }
@@ -1015,10 +1026,13 @@ class GameManager {
           }
         }
 
-        // Check if can win
+        // Check if can win (必须有有效牌型)
         const winCheck = canWin(player.hand.concealedTiles, player.hand.exposedMelds.length, isWildTile);
         if (winCheck.canWin) {
-          actions.push(ActionType.HU);
+          const handTypes = detectHandTypes(player.hand.concealedTiles, player.hand.exposedMelds, true, player.hand.flowerTiles.length, null, game.wildTileGroup);
+          if (handTypes.length > 0) {
+            actions.push(ActionType.HU);
+          }
         }
       }
     }
@@ -1216,13 +1230,13 @@ class GameManager {
   }
 
   /**
-   * 谢谢带头大哥：一回合内四名玩家连续打出同一张牌
+   * 谢谢带头大哥：四名玩家连续打出同一张牌（不要求相邻出牌）
    * 第一个打出该牌的玩家，结算时额外赔付其余三家每家10分
    */
   private checkLeadingBrother(game: GameState, tile: Tile, currentPlayer: Player): void {
     const tileKey = `${tile.suit}-${tile.value}`;
 
-    // 初始化或重置追踪
+    // 初始化或重置追踪（换了一种牌）
     if (!game.consecutiveDiscards || game.consecutiveDiscards.suit !== tile.suit || game.consecutiveDiscards.value !== tile.value) {
       game.consecutiveDiscards = { suit: tile.suit, value: tile.value, playerIds: [currentPlayer.id] };
       return;
@@ -1230,20 +1244,23 @@ class GameManager {
 
     // 同一牌型继续追加
     const cd = game.consecutiveDiscards;
-    // 避免同一玩家连续出同一张牌重复计数
-    if (!cd.playerIds.includes(currentPlayer.id)) {
-      cd.playerIds.push(currentPlayer.id);
-    } else {
-      // 同一玩家又出了同样的牌，重置为从该玩家开始
-      game.consecutiveDiscards = { suit: tile.suit, value: tile.value, playerIds: [currentPlayer.id] };
-      return;
-    }
 
-    // 检查是否4个不同玩家都连续出了同一张牌
-    const activePlayers = game.players.filter(p => p.status === PlayerStatus.PLAYING || p.status === PlayerStatus.WON);
-    if (cd.playerIds.length >= activePlayers.length && activePlayers.length >= 4) {
+    // 追加当前玩家（允许同一玩家重复出现，统计4个不同玩家即可）
+    cd.playerIds.push(currentPlayer.id);
+
+    // 统计不同玩家数量
+    const uniquePlayerIds = new Set(cd.playerIds);
+
+    // 检查是否4个不同玩家都出过同一张牌（不要求连续/相邻）
+    // 必须四名玩家都齐全且未胡牌（status === PLAYING）
+    const activePlayerIds = new Set(
+      game.players.filter(p => p.status === PlayerStatus.PLAYING).map(p => p.id)
+    );
+    // 只统计仍在游戏中（未胡牌）的玩家
+    const activeDiscarders = new Set(cd.playerIds.filter(id => activePlayerIds.has(id)));
+    if (activePlayerIds.size >= 4 && activeDiscarders.size >= 4) {
       // 触发！第一个出该牌的玩家是带头大哥
-      const firstPlayerId = cd.playerIds[0];
+      const firstPlayerId = cd.playerIds.find(id => activePlayerIds.has(id))!;
       game.leadingBrotherEvent = { firstPlayerId, tileKey };
 
       const firstPlayer = game.players.find(p => p.id === firstPlayerId);
@@ -1358,47 +1375,162 @@ class GameManager {
     return false;
   }
 
-  private handleChow(game: GameState, player: Player): void {
-    // 碰优先级高于吃：如果其他玩家有碰/杠/胡的pending，拒绝吃
-    const higherPriorityPending = game.pendingActions.find(
-      pa => pa.playerId !== player.id &&
-      pa.availableActions.some(a => a === ActionType.PENG || a === ActionType.KONG || a === ActionType.HU)
-    );
-    if (higherPriorityPending) {
-      console.warn(`[CHOW] Blocked: player ${higherPriorityPending.playerId} has higher priority action available`);
-      return;
+  /**
+   * 通用审批流程：检查高优先级玩家
+   */
+  private checkHighPriorityCandidates(
+    game: GameState,
+    requestingPlayerId: string,
+    discardedTile: Tile
+  ): { huCandidates: string[]; pengCandidates: string[]; kongCandidates: string[] } {
+    const huCandidates: string[] = [];
+    const pengCandidates: string[] = [];
+    const kongCandidates: string[] = [];
+
+    for (const p of game.players) {
+      if (p.id === requestingPlayerId) continue;
+      if (p.status !== PlayerStatus.PLAYING) continue;
+
+      // 检查能否胡（必须有有效牌型）
+      const testHand = [...p.hand.concealedTiles, discardedTile];
+      const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
+      const winCheck = canWin(testHand, p.hand.exposedMelds.length, isWildTile);
+      if (winCheck.canWin) {
+        const handTypes = detectHandTypes(testHand, p.hand.exposedMelds, false, p.hand.flowerTiles.length, null, game.wildTileGroup);
+        if (handTypes.length > 0) {
+          huCandidates.push(p.id);
+          continue;
+        }
+      }
+
+      // 检查碰/杠
+      const matchingCount = p.hand.concealedTiles.filter(t => tilesEqual(t, discardedTile)).length;
+      if (matchingCount >= 2) {
+        pengCandidates.push(p.id);
+        if (matchingCount >= 3) kongCandidates.push(p.id);
+      }
     }
+    return { huCandidates, pengCandidates, kongCandidates };
+  }
+
+  /**
+   * 通用审批：给高优先级玩家广播冲突事件并设置pending
+   */
+  private startApproval(
+    game: GameState,
+    requesterPlayerId: string,
+    requesterAction: 'chow' | 'peng' | 'kong',
+    candidates: Array<{ playerId: string; availableActions: string[] }>,
+    tile: Tile
+  ): void {
+    game.pengChowConflict = { requesterId: requesterPlayerId, requesterAction, tile, timestamp: Date.now() };
+
+    const requester = game.players.find(p => p.id === requesterPlayerId);
+    if (!requester) return;
+
+    for (const c of candidates) {
+      const candPlayer = game.players.find(p => p.id === c.playerId);
+      if (!candPlayer || !this.wsManager) continue;
+
+      // 设置pending action（审批窗口，无"过"按钮）
+      const existingPending = game.pendingActions.find(pa => pa.playerId === c.playerId);
+      if (!existingPending) {
+        const label = requesterAction === 'chow' ? '吃' : requesterAction === 'peng' ? '碰' : '杠';
+        game.pendingActions.push({
+          playerId: c.playerId,
+          availableActions: c.availableActions,
+          tile,
+          expiresAt: Date.now() + 5000
+        });
+        // 广播
+        this.wsManager.broadcast(game.gameId, 'actionApproval', {
+          requesterName: requester.name,
+          requesterAction: label,
+          candidatePlayerId: c.playerId,
+          availableActions: c.availableActions,
+          tileKey: `${tile.suit}-${tile.value}`
+        });
+      }
+    }
+
+    // 5秒超时 → 允许低优先级动作
+    const ts = game.pengChowConflict.timestamp;
+    const gid = game.gameId;
+    setTimeout(async () => {
+      try {
+        const fg = await this.getGame(gid);
+        if (!fg || !fg.pengChowConflict || fg.pengChowConflict.timestamp !== ts) return;
+        fg.pengChowConflict = null;
+        for (const c of candidates) fg.pendingActions = fg.pendingActions.filter(pa => pa.playerId !== c.playerId);
+        const rp = fg.players.find(p => p.id === requesterPlayerId);
+        if (!rp) return;
+        if (requesterAction === 'chow') this.executeChowDirectly(fg, rp);
+        else if (requesterAction === 'peng') this.executePengDirectly(fg, rp);
+        else if (requesterAction === 'kong') this.executeKongDirectly(fg, rp, tile.id);
+        await this.persistGame(fg);
+        this.broadcastGameState(gid);
+      } catch (e) { console.error('[Approval] timeout err:', e); }
+    }, 5000);
+  }
+
+  private handleChow(game: GameState, player: Player): void {
     const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
     if (!pendingAction || !pendingAction.tile) return;
 
     const discardedTile = pendingAction.tile;
 
-    // Verify the discarder is the previous active player (上家)
+    // 只在决策犹豫期内才需要审批（其他玩家有pending = 还在窗口内）
+    const otherPlayersPending = game.pendingActions.filter(pa =>
+      pa.playerId !== player.id &&
+      pa.availableActions.some(a => a === ActionType.HU || a === ActionType.PENG || a === ActionType.KONG)
+    );
+
+    if (otherPlayersPending.length > 0) {
+      // 决策犹豫期内 → 检查高优先级玩家，触发审批
+      const { huCandidates, pengCandidates, kongCandidates } = this.checkHighPriorityCandidates(game, player.id, discardedTile);
+      if (huCandidates.length > 0 || pengCandidates.length > 0) {
+        const candidates: Array<{ playerId: string; availableActions: string[] }> = [];
+        for (const pid of huCandidates) candidates.push({ playerId: pid, availableActions: ['hu'] });
+        for (const pid of pengCandidates) {
+          const existing = candidates.find(c => c.playerId === pid);
+          const actions = ['peng'];
+          if (kongCandidates.includes(pid)) actions.push('kong');
+          if (existing) { existing.availableActions.push(...actions); }
+          else { candidates.push({ playerId: pid, availableActions: actions }); }
+        }
+        this.startApproval(game, player.id, 'chow', candidates, discardedTile);
+        return;
+      }
+    }
+
+    // 决策犹豫期已过 → 碰/杠/胡家已丧失机会，直接吃
+    this.executeChowDirectly(game, player);
+  }
+
+  /**
+   * 直接执行吃牌（不检查碰优先级）
+   */
+  private executeChowDirectly(game: GameState, player: Player): void {
+    const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
+    if (!pendingAction || !pendingAction.tile) return;
+
+    const discardedTile = pendingAction.tile;
     const prevPlayer = this.getPreviousActivePlayer(game, game.currentPlayerIndex);
-    if (!prevPlayer || prevPlayer.id !== player.id) {
-      throw new Error('Can only chow from the previous player (上家)');
-    }
+    if (!prevPlayer || prevPlayer.id !== player.id) { console.warn('[CHOW] Not previous player'); return; }
 
-    // Find all possible sequences and select the best one
     const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile, game);
-    if (sequences.length === 0) {
-      throw new Error('No valid sequence found for chow');
-    }
+    if (sequences.length === 0) { console.warn('[CHOW] No sequence'); return; }
 
-    // 智能选择最优吃牌组合（夹张 > 单边 > 两面）
     const sequence = this.selectBestChowSequence(sequences, discardedTile);
     const handTiles = sequence.filter(t => t.id !== discardedTile.id);
 
-    // Record bailout action
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
     this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.SEQUENCE);
 
-    // Remove tiles from hand
     for (const tile of handTiles) {
       player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile.id);
     }
 
-    // Create exposed meld
     const sourcePos = this.getLastDiscardPosition(game);
     const meld: Meld = {
       type: MeldType.SEQUENCE,
@@ -1407,92 +1539,150 @@ class GameManager {
       ...(sourcePos !== undefined && { sourcePosition: sourcePos })
     };
     player.hand.exposedMelds.push(meld);
-
-    // Remove from discard pile
     game.discardPile.pop();
-
-    // Clear pending actions
     game.pendingActions = [];
-
-    // Set current player to the chow player - they must discard
+    game.pengChowConflict = null;
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+  }
+
+  /**
+   * 直接执行碰（不检查胡优先级）
+   */
+  private executePengDirectly(game: GameState, player: Player): void {
+    const lastDiscard = game.discardPile[game.discardPile.length - 1];
+    if (!lastDiscard) return;
+    const matchingTiles = player.hand.concealedTiles.filter(t => tilesEqual(t, lastDiscard));
+    if (matchingTiles.length < 2) return;
+    const sourcePlayerId = this.getLastDiscardPlayerId(game);
+    this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.TRIPLET);
+    player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[0].id);
+    player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[1].id);
+    const sourcePos = this.getLastDiscardPosition(game);
+    player.hand.exposedMelds.push({
+      type: MeldType.TRIPLET,
+      tiles: [lastDiscard, matchingTiles[0], matchingTiles[1]],
+      isConcealed: false,
+      ...(sourcePos !== undefined && { sourcePosition: sourcePos })
+    });
+    game.discardPile.pop();
+    game.pendingActions = [];
+    game.pengChowConflict = null;
+    game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+  }
+
+  /**
+   * 直接执行杠（不检查胡优先级）
+   */
+  private executeKongDirectly(game: GameState, player: Player, tileId: string): void {
+    const lastDiscard = game.discardPile[game.discardPile.length - 1];
+    if (!lastDiscard) return;
+
+    const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
+    if (!pendingAction || !pendingAction.tile) return;
+    const matchingTiles = player.hand.concealedTiles.filter(t => tilesEqual(t, lastDiscard));
+    if (matchingTiles.length < 3) return;
+
+    const sourcePlayerId = this.getLastDiscardPlayerId(game);
+    this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.QUAD);
+    for (const t of matchingTiles) player.hand.concealedTiles = removeTile(player.hand.concealedTiles, t.id);
+
+    const sourcePos = this.getLastDiscardPosition(game);
+    player.hand.exposedMelds.push({
+      type: MeldType.QUAD,
+      tiles: [lastDiscard, ...matchingTiles],
+      isConcealed: false,
+      ...(sourcePos !== undefined && { sourcePosition: sourcePos })
+    });
+
+    game.discardPile.pop();
+    // 点杠积分：出牌者付2分
+    player.windScore += 2;
+    game.pendingActions = [];
+    game.pengChowConflict = null;
+    game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+    // 补牌
+    this.handleDraw(game, player);
+  }
+
+  /**
+   * 处理审批回应（碰吃冲突、碰胡冲突等）
+   */
+  handleApprovalChoice(gameId: string, playerId: string, choice: 'confirm' | 'pass'): void {
+    const game = this.games.get(gameId);
+    if (!game || !game.pengChowConflict) return;
+
+    const conflict = game.pengChowConflict;
+    const requesterId = conflict.requesterId;
+    const requesterAction = conflict.requesterAction;
+    const tile = conflict.tile;
+
+    // 清除冲突状态和该玩家的pending
+    game.pengChowConflict = null;
+    game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== playerId);
+
+    const requester = game.players.find(p => p.id === requesterId);
+
+    if (choice === 'confirm') {
+      const candPlayer = game.players.find(p => p.id === playerId);
+      if (!candPlayer) return;
+      // 执行候选者的高优先级动作
+      // 检查候选者有哪些可用动作，优先执行最高级的
+      const pending = game.pendingActions.find(pa => pa.playerId === playerId);
+      if (pending?.availableActions.includes(ActionType.HU)) {
+        // 不在这里执行胡，让前端通过正常流程处理
+        // 设置当前玩家以启用胡按钮
+        game.currentPlayerIndex = game.players.findIndex(p => p.id === playerId);
+      } else if (pending?.availableActions.includes(ActionType.PENG)) {
+        this.executePengDirectly(game, candPlayer);
+      }
+      // 清除请求者的pending
+      game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== requesterId);
+    } else {
+      // 放弃 → 允许低优先级动作
+      if (requester) {
+        if (requesterAction === 'chow') this.executeChowDirectly(game, requester);
+        else if (requesterAction === 'peng') this.executePengDirectly(game, requester);
+        else if (requesterAction === 'kong') this.executeKongDirectly(game, requester, tile.id);
+      }
+    }
+  }
+
+  /**
+   * @deprecated 使用 handleApprovalChoice 代替
+   */
+  handlePengChowChoice(gameId: string, pengPlayerId: string, choice: 'peng' | 'pass'): void {
+    this.handleApprovalChoice(gameId, pengPlayerId, choice === 'peng' ? 'confirm' : 'pass');
   }
 
   private handlePeng(game: GameState, player: Player): void {
     const lastDiscard = game.discardPile[game.discardPile.length - 1];
     if (!lastDiscard) return;
 
-    // Find matching tiles in hand
-    const matchingTiles = player.hand.concealedTiles.filter(t => tilesEqual(t, lastDiscard));
-    if (matchingTiles.length < 2) return;
+    // 碰 → 检查其他玩家是否可以胡（审批流程）
+    const { huCandidates } = this.checkHighPriorityCandidates(game, player.id, lastDiscard);
+    if (huCandidates.length > 0) {
+      const candidates = huCandidates.map(pid => ({ playerId: pid, availableActions: ['hu'] }));
+      this.startApproval(game, player.id, 'peng', candidates, lastDiscard);
+      return;
+    }
 
-    // 记录互包来源（碰的是谁的牌）
-    const sourcePlayerId = this.getLastDiscardPlayerId(game);
-    this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.TRIPLET);
-
-    // Remove tiles from hand
-    player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[0].id);
-    player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[1].id);
-
-    // Create exposed meld
-    const sourcePos = this.getLastDiscardPosition(game);
-    const meld: Meld = {
-      type: MeldType.TRIPLET,
-      tiles: [lastDiscard, matchingTiles[0], matchingTiles[1]],
-      isConcealed: false,
-      ...(sourcePos !== undefined && { sourcePosition: sourcePos })
-    };
-    player.hand.exposedMelds.push(meld);
-
-    // Remove from discard pile
-    game.discardPile.pop();
-
-    // Clear pending actions
-    game.pendingActions = [];
-
-    // Player must discard
-    game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+    this.executePengDirectly(game, player);
   }
 
   private handleKong(game: GameState, player: Player, tileId: string): void {
     const lastDiscard = game.discardPile[game.discardPile.length - 1];
     if (!lastDiscard) return;
 
-    // Find matching tiles in hand
-    const matchingTiles = player.hand.concealedTiles.filter(t => tilesEqual(t, lastDiscard));
-    if (matchingTiles.length < 3) return;
-
-    // 记录互包来源（杠的是谁的牌）
-    const sourcePlayerId = this.getLastDiscardPlayerId(game);
-    this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.KONG);
-
-    // Remove tiles from hand
-    for (let i = 0; i < 3; i++) {
-      player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[i].id);
+    // 杠 → 检查其他玩家是否可以胡（审批流程）
+    const { huCandidates } = this.checkHighPriorityCandidates(game, player.id, lastDiscard);
+    if (huCandidates.length > 0) {
+      const candidates = huCandidates.map(pid => ({ playerId: pid, availableActions: ['hu'] }));
+      this.startApproval(game, player.id, 'kong', candidates, lastDiscard);
+      return;
     }
 
-    // Create exposed kong
-    const sourcePos = this.getLastDiscardPosition(game);
-    const meld: Meld = {
-      type: MeldType.KONG,
-      tiles: [lastDiscard, ...matchingTiles.slice(0, 3)],
-      isConcealed: false,
-      ...(sourcePos !== undefined && { sourcePosition: sourcePos })
-    };
-    player.hand.exposedMelds.push(meld);
-
-    // Remove from discard pile
-    game.discardPile.pop();
-
-    // Award direct kong score (点杠) - discarder pays 2
-    const discarderIndex = (game.currentPlayerIndex - 1 + game.players.length) % game.players.length;
-    player.windScore += 2;
-
-    // Clear pending actions
-    game.pendingActions = [];
-
-    // Draw supplement tile
-    this.handleDraw(game, player);
+    this.executeKongDirectly(game, player, tileId);
+  }
 
     // Player must discard
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
@@ -1546,6 +1736,9 @@ class GameManager {
       const testHand = [...candidate.hand.concealedTiles, tile];
       const winCheck = canWin(testHand, candidate.hand.exposedMelds.length, isWildTile);
       if (!winCheck.canWin) continue;
+      // 牌型校验：必须有有效牌型
+      const robHandTypes = detectHandTypes(testHand, candidate.hand.exposedMelds, false, candidate.hand.flowerTiles.length, null, game.wildTileGroup);
+      if (robHandTypes.length === 0) continue;
 
       // 规则：若抢杠牌型为碰碰胡/混一色，门口必须有花牌
       const flowerCount = candidate.hand.exposedMelds
@@ -1569,7 +1762,7 @@ class GameManager {
         playerId: candidate.id,
         availableActions: [ActionType.HU, ActionType.PASS],
         tile,
-        expiresAt: Date.now() + 1000
+        expiresAt: Date.now() + 2000 // 2秒决策犹豫期
       });
     }
 
@@ -1677,6 +1870,11 @@ class GameManager {
     const winCheck = canWin(player.hand.concealedTiles, existingMelds, isWildTile);
     if (!winCheck.canWin) {
       throw new Error('Invalid Hu declaration');
+    }
+    // 牌型校验：必须有有效牌型
+    const huHandTypes = detectHandTypes(player.hand.concealedTiles, player.hand.exposedMelds, !pendingAction, player.hand.flowerTiles.length, null, game.wildTileGroup);
+    if (huHandTypes.length === 0) {
+      throw new Error('No valid hand type for Hu');
     }
 
     const isSelfDrawn = !pendingAction;
@@ -2211,7 +2409,7 @@ class GameManager {
           playerId: player.id,
           availableActions: actions,
           tile: discardedTile,
-          expiresAt: Date.now() + 1000 // 1 second response window
+          expiresAt: Date.now() + 2000 // 2秒决策犹豫期
         });
       }
     }
@@ -2233,7 +2431,7 @@ class GameManager {
             playerId: chowPlayer.id,
             availableActions: [ActionType.CHOW, ActionType.PASS],
             tile: discardedTile,
-            expiresAt: Date.now() + 1000
+            expiresAt: Date.now() + 2000 // 2秒决策犹豫期
           });
         }
       }
@@ -2706,11 +2904,14 @@ class GameManager {
       if (firstPlayer) {
         const penalty = 30; // 赔付3家 × 10分
         firstPlayer.score -= penalty;
+        finalScores[firstPlayerId] = (finalScores[firstPlayerId] || 0) - penalty;
         for (const p of game.players) {
           if (p.id !== firstPlayerId) {
             p.score += 10;
+            finalScores[p.id] = (finalScores[p.id] || 0) + 10;
           }
         }
+        game.finalScores = finalScores; // 同步更新
         console.log(`[LeadingBrother] ${firstPlayer.name} 赔付30分（每家10分）`);
       }
       game.leadingBrotherEvent = null;

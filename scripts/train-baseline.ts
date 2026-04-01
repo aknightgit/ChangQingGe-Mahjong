@@ -19,6 +19,7 @@ import { TileSuit, MeldType, WinType, type Tile, type Meld } from '../server/typ
 import * as fs from 'fs'
 import * as path from 'path'
 import { fileURLToPath } from 'url'
+import mysql from 'mysql2/promise'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -29,6 +30,52 @@ const BASELINE_MODE = process.argv[4] === '--baseline'  // 基线训练：优化
 const SETTLEMENT_MULT = 10
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
 const OUT_DIR = path.resolve(__dirname, '..', 'training-output')
+
+// ========== MariaDB 备份 ==========
+const DB_CONFIG = { host: '192.168.3.241', port: 33061, user: 'openclaw', password: '0penC1aw', database: 'changqingge' }
+const RUN_TAG = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+
+async function saveRoundToMariaDB(roundNo: number, evalResult: EvalResult, policy: BotPolicy): Promise<void> {
+  try {
+    const conn = await mysql.createConnection(DB_CONFIG)
+    const worstGame = evalResult.worstSingleLoss
+    const worstGameJson = worstGame ? JSON.stringify({
+      loser: worstGame.loser, score: worstGame.score, gameIdx: worstGame.gameIdx,
+      wildTile: worstGame.result.wildTile,
+      dice1: worstGame.result.dice1, dice2: worstGame.result.dice2,
+      diceMultiplier: worstGame.result.diceMultiplier,
+      multiplier: worstGame.result.multiplier,
+      winnerDetails: worstGame.result.winnerDetails,
+      settlementLog: worstGame.result.settlementLog,
+      snapshots: worstGame.result.snapshots?.map(s => ({ name: s.name, hand: s.hand, melds: s.melds, flowers: s.flowers, meldSources: s.meldSources }))
+    }) : null
+
+    await conn.execute(
+      `INSERT INTO training_results (run_tag, round_no, script, games, hu_rate, draw_rate, self_draw_rate, discard_win_rate, fight_to_last_rate, big_hand_rate, menqing_rate, fitness, avg_rounds, avg_pot, avg_winner_points, policy_json, worst_game_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        RUN_TAG, roundNo, 'train-baseline', evalResult.totalGames,
+        ((1 - evalResult.draws / Math.max(1, evalResult.totalGames)) * 100).toFixed(2),
+        (evalResult.draws / Math.max(1, evalResult.totalGames) * 100).toFixed(2),
+        (evalResult.selfDrawGames / Math.max(1, evalResult.winGames) * 100).toFixed(2),
+        (evalResult.discardWinGames / Math.max(1, evalResult.winGames) * 100).toFixed(2),
+        (evalResult.fightToLastGames / Math.max(1, evalResult.totalGames - evalResult.draws) * 100).toFixed(2),
+        (evalResult.bigWinGames / Math.max(1, evalResult.winGames) * 100).toFixed(2),
+        (evalResult.menqingWinGames / Math.max(1, evalResult.winGames) * 100).toFixed(2),
+        evalResult.metricsFitness.toFixed(2),
+        evalResult.avgRounds.toFixed(2),
+        evalResult.avgPot.toFixed(2),
+        evalResult.avgWinnerPoints.toFixed(2),
+        JSON.stringify(policy),
+        worstGameJson
+      ]
+    )
+    await conn.end()
+    console.log(`  📦 MariaDB: round ${roundNo} saved (run_tag=${RUN_TAG})`)
+  } catch (e: any) {
+    console.error(`  ⚠️ MariaDB save failed: ${e.message}`)
+  }
+}
 
 // ========== Bot Policy (长清阁规则) ==========
 interface BotPolicy {
@@ -100,11 +147,11 @@ const DEFAULT_POLICY: BotPolicy = {
   pengWildBoost: 0.06, kongWildBoost: 0.14, chowWildPenalty: 0.18,
   menqingKeepBonus: 5.0, meldPenalty: 0.05,
   allPungsPursuit: 0.5, pureFlushPursuit: 0.3, halfFlushWeight: 0.4,
-  sevenPairsPursuit: 0.2, allHonorsPursuit: 0.1, allHonorsPungsPursuit: 0.05,
+  sevenPairsPursuit: 0.2, allHonorsPursuit: 0.5, allHonorsPungsPursuit: 0.3,
   qingPengPursuit: 0.15, hunPengPursuit: 0.3,
-  windEastKeep: 2.0, windSouthKeep: 1.0, windWestKeep: 1.0, windNorthKeep: 1.0,
-  windGeneralKeep: 1.5,
-  dragonRedKeep: 3.0, dragonGreenKeep: 3.0, dragonWhiteKeep: 2.5, dragonGeneralKeep: 3.0,
+  windEastKeep: 3.0, windSouthKeep: 2.0, windWestKeep: 2.0, windNorthKeep: 2.0,
+  windGeneralKeep: 2.5,
+  dragonRedKeep: 4.0, dragonGreenKeep: 4.0, dragonWhiteKeep: 3.5, dragonGeneralKeep: 4.0,
   pairWeight: 4.0, nearWeight: 3.6, tripletKeepBonus: 4.7, terminalPenalty: 1.0,
   wildKeepPenalty: 1400, wildBailoutThreshold: 3,
   wild0Aggression: 0.3, wild1Aggression: 0.5, wild2Aggression: 0.7, wild3PlusAggression: 0.9,
@@ -324,15 +371,15 @@ function mutatePolicy(base: BotPolicy, intensity: number = 1.0): BotPolicy {
 
   for (const key of keys) {
     const range = PARAM_RANGES[key]
-    if (!range) { console.error('[DEBUG] key not in PARAM_RANGES:', key); continue }
+    if (!range) { continue }
     const rMin = Number(range.min)
     const rMax = Number(range.max)
     if (!Number.isFinite(rMin) || !Number.isFinite(rMax)) {
-      console.error('[DEBUG] BAD min/max for', key, ':', range)
+      // console.error('[DEBUG] BAD min/max for', key, ':', range)
       continue
     }
     const current = Number(base[key])
-    if (!Number.isFinite(current)) { console.error('[DEBUG] base[key] not finite:', key, '=', current); continue }
+    if (!Number.isFinite(current)) { continue }
     const delta = (Math.random() * 2 - 1) * range.step * intensity * (1 + Math.random())
     let newVal = current + delta
     if (newVal > rMax) {
@@ -461,7 +508,7 @@ function drawTile(g: GameState, p: BotPlayer): Tile | null {
   // 诊断：追踪手牌，摸牌后手牌长度
   // const kongC = p.exposedMelds.filter(m => m.type === MeldType.KONG).length
   // const exp = 14 - (p.exposedMelds.length - kongC) * 3 - kongC * 4
-  // if (p.hand.length !== exp) console.error(`DRAW: ${p.name} hand=${p.hand.length} expected=${exp} melds=${p.exposedMelds.length} kongs=${kongC}`)
+  // if (p.hand.length !== exp) // console.error(`DRAW: ${p.name} hand=${p.hand.length} expected=${exp} melds=${p.exposedMelds.length} kongs=${kongC}`)
   return tile
 }
 
@@ -514,11 +561,9 @@ function canJiaGang(p: BotPlayer): Tile[] {
 function applyPeng(p: BotPlayer, tile: Tile, sourcePos?: number): void {
   const before = p.hand.length
   const matches = p.hand.filter(t => t && tileEq(t, tile)).slice(0, 2)
-  if (before !== 13 && before !== 11) console.error(`PENG_STATE: ${p.name} hand=${before} tile=${tileStr(tile)}`)
-  for (const u of matches) { const idx = p.hand.findIndex(rt => rt && rt.id === u.id); if (idx >= 0) p.hand.splice(idx, 1) }
+    for (const u of matches) { const idx = p.hand.findIndex(rt => rt && rt.id === u.id); if (idx >= 0) p.hand.splice(idx, 1) }
   const after = p.hand.length
-  if (after !== before - 2) console.error(`BUG applyPeng: ${p.name} before=${before} matches=${matches.length} after=${after} (expected ${before-2}) tile=${tileStr(tile)}`)
-  p.exposedMelds.push({ type: MeldType.TRIPLET, tiles: [tile, tile, tile], isConcealed: false })
+    p.exposedMelds.push({ type: MeldType.TRIPLET, tiles: [tile, tile, tile], isConcealed: false })
   if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
 }
 function applyChow(p: BotPlayer, tile: Tile, sourcePos?: number): void {
@@ -546,11 +591,10 @@ function applyChow(p: BotPlayer, tile: Tile, sourcePos?: number): void {
   }
 
   if (!t1 || !t2) return
-  if (t1.id === t2.id) { console.error(`BUG applyChow: same tile! ${p.name} tile=${tileStr(tile)} t1=t2=${t1.id}`); return }
+  if (t1.id === t2.id) { return }
   removeTile(t1); removeTile(t2)
   const after = p.hand.length
-  if (after !== before - 2) console.error(`BUG applyChow: ${p.name} before=${before} after=${after} (expected ${before-2}) tile=${tileStr(tile)} t1=${t1.id} t2=${t2.id}`)
-  // 排序tiles为从小到大
+    // 排序tiles为从小到大
   const meldTiles = [t1, tile, t2].sort((a, b) => a.value - b.value)
   p.exposedMelds.push({ type: MeldType.SEQUENCE, tiles: meldTiles, isConcealed: false })
   if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
@@ -794,8 +838,12 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   }
   const isPureFlushRoute = maxSuitCount >= hand.length * 0.7 && maxSuitCount >= 8
   const isHalfFlushRoute = maxSuitCount >= hand.length * 0.5 && honorCount >= 2
-  const isAllHonorsRoute = honorCount >= hand.length * 0.6 && honorCount >= 6
-  const isAllPungsRoute = (tripletCount * 3 + quadCount * 4) >= hand.length * 0.6
+  // 风一色/风碰路线：降低阈值，6张风箭+百搭就开始冲
+  const honorWildCount = honorCount + wildCount
+  const isAllHonorsRoute = honorWildCount >= 6 || (honorCount >= hand.length * 0.5 && honorCount >= 5)
+  // 清碰路线：旧条件(6张三对) OR 新条件(3+同系对子)
+  const sameSuitPairCount = Array.from(groups.values()).filter(tiles => tiles[0] && !isHonor(tiles[0]) && tiles.length >= 2).length
+  const isAllPungsRoute = (tripletCount * 3 + quadCount * 4) >= hand.length * 0.6 || sameSuitPairCount >= 3
   const isSevenPairsRoute = pairCount >= 4 && totalMelds === 0
 
   // 倍数×起手牌质量联合路线
@@ -876,6 +924,9 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
       if (count === 1) keepScore -= wk * 0.5
       if (isAllHonorsRoute) keepScore += policy.allHonorsPursuit * 10 * (count >= 2 ? 2 : 1)
       if (isAllHonorsRoute && isAllPungsRoute) keepScore += policy.allHonorsPungsPursuit * 20
+      // 风箭潜力加成：5+张风箭时，单张也强留
+      if (honorWildCount >= 5 && count === 1) keepScore += (honorWildCount - 4) * 3
+      if (honorWildCount >= 6) keepScore += honorWildCount * 2  // 6张+百搭路线，强烈保留
     }
 
     if (tile.suit === TileSuit.DRAGON) {
@@ -889,6 +940,9 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
       if (count === 1) keepScore -= dk * 0.3
       if (isAllHonorsRoute) keepScore += policy.allHonorsPursuit * 10 * (count >= 2 ? 2 : 1)
       if (isAllHonorsRoute && isAllPungsRoute) keepScore += policy.allHonorsPungsPursuit * 20
+      // 箭牌潜力加成
+      if (honorWildCount >= 5 && count === 1) keepScore += (honorWildCount - 4) * 3
+      if (honorWildCount >= 6) keepScore += honorWildCount * 2
     }
 
     if (policy.pureFlushPursuit > 0 && !isHonor(tile)) {
@@ -923,6 +977,14 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     if (policy.allPungsPursuit > 0 && isAllPungsRoute) {
       if (count >= 2) keepScore += policy.allPungsPursuit * 5
       if (count === 1 && !isHonor(tile)) keepScore -= policy.allPungsPursuit * 2
+    }
+    // 清碰潜力：3+同系对子时，该花色的单张也强留（冲第4对+雀头）
+    if (sameSuitPairCount >= 3 && !isHonor(tile) && tile.suit === suits[maxSuitIdx]) {
+      keepScore += (sameSuitPairCount - 2) * 4
+    }
+    // 风箭路线：5+风箭时，绝对不打风箭（扣巨大负分 = 高保留）
+    if (isHonor(tile) && honorWildCount >= 5) {
+      keepScore += (honorWildCount - 4) * 8  // 5张=+8, 6张=+16, 7张=+24
     }
     if (policy.sevenPairsPursuit > 0 && isSevenPairsRoute) {
       if (count === 2) keepScore += policy.sevenPairsPursuit * 8
@@ -1112,6 +1174,14 @@ interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers:
 interface GameResult {
   winner: number; scores: number[]; events: GameEvent[]; multiplier: number
   settlementLog: SettlementEntry[]; snapshots: PlayerSnapshot[]; roundNum: number
+  wildTile: string; wildSuit?: TileSuit; wildValue?: number
+  dice1: number; dice2: number; diceMultiplier: number
+  totalPot: number
+  // 每个赢家的详细信息
+  winnerDetails: Array<{
+    name: string; winMode: string; handType: string; baseFan: number; finalPoints: number
+    handTiles: string; melds: string[]; flowers: string[]; isMenQing: boolean; from?: string
+  }>
 }
 
 // ========== 手牌规范化（胡牌前必调） ==========
@@ -1157,6 +1227,15 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
   const events: GameEvent[] = []
   const settlementLog: SettlementEntry[] = []
   let turn = 0
+
+  // 骰子
+  const dice1 = Math.floor(Math.random() * 6) + 1
+  const dice2 = Math.floor(Math.random() * 6) + 1
+  const isPair = dice1 === dice2
+  const isBigPair = isPair && (dice1 === 1 || dice1 === 4)
+  const diceMultiplier = isBigPair ? 4 : isPair ? 2 : 1
+  const wildTileStr = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : 'unknown'
+
   const recordPayment = (from: string, to: string, amount: number, reason: string, mult?: number) => {
     settlementLog.push({ from, to, amount, reason, mult })
   }
@@ -1168,19 +1247,57 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       meldSources: [...p.meldSources]
     }))
   }
+
+  // 构建完整 GameResult 的辅助函数
+  const buildResult = (winnerIdx: number, winMode: string, winPoints: number, winHandType: string, winBaseFan: number, from?: string): GameResult => {
+    const snapshots = recordSnapshots()
+    const wSnap = snapshots[winnerIdx]
+    const wPlayer = g.players[winnerIdx]
+    const isMenQing = wPlayer.exposedMelds.length === 0
+    const winnerDetails = [{
+      name: wSnap.name, winMode, handType: winHandType, baseFan: winBaseFan, finalPoints: winPoints,
+      handTiles: wSnap.hand, melds: wSnap.melds, flowers: wSnap.flowers, isMenQing, from
+    }]
+    const totalPot = g.players.reduce((s, p) => s + Math.abs(p.score), 0)
+    return {
+      winner: winnerIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier,
+      settlementLog, snapshots, roundNum: turn, wildTile: wildTileStr, wildSuit: g.wildSuit, wildValue: g.wildValue,
+      dice1, dice2, diceMultiplier, totalPot, winnerDetails
+    }
+  }
+
+  // 生成赢家牌型信息
+  const getWinInfo = (player: BotPlayer, isSelfDraw: boolean, isKongWin: boolean): { handType: string; baseFan: number; finalPoints: number } => {
+    try {
+      const types = detectHandTypes(player.hand, player.exposedMelds, isSelfDraw, player.flowerTiles.length,
+        player.wildSuit && player.wildValue ? `${player.wildSuit}-${player.wildValue}` : null)
+      const result = calculateScore({
+        handTiles: player.hand, exposedMelds: player.exposedMelds,
+        flowerTiles: player.flowerTiles, handTypes: types,
+        isSelfDrawn: isSelfDraw, isKongFlower: isKongWin,
+        isRobbingKong: false, isMenQing: player.exposedMelds.length === 0,
+        wildTileSuit: player.wildSuit, wildTileValue: player.wildValue,
+        roundMultiplier: 1, globalMultiplier: g.gameMultiplier
+      })
+      return { handType: result.handTypeName || types[0] || '基础胡', baseFan: result.baseFan || 0, finalPoints: result.finalPoints || 0 }
+    } catch {
+      return { handType: '基础胡', baseFan: 0, finalPoints: 0 }
+    }
+  }
+
+  // 带牌型校验的胡牌判断：不允许"普通胡"
+  // player参数用于获取exposedMelds/flowerTiles
+  const canWinWithType = (tiles: Tile[], p: BotPlayer, makeWT: (p: BotPlayer) => WildTileChecker, kongCount = 0): boolean => {
+    const win = canWin(tiles, p.exposedMelds.length, makeWT(p), kongCount)
+    if (!win.canWin) return false
+    // 必须有有效牌型（不允许普通胡）
+    const types = detectHandTypes(tiles, p.exposedMelds, true, p.flowerTiles.length, null, g.wildTileGroup || [])
+    return types.length > 0
+  }
+
   const log = (player: string, action: string, detail: string) => { events.push({ turn, player, action, detail }) }
 
   for (let i = 0; i < 13; i++) { for (let p = 0; p < 4; p++) drawTile(g, g.players[p]) }
-  // 发牌完成后AI-小胖手牌验证
-  for (const p of g.players) {
-    const km = p.exposedMelds.filter(m => m.type === MeldType.KONG).length
-    const exp = 14 - (p.exposedMelds.length - km) * 3 - km * 4
-    if (p.name === 'AI-小胖' && p.hand.length !== exp) {
-      console.error(`初始手牌错误: ${p.name} hand=${p.hand.length} expected=${exp}`)
-    }
-  }
-  // 发牌完成日志
-  for (const p of g.players) log(p.name, '发牌', p.hand.map(t => tileStr(t)).join(' '))
 
   const MAX_ROUNDS = 200
   let consecutiveDraws = 0
@@ -1190,7 +1307,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     const player = g.players[curr]
     turn = round
     const drawn = drawTile(g, player)
-    if (!drawn) { console.error(`⚠️ 流局: 牌墙耗尽 round=${round} wallIdx=${g.wallIdx}/${g.deck.length}`); return null }
+    if (!drawn) { return null }
     if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); continue }
     log(player.name, '摸牌', tileStr(drawn))
 
@@ -1199,12 +1316,17 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     const kongCount = player.exposedMelds.filter(m => m.type === MeldType.KONG).length
     const expectedLen = 14 - (player.exposedMelds.length - kongCount) * 3 - kongCount * 4
     if (normalizedHand.length !== expectedLen) {
-      console.error(`⚠️ 手牌长度异常: ${player.name} round=${round} hand=${normalizedHand.length} expected=${expectedLen} melds=${player.exposedMelds.length} kongs=${kongCount} wall=${g.deck.length - g.wallIdx}`)
+      // console.error(`⚠️ 手牌长度异常: ${player.name} round=${round} hand=${normalizedHand.length} expected=${expectedLen} melds=${player.exposedMelds.length} kongs=${kongCount} wall=${g.deck.length - g.wallIdx}`)
     }
-    const winCheck = canWin(normalizedHand, player.exposedMelds.length, makeWT(player), kongCount)
-    if (winCheck.canWin) {
+    const winCheck = canWinWithType(normalizedHand, player, makeWT, kongCount)
+    if (winCheck) {
+      // 牌型校验：必须有有效牌型才能胡（不允许"普通胡"）
+      const handTypes = detectHandTypes(normalizedHand, player.exposedMelds, true, player.flowerTiles.length, null, g.wildTileGroup || [])
+      if (handTypes.length === 0) {
+        // 无有效牌型，不能胡
+      } else {
       // 调试：记录有生成功会的游戏
-      if (round >= 30) console.error(`DEBUG: ${player.name}可胡 at round=${round} hand=${normalizedHand.length} melds=${player.exposedMelds.length} kong=${kongCount}`)
+      // removed: if (round >= 30) console.error DEBUG
       let winChance = player.policy.selfWinChance
       const wildCount = player.hand.filter(t => isWT(t, player)).length
       winChance += wildCount * player.policy.selfWinWildBoost
@@ -1218,8 +1340,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         applyBaoSettlement(g, curr, true, null, baseScore)
         for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore, '自摸') }
         log(player.name, '自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}] [手牌${normalizedHand.length}张+副露${player.exposedMelds.length}]`)
-        return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+        const winInfo = getWinInfo(player, true, false)
+        return buildResult(curr, '自摸', winInfo.finalPoints, winInfo.handType, winInfo.baseFan)
       }
+      } // end else (has valid hand type)
     }
 
     // AnKong / JiaGang (policy-driven)
@@ -1228,13 +1352,13 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         applyAnKong(player, ak)
         const extra = drawTile(g, player)
         if (extra && !isFlower(extra)) {
-          if (canWin(normalizeHand(player.hand), player.exposedMelds.length, makeWT(player), player.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
+          if (canWinWithType(normalizeHand(player.hand), player, makeWT, player.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
             const baseScore = calcScore(player, true, true, g.gameMultiplier)
             player.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
             applyBaoSettlement(g, curr, true, null, baseScore)
-            log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
-            return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+            const winInfo = getWinInfo(player, true, true)
+            return buildResult(curr, '杠上自摸', winInfo.finalPoints, winInfo.handType, winInfo.baseFan)
           }
         }
       }
@@ -1244,13 +1368,13 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         applyJiaGang(player, jg)
         const extra = drawTile(g, player)
         if (extra && !isFlower(extra)) {
-          if (canWin(normalizeHand(player.hand), player.exposedMelds.length, makeWT(player), player.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
+          if (canWinWithType(normalizeHand(player.hand), player, makeWT, player.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
             const baseScore = calcScore(player, true, true, g.gameMultiplier)
             player.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
             applyBaoSettlement(g, curr, true, null, baseScore)
-            log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
-            return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+            const winInfo1 = getWinInfo(player, true, true)
+            return buildResult(curr, '杠上自摸', winInfo1.finalPoints, winInfo1.handType, winInfo1.baseFan)
           }
         }
       }
@@ -1270,7 +1394,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       if (other === curr) continue
       const opp = g.players[other]
       const testHand = [...opp.hand.filter(t => t !== undefined), discard]
-      if (canWin(testHand, opp.exposedMelds.length, makeWT(opp), opp.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
+      if (canWinWithType(testHand, opp, makeWT, opp.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
         let huChance = opp.policy.discardHuChance
         const wildCount = opp.hand.filter(t => isWT(t, opp)).length
         huChance -= wildCount * opp.policy.discardHuWildPenalty
@@ -1281,8 +1405,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           // 互包结算：如果有人对opp有包三，且放炮者不是包家
           applyBaoSettlement(g, other, false, curr, score)
           recordPayment(player.name, opp.name, score, '放炮')
-          log(opp.name, '放炮胡', `${player.name}出${tileStr(discard)}→${opp.hand.map(t => tileStr(t)).join(' ')} [${score}]`)
-          return { winner: other, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+          const winInfo2 = getWinInfo(opp, false, false)
+          return buildResult(other, '放冲', winInfo2.finalPoints, winInfo2.handType, winInfo2.baseFan, player.name)
         }
       }
     }
@@ -1305,46 +1429,46 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           if (opp.name === 'AI-小胖') {
             const km = opp.exposedMelds.filter(m => m.type === MeldType.KONG).length
             const expBefore = 14 - (opp.exposedMelds.length - km) * 3 - km * 4
-            console.error(`小胖_CLAIM: hand=${opp.hand.length} melds=${opp.exposedMelds.length} kong=${km} exp=${expBefore} tile=${tileStr(discard)}`)
+            // console.error(`小胖_CLAIM: hand=${opp.hand.length} melds=${opp.exposedMelds.length} kong=${km} exp=${expBefore} tile=${tileStr(discard)}`)
           }
           applyPeng(opp, discard, curr)
           // 放炮胡检查（claim后draw前，手牌=expectedLen）
           const handAfterPeng = normalizeHand(opp.hand)
           const kongAfterPeng = opp.exposedMelds.filter(m => m.type === MeldType.KONG).length
           const expAfterPeng = 14 - (opp.exposedMelds.length - kongAfterPeng) * 3 - kongAfterPeng * 4
-          console.error(`PENG_HU_CHECK: ${opp.name} hand=${handAfterPeng.length} expected=${expAfterPeng} melds=${opp.exposedMelds.length}`)
-          if (canWin(handAfterPeng, opp.exposedMelds.length, makeWT(opp), kongAfterPeng).canWin) {
+          // console.error(`PENG_HU_CHECK: ${opp.name} hand=${handAfterPeng.length} expected=${expAfterPeng} melds=${opp.exposedMelds.length}`)
+          if (canWinWithType(handAfterPeng, opp, makeWT, kongAfterPeng)) {
             const huChance = opp.policy.discardHuChance
             if (Math.random() < huChance) {
               const score = calcScore(opp, false, false, g.gameMultiplier)
               opp.score += score; g.players[curr].score -= score
               applyBaoSettlement(g, otherIdx, false, curr, score)
               recordPayment(g.players[curr].name, opp.name, score, '碰后放炮')
-              log(opp.name, '碰后放炮胡', `${tileStr(discard)} [${score}]`)
-              return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+              const winInfo3 = getWinInfo(opp, false, false)
+              return buildResult(otherIdx, '放冲', winInfo3.finalPoints, winInfo3.handType, winInfo3.baseFan, g.players[curr].name)
             }
           }
           const d = drawTile(g, opp)
           if (!d) return null
-          if (canWin(normalizeHand(opp.hand), opp.exposedMelds.length, makeWT(opp), opp.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
+          if (canWinWithType(normalizeHand(opp.hand), opp, makeWT, opp.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
             const baseScore = calcScore(opp, true, false, g.gameMultiplier)
             opp.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= baseScore }
             applyBaoSettlement(g, otherIdx, true, null, baseScore)
-            log(opp.name, '碰后自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
-            return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+            const winInfo4 = getWinInfo(opp, true, false)
+            return buildResult(otherIdx, '自摸', winInfo4.finalPoints, winInfo4.handType, winInfo4.baseFan)
           }
           for (const ak of canAnKong(opp)) {
             applyAnKong(opp, ak)
             const extra = drawTile(g, opp)
             if (extra && !isFlower(extra)) {
-              if (canWin(normalizeHand(opp.hand), opp.exposedMelds.length, makeWT(opp), opp.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
+              if (canWinWithType(normalizeHand(opp.hand), opp, makeWT, opp.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
                 const kongBaseScore = calcScore(opp, true, true, g.gameMultiplier)
                 opp.score += kongBaseScore * 3
                 for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
                 applyBaoSettlement(g, otherIdx, true, null, kongBaseScore)
-                log(opp.name, '碰杠后自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3=${kongBaseScore*3}]`)
-                return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+                const winInfo5 = getWinInfo(opp, true, true)
+                return buildResult(otherIdx, '杠上自摸', winInfo5.finalPoints, winInfo5.handType, winInfo5.baseFan)
               }
             }
           }
@@ -1366,38 +1490,38 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       // 放炮胡检查（claim后draw前，手牌=expectedLen）
       const handAfterChow = normalizeHand(nextP.hand)
       const kongAfterChow = nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length
-      if (canWin(handAfterChow, nextP.exposedMelds.length, makeWT(nextP), kongAfterChow).canWin) {
+      if (canWinWithType(handAfterChow, nextP, makeWT, kongAfterChow)) {
         const huChance = nextP.policy.discardHuChance
         if (Math.random() < huChance) {
           const score = calcScore(nextP, false, false, g.gameMultiplier)
           nextP.score += score; g.players[curr].score -= score
           applyBaoSettlement(g, nextPlayer, false, curr, score)
           recordPayment(g.players[curr].name, nextP.name, score, '吃后放炮')
-          log(nextP.name, '吃后放炮胡', `${tileStr(discard)} [${score}]`)
-          return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+          const winInfo6 = getWinInfo(nextP, false, false)
+          return buildResult(nextPlayer, '放冲', winInfo6.finalPoints, winInfo6.handType, winInfo6.baseFan, g.players[curr].name)
         }
       }
       const d = drawTile(g, nextP)
       if (!d) return null
-      if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds.length, makeWT(nextP), nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
+      if (canWinWithType(normalizeHand(nextP.hand), nextP, makeWT, nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
         const baseScore = calcScore(nextP, true, false, g.gameMultiplier)
         nextP.score += baseScore * 3
         for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= baseScore }
         applyBaoSettlement(g, nextPlayer, true, null, baseScore)
-        log(nextP.name, '吃后自摸', `${nextP.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
-        return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+        const winInfo7 = getWinInfo(nextP, true, false)
+        return buildResult(nextPlayer, '自摸', winInfo7.finalPoints, winInfo7.handType, winInfo7.baseFan)
       }
       for (const ak of canAnKong(nextP)) {
         applyAnKong(nextP, ak)
         const extra = drawTile(g, nextP)
         if (extra && !isFlower(extra)) {
-          if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds.length, makeWT(nextP), nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
+          if (canWinWithType(normalizeHand(nextP.hand), nextP, makeWT, nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
             const kongBaseScore = calcScore(nextP, true, true, g.gameMultiplier)
             nextP.score += kongBaseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= kongBaseScore }
             applyBaoSettlement(g, nextPlayer, true, null, kongBaseScore)
-            log(nextP.name, '吃杠后自摸', `${nextP.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3=${kongBaseScore*3}]`)
-            return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), roundNum: turn }
+            const winInfo8 = getWinInfo(nextP, true, true)
+            return buildResult(nextPlayer, '杠上自摸', winInfo8.finalPoints, winInfo8.handType, winInfo8.baseFan)
           }
         }
       }
@@ -1429,11 +1553,15 @@ interface EvalResult {
   menqingWinGames: number  // 门清胡牌局数
   metricsFitness: number    // 指标导向fitness（用于基线训练）
   worstSingleLoss: { loser: string; score: number; gameIdx: number; result: GameResult } | null
+  biggestSingleWin: { winner: string; score: number; gameIdx: number; result: GameResult } | null
+  avgRounds: number; avgPot: number; avgWinnerPoints: number
+  highMultGameCount: number  // 骰子>=2的局数
 }
 
 function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy: BotPolicy): string {
   const ts = new Date().toISOString()
-  const drawGames = evalResult.totalGames - evalResult.winGames
+  const drawGames = evalResult.draws
+  const nonDrawGames = evalResult.totalGames - drawGames
   const loss = evalResult.worstSingleLoss
   const lines: string[] = []
 
@@ -1441,84 +1569,114 @@ function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy
   lines.push('')
   lines.push('### 训练指标')
   lines.push(`- Games: ${evalResult.totalGames}`)
-  lines.push(`- 胡牌局: ${evalResult.winGames} (${(evalResult.winGames / Math.max(1, evalResult.totalGames) * 100).toFixed(2)}%)`)
+  lines.push(`- 胡牌局: ${nonDrawGames} (${(nonDrawGames / Math.max(1, evalResult.totalGames) * 100).toFixed(2)}%)`)
   lines.push(`- 流局: ${drawGames} (${(drawGames / Math.max(1, evalResult.totalGames) * 100).toFixed(2)}%)`)
-  const fightRate = evalResult.winGames > 0 ? (evalResult.fightToLastGames / evalResult.winGames * 100).toFixed(2) : '0.00'
+  const fightRate = nonDrawGames > 0 ? (evalResult.fightToLastGames / nonDrawGames * 100).toFixed(2) : '0.00'
   lines.push(`- 血战到最后一人: ${evalResult.fightToLastGames} (${fightRate}%)`)
+  lines.push(`- 平均回合: ${evalResult.avgRounds.toFixed(2)}`)
+  lines.push(`- 平均总筹码: ${evalResult.avgPot.toFixed(2)}`)
   lines.push(`- 自摸率(胡牌中): ${(evalResult.selfDrawGames / Math.max(1, evalResult.winGames) * 100).toFixed(2)}%`)
-  lines.push(`- 捉冲率(胡牌中): ${(evalResult.discardWinGames / Math.max(1, evalResult.winGames) * 100).toFixed(2)}%`)
   lines.push(`- 大牌率(胡牌中): ${(evalResult.bigWinGames / Math.max(1, evalResult.winGames) * 100).toFixed(2)}%`)
   lines.push(`- 门清胡牌率(胡牌中): ${(evalResult.menqingWinGames / Math.max(1, evalResult.winGames) * 100).toFixed(2)}%`)
-  lines.push(`- Fitness: ${evalResult.akScore.toFixed(4)}`)
-  lines.push('')
+  lines.push(`- 胜者平均最终点: ${evalResult.avgWinnerPoints.toFixed(2)}`)
+  lines.push(`- Fitness: ${evalResult.metricsFitness.toFixed(4)}`)
 
+  lines.push('')
   lines.push('### 本轮最佳策略参数')
   lines.push('```json')
   lines.push(JSON.stringify(bestPolicy, null, 2))
   lines.push('```')
-  lines.push('')
 
-  lines.push('### 最大单人亏损局明细（本轮）')
-  if (!loss) {
+  // 格式化单局明细的辅助函数
+  const formatGameDetail = (gameResult: GameResult, gameIdx: number, label: string, playerName: string, score: number): string[] => {
+    const gLines: string[] = []
+    const r = gameResult
+    const gm = r.multiplier
+    const totalPot = r.totalPot || r.scores.reduce((s, sc) => s + Math.abs(sc), 0)
+    gLines.push(`#### ${label}`)
+    gLines.push(`- ${label.includes('赢') ? '最大赢利' : '最大亏损'}: ${playerName} ${score} 点（绝对值 ${Math.abs(score)}）`)
+    gLines.push(`- 局号: ${gameIdx}`)
+    gLines.push(`- 回合: ${r.roundNum}`)
+    gLines.push(`- 总筹码: ${totalPot}`)
+    gLines.push(`- 百搭: ${r.wildTile || '未知'}`)
+    gLines.push(`- 回合/全局倍数信息:`)
+    gLines.push(`  - 骰子点数: ${r.dice1 || '?'} + ${r.dice2 || '?'}`)
+    gLines.push(`  - 骰子倍数（清晰明了）: x${r.diceMultiplier || '?'}`)
+    gLines.push(`  - 全局倍数: x${gm}`)
+
+    // 胡牌玩家明细
+    gLines.push('')
+    gLines.push('- 输出该局所有胡牌玩家明细')
+    if (r.winnerDetails && r.winnerDetails.length > 0) {
+      for (const w of r.winnerDetails) {
+        gLines.push(`  - 玩家: ${w.name}`)
+        gLines.push(`    - 胡牌方式: ${w.winMode}${w.from ? ` (来自 ${w.from})` : ''}`)
+        gLines.push(`    - 牌型/基础番/最终点: ${w.handType} / ${w.baseFan} / ${w.finalPoints}`)
+        gLines.push(`    - 手牌牌面: ${w.handTiles || '(空)'}`)
+        gLines.push(`    - 门口牌（吃/碰/杠）: ${w.melds.length > 0 ? w.melds.join(' ; ') : '(无)'}`)
+        gLines.push(`    - 花牌: ${w.flowers.length > 0 ? w.flowers.join(' ') : '(无)'}`)
+      }
+    } else {
+      gLines.push('  - (无胡牌玩家)')
+    }
+
+    // 三口/四口关系
+    const baoRelations: string[] = []
+    for (const snap of r.snapshots || []) {
+      for (let ci = 0; ci < 4; ci++) {
+        if (snap.meldSources[ci] >= 3) {
+          const partner = r.snapshots?.[ci]
+          if (partner) {
+            const level = snap.meldSources[ci] >= 4 ? '四口' : '三口'
+            baoRelations.push(`  - ${snap.name} <-> ${partner.name}: ${level} (A->B:${snap.meldSources[ci]}, B->A:${partner.meldSources?.[r.snapshots.indexOf(snap)] || 0})`)
+          }
+        }
+      }
+    }
+    if (baoRelations.length > 0) {
+      gLines.push('')
+      gLines.push('- 三口/四口关系')
+      gLines.push(...baoRelations)
+    }
+
+    // 结算逐笔明细
+    gLines.push('')
+    gLines.push('- 结算逐笔明细（谁付给谁、倍率和金额）')
+    if (r.settlementLog && r.settlementLog.length > 0) {
+      for (const s of r.settlementLog) {
+        const multStr = s.mult ? ` (${s.amount / s.mult}x${s.mult})` : ''
+        gLines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
+      }
+    } else {
+      gLines.push('  - (无)')
+    }
+    return gLines
+  }
+
+  lines.push('')
+  lines.push('### 最大输赢局明细（本轮）')
+  if (!loss && !evalResult.biggestSingleWin) {
     lines.push('- 本轮无有效对局数据')
     return lines.join('\n')
   }
 
-  const r = loss.result
-  const gm = r.gameMultiplier
-  lines.push(`- 最大亏损: ${loss.loser} ${loss.score} 点（绝对值 ${Math.abs(loss.score)}）`)
-  lines.push(`- 局号: ${loss.gameIdx}`)
-  lines.push(`- 回合: ${r.roundNum}`)
-  lines.push(`- 总筹码: ${Math.abs(loss.score)}`)
-  lines.push(`- 百搭: ${r.snapshots?.[0]?.hand ? '见手牌' : '未知'}`)
-  lines.push(`- 回合/全局倍数信息:`)
-  lines.push(`  - 全局倍数: x${gm}`)
-
-  // 胡牌玩家明细
-  lines.push('')
-  lines.push('- 输出该局所有胡牌玩家明细')
-  const winnerSnap = r.snapshots?.[r.winner]
-  if (winnerSnap) {
-    lines.push(`  - 玩家: ${winnerSnap.name}`)
-    // 从events推断胡牌方式
-    const winEvent = r.events.find(e => e.action.includes('自摸') || e.action.includes('放炮胡') || e.action.includes('胡'))
-    const winType = winEvent?.action?.includes('自摸') ? '自摸' : winEvent?.action?.includes('放炮') ? '放冲' : '胡牌'
-    lines.push(`    - 胡牌方式: ${winType}`)
-    lines.push(`    - 手牌牌面: ${winnerSnap.hand || '(空)'}`)
-    lines.push(`    - 门口牌（吃/碰/杠）: ${winnerSnap.melds.length > 0 ? winnerSnap.melds.join(' ; ') : '(无)'}`)
-    lines.push(`    - 花牌: ${winnerSnap.flowers.length > 0 ? winnerSnap.flowers.join(' ') : '(无)'}`)
+  // 最大赢局
+  if (evalResult.biggestSingleWin) {
+    const win = evalResult.biggestSingleWin
+    lines.push(...formatGameDetail(win.result, win.gameIdx, '最大赢局', win.winner, win.score))
   }
 
-  // 三口/四口关系
-  const baoRelations: string[] = []
-  for (const snap of r.snapshots || []) {
-    for (let ci = 0; ci < 4; ci++) {
-      if (snap.meldSources[ci] >= 3) {
-        const partner = r.snapshots?.[ci]
-        if (partner) {
-          const level = snap.meldSources[ci] >= 4 ? '四口' : '三口'
-          baoRelations.push(`  - ${snap.name} <-> ${partner.name}: ${level} (A->B:${snap.meldSources[ci]}, B->A:${partner.meldSources?.[r.snapshots.indexOf(snap)] || 0})`)
-        }
-      }
-    }
-  }
-  if (baoRelations.length > 0) {
+  // 最大输局
+  if (loss) {
     lines.push('')
-    lines.push('- 三口/四口关系')
-    lines.push(...baoRelations)
+    lines.push('---')
+    lines.push('')
+    lines.push(...formatGameDetail(loss.result, loss.gameIdx, '最大输局', loss.loser, loss.score))
   }
 
-  // 结算逐笔明细
+  // 高倍数统计
   lines.push('')
-  lines.push('- 结算逐笔明细（谁付给谁、倍率和金额）')
-  if (r.settlementLog && r.settlementLog.length > 0) {
-    for (const s of r.settlementLog) {
-      const multStr = s.mult ? ` (${s.amount / s.mult}x${s.mult})` : ''
-      lines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
-    }
-  } else {
-    lines.push('  - (无)')
-  }
+  lines.push(`- 高倍数局数(骰子>=2): ${evalResult.highMultGameCount}`)
 
   return lines.join('\n')
 }
@@ -1552,6 +1710,12 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
   let bigWin: EvalResult['bigWin'] = null
   let bigLoss: EvalResult['bigLoss'] = null
   let worstSingleLoss: EvalResult['worstSingleLoss'] = null
+  let biggestSingleWin: EvalResult['biggestSingleWin'] = null
+  let totalRounds = 0
+  let totalPot = 0
+  let totalWinnerPoints = 0
+  let winnerPointCount = 0
+  let highMultGameCount = 0
   prevRoundWasDraw = false
 
   for (let g = 0; g < games; g++) {
@@ -1602,6 +1766,16 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
     const detailResult = runGame(policy, [policy, policy, policy])
 
     if (detailResult) {
+      totalRounds += detailResult.roundNum
+      const pot = detailResult.scores.reduce((s, sc) => s + Math.abs(sc), 0)
+      totalPot += pot
+      if (detailResult.diceMultiplier >= 2) highMultGameCount++
+      if (detailResult.winnerDetails) {
+        for (const wd of detailResult.winnerDetails) {
+          totalWinnerPoints += wd.finalPoints
+          winnerPointCount++
+        }
+      }
       for (let i = 0; i < AI_NAMES.length; i++) {
         scores[AI_NAMES[i]] += detailResult.scores[i] * SETTLEMENT_MULT
       }
@@ -1619,6 +1793,9 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
         const delta = detailResult.scores[i] * SETTLEMENT_MULT
         if (!worstSingleLoss || delta < worstSingleLoss.score) {
           worstSingleLoss = { loser: AI_NAMES[i], score: delta, gameIdx: g, result: detailResult }
+        }
+        if (!biggestSingleWin || delta > biggestSingleWin.score) {
+          biggestSingleWin = { winner: AI_NAMES[i], score: delta, gameIdx: g, result: detailResult }
         }
       }
     }
@@ -1656,12 +1833,16 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
   return {
     akScore: scores['AI-AK'] || 0, akWins: wins['AI-AK'] || 0, winRates, scores, draws,
     bigWin, bigLoss, totalGames: games, winGames, selfDrawGames, discardWinGames,
-    fightToLastGames, bigWinGames, menqingWinGames, metricsFitness: mf, worstSingleLoss
+    fightToLastGames, bigWinGames, menqingWinGames, metricsFitness: mf, worstSingleLoss, biggestSingleWin,
+    avgRounds: games > 0 ? totalRounds / games : 0,
+    avgPot: games > 0 ? totalPot / games : 0,
+    avgWinnerPoints: winnerPointCount > 0 ? totalWinnerPoints / winnerPointCount : 0,
+    highMultGameCount
   }
 }
 
 // ========== Main Training Loop (全员收敛) ==========
-function main() {
+async function main() {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
   const mdFile = path.join(OUT_DIR, `baseline-training-${timestamp}.md`)
   const policyFile = path.join(OUT_DIR, `best-policy-baseline-${timestamp}.json`)
@@ -1785,6 +1966,8 @@ function main() {
 
     if (bestEvalResult) {
       logLines.push('', formatRoundMarkdown(round, bestEvalResult, roundBestPolicy), '')
+      // MariaDB 备份
+      await saveRoundToMariaDB(round, bestEvalResult, roundBestPolicy)
     }
   }
 
@@ -1820,20 +2003,24 @@ function main() {
     finalLines.push(`    ${k}: ${typeof val === 'number' ? (Number.isInteger(val) ? val : val.toFixed(4)) : val}`)
   }
 
-  // 最大输赢局明细
+  // 最大输赢局明细（只显示胡牌事件，不显示每回合操作）
+  const winActions = ['自摸', '放炮胡', '杠上自摸', '碰后放炮胡', '碰后自摸', '碰杠后自摸', '吃后放炮胡', '吃后自摸', '吃杠后自摸']
   if (finalEval.bigWin) {
-    const evs = finalEval.bigWin.result.events
+    const evs = finalEval.bigWin.result.events.filter(e => winActions.some(a => e.action.includes(a)))
     finalLines.push(`\n  【最大赢局】+${finalEval.bigWin.score} (倍×${finalEval.bigWin.result.multiplier})`)
     for (const e of evs) finalLines.push(`    ${e.player} ${e.action}: ${e.detail}`)
   }
   if (finalEval.bigLoss) {
-    const evs = finalEval.bigLoss.result.events
+    const evs = finalEval.bigLoss.result.events.filter(e => winActions.some(a => e.action.includes(a)))
     finalLines.push(`\n  【最大输局】${finalEval.bigLoss.score} (倍×${finalEval.bigLoss.result.multiplier})`)
     for (const e of evs) finalLines.push(`    ${e.player} ${e.action}: ${e.detail}`)
   }
 
   console.log(finalLines.join('\n'))
   logLines.push(...finalLines)
+
+  // 最终评估也写MariaDB
+  await saveRoundToMariaDB(ROUNDS + 1, finalEval, bestPolicy)
 
   // Save all 4 AIs with same policy
   const metrics = {

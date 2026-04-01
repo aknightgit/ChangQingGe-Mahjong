@@ -71,6 +71,17 @@ export function calculateScore(params: {
   let handTypeName = '普通胡';
   let baseFan = 0;
 
+  // 牌型校验：必须有有效牌型（不允许"普通胡"）
+  if (handTypes.length === 0) {
+    return {
+      baseFan: 0,
+      finalPoints: 0,
+      handTypeName: '无效牌型',
+      details: ['无有效牌型'],
+      multiplier: 0
+    }
+  }
+
   // 1. 确定最高优先级牌型
   if (handTypes.length > 0) {
     const topType = handTypes[0];

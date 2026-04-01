@@ -14,6 +14,7 @@ export const useGame = () => {
   const isConnected = ref(false)
   const error = ref<string | null>(null)
   const leadingBrotherEvent = ref<{ firstPlayerName: string; tileKey: string } | null>(null)
+  const actionApprovalEvent = ref<{ requesterName: string; requesterAction: string; candidatePlayerId: string; availableActions: string[]; tileKey: string } | null>(null)
   const isActionPending = ref(false)
   const roomDismissedReason = ref<string | null>(null)
   // 延迟高亮：记录最后一次 state-changed 的时间戳
@@ -160,6 +161,17 @@ export const useGame = () => {
         }, 100)
       })
 
+      // 通用审批流程
+      socket.value.on('actionApproval', (data: { requesterName: string; requesterAction: string; candidatePlayerId: string; availableActions: string[]; tileKey: string }) => {
+        console.log('⚡ 审批流程:', data)
+        actionApprovalEvent.value = data
+        setTimeout(() => {
+          if (actionApprovalEvent.value?.requesterName === data.requesterName) {
+            actionApprovalEvent.value = null
+          }
+        }, 5000)
+      })
+
     } catch (e: any) {
       error.value = e.message || 'Failed to connect'
     }
@@ -289,6 +301,7 @@ export const useGame = () => {
     isActionPending,
     roomDismissedReason,
     lastStateChangeAt,
-    leadingBrotherEvent
+    leadingBrotherEvent,
+    actionApprovalEvent
   }
 }
