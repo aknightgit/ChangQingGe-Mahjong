@@ -28,7 +28,7 @@ class GameManager {
   private playerToGame: Map<string, string> = new Map();
   private wsManager: any = null;
   private isHydrated = false;
-  
+
   // 互包跟踪: gameId -> Map<playerId, Map<partnerId, count>>
   // 记录每个玩家从另一个玩家吃/碰/杠了多少口
   private mutualBailout: Map<string, Map<string, Map<string, number>>> = new Map();
@@ -41,6 +41,11 @@ class GameManager {
 
   // AI托管模式：玩家ID集合，被标记的玩家由AI自动出牌
   private botModePlayers: Set<string> = new Set();
+
+  /** 获取决策犹豫期（毫秒），默认2000ms */
+  private getHesitationWindow(game: GameState): number {
+    return game.hesitationWindow ?? 2000;
+  }
 
   setWebSocketManager(manager: any) {
     this.wsManager = manager;
@@ -122,7 +127,7 @@ class GameManager {
       } finally {
         this.pendingActionTimers.delete(gameId);
       }
-    }, 2000); // 2秒决策犹豫期（human反应 1500ms + 保险 500ms）
+    }, this.games.get(gameId)?.hesitationWindow ?? 2000); // 决策犹豫期（默认2秒）
 
     this.pendingActionTimers.set(gameId, timer);
   }
@@ -1762,7 +1767,7 @@ class GameManager {
         playerId: candidate.id,
         availableActions: [ActionType.HU, ActionType.PASS],
         tile,
-        expiresAt: Date.now() + 2000 // 2秒决策犹豫期
+        expiresAt: Date.now() + this.getHesitationWindow(game) // 决策犹豫期
       });
     }
 
@@ -2409,7 +2414,7 @@ class GameManager {
           playerId: player.id,
           availableActions: actions,
           tile: discardedTile,
-          expiresAt: Date.now() + 2000 // 2秒决策犹豫期
+          expiresAt: Date.now() + this.getHesitationWindow(game) // 决策犹豫期
         });
       }
     }
@@ -2431,7 +2436,7 @@ class GameManager {
             playerId: chowPlayer.id,
             availableActions: [ActionType.CHOW, ActionType.PASS],
             tile: discardedTile,
-            expiresAt: Date.now() + 2000 // 2秒决策犹豫期
+            expiresAt: Date.now() + this.getHesitationWindow(game) // 决策犹豫期
           });
         }
       }

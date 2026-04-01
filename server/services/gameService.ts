@@ -10,7 +10,7 @@ export class GameService {
   /**
    * Create a new game from a room
    */
-  static async createGame(roomId: string, players: Array<{ userId: string; name: string }>): Promise<MahjongGame> {
+  static async createGame(roomId: string, players: Array<{ userId: string; name: string }>, hesitationWindow?: number): Promise<MahjongGame> {
     const collection = await getCollection<MahjongGame>(this.COLLECTION_NAME);
     
     // Shuffle and deal tiles
@@ -57,7 +57,8 @@ export class GameService {
       roundNumber: 1,
       createdAt: new Date(),
       lastActionTime: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      hesitationWindow: hesitationWindow ?? 2000 // 决策犹豫期，默认2秒
     };
 
     await collection.insertOne(game);

@@ -77,7 +77,11 @@ export default defineEventHandler(async (event) => {
     );
 
     // Create game
-    const game = await GameService.createGame(roomId, players);
+    const game = await GameService.createGame(
+      roomId,
+      players,
+      room.settings.hesitationWindow ?? 2000
+    );
 
     // Update room status
     await RoomService.updateRoomStatus(roomId, 'playing');

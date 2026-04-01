@@ -45,6 +45,7 @@ export interface Room {
     isPrivate: boolean;
     password?: string;
     allowSpectators: boolean;
+    hesitationWindow?: number; // 决策犹豫期（毫秒），默认2000ms = 2秒
   };
   createdAt: Date;
   startedAt?: Date;
@@ -75,6 +76,7 @@ export interface MahjongGame {
   finalScores?: Record<string, number>;
   customScoringMode?: 'cheat' | null;
   pendingActions?: PendingAction[];
+  hesitationWindow?: number; // 决策犹豫期（毫秒），从Room.settings继承，默认2000
 }
 
 export interface GamePlayer {
