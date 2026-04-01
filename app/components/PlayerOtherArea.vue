@@ -211,6 +211,7 @@ const getArrowChar = (sourcePos: number): string => {
   height: 36px;
   font-size: 0.85rem;
   line-height: 1;
+  transform: rotate(180deg); /* 对家头像旋转180度 */
 }
 
 .player-other-name {
@@ -321,12 +322,13 @@ const getArrowChar = (sourcePos: number): string => {
 .player-other--right .player-other-hand {
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;  /* 不换行，始终单排 */
   gap: 2px;
   align-items: center;
+  overflow-x: auto;  /* 超出可滚动 */
 }
 
-/* 左家手牌：水平排列，牌横置（宽>高），平行于牌桌边缘 */
+/* 左家手牌：水平排列，牌横置（宽>高），平行于牌桌边缘，2.5D阴影朝下（靠近牌桌中心） */
 .player-other--left .player-other-hand :deep(.tile) {
   width: 40px;
   height: 28px;
@@ -335,10 +337,10 @@ const getArrowChar = (sourcePos: number): string => {
   padding: 0;
   border: none;
   border-radius: 2px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  box-shadow: 1px 0 0 #8a7a5a, 2px 0 0 #6a5a3a, 0 3px 6px rgba(0,0,0,0.3);
 }
 
-/* 右家手牌：水平排列，牌横置（宽>高），平行于牌桌边缘 */
+/* 右家手牌：水平排列，牌横置（宽>高），平行于牌桌边缘，2.5D阴影朝下（靠近牌桌中心） */
 .player-other--right .player-other-hand :deep(.tile) {
   width: 40px;
   height: 28px;
@@ -347,7 +349,7 @@ const getArrowChar = (sourcePos: number): string => {
   padding: 0;
   border: none;
   border-radius: 2px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  box-shadow: -1px 0 0 #8a7a5a, -2px 0 0 #6a5a3a, 0 3px 6px rgba(0,0,0,0.3);
 }
 
 /* 左家门口：靠边缘 */

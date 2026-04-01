@@ -64,8 +64,8 @@ defineProps<{
 }>()
 
 const TILES_PER_SIDE = 18
-const OVERLAP = 28
-const V_OVERLAP = 28
+const OVERLAP = 29  // 原28，增加1px间隙
+const V_OVERLAP = 29  // 原28，增加1px间隙
 const LAYER_OFFSET = 1
 </script>
 

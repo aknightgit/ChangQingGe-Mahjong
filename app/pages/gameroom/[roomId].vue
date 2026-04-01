@@ -144,10 +144,11 @@
         </div>
 
         <div v-if="isOverlayVisible" class="game-over-overlay">
-          <div class="game-over-card">
-            <p class="overlay-title">{{ overlayTitle }}</p>
+          <div class="game-over-card" :class="{ 'game-over-card--draw': isDrawOverlay }">
+            <p class="overlay-title">{{ isDrawOverlay ? '流局！下把翻倍！' : overlayTitle }}</p>
             <p class="overlay-message">{{ overlayMessage }}</p>
-            <ul v-if="playerResults.length" class="overlay-results">
+            <!-- 非流局时显示玩家结算列表 -->
+            <ul v-if="!isDrawOverlay && playerResults.length" class="overlay-results">
               <li v-for="player in playerResults" :key="player.id" class="overlay-result-item">
                 <div>
                   <span class="result-rank" :class="{ 'rank-winner': player.isWinner }">{{ player.rankLabel }}</span>
@@ -160,8 +161,12 @@
                 </div>
               </li>
             </ul>
-            <p v-else class="overlay-empty">游戏结果将在服务端结算后显示。</p>
-            <button class="mahjong-button primary overlay-button" @click="backToLobby">
+            <p v-else-if="!isDrawOverlay" class="overlay-empty">游戏结果将在服务端结算后显示。</p>
+            <!-- 流局时：任意点击进入下一局；非流局时：退出大厅 -->
+            <button v-if="isDrawOverlay" class="mahjong-button primary overlay-button" @click="startNextRound">
+              下一局
+            </button>
+            <button v-else class="mahjong-button primary overlay-button" @click="backToLobby">
               退出到大厅
             </button>
           </div>
@@ -1218,7 +1223,7 @@ const overlayMessage = computed(() => {
   switch (reason) {
     case GameEndReason.WALL_EXHAUSTED: {
       const nextMul = (gameState.value as any)?.inheritedGlobalMultiplier ?? gameState.value?.globalMultiplier ?? 1
-      return `牌墙已空，全局倍数翻倍（下局倍数 ×${nextMul}）`
+      return `下局倍数 ×${nextMul}`
     }
     case GameEndReason.LAST_PLAYER:
       return '只剩一名玩家，本轮结束。'
@@ -1230,6 +1235,10 @@ const overlayMessage = computed(() => {
       return '本轮已结束，请退出到大厅。'
   }
 })
+
+const isDrawOverlay = computed(() => overlayReason.value === GameEndReason.WALL_EXHAUSTED)
+
+const startNextRound = () => { showSettlement.value = false; startGame() }
 const isInteractionLocked = computed(() => isOverlayVisible.value)
 
 const formatOrdinal = (value: number | null | undefined) => {
@@ -2327,14 +2336,14 @@ const forceDiscard = async (p: Player) => {
   padding: 2px 15px;
   font-size: 0.7rem;
   border-radius: 6px;
-  background: #e53935;
+  background: rgba(33, 150, 243, 0.8);  /* 蓝色，20%透明度 */
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.2);
   cursor: pointer;
   white-space: nowrap;
   min-width: 108px;
 }
-.settle-btn-header:hover { background: #c62828; color: #fff; }
+.settle-btn-header:hover { background: rgba(25, 118, 210, 0.8); color: #fff; }
 
 .mahjong-title {
   font-size: 1.4rem;
@@ -3542,6 +3551,22 @@ const forceDiscard = async (p: Player) => {
   width: min(360px, 90%);
   text-align: center;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+
+/* 流局专用卡片：更简洁 */
+.game-over-card--draw {
+  padding: 48px 32px;
+}
+.game-over-card--draw .overlay-title {
+  font-size: 2rem;
+  color: #FFD700;
+  text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+  margin-bottom: 8px;
+}
+.game-over-card--draw .overlay-message {
+  font-size: 1.2rem;
+  color: rgba(255,255,255,0.8);
+  margin-bottom: 24px;
 }
 
 .overlay-title {
