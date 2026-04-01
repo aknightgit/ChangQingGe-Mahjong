@@ -895,7 +895,11 @@ const isDoubleRound = computed(() => {
 })
 const effectiveMaxRolls = computed(() => isDoubleRound.value ? 1 : maxDiceRolls.value)
 const showDoubleReminder = ref(false)
-const freezeDurationMs = ref(Math.max(1000, (Number(route.query.freeze) || 1) * 1000)) // 最低1秒
+// 决策犹豫期（毫秒），优先从游戏状态读取，兜底2秒
+const freezeDurationMs = computed(() => {
+  const hw = (gameState.value as any)?.hesitationWindow
+  return typeof hw === 'number' && hw > 0 ? hw : 2000
+})
 
 // 当前决策犹豫期截止时间（从游戏状态读取）
 const currentFreezeUntil = computed(() => {
