@@ -813,7 +813,7 @@ class GameManager {
     this.broadcastGameState(gameId);
 
     // 庄家首轮自动摸牌（模拟 moveToNextPlayer 的 freeze 机制）
-    const freezeMs = game.freezeDurationMs || 1000;
+    const freezeMs = this.getHesitationWindow(gameId);  // 决策犹豫期同时控制人类和AI
     const dealer = game.players[game.currentPlayerIndex];
     if (dealer) {
       if (this.isPlayerBotControlled(dealer)) {
@@ -2614,7 +2614,7 @@ class GameManager {
     } while (game.players[game.currentPlayerIndex].status !== PlayerStatus.PLAYING);
 
     const nextPlayer = game.players[game.currentPlayerIndex];
-    const freezeMs = game.freezeDurationMs || 1000;
+    const freezeMs = this.getHesitationWindow(game.gameId);  // 决策犹豫期同时控制人类和AI
 
     console.log(`[moveToNextPlayer] → ${nextPlayer.name} (${this.isPlayerBotControlled(nextPlayer) ? 'BOT' : 'HUMAN'}), freeze: ${freezeMs}ms`);
 

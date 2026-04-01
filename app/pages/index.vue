@@ -214,7 +214,7 @@
 
                 <div class="create-field">
                   <div class="field-header">
-                    <label>迟滞摸牌秒数</label>
+                    <label>决策犹豫期（秒）</label>
                     <button class="help-btn" @click="toggleHelp('hesitation')">?</button>
                   </div>
                   <input type="number" v-model.number="createParams.hesitationSeconds" min="0.5" max="10" step="0.5" />
