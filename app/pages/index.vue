@@ -600,6 +600,8 @@ const logout = () => {
   border-radius: 999px;
   border: none;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   font-weight: 600;
   font-size: 0.95rem;
   transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
