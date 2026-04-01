@@ -49,6 +49,61 @@
           </div>
         </div>
 
+        <!-- 通用审批流程弹窗（给被审批的高优先级玩家） -->
+        <div v-if="actionApprovalEvent && actionApprovalEvent.candidatePlayerId === currentPlayer?.id" class="approval-overlay">
+          <div class="approval-card">
+            <div class="approval-icon">⚡🀄</div>
+            <p class="approval-title">{{ actionApprovalEvent.requesterAction === '吃' ? '吃碰/胡冲突' : actionApprovalEvent.requesterAction === '碰' ? '碰胡冲突' : '杠胡冲突' }}！</p>
+            <p class="approval-sub">{{ actionApprovalEvent.requesterName }} 要{{ actionApprovalEvent.requesterAction }}这张牌</p>
+            <p class="approval-question">你要用{{ actionApprovalEvent.availableActions.map(a => a === 'hu' ? '胡' : a === 'peng' ? '碰' : '杠').join('/') }}吗？</p>
+            <div class="approval-buttons">
+              <button
+                v-if="actionApprovalEvent.availableActions.includes('hu')"
+                class="approval-btn approval-btn--hu"
+                @click="onApprovalChoice('hu')"
+              >胡！</button>
+              <button
+                v-if="actionApprovalEvent.availableActions.includes('kong')"
+                class="approval-btn approval-btn--kong"
+                @click="onApprovalChoice('kong')"
+              >杠！</button>
+              <button
+                v-if="actionApprovalEvent.availableActions.includes('peng')"
+                class="approval-btn approval-btn--peng"
+                @click="onApprovalChoice('peng')"
+              >碰！</button>
+              <button class="approval-btn approval-btn--pass" @click="onApprovalChoice('pass')">算了，给他{{ actionApprovalEvent.requesterAction }}</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 审批等待提示（给低优先级玩家） -->
+        <div v-if="actionApprovalEvent && actionApprovalEvent.candidatePlayerId !== currentPlayer?.id && isMyApprovalWaiting" class="approval-waiting-overlay">
+          <div class="approval-waiting-card">
+            <div class="approval-waiting-icon">⏳</div>
+            <p class="approval-waiting-text">等待其他家做决定...</p>
+            <p class="approval-waiting-sub">你{{ actionApprovalEvent.requesterAction }}了这张牌，等待{{ actionApprovalEvent.availableActions.map(a => a === 'hu' ? '胡' : a === 'peng' ? '碰' : '杠').join('/') }}</p>
+          </div>
+        </div>
+
+        <!-- 容我想一想弹窗 -->
+        <div v-if="showThinkOptions" class="think-overlay">
+          <div class="think-card">
+            <div class="think-icon">🧠</div>
+            <p class="think-title">容我想一想</p>
+            <p class="think-sub">选择你的操作：</p>
+            <div class="think-options">
+              <button
+                v-for="opt in thinkOptions"
+                :key="opt.action"
+                class="think-opt"
+                :class="opt.cssClass"
+                @click="onThinkOption(opt.action)"
+              >{{ opt.label }}</button>
+            </div>
+          </div>
+        </div>
+
         <!-- 胡牌选择面板 -->
         <div v-if="showHuPanel" class="hu-panel-overlay" @click.self="onCancelHu">
           <div class="hu-panel">
@@ -442,45 +497,50 @@
                   <button
                     v-if="showChow"
                     class="inline-action-btn inline-action-btn--chow"
-                    :disabled="isInteractionLocked"
+                    :class="{ 'inline-action-btn--frozen': thinkFreezeActive }"
+                    :disabled="isInteractionLocked || thinkFreezeActive"
                     @click="onChow"
                   >吃</button>
                   <button
                     v-if="showPeng"
                     class="inline-action-btn inline-action-btn--peng"
-                    :disabled="isInteractionLocked"
+                    :class="{ 'inline-action-btn--frozen': thinkFreezeActive }"
+                    :disabled="isInteractionLocked || thinkFreezeActive"
                     @click="onPeng"
                   >碰</button>
                   <button
                     v-if="showKong || showConcealedKong || showExtendedKong"
                     class="inline-action-btn inline-action-btn--kong"
-                    :disabled="isInteractionLocked"
+                    :class="{ 'inline-action-btn--frozen': thinkFreezeActive }"
+                    :disabled="isInteractionLocked || thinkFreezeActive"
                     @click="handleCircularAction('kong')"
                   >杠</button>
                   <button
                     v-if="showHu"
                     class="inline-action-btn inline-action-btn--hu"
-                    :disabled="isInteractionLocked"
+                    :class="{ 'inline-action-btn--frozen': thinkFreezeActive }"
+                    :disabled="isInteractionLocked || thinkFreezeActive"
                     @click="onHu"
                   >胡</button>
                   <button
                     v-if="showRebel"
                     class="inline-action-btn inline-action-btn--rebel"
-                    :disabled="isInteractionLocked"
+                    :class="{ 'inline-action-btn--frozen': thinkFreezeActive }"
+                    :disabled="isInteractionLocked || thinkFreezeActive"
                     @click="onRebel"
                   >🚨造反</button>
                   <button
                     v-if="showThink"
                     class="inline-action-btn inline-action-btn--think"
-                    :class="{ 'inline-action-btn--think-depleted': thinkRemaining <= 0 }"
-                    :disabled="isInteractionLocked || thinkRemaining <= 0"
-                    @click="onThink"
-                  >等*{{ thinkRemaining }}</button>
+                    :class="{ 'inline-action-btn--think-depleted': !canUseThink, 'inline-action-btn--frozen': thinkFreezeActive }"
+                    :disabled="isInteractionLocked || !canUseThink || thinkFreezeActive"
+                    @click="onThinkPopup"
+                  >慢{{ thinkRemaining > 0 ? thinkRemaining : '' }}</button>
                   <button
                     v-if="canLiangShan"
                     class="inline-action-btn inline-action-btn--liangshan"
-                    :class="{ 'inline-action-btn--liangshan-voted': hasVotedLiangShan }"
-                    :disabled="!canLiangShan || isInteractionLocked || hasVotedLiangShan"
+                    :class="{ 'inline-action-btn--liangshan-voted': hasVotedLiangShan, 'inline-action-btn--frozen': thinkFreezeActive }"
+                    :disabled="!canLiangShan || isInteractionLocked || hasVotedLiangShan || thinkFreezeActive"
                     @click="onLiangShan"
                   >🔥{{ hasVotedLiangShan ? '已聚义' : '梁山聚义' }}</button>
                   <div v-if="!showDraw && !showChow && !showPeng && !showKong && !showHu && !showConcealedKong && !showExtendedKong && !showRebel && !showThink && !canLiangShan" class="inline-action-waiting">
@@ -688,7 +748,8 @@ const {
   forceRefreshState,
   roomDismissedReason,
   lastStateChangeAt,
-  leadingBrotherEvent
+  leadingBrotherEvent,
+  actionApprovalEvent
 } = useGame()
 
 const backToLobby = () => navigateTo('/')
@@ -1355,6 +1416,7 @@ const thinkRemaining = computed(() => {
   const used = (gameState.value as any).thinkUsage?.[currentPlayer.value.id] ?? 0
   return maxChances - used
 })
+const canUseThink = computed(() => thinkRemaining.value > 0)
 // 等我想一想冻结状态
 const thinkFreezeActive = computed(() => {
   const until = (gameState.value as any)?.thinkFreezeUntil
@@ -1535,6 +1597,62 @@ const onCancelHu = () => {
   showHuPanel.value = false
   selectedHuCombo.value = null
 }
+
+// ===== 审批流程 =====
+const isMyApprovalWaiting = computed(() => {
+  if (!actionApprovalEvent.value) return false
+  const myPending = myPendingAction.value
+  if (!myPending) return false
+  return actionApprovalEvent.value.candidatePlayerId !== currentPlayer.value?.id
+})
+const onApprovalChoice = async (choice: string) => {
+  try {
+    await $fetch('/api/game/approval-choice', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: currentPlayer.value?.id,
+        choice
+      }
+    })
+    actionApprovalEvent.value = null
+  } catch (err) {
+    console.error('Approval choice failed:', err)
+  }
+}
+
+// ===== 容我想一想 =====
+const showThinkOptions = ref(false)
+const thinkOptions = computed(() => {
+  const opts: Array<{ action: string; label: string; cssClass: string }> = []
+  if (showHu.value) opts.push({ action: 'hu', label: '胡', cssClass: 'think-opt--hu' })
+  if (showKong.value || showConcealedKong.value || showExtendedKong.value)
+    opts.push({ action: 'kong', label: '杠', cssClass: 'think-opt--kong' })
+  if (showPeng.value) opts.push({ action: 'peng', label: '碰', cssClass: 'think-opt--peng' })
+  opts.push({ action: 'cancel', label: '算了', cssClass: 'think-opt--cancel' })
+  return opts
+})
+const onThinkPopup = () => {
+  if (thinkOptions.value.length <= 1) return // 只有"算了"就不弹
+  showThinkOptions.value = true
+}
+const onThinkOption = async (action: string) => {
+  showThinkOptions.value = false
+  if (action === 'cancel') return // 纯关闭，不执行任何操作
+  // 执行对应的action
+  if (action === 'hu') await onHu()
+  else if (action === 'kong') handleCircularAction('kong')
+  else if (action === 'peng') onPeng()
+}
+
+// ===== 决策犹豫期计时 =====
+const actionCountdownRatio = computed(() => {
+  const pending = myPendingAction.value
+  if (!pending?.expiresAt) return 1
+  const totalMs = 2000 // 决策犹豫期2秒
+  const leftMs = Math.max(0, pending.expiresAt - Date.now())
+  return Math.max(0, Math.min(1, leftMs / totalMs))
+})
 
 const canCheatHu = computed(
   () => isAdminUser.value && isMyTurn.value && gameState.value?.phase === GamePhase.PLAYING
@@ -2629,6 +2747,45 @@ const forceDiscard = async (p: Player) => {
   border-color: rgba(255, 255, 255, 0.1);
   animation: none;
 }
+
+/* 冻结状态：按钮显示但变灰禁用 */
+.inline-action-btn--frozen {
+  opacity: 0.5;
+  filter: grayscale(0.7);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* 决策倒计时：按钮边框变为进度环 */
+.inline-action-btn--countdown {
+  position: relative;
+  overflow: visible;
+}
+.inline-action-btn--countdown::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 10px;
+  background: conic-gradient(
+    rgba(255, 215, 0, var(--countdown-progress, 1)) 0deg,
+    transparent calc(var(--countdown-progress, 1) * 360deg)
+  );
+  opacity: 0.7;
+  z-index: -1;
+  animation: countdown-fade linear forwards;
+}
+@keyframes countdown-fade {
+  from { opacity: 0.8; }
+  to { opacity: 0.3; }
+}
+
+.inline-action-btn--countdown-brightness {
+  animation: countdown-brightness 0.5s ease-in-out infinite alternate;
+}
+@keyframes countdown-brightness {
+  from { filter: brightness(1); }
+  to { filter: brightness(1.3); }
+}
 @keyframes liangshan-btn-pulse {
   0%, 100% { box-shadow: 0 0 6px rgba(239, 83, 80, 0.2); }
   50% { box-shadow: 0 0 16px rgba(239, 83, 80, 0.5); }
@@ -3032,6 +3189,106 @@ const forceDiscard = async (p: Player) => {
   from { transform: scale(0.85); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }
+
+/* ===== 胡牌选择面板 ===== */
+/* ===== 审批弹窗 ===== */
+.approval-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 10, 8, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+}
+.approval-card {
+  background: rgba(10, 25, 18, 0.98);
+  border: 2px solid rgba(255, 215, 0, 0.3);
+  border-radius: 20px;
+  padding: 28px 32px;
+  text-align: center;
+  max-width: 420px;
+  width: 90%;
+}
+.approval-icon { font-size: 2rem; margin-bottom: 8px; }
+.approval-title { font-size: 1.3rem; font-weight: 800; color: #FFD700; margin: 0 0 6px; }
+.approval-sub { font-size: 0.95rem; color: rgba(255,255,255,0.8); margin: 0 0 4px; }
+.approval-question { font-size: 1rem; color: #fff; margin: 0 0 16px; }
+.approval-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.approval-btn {
+  padding: 12px 28px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.approval-btn--hu { background: linear-gradient(135deg, #c62828, #ef5350); color: #fff; border-color: rgba(239,83,80,0.5); }
+.approval-btn--kong { background: linear-gradient(135deg, #E65100, #FF9800); color: #fff; border-color: rgba(255,152,0,0.5); }
+.approval-btn--peng { background: linear-gradient(135deg, #1565C0, #42A5F5); color: #fff; border-color: rgba(66,165,245,0.5); }
+.approval-btn--pass { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.6); border-color: rgba(255,255,255,0.2); }
+
+/* ===== 审批等待提示 ===== */
+.approval-waiting-overlay {
+  position: absolute;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  animation: fadeIn 0.2s ease-out;
+}
+.approval-waiting-card {
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  padding: 16px 24px;
+  text-align: center;
+  backdrop-filter: blur(8px);
+  animation: waitPulse 1.5s ease-in-out infinite;
+}
+.approval-waiting-icon { font-size: 1.5rem; margin-bottom: 6px; }
+.approval-waiting-text { font-size: 1.1rem; font-weight: 700; color: #fff; margin: 0 0 4px; }
+.approval-waiting-sub { font-size: 0.8rem; color: rgba(255,255,255,0.6); margin: 0; }
+@keyframes waitPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+/* ===== 容我想一想弹窗 ===== */
+.think-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 10, 8, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+}
+.think-card {
+  background: rgba(10, 25, 18, 0.98);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  border-radius: 20px;
+  padding: 24px 28px;
+  text-align: center;
+  max-width: 350px;
+  width: 85%;
+}
+.think-icon { font-size: 2rem; margin-bottom: 6px; }
+.think-title { font-size: 1.2rem; font-weight: 700; color: #FFD700; margin: 0 0 4px; }
+.think-sub { font-size: 0.9rem; color: rgba(255,255,255,0.7); margin: 0 0 16px; }
+.think-options { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.think-opt {
+  padding: 10px 24px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.think-opt:active { transform: scale(0.95); }
+.think-opt--hu { background: linear-gradient(135deg, #c62828, #ef5350); color: #fff; }
+.think-opt--kong { background: linear-gradient(135deg, #E65100, #FF9800); color: #fff; }
+.think-opt--peng { background: linear-gradient(135deg, #1565C0, #42A5F5); color: #fff; }
+.think-opt--cancel { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.6); border-color: rgba(255,255,255,0.2); }
 
 /* ===== 胡牌选择面板 ===== */
 .hu-panel-overlay {
