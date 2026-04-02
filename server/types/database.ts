@@ -230,6 +230,33 @@ export interface RoomState {
 }
 
 /**
+ * Settlement History Collection - Room-level settlement records
+ */
+export interface SettlementHistory {
+  _id?: ObjectId;
+  gameId: string;
+  roomNumber?: string;
+  totalRounds: number;
+  playerStats: SettlementPlayerStat[];
+  savedAt: Date;
+  savedBy: string; // playerId who clicked save
+}
+
+export interface SettlementPlayerStat {
+  id: string;
+  name: string;
+  totalScore: number;
+  effectiveScore: number;
+  vsAiScore: number;
+  wins: number;
+  selfDraws: number;
+  discards: number;
+  maxWin: number;
+  maxLoss: number;
+  rounds: number;
+}
+
+/**
  * Game Messages Collection - Per-room game broadcast messages for history tracking
  */
 export interface GameMessage {

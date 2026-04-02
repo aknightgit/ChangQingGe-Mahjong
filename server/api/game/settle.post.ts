@@ -1,5 +1,7 @@
 import { gameManager } from '../../utils/gameManager';
 import { GamePhase, GameEndReason } from '../../types/game';
+import { getCollection } from '../../utils/mongo';
+import type { SettlementHistory } from '../../types/database';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -89,7 +91,81 @@ export default defineEventHandler(async (event) => {
   }
 
   if (action === 'save') {
-    // 保存结算并结束
+    // 识别AI玩家ID集合
+    const aiPlayerIds = new Set(
+      game.players.filter((p: any) => p.name?.startsWith('AI-')).map((p: any) => p.id)
+    );
+
+    // 计算累计统计数据（与 request 一致）
+    const playerStatsMap: Record<string, any> = {};
+    for (const p of game.players) {
+      playerStatsMap[p.id] = {
+        id: p.id,
+        name: p.name,
+        totalScore: 0,
+        effectiveScore: 0,
+        vsAiScore: 0,
+        wins: 0,
+        selfDraws: 0,
+        discards: 0,
+        maxWin: 0,
+        maxLoss: 0,
+        rounds: 0
+      };
+    }
+
+    for (const round of (game.roundStats || [])) {
+      const roundHasAI = round.winners.some((wid: string) => aiPlayerIds.has(wid)) ||
+        Object.keys(round.scores).some((pid: string) => aiPlayerIds.has(pid));
+
+      for (const [pid, score] of Object.entries(round.scores)) {
+        if (!playerStatsMap[pid]) continue;
+        playerStatsMap[pid].totalScore += score;
+        playerStatsMap[pid].rounds += 1;
+        if (score > 0) {
+          if (score > playerStatsMap[pid].maxWin) playerStatsMap[pid].maxWin = score;
+        } else if (score < 0) {
+          if (score < playerStatsMap[pid].maxLoss) playerStatsMap[pid].maxLoss = score;
+        }
+        if (roundHasAI) {
+          playerStatsMap[pid].vsAiScore += score;
+        } else {
+          playerStatsMap[pid].effectiveScore += score;
+        }
+      }
+      for (const wid of round.winners) {
+        if (playerStatsMap[wid]) playerStatsMap[wid].wins += 1;
+      }
+      const selfDrawSet = new Set(round.selfDraws || []);
+      for (const sid of round.selfDraws || []) {
+        if (playerStatsMap[sid]) playerStatsMap[sid].selfDraws += 1;
+      }
+      for (const wid of round.winners) {
+        if (playerStatsMap[wid] && !selfDrawSet.has(wid)) {
+          playerStatsMap[wid].discards += 1;
+        }
+      }
+    }
+
+    // 保存结算数据到 MongoDB
+    const collection = await getCollection<SettlementHistory>('settlementHistory');
+    const settlementDoc: SettlementHistory = {
+      gameId: game.gameId,
+      roomNumber: (game as any).roomNumber,
+      totalRounds: (game.roundStats || []).length,
+      playerStats: Object.values(playerStatsMap),
+      savedAt: new Date(),
+      savedBy: playerId
+    };
+    await collection.updateOne(
+      { gameId: game.gameId },
+      { $set: settlementDoc },
+      { upsert: true }
+    );
+
+    console.log(`[Settle] 结算已保存到MongoDB: gameId=${game.gameId}, rounds=${settlementDoc.totalRounds}`);
+
+    // 结束游戏
     game.settleRequested = true;
     game.phase = GamePhase.ENDED;
     game.endReason = GameEndReason.OWNER_LEFT;
