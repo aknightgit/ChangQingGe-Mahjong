@@ -146,7 +146,7 @@ const DEFAULT_POLICY: BotPolicy = {
   selfWinWildBoost: 0.1, discardHuWildPenalty: 0.2, discardHuMenQingPenalty: 0.05,
   pengChance: 0.9, kongChance: 0.7, chowChance: 0.4, anKongChance: 0.95,
   pengWildBoost: 0.06, kongWildBoost: 0.14, chowWildPenalty: 0.18,
-  menqingKeepBonus: 5.0, meldPenalty: 0.05,
+  menqingKeepBonus: 0.0, meldPenalty: 0.00,
   allPungsPursuit: 0.7, pureFlushPursuit: 0.5, halfFlushWeight: 0.6,
   sevenPairsPursuit: 0.4, allHonorsPursuit: 0.6, allHonorsPungsPursuit: 0.4,
   qingPengPursuit: 0.3, hunPengPursuit: 0.5,
