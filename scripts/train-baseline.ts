@@ -141,14 +141,14 @@ interface BotPolicy {
 
 const DEFAULT_POLICY: BotPolicy = {
   id: 'default',
-  selfWinChance: 0.8, discardHuChance: 0.8,
-  selfWinWildBoost: 0.1, discardHuWildPenalty: 0.4, discardHuMenQingPenalty: 0.14,
-  pengChance: 0.79, kongChance: 0.47, chowChance: 0.03, anKongChance: 0.95,
+  selfWinChance: 1.0, discardHuChance: 1.0,
+  selfWinWildBoost: 0.1, discardHuWildPenalty: 0.2, discardHuMenQingPenalty: 0.05,
+  pengChance: 0.9, kongChance: 0.7, chowChance: 0.4, anKongChance: 0.95,
   pengWildBoost: 0.06, kongWildBoost: 0.14, chowWildPenalty: 0.18,
   menqingKeepBonus: 5.0, meldPenalty: 0.05,
-  allPungsPursuit: 0.5, pureFlushPursuit: 0.3, halfFlushWeight: 0.4,
-  sevenPairsPursuit: 0.2, allHonorsPursuit: 0.5, allHonorsPungsPursuit: 0.3,
-  qingPengPursuit: 0.15, hunPengPursuit: 0.3,
+  allPungsPursuit: 0.7, pureFlushPursuit: 0.5, halfFlushWeight: 0.6,
+  sevenPairsPursuit: 0.4, allHonorsPursuit: 0.6, allHonorsPungsPursuit: 0.4,
+  qingPengPursuit: 0.3, hunPengPursuit: 0.5,
   windEastKeep: 3.0, windSouthKeep: 2.0, windWestKeep: 2.0, windNorthKeep: 2.0,
   windGeneralKeep: 2.5,
   dragonRedKeep: 4.0, dragonGreenKeep: 4.0, dragonWhiteKeep: 3.5, dragonGeneralKeep: 4.0,
@@ -236,7 +236,7 @@ const PARAM_RANGES: Record<string, { min: number; max: number; step: number }> =
   discardHuMenQingPenalty:    { min: 0.0,  max: 0.4,  step: 0.02 },
   pengChance:                 { min: 0.3,  max: 1.0,  step: 0.05 },
   kongChance:                 { min: 0.1,  max: 1.0,  step: 0.05 },
-  chowChance:                 { min: 0.0,  max: 0.5,  step: 0.02 },
+  chowChance:                 { min: 0.05,  max: 0.8,  step: 0.05 },
   anKongChance:               { min: 0.5,  max: 1.0,  step: 0.05 },
   pengWildBoost:              { min: 0.0,  max: 0.3,  step: 0.02 },
   kongWildBoost:              { min: 0.0,  max: 0.4,  step: 0.02 },
@@ -1806,8 +1806,8 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
   let mf = 0
   // 胡牌率 = 1 - drawRate（目标≥90%）
   const huRate = 1 - drawRate
-  mf -= Math.max(0, drawRate - 0.10) * 1000       // 流局率惩罚（目标<10%）
-  mf += Math.max(0, huRate - 0.90) * 500           // 胡牌率奖励
+  mf -= Math.max(0, drawRate - 0.10) * 2000       // 流局率惩罚翻倍（目标<10%）
+  mf += Math.max(0, huRate - 0.90) * 1000          // 胡牌率奖励翻倍
   // 自摸率（目标40-60%，中心50%）
   mf -= Math.max(0, Math.abs(selfDrawRate - 0.50) - 0.10) * 400
   // 捉冲率（目标40-60%，中心50%）

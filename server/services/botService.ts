@@ -68,7 +68,7 @@ function loadCharacterPolicy(botName: string): any {
         discardHuMenQingPenalty: 0.1,
         pengChance: 0.6,
         kongChance: 0.5,
-        chowChance: 0.6,
+        chowChance: 0.4,
         chowWildPenalty: 0.05,
         wildKeepPenalty: 1000,
         dominantSuitBonus: 3.0,
@@ -253,8 +253,10 @@ function evaluateChowValue(
 
   // 1. 面子数惩罚：吃的越多，门清越差，胡牌难度越大
   const meldCount = player.hand.exposedMelds.length
-  if (meldCount >= 2) {
-    score *= 0.5 // 已有2+面子，再吃风险大
+  if (meldCount >= 3) {
+    score *= 0.4 // 已有3+面子，再吃风险大
+  } else if (meldCount >= 2) {
+    score *= 0.7 // 2个面子，适度降低
   }
   if (meldCount === 0 && policy.bailoutHuPenaltyPerMeld > 0.05) {
     // 门清玩家，保守型不太想吃
