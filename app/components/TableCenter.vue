@@ -130,16 +130,16 @@ const wildTileName = computed(() => {
   background: transparent;
   padding: 4px 10px;
   border-radius: 999px;
-  font-size: 0.5rem;
+  font-size: 0.6rem;
   font-weight: 800;
 }
 
 .multiplier-badge .badge-icon {
-  font-size: 0.55rem;
+  font-size: 0.66rem;
 }
 
 .multiplier-badge .badge-value {
-  font-size: 0.6rem;
+  font-size: 0.72rem;
   font-weight: 900;
 }
 
@@ -148,16 +148,16 @@ const wildTileName = computed(() => {
   background: transparent;
   padding: 4px 10px;
   border-radius: 999px;
-  font-size: 0.5rem;
+  font-size: 0.6rem;
   font-weight: 800;
 }
 
 .remaining-badge .badge-icon {
-  font-size: 0.55rem;
+  font-size: 0.66rem;
 }
 
 .remaining-badge .badge-value {
-  font-size: 0.6rem;
+  font-size: 0.72rem;
   font-weight: 900;
 }
 

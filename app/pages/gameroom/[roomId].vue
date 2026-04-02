@@ -2426,7 +2426,7 @@ const forceDiscard = async (p: Player) => {
 :deep(.discard-zone--top) {
   top: 26%;
   left: 50%;
-  transform: translateX(-50%) rotate(180deg);
+  transform: translateX(-50%);
 }
 :deep(.discard-zone--bottom) {
   bottom: 26%;
@@ -2435,12 +2435,12 @@ const forceDiscard = async (p: Player) => {
 }
 :deep(.discard-zone--left) {
   top: 50%;
-  left: calc(18% + 30px);
+  left: calc(8% + 30px);
   transform: translateY(-50%) rotate(90deg);
 }
 :deep(.discard-zone--right) {
   top: 50%;
-  right: calc(18% + 30px);
+  right: calc(8% + 30px);
   transform: translateY(-50%) rotate(-90deg);
 }
 
@@ -2593,7 +2593,7 @@ const forceDiscard = async (p: Player) => {
 .seat-top {
   top: 0;
   left: 50%;
-  transform: translateX(-50%) rotate(180deg);
+  transform: translateX(-50%) rotate(180deg) translateY(3%);
   width: 62%;
   height: auto;
 }
@@ -2601,7 +2601,7 @@ const forceDiscard = async (p: Player) => {
 .seat-bottom {
   bottom: 0;
   left: 50%;
-  transform: translateX(-50%) scale(1.2);
+  transform: translateX(-50%) scale(1.2) translateY(-5%);
   transform-origin: bottom center;
   width: 62%;
   height: auto;

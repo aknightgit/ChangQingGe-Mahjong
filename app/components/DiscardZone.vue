@@ -59,7 +59,7 @@ const props = defineProps<{
   /* 不旋转，外层transform已处理方向 */
 }
 
-/* 上家弃牌：已旋转180°（通过 position: top + translateX(-50%)），额外翻转让牌面正向显示 */
+/* 上家弃牌：旋转180°，牌面朝向牌桌中心 */
 .discard-zone--top .discards-grid {
   transform: rotate(180deg);
 }
