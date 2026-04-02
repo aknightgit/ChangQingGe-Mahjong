@@ -115,6 +115,18 @@ class GameManager {
           return;
         }
 
+        // 修复竞态：如果牌已被bot吃/碰消耗（discardPile变短），不要auto-pass
+        // handleBotPendingActions已经处理了，此时pending是新的
+        const pendingTiles = game.pendingActions.map(pa => pa.tile?.id).filter(Boolean);
+        const discardIds = new Set(game.discardPile.map(t => t.id));
+        const tileClaimed = pendingTiles.some(tid => tid && !discardIds.has(tid));
+        if (tileClaimed) {
+          // 牌已被claim，pending已过时，直接清除
+          game.pendingActions = [];
+          await this.persistGame(game);
+          return;
+        }
+
         // 自动让所有待响应玩家 PASS，推动流程（包括卡住的bot）
         const pending = [...game.pendingActions];
         for (const pa of pending) {
@@ -127,7 +139,15 @@ class GameManager {
         game.pendingActions = [];
         await this.persistGame(game);
         this.broadcastGameState(gameId);
-        // 不再调用 moveToNextPlayer — freeze timer 已并行处理下家流转
+        // 如果所有pending清除后还有当前玩家需要出牌，调度bot出牌
+        const currentPlayer = game.players[game.currentPlayerIndex];
+        if (currentPlayer && this.isPlayerBotControlled(currentPlayer) && currentPlayer.hand.concealedTiles.length % 3 === 2) {
+          this.scheduleBotDiscard(gameId, currentPlayer.id);
+        }
+        // 如果当前玩家手牌不是2 mod 3，说明claim已执行但后续流程断了，推进到下家
+        if (currentPlayer && currentPlayer.hand.concealedTiles.length % 3 !== 2) {
+          await this.moveToNextPlayer(game);
+        }
       } catch (err) {
         console.error('Failed to auto-resolve pending actions:', err);
       } finally {
@@ -1510,7 +1530,9 @@ class GameManager {
         const fg = await this.getGame(gid);
         if (!fg || !fg.pengChowConflict || fg.pengChowConflict.timestamp !== ts) return;
         fg.pengChowConflict = null;
+        // 清除所有候选者 AND 请求者的 pending action（修复：之前只清候选者，请求者pending残留导致游戏卡住）
         for (const c of candidates) fg.pendingActions = fg.pendingActions.filter(pa => pa.playerId !== c.playerId);
+        fg.pendingActions = fg.pendingActions.filter(pa => pa.playerId !== requesterPlayerId);
         const rp = fg.players.find(p => p.id === requesterPlayerId);
         if (!rp) return;
         if (requesterAction === 'chow') this.executeChowDirectly(fg, rp);
@@ -1518,6 +1540,11 @@ class GameManager {
         else if (requesterAction === 'kong') this.executeKongDirectly(fg, rp, tile.id);
         await this.persistGame(fg);
         this.broadcastGameState(gid);
+        // 修复：审批超时执行后，如果是bot接管回合，调度bot出牌
+        const currentPlayer = fg.players[fg.currentPlayerIndex];
+        if (currentPlayer && this.isPlayerBotControlled(currentPlayer)) {
+          this.scheduleBotDiscard(gid, currentPlayer.id);
+        }
       } catch (e) { console.error('[Approval] timeout err:', e); }
     }, 5000);
   }
