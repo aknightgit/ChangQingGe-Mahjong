@@ -1194,16 +1194,13 @@ class GameManager {
     game.lastActionTime = Date.now();
 
     // Claim 动作（PENG/KONG/HU/CHOW）执行后，claiming player 接管回合
-    // 需要先摸牌（13→14），再调度出牌
+    // Bot需要自动摸牌+出牌；人类手动点击"摸"按钮
     if (action !== ActionType.DISCARD && game.pendingActions.length === 0) {
       const currentP = game.players[game.currentPlayerIndex];
-      if (currentP && currentP.status === PlayerStatus.PLAYING) {
-        // 先补花+摸牌
+      if (currentP && this.isPlayerBotControlled(currentP) && currentP.status === PlayerStatus.PLAYING) {
         this.replaceFlowers(game, currentP);
         this.handleDraw(game, currentP);
-        if (this.isPlayerBotControlled(currentP)) {
-          this.scheduleBotDiscard(gameId, currentP.id);
-        }
+        this.scheduleBotDiscard(gameId, currentP.id);
       }
     }
 
