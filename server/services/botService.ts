@@ -68,7 +68,7 @@ function loadCharacterPolicy(botName: string): any {
         discardHuMenQingPenalty: 0.1,
         pengChance: 0.6,
         kongChance: 0.5,
-        chowChance: 0.4,
+        chowChance: 0.65,
         chowWildPenalty: 0.05,
         wildKeepPenalty: 1000,
         dominantSuitBonus: 3.0,
@@ -251,7 +251,10 @@ function evaluateChowValue(
   const policy = getPolicyForPlayer(player)
   let score = policy.chowChance // Start with base policy chance
 
-  // 1. 面子数惩罚：吃的越多，门清越差，胡牌难度越大
+  // 1. 吃牌只可能发生在下家弃牌，给一个基础进攻加成（让AI更积极吃）
+  score *= 1.15
+
+  // 2. 面子数惩罚：吃的越多，门清越差，胡牌难度越大
   const meldCount = player.hand.exposedMelds.length
   if (meldCount >= 3) {
     score *= 0.4 // 已有3+面子，再吃风险大

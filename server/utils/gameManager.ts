@@ -109,6 +109,12 @@ class GameManager {
         if (!game || game.phase !== GamePhase.PLAYING) return;
         if (!game.pendingActions.length) return;
 
+        // 审批流进行中时，不要提前PASS清空pending，否则会打断5秒审批窗口
+        if (game.pengChowConflict) {
+          this.schedulePendingActionTimeout(gameId);
+          return;
+        }
+
         // 自动让所有待响应玩家 PASS，推动流程（包括卡住的bot）
         const pending = [...game.pendingActions];
         for (const pa of pending) {
@@ -1464,6 +1470,9 @@ class GameManager {
     tile: Tile
   ): void {
     game.pengChowConflict = { requesterId: requesterPlayerId, requesterAction, tile, timestamp: Date.now() };
+
+    // 审批开始时清理旧的pending超时，避免2秒自动PASS抢跑破坏5秒审批
+    this.clearPendingActionTimer(game.gameId);
 
     const requester = game.players.find(p => p.id === requesterPlayerId);
     if (!requester) return;
