@@ -437,6 +437,7 @@
                 :is-winner="northIsWinner"
                 :reveal-hand="shouldRevealOpponents"
                 :is-bot="isBotPlayer(topPlayer)"
+                :seat-position="topPlayer?.position"
                 @name-click="onPlayerNameClick(topPlayer)"
               />
             </div>
@@ -451,6 +452,7 @@
                 :is-winner="westIsWinner"
                 :reveal-hand="shouldRevealOpponents"
                 :is-bot="isBotPlayer(leftPlayer)"
+                :seat-position="leftPlayer?.position"
                 @name-click="onPlayerNameClick(leftPlayer)"
               />
             </div>
@@ -465,6 +467,7 @@
                 :is-winner="eastIsWinner"
                 :reveal-hand="shouldRevealOpponents"
                 :is-bot="isBotPlayer(rightPlayer)"
+                :seat-position="rightPlayer?.position"
                 @name-click="onPlayerNameClick(rightPlayer)"
               />
             </div>
@@ -2607,7 +2610,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .seat-left {
-  left: 2%;
+  left: 7%;
   top: 0;
   height: 100%;
   width: 85px;
@@ -2618,7 +2621,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .seat-right {
-  right: 2%;
+  right: 7%;
   top: 0;
   height: 100%;
   width: 85px;

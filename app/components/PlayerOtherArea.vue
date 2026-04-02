@@ -119,6 +119,7 @@ const props = defineProps<{
   revealHand?: boolean
   avatar?: string
   isBot?: boolean
+  seatPosition?: number // 绝对位置 0-3，用于计算吃碰箭头方向
 }>()
 
 const emit = defineEmits<{
@@ -136,11 +137,16 @@ const isFlowerMeld = (meld: Meld): boolean => {
   return meld.tiles.some(t => t.suit === 'hua' || t.isFlower)
 }
 
-// 根据相对位置返回来源箭头字符
+// 绝对位置名称
+const POS_NAMES = ['南', '西', '北', '东'] // 0=South, 1=West, 2=North, 3=East
+// 相对方向：myPos=0时，delta +1=下家(右), +2=对家, +3=上家(左)
+const REL_ARROWS = ['↓', '←', '↑', '→'] // 下家(右), 对家(对), 上家(左), 自己
+
 const getArrowChar = (sourcePos: number): string => {
-  // sourcePos 是绝对位置 0-3，需要根据当前玩家位置计算相对方向
-  // 简化：直接用箭头
-  return '←'
+  if (props.seatPosition === undefined) return '←'
+  const delta = (sourcePos - props.seatPosition + 4) % 4
+  if (delta === 0) return '★' // 自己（理论上不会出现）
+  return `${REL_ARROWS[delta]}${POS_NAMES[sourcePos]}`
 }
 </script>
 
@@ -358,7 +364,8 @@ const getArrowChar = (sourcePos: number): string => {
     2px 4px 0 #8a7a5a,
     3px 6px 0 #6a5a3a,
     0 6px 12px rgba(0,0,0,0.45);
-  transform: translateY(2px);
+  transform: translateY(3px) scale(1.06);
+  z-index: 1;
 }
 
 /* 右家手牌：水平排列，牌横置（宽>高），平行于牌桌边缘，2.5D阴影朝下（靠近牌桌中心） */

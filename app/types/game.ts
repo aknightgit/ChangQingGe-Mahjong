@@ -29,6 +29,7 @@ export interface Meld {
   type: MeldType;
   tiles: Tile[];
   isConcealed: boolean;
+  sourcePosition?: number; // 0-3: 来源玩家位置（吃碰杠自谁）
 }
 
 // Player hand

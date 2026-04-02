@@ -132,7 +132,7 @@ const props = defineProps<{
   box-shadow: 0 -2px 4px rgba(0,0,0,0.3), 0 -3px 0 #8a7a5a, 0 -4px 0 #6a5a3a;
 }
 .discard-zone--top .discard-item :deep(.tile) {
-  box-shadow: 0 2px 4px rgba(0,0,0,0.3), 0 3px 0 #8a7a5a, 0 4px 0 #6a5a3a;
+  box-shadow: 0 -2px 4px rgba(0,0,0,0.3), 0 -3px 0 #8a7a5a, 0 -4px 0 #6a5a3a;
 }
 .discard-zone--left .discard-item :deep(.tile) {
   box-shadow: 2px 0 4px rgba(0,0,0,0.3), 3px 0 0 #8a7a5a, 4px 0 0 #6a5a3a;
