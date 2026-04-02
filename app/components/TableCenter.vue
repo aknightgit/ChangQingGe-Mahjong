@@ -170,8 +170,8 @@ const wildTileName = computed(() => {
 }
 
 .wild-name {
-  color: #ffd54f;
-  font-size: 0.5rem;
+  color: #ff4444;
+  font-size: 0.6rem;
   font-weight: 800;
   text-shadow: 0 1px 4px rgba(0,0,0,0.5);
 }
