@@ -814,6 +814,49 @@ function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
 
 // ========== AI Discard (长清阁规则) ==========
 // 新出牌策略：K哥机械规则（弃最短门单张→风箭→对子）
+
+// ========== 听牌优化器（支持任意张数） ==========
+// 摸牌后手牌N张时，找到让"待胡池"最大的弃牌
+function findTingPaiDiscard(p: BotPlayer, isWT: (t: Tile, p: BotPlayer) => boolean): Tile | null {
+  const hand = p.hand
+  const nonFlower = hand.filter(t => !isFlower(t))
+  if (nonFlower.length < 2) return null
+
+  const nonWild = nonFlower.filter(t => !isWT(t, p))
+  const wildCount = nonFlower.filter(t => isWT(t, p)).length
+
+  // 27种牌（万/筒/条各1-9）
+  const ALL: [TileSuit, number][] = []
+  for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+    for (let v = 1; v <= 9; v++) ALL.push([suit, v])
+  }
+
+  // 枚举弃牌 → 数待胡池
+  let bestTile: Tile | null = null
+  let bestCount = -1
+
+  for (const discard of nonWild) {
+    const after = nonWild.filter(t => t.id !== discard.id)
+    let waitingCount = 0
+
+    for (const [suit, value] of ALL) {
+      const testTile: Tile = { id: `tp-${suit}-${value}`, suit, value }
+      const testHand = [...after, testTile, ...nonFlower.filter(t => isWT(t, p))]
+      if (canWinStandard(testHand, p.exposedMelds.length, (t: Tile) => isWT(t, p))) {
+        waitingCount++
+      }
+    }
+
+    if (waitingCount > bestCount) {
+      bestCount = waitingCount
+      bestTile = discard
+    }
+  }
+
+  // 至少听2张才算有意义的优化
+  return bestCount >= 2 ? bestTile : null
+}
+
 function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[] = [],
   wallIdx: number = 0, deckLen: number = 144, allPlayers: BotPlayer[] = [], myPos: number = 0): Tile {
   const hand = p.hand
@@ -822,6 +865,10 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
 
   // 百搭永远不打
   if (nonWild.length === 0 && wilds.length > 0) return wilds[0]
+
+  // 【听牌优化器】任意张数下找待胡池最大的弃牌
+  const tingPai = findTingPaiDiscard(p, isWT)
+  if (tingPai) return tingPai
 
   // 花色统计
   const suitTiles: Record<string, Tile[]> = {}
