@@ -354,7 +354,6 @@ const openCreateModal = (aiCount: number) => {
 const confirmCreateGame = async () => {
   if (isCreatingGame.value) return
   isCreatingGame.value = true
-  showCreateModal.value = false
   try {
     const response = await $fetch('/api/game/create', {
       method: 'POST',
