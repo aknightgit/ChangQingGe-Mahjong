@@ -2607,25 +2607,25 @@ const forceDiscard = async (p: Player) => {
 }
 
 .seat-left {
-  left: 5%;
+  left: 2%;
   top: 0;
   height: 100%;
-  width: 60px;
+  width: 85px;
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .seat-right {
-  right: 5%;
+  right: 2%;
   top: 0;
   height: 100%;
-  width: 60px;
+  width: 85px;
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* ===== 本家：手牌 + 动作按钮横排 ===== */

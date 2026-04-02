@@ -866,9 +866,9 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   // 百搭永远不打
   if (nonWild.length === 0 && wilds.length > 0) return wilds[0]
 
-  // 【听牌优化器】任意张数下找待胡池最大的弃牌
-  const tingPai = findTingPaiDiscard(p, isWT)
-  if (tingPai) return tingPai
+  // 【听牌优化器】已禁用
+  // const tingPai = findTingPaiDiscard(p, isWT)
+  // if (tingPai) return tingPai
 
   // 花色统计
   const suitTiles: Record<string, Tile[]> = {}
