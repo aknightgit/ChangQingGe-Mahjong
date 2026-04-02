@@ -228,15 +228,19 @@ class GameManager {
 
         // 所有 pending 都已处理 → 进入下家（除非有人碰/杠/胡）
         if (!claimedAction) {
-          game.pendingActions = [];
+          // 只清除 bot 的 pending，保留人类玩家的（人类还在犹豫窗口内）
+          const botIds = new Set(game.players.filter(p => this.isPlayerBotControlled(p)).map(p => p.id));
+          game.pendingActions = game.pendingActions.filter(pa => !botIds.has(pa.playerId));
         }
         
         await this.persistGame(game);
         this.broadcastGameState(gameId);
 
         if (!claimedAction) {
-          // 没人碰/杠，进入下家
-          await this.moveToNextPlayer(game);
+          // 没人碰/杠，进入下家（仅当所有pending都已清除）
+          if (game.pendingActions.length === 0) {
+            await this.moveToNextPlayer(game);
+          }
         } else {
           // 有人碰/杠/吃，其回合已设好 → 调度出牌
           const claimingPlayer = game.players[game.currentPlayerIndex];
