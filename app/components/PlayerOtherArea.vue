@@ -314,18 +314,27 @@ const getArrowChar = (sourcePos: number): string => {
 .player-other--top .player-other-hand {
   flex-direction: row;
   flex-wrap: wrap;
-  gap: 2px;
+  gap: 1px;
 }
 
-/* 左家/右家：水平排列，平行于牌桌边缘 */
-.player-other--left .player-other-hand,
+/* 左家：在90°旋转容器内用column-reverse布局，旋转后视觉为横向，牌从左到右排列 */
+.player-other--left .player-other-hand {
+  display: flex;
+  flex-direction: column-reverse;
+  flex-wrap: nowrap;
+  row-gap: 3px;
+  align-items: center;
+  overflow-y: auto;
+}
+
+/* 右家：在-90°旋转容器内用column布局，旋转后视觉为横向，牌从左到右排列 */
 .player-other--right .player-other-hand {
   display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;  /* 不换行，始终单排 */
-  gap: 3px;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  row-gap: 3px;
   align-items: center;
-  overflow-x: auto;  /* 超出可滚动 */
+  overflow-y: auto;
 }
 
 /* 左家手牌：水平排列，牌横置（宽>高），平行于牌桌边缘，2.5D阴影朝下（靠近牌桌中心） */

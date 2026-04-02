@@ -497,29 +497,25 @@
                   <button
                     v-if="showChow"
                     class="inline-action-btn inline-action-btn--chow"
-                    :class="{ 'inline-action-btn--frozen': thinkFreezeActive }"
-                    :disabled="isInteractionLocked || thinkFreezeActive"
+                    :disabled="isInteractionLocked"
                     @click="onChow"
                   >吃</button>
                   <button
                     v-if="showPeng"
                     class="inline-action-btn inline-action-btn--peng"
-                    :class="{ 'inline-action-btn--frozen': thinkFreezeActive }"
-                    :disabled="isInteractionLocked || thinkFreezeActive"
+                    :disabled="isInteractionLocked"
                     @click="onPeng"
                   >碰</button>
                   <button
                     v-if="showKong || showConcealedKong || showExtendedKong"
                     class="inline-action-btn inline-action-btn--kong"
-                    :class="{ 'inline-action-btn--frozen': thinkFreezeActive }"
-                    :disabled="isInteractionLocked || thinkFreezeActive"
+                    :disabled="isInteractionLocked"
                     @click="handleCircularAction('kong')"
                   >杠</button>
                   <button
                     v-if="showHu"
                     class="inline-action-btn inline-action-btn--hu"
-                    :class="{ 'inline-action-btn--frozen': thinkFreezeActive }"
-                    :disabled="isInteractionLocked || thinkFreezeActive"
+                    :disabled="isInteractionLocked"
                     @click="onHu"
                   >胡</button>
                   <button
@@ -2432,12 +2428,12 @@ const forceDiscard = async (p: Player) => {
 }
 :deep(.discard-zone--left) {
   top: 50%;
-  left: calc(18% + 30px);
+  left: calc(21.6% + 36px);
   transform: translateY(-50%) rotate(90deg);
 }
 :deep(.discard-zone--right) {
   top: 50%;
-  right: calc(18% + 30px);
+  right: calc(21.6% + 36px);
   transform: translateY(-50%) rotate(-90deg);
 }
 
