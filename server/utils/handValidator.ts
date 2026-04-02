@@ -246,10 +246,7 @@ function detectHandTypesInternal(
     }
   }
 
-  // 大吊
-  if (isDaDiao(handTiles, exposedMelds)) {
-    types.push(HandType.DA_DIAO)
-  }
+  // 大吊：不再是独立牌型，仅用于计分（在 scoring.ts 中单独判断）
 
   return types.sort((a, b) => HAND_TYPE_PRIORITY[b] - HAND_TYPE_PRIORITY[a])
 }

@@ -1789,7 +1789,7 @@ class GameManager {
         game.wildTileGroup
       );
 
-      const hasDaDiao = handTypes.includes(HandType.DA_DIAO);
+      const hasDaDiao = false; // 大吊已移除独立牌型
       const requiresFlowerGate = (handTypes.includes(HandType.ALL_TRIPLETS) || handTypes.includes(HandType.HALF_FLUSH)) && !hasDaDiao;
       const hasFlowerAtDoor = flowerCount > 0;
       if (requiresFlowerGate && !hasFlowerAtDoor) continue;
@@ -2430,7 +2430,7 @@ class GameManager {
           game.wildTileGroup
         );
 
-        const hasDaDiao = handTypes.includes(HandType.DA_DIAO);
+        const hasDaDiao = false; // 大吊已移除独立牌型
         const requiresFlowerGate = (handTypes.includes(HandType.ALL_TRIPLETS) || handTypes.includes(HandType.HALF_FLUSH)) && !hasDaDiao;
         const hasFlowerAtDoor = flowerCount > 0;
 
