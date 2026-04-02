@@ -70,68 +70,103 @@ const props = defineProps<{
   transform: rotate(180deg);
 }
 
-/* 下家弃牌：亮红效果用outline外圈，不覆盖牌面内容 */
+/* 下家弃牌：半透明红圈+发散光晕 */
 .discard-zone--bottom .discard-item :deep(.latest-tile) {
-  outline: 3px solid #ff4444 !important;
-  outline-offset: 2px;
+  outline: 2px solid rgba(255, 68, 68, 0.5) !important;
+  outline-offset: 3px;
   border-radius: 6px;
-  box-shadow: 0 0 12px rgba(255, 68, 68, 0.5), 0 0 24px rgba(255, 68, 68, 0.25);
-  animation: latest-glow 1.5s ease-in-out infinite;
+  box-shadow:
+    0 0 8px rgba(255, 68, 68, 0.3),
+    0 0 16px rgba(255, 68, 68, 0.15),
+    0 0 32px rgba(255, 68, 68, 0.08);
+  animation: latest-pulse 2s ease-in-out infinite;
 }
 
-/* 上家弃牌：outline外圈效果 */
+/* 上家弃牌：半透明红圈+发散光晕 */
 .discard-zone--top .discard-item :deep(.latest-tile) {
-  outline: 3px solid #ff4444 !important;
-  outline-offset: 2px;
+  outline: 2px solid rgba(255, 68, 68, 0.5) !important;
+  outline-offset: 3px;
   border-radius: 6px;
-  box-shadow: 0 0 12px rgba(255, 68, 68, 0.5), 0 0 24px rgba(255, 68, 68, 0.25);
-  animation: latest-glow 1.5s ease-in-out infinite;
+  box-shadow:
+    0 0 8px rgba(255, 68, 68, 0.3),
+    0 0 16px rgba(255, 68, 68, 0.15),
+    0 0 32px rgba(255, 68, 68, 0.08);
+  animation: latest-pulse 2s ease-in-out infinite;
 }
 
-/* 左家弃牌：outline外圈效果 */
+/* 左家弃牌：半透明红圈+发散光晕 */
 .discard-zone--left .discard-item :deep(.latest-tile) {
-  outline: 3px solid #ff4444 !important;
-  outline-offset: 2px;
+  outline: 2px solid rgba(255, 68, 68, 0.5) !important;
+  outline-offset: 3px;
   border-radius: 6px;
-  box-shadow: -6px 0 12px rgba(255, 68, 68, 0.5), -12px 0 24px rgba(255, 68, 68, 0.25);
-  animation: latest-glow 1.5s ease-in-out infinite;
+  box-shadow:
+    0 0 8px rgba(255, 68, 68, 0.3),
+    0 0 16px rgba(255, 68, 68, 0.15),
+    0 0 32px rgba(255, 68, 68, 0.08);
+  animation: latest-pulse 2s ease-in-out infinite;
 }
 
-/* 右家弃牌：outline外圈效果 */
+/* 右家弃牌：半透明红圈+发散光晕 */
 .discard-zone--right .discard-item :deep(.latest-tile) {
-  outline: 3px solid #ff4444 !important;
-  outline-offset: 2px;
+  outline: 2px solid rgba(255, 68, 68, 0.5) !important;
+  outline-offset: 3px;
   border-radius: 6px;
-  box-shadow: 6px 0 12px rgba(255, 68, 68, 0.5), 12px 0 24px rgba(255, 68, 68, 0.25);
-  animation: latest-glow 1.5s ease-in-out infinite;
+  box-shadow:
+    0 0 8px rgba(255, 68, 68, 0.3),
+    0 0 16px rgba(255, 68, 68, 0.15),
+    0 0 32px rgba(255, 68, 68, 0.08);
+  animation: latest-pulse 2s ease-in-out infinite;
 }
 
 .discard-item {
   position: relative;
 }
 
-/* 最后一张弃牌小一圈 */
+/* 最后一张弃牌：尺寸和其他牌保持一致 */
 .discard-item:last-child :deep(.tile) {
-  transform: scale(0.9);
+  transform: none;
 }
 
-/* 最新弃牌：红色outline外圈 + 亮度浮动（不覆盖牌面） */
+/* 所有弃牌：2.5D阴影朝向我方（中心） */
+.discard-zone--bottom .discard-item :deep(.tile) {
+  box-shadow: 0 -2px 4px rgba(0,0,0,0.3), 0 -3px 0 #8a7a5a, 0 -4px 0 #6a5a3a;
+}
+.discard-zone--top .discard-item :deep(.tile) {
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3), 0 3px 0 #8a7a5a, 0 4px 0 #6a5a3a;
+}
+.discard-zone--left .discard-item :deep(.tile) {
+  box-shadow: 2px 0 4px rgba(0,0,0,0.3), 3px 0 0 #8a7a5a, 4px 0 0 #6a5a3a;
+}
+.discard-zone--right .discard-item :deep(.tile) {
+  box-shadow: -2px 0 4px rgba(0,0,0,0.3), -3px 0 0 #8a7a5a, -4px 0 0 #6a5a3a;
+}
+
+/* 最新弃牌：半透明红色outline + 发散光晕 + 呼吸动画 */
 .discard-item :deep(.latest-tile) {
-  outline: 3px solid #ff4444 !important;
-  outline-offset: 2px;
+  outline: 2px solid rgba(255, 68, 68, 0.5) !important;
+  outline-offset: 3px;
   border-radius: 6px;
-  box-shadow: 0 0 12px rgba(255, 68, 68, 0.5), 0 0 24px rgba(255, 68, 68, 0.25);
-  animation: latest-glow 1.5s ease-in-out infinite;
+  box-shadow:
+    0 0 8px rgba(255, 68, 68, 0.3),
+    0 0 16px rgba(255, 68, 68, 0.15),
+    0 0 32px rgba(255, 68, 68, 0.08);
+  animation: latest-pulse 2s ease-in-out infinite;
 }
 
-@keyframes latest-glow {
+@keyframes latest-pulse {
   0%, 100% {
-    box-shadow: 0 0 12px rgba(255, 68, 68, 0.5), 0 0 24px rgba(255, 68, 68, 0.25);
-    outline-color: #ff4444;
+    box-shadow:
+      0 0 8px rgba(255, 68, 68, 0.3),
+      0 0 16px rgba(255, 68, 68, 0.15),
+      0 0 32px rgba(255, 68, 68, 0.08);
+    outline-color: rgba(255, 68, 68, 0.5);
   }
   50% {
-    box-shadow: 0 0 22px rgba(255, 68, 68, 0.8), 0 0 44px rgba(255, 68, 68, 0.4);
-    outline-color: #ff6666;
+    box-shadow:
+      0 0 12px rgba(255, 68, 68, 0.5),
+      0 0 24px rgba(255, 68, 68, 0.25),
+      0 0 48px rgba(255, 68, 68, 0.12);
+    outline-color: rgba(255, 100, 100, 0.7);
   }
 }
 </style>

@@ -9,7 +9,7 @@ import {
   shuffleTiles, isFlower, groupTiles, sortTiles, tilesEqual
 } from '../server/utils/tiles'
 import {
-  canWin, buildWildTileChecker,
+  canWin, canWinStandard, buildWildTileChecker,
   detectHandTypes, HandType, isTing
 } from '../server/utils/handValidator'
 import {

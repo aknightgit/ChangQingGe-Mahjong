@@ -279,6 +279,7 @@ const getArrowChar = (sourcePos: number): string => {
   background: rgba(17, 43, 33, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.1);
   position: relative;
+  margin-bottom: 4px;
 }
 
 /* 花牌 meld：无边框 */
@@ -349,6 +350,17 @@ const getArrowChar = (sourcePos: number): string => {
   box-shadow: 1px 0 0 #8a7a5a, 2px 0 0 #6a5a3a, 0 3px 6px rgba(0,0,0,0.3);
 }
 
+/* 左家手牌最后一张：2.4D凸起特效（靠近我方） */
+.player-other--left .player-other-hand :deep(.tile:last-child) {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.4),
+    inset 0 -1px 0 rgba(0,0,0,0.1),
+    2px 4px 0 #8a7a5a,
+    3px 6px 0 #6a5a3a,
+    0 6px 12px rgba(0,0,0,0.45);
+  transform: translateY(-2px);
+}
+
 /* 右家手牌：水平排列，牌横置（宽>高），平行于牌桌边缘，2.5D阴影朝下（靠近牌桌中心） */
 .player-other--right .player-other-hand :deep(.tile) {
   width: 40px;
@@ -361,10 +373,21 @@ const getArrowChar = (sourcePos: number): string => {
   box-shadow: -1px 0 0 #8a7a5a, -2px 0 0 #6a5a3a, 0 3px 6px rgba(0,0,0,0.3);
 }
 
+/* 右家手牌最后一张：2.4D凸起特效（靠近我方） */
+.player-other--right .player-other-hand :deep(.tile:last-child) {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.4),
+    inset 0 -1px 0 rgba(0,0,0,0.1),
+    -2px 4px 0 #8a7a5a,
+    -3px 6px 0 #6a5a3a,
+    0 6px 12px rgba(0,0,0,0.45);
+  transform: translateY(-2px);
+}
+
 /* 左家门口：靠边缘 */
 .player-other--left .player-other-melds {
   flex-direction: column;
-  gap: 0;
+  gap: 4px;
   flex-shrink: 0;
   order: -1;
 }
@@ -380,7 +403,7 @@ const getArrowChar = (sourcePos: number): string => {
 /* 右家门口：靠中心 */
 .player-other--right .player-other-melds {
   flex-direction: column;
-  gap: 0;
+  gap: 4px;
   flex-shrink: 0;
   margin-top: 30px;
 }

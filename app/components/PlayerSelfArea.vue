@@ -174,6 +174,8 @@ const onPointerCancel = () => {
   padding: 10px 12px 12px;
   border-radius: 14px;
   background: transparent;
+  position: relative;
+  bottom: 5%;
 }
 
 .player-area--winner {
