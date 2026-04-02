@@ -156,6 +156,12 @@ class GameManager {
         let claimedAction = false;
         let claimedHigherPriority = false; // 碰/杠/胡是否已被执行
 
+        // 保存人类玩家的pending（bot的claim不应清除人类的犹豫窗口）
+        const humanPendingActions = game.pendingActions.filter(pa => {
+          const p = game.players.find(pl => pl.id === pa.playerId);
+          return p && !this.isPlayerBotControlled(p);
+        });
+
         // 第一轮：处理碰/杠/胡（优先级高的先执行）
         for (const pa of [...game.pendingActions]) {
           const player = game.players.find(p => p.id === pa.playerId);
@@ -217,7 +223,10 @@ class GameManager {
               const chowTotalCount = player.hand.concealedTiles.length + chowExposedCount;
               if (chowTotalCount - 2 + 3 <= 14) {
                 this.handleChow(game, player);
-                claimedAction = true;
+                // handleChow可能触发审批流（人类有碰/胡），此时chow并未执行
+                if (!game.pengChowConflict) {
+                  claimedAction = true;
+                }
               } else {
                 console.warn(`[BotChow] ${player.name} blocked: would exceed 14 tiles`);
                 this.handlePass(game, player);
@@ -228,9 +237,19 @@ class GameManager {
 
         // 所有 pending 都已处理 → 进入下家（除非有人碰/杠/胡）
         if (!claimedAction) {
-          // 只清除 bot 的 pending，保留人类玩家的（人类还在犹豫窗口内）
-          const botIds = new Set(game.players.filter(p => this.isPlayerBotControlled(p)).map(p => p.id));
-          game.pendingActions = game.pendingActions.filter(pa => !botIds.has(pa.playerId));
+          // 没人claim → 恢复人类pending，丢弃bot的
+          // 如果审批流已触发（pengChowConflict），保留审批流设置的新pending
+          if (game.pengChowConflict) {
+            // 审批流已添加新的approval pending，只移除bot的pending
+            const botIds = new Set(game.players.filter(p => this.isPlayerBotControlled(p)).map(p => p.id));
+            game.pendingActions = game.pendingActions.filter(pa => !botIds.has(pa.playerId));
+          } else {
+            // 无审批流，直接恢复人类原始pending
+            game.pendingActions = humanPendingActions;
+          }
+        } else {
+          // bot成功claim → tile已被吃/碰消耗，恢复已无意义
+          // 但需确保人类pending被正确清除（由executeChowDirectly/executePengDirectly处理）
         }
         
         await this.persistGame(game);
