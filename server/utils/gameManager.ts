@@ -986,6 +986,18 @@ class GameManager {
       if (game.freezeRound && game.roundNumber <= game.freezeRound) {
         return [];
       }
+      // 等我想一想：有胡/碰/杠选项时可用，每局限定次数
+      const pendingHasPriority = pendingAction.availableActions.some(a =>
+        a === ActionType.HU || a === ActionType.PENG || a === ActionType.KONG ||
+        a === ActionType.CONCEALED_KONG || a === ActionType.EXTENDED_KONG
+      );
+      if (pendingHasPriority) {
+        const maxChances = game.thinkChances ?? 3;
+        const used = game.thinkUsage?.[playerId] ?? 0;
+        if (used < maxChances) {
+          return [...pendingAction.availableActions, ActionType.THINK];
+        }
+      }
       return pendingAction.availableActions;
     }
 

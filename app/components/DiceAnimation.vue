@@ -30,8 +30,11 @@
               <Dice3D :value="1" :state="'idle'" />
             </div>
             <p class="dice-hint" v-if="maxRollsLimit > 1" style="margin-top: 8px;">{{ currentRoll }}/{{ maxRollsLimit }}</p>
-            <button v-if="isDealer" class="deal-button" style="margin-top: 16px;" @click="onRollAndDeal">
+            <button v-if="isDealer && maxRollsLimit <= 1" class="deal-button" style="margin-top: 16px;" @click="onRollAndDeal">
               <span class="deal-icon">🎲🃏</span> 掷骰+发牌
+            </button>
+            <button v-if="isDealer && maxRollsLimit > 1" class="deal-button" style="margin-top: 16px;" @click="onRoll">
+              <span class="deal-icon">🎲</span> 掷骰子 ({{ currentRoll }}/{{ maxRollsLimit }})
             </button>
             <p v-if="!isDealer" class="dice-hint" style="margin-top: 16px;">等待庄家掷骰子...</p>
           </div>
