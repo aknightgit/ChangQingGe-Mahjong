@@ -171,10 +171,7 @@ const onPointerCancel = () => {
 
 /* 自家玩家头像区域 */
 .self-player-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
+  display: none;
 }
 
 .self-avatar {

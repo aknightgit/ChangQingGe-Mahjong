@@ -2437,12 +2437,12 @@ const forceDiscard = async (p: Player) => {
 }
 :deep(.discard-zone--left) {
   top: 50%;
-  left: 18%;
+  left: calc(18% + 30px);
   transform: translateY(-50%) rotate(90deg);
 }
 :deep(.discard-zone--right) {
   top: 50%;
-  right: 18%;
+  right: calc(18% + 30px);
   transform: translateY(-50%) rotate(-90deg);
 }
 
