@@ -6,6 +6,7 @@
         <div class="room-info">
           <div class="room-title-line">
             <h1 class="mahjong-title">长清阁麻将</h1>
+            <span class="round-info-header" v-if="gameState?.phase === 'playing'">{{ roundDisplay }}</span>
           </div>
         </div>
 
@@ -351,9 +352,6 @@
             <!-- 绿色桌布内层 -->
             <div class="table-felt">
             <!-- 左上角: 轮次信息 -->
-            <div class="round-info" v-if="gameState?.phase === 'playing'">
-              {{ roundDisplay }}
-            </div>
             <!-- 十字定位标志 -->
             <div class="cross-marker">
               <div class="cross-h"></div>
@@ -2890,17 +2888,15 @@ const forceDiscard = async (p: Player) => {
   margin: 0;
 }
 
-.round-info {
-  position: absolute;
-  top: 32px;
-  left: 12px;
+.round-info-header {
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.7);
   font-weight: 600;
-  z-index: 4;
   background: rgba(0, 0, 0, 0.35);
   padding: 2px 10px;
   border-radius: 999px;
+  margin-left: 12px;
+  white-space: nowrap;
 }
 
 /* 十字定位标志 */
