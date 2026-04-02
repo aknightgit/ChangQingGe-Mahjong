@@ -50,7 +50,7 @@
         <!-- 手牌 -->
         <div class="player-hand">
           <MahjongTile
-            v-for="tile in hand"
+            v-for="tile in sortedHand"
             :key="tile.id"
             :tile="tile"
             :selected="selectedTileId === tile.id"
@@ -86,6 +86,17 @@ const props = defineProps<{
   bailoutCounts?: Record<string, number>
   playerColors?: string[]
 }>()
+
+// 百搭牌排在最左侧
+const sortedHand = computed(() => {
+  const tiles = [...props.hand]
+  tiles.sort((a, b) => {
+    const aWild = (a as any).isWild ? -1 : 0
+    const bWild = (b as any).isWild ? -1 : 0
+    return aWild - bWild
+  })
+  return tiles
+})
 
 const colors = computed(() => props.playerColors || ['#e53935', '#43a047', '#1e88e5', '#fb8c00'])
 
@@ -256,6 +267,7 @@ const onPointerCancel = () => {
   /* 限制最大宽度为14张牌，多余才换行 */
   max-width: 440px;
   margin: 0 auto;
+  gap: 2px;
 }
 
 .player-hand :deep(.tile) {

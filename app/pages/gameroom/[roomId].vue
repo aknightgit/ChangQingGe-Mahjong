@@ -222,9 +222,6 @@
         <!-- 结算面板 -->
         <div v-if="showSettlement" class="settle-overlay">
           <div class="settle-panel">
-            <h2 class="settle-title">📊 最终结算</h2>
-            <p class="settle-meta">房间 #{{ roomId }} · 共 {{ settlementData?.totalRounds || 0 }} 局</p>
-
             <div class="settle-ranking">
               <div
                 v-for="(p, i) in (settlementData?.playerStats || [])"
@@ -362,8 +359,8 @@
             <!-- 四方位标注 -->
             <span class="compass compass--n">北</span>
             <span class="compass compass--s">南</span>
-            <span class="compass compass--w">{{ leftPlayer?.name || '西' }}</span>
-            <span class="compass compass--e">{{ rightPlayer?.name || '东' }}</span>
+            <span class="compass compass--w">西</span>
+            <span class="compass compass--e">东</span>
             <!-- 状态消息（非中心显示） -->
             <div class="turn-indicator">
               <span v-if="thinkFreezeActive" class="think-freeze-indicator">
@@ -2339,13 +2336,13 @@ const forceDiscard = async (p: Player) => {
   font-size: 0.7rem;
   border-radius: 6px;
   background: rgba(33, 150, 243, 0.8);  /* 蓝色，20%透明度 */
-  color: #fff;
+  color: #000;
   border: 1px solid rgba(255, 255, 255, 0.2);
   cursor: pointer;
   white-space: nowrap;
   min-width: 108px;
 }
-.settle-btn-header:hover { background: rgba(25, 118, 210, 0.8); color: #fff; }
+.settle-btn-header:hover { background: rgba(25, 118, 210, 0.8); color: #000; }
 
 .mahjong-title {
   font-size: 1.4rem;
@@ -2435,12 +2432,12 @@ const forceDiscard = async (p: Player) => {
 }
 :deep(.discard-zone--left) {
   top: 50%;
-  left: calc(8% + 30px);
+  left: calc(18% + 30px);
   transform: translateY(-50%) rotate(90deg);
 }
 :deep(.discard-zone--right) {
   top: 50%;
-  right: calc(8% + 30px);
+  right: calc(18% + 30px);
   transform: translateY(-50%) rotate(-90deg);
 }
 
@@ -3780,6 +3777,7 @@ const forceDiscard = async (p: Player) => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
+  min-height: 48px;
 }
 .settle-back-btn:hover {
   background: rgba(255, 255, 255, 0.12);
@@ -3787,7 +3785,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .settle-save-btn {
-  width: 100%;
+  flex: 1;
   padding: 14px;
   border-radius: 12px;
   border: none;
@@ -3797,6 +3795,7 @@ const forceDiscard = async (p: Player) => {
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
+  min-height: 48px;
 }
 .settle-save-btn:hover {
   transform: scale(1.02);

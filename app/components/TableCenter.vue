@@ -163,10 +163,10 @@ const wildTileName = computed(() => {
 
 /* 百搭牌行 */
 .wild-tile-row {
-  background: linear-gradient(135deg, rgba(255, 215, 0, 0.2) 0%, rgba(255, 152, 0, 0.15) 100%);
+  background: transparent;
   padding: 4px 8px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 215, 0, 0.3);
+  border: none;
 }
 
 .wild-name {

@@ -3,7 +3,7 @@
     class="discard-zone"
     :class="[`discard-zone--${position}`, { 'discard-zone--empty': !tiles.length }]"
   >
-    <div class="discards-grid">
+    <div class="discards-grid" :class="[`discards-grid--${position}`]">
       <div
         v-for="tile in tiles"
         :key="tile.id"
@@ -46,7 +46,13 @@ const props = defineProps<{
 .discards-grid {
   display: grid;
   grid-template-columns: repeat(8, max-content);
-  gap: 2px;
+  gap: 1px;
+}
+
+/* 左右弃牌区：每排6张 */
+.discards-grid--left,
+.discards-grid--right {
+  grid-template-columns: repeat(6, max-content);
 }
 
 /* 左家弃牌：外层已旋转90°，内层不再旋转 */
@@ -98,6 +104,11 @@ const props = defineProps<{
 
 .discard-item {
   position: relative;
+}
+
+/* 最后一张弃牌小一圈 */
+.discard-item:last-child :deep(.tile) {
+  transform: scale(0.9);
 }
 
 /* 最新弃牌：红色外框 + 亮度浮动 */
