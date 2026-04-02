@@ -127,12 +127,11 @@ const wildTileName = computed(() => {
 
 /* 倍数徽章 */
 .multiplier-badge {
-  background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+  background: transparent;
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 0.5rem;
   font-weight: 800;
-  box-shadow: 0 3px 12px rgba(255, 152, 0, 0.45);
 }
 
 .multiplier-badge .badge-icon {
@@ -146,12 +145,11 @@ const wildTileName = computed(() => {
 
 /* 剩余牌数徽章 */
 .remaining-badge {
-  background: linear-gradient(135deg, #00796b 0%, #004d40 100%);
+  background: transparent;
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 0.5rem;
   font-weight: 800;
-  box-shadow: 0 3px 12px rgba(0, 121, 107, 0.4);
 }
 
 .remaining-badge .badge-icon {
