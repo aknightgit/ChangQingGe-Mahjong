@@ -9,12 +9,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Game ID, player ID, and choice are required' });
   }
 
-  if (choice !== 'confirm' && choice !== 'pass') {
-    throw createError({ statusCode: 400, message: 'Choice must be "confirm" or "pass"' });
+  if (choice !== 'confirm' && choice !== 'pass' && choice !== 'hu' && choice !== 'kong' && choice !== 'peng') {
+    throw createError({ statusCode: 400, message: `Choice must be 'confirm', 'pass', 'hu', 'kong', or 'peng', got '${choice}'` });
   }
 
   try {
-    gameManager.handleApprovalChoice(gameId, playerId, choice);
+    // 将前端的具体动作映射到 'confirm' 或 'pass'
+    const mappedChoice = choice === 'pass' ? 'pass' : 'confirm';
+    await gameManager.handleApprovalChoice(gameId, playerId, mappedChoice);
 
     const game = await gameManager.getGame(gameId);
     emitToRoom(gameId, 'game:state-changed', {

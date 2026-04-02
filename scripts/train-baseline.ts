@@ -142,7 +142,7 @@ interface BotPolicy {
 
 const DEFAULT_POLICY: BotPolicy = {
   id: 'default',
-  selfWinChance: 0.35, discardHuChance: 1.0,
+  selfWinChance: 1.0, discardHuChance: 1.0,
   selfWinWildBoost: 0.1, discardHuWildPenalty: 0.2, discardHuMenQingPenalty: 0.05,
   pengChance: 0.9, kongChance: 0.7, chowChance: 0.4, anKongChance: 0.95,
   pengWildBoost: 0.06, kongWildBoost: 0.14, chowWildPenalty: 0.18,
@@ -551,28 +551,32 @@ function isClaimSuitAllowed(p: BotPlayer, tile: Tile, action: 'chow' | 'peng' = 
   if (isHonor(tile)) return true
   if (tile.suit === TileSuit.FLOWER) return false
 
-  // 统计所有碰/吃过门（不含风箭）
-  const allMeldedSuits = new Set<string>()
-  const hasChow = p.exposedMelds.some(m =>
-    m.type === MeldType.SEQUENCE && m.tiles?.[0] &&
-    m.tiles[0].suit !== TileSuit.WIND && m.tiles[0].suit !== TileSuit.DRAGON
-  )
-
+  // 【K哥4条铁律】
+  // 1. 吃过一门 → 不能吃其他门
+  // 2. 吃过一门 → 不能碰其他门
+  // 3. 碰过1门 → 不能吃其他门
+  // 4. 碰过2门 → 不能吃任何一门
+  const chowedSuits = new Set<string>()
+  const pongedSuits = new Set<string>()
   for (const meld of p.exposedMelds) {
-    if (meld.tiles && meld.tiles.length > 0) {
-      const suit = meld.tiles[0].suit
-      if (suit !== TileSuit.WIND && suit !== TileSuit.DRAGON) {
-        allMeldedSuits.add(suit)
-      }
+    if (meld.tiles?.[0] && meld.tiles[0].suit !== TileSuit.WIND && meld.tiles[0].suit !== TileSuit.DRAGON) {
+      if (meld.type === MeldType.SEQUENCE) chowedSuits.add(meld.tiles[0].suit)
+      if (meld.type === MeldType.PONG || meld.type === MeldType.KONG) pongedSuits.add(meld.tiles[0].suit)
     }
   }
 
-  // 【K哥硬规则】
-  // 1. 吃过A门 → 只能继续吃A门，不能吃碰其他门
-  if (hasChow) return allMeldedSuits.has(tile.suit)
-  // 2. 碰过A门（没吃过） → 只能吃碰A门
-  if (allMeldedSuits.size > 0) return allMeldedSuits.has(tile.suit)
-  // 3. 没碰没吃过 → 当前门决定方向
+  // 风箭碰 → 永远允许
+  if (isHonor(tile)) return true
+
+  // 铁律1: 吃过一门 → 不能吃碰其他门
+  if (chowedSuits.size > 0) return chowedSuits.has(tile.suit)
+
+  // 铁律2+3: 碰过1门+ → 不能吃其他门
+  if (action === 'chow' && pongedSuits.size >= 1) return pongedSuits.has(tile.suit)
+
+  // 铁律4: 碰过2门+ → 不能吃任何一门
+  if (action === 'chow' && pongedSuits.size >= 2) return false
+
   return true
 }
 

@@ -1611,6 +1611,25 @@ class GameManager {
   }
 
   /**
+   * 直接执行胡（碰吃冲突中，高优先级胡直接执行）
+   */
+  private async executeWinDirectly(game: GameState, player: Player, winningTile: Tile): Promise<void> {
+    // 构造假的pendingAction，让handleHu能获取winningTile
+    const fakePending = {
+      playerId: player.id,
+      availableActions: [ActionType.HU],
+      tile: winningTile
+    };
+    game.pendingActions.push(fakePending as any);
+
+    try {
+      await this.handleHu(game, player);
+    } finally {
+      game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
+    }
+  }
+
+  /**
    * 直接执行杠（不检查胡优先级）
    */
   private executeKongDirectly(game: GameState, player: Player, tileId: string): void {
@@ -1647,7 +1666,7 @@ class GameManager {
   /**
    * 处理审批回应（碰吃冲突、碰胡冲突等）
    */
-  handleApprovalChoice(gameId: string, playerId: string, choice: 'confirm' | 'pass'): void {
+  async handleApprovalChoice(gameId: string, playerId: string, choice: 'confirm' | 'pass'): Promise<void> {
     const game = this.games.get(gameId);
     if (!game || !game.pengChowConflict) return;
 
@@ -1656,7 +1675,7 @@ class GameManager {
     const requesterAction = conflict.requesterAction;
     const tile = conflict.tile;
 
-    // 清除冲突状态和该玩家的pending
+    // 清除冲突状态和该玩家的pending（保留winner's pending供executeWinDirectly使用）
     game.pengChowConflict = null;
     game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== playerId);
 
@@ -1666,12 +1685,11 @@ class GameManager {
       const candPlayer = game.players.find(p => p.id === playerId);
       if (!candPlayer) return;
       // 执行候选者的高优先级动作
-      // 检查候选者有哪些可用动作，优先执行最高级的
       const pending = game.pendingActions.find(pa => pa.playerId === playerId);
       if (pending?.availableActions.includes(ActionType.HU)) {
-        // 不在这里执行胡，让前端通过正常流程处理
-        // 设置当前玩家以启用胡按钮
-        game.currentPlayerIndex = game.players.findIndex(p => p.id === playerId);
+        // 执行胡牌
+        await this.executeWinDirectly(game, candPlayer, tile);
+        return;
       } else if (pending?.availableActions.includes(ActionType.PENG)) {
         this.executePengDirectly(game, candPlayer);
       }
