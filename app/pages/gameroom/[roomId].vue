@@ -228,8 +228,8 @@
               <!-- 列名表头 -->
               <div class="settle-detail-header">
                 <span class="settle-detail-name"></span>
-                <span class="settle-detail-stat settle-detail-stat--record">总输赢</span>
-                <span class="settle-detail-stat">有效输赢</span>
+                <span class="settle-detail-stat">总输赢</span>
+                <span class="settle-detail-stat settle-detail-stat--record">有效输赢</span>
                 <span class="settle-detail-stat">🤖 vs AI</span>
                 <span class="settle-detail-stat">🀄 自摸</span>
                 <span class="settle-detail-stat">🎯 捉冲</span>
@@ -240,10 +240,10 @@
                 <template v-for="p in (settlementData?.playerStats || [])" :key="p.id + '-detail'">
                   <div class="settle-detail-row">
                     <span class="settle-detail-name">{{ p.name }}</span>
-                    <span class="settle-detail-stat settle-detail-stat--record" title="总输赢">
+                    <span class="settle-detail-stat" title="总输赢">
                       {{ (p.totalScore ?? 0) > 0 ? '+' : '' }}{{ p.totalScore ?? 0 }}
                     </span>
-                    <span class="settle-detail-stat" title="有效输赢">{{ p.effectiveScore ?? p.totalScore ?? 0 }}</span>
+                    <span class="settle-detail-stat settle-detail-stat--record" title="有效输赢">{{ p.effectiveScore ?? p.totalScore ?? 0 }}</span>
                     <span class="settle-detail-stat" title="与AI战绩">{{ p.vsAiScore ?? 0 }}</span>
                     <span class="settle-detail-stat">{{ p.selfDraws ?? 0 }}</span>
                     <span class="settle-detail-stat">{{ p.discards ?? 0 }}</span>
