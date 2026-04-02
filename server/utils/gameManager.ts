@@ -1193,13 +1193,17 @@ class GameManager {
     game.actionHistory.push(gameAction);
     game.lastActionTime = Date.now();
 
-    // DISCARD 的 moveToNextPlayer 已在 handleDiscard 中处理
-    // Claim 动作（PENG/KONG/HU/CHOW）执行后，claiming player 接管回合，不需要 moveToNextPlayer
-    // 但如果新当前玩家是 bot，需要调度出牌
+    // Claim 动作（PENG/KONG/HU/CHOW）执行后，claiming player 接管回合
+    // 需要先摸牌（13→14），再调度出牌
     if (action !== ActionType.DISCARD && game.pendingActions.length === 0) {
       const currentP = game.players[game.currentPlayerIndex];
-      if (currentP && this.isPlayerBotControlled(currentP) && currentP.status === PlayerStatus.PLAYING) {
-        this.scheduleBotDiscard(gameId, currentP.id);
+      if (currentP && currentP.status === PlayerStatus.PLAYING) {
+        // 先补花+摸牌
+        this.replaceFlowers(game, currentP);
+        this.handleDraw(game, currentP);
+        if (this.isPlayerBotControlled(currentP)) {
+          this.scheduleBotDiscard(gameId, currentP.id);
+        }
       }
     }
 
@@ -1311,6 +1315,16 @@ class GameManager {
   private handleDraw(game: GameState, player: Player): void {
     if (game.wall.length === 0) {
       this.endRound(game, GameEndReason.WALL_EXHAUSTED);
+      return;
+    }
+
+    // 牌数上限检查（不含花牌的门口牌+手牌 < 14 才能摸）
+    const nonFlowerExposed = player.hand.exposedMelds.reduce((sum, m) => {
+      if (m.tiles.length === 1 && isFlower(m.tiles[0])) return sum;
+      return sum + m.tiles.length;
+    }, 0);
+    if (player.hand.concealedTiles.length + nonFlowerExposed >= 14) {
+      console.warn(`[DRAW] Skipped: ${player.name} already has ${player.hand.concealedTiles.length + nonFlowerExposed} tiles (excl flowers)`);
       return;
     }
 
@@ -2843,21 +2857,23 @@ class GameManager {
 
     if (flowerMelds.length === 0) return;
 
-    // 从 exposedMelds 中移除这些花牌 meld（处理完再加回来）
+    // 从 exposedMelds 中移除这些花牌 meld
     player.hand.exposedMelds = player.hand.exposedMelds.filter(
       m => !(m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]))
     );
-
-    const newFlowers: Tile[] = [];
 
     for (const meld of flowerMelds) {
       if (game.wall.length === 0) break;
 
       let replacement = game.wall.pop()!;
 
-      // 如果补到花牌，继续从牌墙补
+      // 如果补到花牌，花牌留在门口，继续摸（正确麻将规则：花牌不增加总牌数）
       while (isFlower(replacement) && !this.isWildTile(game, replacement)) {
-        newFlowers.push(replacement);
+        player.hand.exposedMelds.push({
+          type: MeldType.TRIPLET,
+          tiles: [replacement],
+          isConcealed: false
+        });
         if (game.wall.length === 0) {
           replacement = null as any;
           break;
@@ -2866,18 +2882,9 @@ class GameManager {
       }
 
       if (replacement) {
-        // 补到普通牌，加入手牌
+        // 补到普通牌，加入手牌（替换原来花牌的位置）
         player.hand.concealedTiles.push(replacement);
       }
-    }
-
-    // 新补到的花牌也放到门口
-    for (const flower of newFlowers) {
-      player.hand.exposedMelds.push({
-        type: MeldType.TRIPLET,
-        tiles: [flower],
-        isConcealed: false
-      });
     }
 
     player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
