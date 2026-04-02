@@ -38,5 +38,6 @@
     "flushChaseBonus": 0.8,
     "id": "AI-小猪-风险规避型",
     "savedAt": "2026-03-29T19:24:12.160Z"
-  }
+  },
+  "chowChance": 0.4
 }

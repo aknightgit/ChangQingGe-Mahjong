@@ -38,5 +38,6 @@
     "flushChaseBonus": 1.3572,
     "id": "AI-老蒋-均衡型",
     "savedAt": "2026-03-29T19:24:12.159Z"
-  }
+  },
+  "chowChance": 0.4
 }
