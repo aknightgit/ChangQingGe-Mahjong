@@ -222,37 +222,33 @@
         <!-- 结算面板 -->
         <div v-if="showSettlement" class="settle-overlay">
           <div class="settle-panel">
-            <div class="settle-ranking">
-              <div
-                v-for="(p, i) in (settlementData?.playerStats || [])"
-                :key="p.id"
-                class="settle-row"
-                :class="{ 'settle-row--top': i === 0 }"
-              >
-                <span class="settle-rank">
-                  <span v-if="i === 0">🥇</span>
-                  <span v-else-if="i === 1">🥈</span>
-                  <span v-else-if="i === 2">🥉</span>
-                  <span v-else>{{ i + 1 }}</span>
-                </span>
-                <span class="settle-name">{{ p.name }}</span>
-                <span class="settle-total" :class="p.totalScore > 0 ? 'sc-pos' : p.totalScore < 0 ? 'sc-neg' : ''">
-                  {{ p.totalScore > 0 ? '+' : '' }}{{ p.totalScore }}
-                </span>
-              </div>
-            </div>
+            <h2 class="settle-title-center">最终战绩</h2>
 
             <div class="settle-details">
+              <!-- 列名表头 -->
+              <div class="settle-detail-header">
+                <span class="settle-detail-name"></span>
+                <span class="settle-detail-stat settle-detail-stat--record">总输赢</span>
+                <span class="settle-detail-stat">有效输赢</span>
+                <span class="settle-detail-stat">🤖 vs AI</span>
+                <span class="settle-detail-stat">🀄 自摸</span>
+                <span class="settle-detail-stat">🎯 捉冲</span>
+                <span class="settle-detail-stat settle-detail-stat--win">最大赢</span>
+                <span class="settle-detail-stat settle-detail-stat--loss">最大输</span>
+              </div>
               <div class="settle-detail-grid">
                 <template v-for="p in (settlementData?.playerStats || [])" :key="p.id + '-detail'">
                   <div class="settle-detail-row">
                     <span class="settle-detail-name">{{ p.name }}</span>
-                    <span class="settle-detail-stat settle-detail-stat--record" title="有效战绩">🏅 {{ p.effectiveScore ?? p.totalScore }}</span>
-                    <span class="settle-detail-stat" title="与AI战绩">🤖 {{ p.vsAiScore ?? 0 }}</span>
-                    <span class="settle-detail-stat">🀄 {{ p.selfDraws ?? 0 }}自摸</span>
-                    <span class="settle-detail-stat">🎯 {{ p.discards ?? 0 }}捉冲</span>
-                    <span class="settle-detail-stat settle-detail-stat--win">最大赢 +{{ p.maxWin ?? 0 }}</span>
-                    <span class="settle-detail-stat settle-detail-stat--loss">最大输 {{ p.maxLoss ?? 0 }}</span>
+                    <span class="settle-detail-stat settle-detail-stat--record" title="总输赢">
+                      {{ (p.totalScore ?? 0) > 0 ? '+' : '' }}{{ p.totalScore ?? 0 }}
+                    </span>
+                    <span class="settle-detail-stat" title="有效输赢">{{ p.effectiveScore ?? p.totalScore ?? 0 }}</span>
+                    <span class="settle-detail-stat" title="与AI战绩">{{ p.vsAiScore ?? 0 }}</span>
+                    <span class="settle-detail-stat">{{ p.selfDraws ?? 0 }}</span>
+                    <span class="settle-detail-stat">{{ p.discards ?? 0 }}</span>
+                    <span class="settle-detail-stat settle-detail-stat--win">+{{ p.maxWin ?? 0 }}</span>
+                    <span class="settle-detail-stat settle-detail-stat--loss">{{ p.maxLoss ?? 0 }}</span>
                   </div>
                 </template>
               </div>
@@ -3649,11 +3645,20 @@ const forceDiscard = async (p: Player) => {
   border: 1px solid rgba(255, 215, 0, 0.15);
   border-radius: 20px;
   padding: 32px;
-  width: min(480px, 92%);
+  width: min(520px, 92%);
   max-height: 85vh;
   overflow-y: auto;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
   animation: settle-in 0.3s ease;
+}
+
+.settle-title-center {
+  text-align: center;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #ffd700;
+  margin: 0 0 20px;
+  letter-spacing: 0.15em;
 }
 
 @keyframes settle-in {
@@ -3718,6 +3723,20 @@ const forceDiscard = async (p: Player) => {
   margin-bottom: 20px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding-top: 16px;
+}
+
+.settle-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  opacity: 0.5;
+  font-weight: 600;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 6px;
+  flex-wrap: wrap;
 }
 
 .settle-detail-grid {
