@@ -4,6 +4,7 @@
  */
 import { GameState, Player, Tile, TileSuit, MeldType, PlayerStatus, ActionType } from '../types/game'
 import { groupTiles, tilesEqual, isFlower, isHonor, isWind, isDragon } from '../utils/tiles'
+import { canWin } from '../utils/handValidator'
 import fs from 'fs'
 import path from 'path'
 
@@ -239,6 +240,78 @@ export function selectDiscardTile(player: Player, game: GameState): string {
 }
 
 /**
+ * Count how many tiles from the remaining wall would complete the hand (听牌总张数).
+ * Tests each tile type (4 suits × 9 values + honors) against the player's concealed tiles.
+ */
+function countWinningTiles(player: Player, game: GameState): number {
+  const hand = player.hand.concealedTiles
+  const exposed = player.hand.exposedMelds
+  if (hand.length === 0) return 0
+
+  const wildChecker = (t: Tile) => isWildTile(t, game)
+  let count = 0
+
+  // Test all 34 standard tile types (万/条/筒 1-9 × 3 + 风 4 + 箭 3)
+  const suits: TileSuit[] = [TileSuit.WAN, TileSuit.TIAO, TileSuit.DOTS]
+  for (const suit of suits) {
+    for (let v = 1; v <= 9; v++) {
+      const testTile: Tile = { suit, value: v, id: `test-${suit}-${v}` }
+      const testHand = [...hand, testTile]
+      const result = canWin(testHand, exposed.length, wildChecker)
+      if (result.canWin) {
+        // Estimate remaining count (4 minus what's in hand/visible)
+        const inHand = hand.filter(t => t.suit === suit && t.value === v).length
+        count += Math.max(0, 4 - inHand)
+      }
+    }
+  }
+  // Wind tiles (东南西北)
+  for (const w of ['east', 'south', 'west', 'north']) {
+    const testTile: Tile = { suit: TileSuit.WIND, value: 0, id: `test-wind-${w}` }
+    // WIND tiles use value to distinguish, but canWin checks suit
+    const testHand = [...hand, testTile]
+    const result = canWin(testHand, exposed.length, wildChecker)
+    if (result.canWin) count += 4
+  }
+  // Dragon tiles (中发白)
+  for (let v = 1; v <= 3; v++) {
+    const testTile: Tile = { suit: TileSuit.DRAGON, value: v, id: `test-dragon-${v}` }
+    const testHand = [...hand, testTile]
+    const result = canWin(testHand, exposed.length, wildChecker)
+    if (result.canWin) count += 4
+  }
+
+  return count
+}
+
+/**
+ * Check if chowing this tile would actually improve the hand (not create dead hand).
+ * Returns true if the chow creates at least one complete sequence from the tiles used.
+ */
+function isChowBeneficial(player: Player, game: GameState, chowTile: Tile): boolean {
+  const hand = player.hand.concealedTiles
+  const v = chowTile.value
+  const suit = chowTile.suit
+
+  // Must have the tiles to form a sequence
+  const hasLeft = hand.some(t => t.suit === suit && t.value === v - 1)
+  const hasRight = hand.some(t => t.suit === suit && t.value === v + 1)
+  const hasLeftLeft = hand.some(t => t.suit === suit && t.value === v - 2)
+  const hasRightRight = hand.some(t => t.suit === suit && t.value === v + 2)
+
+  // Good chow: completes a pair of tiles into a meld
+  if (hasLeft && hasRight) return true   // 夹张: 1+吃2+3
+  if (hasLeft && hasRightRight) return true  // 延伸: 3+4+吃5
+  if (hasRight && hasLeftLeft) return true   // 延伸: 吃3+4+6
+
+  // OK chow: at least one side forms a connection
+  if (hasLeft || hasRight) return true
+
+  // Bad chow: would need to hold orphan tiles
+  return false
+}
+
+/**
  * Evaluate whether chowing is beneficial based on hand composition.
  * Returns a score 0~1 indicating how desirable the chow is.
  */
@@ -249,24 +322,38 @@ function evaluateChowValue(
 ): number {
   const hand = player.hand.concealedTiles
   const policy = getPolicyForPlayer(player)
-  let score = policy.chowChance // Start with base policy chance
-
-  // 1. 吃牌只可能发生在下家弃牌，给一个基础进攻加成（让AI更积极吃）
-  score *= 1.15
-
-  // 2. 面子数惩罚：吃的越多，门清越差，胡牌难度越大
   const meldCount = player.hand.exposedMelds.length
-  if (meldCount >= 3) {
-    score *= 0.4 // 已有3+面子，再吃风险大
-  } else if (meldCount >= 2) {
-    score *= 0.7 // 2个面子，适度降低
-  }
-  if (meldCount === 0 && policy.bailoutHuPenaltyPerMeld > 0.05) {
-    // 门清玩家，保守型不太想吃
-    score *= (1 - policy.bailoutHuPenaltyPerMeld * 3)
+
+  // 已经听牌不再吃
+  if (player.isTing) return 0
+
+  // === 基础分：大幅提高吃牌积极性 ===
+  // 原来 chowChance=0.148 导致吃牌率极低，现在用更强的加成
+  let score = Math.max(policy.chowChance, 0.35) // 最低保底35%
+
+  // === 进攻加成：鼓励积极吃牌 ===
+  score *= 1.5
+
+  // === 门清意愿降低 ===
+  if (meldCount === 0) {
+    // 门清时不再大幅惩罚，只轻微降低
+    score *= 0.85  // 原来是 (1 - bailoutHuPenaltyPerMeld * 3) 可能很低
   }
 
-  // 2. 判断吃牌类型：夹张 > 单边 > 两面
+  // === 面子数管理：限制瞎吃 ===
+  if (meldCount >= 3) {
+    score *= 0.3 // 已有3+面子，强烈不建议再吃（容易死牌）
+  } else if (meldCount >= 2) {
+    score *= 0.7
+  }
+  // meldCount 0-1: 不惩罚，鼓励吃
+
+  // === 死牌检测：如果吃后手里只剩孤张，不吃 ===
+  if (!isChowBeneficial(player, game, chowTile)) {
+    score *= 0.2 // 吃了也是死牌，大幅降低
+  }
+
+  // === 吃牌类型价值排序 ===
   const v = chowTile.value
   const suit = chowTile.suit
   const groups = groupTiles(hand)
@@ -277,41 +364,81 @@ function evaluateChowValue(
   const hasRightRight = groups.has(`${suit}-${v + 2}`)
 
   if (hasLeft && hasRight) {
-    // 夹张：手里有1+3，吃2 → 填补缺口，最有价值
-    score *= 1.8
+    // 夹张：手里有1+3，吃2 → 最有价值，直接完成面子
+    score *= 2.0
+  } else if (hasLeft && hasRightRight) {
+    // 延伸搭子：手里有3+5，吃4 → 完成一个面子+保留延伸
+    score *= 1.6
+  } else if (hasRight && hasLeftLeft) {
+    // 延伸搭子：手里有4+6，吃5
+    score *= 1.6
   } else if ((hasLeft && v - 1 === 1) || (hasRight && v + 1 === 9)) {
-    // 单边：手里有1+2吃3，或7+8吃9 → 完成边搭，优先吃
-    score *= 1.5
+    // 单边搭子：1+2吃3或7+8吃9
+    score *= 1.3
   } else if (hasLeft || hasRight) {
-    // 两面：手里有2+3吃1或4 → 留下灵活搭子，不太想吃
-    score *= 0.9
+    // 两面：手里有2+3吃1或4 → 保留灵活搭子
+    score *= 1.0
   } else if (hasLeftLeft || hasRightRight) {
     // 间隔搭子：价值较低
     score *= 0.7
   }
 
-  // 3. 吃的牌是否是百搭
+  // === 百搭牌被吃了可惜 ===
   if (isWildTile(chowTile, game)) {
-    score *= (1 - (policy.chowWildPenalty || 0.1))
+    score *= 0.5
   }
 
-  // 4. 做大牌风格：尽量不吃（保持门清）
-  if (policy.chowChance < 0.1) {
-    score *= 0.3 // 阿水型：极度不想吃
+  // === 接近胡牌阶段：更积极吃 ===
+  const tilesNeeded = 14 - hand.length - meldCount * 3 // 还差几张到14张
+  if (tilesNeeded <= 2) {
+    score *= 1.3 // 接近胡牌，积极吃牌加速
   }
 
-  // 5. 进攻型风格：积极吃牌构建手牌
-  if (policy.chowChance > 0.5) {
-    score *= 1.3 // 老赵型：愿意吃
-  }
-
-  // 6. 如果已经听牌，不再吃
-  if (player.isTing) {
-    score = 0
+  // === 听牌总张数不多 → 更积极吃牌冲胡 ===
+  if (hand.length <= 6) {
+    const winningCount = countWinningTiles(player, game)
+    if (winningCount <= 8) {
+      score *= 1.4 // 听牌张数少，吃牌搏一把
+    }
   }
 
   return Math.max(0, Math.min(1, score))
 }
+
+/**
+ * Evaluate a specific chow option (which tiles to use for the chow).
+ * Some chow options are better than others.
+ */
+function evaluateChowOption(
+  player: Player,
+  game: GameState,
+  optionTiles: Tile[],
+  chowTile: Tile
+): number {
+  // Prefer chow options that keep better tiles in hand
+  const hand = player.hand.concealedTiles
+  let score = 0
+
+  for (const t of optionTiles) {
+    const key = `${t.suit}-${t.value}`
+    const groups = groupTiles(hand)
+    const count = groups.get(key)?.length || 0
+    if (count >= 2) score -= 2 // 用对子吃牌不好
+    if (count >= 3) score -= 5 // 用刻子吃牌很不好
+
+    // 检查这张牌是否与其他牌有搭子
+    for (let dv = -2; dv <= 2; dv++) {
+      if (dv === 0) continue
+      const adjKey = `${t.suit}-${t.value + dv}`
+      if (groups.has(adjKey) && adjKey !== `${chowTile.suit}-${chowTile.value}`) {
+        score += 1 // 这张牌有其他搭子，吃掉后可能浪费
+      }
+    }
+  }
+
+  return score
+}
+
 /**
  * Determine if bot should claim a pending action (PENG/KONG/HU/PASS).
  * Returns the ActionType to execute.
@@ -322,21 +449,41 @@ export function shouldClaimPendingAction(
   game: GameState
 ): ActionType {
   const policy = getPolicyForPlayer(player)
+  const hand = player.hand.concealedTiles
 
-  // Always take HU if available
-  if (availableActions.includes(ActionType.HU)) return ActionType.HU
+  // === HU: 根据听牌张数决定是否强制胡 ===
+  if (availableActions.includes(ActionType.HU)) {
+    // 听牌总张数不多时，强制胡牌
+    if (hand.length <= 7) {
+      const winningCount = countWinningTiles(player, game)
+      if (winningCount <= 12) {
+        // 听牌张数少，不犹豫直接胡
+        return ActionType.HU
+      }
+    }
+    // 正常胡牌概率
+    if (Math.random() < policy.selfWinChance) {
+      return ActionType.HU
+    }
+  }
 
-  // KONG: usually take (good for scoring)
+  // === KONG: 通常杠（加分） ===
   if (availableActions.includes(ActionType.KONG) && Math.random() < policy.kongChance) {
     return ActionType.KONG
   }
 
-  // PENG: take based on policy
-  if (availableActions.includes(ActionType.PENG) && Math.random() < policy.pengChance) {
-    return ActionType.PENG
+  // === PENG: 基于策略决定 ===
+  if (availableActions.includes(ActionType.PENG)) {
+    // 接近胡牌阶段更积极碰
+    if (hand.length <= 7 && Math.random() < policy.pengChance * 1.2) {
+      return ActionType.PENG
+    }
+    if (Math.random() < policy.pengChance) {
+      return ActionType.PENG
+    }
   }
 
-  // CHOW: smart evaluation based on hand composition
+  // === CHOW: 智能评估 ===
   if (availableActions.includes(ActionType.CHOW)) {
     const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id)
     if (pendingAction?.tile) {
