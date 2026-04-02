@@ -198,7 +198,7 @@ const chineseNum = computed(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  margin: 0 -1px;
+  margin: 0 1px;
   cursor: pointer;
   transition:
     transform 0.12s ease,
