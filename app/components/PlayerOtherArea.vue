@@ -322,11 +322,12 @@ const getMeldSourceChar = (sourcePos: number): string => {
   display: flex;
 }
 
-/* 上家：长边贴靠，水平排列 */
+/* 上家手牌：长边贴靠，水平排列，无拖拉条，2.5D阴影朝下（靠我方）*/
 .player-other--top .player-other-hand {
   flex-direction: row;
   flex-wrap: nowrap;
   gap: 1px;
+  overflow: visible;
 }
 
 /* 左家：在90°旋转容器内用column-reverse布局，旋转后视觉为横向，牌从左到右排列 */
@@ -423,15 +424,15 @@ const getMeldSourceChar = (sourcePos: number): string => {
   /* 不旋转，一字平铺 */
 }
 
-/* 对家手牌：2.5D阴影朝向牌桌中心（即朝向下方=我方方向） */
+/* 对家手牌：2.5D阴影朝上（seat旋转180°后视觉朝下=靠我方） */
 .player-other--top .player-other-hand :deep(.tile) {
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.55),
     inset -1px 0 0 rgba(0,0,0,0.06),
     inset 0 -1px 0 rgba(0,0,0,0.08),
-    -1px 3px 0 #8a7a5a,
-    -2px 5px 0 #6a5a3a,
-    0 3px 10px rgba(0, 0, 0, 0.45);
+    -1px -3px 0 #8a7a5a,
+    -2px -5px 0 #6a5a3a,
+    0 -3px 10px rgba(0, 0, 0, 0.45);
 }
 
 /* 上家 melds：水平一字排列，不换行 */
