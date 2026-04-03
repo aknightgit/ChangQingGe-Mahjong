@@ -1661,7 +1661,10 @@ class GameManager {
       ...(sourcePos !== undefined && { sourcePosition: sourcePos })
     };
     player.hand.exposedMelds.push(meld);
-    game.discardPile.pop();
+    // Bug6: 用findIndex找并移除被吃牌，而非pop()
+    const discardedTile = pendingAction!.tile;
+    const cdIdx = game.discardPile.findIndex(t => t.id === discardedTile.id);
+    if (cdIdx >= 0) game.discardPile.splice(cdIdx, 1);
     game.pendingActions = [];
     game.pengChowConflict = null;
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
@@ -1686,7 +1689,9 @@ class GameManager {
       isConcealed: false,
       ...(sourcePos !== undefined && { sourcePosition: sourcePos })
     });
-    game.discardPile.pop();
+    // Bug6: 用findIndex找并移除被碰牌
+    const pdIdx = game.discardPile.findIndex(t => t.id === lastDiscard.id);
+    if (pdIdx >= 0) game.discardPile.splice(pdIdx, 1);
     game.pendingActions = [];
     game.pengChowConflict = null;
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
