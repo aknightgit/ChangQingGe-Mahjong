@@ -1,5 +1,5 @@
 <template>
-  <div class="mahjong-page" :class="{ 'mobile-portrait': shouldRotateView }">
+  <div class="mahjong-page" :class="['layout-debug', { 'mobile-portrait': shouldRotateView }]">
     <div class="room-viewport" :class="{ 'room-viewport--rotated': shouldRotateView }">
       <div class="room-container" :class="{ 'room-container--rotated': shouldRotateView }">
       <header class="room-header">
@@ -4289,4 +4289,94 @@ const forceDiscard = async (p: Player) => {
     width: 100%;
   }
 }
+/* ===== Layout debug borders ===== */
+.layout-debug {
+  /* viewport boundaries */
+  --dbg-room-container: 2px dashed #ff0000;
+  --dbg-seat: 2px solid #00ff00;
+  --dbg-discard: 2px solid #00aaff;
+  --dbg-player: 2px dotted #ff00ff;
+  --dbg-self: 2px solid #ffff00;
+  --dbg-main: 2px dashed #ffaa00;
+  --dbg-melds: 2px dotted #ff8800;
+  --dbg-center: 2px dashed #ffffff;
+}
+
+/* Room boundaries */
+.layout-debug .room-viewport {
+  outline: 3px solid #ff0000 !important;
+  outline-offset: -3px;
+}
+.layout-debug .room-container {
+  outline: 3px solid #ff6600 !important;
+  outline-offset: -3px;
+}
+.layout-debug .room-main {
+  outline: 3px solid #ffaa00 !important;
+  outline-offset: -3px;
+}
+
+/* Center area */
+.layout-debug .center-area {
+  outline: 3px dashed #ffffff !important;
+  outline-offset: -3px;
+}
+
+/* Seats */
+.layout-debug .seat {
+  outline: 2px solid #00ff88 !important;
+  outline-offset: -2px;
+}
+.layout-debug .seat-top {
+  outline-color: #00ccff !important;
+}
+.layout-debug .seat-left {
+  outline-color: #ff8800 !important;
+}
+.layout-debug .seat-right {
+  outline-color: #cc44ff !important;
+}
+.layout-debug .seat-bottom {
+  outline-color: #88ff44 !important;
+}
+
+/* Player areas */
+.layout-debug .player-other {
+  outline: 2px solid #ff44ff !important;
+  outline-offset: -1px;
+}
+.layout-debug .self-area {
+  outline: 3px solid #ffff00 !important;
+  outline-offset: -2px;
+}
+
+/* Discard zones */
+.layout-debug .discard-zone {
+  outline: 2px solid #00aaff !important;
+  outline-offset: -2px;
+}
+
+/* Melds */
+.layout-debug .player-other-melds,
+.layout-debug .player-self-melds {
+  outline: 2px dotted #ff8800 !important;
+  outline-offset: -2px;
+}
+
+/* Discard grid */
+.layout-debug .discards-grid {
+  outline: 1px dashed rgba(255, 0, 255, 0.5) !important;
+  outline-offset: 0;
+}
+
+/* Action buttons */
+.layout-debug .action-buttons,
+.layout-debug .inline-action-buttons {
+  outline: 2px solid #ff0000 !important;
+}
+
+.self-area-with-actions {
+  outline: 2px solid rgba(255, 255, 0, 0.3);
+}
+
 </style>
