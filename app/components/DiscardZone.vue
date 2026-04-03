@@ -45,8 +45,10 @@ const props = defineProps<{
 
 .discards-grid {
   display: grid;
-  grid-template-columns: repeat(8, max-content);
+  /* 固定列宽：弃牌从第一张开始位置不变，不会随增多而移动 */
+  grid-template-columns: repeat(8, 28px);
   gap: 1px;
+  justify-items: center;
 }
 
 /* 左右弃牌区：每排6张 */
