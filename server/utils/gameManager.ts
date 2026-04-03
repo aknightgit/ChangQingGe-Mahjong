@@ -1689,8 +1689,7 @@ class GameManager {
       ...(sourcePos !== undefined && { sourcePosition: sourcePos })
     };
     player.hand.exposedMelds.push(meld);
-    // Bug6: 用findIndex找并移除被吃牌，而非pop()
-    const discardedTile = pendingAction!.tile;
+    // Bug6: 用findIndex找并移除被吃牌
     const cdIdx = game.discardPile.findIndex(t => t.id === discardedTile.id);
     if (cdIdx >= 0) game.discardPile.splice(cdIdx, 1);
     game.pendingActions = [];
