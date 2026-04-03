@@ -866,36 +866,45 @@ class GameManager {
       player.hand.discardedTiles = [];
       for (let i = 0; i < 13; i++) {
         const tile = game.wall.pop()!;
-        if (isFlower(tile)) {
-          // 花牌放到门口，不补花（等自己回合再补）
+        if (isFlower(tile) && !this.isWildTile(game, tile)) {
+          // 普通花牌放到门口，不补花（等自己回合再补）
           player.hand.exposedMelds.push({
             type: MeldType.TRIPLET,
             tiles: [tile],
             isConcealed: false
           });
+        } else if (isFlower(tile) && this.isWildTile(game, tile)) {
+          // 花牌百搭 → 进手牌，不放门口
+          player.hand.concealedTiles.push(tile);
         } else {
           player.hand.concealedTiles.push(tile);
         }
       }
-      player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
+      player.hand.concealedTiles = this.sortHandWithWildFirst(player.hand.concealedTiles, game);
+        }
+      }
+      player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
       player.status = PlayerStatus.PLAYING;
       player.score = 0;
     }
 
-    // 庄家摸牌（也处理花牌：放门口不补花）
+    // 庄家摸牌（也处理花牌：普通花放门口，百搭进手牌）
     {
       const tile = game.wall.pop()!;
-      if (isFlower(tile)) {
+      if (isFlower(tile) && !this.isWildTile(game, tile)) {
         game.players[game.dealerIndex].hand.exposedMelds.push({
           type: MeldType.TRIPLET,
           tiles: [tile],
           isConcealed: false
         });
+      } else if (isFlower(tile) && this.isWildTile(game, tile)) {
+        // 花牌百搭 → 进手牌
+        game.players[game.dealerIndex].hand.concealedTiles.push(tile);
       } else {
         game.players[game.dealerIndex].hand.concealedTiles.push(tile);
       }
-      game.players[game.dealerIndex].hand.concealedTiles = sortTiles(
-        game.players[game.dealerIndex].hand.concealedTiles
+      game.players[game.dealerIndex].hand.concealedTiles = this.sortHandWithWildFirst(
+        game.players[game.dealerIndex].hand.concealedTiles, game
       );
     }
 
@@ -1473,7 +1482,7 @@ class GameManager {
       // 普通牌 → 进手牌
       player.hand.concealedTiles.push(tile);
     }
-    player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
+    player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
   }
 
   /**
@@ -1509,13 +1518,32 @@ class GameManager {
       } else if (isFlower(replacement) && this.isWildTile(game, replacement)) {
         // 百搭花牌 → 进手牌
         player.hand.concealedTiles.push(replacement);
-        player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
+        player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
       } else {
         // 普通牌 → 进手牌
         player.hand.concealedTiles.push(replacement);
-        player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
+        player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
       }
     }
+  }
+
+  /**
+   * 手牌排序：百搭放最左边，其余按花色数值排序
+   */
+  private sortHandWithWildFront(tiles: Tile[], game: GameState): Tile[] {
+    const suitOrder: Record<string, number> = {
+      dots: 0, characters: 1, bamboos: 2, wind: 3, dragon: 4, flower: 5
+    };
+    return [...tiles].sort((a, b) => {
+      const aIsWild = this.isWildTile(game, a);
+      const bIsWild = this.isWildTile(game, b);
+      if (aIsWild && !bIsWild) return -1;  // 百搭放前面
+      if (!aIsWild && bIsWild) return 1;
+      if (aIsWild && bIsWild) return 0;
+      // 非百搭：按花色数值排序
+      if (a.suit !== b.suit) return (suitOrder[a.suit] ?? 99) - (suitOrder[b.suit] ?? 99);
+      return a.value - b.value;
+    });
   }
 
   /**
@@ -2028,7 +2056,7 @@ class GameManager {
 
     if (winningTile) {
       player.hand.concealedTiles.push(winningTile);
-      player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
+      player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
 
       const lastDiscard = game.discardPile[game.discardPile.length - 1];
       if (lastDiscard && lastDiscard.id === winningTile.id) {
@@ -3055,7 +3083,7 @@ class GameManager {
       }
     }
 
-    player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
+    player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
 
     // 补花后检查牌墙是否空了
     if (game.wall.length === 0 && game.phase === GamePhase.PLAYING) {
