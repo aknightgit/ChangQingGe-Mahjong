@@ -160,7 +160,7 @@ class GameManager {
 
   /**
    * 让 bot 处理自己的 pending action（碰/杠/胡/吃/过）
-   * 延迟300-600ms模拟"思考时间"，给人类玩家反应窗口
+   * Bug修复：bot必须等满 hesitationWindow 再 action，否则人类按钮闪现消失
    */
 
 
@@ -172,7 +172,9 @@ class GameManager {
   }
 
   private handleBotPendingActions(gameId: string): void {
-    const botThinkMs = 300 + Math.floor(Math.random() * 300); // 300-600ms 思考延迟
+    // Bug修复：bot 等满 hesitationWindow 再 action，人类有完整反应时间
+    const game = this.games.get(gameId);
+    const botThinkMs = game?.hesitationWindow ?? 5000; // 使用 hesitationWindow 作为bot延迟
     setTimeout(async () => {
       try {
         const game = await this.getGame(gameId);
