@@ -30,8 +30,8 @@
           <div v-for="(meld, i) in melds" :key="i" class="other-meld"
             :class="[`other-meld--${meld.type}`, { 'other-meld--flower': isFlowerMeld(meld), 'other-meld--concealed': meld.type === 'concealed_kong' }]">
             <MahjongTile v-for="tile in meld.tiles" :key="tile.id" :tile="tile" :small="true" :dimmed="isWinner" />
-            <!-- bug5: 只显示箭头，无文字 -->
-            <span v-if="meld.sourcePosition !== undefined" class="meld-arrow"></span>
+            <!-- 箭头根据sourcePosition旋转 -->
+            <span v-if="meld.sourcePosition !== undefined" class="meld-arrow" :style="{ transform: `translateX(-50%) rotate(${arrowRotation(meld.sourcePosition)})` }"></span>
           </div>
         </div>
       </template>
@@ -49,8 +49,7 @@
           <div v-for="(meld, i) in melds" :key="i" class="other-meld"
             :class="[`other-meld--${meld.type}`, { 'other-meld--flower': isFlowerMeld(meld), 'other-meld--concealed': meld.type === 'concealed_kong' }]">
             <MahjongTile v-for="tile in meld.tiles" :key="tile.id" :tile="tile" :small="true" :dimmed="isWinner" />
-            <!-- bug5: 只显示箭头，无文字 -->
-            <span v-if="meld.sourcePosition !== undefined" class="meld-arrow"></span>
+            <span v-if="meld.sourcePosition !== undefined" class="meld-arrow" :style="{ transform: `translateX(-50%) rotate(${arrowRotation(meld.sourcePosition)})` }"></span>
           </div>
         </div>
         <div class="player-other-hand" :class="{ 'player-other-hand--right': position === 'right' }">
@@ -84,6 +83,17 @@ const posColor = computed(() => {
 
 const isFlowerMeld = (meld: Meld): boolean => {
   return meld.tiles.some(t => t.suit === 'hua' || t.isFlower)
+}
+
+// 箭头方向：sourcePosition是出牌者的绝对位置(0-3)
+// relative delta: 1=下家(右), 2=对家(上), 3=上家(左)
+const arrowRotation = (sourcePos: number): string => {
+  if (props.seatPosition === undefined) return '0deg'
+  const delta = (sourcePos - props.seatPosition + 4) % 4
+  if (delta === 0) return '0deg'       // 自己：朝上
+  if (delta === 1) return '90deg'      // 下家：朝右
+  if (delta === 2) return '180deg'     // 对家：朝下
+  return '270deg'                       // 上家：朝左
 }
 </script>
 
@@ -164,13 +174,14 @@ const isFlowerMeld = (meld: Meld): boolean => {
 .player-other--left .player-other-melds :deep(.tile),
 .player-other--right .player-other-melds :deep(.tile) { width: 36px; height: 25px; }
 
-/* bug5: 纯箭头(红色三角)，无文字 */
+/* bug5: 纯箭头(红色三角)，无文字 — 旋转由内联style控制 */
 .meld-arrow {
-  position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%);
+  position: absolute; bottom: -10px; left: 50%;
   width: 0; height: 0;
   border-left: 4px solid transparent; border-right: 4px solid transparent;
   border-bottom: 7px solid #ff4444;
   filter: drop-shadow(0 0 3px rgba(255,68,68,0.5));
+  transform-origin: center center;
 }
 
 /* 对家 2.5D 修复 */
