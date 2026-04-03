@@ -880,10 +880,7 @@ class GameManager {
           player.hand.concealedTiles.push(tile);
         }
       }
-      player.hand.concealedTiles = this.sortHandWithWildFirst(player.hand.concealedTiles, game);
-        }
-      }
-      player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
+      player.hand.concealedTiles = sortTiles(player.hand.concealedTiles);
       player.status = PlayerStatus.PLAYING;
       player.score = 0;
     }
@@ -903,7 +900,7 @@ class GameManager {
       } else {
         game.players[game.dealerIndex].hand.concealedTiles.push(tile);
       }
-      game.players[game.dealerIndex].hand.concealedTiles = this.sortHandWithWildFirst(
+      game.players[game.dealerIndex].hand.concealedTiles = this.sortHandWithWildFront(
         game.players[game.dealerIndex].hand.concealedTiles, game
       );
     }
