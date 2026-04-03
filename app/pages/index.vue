@@ -209,7 +209,7 @@
                     <button class="help-btn" @click="toggleHelp('hesitation')">?</button>
                   </div>
                   <input type="number" v-model.number="createParams.hesitationSeconds" min="0.5" max="10" step="0.5" />
-                  <span v-if="activeHelp === 'hesitation'" class="help-bubble">上家打出牌后，所有玩家做吃/碰/杠/胡决策的时间窗口。默认2秒。</span>
+                  <span v-if="activeHelp === 'hesitation'" class="help-bubble">上家打出牌后，所有玩家做吃/碰/杠/胡决策的时间窗口。默认5秒。</span>
                 </div>
 
                 <div class="create-field create-field--checkbox">
@@ -317,7 +317,7 @@ const toggleHelp = (key: string) => {
 }
 const createParams = reactive({
   maxDiceRolls: 2,
-  hesitationSeconds: 2, // 决策犹豫期（秒），默认2秒
+  hesitationSeconds: 5, // 决策犹豫期（秒），默认5秒
   firstRoundDouble: true,
   liangShanThreshold: 4000,
   thinkChances: 3,

@@ -42,9 +42,15 @@ class GameManager {
   // AI托管模式：玩家ID集合，被标记的玩家由AI自动出牌
   private botModePlayers: Set<string> = new Set();
 
-  /** 获取决策犹豫期（毫秒），默认2000ms */
+  /** 获取决策犹豫期（毫秒），默认5000ms */
   private getHesitationWindow(game: GameState): number {
-    return game.hesitationWindow ?? 2000;
+    return game.hesitationWindow ?? 5000;
+  }
+
+  /** 获取犹豫等待毫秒数（用于setTimeout等） */
+  private getHesitationWaitMs(gameId: string): number {
+    const game = this.games.get(gameId);
+    return game?.hesitationWindow ?? 5000;
   }
 
   setWebSocketManager(manager: any) {
@@ -172,7 +178,7 @@ class GameManager {
       } finally {
         this.pendingActionTimers.delete(gameId);
       }
-    }, this.games.get(gameId)?.hesitationWindow ?? 2000); // 决策犹豫期（默认2秒）
+    }, this.games.get(gameId)?.hesitationWindow ?? 5000); // 决策犹豫期（默认5秒）
 
     this.pendingActionTimers.set(gameId, timer);
   }
@@ -222,7 +228,7 @@ class GameManager {
   private handleBotPendingActions(gameId: string): void {
     // 训练模式：等 full hesitationWindow 后统一处理
     const game = this.games.get(gameId);
-    const botThinkMs = game?.hesitationWindow ?? 5000;
+    const botThinkMs = this.getHesitationWindow(game);
     setTimeout(async () => {
       try {
         const game = await this.getGame(gameId);
@@ -1601,7 +1607,7 @@ class GameManager {
           playerId: c.playerId,
           availableActions: c.availableActions,
           tile,
-          expiresAt: Date.now() + 5000
+          expiresAt: Date.now() + this.getHesitationWindow(game)
         });
         // 广播
         this.wsManager.broadcast(game.gameId, 'actionApproval', {
@@ -1638,7 +1644,7 @@ class GameManager {
           this.scheduleBotDiscard(gid, currentPlayer.id);
         }
       } catch (e) { console.error('[Approval] timeout err:', e); }
-    }, 5000);
+    }, this.getHesitationWaitMs(game.gameId));
   }
 
   private handleChow(game: GameState, player: Player): void {
@@ -3003,7 +3009,7 @@ class GameManager {
       } catch (err) {
         console.error('[bot-discard] Error:', err);
       }
-    }, this.getHesitationWindow(gameId) + Math.floor(Math.random() * 500));  // 使用配置的犹豫期 + 随机0-500ms
+    }, this.getHesitationWaitMs(gameId) + Math.floor(Math.random() * 500));  // 使用配置的犹豫期 + 随机0-500ms
 
     this.botTimers.set(gameId, timer);
   }

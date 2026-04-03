@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
       thinkChances: body.thinkChances ?? 3,
       settlementMultiplier: body.settlementMultiplier ?? 10,
       maxBots: body.maxBots ?? 3,
-      hesitationWindow: body.hesitationWindow ?? 2000 // 默认2秒
+      hesitationWindow: body.hesitationWindow ?? 5000 // 默认5秒
     });
     
     return {

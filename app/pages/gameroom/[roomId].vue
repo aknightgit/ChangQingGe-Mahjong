@@ -888,10 +888,10 @@ const isDoubleRound = computed(() => {
 })
 const effectiveMaxRolls = computed(() => isDoubleRound.value ? 1 : maxDiceRolls.value)
 const showDoubleReminder = ref(false)
-// 决策犹豫期（毫秒），优先从游戏状态读取，兜底2秒
+// 决策犹豫期（毫秒），优先从游戏状态读取，兜底5秒
 const freezeDurationMs = computed(() => {
   const hw = (gameState.value as any)?.hesitationWindow
-  return typeof hw === 'number' && hw > 0 ? hw : 2000
+  return typeof hw === 'number' && hw > 0 ? hw : 5000
 })
 
 // 当前决策犹豫期截止时间（从游戏状态读取）
@@ -1669,7 +1669,7 @@ const onThinkOption = async (action: string) => {
 const actionCountdownRatio = computed(() => {
   const pending = myPendingAction.value
   if (!pending?.expiresAt) return 1
-  const totalMs = 2000 // 决策犹豫期2秒
+  const totalMs = freezeDurationMs.value // 决策犹豫期
   const leftMs = Math.max(0, pending.expiresAt - Date.now())
   return Math.max(0, Math.min(1, leftMs / totalMs))
 })
