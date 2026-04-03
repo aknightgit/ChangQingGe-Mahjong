@@ -963,6 +963,11 @@ onMounted(async () => {
     evaluateViewport()
     window.addEventListener('resize', evaluateViewport)
     window.addEventListener('orientationchange', evaluateViewport)
+    // 接收服务端广播的牌局快讯
+    window.addEventListener('mahjong-broadcast', ((e: CustomEvent) => {
+      const d = e.detail
+      addBroadcast(d.text, d.type as BroadcastMsg['type'])
+    }) as EventListener)
     actionWindowTimer = setInterval(() => {
       nowTs.value = Date.now()
     }, 250)

@@ -151,6 +151,12 @@ export const useGame = () => {
         await refreshState()
       })
 
+      // 牌局快讯广播
+      socket.value.on('broadcastMessage', (data: { id: number; text: string; type: string; timestamp: number; timeLabel: string }) => {
+        console.log('📢 广播消息:', data)
+        window.dispatchEvent(new CustomEvent('mahjong-broadcast', { detail: data }))
+      })
+
       // 谢谢带头大哥事件
       socket.value.on('leadingBrother', (data: { firstPlayerName: string; tileKey: string }) => {
         console.log('🔥 谢谢带头大哥！', data)

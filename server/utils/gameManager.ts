@@ -412,6 +412,35 @@ class GameManager {
     return relations;
   }
 
+  /** 检测新形成的互包关系并广播到牌局快讯 */
+  checkAndBroadcastBailout(
+    game: GameState,
+    playerId: string,
+    sourcePlayerId: string,
+  ): void {
+    const relations = this.getMutualBailoutRelations(game.gameId);
+    const player = game.players.find(p => p.id === playerId);
+    const source = game.players.find(p => p.id === sourcePlayerId);
+    if (!player || !source) return;
+
+    for (const rel of relations) {
+      const pairIds = [rel.player1, rel.player2].sort().join('-');
+      const checkIds = [playerId, sourcePlayerId].sort().join('-');
+      if (pairIds === checkIds) {
+        const msg = `${player.name}搞了${source.name}${rel.type}了！`;
+        if (this.wsManager) {
+          this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+            id: Date.now(),
+            text: msg,
+            type: 'special',
+            timestamp: Date.now(),
+            timeLabel: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+          });
+        }
+      }
+    }
+  }
+
   /**
    * 检查两个玩家之间是否有互包关系
    */
@@ -1676,6 +1705,7 @@ class GameManager {
 
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
     this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.SEQUENCE);
+    this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
 
     for (const tile of handTiles) {
       player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile.id);
@@ -1707,6 +1737,7 @@ class GameManager {
     if (matchingTiles.length < 2) return;
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
     this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.TRIPLET);
+    this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[0].id);
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[1].id);
     const sourcePos = this.getLastDiscardPosition(game);
