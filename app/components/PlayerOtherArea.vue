@@ -35,6 +35,7 @@
             :small="true"
             :back="true"
             :dimmed="isWinner"
+            :class="`tile-left-other`"
           />
         </div>
         <div class="player-other-melds" v-if="melds.length">
@@ -51,8 +52,9 @@
               :small="true"
               :dimmed="isWinner"
             />
-            <span v-if="meld.sourcePosition !== undefined" class="meld-arrow-display">
-              {{ getMeldSourceChar(meld.sourcePosition) }}
+            <span v-if="meld.sourcePosition !== undefined" class="meld-arrow" :class="`meld--${meld.type}`">
+              {{ getArrowChar2(meld.sourcePosition, 'left') }}
+              <span class="meld-source-dot"></span>
             </span>
           </div>
         </div>
@@ -82,8 +84,9 @@
               :small="true"
               :dimmed="isWinner"
             />
-            <span v-if="meld.sourcePosition !== undefined" class="meld-arrow-display">
-              {{ getMeldSourceChar(meld.sourcePosition) }}
+            <span v-if="meld.sourcePosition !== undefined" class="meld-arrow" :class="`meld--${meld.type}`">
+              {{ getArrowChar2(meld.sourcePosition, position) }}
+              <span class="meld-source-dot"></span>
             </span>
           </div>
         </div>
@@ -137,16 +140,19 @@ const isFlowerMeld = (meld: Meld): boolean => {
   return meld.tiles.some(t => t.suit === 'hua' || t.isFlower)
 }
 
-// 绝对位置名称
-const POS_NAMES = ['南', '西', '北', '东'] // 0=South, 1=West, 2=North, 3=East
-// 相对方向：myPos=0时，delta +1=下家(右), +2=对家, +3=上家(左)
-const REL_ARROWS = ['↓', '←', '↑', '→'] // 下家(右), 对家(对), 上家(左), 自己
+// 方向映射：吃牌来源的相对方向标注
+const dirLabel: Record<string, string> = {
+  top: '↓下',
+  left: '←对',
+  right: '→上'
+}
 
-const getMeldSourceChar = (sourcePos: number): string => {
+const getArrowChar2 = (sourcePos: number, position: string): string => {
   if (props.seatPosition === undefined) return '←'
   const delta = (sourcePos - props.seatPosition + 4) % 4
-  if (delta === 0) return '★' // 自己（理论上不会出现）
-  return `${REL_ARROWS[delta]}${POS_NAMES[sourcePos]}`
+  // delta: 1=下家(右), 2=对家, 3=上家(左)
+  const labels = ['', '→下', '↑对', '←上']
+  return labels[delta] || '←'
 }
 </script>
 
@@ -171,6 +177,10 @@ const getMeldSourceChar = (sourcePos: number): string => {
   align-items: center;
   gap: 4px;
   opacity: 0.9;
+}
+
+.player-other--top .player-other-header {
+  display: none; /* 头像已替代名字 */
 }
 
 /* 左家头像区域：垂直排列 */
@@ -304,8 +314,7 @@ const getMeldSourceChar = (sourcePos: number): string => {
   box-shadow: 0 0 6px rgba(255, 214, 0, 0.35);
 }
 
-/* 吃碰箭头：加大红色，醒目显示 */
-.meld-arrow-display {
+.meld-arrow {
   position: absolute;
   bottom: -14px;
   left: 50%;
@@ -315,14 +324,26 @@ const getMeldSourceChar = (sourcePos: number): string => {
   color: #ff4444;
   text-shadow: 0 0 4px rgba(255,68,68,0.3), 0 1px 2px rgba(0,0,0,0.8);
   white-space: nowrap;
-  z-index: 5;
+}
+
+/* 吃碰箭头：根据position调整位置 */
+.player-other--top .meld-arrow {
+  bottom: -14px;
+}
+
+.player-other {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.75rem;
+  color: #f5f5f5;
 }
 
 .player-other-hand {
   display: flex;
 }
 
-/* 上家手牌：长边贴靠，水平排列，无拖拉条，2.5D阴影朝下（靠我方）*/
+/* 上家：水平排列，不换行，无滚动条 */
 .player-other--top .player-other-hand {
   flex-direction: row;
   flex-wrap: nowrap;
@@ -330,16 +351,41 @@ const getMeldSourceChar = (sourcePos: number): string => {
   overflow: visible;
 }
 
-/* 左家：在90°旋转容器内用column-reverse布局，旋转后视觉为横向，牌从左到右排列 */
+/* 左家：在90°旋转容器内，column-reverse=视觉横向从左到右 */
 .player-other--left .player-other-hand {
   display: flex;
   flex-direction: column-reverse;
   flex-wrap: nowrap;
   row-gap: 3px;
   align-items: center;
+  overflow: visible;
 }
 
-/* 左家手牌：横置（宽>高），平行于牌桌边缘 */
+/* 右家：在-90°旋转容器内，column=视觉横向从左到右 */
+.player-other--right .player-other-hand {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  row-gap: 3px;
+  align-items: center;
+  overflow: visible;
+}
+
+/* 上家手牌：2.5D阴影，靠我方（正数Y = 视觉下方） */
+.player-other--top .player-other-hand :deep(.tile) {
+  width: 32px;
+  height: 26px;
+  flex-shrink: 0;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.55),
+    inset -1px 0 0 rgba(0,0,0,0.06),
+    inset 0 -1px 0 rgba(0,0,0,0.08),
+    0 3px 0 #8a7a5a,
+    0 5px 0 #6a5a3a,
+    0 6px 10px rgba(0,0,0,0.45);
+}
+
+/* 左家手牌：横置平行于牌桌 */
 .player-other--left .player-other-hand :deep(.tile) {
   width: 36px;
   height: 25px;
@@ -352,7 +398,7 @@ const getMeldSourceChar = (sourcePos: number): string => {
   transition: transform 0.15s ease;
 }
 
-/* 左家第一张：2.5D凸起特效 */
+/* 左家第一张：2.5D凸起 */
 .player-other--left .player-other-hand :deep(.tile:first-child) {
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.4),
@@ -364,16 +410,7 @@ const getMeldSourceChar = (sourcePos: number): string => {
   z-index: 1;
 }
 
-/* 右家容器：-90°旋转后，column布局=视觉横向排列 */
-.player-other--right .player-other-hand {
-  display: flex;
-  flex-direction: column;
-  flex-wrap: nowrap;
-  row-gap: 3px;
-  align-items: center;
-}
-
-/* 右家手牌：横置（宽>高），平行于牌桌边缘 */
+/* 右家手牌：横置平行于牌桌 */
 .player-other--right .player-other-hand :deep(.tile) {
   width: 36px;
   height: 25px;
@@ -385,7 +422,7 @@ const getMeldSourceChar = (sourcePos: number): string => {
   box-shadow: -1px 0 0 #8a7a5a, -2px 0 0 #6a5a3a, 0 3px 6px rgba(0,0,0,0.3);
 }
 
-/* 右家最后一张：2.5D凸起（靠我方方向） */
+/* 右家最后一张：2.5D凸起（靠我方） */
 .player-other--right .player-other-hand :deep(.tile:last-child) {
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.4),
@@ -396,46 +433,35 @@ const getMeldSourceChar = (sourcePos: number): string => {
   transform: translateY(-2px);
 }
 
-/* 左家门口：水平一字排列，不旋转 */
+/* 左家门口：水平横排 */
 .player-other--left .player-other-melds {
   flex-direction: row;
   gap: 4px;
   flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 .player-other--left .player-other-melds :deep(.tile) {
   width: 36px;
   height: 25px;
-  /* 不旋转，一字平铺 */
 }
 .player-other--left .player-other-hand {
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
-/* 右家门口：水平一字排列，不旋转 */
+/* 右家门口：水平横排 */
 .player-other--right .player-other-melds {
   flex-direction: row;
   gap: 4px;
   flex-shrink: 0;
-  margin-top: 8px;
+  flex-wrap: nowrap;
+  margin-top: 6px;
 }
 .player-other--right .player-other-melds :deep(.tile) {
   width: 36px;
   height: 25px;
-  /* 不旋转，一字平铺 */
 }
 
-/* 对家手牌：2.5D阴影朝上（seat旋转180°后视觉朝下=靠我方） */
-.player-other--top .player-other-hand :deep(.tile) {
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.55),
-    inset -1px 0 0 rgba(0,0,0,0.06),
-    inset 0 -1px 0 rgba(0,0,0,0.08),
-    -1px -3px 0 #8a7a5a,
-    -2px -5px 0 #6a5a3a,
-    0 -3px 10px rgba(0, 0, 0, 0.45);
-}
-
-/* 上家 melds：水平一字排列，不换行 */
+/* 上家门口：水平排列 */
 .player-other--top .player-other-melds {
   gap: 4px;
   flex-wrap: nowrap;
