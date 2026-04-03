@@ -172,9 +172,12 @@ class GameManager {
   }
 
   private handleBotPendingActions(gameId: string): void {
-    // Bot: wait half of hesitationWindow (human priority) then claim
+    // Bot 等犹豫窗口一半的时间就行动，确保在 pending 过期前 claim
+    // human 通常 1-2s 内响应，bot 2-2.5s 响应，pending 5s 兜底过期
     const game = this.games.get(gameId);
-    const botThinkMs = game?.hesitationWindow ?? 5000; // 使用 hesitationWindow 作为bot延迟
+    const baseDelay = 300 + Math.floor(Math.random() * 400); // 300-700ms
+    const maxSafeDelay = (game?.hesitationWindow ?? 5000) / 2;
+    const botThinkMs = Math.min(baseDelay, maxSafeDelay);
     setTimeout(async () => {
       try {
         const game = await this.getGame(gameId);
