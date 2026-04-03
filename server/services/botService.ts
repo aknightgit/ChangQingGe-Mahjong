@@ -329,7 +329,7 @@ function evaluateChowValue(
 
   // === 基础分：大幅提高吃牌积极性 ===
   // 原来 chowChance=0.148 导致吃牌率极低，现在用更强的加成
-  let score = Math.max(policy.chowChance, 0.35) // 最低保底35%
+  let score = Math.max(policy.chowChance, 0.85) // 最低保底85%（提高吃牌率）
 
   // === 进攻加成：鼓励积极吃牌 ===
   score *= 1.5
@@ -488,7 +488,7 @@ export function shouldClaimPendingAction(
     const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id)
     if (pendingAction?.tile) {
       const chowValue = evaluateChowValue(player, game, pendingAction.tile)
-      if (Math.random() < chowValue) {
+      if (chowValue >= 0.5) {
         return ActionType.CHOW
       }
     }

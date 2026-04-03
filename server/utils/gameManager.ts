@@ -127,40 +127,30 @@ class GameManager {
           return;
         }
 
-        // 超时到期：先让所有 bot 做决策，然后人类 PASS（没响应的话）
-        // 这样 AI 和人类共享同一个 hesitationWindow，完全公平
+        // 训练模式(allClaimMode): 等所有pending玩家响应（含bot决策）
+        // 实战模式: bot和人类共享同一个hesitationWindow
+        const allClaimMode = (game as any).allClaimMode;
         const pending = [...game.pendingActions];
-        for (const pa of pending) {
-          const player = game.players.find(p => p.id === pa.playerId);
-          if (!player || player.status !== PlayerStatus.PLAYING) continue;
-          
-          if (this.isPlayerBotControlled(player)) {
-            // Bot 超时到期后自动决策
-            const action = shouldClaimPendingAction(player, pa.availableActions, game);
-            if (action === ActionType.PASS) {
+
+        if (allClaimMode) {
+          // 训练模式: 所有pending都是bot, 统一调用shouldClaimPendingAction
+          for (const pa of pending) {
+            const player = game.players.find(p => p.id === pa.playerId);
+            if (!player || !this.isPlayerBotControlled(player)) continue;
+            this.resolvePendingAction(game, player, pa);
+          }
+        } else {
+          // 实战模式: bot AI决策, 人类超时=PASS
+          for (const pa of pending) {
+            const player = game.players.find(p => p.id === pa.playerId);
+            if (!player || player.status !== PlayerStatus.PLAYING) continue;
+            if (this.isPlayerBotControlled(player)) {
+              // Bot 超时到期后自动决策
+              this.resolvePendingAction(game, player, pa);
+            } else {
+              // 人类玩家超时没响应 = PASS
               this.handlePass(game, player);
-            } else if (action === ActionType.PENG) {
-              const pengExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
-              const pengTotalCount = player.hand.concealedTiles.length + pengExposedCount;
-              if (pengTotalCount - 2 + 3 <= 14) {
-                this.handlePeng(game, player);
-              } else {
-                this.handlePass(game, player);
-              }
-            } else if (action === ActionType.CHOW) {
-              const chowExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
-              const chowTotalCount = player.hand.concealedTiles.length + chowExposedCount;
-              if (chowTotalCount - 2 + 3 <= 14) {
-                this.handleChow(game, player);
-              } else {
-                this.handlePass(game, player);
-              }
-            } else if (action === ActionType.HU) {
-              this.handleHu(game, player);
             }
-          } else {
-            // 人类玩家超时没响应 = PASS
-            this.handlePass(game, player);
           }
         }
 
@@ -193,6 +183,31 @@ class GameManager {
    */
 
 
+  /** 统一处理 pendingAction 决策（吃/碰/杠/胡/PASS） */
+  private resolvePendingAction(game: GameState, player: Player, pa: PendingAction): void {
+    const action = shouldClaimPendingAction(player, pa.availableActions, game);
+    console.log(`[PendingResolve] ${player.name} → ${action}`);
+    if (action === ActionType.PASS) {
+      this.handlePass(game, player);
+    } else if (action === ActionType.PENG) {
+      const pengExposed = this.countExposedTilesExcludingFlowerMelds(player);
+      const pengTotal = player.hand.concealedTiles.length + pengExposed;
+      if (pengTotal - 2 + 3 <= 14) { this.handlePeng(game, player); }
+      else { this.handlePass(game, player); }
+    } else if (action === ActionType.CHOW) {
+      const chowExposed = this.countExposedTilesExcludingFlowerMelds(player);
+      const chowTotal = player.hand.concealedTiles.length + chowExposed;
+      if (chowTotal - 2 + 3 <= 14) { this.handleChow(game, player); }
+      else { this.handlePass(game, player); }
+    } else if (action === ActionType.HU) {
+      this.handleHu(game, player);
+    } else {
+      this.handlePass(game, player);
+    }
+  }
+
+  /** bot 训练模式专用 */
+
   private countExposedTilesExcludingFlowerMelds(player: Player): number {
     return player.hand.exposedMelds.reduce((sum, m) => {
       if (m.tiles.length === 1 && isFlower(m.tiles[0])) return sum;
@@ -200,13 +215,14 @@ class GameManager {
     }, 0);
   }
 
+  /** 
+   * 训练模式专用：等满 hesitationWindow 后所有 bot 统一决策
+   * 实战模式不使用此方法，bot 和人类共用 pending timeout
+   */
   private handleBotPendingActions(gameId: string): void {
-    // Bot 等犹豫窗口一半的时间就行动，确保在 pending 过期前 claim
-    // human 通常 1-2s 内响应，bot 2-2.5s 响应，pending 5s 兜底过期
+    // 训练模式：等 full hesitationWindow 后统一处理
     const game = this.games.get(gameId);
-    const baseDelay = 300 + Math.floor(Math.random() * 400); // 300-700ms
-    const maxSafeDelay = (game?.hesitationWindow ?? 5000) / 2;
-    const botThinkMs = Math.min(baseDelay, maxSafeDelay);
+    const botThinkMs = game?.hesitationWindow ?? 5000;
     setTimeout(async () => {
       try {
         const game = await this.getGame(gameId);
@@ -536,7 +552,7 @@ class GameManager {
     return String(Date.now()).slice(-4);
   }
 
-  async createGame(playerName: string, options?: { freezeDurationMs?: number; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number; maxBots?: number; hesitationWindow?: number }): Promise<{ gameId: string; playerId: string }> {
+  async createGame(playerName: string, options?: { freezeDurationMs?: number; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number; maxBots?: number; hesitationWindow?: number; allClaimMode?: boolean }): Promise<{ gameId: string; playerId: string }> {
     await this.hydrateFromDatabase();
 
     const gameId = randomUUID();
@@ -597,7 +613,8 @@ class GameManager {
       settlementMultiplier: options?.settlementMultiplier ?? 10,
       maxBots: options?.maxBots ?? 3,  // 默认允许最多3个AI
       hesitationWindow: options?.hesitationWindow ?? 5000, // 决策犹豫期，默认5秒（给人类足够时间吃碰）
-      thinkUsage: {}
+      thinkUsage: {},
+      allClaimMode: options?.allClaimMode
     };
 
     this.games.set(gameId, game);
@@ -1596,8 +1613,13 @@ class GameManager {
   }
 
   private handleChow(game: GameState, player: Player): void {
-    const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
-    if (!pendingAction || !pendingAction.tile) return;
+    let pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
+    // Bug修复: pending被timeout清空后，从discardPile重建
+    if (!pendingAction || !pendingAction.tile) {
+      const lastDiscard = game.discardPile[game.discardPile.length - 1];
+      if (!lastDiscard) return;
+      pendingAction = { playerId: player.id, availableActions: [ActionType.CHOW], tile: lastDiscard } as any;
+    }
 
     const discardedTile = pendingAction.tile;
 
@@ -1633,8 +1655,14 @@ class GameManager {
    * 直接执行吃牌（不检查碰优先级）
    */
   private executeChowDirectly(game: GameState, player: Player): void {
-    const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
-    if (!pendingAction || !pendingAction.tile) return;
+    let pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
+    // Bug修复: pending被timeout清空后，从discardPile重建
+    if (!pendingAction || !pendingAction.tile) {
+      const lastDiscard = game.discardPile[game.discardPile.length - 1];
+      if (!lastDiscard) return;
+      // 从discardPile重建pendingAction
+      pendingAction = { playerId: player.id, availableActions: [ActionType.CHOW], tile: lastDiscard } as any;
+    }
 
     const discardedTile = pendingAction.tile;
     const prevPlayer = this.getPreviousActivePlayer(game, game.currentPlayerIndex);
@@ -1740,7 +1768,9 @@ class GameManager {
       ...(sourcePos !== undefined && { sourcePosition: sourcePos })
     });
 
-    game.discardPile.pop();
+    // Bug6: 用findIndex找并移除被杠牌
+    const kgIdx = game.discardPile.findIndex(t => t.id === lastDiscard.id);
+    if (kgIdx >= 0) game.discardPile.splice(kgIdx, 1);
     // 点杠积分：出牌者付2分
     player.windScore += 2;
     game.pendingActions = [];
