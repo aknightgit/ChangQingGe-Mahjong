@@ -267,6 +267,7 @@ export const useGame = () => {
 
       if ((response as any)?.success) {
         console.log('[startGame] API success, refreshing state...')
+        roomDismissedReason.value = null  // 清除 overlay 原因
         await refreshState()
         socket.value?.emit('game:state-update', { gameId: gameId.value })
         console.log('[startGame] Done, phase:', gameState.value?.phase)

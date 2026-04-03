@@ -877,7 +877,10 @@ watch(() => gameState.value?.phase, (newPhase, oldPhase) => {
   }
 })
 const diceValues = ref<[number, number]>([1, 1])
-const maxDiceRolls = ref(Number((gameState.value as any)?.diceRollCount) || Number(route.query.dice) || 2)
+const maxDiceRolls = computed(() => {
+  if (!gameState.value) return 2
+  return Number((gameState.value as any).diceRollCount) || Number((route.query as any).dice) || 2
+})
 // 如果本局已因造反/流局/聚义翻倍（inheritedGlobalMultiplier>=2），强制只掷一次骰子
 const isDoubleRound = computed(() => {
   const igm = (gameState.value as any)?.inheritedGlobalMultiplier
