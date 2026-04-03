@@ -51,8 +51,8 @@
               :small="true"
               :dimmed="isWinner"
             />
-            <span v-if="meld.sourcePosition !== undefined" class="meld-arrow">
-              {{ getArrowChar(meld.sourcePosition) }}
+            <span v-if="meld.sourcePosition !== undefined" class="meld-arrow-display">
+              {{ getMeldSourceChar(meld.sourcePosition) }}
             </span>
           </div>
         </div>
@@ -82,8 +82,8 @@
               :small="true"
               :dimmed="isWinner"
             />
-            <span v-if="meld.sourcePosition !== undefined" class="meld-arrow">
-              {{ getArrowChar(meld.sourcePosition) }}
+            <span v-if="meld.sourcePosition !== undefined" class="meld-arrow-display">
+              {{ getMeldSourceChar(meld.sourcePosition) }}
             </span>
           </div>
         </div>
@@ -142,7 +142,7 @@ const POS_NAMES = ['南', '西', '北', '东'] // 0=South, 1=West, 2=North, 3=Ea
 // 相对方向：myPos=0时，delta +1=下家(右), +2=对家, +3=上家(左)
 const REL_ARROWS = ['↓', '←', '↑', '→'] // 下家(右), 对家(对), 上家(左), 自己
 
-const getArrowChar = (sourcePos: number): string => {
+const getMeldSourceChar = (sourcePos: number): string => {
   if (props.seatPosition === undefined) return '←'
   const delta = (sourcePos - props.seatPosition + 4) % 4
   if (delta === 0) return '★' // 自己（理论上不会出现）
@@ -304,7 +304,7 @@ const getArrowChar = (sourcePos: number): string => {
   box-shadow: 0 0 6px rgba(255, 214, 0, 0.35);
 }
 
-.meld-arrow {
+.meld-arrow-display {
   position: absolute;
   bottom: -10px;
   left: 50%;
