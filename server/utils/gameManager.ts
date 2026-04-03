@@ -127,12 +127,41 @@ class GameManager {
           return;
         }
 
-        // 自动让所有待响应玩家 PASS，推动流程（包括卡住的bot）
+        // 超时到期：先让所有 bot 做决策，然后人类 PASS（没响应的话）
+        // 这样 AI 和人类共享同一个 hesitationWindow，完全公平
         const pending = [...game.pendingActions];
         for (const pa of pending) {
           const player = game.players.find(p => p.id === pa.playerId);
           if (!player || player.status !== PlayerStatus.PLAYING) continue;
-          this.handlePass(game, player);
+          
+          if (this.isPlayerBotControlled(player)) {
+            // Bot 超时到期后自动决策
+            const action = shouldClaimPendingAction(player, pa.availableActions, game);
+            if (action === ActionType.PASS) {
+              this.handlePass(game, player);
+            } else if (action === ActionType.PENG) {
+              const pengExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
+              const pengTotalCount = player.hand.concealedTiles.length + pengExposedCount;
+              if (pengTotalCount - 2 + 3 <= 14) {
+                this.handlePeng(game, player);
+              } else {
+                this.handlePass(game, player);
+              }
+            } else if (action === ActionType.CHOW) {
+              const chowExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
+              const chowTotalCount = player.hand.concealedTiles.length + chowExposedCount;
+              if (chowTotalCount - 2 + 3 <= 14) {
+                this.handleChow(game, player);
+              } else {
+                this.handlePass(game, player);
+              }
+            } else if (action === ActionType.HU) {
+              this.handleHu(game, player);
+            }
+          } else {
+            // 人类玩家超时没响应 = PASS
+            this.handlePass(game, player);
+          }
         }
 
         // 清除所有 pending（兜底）
@@ -1296,7 +1325,7 @@ class GameManager {
 
     if (game.pendingActions.length > 0) {
       this.schedulePendingActionTimeout(game.gameId);
-      this.handleBotPendingActions(game.gameId);
+      // handleBotPendingActions 已移除，bot 和人类共用 hesitationWindow 超时处理
     }
 
     await this.moveToNextPlayer(game);
