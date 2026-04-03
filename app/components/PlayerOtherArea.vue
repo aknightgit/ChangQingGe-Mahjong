@@ -95,7 +95,7 @@ const isFlowerMeld = (meld: Meld): boolean => {
 .player-other-header { display: flex; justify-content: center; align-items: center; gap: 4px; opacity: 0.9; }
 .player-other-header-left, .player-other-header-right { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .player-avatar, .player-avatar-left, .player-avatar-right { width: 36px; height: 36px; }
-.player-other-name { display: none; }
+.player-other-name { font-weight: 600; font-size: 0.85rem; }
 .player-other-name--clickable { text-decoration: underline dotted rgba(255,255,255,0.25); text-underline-offset: 3px; cursor: pointer; }
 .winner-tag { margin-left: 3px; padding: 0 3px; border-radius: 999px; background: #f44336; color: #fff; font-size: 0.6rem; }
 
