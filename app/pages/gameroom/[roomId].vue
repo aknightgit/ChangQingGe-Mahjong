@@ -877,7 +877,7 @@ watch(() => gameState.value?.phase, (newPhase, oldPhase) => {
   }
 })
 const diceValues = ref<[number, number]>([1, 1])
-const maxDiceRolls = ref(Number(route.query.dice) || 2)
+const maxDiceRolls = ref(Number((gameState.value as any)?.diceRollCount) || Number(route.query.dice) || 2)
 // 如果本局已因造反/流局/聚义翻倍（inheritedGlobalMultiplier>=2），强制只掷一次骰子
 const isDoubleRound = computed(() => {
   const igm = (gameState.value as any)?.inheritedGlobalMultiplier
@@ -1232,7 +1232,16 @@ const overlayMessage = computed(() => {
 
 const isDrawOverlay = computed(() => overlayReason.value === GameEndReason.WALL_EXHAUSTED)
 
-const startNextRound = () => { showSettlement.value = false; startGame() }
+const startNextRound = async () => { 
+  showSettlement.value = false;
+  try {
+    await startGame({ freezeDurationMs: freezeDurationMs.value });
+    await forceRefreshState();
+    console.log('[startNextRound] Game restarted, phase:', gameState.value?.phase);
+  } catch (e) {
+    console.error('[startNextRound] Failed:', e);
+  }
+}
 const isInteractionLocked = computed(() => isOverlayVisible.value)
 
 const formatOrdinal = (value: number | null | undefined) => {
