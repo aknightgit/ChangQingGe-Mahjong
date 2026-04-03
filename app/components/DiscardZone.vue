@@ -52,7 +52,9 @@ const props = defineProps<{
 /* 左右弃牌区：每排6张 */
 .discards-grid--left,
 .discards-grid--right {
-  grid-template-columns: repeat(6, max-content);
+  grid-template-columns: repeat(8, max-content);
+  max-width: 200px;
+  overflow: hidden;
 }
 
 /* 左家弃牌：外层已旋转90°，内层不再旋转 */

@@ -36,11 +36,17 @@
             :small="true"
             :dimmed="isWinner"
           />
-          <!-- 来源颜色圆点 -->
+          <!-- 吃碰杠箭头指示来源 -->
           <span
-            v-if="meld.sourceIndex !== undefined"
+            v-if="meld.sourcePosition !== undefined"
+            class="meld-arrow"
+            :class="`meld-arrow--${meld.type}`"
+          >{{ getSourceArrow(meld.sourcePosition) }}</span>
+          <!-- 兼容旧字段 sourceIndex -->
+          <span
+            v-else-if="(meld as any).sourceIndex !== undefined"
             class="meld-source"
-            :style="{ background: colors[meld.sourceIndex] }"
+            :style="{ background: colors[(meld as any).sourceIndex] }"
           />
         </div>
       </div>
@@ -102,6 +108,13 @@ const colors = computed(() => props.playerColors || ['#e53935', '#43a047', '#1e8
 
 const isFlowerMeld = (meld: Meld): boolean => {
   return meld.tiles.some(t => t.suit === 'hua' || t.isFlower)
+}
+
+// 吃碰箭头：根据sourcePosition（相对位置偏移）显示方向
+// 0=自己, 1=下家(右), 2=对家(上), 3=上家(左)
+function getSourceArrow(sourcePosition: number): string {
+  const arrows = ['自摸→', '←下家', '↑对家', '→上家']
+  return arrows[sourcePosition] || '?'
 }
 
 // 弃牌区每行6张，自动换行（由CSS flex-wrap处理，无需computed）

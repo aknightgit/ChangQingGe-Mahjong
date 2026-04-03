@@ -562,7 +562,7 @@ class GameManager {
       thinkChances: options?.thinkChances ?? 3,
       settlementMultiplier: options?.settlementMultiplier ?? 10,
       maxBots: options?.maxBots ?? 3,  // 默认允许最多3个AI
-      hesitationWindow: options?.hesitationWindow ?? 2000, // 决策犹豫期，默认2秒
+      hesitationWindow: options?.hesitationWindow ?? 5000, // 决策犹豫期，默认5秒（给人类足够时间吃碰）
       thinkUsage: {}
     };
 

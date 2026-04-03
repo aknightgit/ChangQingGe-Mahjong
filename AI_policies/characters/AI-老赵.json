@@ -1,17 +1,17 @@
 {
-  "savedAt": "2026-04-02T07:05:40.884Z",
+  "savedAt": "2026-04-03T02:17:55.125Z",
   "round": 0,
   "metrics": {
-    "fitness": -2197.1794871794873,
-    "huRate": 0.039000000000000035,
-    "drawRate": 0.961,
-    "selfDrawRate": 0.375,
-    "discardWinRate": 0.625,
-    "fightToLastRate": 0.02564102564102564,
-    "bigHandRate": 0.1,
-    "menqingWinRate": 0.05,
-    "totalGames": 20,
-    "note": "Baseline convergence - 1x20"
+    "fitness": -2563,
+    "huRate": 0,
+    "drawRate": 1,
+    "selfDrawRate": 0,
+    "discardWinRate": 0,
+    "fightToLastRate": 0,
+    "bigHandRate": 0,
+    "menqingWinRate": 0,
+    "totalGames": 10,
+    "note": "Baseline convergence - 1x10"
   },
   "policy": {
     "id": "AI-老赵",

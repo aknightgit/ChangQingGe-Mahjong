@@ -4,6 +4,8 @@
  */
 import { Tile, TileSuit, Meld, MeldType } from '../server/types/game'
 import { isHonor, isWind, isDragon, isFlower, groupTiles } from '../server/utils/tiles'
+import { isTing } from '../server/utils/handValidator'
+import { buildWildTileChecker } from '../server/utils/handValidator'
 
 // ===== 路线定义 =====
 export enum Route {
@@ -262,6 +264,58 @@ export function evaluateAllRoutes(hand: Tile[], exposedMelds: M[], wildCount: nu
     route,
     score: routeScore(route, hand, exposedMelds, wildCount, phase, wallRemaining, scorePosition, wildSuit, wildValue)
   })).sort((a, b) => b.score - a.score)
+}
+
+/**
+ * 计算距离听牌差几张有效牌
+ * distance=0: 已经听牌
+ * distance=1: 弃1张即听
+ * distance=2: 弃2张即听
+ * distance≥3: 还远
+ * 支持有百搭的情况
+ */
+export function calcTenpaiDistance(hand: Tile[], exposedMelds: Meld[], wildSuit?: TileSuit, wildValue?: number): number {
+  const nonFlower = hand.filter(t => t && !isFlower(t))
+  if (nonFlower.length < 2) return 99
+
+  const meldCount = exposedMelds.length
+  let kongCount = 0
+  for (const m of exposedMelds) {
+    if (m.tiles && m.tiles.length >= 4) kongCount++
+  }
+  const expectedLen = 14 - (meldCount - kongCount) * 3 - kongCount * 4
+
+  if (nonFlower.length !== expectedLen && nonFlower.length !== expectedLen + 1) return 99
+
+  // 辅助函数：检查弃掉指定牌后是否听牌
+  const checkTenpai = (remaining: Tile[]): boolean => {
+    if (remaining.length !== expectedLen) return false
+    try {
+      const wsVal = wildSuit && wildValue ? `${wildSuit}-${wildValue}` : null
+      return isTing(remaining, exposedMelds.length, buildWildTileChecker(wsVal))
+    } catch { return false }
+  }
+
+  // 已经听牌
+  if (checkTenpai(nonFlower)) return 0
+
+  // 弃1张即听
+  for (let i = 0; i < nonFlower.length; i++) {
+    const after = nonFlower.filter((_, j) => j !== i)
+    if (checkTenpai(after)) return 1
+  }
+
+  // 弃2张即听
+  if (nonFlower.length > expectedLen - 1) {
+    for (let i = 0; i < nonFlower.length; i++) {
+      for (let j = i + 1; j < nonFlower.length; j++) {
+        const after = nonFlower.filter((_, k) => k !== i && k !== j)
+        if (checkTenpai(after)) return 2
+      }
+    }
+  }
+
+  return 3
 }
 
 /** 出牌决策：选价值最低的牌打出 */
