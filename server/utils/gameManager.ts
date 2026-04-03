@@ -172,7 +172,7 @@ class GameManager {
   }
 
   private handleBotPendingActions(gameId: string): void {
-    // Bug修复：bot 等满 hesitationWindow 再 action，人类有完整反应时间
+    // Bot: wait half of hesitationWindow (human priority) then claim
     const game = this.games.get(gameId);
     const botThinkMs = game?.hesitationWindow ?? 5000; // 使用 hesitationWindow 作为bot延迟
     setTimeout(async () => {
