@@ -183,14 +183,27 @@ const arrowRotation = (sourcePos: number): string => {
 .player-other--left .player-other-melds :deep(.tile),
 .player-other--right .player-other-melds :deep(.tile) { width: 36px; height: 25px; }
 
-/* ===== 箭头指示（吃碰来源） ===== */
+/* ===== 箭头指示（吃碰来源）：带尾巴的大箭头 ===== */
 .meld-arrow {
-  position: absolute; bottom: -10px; left: 50%;
-  width: 0; height: 0;
-  border-left: 4px solid transparent; border-right: 4px solid transparent;
-  border-bottom: 7px solid #ff4444;
-  filter: drop-shadow(0 0 3px rgba(255,68,68,0.5));
-  transform-origin: center center;
+  position: absolute;
+  bottom: -24px;
+  left: 50%;
+  width: 5px;
+  height: 18px;
+  background: #ff4444;
+  filter: drop-shadow(0 0 4px rgba(255,68,68,0.6));
+}
+.meld-arrow::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 14px solid #ff4444;
 }
 
 /*.player-other-melds { flex-wrap: nowrap; }*/
