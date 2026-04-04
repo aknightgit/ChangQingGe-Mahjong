@@ -247,6 +247,74 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
 }
 
 /**
+ * 计算向听数（0=听牌，1=一向听，2=二向听...）
+ */
+function calculateShanten(
+  tiles: Tile[],
+  exposedCount: number,
+  isWildTileChecker: (tile: Tile) => boolean
+): number {
+  const currentLen = tiles.length
+  const expectedWinLen = 14 - exposedCount * 3
+  const needDraws = Math.max(0, expectedWinLen - currentLen)
+
+  const maxAdditional = 8
+  for (let drawCount = needDraws; drawCount <= maxAdditional; drawCount++) {
+    if (drawCount === 0) {
+      if (canWin(tiles, exposedCount, isWildTileChecker).canWin) return 0
+      continue
+    }
+
+    const placeholders: Tile[] = []
+    for (let i = 0; i < drawCount; i++) {
+      placeholders.push({
+        suit: TileSuit.DOTS,
+        value: 1,
+        id: `shanten-ph-${i}`,
+      })
+    }
+
+    if (canWin([...tiles, ...placeholders], exposedCount, isWildTileChecker).canWin) {
+      return drawCount - 1
+    }
+  }
+
+  return 8
+}
+
+/**
+ * 计算有效进张数：加入一张后能使向听数下降的牌总剩余张数
+ */
+function countEffectiveTiles(
+  tiles: Tile[],
+  exposedCount: number,
+  isWildTileChecker: (tile: Tile) => boolean
+): number {
+  const currentShanten = calculateShanten(tiles, exposedCount, isWildTileChecker)
+
+  const candidates: Array<{ suit: TileSuit; value: number }> = []
+  for (const suit of [TileSuit.WAN, TileSuit.TIAO, TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+    for (let v = 1; v <= 9; v++) {
+      candidates.push({ suit, value: v })
+    }
+  }
+  for (let v = 1; v <= 4; v++) candidates.push({ suit: TileSuit.WIND, value: v })
+  for (let v = 1; v <= 3; v++) candidates.push({ suit: TileSuit.DRAGON, value: v })
+
+  let total = 0
+  for (const c of candidates) {
+    const testTile: Tile = { suit: c.suit, value: c.value, id: `eff-${c.suit}-${c.value}` }
+    const nextShanten = calculateShanten([...tiles, testTile], exposedCount, isWildTileChecker)
+    if (nextShanten < currentShanten) {
+      const inHand = tiles.filter(t => t.suit === c.suit && t.value === c.value).length
+      total += Math.max(0, 4 - inHand)
+    }
+  }
+
+  return total
+}
+
+/**
  * Select the best tile to discard from the player's hand.
  * Returns the tile ID.
  */
@@ -257,23 +325,26 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   const wildChecker = (t: Tile) => isWildTile(t, game)
   const exposedCount = player.hand.exposedMelds.length
 
-  // ✅ 听牌最大化弃牌：当手牌是 14/11/8/5/2 张时，优先用精确分析
-  const tingValidSizes = [14, 11, 8, 5, 2];
-  if (tingValidSizes.includes(hand.length)) {
-    const tingResult = findBestDiscardForTing(hand, exposedCount, wildChecker);
-    if (tingResult.isTing && tingResult.discardTile) {
-      // console.log(`[TingDiscard] ${player.name} 听牌最大化: 打 ${tingResult.discardTile.suit}-${tingResult.discardTile.value}, 听 ${tingResult.totalWinningCount} 张`);
-      return tingResult.discardTile.id;
-    }
-  }
-
-  // 回退到启发式打分
   let bestTile = hand[0]
+  let bestShanten = Infinity
+  let bestEffective = -1
   let bestScore = -Infinity
 
-  for (const tile of hand) {
+  for (let i = 0; i < hand.length; i++) {
+    const tile = hand[i]
+    const remaining = hand.filter((_, idx) => idx !== i)
+
+    const shanten = calculateShanten(remaining, exposedCount, wildChecker)
+    const effective = countEffectiveTiles(remaining, exposedCount, wildChecker)
     const score = scoreTileForDiscard(tile, hand, game, player)
-    if (score > bestScore) {
+
+    if (
+      shanten < bestShanten ||
+      (shanten === bestShanten && effective > bestEffective) ||
+      (shanten === bestShanten && effective === bestEffective && score > bestScore)
+    ) {
+      bestShanten = shanten
+      bestEffective = effective
       bestScore = score
       bestTile = tile
     }
