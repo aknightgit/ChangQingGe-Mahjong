@@ -12,7 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createDeck, shuffleTiles, isFlower, groupTiles } from '../server/utils/tiles';
-import { Tile, TileSuit, MeldType, type Meld, type Player, type GameState } from '../server/types/game';
+import { Tile, TileSuit, MeldType, ActionType, type Meld, type Player, type GameState } from '../server/types/game';
 import { canWin, findBestDiscardForTing, checkChowPongExclusion, updateChowPongExclusion, HandType, ChowPongExclusionState } from '../server/utils/handValidator';
 import { selectDiscardTile, shouldClaimPendingAction } from '../server/services/botService';
 
@@ -68,10 +68,11 @@ function checkWin(hand: Tile[], exposed: Meld[]): { canWin: boolean; types: Hand
 
 // ========== Ting check ==========
 function checkTing(hand: Tile[], exposed: Meld[]): boolean {
-  // 打任意一张能胡 = 听牌
+  // 听牌：打任意一张后，存在任意进张可胡
   for (let i = 0; i < hand.length; i++) {
     const remaining = [...hand.slice(0, i), ...hand.slice(i + 1)];
-    if (checkWin(remaining, exposed).canWin) return true;
+    const result = findBestDiscardForTing(remaining, exposed);
+    if (result.isTing) return true;
   }
   return false;
 }
@@ -183,42 +184,51 @@ function canChow(hand: Tile[], discarded: Tile): boolean {
   const v = discarded.value;
   const suit = discarded.suit;
   const groups = groupTiles(hand);
-  return groups.has(`${suit}-${v - 1}`) || groups.has(`${suit}-${v + 1}`);
+
+  const has = (value: number) => groups.has(`${suit}-${value}`);
+  return (has(v - 2) && has(v - 1)) || (has(v - 1) && has(v + 1)) || (has(v + 1) && has(v + 2));
 }
 
 function doChow(hand: Tile[], discarded: Tile): { hand: Tile[]; meld: Meld } | null {
   if (isHonor(discarded)) return null;
   const v = discarded.value;
   const suit = discarded.suit;
-  
-  const newHand = [...hand];
-  const usedTiles: Tile[] = [{ ...discarded, id: `${discarded.suit}-${discarded.value}-c0` }];
-  
-  const leftIdx = newHand.findIndex(t => t.suit === suit && t.value === v - 1);
-  const rightIdx = newHand.findIndex(t => t.suit === suit && t.value === v + 1);
-  
-  if (leftIdx >= 0 && rightIdx >= 0) {
-    usedTiles.push({ ...newHand[leftIdx], id: `${suit}-${v-1}-c1` });
-    usedTiles.push({ ...newHand[rightIdx], id: `${suit}-${v+1}-c2` });
-    newHand.splice(Math.max(leftIdx, rightIdx), 1);
-    newHand.splice(Math.min(leftIdx, rightIdx), 1);
-  } else if (leftIdx >= 0) {
-    usedTiles.push({ ...newHand[leftIdx], id: `${suit}-${v-1}-c1` });
-    newHand.splice(leftIdx, 1);
-  } else if (rightIdx >= 0) {
-    usedTiles.push({ ...newHand[rightIdx], id: `${suit}-${v+1}-c1` });
-    newHand.splice(rightIdx, 1);
-  } else {
-    return null;
+
+  const patterns: [number, number][] = [
+    [v - 2, v - 1],
+    [v - 1, v + 1],
+    [v + 1, v + 2],
+  ];
+
+  for (const [a, b] of patterns) {
+    const idxA = hand.findIndex(t => t.suit === suit && t.value === a);
+    const idxB = hand.findIndex((t, i) => i !== idxA && t.suit === suit && t.value === b);
+    if (idxA >= 0 && idxB >= 0) {
+      const newHand = [...hand];
+      const i1 = Math.max(idxA, idxB);
+      const i2 = Math.min(idxA, idxB);
+      const t1 = newHand[i1];
+      const t2 = newHand[i2];
+      newHand.splice(i1, 1);
+      newHand.splice(i2, 1);
+
+      const meldTiles = [
+        { ...discarded, id: `${discarded.suit}-${discarded.value}-c0` },
+        { ...t1, id: `${t1.suit}-${t1.value}-c1` },
+        { ...t2, id: `${t2.suit}-${t2.value}-c2` },
+      ].sort((x, y) => x.value - y.value);
+
+      const meld: Meld = {
+        type: MeldType.SEQUENCE,
+        tiles: meldTiles,
+        isConcealed: false,
+      };
+
+      return { hand: newHand, meld };
+    }
   }
-  
-  const meld: Meld = {
-    type: MeldType.SEQUENCE,
-    tiles: usedTiles,
-    isConcealed: false,
-  };
-  
-  return { hand: newHand, meld };
+
+  return null;
 }
 
 // ========== Create bot objects ==========
@@ -243,7 +253,7 @@ function createBotGame(players: SimPlayer[], wallIdx: number, currentTurn: numbe
     currentTurn,
     dealerIndex: 0,
     roundStats: [],
-    chowPongExclusion: {},
+    chowPongExclusion: Object.fromEntries(players.map((p, i) => [`bot-${i}`, p.chowPongExclusion])) as any,
     pendingActions,
   } as GameState;
 }
@@ -259,6 +269,18 @@ function getPriorityOrder(discarderIdx: number): number[] {
 }
 
 // ========== Main game loop ==========
+function drawNonFlower(wall: Tile[], wallIdx: number, player: SimPlayer): { tile: Tile | null; wallIdx: number } {
+  while (wallIdx < wall.length) {
+    const drawn = wall[wallIdx++];
+    if (isFlower(drawn)) {
+      player.flowers.push(drawn);
+      continue;
+    }
+    return { tile: drawn, wallIdx };
+  }
+  return { tile: null, wallIdx };
+}
+
 function playOneGame(): { winner: string | null; winTypes: HandType[]; score: number } {
   const { hands, wall, flowers } = dealTiles();
   
@@ -285,24 +307,12 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
     turn++;
     const player = players[currentPlayer];
     
-    // Draw tile
-    if (wallIdx < wall.length) {
-      const drawn = wall[wallIdx++];
-      if (isFlower(drawn)) {
-        player.flowers.push(drawn);
-        // 花牌补牌后检查胡牌
-        if (wallIdx < wall.length) {
-          player.hand.push(wall[wallIdx++]);
-          const flowerWinResult = checkWin(player.hand, player.exposed);
-          if (flowerWinResult.canWin) {
-            return { winner: player.name, winTypes: flowerWinResult.types, score: 1 };
-          }
-        } else break;
-      } else {
-        player.hand.push(drawn);
-      }
-    } else {
-      break; // Wall exhausted
+    // Draw tile（连续补花直到非花）
+    {
+      const draw = drawNonFlower(wall, wallIdx, player);
+      wallIdx = draw.wallIdx;
+      if (!draw.tile) break;
+      player.hand.push(draw.tile);
     }
     
     // Check win after draw (自摸)
@@ -321,22 +331,16 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
         tile: anGangTile,
         availableActions: ['ANGANG'],
       }]);
-      const gangAction = shouldClaimPendingAction(botPlayer, ['concealed_kong', 'pass'], botGame);
-      if (gangAction === 'ANGANG') {
+      const gangAction = shouldClaimPendingAction(botPlayer, [ActionType.KONG, ActionType.PASS], botGame);
+      if (gangAction === 'kong') {
         const gangResult = doAnGang(player.hand, anGangTile);
         player.hand = gangResult.hand;
         player.exposed.push(gangResult.meld);
-        // 岭上补牌
-        if (wallIdx < wall.length) {
-          const kongDrawn = wall[wallIdx++];
-          if (isFlower(kongDrawn)) {
-            player.flowers.push(kongDrawn);
-            if (wallIdx < wall.length) {
-              player.hand.push(wall[wallIdx++]);
-            }
-          } else {
-            player.hand.push(kongDrawn);
-          }
+        // 岭上补牌（连续补花）
+        const kongDraw = drawNonFlower(wall, wallIdx, player);
+        wallIdx = kongDraw.wallIdx;
+        if (kongDraw.tile) {
+          player.hand.push(kongDraw.tile);
           // 岭上开花：补牌后检查胡牌
           const kongWinResult = checkWin(player.hand, player.exposed);
           if (kongWinResult.canWin) {
@@ -396,22 +400,16 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
           tile: lastDiscard,
           availableActions: ['MINGGANG'],
         }]);
-        const gangAction = shouldClaimPendingAction(gangPlayer, ['kong', 'pass'], gangGame);
-        if (gangAction === 'MINGGANG') {
+        const gangAction = shouldClaimPendingAction(gangPlayer, [ActionType.KONG, ActionType.PASS], gangGame);
+        if (gangAction === 'kong') {
           const gangResult = doMingGang(pPlayer.hand, lastDiscard);
           pPlayer.hand = gangResult.hand;
           pPlayer.exposed.push(gangResult.meld);
-          // 岭上补牌
-          if (wallIdx < wall.length) {
-            const kongDrawn = wall[wallIdx++];
-            if (isFlower(kongDrawn)) {
-              pPlayer.flowers.push(kongDrawn);
-              if (wallIdx < wall.length) {
-                pPlayer.hand.push(wall[wallIdx++]);
-              }
-            } else {
-              pPlayer.hand.push(kongDrawn);
-            }
+          // 岭上补牌（连续补花）
+          const kongDraw = drawNonFlower(wall, wallIdx, pPlayer);
+          wallIdx = kongDraw.wallIdx;
+          if (kongDraw.tile) {
+            pPlayer.hand.push(kongDraw.tile);
             const kongWinResult = checkWin(pPlayer.hand, pPlayer.exposed);
             if (kongWinResult.canWin) {
               return { winner: pPlayer.name, winTypes: kongWinResult.types, score: 1 };
