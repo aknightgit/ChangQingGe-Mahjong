@@ -23,7 +23,10 @@
             :key="player.id"
             :class="{ 'row-me': player.isMe }"
           >
-            <td class="td-name">
+            <td class="td-name"
+              @click="player._raw ? $emit('nameClick', player._raw) : $emit('nameClick', player)"
+              :class="{ 'name-clickable': true }"
+            >
               <span class="rank-dot" :class="`dot--${player.color}`"></span>
               <span :class="{ 'name-me': player.isMe }">{{ player.name }}</span>
               <span
@@ -77,6 +80,7 @@ interface PlayerStat {
   discardCount?: number
   selfDrawCount?: number
   bestRound?: number | null
+  _raw?: any
 }
 
 const props = defineProps<{
@@ -85,7 +89,7 @@ const props = defineProps<{
   spectatingId?: string | null
 }>()
 
-defineEmits<{ spectate: [id: string] }>()
+const emit = defineEmits<{ spectate: [id: string]; nameClick: [player: any] }>()
 
 const rankedPlayers = computed(() =>
   [...props.players].sort((a, b) => b.score - a.score)
@@ -163,6 +167,8 @@ const rankedPlayers = computed(() =>
   gap: 5px;
   white-space: nowrap;
 }
+.name-clickable { cursor: pointer; }
+.name-clickable:hover .name-me { color: #fff; }
 
 .rank-dot {
   width: 8px;

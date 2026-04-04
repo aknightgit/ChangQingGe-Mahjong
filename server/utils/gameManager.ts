@@ -203,8 +203,13 @@ class GameManager {
     } else if (action === ActionType.CHOW) {
       const chowExposed = this.countExposedTilesExcludingFlowerMelds(player);
       const chowTotal = player.hand.concealedTiles.length + chowExposed;
-      if (chowTotal - 2 + 3 <= 14) { this.handleChow(game, player); }
-      else { this.handlePass(game, player); }
+      if (chowTotal - 2 + 3 <= 14) {
+        console.log(`[PendingResolve] ${player.name} executing CHOW (concealed=${player.hand.concealedTiles.length}, exposed=${chowExposed})`);
+        this.handleChow(game, player);
+      } else {
+        console.warn(`[PendingResolve] ${player.name} CHOW blocked: would exceed 14 tiles (total=${chowTotal})`);
+        this.handlePass(game, player);
+      }
     } else if (action === ActionType.HU) {
       this.handleHu(game, player);
     } else {
@@ -1725,8 +1730,12 @@ class GameManager {
     }
 
     const discardedTile = pendingAction.tile;
-    const prevPlayer = this.getPreviousActivePlayer(game, game.currentPlayerIndex);
-    if (!prevPlayer || prevPlayer.id !== player.id) { console.warn('[CHOW] Not previous player'); return; }
+    // 修复BUG：吃牌玩家应该是弃牌者的下家（下一个活跃玩家），不是前一个
+    const nextPlayerAfterDiscarder = this.getNextActivePlayer(game, game.currentPlayerIndex);
+    if (!nextPlayerAfterDiscarder || nextPlayerAfterDiscarder.id !== player.id) {
+      console.warn(`[CHOW] Not the next player after discarder: expected=${nextPlayerAfterDiscarder?.name}, got=${player.id}`);
+      return;
+    }
 
     const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile, game);
     if (sequences.length === 0) { console.warn('[CHOW] No sequence'); return; }

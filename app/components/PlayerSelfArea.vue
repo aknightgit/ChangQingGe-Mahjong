@@ -93,16 +93,8 @@ const props = defineProps<{
   playerColors?: string[]
 }>()
 
-// 百搭牌排在最左侧
-const sortedHand = computed(() => {
-  const tiles = [...props.hand]
-  tiles.sort((a, b) => {
-    const aWild = (a as any).isWild ? -1 : 0
-    const bWild = (b as any).isWild ? -1 : 0
-    return aWild - bWild
-  })
-  return tiles
-})
+// 直接使用后端传来的排序，不再前端重排
+const sortedHand = computed(() => props.hand)
 
 const colors = computed(() => props.playerColors || ['#e53935', '#43a047', '#1e88e5', '#fb8c00'])
 

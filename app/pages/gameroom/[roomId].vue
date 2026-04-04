@@ -352,33 +352,23 @@
             </div>
             <!-- 中心金色圆环 -->
             <div class="center-glow"></div>
-            <!-- 四方位标注 -->
-            <span class="compass compass--n">北</span>
-            <span class="compass compass--s">南</span>
-            <span class="compass compass--w">西</span>
-            <span class="compass compass--e">东</span>
-            <!-- 状态消息（非中心显示） -->
-            <div class="turn-indicator">
-              <span v-if="thinkFreezeActive" class="think-freeze-indicator">
-                🧠 {{ thinkFreezePlayerName }} 在思考中... {{ thinkFreezeCountdown }}s
-              </span>
-              <span v-else-if="isWinner" class="turn-win">🎉 你赢了！</span>
-              <span v-if="isWinner && gameState?.phase === 'playing'" class="spectator-bar">
-                <span class="spectator-label">👁 观战：</span>
-                <button
-                  v-for="p in spectatablePlayers"
-                  :key="p.id"
-                  class="spectator-chip"
-                  :class="{ 'spectator-chip--active': viewingPlayerId === p.id }"
-                  @click="setSpectateTarget(p.id)"
-                >{{ p.name }}</button>
-              </span>
-              <span v-else-if="isAIControlled" class="turn-ai">🤖 AI托管中</span>
-              <span v-else-if="showMobileActionNotice" class="turn-action">有可用操作</span>
-              <span v-else>{{ turnMessage }}</span>
-              <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
-                ⏱ {{ turnTimer }}s
-              </span>
+          <!-- 状态消息（桌面中心，已迁移到扩展区） -->
+
+            <!-- 玩家名称标注（固定位置，不挤其他容器） -->
+            <div class="player-name-label player-name-label--top" v-if="topPlayer" @click="onPlayerNameClick(topPlayer)">
+              {{ topPlayer.name }}
+              <span v-if="northIsWinner" class="winner-tag">胡</span>
+            </div>
+            <div class="player-name-label player-name-label--left" v-if="leftPlayer" @click="onPlayerNameClick(leftPlayer)">
+              {{ leftPlayer.name }}
+              <span v-if="westIsWinner" class="winner-tag">胡</span>
+            </div>
+            <div class="player-name-label player-name-label--right" v-if="rightPlayer" @click="onPlayerNameClick(rightPlayer)">
+              {{ rightPlayer.name }}
+              <span v-if="eastIsWinner" class="winner-tag">胡</span>
+            </div>
+            <div class="player-name-label player-name-label--bottom" v-if="currentPlayer" @click="onPlayerNameClick(currentPlayer)">
+              我
             </div>
 
             <!-- 桌面中心: 弃牌池 + 牌墙 + 倍数 -->
@@ -426,50 +416,35 @@
             <!-- Top player -->
             <div class="seat seat-top" :class="{ 'seat-active': activePosition !== null && topPlayer?.position === activePosition }">
               <PlayerOtherArea
-                :name="topPlayer?.name || '北家'"
                 position="top"
                 :hand="northHand"
                 :melds="northMelds"
                 :is-winner="northIsWinner"
-                :reveal-hand="shouldRevealOpponents"
-                :is-bot="isBotPlayer(topPlayer)"
-                :seat-position="topPlayer?.position"
-                @name-click="onPlayerNameClick(topPlayer)"
               />
             </div>
 
             <!-- Left player -->
             <div class="seat seat-left" :class="{ 'seat-active': activePosition !== null && leftPlayer?.position === activePosition }">
               <PlayerOtherArea
-                :name="leftPlayer?.name || '西家'"
                 position="left"
                 :hand="westHand"
                 :melds="westMelds"
                 :is-winner="westIsWinner"
-                :reveal-hand="shouldRevealOpponents"
-                :is-bot="isBotPlayer(leftPlayer)"
-                :seat-position="leftPlayer?.position"
-                @name-click="onPlayerNameClick(leftPlayer)"
               />
             </div>
 
             <!-- Right player -->
             <div class="seat seat-right" :class="{ 'seat-active': activePosition !== null && rightPlayer?.position === activePosition }">
               <PlayerOtherArea
-                :name="rightPlayer?.name || '东家'"
                 position="right"
                 :hand="eastHand"
                 :melds="eastMelds"
                 :is-winner="eastIsWinner"
-                :reveal-hand="shouldRevealOpponents"
-                :is-bot="isBotPlayer(rightPlayer)"
-                :seat-position="rightPlayer?.position"
-                @name-click="onPlayerNameClick(rightPlayer)"
               />
             </div>
 
             <!-- Bottom (self) player -->
-            <div class="seat seat-bottom" :class="{ 'seat-active': activePosition !== null && currentPlayer?.position === activePosition }">
+            <div class="seat seat-bottom">
               <div class="self-area-with-actions">
                 <PlayerSelfArea
                   name="我"
@@ -573,6 +548,7 @@
             :current-round="currentRound"
             :spectating-id="spectatingId"
             @spectate="handleSpectate"
+            @name-click="onPlayerNameClick"
           />
 
           <!-- 牌局快讯 -->
@@ -620,6 +596,27 @@
 
           <!-- 操作按钮区：与战绩榜同宽，底部对齐牌桌 -->
           <div class="action-buttons-panel">
+              <!-- 状态提示 -->
+              <div class="turn-status-text">
+                <template v-if="thinkFreezeActive">
+                  🧠 {{ thinkFreezePlayerName }} 在思考中... {{ thinkFreezeCountdown }}s
+                </template>
+                <template v-else-if="isWinner">
+                  🎉 你赢了！
+                </template>
+                <template v-else-if="isAIControlled">
+                  🤖 AI托管中
+                </template>
+                <template v-else-if="showMobileActionNotice">
+                  ⚡ 有可用操作
+                </template>
+                <template v-else>
+                  {{ turnMessage }}
+                </template>
+                <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
+                  ⏱ {{ turnTimer }}s
+                </span>
+              </div>
               <CircularActionButtons
                 :available-actions="availableActions"
                 :is-connected="isConnected"
@@ -701,9 +698,12 @@
           </div>
         </div>
       </Teleport>
+      </div>
     </div>
   </div>
-</div></template>
+  <!-- 布局热调面板 -->
+  <LayoutDebugPanel v-if="showDebugPanel" @close="showDebugPanel = false" />
+</template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch, provide } from 'vue'
@@ -720,6 +720,7 @@ import PlayerInfo from '~/components/PlayerInfo.vue'
 import RoomStats from '~/components/RoomStats.vue'
 import GameBroadcast from '~/components/GameBroadcast.vue'
 import DiscardZone from '~/components/DiscardZone.vue'
+import LayoutDebugPanel from '~/components/LayoutDebugPanel.vue'
 import { useGame, ACTION_HIGHLIGHT_DELAY_MS } from '~/composables/useGame'
 import { useSound } from '~/composables/useSound'
 import { ActionType, GamePhase, GameEndReason, type Tile, type Meld, type Player } from '~/types/game'
@@ -772,6 +773,7 @@ let lastWarnAt = 0
 let consecutiveAutoCount = 0   // 连续自动操作次数
 const isAIControlled = ref(false) // 是否被AI接管
 const showSettings = ref(false) // 显示设置面板
+const showDebugPanel = ref(true) // 布局热调面板
 
 // 游戏设置
 const showHintEnabled = ref(true)       // 出牌提示
@@ -1172,6 +1174,7 @@ const statsPlayers = computed(() => {
       totalWins: cumulative.wins,
       totalLosses: cumulative.losses,
       lastRoundStatus: cumulative.lastStatus,
+      _raw: p, // 供战绩榜点击菜单使用
     }
   })
 })
@@ -2433,23 +2436,23 @@ const forceDiscard = async (p: Player) => {
 /* 上家：靠近牌桌中心，旋转180° */
 /* 四个弃牌区居中对齐牌桌十字 */
 :deep(.discard-zone--top) {
-  top: 26%;
+  top: 31%;
   left: 50%;
   transform: translateX(-50%);
 }
 :deep(.discard-zone--bottom) {
-  bottom: 26%;
+  bottom: 31%;
   left: 50%;
   transform: translateX(-50%);
 }
 :deep(.discard-zone--left) {
   top: 50%;
-  left: calc(16.6% + 20px);
+  left: calc(21.6% + 20px);
   transform: translateY(-50%) rotate(90deg);
 }
 :deep(.discard-zone--right) {
   top: 50%;
-  right: calc(16.6% + 20px);
+  right: calc(21.6% + 20px);
   transform: translateY(-50%) rotate(-90deg);
 }
 
@@ -2600,10 +2603,10 @@ const forceDiscard = async (p: Player) => {
 }
 
 .seat-top {
-  top: 0;
+  top: 10%;
   left: 50%;
-  transform: translateX(-50%) rotate(180deg) translateY(3%);
-  width: 62%;
+  transform: translateX(-50%) rotate(180deg);
+  width: 66%;
   height: auto;
 }
 
@@ -2947,33 +2950,66 @@ const forceDiscard = async (p: Player) => {
   transform: translateX(-0.5px);
 }
 
-/* 四方位标注 */
-.compass {
+/* 玩家名称标注（固定在牌桌四边，不挤占其他容器） */
+.player-name-label {
   position: absolute;
-  font-size: 0.7rem;
+  z-index: 5;
+  font-size: 0.75rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.35);
-  z-index: 2;
-  pointer-events: none;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(0, 0, 0, 0.3);
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  pointer-events: auto;
+  white-space: nowrap;
+  transition: color 0.2s, background 0.2s;
 }
-.compass--n { top: 2%; left: 50%; transform: translateX(-50%); }
-.compass--s { bottom: 2%; left: 50%; transform: translateX(-50%); }
-.compass--w { left: 2%; top: 50%; transform: translateY(-50%); }
-.compass--e { right: 2%; top: 50%; transform: translateY(-50%); }
+.player-name-label:hover {
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+}
+.player-name-label--top    { top: 0%; left: 50%; transform: translateX(-50%); }
+.player-name-label--bottom { bottom: 0%; left: 50%; transform: translateX(-50%); }
+.player-name-label--left   { left: 2%; top: 50%; transform: translateY(-50%); }
+.player-name-label--right  { right: 2%; top: 50%; transform: translateY(-50%); }
+
+.winner-tag {
+  font-size: 0.65rem;
+  background: #f5c518;
+  color: #1a1a1a;
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* 操作区状态文字 */
+.turn-status-text {
+  text-align: center;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.85);
+  padding: 8px 0 4px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.turn-timer-inline {
+  margin-left: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #81c784;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.turn-timer-inline.turn-timer--urgent {
+  color: #ef5350;
+  animation: timer-pulse 0.5s infinite;
+}
 
 /* 状态提示 */
 .turn-indicator {
-  position: absolute;
-  bottom: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.8);
-  z-index: 4;
-  background: rgba(0, 0, 0, 0.4);
-  padding: 3px 14px;
-  border-radius: 999px;
-  white-space: nowrap;
+  display: none; /* 已迁移到操作面板 */
 }
 
 .turn-win {
