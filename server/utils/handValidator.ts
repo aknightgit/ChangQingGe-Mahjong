@@ -390,7 +390,7 @@ function findBestAssignment(
   let bestTypes: HandType[] = [];
   let bestScore = -1;
   let iterations = 0;
-  const ITERATION_LIMIT = 3000;
+  const ITERATION_LIMIT = 8000;
 
   // 先用已有牌型做基准
   const baselineTypes = detectTypes(concealed, exposed);
@@ -425,7 +425,7 @@ function findBestAssignment(
 
     // 剪枝：如果当前已无法超越最优分数，提前返回
     for (const tt of allCandidates) {
-      if (iterations > ITERATION_LIMIT) break;
+      if (iterations >= ITERATION_LIMIT) break;
       currentAlloc.push(tt);
       enumerateAll(wildIdx + 1, currentAlloc);
       currentAlloc.pop();
@@ -471,7 +471,7 @@ function findBestAssignment(
         return;
       }
       for (const tt of topCandidates) {
-        if (iterations > ITERATION_LIMIT) break;
+        if (iterations >= ITERATION_LIMIT) break;
         currentAlloc.push(tt);
         enumerateTop(wildIdx + 1, currentAlloc);
         currentAlloc.pop();
@@ -481,6 +481,19 @@ function findBestAssignment(
   }
 
   return bestTypes;
+}
+
+// ============================================================
+// 新增：findBestHandTypes - 返回最优牌型列表（公开API）
+// ============================================================
+export function findBestHandTypes(
+  tiles: Tile[],
+  exposed: Meld[],
+  wildTileId: string | null
+): HandType[] {
+  const result = findBestAssignment(tiles, exposed, wildTileId ?? '');
+  // 结果已按优先级排序
+  return result;
 }
 
 // ============================================================

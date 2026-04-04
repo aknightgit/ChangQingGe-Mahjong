@@ -275,13 +275,21 @@ export function generateWinOptions(params: {
     });
     if (selfDrawResult.finalPoints > 0) {
       const label = `${selfDrawResult.handTypeName}·自摸`;
-      if (!options.some(o => o.label === label)) {
+      // 同 label 保留 score 最大者（核心分解签名用 handTypes 区分）
+      const decompKey = `self_draw|${label}|${(decomp.types || []).sort().join(',')}`;
+      const existing = options.find(o => o.label === label);
+      if (!existing) {
         options.push({
           label,
           score: selfDrawResult.finalPoints,
           details: [...selfDrawResult.details],
-          type: 'self_draw'
+          type: 'self_draw',
+          _decompKey: decompKey
         });
+      } else if (selfDrawResult.finalPoints > existing.score) {
+        existing.score = selfDrawResult.finalPoints;
+        existing.details = [...selfDrawResult.details];
+        (existing as any)._decompKey = decompKey;
       }
     }
 
@@ -294,13 +302,20 @@ export function generateWinOptions(params: {
     });
     if (discardResult.finalPoints > 0) {
       const label = `${discardResult.handTypeName}·捉冲`;
-      if (!options.some(o => o.label === label)) {
+      const decompKey = `discard|${label}|${(decomp.types || []).sort().join(',')}`;
+      const existing = options.find(o => o.label === label);
+      if (!existing) {
         options.push({
           label,
           score: discardResult.finalPoints,
           details: [...discardResult.details],
-          type: 'discard'
+          type: 'discard',
+          _decompKey: decompKey
         });
+      } else if (discardResult.finalPoints > existing.score) {
+        existing.score = discardResult.finalPoints;
+        existing.details = [...discardResult.details];
+        (existing as any)._decompKey = decompKey;
       }
     }
   }
@@ -323,13 +338,17 @@ export function generateWinOptions(params: {
         });
         const doubledPoints = noWildResult.finalPoints * 2;
         const noWildLabel = `${noWildResult.handTypeName}·自摸(无百搭×2)`;
-        if (!options.some(o => o.label === noWildLabel)) {
+        const existingNoWild = options.find(o => o.label === noWildLabel);
+        if (!existingNoWild) {
           options.push({
             label: noWildLabel,
             score: doubledPoints,
             details: [...noWildResult.details, `无百搭翻倍 ×2 = ${doubledPoints}点`],
             type: 'self_draw'
           });
+        } else if (doubledPoints > existingNoWild.score) {
+          existingNoWild.score = doubledPoints;
+          existingNoWild.details = [...noWildResult.details, `无百搭翻倍 ×2 = ${doubledPoints}点`];
         }
 
         // 捉冲版
@@ -343,29 +362,31 @@ export function generateWinOptions(params: {
         });
         const doubledDiscard = noWildDiscard.finalPoints * 2;
         const noWildDiscardLabel = `${noWildDiscard.handTypeName}·捉冲(无百搭×2)`;
-        if (!options.some(o => o.label === noWildDiscardLabel)) {
+        const existingNoWildDiscard = options.find(o => o.label === noWildDiscardLabel);
+        if (!existingNoWildDiscard) {
           options.push({
             label: noWildDiscardLabel,
             score: doubledDiscard,
             details: [...noWildDiscard.details, `无百搭翻倍 ×2 = ${doubledDiscard}点`],
             type: 'discard'
           });
+        } else if (doubledDiscard > existingNoWildDiscard.score) {
+          existingNoWildDiscard.score = doubledDiscard;
+          existingNoWildDiscard.details = [...noWildDiscard.details, `无百搭翻倍 ×2 = ${doubledDiscard}点`];
         }
       }
     }
   }
 
-  // 去重 + 按分数倒序
-  const uniqueOptions: WinOption[] = [];
-  const seen = new Set<string>();
+  // 去重（按 label，保留 score 最大者） + 按分数倒序
+  const labelBest = new Map<string, WinOption>();
   for (const opt of options) {
-    const key = opt.label;
-    if (!seen.has(key)) {
-      seen.add(key);
-      uniqueOptions.push(opt);
+    const existing = labelBest.get(opt.label);
+    if (!existing || opt.score > existing.score) {
+      labelBest.set(opt.label, opt);
     }
   }
-  uniqueOptions.sort((a, b) => b.score - a.score);
+  const uniqueOptions = Array.from(labelBest.values()).sort((a, b) => b.score - a.score);
   return uniqueOptions;
 }
 
