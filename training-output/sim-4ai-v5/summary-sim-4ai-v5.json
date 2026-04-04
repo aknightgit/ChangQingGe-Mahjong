@@ -1,0 +1,15 @@
+{
+  "totalGames": 50,
+  "wins": 3,
+  "draws": 47,
+  "overallWinRate": "6.0%",
+  "winTypes": {
+    "full_flush": 2,
+    "qing_peng": 1,
+    "all_triplets": 2
+  },
+  "playerWins": {
+    "AI-AK": 2,
+    "AI-阿水": 1
+  }
+}

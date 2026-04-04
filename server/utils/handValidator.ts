@@ -58,8 +58,19 @@ function canFormMelds(
   n: number,
   isWildTile: WildTileChecker
 ): boolean {
-  // n=0 时不留牌
-  if (n === 0) return tiles.length === 0;
+  // n=0 时：要么没牌，要么恰好2张能组成对子
+  if (n === 0) {
+    if (tiles.length === 0) return true;
+    if (tiles.length === 2) {
+      const wilds = tiles.filter(t => isWildTile(t));
+      const naturals = tiles.filter(t => !isWildTile(t));
+      // 2百搭 或 2张相同自然牌 或 1自然+1百搭
+      if (wilds.length >= 2) return true;
+      if (naturals.length === 2 && naturals[0].suit === naturals[1].suit && naturals[0].value === naturals[1].value) return true;
+      if (naturals.length === 1 && wilds.length === 1) return true;
+    }
+    return false;
+  }
 
   const wilds = tiles.filter(t => isWildTile(t));
   const naturals = tiles.filter(t => !isWildTile(t));
@@ -273,21 +284,20 @@ function detectTypes(
     concealedNonFlower.every(t => isWind(t));
   if (allWind) types.push(HandType.ALL_WIND);
 
+  // ---- 从手牌张数推导需要的面子数 ----
+  // 3n+2 格式：concealed = 3*remainingMelds + 2
+  // 14张→4面子, 11张→3面子, 8张→2面子, 5张→1面子, 2张→0面子
+  const remainingMelds = (concealedNonFlower.length - 2) / 3;
+  if (!Number.isInteger(remainingMelds) || remainingMelds < 0) return [];
+
   // ---- 统计已暴露面子 ----
   const hasExposedSequence = exposed.some(m => m.type === MeldType.SEQUENCE);
-  const exposedTripletCount = exposed.filter(m =>
-    m.type === MeldType.TRIPLET || m.type === MeldType.KONG
-  ).length;
-  const remainingMelds = 4 - exposedTripletCount;
 
   // ---- 3n+2 格式检测 ----
-  const satisfiesFormat = remainingMelds >= 0 &&
-    canFormMelds(concealedNonFlower, remainingMelds, () => false);
+  const satisfiesFormat = canFormMelds(concealedNonFlower, remainingMelds, () => false);
 
   // 碰碰胡：所有面子都是刻子/杠子（门口+手牌都不能有顺子）
-  // 检查手牌能否只用刻子组成面子（不用顺子）
-  const canFormOnlyTriplets = remainingMelds >= 0 &&
-    canFormOnlyTripletsFrom(concealedNonFlower, remainingMelds, () => false);
+  const canFormOnlyTriplets = canFormOnlyTripletsFrom(concealedNonFlower, remainingMelds, () => false);
   if (!hasExposedSequence && canFormOnlyTriplets) {
     types.push(HandType.ALL_TRIPLETS);
   }
@@ -474,11 +484,11 @@ export function canWin(
     return { canWin: true, types: [HandType.EIGHT_FLOWERS] };
   }
 
-  // 四百搭
+  // 四百搭（手牌有4张百搭即可胡）
   if (wildTileId) {
     const wildTileFn = buildWildTileChecker(wildTileId);
     const wildCount = concealed.filter(t => wildTileFn(t)).length;
-    if (wildCount >= 4 && concealedNonFlower.length === 0) {
+    if (wildCount >= 4) {
       return { canWin: true, types: [HandType.FOUR_WILD] };
     }
   }

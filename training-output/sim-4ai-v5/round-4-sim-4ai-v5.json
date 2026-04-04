@@ -1,0 +1,13 @@
+{
+  "round": 4,
+  "totalGames": 10,
+  "wins": 0,
+  "draws": 10,
+  "winRate": "0%",
+  "winTypes": {},
+  "playerWins": {},
+  "timestamp": "2026-04-04T10:49:41.452Z",
+  "issues": [
+    "[R4] 胡牌率过低 (0%)，可能需要调整AI策略"
+  ]
+}
