@@ -483,22 +483,33 @@ export function shouldClaimPendingAction(
 
   // === PENG: 基于策略决定 ===
   if (availableActions.includes(ActionType.PENG)) {
-    // 接近胡牌阶段更积极碰
-    if (hand.length <= 7 && Math.random() < policy.pengChance * 1.2) {
-      return ActionType.PENG
-    }
-    if (Math.random() < policy.pengChance) {
-      return ActionType.PENG
+    // 硬校验：吃碰排斥规则
+    const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id)
+    const exclusionState = game.chowPongExclusion?.[player.id] || { firstActionSuit: null, firstActionType: null }
+    if (pendingAction?.tile) {
+      if (!checkChowPongExclusion(exclusionState, 'pong', pendingAction.tile.suit)) {
+        // 吃碰排斥：禁止碰
+      } else if (hand.length <= 7 && Math.random() < policy.pengChance * 1.2) {
+        return ActionType.PENG
+      } else if (Math.random() < policy.pengChance) {
+        return ActionType.PENG
+      }
     }
   }
 
   // === CHOW: 智能评估 ===
   if (availableActions.includes(ActionType.CHOW)) {
     const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id)
+    // 硬校验：吃碰排斥规则
+    const exclusionState = game.chowPongExclusion?.[player.id] || { firstActionSuit: null, firstActionType: null }
     if (pendingAction?.tile) {
-      const chowValue = evaluateChowValue(player, game, pendingAction.tile)
-      if (chowValue >= 0.5) {
-        return ActionType.CHOW
+      if (!checkChowPongExclusion(exclusionState, 'chow', pendingAction.tile.suit)) {
+        // 吃碰排斥：禁止吃
+      } else {
+        const chowValue = evaluateChowValue(player, game, pendingAction.tile)
+        if (chowValue >= 0.5) {
+          return ActionType.CHOW
+        }
       }
     }
   }

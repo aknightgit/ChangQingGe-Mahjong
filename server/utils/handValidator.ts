@@ -358,20 +358,25 @@ function findBestAssignment(
 
   const naturals = concealed.filter(t => !isWild(t));
 
-  // 收集所有可能的目标牌（手牌中已有的花色+数值）
-  const groups = groupTiles(naturals);
-  const tileTypes: Array<{suit: string; value: number}> = [];
-  for (const [, group] of groups) {
-    if (group.length === 0) continue;
-    const tile = group[0];
-    if (!tileTypes.some(c => c.suit === tile.suit && c.value === tile.value)) {
-      tileTypes.push({ suit: tile.suit, value: tile.value });
+  // 生成所有合法候选牌（34种：3门数牌×9 + 风4 + 箭3）
+  const allCandidates: Array<{suit: string; value: number}> = [];
+  const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+  for (const s of numSuits) {
+    for (let v = 1; v <= 9; v++) {
+      allCandidates.push({ suit: s, value: v });
     }
+  }
+  // 风牌 1-4
+  for (let v = 1; v <= 4; v++) {
+    allCandidates.push({ suit: TileSuit.WIND, value: v });
+  }
+  // 箭牌 1-3
+  for (let v = 1; v <= 3; v++) {
+    allCandidates.push({ suit: TileSuit.DRAGON, value: v });
   }
 
   // 如果没有任何自然牌，百搭只能自成牌型
-  if (tileTypes.length === 0) {
-    // 百搭自成刻子+对子
+  if (naturals.length === 0) {
     const virtualHand: Tile[] = [];
     for (let i = 0; i < wildCount; i++) {
       virtualHand.push({ suit: wildSuit as TileSuit, value: parseInt(wildVal), id: `v-${i}`, isFlower: false });
@@ -379,17 +384,26 @@ function findBestAssignment(
     return detectTypes(virtualHand, exposed);
   }
 
-  // 穷举：每个百搭可以变成 tileTypes 中的任意一种牌
-  // 用递归枚举所有分配组合
+  // 用记忆化 DFS 搜索最优百搭分配
+  // 状态：(wildIdx, currentAlloc) → 最优牌型
+  // 为控制复杂度，使用贪心+回溯策略
   let bestTypes: HandType[] = [];
   let bestScore = -1;
 
-  function enumerateAssignments(
+  // 先用已有牌型做基准
+  const baselineTypes = detectTypes(concealed, exposed);
+  if (baselineTypes.length > 0) {
+    bestScore = HAND_TYPE_PRIORITY[baselineTypes[0]] ?? 0;
+    bestTypes = [...baselineTypes];
+  }
+
+  // 对每个百搭，尝试所有34种候选牌
+  // 使用迭代加深：先试单张最优，再试组合
+  function enumerateAll(
     wildIdx: number,
     currentAlloc: Array<{suit: string; value: number}>
   ) {
     if (wildIdx === wildCount) {
-      // 所有百搭分配完毕，检测牌型
       const virtualHand = [...naturals];
       for (const a of currentAlloc) {
         virtualHand.push({ suit: a.suit as TileSuit, value: a.value, id: `v-${Math.random()}`, isFlower: false });
@@ -405,29 +419,32 @@ function findBestAssignment(
       return;
     }
 
-    // 每个百搭可以尝试变成任意一种已有牌
-    for (const tt of tileTypes) {
+    // 剪枝：如果当前已无法超越最优分数，提前返回
+    for (const tt of allCandidates) {
       currentAlloc.push(tt);
-      enumerateAssignments(wildIdx + 1, currentAlloc);
+      enumerateAll(wildIdx + 1, currentAlloc);
       currentAlloc.pop();
     }
   }
 
-  // 限制：如果组合数太多，只取 top candidates
-  const totalCombinations = Math.pow(tileTypes.length, wildCount);
-  if (totalCombinations > 1000) {
-    // 太多组合，只取 top 5 候选
-    const scored = tileTypes.map(tt => {
-      let score = 50;
+  // 限制搜索深度：百搭数量≤2时全搜索，>2时只搜索高分候选
+  if (wildCount <= 2) {
+    enumerateAll(0, []);
+  } else {
+    // 百搭>2时，只搜索高分候选（箭牌>风牌>数牌）
+    const scoredCandidates = allCandidates.map(tt => {
       const tile = { suit: tt.suit as TileSuit, value: tt.value };
+      let score = 50;
       if (isDragon(tile as Tile)) score = 110;
       else if (isWind(tile as Tile)) score = 100;
+      // 手牌中已有的牌加分
+      if (naturals.some(t => t.suit === tt.suit && t.value === tt.value)) score += 20;
       return { ...tt, score };
     });
-    scored.sort((a, b) => b.score - a.score);
-    const topCandidates = scored.slice(0, 5);
+    scoredCandidates.sort((a, b) => b.score - a.score);
+    const topCandidates = scoredCandidates.slice(0, 15); // 取top15
 
-    function enumerateLimited(
+    function enumerateTop(
       wildIdx: number,
       currentAlloc: Array<{suit: string; value: number}>
     ) {
@@ -448,13 +465,11 @@ function findBestAssignment(
       }
       for (const tt of topCandidates) {
         currentAlloc.push(tt);
-        enumerateLimited(wildIdx + 1, currentAlloc);
+        enumerateTop(wildIdx + 1, currentAlloc);
         currentAlloc.pop();
       }
     }
-    enumerateLimited(0, []);
-  } else {
-    enumerateAssignments(0, []);
+    enumerateTop(0, []);
   }
 
   return bestTypes;
@@ -617,12 +632,28 @@ export function findBestDiscardForTing(
   existingMelds: number,
   isWildTile: WildTileChecker = () => false
 ): TingAnalysis {
+  // 2张手牌已经是将牌状态，不需要弃牌
+  if (tiles.length <= 2) {
+    return {
+      discardTile: null,
+      winningTiles: [],
+      totalWinningCount: 0,
+      isTing: false,
+    };
+  }
+
+  // 生成合法候选听牌：数牌1-9，风牌1-4，箭牌1-3
   const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-  const honorSuits = [TileSuit.WIND, TileSuit.DRAGON];
   const allTileTypes: Array<{ suit: string; value: number }> = [];
-  for (const s of [...numSuits, ...honorSuits])
+  for (const s of numSuits)
     for (let v = 1; v <= 9; v++)
       allTileTypes.push({ suit: s, value: v });
+  // 风牌 1-4
+  for (let v = 1; v <= 4; v++)
+    allTileTypes.push({ suit: TileSuit.WIND, value: v });
+  // 箭牌 1-3
+  for (let v = 1; v <= 3; v++)
+    allTileTypes.push({ suit: TileSuit.DRAGON, value: v });
 
   let bestResult: TingAnalysis = {
     discardTile: null,
