@@ -16,6 +16,7 @@ export enum HandType {
   FOUR_WILD     = 'four_wild',     // 四百搭
   ALL_TRIPLETS  = 'all_triplets',  // 碰碰胡
   DA_DIAO       = 'da_diao',       // 大吊
+  STANDARD      = 'standard',      // 基础胡牌（3n+2格式，无特殊牌型）
 }
 
 // 优先级（越高越好）
@@ -30,6 +31,7 @@ export const HAND_TYPE_PRIORITY: Record<HandType, number> = {
   [HandType.FOUR_WILD]:      50,
   [HandType.ALL_TRIPLETS]:    30,
   [HandType.DA_DIAO]:        85,
+  [HandType.STANDARD]:        10,
 };
 
 export type WildTileChecker = (tile: Tile) => boolean;
@@ -268,10 +270,10 @@ function tryFormMelds(n: number, wildLeft: number, map: Map<string, number>): bo
   const cnt = map.get(firstKey)!;
 
   // --- 刻子 ---
-  const needTriplet = 3 - cnt;
+  const needTriplet = Math.max(0, 3 - cnt);
   if (needTriplet <= wildLeft) {
     const saved = cnt;
-    map.set(firstKey, 0);
+    map.set(firstKey, Math.max(0, cnt - 3)); // 只消耗3张，多余的留下
     if (tryFormMelds(n - 1, wildLeft - needTriplet, map)) return true;
     map.set(firstKey, saved);
   }
@@ -372,6 +374,11 @@ function detectTypes(
   // 大吊
   if (concealedNonFlower.length === 2 && exposed.length >= 1) {
     types.push(HandType.DA_DIAO);
+  }
+
+  // 基础胡牌：满足3n+2格式但没有特殊牌型
+  if (types.length === 0 && satisfiesFormat) {
+    types.push(HandType.STANDARD);
   }
 
   return types.sort((a, b) => (HAND_TYPE_PRIORITY[b] ?? 0) - (HAND_TYPE_PRIORITY[a] ?? 0));
