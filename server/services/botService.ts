@@ -233,7 +233,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   if (tingValidSizes.includes(hand.length)) {
     const tingResult = findBestDiscardForTing(hand, exposedCount, wildChecker);
     if (tingResult.isTing && tingResult.discardTile) {
-      console.log(`[TingDiscard] ${player.name} 听牌最大化: 打 ${tingResult.discardTile.suit}-${tingResult.discardTile.value}, 听 ${tingResult.totalWinningCount} 张`);
+      // console.log(`[TingDiscard] ${player.name} 听牌最大化: 打 ${tingResult.discardTile.suit}-${tingResult.discardTile.value}, 听 ${tingResult.totalWinningCount} 张`);
       return tingResult.discardTile.id;
     }
   }
@@ -341,17 +341,12 @@ function evaluateChowValue(
   // 已经听牌不再吃
   if (player.isTing) return 0
 
-  // === 基础分：大幅提高吃牌积极性 ===
-  // 原来 chowChance=0.148 导致吃牌率极低，现在用更强的加成
-  let score = Math.max(policy.chowChance, 0.85) // 最低保底85%（提高吃牌率）
+  // === 基础分：使用 policy 原始值 ===
+  let score = policy.chowChance
 
-  // === 进攻加成：鼓励积极吃牌 ===
-  score *= 1.5
-
-  // === 门清意愿降低 ===
+  // === 门清意愿 ===
   if (meldCount === 0) {
-    // 门清时不再大幅惩罚，只轻微降低
-    score *= 0.85  // 原来是 (1 - bailoutHuPenaltyPerMeld * 3) 可能很低
+    score *= 0.85
   }
 
   // === 面子数管理：限制瞎吃 ===
