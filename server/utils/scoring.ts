@@ -252,64 +252,98 @@ export function generateWinOptions(params: {
 }): WinOption[] {
   const options: WinOption[] = [];
   const baseParams = { ...params };
+  const roundMult = params.roundMultiplier ?? 1;
+  const globalMult = params.globalMultiplier ?? 1;
 
-  // 方案1: 自摸（如果可以自摸）
+  // ===== 方案1: 自摸 =====
   const selfDrawResult = calculateScore({
     ...baseParams,
     isSelfDrawn: true,
     globalIncludesRound: true,
   });
-  options.push({
-    label: `${selfDrawResult.handTypeName}·自摸`,
-    score: selfDrawResult.finalPoints,
-    details: [...selfDrawResult.details],
-    type: 'self_draw'
-  });
+  if (selfDrawResult.finalPoints > 0) {
+    options.push({
+      label: `${selfDrawResult.handTypeName}·自摸`,
+      score: selfDrawResult.finalPoints,
+      details: [...selfDrawResult.details],
+      type: 'self_draw'
+    });
+  }
 
-  // 方案2: 捉冲
+  // ===== 方案2: 捉冲 =====
   const discardResult = calculateScore({
     ...baseParams,
     isSelfDrawn: false,
     globalIncludesRound: true,
   });
-  options.push({
-    label: `${discardResult.handTypeName}·捉冲`,
-    score: discardResult.finalPoints,
-    details: [...discardResult.details],
-    type: 'discard'
-  });
+  if (discardResult.finalPoints > 0) {
+    options.push({
+      label: `${discardResult.handTypeName}·捉冲`,
+      score: discardResult.finalPoints,
+      details: [...discardResult.details],
+      type: 'discard'
+    });
+  }
 
-  // 方案3: 如果百搭当原牌能胡（无百搭 ×2），也尝试
+  // ===== 方案3: 百搭归位（无百搭翻倍） =====
+  // 检查：把手牌中的百搭当作原牌（非百搭）还能不能胡
   if (params.wildTileSuit !== undefined && params.wildTileValue !== undefined) {
     const wildCount = countWildTiles(params.handTiles, params.wildTileSuit, params.wildTileValue, params.wildTileGroup);
     if (wildCount > 0) {
+      // 关键：用 () => false 作为百搭检测，即所有牌都不是百搭
       const noWildCheck = canWin(params.handTiles, params.exposedMelds.length, () => false);
       if (noWildCheck.canWin) {
-        const noWildSelfDraw = calculateScore({
+        // 百搭归位能胡 → 用无百搭的牌型重新算番
+        const noWildTypes = noWildCheck.types;
+        const noWildResult = calculateScore({
           ...baseParams,
+          handTypes: noWildTypes,
+          // 关键：不传 wildTileSuit/wildTileValue，让 calculateFormulaFan 不走百搭分配
+          wildTileSuit: undefined,
+          wildTileValue: undefined,
           isSelfDrawn: true,
           globalIncludesRound: true,
         });
-        // 无百搭的方案已经在 standard 中（canWin 时 wildCount 可能 > 0 但无百搭仍适用）
-        // 这里标记为特殊选项
-        const noWildLabel = `${noWildSelfDraw.handTypeName}·自摸(百搭归位)`;
+        // 无百搭翻倍：最终点数 ×2
+        const doubledPoints = noWildResult.finalPoints * 2;
+        const noWildLabel = `${noWildResult.handTypeName}·自摸(无百搭×2)`;
         if (!options.some(o => o.label === noWildLabel)) {
           options.push({
             label: noWildLabel,
-            score: noWildSelfDraw.finalPoints,
-            details: [...noWildSelfDraw.details],
+            score: doubledPoints,
+            details: [...noWildResult.details, `无百搭翻倍 ×2 = ${doubledPoints}点`],
             type: 'self_draw'
+          });
+        }
+
+        // 捉冲版
+        const noWildDiscard = calculateScore({
+          ...baseParams,
+          handTypes: noWildTypes,
+          wildTileSuit: undefined,
+          wildTileValue: undefined,
+          isSelfDrawn: false,
+          globalIncludesRound: true,
+        });
+        const doubledDiscard = noWildDiscard.finalPoints * 2;
+        const noWildDiscardLabel = `${noWildDiscard.handTypeName}·捉冲(无百搭×2)`;
+        if (!options.some(o => o.label === noWildDiscardLabel)) {
+          options.push({
+            label: noWildDiscardLabel,
+            score: doubledDiscard,
+            details: [...noWildDiscard.details, `无百搭翻倍 ×2 = ${doubledDiscard}点`],
+            type: 'discard'
           });
         }
       }
     }
   }
 
-  // 去重（相同 score 和 type 只保留第一个）
+  // 去重（相同 label 只保留第一个）
   const uniqueOptions: WinOption[] = [];
   const seen = new Set<string>();
   for (const opt of options) {
-    const key = `${opt.label}`;
+    const key = opt.label;
     if (!seen.has(key)) {
       seen.add(key);
       uniqueOptions.push(opt);
