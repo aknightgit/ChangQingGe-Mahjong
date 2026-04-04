@@ -73,11 +73,10 @@ function checkWin(hand: Tile[], exposed: Meld[], wildTileId: string | null = nul
 
 // ========== Ting check ==========
 function checkTing(hand: Tile[], exposed: Meld[], wildTileId: string | null = null): boolean {
-  const wildChecker = wildTileId ? (t: Tile) => `${t.suit}-${t.value}` === wildTileId : () => false;
   // 听牌：打任意一张后，存在任意进张可胡
   for (let i = 0; i < hand.length; i++) {
     const remaining = [...hand.slice(0, i), ...hand.slice(i + 1)];
-    const result = findBestDiscardForTing(remaining, exposed.length, wildChecker);
+    const result = findBestDiscardForTing(remaining, exposed.length, wildTileId as any);
     if (result.isTing) return true;
   }
   return false;
