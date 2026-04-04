@@ -13,7 +13,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createDeck, shuffleTiles, isFlower, groupTiles } from '../server/utils/tiles';
 import { Tile, TileSuit, MeldType, ActionType, type Meld, type Player, type GameState } from '../server/types/game';
-import { canWin, findBestDiscardForTing, checkChowPongExclusion, updateChowPongExclusion, HandType, ChowPongExclusionState } from '../server/utils/handValidator';
+import { canWin, findBestDiscardForTing, checkChowPongExclusion, updateChowPongExclusion, checkTing as checkTingInfo, HandType, ChowPongExclusionState } from '../server/utils/handValidator';
 import { selectDiscardTile, shouldClaimPendingAction } from '../server/services/botService';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -286,7 +286,32 @@ function drawNonFlower(wall: Tile[], wallIdx: number, player: SimPlayer): { tile
   return { tile: null, wallIdx };
 }
 
-function playOneGame(): { winner: string | null; winTypes: HandType[]; score: number } {
+interface GameMetrics {
+  shantenByPlayerRoundAvg: number[];
+  avgFirstTingTurn: number | null;
+  claimImpact: {
+    withClaim: { games: number; winRate: number };
+    withoutClaim: { games: number; winRate: number };
+    delta: number;
+  };
+  stageSurvivalRate: {
+    early: number;
+    mid: number;
+    late: number;
+  };
+}
+
+function calcShanten(hand: Tile[], exposed: Meld[], wildTileId: string | null = null): number {
+  return checkTingInfo(hand, exposed, wildTileId as any).shanten;
+}
+
+function classifyStage(turn: number): 'early' | 'mid' | 'late' {
+  if (turn <= 24) return 'early';
+  if (turn <= 48) return 'mid';
+  return 'late';
+}
+
+function playOneGame(): { winner: string | null; winTypes: HandType[]; score: number; metrics: GameMetrics } {
   const { hands, wall, flowers, wildTileId } = dealTiles();
   
   const players: SimPlayer[] = AI_NAMES.map((name, i) => ({
@@ -307,11 +332,19 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
   
   let maxTurns = 300;
   let turn = 0;
+
+  const shantenSums = [0, 0, 0, 0];
+  const shantenSnapshots = [0, 0, 0, 0];
+  const firstTingTurn = [-1, -1, -1, -1];
+  let hasClaimAction = false;
+  let endedStage: 'early' | 'mid' | 'late' = 'late';
   
   while (turn < maxTurns) {
     turn++;
     const player = players[currentPlayer];
     
+    endedStage = classifyStage(turn);
+
     // Draw tile（连续补花直到非花）
     {
       const draw = drawNonFlower(wall, wallIdx, player);
@@ -323,7 +356,32 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
     // Check win after draw (自摸)
     const winResult = checkWin(player.hand, player.exposed, wildTileId);
     if (winResult.canWin) {
-      return { winner: player.name, winTypes: winResult.types, score: 1 };
+      const shantenByPlayerRoundAvg = shantenSums.map((sum, idx) =>
+        shantenSnapshots[idx] > 0 ? Number((sum / shantenSnapshots[idx]).toFixed(3)) : 0,
+      );
+      const firstTingTurns = firstTingTurn.filter(t => t > 0);
+      const avgFirstTingTurn = firstTingTurns.length > 0
+        ? Number((firstTingTurns.reduce((a, b) => a + b, 0) / firstTingTurns.length).toFixed(3))
+        : null;
+      return {
+        winner: player.name,
+        winTypes: winResult.types,
+        score: 1,
+        metrics: {
+          shantenByPlayerRoundAvg,
+          avgFirstTingTurn,
+          claimImpact: {
+            withClaim: { games: hasClaimAction ? 1 : 0, winRate: hasClaimAction ? 1 : 0 },
+            withoutClaim: { games: hasClaimAction ? 0 : 1, winRate: hasClaimAction ? 0 : 1 },
+            delta: hasClaimAction ? 1 : -1,
+          },
+          stageSurvivalRate: {
+            early: endedStage === 'early' ? 0 : 1,
+            mid: endedStage === 'late' ? 1 : 0,
+            late: endedStage === 'late' ? 0 : 1,
+          },
+        },
+      };
     }
     
     // Check 暗杠 (before discard)
@@ -349,7 +407,32 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
           // 岭上开花：补牌后检查胡牌
           const kongWinResult = checkWin(player.hand, player.exposed, wildTileId);
           if (kongWinResult.canWin) {
-            return { winner: player.name, winTypes: kongWinResult.types, score: 1 };
+            const shantenByPlayerRoundAvg = shantenSums.map((sum, idx) =>
+              shantenSnapshots[idx] > 0 ? Number((sum / shantenSnapshots[idx]).toFixed(3)) : 0,
+            );
+            const firstTingTurns = firstTingTurn.filter(t => t > 0);
+            const avgFirstTingTurn = firstTingTurns.length > 0
+              ? Number((firstTingTurns.reduce((a, b) => a + b, 0) / firstTingTurns.length).toFixed(3))
+              : null;
+            return {
+              winner: player.name,
+              winTypes: kongWinResult.types,
+              score: 1,
+              metrics: {
+                shantenByPlayerRoundAvg,
+                avgFirstTingTurn,
+                claimImpact: {
+                  withClaim: { games: hasClaimAction ? 1 : 0, winRate: hasClaimAction ? 1 : 0 },
+                  withoutClaim: { games: hasClaimAction ? 0 : 1, winRate: hasClaimAction ? 0 : 1 },
+                  delta: hasClaimAction ? 1 : -1,
+                },
+                stageSurvivalRate: {
+                  early: endedStage === 'early' ? 0 : 1,
+                  mid: endedStage === 'late' ? 1 : 0,
+                  late: endedStage === 'late' ? 0 : 1,
+                },
+              },
+            };
           }
         }
         // 杠后继续出牌
@@ -391,7 +474,32 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
       const tempHand = [...pPlayer.hand, lastDiscard!];
       const discardWin = checkWin(tempHand, pPlayer.exposed, wildTileId);
       if (discardWin.canWin) {
-        return { winner: pPlayer.name, winTypes: discardWin.types, score: 1 };
+        const shantenByPlayerRoundAvg = shantenSums.map((sum, idx) =>
+          shantenSnapshots[idx] > 0 ? Number((sum / shantenSnapshots[idx]).toFixed(3)) : 0,
+        );
+        const firstTingTurns = firstTingTurn.filter(t => t > 0);
+        const avgFirstTingTurn = firstTingTurns.length > 0
+          ? Number((firstTingTurns.reduce((a, b) => a + b, 0) / firstTingTurns.length).toFixed(3))
+          : null;
+        return {
+          winner: pPlayer.name,
+          winTypes: discardWin.types,
+          score: 1,
+          metrics: {
+            shantenByPlayerRoundAvg,
+            avgFirstTingTurn,
+            claimImpact: {
+              withClaim: { games: hasClaimAction ? 1 : 0, winRate: hasClaimAction ? 1 : 0 },
+              withoutClaim: { games: hasClaimAction ? 0 : 1, winRate: hasClaimAction ? 0 : 1 },
+              delta: hasClaimAction ? 1 : -1,
+            },
+            stageSurvivalRate: {
+              early: endedStage === 'early' ? 0 : 1,
+              mid: endedStage === 'late' ? 1 : 0,
+              late: endedStage === 'late' ? 0 : 1,
+            },
+          },
+        };
       }
     }
     
@@ -417,9 +525,35 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
             pPlayer.hand.push(kongDraw.tile);
             const kongWinResult = checkWin(pPlayer.hand, pPlayer.exposed, wildTileId);
             if (kongWinResult.canWin) {
-              return { winner: pPlayer.name, winTypes: kongWinResult.types, score: 1 };
+              const shantenByPlayerRoundAvg = shantenSums.map((sum, idx) =>
+                shantenSnapshots[idx] > 0 ? Number((sum / shantenSnapshots[idx]).toFixed(3)) : 0,
+              );
+              const firstTingTurns = firstTingTurn.filter(t => t > 0);
+              const avgFirstTingTurn = firstTingTurns.length > 0
+                ? Number((firstTingTurns.reduce((a, b) => a + b, 0) / firstTingTurns.length).toFixed(3))
+                : null;
+              return {
+                winner: pPlayer.name,
+                winTypes: kongWinResult.types,
+                score: 1,
+                metrics: {
+                  shantenByPlayerRoundAvg,
+                  avgFirstTingTurn,
+                  claimImpact: {
+                    withClaim: { games: hasClaimAction ? 1 : 0, winRate: hasClaimAction ? 1 : 0 },
+                    withoutClaim: { games: hasClaimAction ? 0 : 1, winRate: hasClaimAction ? 0 : 1 },
+                    delta: hasClaimAction ? 1 : -1,
+                  },
+                  stageSurvivalRate: {
+                    early: endedStage === 'early' ? 0 : 1,
+                    mid: endedStage === 'late' ? 1 : 0,
+                    late: endedStage === 'late' ? 0 : 1,
+                  },
+                },
+              };
             }
           }
+          hasClaimAction = true;
           lastDiscard = null;
           currentPlayer = p;
           actionTaken = true;
@@ -448,6 +582,7 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
             pPlayer.hand = pengResult.hand;
             pPlayer.exposed.push(pengResult.meld);
             pPlayer.chowPongExclusion = updateChowPongExclusion(pPlayer.chowPongExclusion, 'pong', lastDiscard.suit);
+            hasClaimAction = true;
             lastDiscard = null;
             currentPlayer = p;
             actionTaken = true;
@@ -478,6 +613,7 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
             nextP.hand = chowResult.hand;
             nextP.exposed.push(chowResult.meld);
             nextP.chowPongExclusion = updateChowPongExclusion(nextP.chowPongExclusion, 'chow', lastDiscard.suit);
+            hasClaimAction = true;
             lastDiscard = null;
             currentPlayer = nextPlayer;
             actionTaken = true;
@@ -488,16 +624,48 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
     
     if (actionTaken) continue;
     
-    // Update ting status for all players
+    // Update ting status and per-turn shanten snapshots for all players
     for (let p = 0; p < 4; p++) {
+      const shanten = calcShanten(players[p].hand, players[p].exposed, wildTileId);
+      shantenSums[p] += shanten;
+      shantenSnapshots[p]++;
       players[p].isTing = checkTing(players[p].hand, players[p].exposed, wildTileId);
+      if (players[p].isTing && firstTingTurn[p] === -1) {
+        firstTingTurn[p] = turn;
+      }
     }
     
     // Next player's turn
     currentPlayer = (currentPlayer + 1) % 4;
   }
   
-  return { winner: null, winTypes: [], score: 0 };
+  const shantenByPlayerRoundAvg = shantenSums.map((sum, idx) =>
+    shantenSnapshots[idx] > 0 ? Number((sum / shantenSnapshots[idx]).toFixed(3)) : 0,
+  );
+  const firstTingTurns = firstTingTurn.filter(t => t > 0);
+  const avgFirstTingTurn = firstTingTurns.length > 0
+    ? Number((firstTingTurns.reduce((a, b) => a + b, 0) / firstTingTurns.length).toFixed(3))
+    : null;
+
+  return {
+    winner: null,
+    winTypes: [],
+    score: 0,
+    metrics: {
+      shantenByPlayerRoundAvg,
+      avgFirstTingTurn,
+      claimImpact: {
+        withClaim: { games: hasClaimAction ? 1 : 0, winRate: 0 },
+        withoutClaim: { games: hasClaimAction ? 0 : 1, winRate: 0 },
+        delta: 0,
+      },
+      stageSurvivalRate: {
+        early: endedStage === 'early' ? 0 : 1,
+        mid: endedStage === 'late' ? 1 : 0,
+        late: endedStage === 'late' ? 0 : 1,
+      },
+    },
+  };
 }
 
 // ========== Main ==========
@@ -523,23 +691,61 @@ async function main() {
       draws: 0,
       winTypes: {} as Record<string, number>,
       playerWins: {} as Record<string, number>,
+      shantenSums: [0, 0, 0, 0],
+      firstTingTurnSum: 0,
+      firstTingTurnCount: 0,
+      claimWithGames: 0,
+      claimWithWins: 0,
+      claimWithoutGames: 0,
+      claimWithoutWins: 0,
+      stageSurvivalSums: { early: 0, mid: 0, late: 0 },
     };
     
     for (let game = 0; game < gamesPerRound; game++) {
       stats.totalGames++;
       const result = playOneGame();
-      
+
+      for (let i = 0; i < 4; i++) {
+        stats.shantenSums[i] += result.metrics.shantenByPlayerRoundAvg[i];
+      }
+      if (result.metrics.avgFirstTingTurn !== null) {
+        stats.firstTingTurnSum += result.metrics.avgFirstTingTurn;
+        stats.firstTingTurnCount++;
+      }
+      stats.claimWithGames += result.metrics.claimImpact.withClaim.games;
+      stats.claimWithoutGames += result.metrics.claimImpact.withoutClaim.games;
+      stats.stageSurvivalSums.early += result.metrics.stageSurvivalRate.early;
+      stats.stageSurvivalSums.mid += result.metrics.stageSurvivalRate.mid;
+      stats.stageSurvivalSums.late += result.metrics.stageSurvivalRate.late;
+
       if (result.winner) {
         stats.wins++;
         stats.playerWins[result.winner] = (stats.playerWins[result.winner] || 0) + 1;
         for (const t of result.winTypes) {
           stats.winTypes[t] = (stats.winTypes[t] || 0) + 1;
         }
+        if (result.metrics.claimImpact.withClaim.games > 0) {
+          stats.claimWithWins++;
+        } else {
+          stats.claimWithoutWins++;
+        }
       } else {
         stats.draws++;
       }
     }
     
+    const shantenDistribution = AI_NAMES.reduce((acc, name, idx) => {
+      acc[name] = Number((stats.shantenSums[idx] / stats.totalGames).toFixed(3));
+      return acc;
+    }, {} as Record<string, number>);
+
+    const avgFirstTingTurn = stats.firstTingTurnCount > 0
+      ? Number((stats.firstTingTurnSum / stats.firstTingTurnCount).toFixed(3))
+      : null;
+
+    const withClaimWinRate = stats.claimWithGames > 0 ? stats.claimWithWins / stats.claimWithGames : 0;
+    const withoutClaimWinRate = stats.claimWithoutGames > 0 ? stats.claimWithoutWins / stats.claimWithoutGames : 0;
+
     const roundReport = {
       round,
       totalGames: stats.totalGames,
@@ -548,6 +754,20 @@ async function main() {
       winRate: `${((stats.wins / stats.totalGames) * 100).toFixed(1)}%`,
       winTypes: stats.winTypes,
       playerWins: stats.playerWins,
+      calibrationMetrics: {
+        shantenDistribution,
+        avgFirstTingTurn,
+        claimWinRateDelta: {
+          withClaim: Number((withClaimWinRate * 100).toFixed(2)),
+          withoutClaim: Number((withoutClaimWinRate * 100).toFixed(2)),
+          delta: Number(((withClaimWinRate - withoutClaimWinRate) * 100).toFixed(2)),
+        },
+        stageSurvivalRate: {
+          early: Number(((stats.stageSurvivalSums.early / stats.totalGames) * 100).toFixed(2)),
+          mid: Number(((stats.stageSurvivalSums.mid / stats.totalGames) * 100).toFixed(2)),
+          late: Number(((stats.stageSurvivalSums.late / stats.totalGames) * 100).toFixed(2)),
+        },
+      },
     };
     
     console.log(JSON.stringify(roundReport, null, 2));
