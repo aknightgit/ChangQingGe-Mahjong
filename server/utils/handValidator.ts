@@ -219,7 +219,7 @@ function detectTypes(
   let numSuitCount = 0, windCount = 0;
   for (const s of suits) {
     if (numSuits.includes(s)) numSuitCount++;
-    else if (windSuits.includes(s)) windCount++;
+    else if (windSuits.includes(s) || s === TileSuit.DRAGON) windCount++;
   }
 
   const isFullFlushHand = numSuitCount === 1 && windCount === 0;

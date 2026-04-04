@@ -1,0 +1,19 @@
+{
+  "totalGames": 2000,
+  "totalValid": 952,
+  "totalInvalid": 1048,
+  "overallWinRate": "47.6%",
+  "winTypes": {
+    "qing_peng": 589,
+    "full_flush": 589,
+    "all_triplets": 709,
+    "da_diao": 239,
+    "four_wild": 4
+  },
+  "noWildDouble": 165,
+  "chowPongBlocked": 100,
+  "tingDiscardUsed": 994,
+  "tingDiscardTested": 1329,
+  "phase3Passed": 6,
+  "phase3Failed": 4
+}

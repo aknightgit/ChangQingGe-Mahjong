@@ -1,0 +1,18 @@
+{
+  "round": 8,
+  "totalGames": 200,
+  "validHands": 95,
+  "invalidHands": 105,
+  "winRate": "47.5%",
+  "winTypes": {
+    "qing_peng": 52,
+    "full_flush": 52,
+    "all_triplets": 69,
+    "da_diao": 26
+  },
+  "noWildDouble": 10,
+  "chowPongBlocked": 10,
+  "tingDiscardUsed": 103,
+  "tingDiscardTested": 134,
+  "timestamp": "2026-04-04T08:45:35.039Z"
+}

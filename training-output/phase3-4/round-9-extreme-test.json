@@ -1,0 +1,15 @@
+{
+  "round": 9,
+  "totalGames": 200,
+  "validHands": 4,
+  "invalidHands": 196,
+  "winRate": "2.0%",
+  "winTypes": {
+    "four_wild": 4
+  },
+  "noWildDouble": 0,
+  "chowPongBlocked": 0,
+  "tingDiscardUsed": 0,
+  "tingDiscardTested": 48,
+  "timestamp": "2026-04-04T08:31:13.291Z"
+}
