@@ -119,6 +119,86 @@ function canFormMelds(
   return false;
 }
 
+// 尝试只用刻子组成 n 个面子（不用顺子）
+function canFormOnlyTripletsFrom(
+  tiles: Tile[],
+  n: number,
+  isWildTile: WildTileChecker
+): boolean {
+  if (n === 0) return tiles.length === 0;
+
+  const wilds = tiles.filter(t => isWildTile(t));
+  const naturals = tiles.filter(t => !isWildTile(t));
+
+  const countMap = new Map<string, number>();
+  for (const t of naturals) {
+    const k = `${t.suit}-${t.value}`;
+    countMap.set(k, (countMap.get(k) || 0) + 1);
+  }
+
+  // 找候选对子
+  const pairCandidates: Array<{key: string; cnt: number; isWild: boolean}> = [];
+  for (const [k, cnt] of countMap) {
+    if (cnt >= 2) pairCandidates.push({ key: k, cnt, isWild: false });
+  }
+  if (wilds.length >= 1) {
+    for (const [k] of countMap) {
+      pairCandidates.push({ key: k, cnt: 1, isWild: true });
+    }
+  }
+  if (wilds.length >= 2) {
+    pairCandidates.push({ key: '__wild_pair__', cnt: 2, isWild: true });
+  }
+
+  for (const pair of pairCandidates) {
+    const map2 = new Map(countMap);
+    let wildLeft = wilds.length;
+
+    if (!pair.isWild) {
+      const prev = map2.get(pair.key)!;
+      if (prev < 2) continue;
+      map2.set(pair.key, prev - 2);
+    } else if (pair.key === '__wild_pair__') {
+      wildLeft -= 2;
+    } else {
+      const prev = map2.get(pair.key)!;
+      map2.set(pair.key, prev - 1);
+      wildLeft -= 1;
+    }
+
+    if (wildLeft < 0) continue;
+    if (tryFormOnlyTriplets(n, wildLeft, map2)) return true;
+  }
+
+  return false;
+}
+
+// 只用刻子组成 n 个面子
+function tryFormOnlyTriplets(n: number, wildLeft: number, map: Map<string, number>): boolean {
+  if (n === 0) {
+    for (const c of map.values()) if (c > 0) return false;
+    return wildLeft === 0;
+  }
+
+  let firstKey: string | null = null;
+  for (const k of map.keys()) {
+    if ((map.get(k) || 0) > 0) { firstKey = k; break; }
+  }
+
+  if (!firstKey) return wildLeft >= n * 3;
+
+  const cnt = map.get(firstKey)!;
+  const needTriplet = 3 - cnt;
+  if (needTriplet <= wildLeft) {
+    const saved = cnt;
+    map.set(firstKey, 0);
+    if (tryFormOnlyTriplets(n - 1, wildLeft - needTriplet, map)) return true;
+    map.set(firstKey, saved);
+  }
+
+  return false;
+}
+
 // 尝试用剩余牌组成 n 个面子（不回溯配对）
 function tryFormMelds(n: number, wildLeft: number, map: Map<string, number>): boolean {
   if (n === 0) {
@@ -194,7 +274,7 @@ function detectTypes(
   if (allWind) types.push(HandType.ALL_WIND);
 
   // ---- 统计已暴露面子 ----
-  const hasSequence = exposed.some(m => m.type === MeldType.SEQUENCE);
+  const hasExposedSequence = exposed.some(m => m.type === MeldType.SEQUENCE);
   const exposedTripletCount = exposed.filter(m =>
     m.type === MeldType.TRIPLET || m.type === MeldType.KONG
   ).length;
@@ -204,8 +284,11 @@ function detectTypes(
   const satisfiesFormat = remainingMelds >= 0 &&
     canFormMelds(concealedNonFlower, remainingMelds, () => false);
 
-  // 碰碰胡：所有面子都是刻子/杠子
-  if (!hasSequence && satisfiesFormat) {
+  // 碰碰胡：所有面子都是刻子/杠子（门口+手牌都不能有顺子）
+  // 检查手牌能否只用刻子组成面子（不用顺子）
+  const canFormOnlyTriplets = remainingMelds >= 0 &&
+    canFormOnlyTripletsFrom(concealedNonFlower, remainingMelds, () => false);
+  if (!hasExposedSequence && canFormOnlyTriplets) {
     types.push(HandType.ALL_TRIPLETS);
   }
 
