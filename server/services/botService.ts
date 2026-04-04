@@ -551,62 +551,151 @@ export function shouldClaimPendingAction(
 ): ActionType {
   const policy = getPolicyForPlayer(player)
   const hand = player.hand.concealedTiles
+  const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id)
+  const claimTile = pendingAction?.tile
 
-  // === HU: 根据听牌张数决定是否强制胡 ===
+  // HU 仍然最高优先级（可胡直接胡）
   if (availableActions.includes(ActionType.HU)) {
-    // 听牌总张数不多时，强制胡牌
-    if (hand.length <= 7) {
-      const winningCount = countWinningTiles(player, game)
-      if (winningCount <= 12) {
-        // 听牌张数少，不犹豫直接胡
-        return ActionType.HU
+    return ActionType.HU
+  }
+
+  if (!claimTile) return ActionType.PASS
+
+  const wildChecker = (t: Tile) => isWildTile(t, game)
+  const exposedCount = player.hand.exposedMelds.length
+  const exclusionState = game.chowPongExclusion?.[player.id] || { firstActionSuit: null, firstActionType: null }
+
+  const actionScores = new Map<ActionType, { shanten: number; effective: number; tune: number }>()
+
+  const evaluateResultingHand = (candidateHand: Tile[]): { shanten: number; effective: number } => {
+    let bestShanten = Infinity
+    let bestEffective = -1
+
+    for (let i = 0; i < candidateHand.length; i++) {
+      const remain = candidateHand.filter((_, idx) => idx !== i)
+      const shanten = calculateShanten(remain, exposedCount + 1, wildChecker)
+      const effective = countEffectiveTiles(remain, exposedCount + 1, wildChecker)
+      if (shanten < bestShanten || (shanten === bestShanten && effective > bestEffective)) {
+        bestShanten = shanten
+        bestEffective = effective
       }
     }
-    // 正常胡牌概率
-    if (Math.random() < policy.selfWinChance) {
-      return ActionType.HU
-    }
+
+    return { shanten: bestShanten, effective: bestEffective }
   }
 
-  // === KONG: 通常杠（加分） ===
-  if (availableActions.includes(ActionType.KONG) && Math.random() < policy.kongChance) {
-    return ActionType.KONG
+  // PASS：不吃碰杠，保持当前手牌（下一步摸牌前的基线质量）
+  {
+    const shanten = calculateShanten(hand, exposedCount, wildChecker)
+    const effective = countEffectiveTiles(hand, exposedCount, wildChecker)
+    actionScores.set(ActionType.PASS, { shanten, effective, tune: 0 })
   }
 
-  // === PENG: 基于策略决定 ===
-  if (availableActions.includes(ActionType.PENG)) {
-    // 硬校验：吃碰排斥规则
-    const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id)
-    const exclusionState = game.chowPongExclusion?.[player.id] || { firstActionSuit: null, firstActionType: null }
-    if (pendingAction?.tile) {
-      if (!checkChowPongExclusion(exclusionState, 'pong', pendingAction.tile.suit)) {
-        // 吃碰排斥：禁止碰
-      } else if (hand.length <= 7 && Math.random() < policy.pengChance * 1.2) {
-        return ActionType.PENG
-      } else if (Math.random() < policy.pengChance) {
-        return ActionType.PENG
-      }
-    }
-  }
-
-  // === CHOW: 智能评估 ===
-  if (availableActions.includes(ActionType.CHOW)) {
-    const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id)
-    // 硬校验：吃碰排斥规则
-    const exclusionState = game.chowPongExclusion?.[player.id] || { firstActionSuit: null, firstActionType: null }
-    if (pendingAction?.tile) {
-      if (!checkChowPongExclusion(exclusionState, 'chow', pendingAction.tile.suit)) {
-        // 吃碰排斥：禁止吃
-      } else {
-        const chowValue = evaluateChowValue(player, game, pendingAction.tile)
-        // 改为概率决策：chowValue 越高越可能吃
-        if (Math.random() < chowValue) {
-          return ActionType.CHOW
+  // PENG
+  if (
+    availableActions.includes(ActionType.PENG) &&
+    checkChowPongExclusion(exclusionState, 'pong', claimTile.suit)
+  ) {
+    const groups = groupTiles(hand)
+    const key = `${claimTile.suit}-${claimTile.value}`
+    const sameTiles = groups.get(key) || []
+    if (sameTiles.length >= 2) {
+      const candidateHand = [...hand]
+      let removed = 0
+      for (let i = candidateHand.length - 1; i >= 0 && removed < 2; i--) {
+        if (candidateHand[i].suit === claimTile.suit && candidateHand[i].value === claimTile.value) {
+          candidateHand.splice(i, 1)
+          removed++
         }
       }
+      if (removed === 2 && candidateHand.length > 0) {
+        const { shanten, effective } = evaluateResultingHand(candidateHand)
+        actionScores.set(ActionType.PENG, { shanten, effective, tune: policy.pengChance || 0 })
+      }
     }
   }
 
-  // Default: PASS
-  return ActionType.PASS
+  // KONG（明杠）
+  if (availableActions.includes(ActionType.KONG)) {
+    const groups = groupTiles(hand)
+    const key = `${claimTile.suit}-${claimTile.value}`
+    const sameTiles = groups.get(key) || []
+    if (sameTiles.length >= 3) {
+      const candidateHand = [...hand]
+      let removed = 0
+      for (let i = candidateHand.length - 1; i >= 0 && removed < 3; i--) {
+        if (candidateHand[i].suit === claimTile.suit && candidateHand[i].value === claimTile.value) {
+          candidateHand.splice(i, 1)
+          removed++
+        }
+      }
+      if (removed === 3 && candidateHand.length > 0) {
+        const { shanten, effective } = evaluateResultingHand(candidateHand)
+        actionScores.set(ActionType.KONG, { shanten, effective, tune: policy.kongChance || 0 })
+      }
+    }
+  }
+
+  // CHOW（取最好吃法）
+  if (
+    availableActions.includes(ActionType.CHOW) &&
+    checkChowPongExclusion(exclusionState, 'chow', claimTile.suit) &&
+    !isHonor(claimTile)
+  ) {
+    const v = claimTile.value
+    const suit = claimTile.suit
+
+    const chowPatterns: Array<[number, number]> = [
+      [v - 2, v - 1],
+      [v - 1, v + 1],
+      [v + 1, v + 2],
+    ]
+
+    let bestChow: { shanten: number; effective: number; tune: number } | null = null
+
+    for (const [a, b] of chowPatterns) {
+      if (a < 1 || b > 9) continue
+
+      const idxA = hand.findIndex(t => t.suit === suit && t.value === a)
+      const idxB = hand.findIndex((t, i) => i !== idxA && t.suit === suit && t.value === b)
+      if (idxA === -1 || idxB === -1) continue
+
+      const candidateHand = hand.filter((_, i) => i !== idxA && i !== idxB)
+      if (candidateHand.length === 0) continue
+
+      const { shanten, effective } = evaluateResultingHand(candidateHand)
+      const chowTune = evaluateChowValue(player, game, claimTile)
+      const candidate = { shanten, effective, tune: chowTune }
+
+      if (
+        !bestChow ||
+        candidate.shanten < bestChow.shanten ||
+        (candidate.shanten === bestChow.shanten && candidate.effective > bestChow.effective) ||
+        (candidate.shanten === bestChow.shanten && candidate.effective === bestChow.effective && candidate.tune > bestChow.tune)
+      ) {
+        bestChow = candidate
+      }
+    }
+
+    if (bestChow) {
+      actionScores.set(ActionType.CHOW, bestChow)
+    }
+  }
+
+  // 比较：先看向听，再看有效进张，最后用策略概率微调（tie-break）
+  let bestAction = ActionType.PASS
+  let best = actionScores.get(ActionType.PASS)!
+
+  for (const [action, s] of actionScores.entries()) {
+    if (
+      s.shanten < best.shanten ||
+      (s.shanten === best.shanten && s.effective > best.effective) ||
+      (s.shanten === best.shanten && s.effective === best.effective && s.tune > best.tune)
+    ) {
+      bestAction = action
+      best = s
+    }
+  }
+
+  return bestAction
 }

@@ -1,14 +1,8 @@
 {
-  "totalGames": 50,
-  "wins": 2,
-  "draws": 48,
-  "overallWinRate": "4.0%",
-  "winTypes": {
-    "all_triplets": 1,
-    "full_flush": 1
-  },
-  "playerWins": {
-    "AI-小胖": 1,
-    "AI-阿水": 1
-  }
+  "totalGames": 1,
+  "wins": 0,
+  "draws": 1,
+  "overallWinRate": "0.0%",
+  "winTypes": {},
+  "playerWins": {}
 }
