@@ -301,28 +301,20 @@ function countWinningTiles(player: Player, game: GameState): number {
 /**
  * Check if chowing this tile would actually improve the hand (not create dead hand).
  * Returns true if the chow creates at least one complete sequence from the tiles used.
+ * 严格检查：必须能组成完整顺子（三种合法形之一）
  */
 function isChowBeneficial(player: Player, game: GameState, chowTile: Tile): boolean {
   const hand = player.hand.concealedTiles
   const v = chowTile.value
   const suit = chowTile.suit
+  const groups = groupTiles(hand)
 
-  // Must have the tiles to form a sequence
-  const hasLeft = hand.some(t => t.suit === suit && t.value === v - 1)
-  const hasRight = hand.some(t => t.suit === suit && t.value === v + 1)
-  const hasLeftLeft = hand.some(t => t.suit === suit && t.value === v - 2)
-  const hasRightRight = hand.some(t => t.suit === suit && t.value === v + 2)
+  // 三种合法吃法：必须能组成完整顺子
+  const hasLeftLeft = groups.has(`${suit}-${v - 2}`) && groups.has(`${suit}-${v - 1}`);
+  const hasLeftRight = groups.has(`${suit}-${v - 1}`) && groups.has(`${suit}-${v + 1}`);
+  const hasRightRight = groups.has(`${suit}-${v + 1}`) && groups.has(`${suit}-${v + 2}`);
 
-  // Good chow: completes a pair of tiles into a meld
-  if (hasLeft && hasRight) return true   // 夹张: 1+吃2+3
-  if (hasLeft && hasRightRight) return true  // 延伸: 3+4+吃5
-  if (hasRight && hasLeftLeft) return true   // 延伸: 吃3+4+6
-
-  // OK chow: at least one side forms a connection
-  if (hasLeft || hasRight) return true
-
-  // Bad chow: would need to hold orphan tiles
-  return false
+  return hasLeftLeft || hasLeftRight || hasRightRight;
 }
 
 /**
@@ -507,7 +499,8 @@ export function shouldClaimPendingAction(
         // 吃碰排斥：禁止吃
       } else {
         const chowValue = evaluateChowValue(player, game, pendingAction.tile)
-        if (chowValue >= 0.5) {
+        // 改为概率决策：chowValue 越高越可能吃
+        if (Math.random() < chowValue) {
           return ActionType.CHOW
         }
       }
