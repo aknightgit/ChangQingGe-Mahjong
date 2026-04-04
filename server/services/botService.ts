@@ -168,7 +168,7 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
     suitCounts[t.suit] = (suitCounts[t.suit] || 0) + 1
     if (isWind(t) || isDragon(t)) honorCount++
   }
-  const numberSuits = [TileSuit.WAN, TileSuit.TIAO, TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
+  const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
   const dominantNumberSuit = numberSuits
     .filter(s => (suitCounts[s] || 0) > 0)
     .sort((a, b) => (suitCounts[b] || 0) - (suitCounts[a] || 0))[0] || null
@@ -309,7 +309,7 @@ function countEffectiveTiles(
   const currentShanten = calculateShanten(tiles, exposedCount, isWildTileChecker)
 
   const candidates: Array<{ suit: TileSuit; value: number }> = []
-  for (const suit of [TileSuit.WAN, TileSuit.TIAO, TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+  for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
     for (let v = 1; v <= 9; v++) {
       candidates.push({ suit, value: v })
     }
@@ -382,7 +382,7 @@ function countWinningTiles(player: Player, game: GameState): number {
   let count = 0
 
   // Test all 34 standard tile types (万/条/筒 1-9 × 3 + 风 4 + 箭 3)
-  const suits: TileSuit[] = [TileSuit.WAN, TileSuit.TIAO, TileSuit.DOTS]
+  const suits: TileSuit[] = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
   for (const suit of suits) {
     for (let v = 1; v <= 9; v++) {
       const testTile: Tile = { suit, value: v, id: `test-${suit}-${v}` }

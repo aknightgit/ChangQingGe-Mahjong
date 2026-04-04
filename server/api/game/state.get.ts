@@ -65,7 +65,7 @@ export default defineEventHandler(async (event) => {
           ? p.hand.concealedTiles
           : p.hand.concealedTiles.map((_, index) => ({
               id: `hidden-${p.id}-${index}`,
-              suit: TileSuit.WAN,
+              suit: TileSuit.CHARACTERS,
               value: 0
             }))
       }

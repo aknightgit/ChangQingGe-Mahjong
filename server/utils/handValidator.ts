@@ -38,7 +38,45 @@ export function buildWildTileChecker(wildTileId: string | null): WildTileChecker
   if (!wildTileId || typeof wildTileId !== 'string') return () => false;
   const parts = wildTileId.split('-');
   if (parts.length < 2) return () => false;
-  return (t: Tile) => t.suit === parts[0] && String(t.value) === parts[1];
+  const normalizedSuit = normalizeTileSuit(parts[0]);
+  if (!normalizedSuit) return () => false;
+  return (t: Tile) => t.suit === normalizedSuit && String(t.value) === parts[1];
+}
+
+function normalizeTileSuit(rawSuit: string): TileSuit | null {
+  switch (rawSuit) {
+    case TileSuit.DOTS:
+    case 'tong':
+      return TileSuit.DOTS;
+    case TileSuit.CHARACTERS:
+    case 'wan':
+      return TileSuit.CHARACTERS;
+    case TileSuit.BAMBOOS:
+    case 'tiao':
+      return TileSuit.BAMBOOS;
+    case TileSuit.WIND:
+    case 'feng':
+      return TileSuit.WIND;
+    case TileSuit.DRAGON:
+    case 'jian':
+      return TileSuit.DRAGON;
+    case TileSuit.FLOWER:
+    case 'hua':
+      return TileSuit.FLOWER;
+    // 兼容历史命名
+    case 'WAN':
+      return TileSuit.CHARACTERS;
+    case 'TIAO':
+      return TileSuit.BAMBOOS;
+    case 'DOTS':
+      return TileSuit.DOTS;
+    case 'CHARACTERS':
+      return TileSuit.CHARACTERS;
+    case 'BAMBOOS':
+      return TileSuit.BAMBOOS;
+    default:
+      return null;
+  }
 }
 
 // ============================================================
@@ -350,7 +388,9 @@ function findBestAssignment(
   if (!wildTileId || typeof wildTileId !== 'string') return detectTypes(concealed, exposed);
   const parts = wildTileId.split('-');
   if (parts.length < 2) return detectTypes(concealed, exposed);
-  const [wildSuit, wildVal] = parts;
+  const [wildSuitRaw, wildVal] = parts;
+  const wildSuit = normalizeTileSuit(wildSuitRaw);
+  if (!wildSuit) return detectTypes(concealed, exposed);
   const isWild = (t: Tile) => t.suit === wildSuit && String(t.value) === wildVal;
 
   const wildCount = concealed.filter(t => isWild(t)).length;
@@ -546,19 +586,7 @@ export function canWin(
   const allWind = concealedNonFlower.length > 0 &&
     concealedNonFlower.every(t => isWind(t) || isDragon(t) || isWildTileFn(t));
   if (allWind) {
-    // 风一色也需要验证 3n+2 格式
-    const stdResult = wildTileId
-      ? findBestAssignment(concealed, exposed, wildTileId)
-      : detectTypes(concealed, exposed);
-    if (stdResult.length > 0) {
-      const types: HandType[] = [HandType.ALL_WIND, ...stdResult];
-      if (stdResult.includes(HandType.ALL_TRIPLETS) && !types.includes(HandType.FENG_PENG)) {
-        types.push(HandType.FENG_PENG);
-      }
-      return { canWin: true, types };
-    }
-    // 3n+2 不满足 → 不能胡
-    return { canWin: false, types: [] };
+    return { canWin: true, types: [HandType.ALL_WIND] };
   }
 
   // 第二层：标准3n+2
