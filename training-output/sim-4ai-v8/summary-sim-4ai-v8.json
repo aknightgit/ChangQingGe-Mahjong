@@ -1,0 +1,15 @@
+{
+  "totalGames": 20,
+  "wins": 2,
+  "draws": 18,
+  "overallWinRate": "10.0%",
+  "winTypes": {
+    "hun_peng": 1,
+    "half_flush": 2,
+    "all_triplets": 1
+  },
+  "playerWins": {
+    "AI-小胖": 1,
+    "AI-老赵": 1
+  }
+}

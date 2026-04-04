@@ -1,15 +1,19 @@
 {
-  "totalGames": 50,
-  "wins": 3,
-  "draws": 47,
-  "overallWinRate": "6.0%",
+  "totalGames": 5000,
+  "wins": 105,
+  "draws": 4895,
+  "overallWinRate": "2.1%",
   "winTypes": {
-    "full_flush": 2,
-    "qing_peng": 1,
-    "all_triplets": 2
+    "all_triplets": 73,
+    "qing_peng": 3,
+    "full_flush": 13,
+    "half_flush": 27,
+    "hun_peng": 5
   },
   "playerWins": {
-    "AI-AK": 2,
-    "AI-阿水": 1
+    "AI-阿水": 30,
+    "AI-小胖": 29,
+    "AI-AK": 24,
+    "AI-老赵": 22
   }
 }

@@ -1,0 +1,19 @@
+{
+  "totalGames": 2500,
+  "wins": 189,
+  "draws": 2311,
+  "overallWinRate": "7.6%",
+  "winTypes": {
+    "all_triplets": 129,
+    "full_flush": 28,
+    "half_flush": 40,
+    "hun_peng": 3,
+    "qing_peng": 5
+  },
+  "playerWins": {
+    "AI-老赵": 40,
+    "AI-小胖": 46,
+    "AI-阿水": 51,
+    "AI-AK": 52
+  }
+}
