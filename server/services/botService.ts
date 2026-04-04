@@ -146,6 +146,16 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
   const policy = getPolicyForPlayer(player)
   let score = 0
 
+  const phaseTileCount = hand.length
+  const isEarlyPhase = phaseTileCount >= 11
+  const isMidPhase = phaseTileCount >= 5 && phaseTileCount <= 10
+  const isLatePhase = phaseTileCount <= 4
+
+  const nearWeightFactor = isEarlyPhase ? 1.25 : (isMidPhase ? 0.9 : 0.75)
+  const pairWeightFactor = isEarlyPhase ? 0.9 : (isMidPhase ? 1.25 : 1.1)
+  const tripletWeightFactor = isEarlyPhase ? 0.85 : (isMidPhase ? 1.2 : 1.25)
+  const routeBiasFactor = isEarlyPhase ? 0.35 : (isMidPhase ? 0.75 : 1.0)
+
   const groups = groupTiles(hand)
   const tileKey = `${tile.suit}-${tile.value}`
   const sameTypeCount = groups.get(tileKey)?.length || 0
@@ -175,7 +185,7 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
   if (isHonor(tile)) {
     if (sameTypeCount >= 2) {
       // Honor pair: keep (low score)
-      score -= policy.pairWeight * policy.honorPairBonus
+      score -= policy.pairWeight * pairWeightFactor * policy.honorPairBonus
     } else {
       // Single honor: high to discard (good candidate to throw away)
       score += 5
@@ -187,9 +197,9 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
 
   // Pair or triplet: keep (low score)
   if (sameTypeCount >= 3) {
-    score -= policy.tripletKeepBonus * 3 // triplet: very valuable, hard to discard
+    score -= policy.tripletKeepBonus * tripletWeightFactor * 3 // triplet: very valuable, hard to discard
   } else if (sameTypeCount >= 2) {
-    score -= policy.pairWeight // pair: keep
+    score -= policy.pairWeight * pairWeightFactor // pair: keep
   }
 
   // Near sequence (前后两张): keep for sequence building
@@ -202,7 +212,7 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
       if (v >= 1 && v <= 9) {
         const key = `${suit}-${v}`
         if (groups.has(key)) {
-          score -= policy.nearWeight
+          score -= policy.nearWeight * nearWeightFactor
         }
       }
     }
@@ -214,26 +224,32 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
   if (dominantSuit && maxSuitCount >= policy.honorRushThreshold) {
     if (tile.suit !== dominantSuit && tile.suit !== TileSuit.FLOWER) {
       // Not in dominant suit: good to discard (boost score)
-      score += policy.dominantSuitBonus
+      score += policy.dominantSuitBonus * routeBiasFactor
     }
   }
 
   // === 4.1 清一色/混一色导向：某门数牌>=6，优先保留该门 ===
   if (dominantNumberSuit && dominantNumberSuitCount >= 6) {
-    if (tile.suit === dominantNumberSuit) score -= 2.0
-    else if (!isHonor(tile) && tile.suit !== TileSuit.FLOWER) score += 2.0
+    if (tile.suit === dominantNumberSuit) score -= 2.0 * routeBiasFactor
+    else if (!isHonor(tile) && tile.suit !== TileSuit.FLOWER) score += 2.0 * routeBiasFactor
   }
 
   // === 4.2 风一色导向：风箭多时，保留风箭 ===
   if (honorFocus) {
-    if (isWind(tile) || isDragon(tile)) score -= 2.0
-    else if (tile.suit !== TileSuit.FLOWER) score += 2.0
+    if (isWind(tile) || isDragon(tile)) score -= 2.0 * routeBiasFactor
+    else if (tile.suit !== TileSuit.FLOWER) score += 2.0 * routeBiasFactor
   }
 
   // === 4.3 碰碰胡导向：保留对子/刻子，弱化顺子价值 ===
-  if (sameTypeCount >= 2) score -= 1.0
+  if (sameTypeCount >= 2) score -= 1.0 * routeBiasFactor
   if (!isHonor(tile) && sameTypeCount < 2) {
-    score += 0.6
+    score += 0.6 * routeBiasFactor
+  }
+
+  // Late game tie-break: bias toward ready hand speed and safer discards.
+  if (isLatePhase) {
+    const dangerPenalty = isHonor(tile) ? 0.15 : 0.45
+    score += dangerPenalty
   }
 
   // === 5. Edge tiles (1, 9): slightly less valuable than middle ===
