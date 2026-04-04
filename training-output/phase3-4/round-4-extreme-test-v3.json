@@ -5,14 +5,18 @@
   "invalidHands": 96,
   "winRate": "52.0%",
   "winTypes": {
-    "all_triplets": 83,
-    "qing_peng": 64,
-    "full_flush": 64,
-    "da_diao": 21
+    "da_diao": 24,
+    "all_wind": 17,
+    "feng_peng": 17,
+    "qing_peng": 30,
+    "full_flush": 30,
+    "all_triplets": 63,
+    "hun_peng": 22,
+    "half_flush": 22
   },
-  "noWildDouble": 19,
+  "noWildDouble": 11,
   "chowPongBlocked": 10,
-  "tingDiscardUsed": 108,
-  "tingDiscardTested": 138,
-  "timestamp": "2026-04-04T08:45:31.872Z"
+  "tingDiscardUsed": 120,
+  "tingDiscardTested": 147,
+  "timestamp": "2026-04-04T09:05:02.733Z"
 }

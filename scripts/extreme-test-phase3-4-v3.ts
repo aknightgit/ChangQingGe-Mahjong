@@ -16,6 +16,7 @@ let _id = 0;
 function T(suit: string, value: number): Tile {
   return { suit: suit as TileSuit, value, id: `${suit}-${value}-${_id++}`, isFlower: false };
 }
+// NOTE: TileSuit enum uses 'feng'/'wan'/'tiao', NOT 'wind'/'characters'/'bamboos'
 function Ts(suit: string, vals: number[]): Tile[] {
   return vals.map(v => T(suit, v));
 }
@@ -49,7 +50,7 @@ function buildTestCases(): TestCase[] {
   // 2. 混碰: 111 222 333 44万 + 东东 (14张)
   cases.push({
     name: '混碰',
-    hand: [...Ts('dots', [1,1,1,2,2,2,3,3,3,4,4]), ...Ts('wind', [1,1,1])],
+    hand: [...Ts('dots', [1,1,1,2,2,2,3,3,3,4,4]), ...Ts('feng', [1,1,1])],
     exposed: [],
     wildTileId: null,
     expectedCanWin: true,
@@ -60,18 +61,37 @@ function buildTestCases(): TestCase[] {
   // 风牌只能组成刻子: 111 222 333 444 11 = 14张
   cases.push({
     name: '风一色',
-    hand: [...Ts('wind', [1,1,1,2,2,2,3,3,3,4,4,4,1,1])],
+    hand: [...Ts('feng', [1,1,1,2,2,2,3,3,3,4,4,4,1,1])],
     exposed: [],
     wildTileId: null,
     expectedCanWin: true,
     expectedTypes: [HandType.ALL_WIND],
   });
 
-  // 4. 风碰: 门口1个刻子 + 手牌11张 (14张)
+  // 4. 风碰: 门口1个刻子 + 手牌14张 (需要正确构造)
+  // 正确构造: 门口用北风NNN (3张), 手牌EEEE SSSS WWWW 11 (3+3+3+2=11) 不对!
+  // 重新构造: 门口北风NNN, 手牌: EEEEE SSS WWW (4+3+3=10)...
+  // 正确方案: 用3种风各3张作刻子(9张), 剩下2张做成1对
+  // 门口: NNN  手牌: EEEEE SSS WWW 11 (5+3+3+2=13, 还差1张?)
+  // 实际问题: 风牌只有4种, 每种最多4张, 无法在手牌+门口=14张内构造ALL_WIND+ALL_TRIPLETS
+  // 改为构造: 门口SS S, 手牌: NNNN EEEEE WWWW (4+5+4=13)...
+  // 实际可行的风碰: 门口EEE, 手牌: EEE NNN SSS WWW WW (3+3+3+3+2=14), all_triplets但门里门外同风
+  // 更简单的风碰: 门口用N(北), 手牌包含E/S/W三种风各3张+对子
+  // 门口: NNN, 手牌: EEE SSS WWW EE (3+3+3+2=11张但需要14!)
+  // 重新思考: 风碰需要14张全风牌, 门口占3张, 手牌11张
+  // 11张风牌必须形成: 一个对子 + 三个刻子 = 14张, 但11张无法形成这些
+  // 所以风碰只能是: 门口E,手牌EESSSWWWNN(11张), 形成EEEE SSS WWW NNNN=4+3+3+4=14? 不对!
+  // 
+  // 修正: 手牌11张用: EEEE SSS WWW NN (4+3+3+2=12)...
+  // 最终方案: 手牌需要是风牌, 且能形成4个刻子+1对
+  // 只有EEE+SSS+WWW+NNN+EE = 3+3+3+3+2=14张全在手里
+  // 门口再放一个刻子就超了, 所以风碰应该只有手里14张全风, 门口=0
+  // 但测试名是风碰(门口有刻子)... 所以门口放一个风刻子, 手牌留另一种风的11张
+  // 门口: NNN(北), 手牌: EEEEE SSS WWW (5+3+3=11)...EEE SSS WWW NN = 3+3+3+2=11 OK
   cases.push({
     name: '风碰',
-    hand: [...Ts('wind', [1,1,2,2,3,3,4,4,4,4,4])],
-    exposed: [{ type: MeldType.TRIPLET, tiles: Ts('wind', [1,1,1]), isConcealed: false }],
+    hand: [...Ts('feng', [1,1,1,2,2,2,3,3,3,4,4])],
+    exposed: [{ type: MeldType.TRIPLET, tiles: Ts('feng', [4,4,4]), isConcealed: false }],
     wildTileId: null,
     expectedCanWin: true,
     expectedTypes: [HandType.FENG_PENG, HandType.ALL_WIND, HandType.ALL_TRIPLETS],
@@ -125,7 +145,7 @@ function buildTestCases(): TestCase[] {
   // 9. 混一色: 111 222 345 678万 + 东东 (14张)
   cases.push({
     name: '混一色',
-    hand: [...Ts('dots', [1,1,1,2,2,2,3,4,5,6,7,8]), ...Ts('wind', [1,1])],
+    hand: [...Ts('dots', [1,1,1,2,2,2,3,4,5,6,7,8]), ...Ts('feng', [1,1])],
     exposed: [],
     wildTileId: null,
     expectedCanWin: true,
@@ -226,7 +246,7 @@ function runExtremeTest(round: number, gamesPerRound: number) {
   };
 
   const baseCases = buildTestCases().filter(tc => tc.expectedCanWin);
-  const suits = ['dots', 'characters', 'bamboos', 'wind', 'dragon'];
+  const suits = ['dots', 'wan', 'tiao', 'feng', 'jian'];
 
   for (let game = 0; game < gamesPerRound; game++) {
     stats.totalGames++;
