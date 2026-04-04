@@ -87,6 +87,7 @@ function loadCharacterPolicy(botName: string): any {
   
   // Use default for this character
   _policies[botName] = _policies['default']
+  console.log(`[BotService] policy id for ${botName}: ${_policies[botName]?.id || 'unknown'}`)
   return _policies[botName]
 }
 
@@ -149,6 +150,21 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
   const tileKey = `${tile.suit}-${tile.value}`
   const sameTypeCount = groups.get(tileKey)?.length || 0
 
+  // 目标牌型导向：清一色/混一色/风一色 + 碰碰胡路线
+  const suitCounts: Record<string, number> = {}
+  let honorCount = 0
+  for (const t of hand) {
+    if (t.suit === TileSuit.FLOWER) continue
+    suitCounts[t.suit] = (suitCounts[t.suit] || 0) + 1
+    if (isWind(t) || isDragon(t)) honorCount++
+  }
+  const numberSuits = [TileSuit.WAN, TileSuit.TIAO, TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
+  const dominantNumberSuit = numberSuits
+    .filter(s => (suitCounts[s] || 0) > 0)
+    .sort((a, b) => (suitCounts[b] || 0) - (suitCounts[a] || 0))[0] || null
+  const dominantNumberSuitCount = dominantNumberSuit ? (suitCounts[dominantNumberSuit] || 0) : 0
+  const honorFocus = honorCount >= 6
+
   // === 1. Wild tile: very bad to discard (low score) ===
   if (isWildTile(tile, game)) {
     score -= policy.wildKeepPenalty
@@ -193,18 +209,31 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
   }
 
   // === 4. Dominant suit bonus: keep tiles of the dominant suit ===
-  const suitCounts: Record<string, number> = {}
-  for (const t of hand) {
-    if (t.suit === TileSuit.FLOWER) continue
-    suitCounts[t.suit] = (suitCounts[t.suit] || 0) + 1
-  }
-  const maxSuitCount = Math.max(...Object.values(suitCounts))
+  const maxSuitCount = Object.values(suitCounts).length > 0 ? Math.max(...Object.values(suitCounts)) : 0
   const dominantSuit = Object.keys(suitCounts).find(s => suitCounts[s] === maxSuitCount)
   if (dominantSuit && maxSuitCount >= policy.honorRushThreshold) {
     if (tile.suit !== dominantSuit && tile.suit !== TileSuit.FLOWER) {
       // Not in dominant suit: good to discard (boost score)
       score += policy.dominantSuitBonus
     }
+  }
+
+  // === 4.1 清一色/混一色导向：某门数牌>=6，优先保留该门 ===
+  if (dominantNumberSuit && dominantNumberSuitCount >= 6) {
+    if (tile.suit === dominantNumberSuit) score -= 2.0
+    else if (!isHonor(tile) && tile.suit !== TileSuit.FLOWER) score += 2.0
+  }
+
+  // === 4.2 风一色导向：风箭多时，保留风箭 ===
+  if (honorFocus) {
+    if (isWind(tile) || isDragon(tile)) score -= 2.0
+    else if (tile.suit !== TileSuit.FLOWER) score += 2.0
+  }
+
+  // === 4.3 碰碰胡导向：保留对子/刻子，弱化顺子价值 ===
+  if (sameTypeCount >= 2) score -= 1.0
+  if (!isHonor(tile) && sameTypeCount < 2) {
+    score += 0.6
   }
 
   // === 5. Edge tiles (1, 9): slightly less valuable than middle ===

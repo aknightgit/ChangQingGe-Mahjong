@@ -16,7 +16,6 @@ export enum HandType {
   FOUR_WILD     = 'four_wild',     // 四百搭
   ALL_TRIPLETS  = 'all_triplets',  // 碰碰胡
   DA_DIAO       = 'da_diao',       // 大吊
-  STANDARD_WIN  = 'standard_win',  // 普通胡牌（4面子+1将，无特殊牌型）
 }
 
 // 优先级（越高越好）
@@ -31,7 +30,6 @@ export const HAND_TYPE_PRIORITY: Record<HandType, number> = {
   [HandType.FOUR_WILD]:      50,
   [HandType.ALL_TRIPLETS]:    30,
   [HandType.DA_DIAO]:        85,
-  [HandType.STANDARD_WIN]:    1,
 };
 
 export type WildTileChecker = (tile: Tile) => boolean;
@@ -283,7 +281,7 @@ function detectTypes(
   if (flowerCount >= 8) types.push(HandType.EIGHT_FLOWERS);
 
   const allWind = concealedNonFlower.length > 0 &&
-    concealedNonFlower.every(t => isWind(t));
+    concealedNonFlower.every(t => isWind(t) || isDragon(t));
   if (allWind) types.push(HandType.ALL_WIND);
 
   // ---- 从手牌张数推导需要的面子数 ----
@@ -336,11 +334,6 @@ function detectTypes(
   // 大吊
   if (concealedNonFlower.length === 2 && exposed.length >= 1) {
     types.push(HandType.DA_DIAO);
-  }
-
-  // 普通胡牌：满足 3n+2 格式但无特殊牌型
-  if (types.length === 0 && satisfiesFormat) {
-    types.push(HandType.STANDARD_WIN);
   }
 
   return types.sort((a, b) => (HAND_TYPE_PRIORITY[b] ?? 0) - (HAND_TYPE_PRIORITY[a] ?? 0));
@@ -396,6 +389,8 @@ function findBestAssignment(
   // 为控制复杂度，使用贪心+回溯策略
   let bestTypes: HandType[] = [];
   let bestScore = -1;
+  let iterations = 0;
+  const ITERATION_LIMIT = 3000;
 
   // 先用已有牌型做基准
   const baselineTypes = detectTypes(concealed, exposed);
@@ -411,6 +406,8 @@ function findBestAssignment(
     currentAlloc: Array<{suit: string; value: number}>
   ) {
     if (wildIdx === wildCount) {
+      iterations++;
+      if (iterations > ITERATION_LIMIT) return;
       const virtualHand = [...naturals];
       for (const a of currentAlloc) {
         virtualHand.push({ suit: a.suit as TileSuit, value: a.value, id: `v-${Math.random()}`, isFlower: false });
@@ -428,6 +425,7 @@ function findBestAssignment(
 
     // 剪枝：如果当前已无法超越最优分数，提前返回
     for (const tt of allCandidates) {
+      if (iterations > ITERATION_LIMIT) break;
       currentAlloc.push(tt);
       enumerateAll(wildIdx + 1, currentAlloc);
       currentAlloc.pop();
@@ -456,6 +454,8 @@ function findBestAssignment(
       currentAlloc: Array<{suit: string; value: number}>
     ) {
       if (wildIdx === wildCount) {
+        iterations++;
+        if (iterations > ITERATION_LIMIT) return;
         const virtualHand = [...naturals];
         for (const a of currentAlloc) {
           virtualHand.push({ suit: a.suit as TileSuit, value: a.value, id: `v-${Math.random()}`, isFlower: false });
@@ -471,6 +471,7 @@ function findBestAssignment(
         return;
       }
       for (const tt of topCandidates) {
+        if (iterations > ITERATION_LIMIT) break;
         currentAlloc.push(tt);
         enumerateTop(wildIdx + 1, currentAlloc);
         currentAlloc.pop();
@@ -530,7 +531,7 @@ export function canWin(
   if (flowerCount >= 8) return { canWin: true, types: [HandType.EIGHT_FLOWERS] };
 
   const allWind = concealedNonFlower.length > 0 &&
-    concealedNonFlower.every(t => isWind(t) || isWildTileFn(t));
+    concealedNonFlower.every(t => isWind(t) || isDragon(t) || isWildTileFn(t));
   if (allWind) {
     // 风一色也需要验证 3n+2 格式
     const stdResult = wildTileId

@@ -38,7 +38,7 @@ interface SimPlayer {
 }
 
 // ========== Deal ==========
-function dealTiles(): { hands: Tile[][]; wall: Tile[]; flowers: Tile[][] } {
+function dealTiles(): { hands: Tile[][]; wall: Tile[]; flowers: Tile[][]; wildTileId: string | null } {
   const deck = createDeck();
   const shuffled = shuffleTiles(deck);
   
@@ -58,7 +58,12 @@ function dealTiles(): { hands: Tile[][]; wall: Tile[]; flowers: Tile[][] } {
   }
   
   const wall = shuffled.slice(idx);
-  return { hands, wall, flowers };
+  const nonFlowerPool = shuffled.filter(t => !isFlower(t));
+  const wildSource = nonFlowerPool.length > 0
+    ? nonFlowerPool[Math.floor(Math.random() * nonFlowerPool.length)]
+    : null;
+  const wildTileId = wildSource ? `${wildSource.suit}-${wildSource.value}` : null;
+  return { hands, wall, flowers, wildTileId };
 }
 
 // ========== Win check ==========
@@ -283,7 +288,7 @@ function drawNonFlower(wall: Tile[], wallIdx: number, player: SimPlayer): { tile
 }
 
 function playOneGame(): { winner: string | null; winTypes: HandType[]; score: number } {
-  const { hands, wall, flowers } = dealTiles();
+  const { hands, wall, flowers, wildTileId } = dealTiles();
   
   const players: SimPlayer[] = AI_NAMES.map((name, i) => ({
     name,
@@ -317,7 +322,7 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
     }
     
     // Check win after draw (自摸)
-    const winResult = checkWin(player.hand, player.exposed);
+    const winResult = checkWin(player.hand, player.exposed, wildTileId);
     if (winResult.canWin) {
       return { winner: player.name, winTypes: winResult.types, score: 1 };
     }
@@ -343,7 +348,7 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
         if (kongDraw.tile) {
           player.hand.push(kongDraw.tile);
           // 岭上开花：补牌后检查胡牌
-          const kongWinResult = checkWin(player.hand, player.exposed);
+          const kongWinResult = checkWin(player.hand, player.exposed, wildTileId);
           if (kongWinResult.canWin) {
             return { winner: player.name, winTypes: kongWinResult.types, score: 1 };
           }
@@ -385,7 +390,7 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
     for (const p of winOrder) {
       const pPlayer = players[p];
       const tempHand = [...pPlayer.hand, lastDiscard!];
-      const discardWin = checkWin(tempHand, pPlayer.exposed);
+      const discardWin = checkWin(tempHand, pPlayer.exposed, wildTileId);
       if (discardWin.canWin) {
         return { winner: pPlayer.name, winTypes: discardWin.types, score: 1 };
       }
@@ -411,7 +416,7 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
           wallIdx = kongDraw.wallIdx;
           if (kongDraw.tile) {
             pPlayer.hand.push(kongDraw.tile);
-            const kongWinResult = checkWin(pPlayer.hand, pPlayer.exposed);
+            const kongWinResult = checkWin(pPlayer.hand, pPlayer.exposed, wildTileId);
             if (kongWinResult.canWin) {
               return { winner: pPlayer.name, winTypes: kongWinResult.types, score: 1 };
             }
@@ -486,7 +491,7 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
     
     // Update ting status for all players
     for (let p = 0; p < 4; p++) {
-      players[p].isTing = checkTing(players[p].hand, players[p].exposed, null);
+      players[p].isTing = checkTing(players[p].hand, players[p].exposed, wildTileId);
     }
     
     // Next player's turn
