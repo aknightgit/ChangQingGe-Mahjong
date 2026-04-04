@@ -763,6 +763,12 @@ const shouldRotateView = computed(() => isMobilePortrait.value)
 const nowTs = ref(Date.now())
 let actionWindowTimer: ReturnType<typeof setInterval> | null = null
 
+const actionButtonsVisibleUntil = ref(0)
+const getActionWindowMs = (state: any) => {
+  const hw = state?.hesitationWindow
+  return typeof hw === 'number' && hw > 0 ? hw : 5000
+}
+
 // ===== 出牌倒计时 & AI托管 =====
 const TURN_TIMEOUT_SEC = 60
 const CONSECUTIVE_AUTO_THRESHOLD = 2 // 连续自动操作N次后AI接管
@@ -1426,10 +1432,15 @@ const handleTileClick = (tile: Tile) => {
 // but `gameManager.ts` implementation of `handlePeng` finds matching tiles automatically.
 
 const showDraw = computed(() => availableActions.value.includes(ActionType.DRAW))
-const showChow = computed(() => availableActions.value.includes(ActionType.CHOW))
-const showPeng = computed(() => availableActions.value.includes(ActionType.PENG))
-const showKong = computed(() => availableActions.value.includes(ActionType.KONG))
-const showHu = computed(() => availableActions.value.includes(ActionType.HU))
+const shouldShowActionButton = (type: ActionType) => {
+  if (!availableActions.value.includes(type)) return false
+  return nowTs.value <= actionButtonsVisibleUntil.value
+}
+
+const showChow = computed(() => shouldShowActionButton(ActionType.CHOW))
+const showPeng = computed(() => shouldShowActionButton(ActionType.PENG))
+const showKong = computed(() => shouldShowActionButton(ActionType.KONG))
+const showHu = computed(() => shouldShowActionButton(ActionType.HU))
 const showPass = computed(() => availableActions.value.includes(ActionType.PASS))
 const showRebel = computed(() => availableActions.value.includes(ActionType.REBEL))
 const showThink = computed(() => availableActions.value.includes(ActionType.THINK))
@@ -1611,6 +1622,7 @@ const onHu = async () => {
   selectedHuCombo.value = 0
 }
 const onConfirmHu = (index: number) => {
+  hideActionButtonsNow()
   resetAutoCount()
   playSound('tile-hu')
   showHuPanel.value = false
@@ -1628,6 +1640,37 @@ const isMyApprovalWaiting = computed(() => {
   if (!myPending) return false
   return actionApprovalEvent.value.candidatePlayerId !== currentPlayer.value?.id
 })
+watch(
+  [
+    () => gameState.value?.pendingActions,
+    () => gameState.value?.hesitationWindow,
+    () => currentPlayer.value?.id
+  ],
+  () => {
+    const myId = currentPlayer.value?.id
+    const pending = (gameState.value as any)?.pendingActions || []
+    const mine = myId ? pending.find((pa: any) => pa.playerId === myId) : null
+    if (mine) {
+      actionButtonsVisibleUntil.value = Date.now() + getActionWindowMs(gameState.value)
+    } else {
+      actionButtonsVisibleUntil.value = 0
+    }
+  },
+  { deep: true, immediate: true }
+)
+
+watch(
+  () => gameState.value?.discardPile,
+  (next, prev) => {
+    const previous = Array.isArray(prev) ? prev : []
+    const current = Array.isArray(next) ? next : []
+    if (current.length >= previous.length) return
+    // 弃牌池减少通常意味着该牌被吃/碰/杠认领，立即隐藏响应按钮，避免残留亮起
+    hideActionButtonsNow()
+  },
+  { deep: true }
+)
+
 const onApprovalChoice = async (choice: string) => {
   try {
     await $fetch('/api/game/approval-choice', {
@@ -1682,9 +1725,13 @@ const canCheatHu = computed(
 )
 
 const onDraw = () => { resetAutoCount(); playSound('tile-draw'); executeAction(ActionType.DRAW) }
-const onChow = () => { resetAutoCount(); playSound('tile-chow'); executeAction(ActionType.CHOW) }
-const onPeng = () => { resetAutoCount(); playSound('tile-pong'); executeAction(ActionType.PENG) }
-const onKong = () => { resetAutoCount(); playSound('tile-kong'); executeAction(ActionType.KONG) }
+const hideActionButtonsNow = () => {
+  actionButtonsVisibleUntil.value = 0
+}
+
+const onChow = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-chow'); executeAction(ActionType.CHOW) }
+const onPeng = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-pong'); executeAction(ActionType.PENG) }
+const onKong = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-kong'); executeAction(ActionType.KONG) }
 const onPass = () => { resetAutoCount(); executeAction(ActionType.PASS) }
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); executeAction(ActionType.REBEL) }
 const onThink = () => { resetAutoCount(); executeAction(ActionType.THINK) }
