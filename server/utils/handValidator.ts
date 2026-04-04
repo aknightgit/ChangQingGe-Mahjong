@@ -44,6 +44,7 @@ export function buildWildTileChecker(wildTileId: string | null): WildTileChecker
 // ============================================================
 // 手牌数校验（摸牌后必须是 2/5/8/11/14）
 // ============================================================
+// ✅ 修复：移除 13（13张是未摸牌状态，胡牌时必须 2/5/8/11/14）
 function isValidHandSize(count: number): boolean {
   return [2, 5, 8, 11, 14].includes(count);
 }
@@ -322,7 +323,22 @@ export function canWin(
   const flowerCount = concealed.filter(t => isFlower(t)).length;
   const concealedNonFlower = concealed.filter(t => !isFlower(t));
 
-  // 手牌数校验
+  // 第一层：特殊牌型（无需3n+2，无需手牌数校验）
+  // 八花自摸优先
+  if (flowerCount >= 8 && concealedNonFlower.length === 0) {
+    return { canWin: true, types: [HandType.EIGHT_FLOWERS] };
+  }
+
+  // 四百搭
+  if (wildTileId) {
+    const wildTileFn = buildWildTileChecker(wildTileId);
+    const wildCount = concealed.filter(t => wildTileFn(t)).length;
+    if (wildCount >= 4 && concealedNonFlower.length === 0) {
+      return { canWin: true, types: [HandType.FOUR_WILD] };
+    }
+  }
+
+  // 手牌数校验（特殊牌型已处理过）
   if (!isValidHandSize(concealedNonFlower.length)) {
     return { canWin: false, types: [] };
   }
@@ -387,4 +403,102 @@ export function isTing(
     if (canWin([...tiles, t], existingMelds, isWildTile).canWin) return true;
   }
   return false;
+}
+
+// ============================================================
+// 新增：吃碰排斥规则
+// 规则：吃A门后禁止吃碰BC门；碰A门后禁止吃BC门
+// ============================================================
+export interface ChowPongExclusionState {
+  firstActionSuit: string | null;
+  firstActionType: 'chow' | 'pong' | null;
+}
+
+export function checkChowPongExclusion(
+  state: ChowPongExclusionState,
+  actionType: 'chow' | 'pong',
+  tileSuit: string
+): boolean {
+  if (!state.firstActionSuit || !state.firstActionType) return true;
+  if (tileSuit === state.firstActionSuit) return true;
+  // 吃A门后 → 禁止吃/碰BC门
+  if (state.firstActionType === 'chow') return false;
+  // 碰A门后 → 禁止吃BC门（允许碰BC门）
+  if (state.firstActionType === 'pong' && actionType === 'chow') return false;
+  return true;
+}
+
+export function updateChowPongExclusion(
+  state: ChowPongExclusionState,
+  actionType: 'chow' | 'pong',
+  tileSuit: string
+): ChowPongExclusionState {
+  if (!state.firstActionSuit) {
+    return { firstActionSuit: tileSuit, firstActionType: actionType };
+  }
+  return state;
+}
+
+// ============================================================
+// 新增：听牌最大化弃牌策略
+// 对 14/11/8/5/2 张牌，枚举打哪张能听最多牌
+// ============================================================
+export interface TingAnalysis {
+  discardTile: { suit: string; value: number; id: string } | null;
+  winningTiles: Array<{ suit: string; value: number; count: number }>;
+  totalWinningCount: number;
+  isTing: boolean;
+}
+
+export function findBestDiscardForTing(
+  tiles: Tile[],
+  existingMelds: number,
+  isWildTile: WildTileChecker = () => false
+): TingAnalysis {
+  const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+  const honorSuits = [TileSuit.WIND, TileSuit.DRAGON];
+  const allTileTypes: Array<{ suit: string; value: number }> = [];
+  for (const s of [...numSuits, ...honorSuits])
+    for (let v = 1; v <= 9; v++)
+      allTileTypes.push({ suit: s, value: v });
+
+  let bestResult: TingAnalysis = {
+    discardTile: null,
+    winningTiles: [],
+    totalWinningCount: 0,
+    isTing: false,
+  };
+
+  for (let i = 0; i < tiles.length; i++) {
+    const discard = tiles[i];
+    const remaining = tiles.filter((_, j) => j !== i);
+
+    const tingTiles: Array<{ suit: string; value: number; count: number }> = [];
+    let totalCount = 0;
+
+    for (const tt of allTileTypes) {
+      const testTile: Tile = { suit: tt.suit as TileSuit, value: tt.value, id: `test-${tt.suit}-${tt.value}`, isFlower: false };
+      const testHand = [...remaining, testTile];
+      const result = canWin(testHand, existingMelds, isWildTile);
+      if (result.canWin) {
+        const inRemaining = remaining.filter(t => t.suit === tt.suit && t.value === tt.value).length;
+        const count = Math.max(0, 4 - inRemaining);
+        if (count > 0) {
+          tingTiles.push({ suit: tt.suit, value: tt.value, count });
+          totalCount += count;
+        }
+      }
+    }
+
+    if (totalCount > bestResult.totalWinningCount) {
+      bestResult = {
+        discardTile: { suit: discard.suit, value: discard.value, id: discard.id },
+        winningTiles: tingTiles,
+        totalWinningCount: totalCount,
+        isTing: totalCount > 0,
+      };
+    }
+  }
+
+  return bestResult;
 }

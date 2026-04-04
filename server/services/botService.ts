@@ -4,7 +4,7 @@
  */
 import { GameState, Player, Tile, TileSuit, MeldType, PlayerStatus, ActionType } from '../types/game'
 import { groupTiles, tilesEqual, isFlower, isHonor, isWind, isDragon } from '../utils/tiles'
-import { canWin } from '../utils/handValidator'
+import { canWin, findBestDiscardForTing, checkChowPongExclusion, updateChowPongExclusion, ChowPongExclusionState } from '../utils/handValidator'
 import fs from 'fs'
 import path from 'path'
 
@@ -225,6 +225,20 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   const hand = player.hand.concealedTiles
   if (hand.length === 0) return ''
 
+  const wildChecker = (t: Tile) => isWildTile(t, game)
+  const exposedCount = player.hand.exposedMelds.length
+
+  // ✅ 听牌最大化弃牌：当手牌是 14/11/8/5/2 张时，优先用精确分析
+  const tingValidSizes = [14, 11, 8, 5, 2];
+  if (tingValidSizes.includes(hand.length)) {
+    const tingResult = findBestDiscardForTing(hand, exposedCount, wildChecker);
+    if (tingResult.isTing && tingResult.discardTile) {
+      console.log(`[TingDiscard] ${player.name} 听牌最大化: 打 ${tingResult.discardTile.suit}-${tingResult.discardTile.value}, 听 ${tingResult.totalWinningCount} 张`);
+      return tingResult.discardTile.id;
+    }
+  }
+
+  // 回退到启发式打分
   let bestTile = hand[0]
   let bestScore = -Infinity
 

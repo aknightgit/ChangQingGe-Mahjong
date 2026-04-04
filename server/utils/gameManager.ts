@@ -13,7 +13,7 @@ import {
   GameEndReason
 } from '../types/game';
 import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isFivePoison } from './tiles';
-import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType } from './handValidator';
+import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
 import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier } from './scoring';
 import { randomUUID } from 'crypto';
 import { saveGameState, loadGameState, loadAllGameStates, deleteGameState } from './gamePersistence';
@@ -834,6 +834,9 @@ class GameManager {
     console.log(`[WallDebug] createDeck: ${deck.length} tiles`);
     game.wall = shuffleTiles(deck);
     console.log(`[WallDebug] after shuffle: ${game.wall.length} tiles`);
+
+    // 每局重置吃碰排斥状态
+    game.chowPongExclusion = {};
 
     // 广播 STARTING 阶段（所有客户端显示骰子动画）
     game.phase = GamePhase.STARTING;
@@ -1720,6 +1723,17 @@ class GameManager {
    * 直接执行吃牌（不检查碰优先级）
    */
   private executeChowDirectly(game: GameState, player: Player): void {
+    // ---- 吃碰排斥检查 ----
+    const discardTile = game.discardPile[game.discardPile.length - 1];
+    if (!discardTile) return;
+    const exclusion = game.chowPongExclusion?.[player.id];
+    const state = exclusion || { firstActionSuit: null, firstActionType: null };
+    if (!checkChowPongExclusion(state, 'chow', discardTile.suit)) {
+      console.warn(`[CHOW] Player ${player.name} blocked by exclusion rule (firstAction=${state.firstActionSuit})`);
+      game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
+      return;
+    }
+
     let pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
     // Bug修复: pending被timeout清空后，从discardPile重建
     if (!pendingAction || !pendingAction.tile) {
@@ -1759,6 +1773,12 @@ class GameManager {
       ...(sourcePos !== undefined && { sourcePosition: sourcePos })
     };
     player.hand.exposedMelds.push(meld);
+
+    // ---- 更新吃碰排斥状态 ----
+    if (!game.chowPongExclusion) game.chowPongExclusion = {};
+    const prevState = game.chowPongExclusion[player.id] || { firstActionSuit: null, firstActionType: null };
+    game.chowPongExclusion[player.id] = updateChowPongExclusion(prevState, 'chow', discardTile.suit);
+
     // Bug6: 用findIndex找并移除被吃牌
     const cdIdx = game.discardPile.findIndex(t => t.id === discardedTile.id);
     if (cdIdx >= 0) game.discardPile.splice(cdIdx, 1);
@@ -1773,6 +1793,16 @@ class GameManager {
   private executePengDirectly(game: GameState, player: Player): void {
     const lastDiscard = game.discardPile[game.discardPile.length - 1];
     if (!lastDiscard) return;
+
+    // ---- 吃碰排斥检查 ----
+    const exclusion = game.chowPongExclusion?.[player.id];
+    const state = exclusion || { firstActionSuit: null, firstActionType: null };
+    if (!checkChowPongExclusion(state, 'pong', lastDiscard.suit)) {
+      console.warn(`[PENG] Player ${player.name} blocked by exclusion rule (firstAction=${state.firstActionSuit})`);
+      game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
+      return;
+    }
+
     const matchingTiles = player.hand.concealedTiles.filter(t => tilesEqual(t, lastDiscard));
     if (matchingTiles.length < 2) return;
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
@@ -1787,6 +1817,12 @@ class GameManager {
       isConcealed: false,
       ...(sourcePos !== undefined && { sourcePosition: sourcePos })
     });
+
+    // ---- 更新吃碰排斥状态 ----
+    if (!game.chowPongExclusion) game.chowPongExclusion = {};
+    const prevState = game.chowPongExclusion[player.id] || { firstActionSuit: null, firstActionType: null };
+    game.chowPongExclusion[player.id] = updateChowPongExclusion(prevState, 'pong', lastDiscard.suit);
+
     // Bug6: 用findIndex找并移除被碰牌
     const pdIdx = game.discardPile.findIndex(t => t.id === lastDiscard.id);
     if (pdIdx >= 0) game.discardPile.splice(pdIdx, 1);

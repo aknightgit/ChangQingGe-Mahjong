@@ -228,6 +228,8 @@ export interface GameState {
   swapChances?: Record<string, number>;  // 每位玩家剩余换位次数
   // 胜者观战模式
   spectatorMode?: { playerId: string; viewingPlayerId: string } | null;
+  // 吃碰排斥规则状态（每局重置）
+  chowPongExclusion?: Record<string, { firstActionSuit: string | null; firstActionType: 'chow' | 'pong' | null }>;
 }
 
 export interface PendingAction {
