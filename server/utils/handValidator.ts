@@ -464,7 +464,7 @@ export function canWinStandard(tiles: Tile[], existingMelds = 0, isWildTile: Wil
   const requiredMelds = Math.max(0, 4 - existingMelds);
   const nonFlowerTiles = tiles.filter(t => !isFlower(t));
   // 手牌张数校验：每次摸牌后手牌 = 14 - 2*melds - kongs（每组牌从手牌消耗2张，杠从手牌消耗3张）
-  const expectedHandSize = 14 - 2 * existingMelds - kongCount
+  const expectedHandSize = 14 - 3 * existingMelds - kongCount
   if (nonFlowerTiles.length !== expectedHandSize) return false
 
   // Try each possible pair as the eyes (including 1 wild + 1 natural)
