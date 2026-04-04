@@ -1,22 +1,22 @@
 {
   "round": 7,
   "totalGames": 200,
-  "validHands": 116,
-  "invalidHands": 84,
-  "winRate": "58.0%",
+  "validHands": 117,
+  "invalidHands": 83,
+  "winRate": "58.5%",
   "winTypes": {
-    "da_diao": 28,
-    "hun_peng": 28,
-    "half_flush": 28,
-    "all_triplets": 73,
-    "qing_peng": 34,
-    "full_flush": 34,
-    "all_wind": 15,
-    "feng_peng": 15
+    "hun_peng": 32,
+    "half_flush": 32,
+    "all_triplets": 91,
+    "da_diao": 24,
+    "qing_peng": 37,
+    "full_flush": 37,
+    "all_wind": 30,
+    "feng_peng": 13
   },
-  "noWildDouble": 15,
+  "noWildDouble": 22,
   "chowPongBlocked": 10,
-  "tingDiscardUsed": 124,
-  "tingDiscardTested": 155,
-  "timestamp": "2026-04-04T09:05:05.455Z"
+  "tingDiscardUsed": 121,
+  "tingDiscardTested": 157,
+  "timestamp": "2026-04-04T09:54:24.449Z"
 }

@@ -247,7 +247,7 @@ function detectTypes(
 }
 
 // ============================================================
-// 百搭最优分配 → 找最高牌型
+// 百搭最优分配 → 穷举所有分配方案，找最高牌型
 // ============================================================
 function findBestAssignment(
   concealed: Tile[],
@@ -264,42 +264,104 @@ function findBestAssignment(
   if (wildCount === 0) return detectTypes(concealed, exposed);
 
   const naturals = concealed.filter(t => !isWild(t));
-  const groups = groupTiles(naturals);
-  const candidates: Array<{suit: string; value: number; score: number}> = [];
 
+  // 收集所有可能的目标牌（手牌中已有的花色+数值）
+  const groups = groupTiles(naturals);
+  const tileTypes: Array<{suit: string; value: number}> = [];
   for (const [, group] of groups) {
     if (group.length === 0) continue;
     const tile = group[0];
-    let score = 50;
-    if (isDragon(tile)) score = 110;
-    else if (isWind(tile)) score = 100;
-    if (!candidates.some(c => c.suit === tile.suit && c.value === tile.value)) {
-      candidates.push({ suit: tile.suit, value: tile.value, score });
+    if (!tileTypes.some(c => c.suit === tile.suit && c.value === tile.value)) {
+      tileTypes.push({ suit: tile.suit, value: tile.value });
     }
   }
-  candidates.sort((a, b) => b.score - a.score);
-  if (candidates.length === 0) return detectTypes(concealed, exposed);
 
+  // 如果没有任何自然牌，百搭只能自成牌型
+  if (tileTypes.length === 0) {
+    // 百搭自成刻子+对子
+    const virtualHand: Tile[] = [];
+    for (let i = 0; i < wildCount; i++) {
+      virtualHand.push({ suit: wildSuit as TileSuit, value: parseInt(wildVal), id: `v-${i}`, isFlower: false });
+    }
+    return detectTypes(virtualHand, exposed);
+  }
+
+  // 穷举：每个百搭可以变成 tileTypes 中的任意一种牌
+  // 用递归枚举所有分配组合
   let bestTypes: HandType[] = [];
   let bestScore = -1;
 
-  for (let i = 0; i <= wildCount; i++) {
-    const alloc = candidates.slice(0, Math.min(i, candidates.length));
-    while (alloc.length < wildCount) alloc.push(candidates[0]);
-
-    const virtualHand = [...naturals];
-    for (const a of alloc) {
-      virtualHand.push({ suit: a.suit as TileSuit, value: a.value, id: `v-${Math.random()}`, isFlower: false });
+  function enumerateAssignments(
+    wildIdx: number,
+    currentAlloc: Array<{suit: string; value: number}>
+  ) {
+    if (wildIdx === wildCount) {
+      // 所有百搭分配完毕，检测牌型
+      const virtualHand = [...naturals];
+      for (const a of currentAlloc) {
+        virtualHand.push({ suit: a.suit as TileSuit, value: a.value, id: `v-${Math.random()}`, isFlower: false });
+      }
+      const types = detectTypes(virtualHand, exposed);
+      if (types.length > 0) {
+        const primaryScore = HAND_TYPE_PRIORITY[types[0]] ?? 0;
+        if (primaryScore > bestScore) {
+          bestScore = primaryScore;
+          bestTypes = [...types];
+        }
+      }
+      return;
     }
 
-    const types = detectTypes(virtualHand, exposed);
-    if (types.length > 0) {
-      const primaryScore = HAND_TYPE_PRIORITY[types[0]] ?? 0;
-      if (primaryScore > bestScore) {
-        bestScore = primaryScore;
-        bestTypes = types;
+    // 每个百搭可以尝试变成任意一种已有牌
+    for (const tt of tileTypes) {
+      currentAlloc.push(tt);
+      enumerateAssignments(wildIdx + 1, currentAlloc);
+      currentAlloc.pop();
+    }
+  }
+
+  // 限制：如果组合数太多，只取 top candidates
+  const totalCombinations = Math.pow(tileTypes.length, wildCount);
+  if (totalCombinations > 1000) {
+    // 太多组合，只取 top 5 候选
+    const scored = tileTypes.map(tt => {
+      let score = 50;
+      const tile = { suit: tt.suit as TileSuit, value: tt.value };
+      if (isDragon(tile as Tile)) score = 110;
+      else if (isWind(tile as Tile)) score = 100;
+      return { ...tt, score };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    const topCandidates = scored.slice(0, 5);
+
+    function enumerateLimited(
+      wildIdx: number,
+      currentAlloc: Array<{suit: string; value: number}>
+    ) {
+      if (wildIdx === wildCount) {
+        const virtualHand = [...naturals];
+        for (const a of currentAlloc) {
+          virtualHand.push({ suit: a.suit as TileSuit, value: a.value, id: `v-${Math.random()}`, isFlower: false });
+        }
+        const types = detectTypes(virtualHand, exposed);
+        if (types.length > 0) {
+          const primaryScore = HAND_TYPE_PRIORITY[types[0]] ?? 0;
+          if (primaryScore > bestScore) {
+            bestScore = primaryScore;
+            bestTypes = [...types];
+          }
+        }
+        return;
+      }
+      for (const tt of topCandidates) {
+        currentAlloc.push(tt);
+        enumerateLimited(wildIdx + 1, currentAlloc);
+        currentAlloc.pop();
       }
     }
+    enumerateLimited(0, []);
+  } else {
+    enumerateAssignments(0, []);
   }
 
   return bestTypes;
@@ -355,12 +417,19 @@ export function canWin(
   const allWind = concealedNonFlower.length > 0 &&
     concealedNonFlower.every(t => isWind(t) || isWildTileFn(t));
   if (allWind) {
-    const types: HandType[] = [HandType.ALL_WIND];
+    // 风一色也需要验证 3n+2 格式
     const stdResult = wildTileId
       ? findBestAssignment(concealed, exposed, wildTileId)
       : detectTypes(concealed, exposed);
-    if (stdResult.includes(HandType.ALL_TRIPLETS)) types.push(HandType.FENG_PENG);
-    return { canWin: true, types };
+    if (stdResult.length > 0) {
+      const types: HandType[] = [HandType.ALL_WIND, ...stdResult];
+      if (stdResult.includes(HandType.ALL_TRIPLETS) && !types.includes(HandType.FENG_PENG)) {
+        types.push(HandType.FENG_PENG);
+      }
+      return { canWin: true, types };
+    }
+    // 3n+2 不满足 → 不能胡
+    return { canWin: false, types: [] };
   }
 
   // 第二层：标准3n+2

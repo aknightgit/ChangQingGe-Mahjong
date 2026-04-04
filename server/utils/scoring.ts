@@ -234,6 +234,7 @@ export interface WinOption {
 
 /**
  * 生成所有可能的胡牌方案（按最大番数倒序排列）
+ * 枚举所有手牌分解方案（不同对子/面子组合 → 不同牌型）
  * 返回 [{label: "碰碰胡·自摸", score: 80, details: [...]}]
  */
 export function generateWinOptions(params: {
@@ -252,59 +253,74 @@ export function generateWinOptions(params: {
 }): WinOption[] {
   const options: WinOption[] = [];
   const baseParams = { ...params };
-  const roundMult = params.roundMultiplier ?? 1;
-  const globalMult = params.globalMultiplier ?? 1;
 
-  // ===== 方案1: 自摸 =====
-  const selfDrawResult = calculateScore({
-    ...baseParams,
-    isSelfDrawn: true,
-    globalIncludesRound: true,
-  });
-  if (selfDrawResult.finalPoints > 0) {
-    options.push({
-      label: `${selfDrawResult.handTypeName}·自摸`,
-      score: selfDrawResult.finalPoints,
-      details: [...selfDrawResult.details],
-      type: 'self_draw'
+  // ===== 枚举所有手牌分解方案 =====
+  // 同一手牌可能有多种分解方式，产生不同牌型
+  // 例如：11122233344万 可以分解为 碰碰胡 或 清一色
+  const allDecompositions = enumerateHandDecompositions(
+    params.handTiles,
+    params.exposedMelds,
+    params.wildTileSuit,
+    params.wildTileValue
+  );
+
+  // 对每种分解方案计算自摸和捉冲
+  for (const decomp of allDecompositions) {
+    // 自摸
+    const selfDrawResult = calculateScore({
+      ...baseParams,
+      handTypes: decomp.types,
+      isSelfDrawn: true,
+      globalIncludesRound: true,
     });
+    if (selfDrawResult.finalPoints > 0) {
+      const label = `${selfDrawResult.handTypeName}·自摸`;
+      if (!options.some(o => o.label === label)) {
+        options.push({
+          label,
+          score: selfDrawResult.finalPoints,
+          details: [...selfDrawResult.details],
+          type: 'self_draw'
+        });
+      }
+    }
+
+    // 捉冲
+    const discardResult = calculateScore({
+      ...baseParams,
+      handTypes: decomp.types,
+      isSelfDrawn: false,
+      globalIncludesRound: true,
+    });
+    if (discardResult.finalPoints > 0) {
+      const label = `${discardResult.handTypeName}·捉冲`;
+      if (!options.some(o => o.label === label)) {
+        options.push({
+          label,
+          score: discardResult.finalPoints,
+          details: [...discardResult.details],
+          type: 'discard'
+        });
+      }
+    }
   }
 
-  // ===== 方案2: 捉冲 =====
-  const discardResult = calculateScore({
-    ...baseParams,
-    isSelfDrawn: false,
-    globalIncludesRound: true,
-  });
-  if (discardResult.finalPoints > 0) {
-    options.push({
-      label: `${discardResult.handTypeName}·捉冲`,
-      score: discardResult.finalPoints,
-      details: [...discardResult.details],
-      type: 'discard'
-    });
-  }
-
-  // ===== 方案3: 百搭归位（无百搭翻倍） =====
-  // 检查：把手牌中的百搭当作原牌（非百搭）还能不能胡
+  // ===== 百搭归位（无百搭翻倍） =====
   if (params.wildTileSuit !== undefined && params.wildTileValue !== undefined) {
     const wildCount = countWildTiles(params.handTiles, params.wildTileSuit, params.wildTileValue, params.wildTileGroup);
     if (wildCount > 0) {
-      // 关键：用 () => false 作为百搭检测，即所有牌都不是百搭
       const noWildCheck = canWin(params.handTiles, params.exposedMelds.length, () => false);
       if (noWildCheck.canWin) {
-        // 百搭归位能胡 → 用无百搭的牌型重新算番
         const noWildTypes = noWildCheck.types;
+        // 自摸版
         const noWildResult = calculateScore({
           ...baseParams,
           handTypes: noWildTypes,
-          // 关键：不传 wildTileSuit/wildTileValue，让 calculateFormulaFan 不走百搭分配
           wildTileSuit: undefined,
           wildTileValue: undefined,
           isSelfDrawn: true,
           globalIncludesRound: true,
         });
-        // 无百搭翻倍：最终点数 ×2
         const doubledPoints = noWildResult.finalPoints * 2;
         const noWildLabel = `${noWildResult.handTypeName}·自摸(无百搭×2)`;
         if (!options.some(o => o.label === noWildLabel)) {
@@ -339,7 +355,7 @@ export function generateWinOptions(params: {
     }
   }
 
-  // 去重（相同 label 只保留第一个）
+  // 去重 + 按分数倒序
   const uniqueOptions: WinOption[] = [];
   const seen = new Set<string>();
   for (const opt of options) {
@@ -349,10 +365,39 @@ export function generateWinOptions(params: {
       uniqueOptions.push(opt);
     }
   }
-
-  // 按分数倒序排列
   uniqueOptions.sort((a, b) => b.score - a.score);
   return uniqueOptions;
+}
+
+/**
+ * 枚举手牌所有可能的分解方案（不同对子/面子组合 → 不同牌型）
+ * 返回去重后的牌型列表
+ */
+function enumerateHandDecompositions(
+  handTiles: Tile[],
+  exposedMelds: Meld[],
+  wildTileSuit?: TileSuit,
+  wildTileValue?: number
+): Array<{ types: HandType[] }> {
+  const results: Array<{ types: HandType[] }> = [];
+  const seen = new Set<string>();
+
+  const wildTileId = (wildTileSuit !== undefined && wildTileValue !== undefined)
+    ? `${wildTileSuit}-${wildTileValue}`
+    : null;
+
+  // canWin 内部已调用 findBestAssignment 穷举所有百搭分配
+  // 这里直接获取最优牌型即可
+  const result = canWin(handTiles, exposedMelds, wildTileId);
+  if (result.canWin && result.types.length > 0) {
+    const key = result.types.sort().join(',');
+    if (!seen.has(key)) {
+      seen.add(key);
+      results.push({ types: result.types });
+    }
+  }
+
+  return results;
 }
 
 // ===== 公式计算（碰碰胡/混一色）=====

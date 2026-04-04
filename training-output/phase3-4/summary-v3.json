@@ -1,23 +1,23 @@
 {
   "totalGames": 2000,
-  "totalValid": 1089,
-  "totalInvalid": 911,
-  "overallWinRate": "54.4%",
+  "totalValid": 1118,
+  "totalInvalid": 882,
+  "overallWinRate": "55.9%",
   "winTypes": {
-    "all_wind": 194,
+    "hun_peng": 302,
+    "half_flush": 302,
+    "all_triplets": 895,
+    "qing_peng": 343,
+    "full_flush": 343,
+    "da_diao": 210,
+    "all_wind": 366,
     "feng_peng": 172,
-    "all_triplets": 691,
-    "qing_peng": 332,
-    "full_flush": 332,
-    "hun_peng": 267,
-    "half_flush": 267,
-    "da_diao": 201,
     "four_wild": 3
   },
-  "noWildDouble": 161,
+  "noWildDouble": 179,
   "chowPongBlocked": 100,
-  "tingDiscardUsed": 1224,
-  "tingDiscardTested": 1554,
-  "phase3Passed": 9,
-  "phase3Failed": 1
+  "tingDiscardUsed": 1239,
+  "tingDiscardTested": 1572,
+  "phase3Passed": 10,
+  "phase3Failed": 0
 }
