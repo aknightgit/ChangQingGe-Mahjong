@@ -62,16 +62,17 @@ function dealTiles(): { hands: Tile[][]; wall: Tile[]; flowers: Tile[][] } {
 }
 
 // ========== Win check ==========
-function checkWin(hand: Tile[], exposed: Meld[]): { canWin: boolean; types: HandType[] } {
-  return canWin(hand, exposed, null);
+function checkWin(hand: Tile[], exposed: Meld[], wildTileId: string | null = null): { canWin: boolean; types: HandType[] } {
+  return canWin(hand, exposed, wildTileId);
 }
 
 // ========== Ting check ==========
-function checkTing(hand: Tile[], exposed: Meld[]): boolean {
+function checkTing(hand: Tile[], exposed: Meld[], wildTileId: string | null = null): boolean {
+  const wildChecker = wildTileId ? (t: Tile) => `${t.suit}-${t.value}` === wildTileId : () => false;
   // 听牌：打任意一张后，存在任意进张可胡
   for (let i = 0; i < hand.length; i++) {
     const remaining = [...hand.slice(0, i), ...hand.slice(i + 1)];
-    const result = findBestDiscardForTing(remaining, exposed);
+    const result = findBestDiscardForTing(remaining, exposed.length, wildChecker);
     if (result.isTing) return true;
   }
   return false;
@@ -438,7 +439,7 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
           }]);
           
           const action = shouldClaimPendingAction(pengPlayer, ['peng', 'pass'], pengGame);
-          if (action === 'PENG') {
+          if (action?.toLowerCase() === 'peng') {
             const pengResult = doPeng(pPlayer.hand, lastDiscard);
             pPlayer.hand = pengResult.hand;
             pPlayer.exposed.push(pengResult.meld);
@@ -467,7 +468,7 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
         }]);
         
         const action = shouldClaimPendingAction(chowPlayer, ['chow', 'pass'], chowGame);
-        if (action === 'CHOW') {
+        if (action?.toLowerCase() === 'chow') {
           const chowResult = doChow(nextP.hand, lastDiscard);
           if (chowResult) {
             nextP.hand = chowResult.hand;
@@ -485,7 +486,7 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
     
     // Update ting status for all players
     for (let p = 0; p < 4; p++) {
-      players[p].isTing = checkTing(players[p].hand, players[p].exposed);
+      players[p].isTing = checkTing(players[p].hand, players[p].exposed, null);
     }
     
     // Next player's turn

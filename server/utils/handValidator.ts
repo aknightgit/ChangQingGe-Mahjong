@@ -16,6 +16,7 @@ export enum HandType {
   FOUR_WILD     = 'four_wild',     // 四百搭
   ALL_TRIPLETS  = 'all_triplets',  // 碰碰胡
   DA_DIAO       = 'da_diao',       // 大吊
+  STANDARD_WIN  = 'standard_win',  // 普通胡牌（4面子+1将，无特殊牌型）
 }
 
 // 优先级（越高越好）
@@ -30,6 +31,7 @@ export const HAND_TYPE_PRIORITY: Record<HandType, number> = {
   [HandType.FOUR_WILD]:      50,
   [HandType.ALL_TRIPLETS]:    30,
   [HandType.DA_DIAO]:        85,
+  [HandType.STANDARD_WIN]:    1,
 };
 
 export type WildTileChecker = (tile: Tile) => boolean;
@@ -334,6 +336,11 @@ function detectTypes(
   // 大吊
   if (concealedNonFlower.length === 2 && exposed.length >= 1) {
     types.push(HandType.DA_DIAO);
+  }
+
+  // 普通胡牌：满足 3n+2 格式但无特殊牌型
+  if (types.length === 0 && satisfiesFormat) {
+    types.push(HandType.STANDARD_WIN);
   }
 
   return types.sort((a, b) => (HAND_TYPE_PRIORITY[b] ?? 0) - (HAND_TYPE_PRIORITY[a] ?? 0));
