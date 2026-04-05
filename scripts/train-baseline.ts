@@ -1055,7 +1055,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
 
   // 构建完整 GameResult 的辅助函数
   const buildResult = (winnerIdx: number, winMode: string, winPoints: number, winHandType: string, winBaseFan: number, from?: string): GameResult => {
-    console.error(`[BUILD_DEBUG] winner=${AI_NAMES[winnerIdx]} mode=${winMode} handType="${winHandType}"`)
+    // console.error(`[BUILD_DEBUG] winner=${AI_NAMES[winnerIdx]} mode=${winMode} handType="${winHandType}"`)
     const snapshots = recordSnapshots()
     const wSnap = snapshots[winnerIdx]
     const wPlayer = g.players[winnerIdx]
@@ -1085,7 +1085,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       const validTypes = types.filter(t => t !== HandType.STANDARD)
       // 诊断
       if (validTypes.length === 0) {
-        console.error(`[无效诊断] ${player.name} concealed=${player.hand.length} exposed=${player.exposedMelds.length} total=${tilesWithWild.length} canWin=${canWinResult.canWin} types=[${types.join(',')}] canWinTypes=[${canWinResult.types.join(',')}] ws=${wsVal}`)
+        // console.error(`[无效诊断] ${player.name} concealed=${player.hand.length} exposed=${player.exposedMelds.length} total=${tilesWithWild.length} canWin=${canWinResult.canWin} types=[${types.join(',')}] canWinTypes=[${canWinResult.types.join(',')}] ws=${wsVal}`)
       }
       const result = calculateScore({
         handTiles: tilesWithWild, exposedMelds: player.exposedMelds,
@@ -1108,13 +1108,13 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     if (!win.canWin) {
       // 诊断：哪些无效手牌在尝试胡
       const wsVal = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : null
-      console.error(`[WIN_BLOCKED] ${p.name} concealed=${tiles.length} exposed=${p.exposedMelds.length} kongCount=${kongCount} canWin=${win.canWin} types=[${win.types.join(',')}] ws=${wsVal}`)
+      // console.error(`[WIN_BLOCKED] ${p.name} concealed=${tiles.length} exposed=${p.exposedMelds.length} kongCount=${kongCount} canWin=${win.canWin} types=[${win.types.join(',')}] ws=${wsVal}`)
       return false
     }
     const validTypes = win.types.filter(t => t !== HandType.STANDARD)
     if (validTypes.length === 0) {
       const wsVal = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : null
-      console.error(`[WIN_BLOCKED_STD] ${p.name} concealed=${tiles.length} exposed=${p.exposedMelds.length} types=[${win.types.join(',')}] ws=${wsVal}`)
+      // console.error(`[WIN_BLOCKED_STD] ${p.name} concealed=${tiles.length} exposed=${p.exposedMelds.length} types=[${win.types.join(',')}] ws=${wsVal}`)
       return false
     }
     return true
@@ -1636,7 +1636,7 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
 
       // 手牌类型统计（K哥目标分布）
       const ht = w.handType || '未知'
-      console.error(`[HT_DEBUG] winner handType="${ht}" score=${w.score}`)
+      // console.error(`[HT_DEBUG] winner handType="${ht}" score=${w.score}`)
       handTypeCounts[ht] = (handTypeCounts[ht] || 0) + 1
     }
 

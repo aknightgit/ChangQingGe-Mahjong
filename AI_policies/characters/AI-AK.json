@@ -1,12 +1,17 @@
 {
-  "savedAt": "2026-04-05T03:20:24.240Z",
+  "savedAt": "2026-04-05T08:23:13.811Z",
   "round": 0,
   "metrics": {
-    "fitness": -30800,
-    "huRate": 0.023,
-    "drawRate": 0.917,
-    "totalGames": 10,
-    "note": "AI-AK iterative training - 1x10"
+    "fitness": -2353.186046511628,
+    "huRate": 0.04300000000000004,
+    "drawRate": 0.957,
+    "selfDrawRate": 0.06976744186046512,
+    "discardWinRate": 0.9302325581395349,
+    "fightToLastRate": 0,
+    "bigHandRate": 0.046511627906976744,
+    "menqingWinRate": 0.09302325581395349,
+    "totalGames": 6000,
+    "note": "Baseline convergence - 10x600"
   },
   "policy": {
     "id": "AI-AK",
