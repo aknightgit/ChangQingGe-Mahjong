@@ -1102,13 +1102,21 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     }
   }
 
-  // 胡牌检测：能胡即可（课程学习：先学胡牌再学好牌）
+  // 胡牌检测：K哥铁律过滤STANDARD + 详细诊断
   const canWinWithType = (tiles: Tile[], p: BotPlayer, makeWT: (p: BotPlayer) => WildTileChecker, kongCount = 0): boolean => {
     const win = canWin(tiles, p.exposedMelds.length, makeWT(p), kongCount)
-    if (!win.canWin) return false
-    // K哥铁律：只有特定牌型才能胡，过滤STANDARD
+    if (!win.canWin) {
+      // 诊断：哪些无效手牌在尝试胡
+      const wsVal = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : null
+      console.error(`[WIN_BLOCKED] ${p.name} concealed=${tiles.length} exposed=${p.exposedMelds.length} kongCount=${kongCount} canWin=${win.canWin} types=[${win.types.join(',')}] ws=${wsVal}`)
+      return false
+    }
     const validTypes = win.types.filter(t => t !== HandType.STANDARD)
-    if (validTypes.length === 0) return false
+    if (validTypes.length === 0) {
+      const wsVal = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : null
+      console.error(`[WIN_BLOCKED_STD] ${p.name} concealed=${tiles.length} exposed=${p.exposedMelds.length} types=[${win.types.join(',')}] ws=${wsVal}`)
+      return false
+    }
     return true
   }
 
