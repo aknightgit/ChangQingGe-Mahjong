@@ -1080,10 +1080,12 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       const wsVal = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : null
       const tilesWithWild = player.hand  // use concealed tiles as-is
       const types = detectHandTypes(tilesWithWild, player.exposedMelds, wsVal)
+      // canWin also check to compare
+      const canWinResult = canWin(tilesWithWild, player.exposedMelds, wsVal ? (t => !!(t.suit === g.wildSuit && t.value === g.wildValue)) : () => false)
       const validTypes = types.filter(t => t !== HandType.STANDARD)
       // 诊断
       if (validTypes.length === 0) {
-        console.error(`[无效诊断] ${player.name} concealed=${player.hand.length} exposed=${player.exposedMelds.length} total=${tilesWithWild.length} types=[${types.join(',')}] ws=${wsVal}`)
+        console.error(`[无效诊断] ${player.name} concealed=${player.hand.length} exposed=${player.exposedMelds.length} total=${tilesWithWild.length} canWin=${canWinResult.canWin} types=[${types.join(',')}] canWinTypes=[${canWinResult.types.join(',')}] ws=${wsVal}`)
       }
       const result = calculateScore({
         handTiles: tilesWithWild, exposedMelds: player.exposedMelds,
