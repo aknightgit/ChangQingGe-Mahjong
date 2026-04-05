@@ -1113,7 +1113,8 @@ interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers:
 interface WinningGameRecord {
   gameIdx: number; winnerName: string; hand: string; melds: string[]; handTypes: string[];
   isSelfDraw: boolean; score: number; multiplier: number; roundNum: number;
-  akDelta: number  // AK的分数变化（正=赢，负=输）
+  akDelta: number;  // AK的分数变化（正=赢，负=输）
+  result?: any  // GameResult，用于settlementLog
 }
 interface GameResult {
   winner: number; scores: number[]; events: GameEvent[]; multiplier: number
@@ -1641,7 +1642,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
           gameIdx: g, winnerName: winnerSnap.name, hand: winnerSnap.hand,
           melds: winnerSnap.melds, handTypes: typeNames.length > 0 ? typeNames : ['普通'],
           isSelfDraw, score: result.scores[result.winner], multiplier: result.multiplier, roundNum: result.roundNum,
-          akDelta
+          akDelta, result
         })
       }
 
