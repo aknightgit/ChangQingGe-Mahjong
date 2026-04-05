@@ -1075,21 +1075,30 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
   // 生成赢家牌型信息
   const getWinInfo = (player: BotPlayer, isSelfDraw: boolean, isKongWin: boolean): { handType: string; baseFan: number; finalPoints: number } => {
     try {
-      // reconstruct hand: add back wild tiles from exposedMelds (they were consumed but needed for type detection)
+      // reconstruct hand: only add back NATURAL tiles from exposedMelds (wild tiles were never in concealed hand)
+      // bug fixed: wild tiles in exposed melds should NOT be added back to concealed count
       const wsVal = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : null
-      const wildsInMelds = player.exposedMelds.flatMap(m => m.tiles).filter(t => g.wildSuit && g.wildValue && t.suit === g.wildSuit && t.value === g.wildValue)
-      const tilesWithWild = [...player.hand, ...wildsInMelds]
-      const types = detectHandTypes(tilesWithWild, player.exposedMelds, isSelfDraw, player.flowerTiles.length, wsVal, g.wildTileGroup || [])
+      const isWild = (t: Tile) => !!(wsVal && t.suit === g.wildSuit && t.value === g.wildValue)
+      // Only add back natural tiles from exposed melds (wild tiles were consumed from concealed, not added back)
+      const naturalsInMelds = player.exposedMelds.flatMap(m => m.tiles).filter(t => !isWild(t))
+      const tilesWithWild = [...player.hand, ...naturalsInMelds]
+      const types = detectHandTypes(tilesWithWild, player.exposedMelds, wsVal)
+      const validTypes = types.filter(t => t !== HandType.STANDARD)
+      // 诊断：哪些hands导致无效牌型
+      if (validTypes.length === 0) {
+        console.error(`[无效诊断] ${player.name} concealed=${player.hand.length} exposed=${player.exposedMelds.length} naturalsInMelds=${naturalsInMelds.length} total=${tilesWithWild.length} types=[${types.join(',')}] ws=${wsVal}`)
+      }
       const result = calculateScore({
         handTiles: tilesWithWild, exposedMelds: player.exposedMelds,
-        flowerTiles: player.flowerTiles, handTypes: types,
+        flowerTiles: player.flowerTiles, handTypes: validTypes.length > 0 ? validTypes : types,
         isSelfDrawn: isSelfDraw, isKongFlower: isKongWin,
         isRobbingKong: false, isMenQing: player.exposedMelds.length === 0,
         wildTileSuit: g.wildSuit, wildTileValue: g.wildValue,
         roundMultiplier: 1, globalMultiplier: g.gameMultiplier
       })
-      return { handType: result.handTypeName || types[0] || '基础胡', baseFan: result.baseFan || 0, finalPoints: result.finalPoints || 0 }
-    } catch {
+      const finalTypes = validTypes.length > 0 ? validTypes : types
+      return { handType: result.handTypeName || finalTypes[0] || '基础胡', baseFan: result.baseFan || 0, finalPoints: result.finalPoints || 0 }
+    } catch (e) {
       return { handType: '基础胡', baseFan: 0, finalPoints: 0 }
     }
   }
@@ -1098,7 +1107,9 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
   const canWinWithType = (tiles: Tile[], p: BotPlayer, makeWT: (p: BotPlayer) => WildTileChecker, kongCount = 0): boolean => {
     const win = canWin(tiles, p.exposedMelds.length, makeWT(p), kongCount)
     if (!win.canWin) return false
-    // 普通胡也放行——fitness会惩罚基础胡，不需要在这里拦死
+    // K哥铁律：只有特定牌型才能胡，过滤STANDARD
+    const validTypes = win.types.filter(t => t !== HandType.STANDARD)
+    if (validTypes.length === 0) return false
     return true
   }
 

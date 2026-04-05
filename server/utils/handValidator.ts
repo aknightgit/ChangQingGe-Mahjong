@@ -606,12 +606,15 @@ export function canWin(
     return { canWin: true, types: [HandType.ALL_WIND] };
   }
 
-  // 第二层：标准3n+2
+  // 第二层：标准3n+2 — K哥铁律：没有"普通胡/基础胡"！
   const types = wildTileId
     ? findBestAssignment(concealed, exposed, wildTileId)
     : detectTypes(concealed, exposed);
 
-  const result = { canWin: types.length > 0, types }
+  // 过滤掉STANDARD：只有特定牌型才能胡
+  const validTypes = types.filter(t => t !== HandType.STANDARD);
+
+  const result = { canWin: validTypes.length > 0, types: validTypes }
   // 缓存结果（防止缓存无限增长）
   if (canWinResultCache.size < CAN_WIN_CACHE_MAX) {
     canWinResultCache.set(cacheKey, result.canWin)
