@@ -18,7 +18,7 @@
     "discardHuMenQingPenalty": 0.2067,
     "pengChance": 0.85,
     "kongChance": 0.5,
-    "chowChance": 0.2,
+    "chowChance": 0.35,
     "pengWildBoost": 0,
     "kongWildBoost": 0.0693,
     "chowWildPenalty": 0.1132,
@@ -37,7 +37,10 @@
     "tripletComboBonus": 2.7776,
     "flushChaseBonus": 1.3572,
     "id": "AI-老蒋-均衡型",
-    "savedAt": "2026-03-29T19:24:12.159Z"
+    "savedAt": "2026-03-29T19:24:12.159Z",
+    "sequenceVsTripletBias": 0.15,
+    "menqingKeepBonus": 2.8,
+    "allPungsPursuit": 0.52
   },
   "chowChance": 0.4
 }

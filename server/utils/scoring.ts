@@ -664,33 +664,62 @@ function checkAllTripletsWithoutWild(
   wildSuit: TileSuit,
   wildValue: number
 ): boolean {
-  // 将百搭标记移除（当作普通牌）
-  const normalizedTiles = handTiles.map(t => {
-    if (t.suit === wildSuit && t.value === wildValue) {
-      return { ...t, isWild: false };
-    }
-    return t;
-  });
-  
-  // 检查是否仍是碰碰胡
-  // 手牌中只有刻子+对子（不含顺子）
-  const groups = groupTiles(normalizedTiles);
-  let tripletCount = 0;
-  let pairCount = 0;
-  
-  for (const [, group] of groups) {
-    if (group.length >= 3) tripletCount++;
-    else if (group.length === 2) pairCount++;
-    else return false; // 有单牌
-  }
-  
   // 门口不能有顺子
   for (const meld of exposedMelds) {
     if (meld.type === MeldType.SEQUENCE) return false;
   }
-  
+
   const expectedTriplets = 4 - exposedMelds.length;
-  return tripletCount === expectedTriplets && pairCount === 1;
+  const counts = new Map<string, number>();
+  let wildCount = 0;
+
+  for (const t of handTiles) {
+    const isWild = t.suit === wildSuit && t.value === wildValue;
+    if (isWild) {
+      wildCount++;
+      continue;
+    }
+    const key = `${t.suit}-${t.value}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+
+  const values = Array.from(counts.values());
+
+  // 穷举“将对”位置（可由普通对子、单牌+1百搭、2百搭组成）
+  const tryWithPair = (pairKey: string | null, pairNeedWild: number): boolean => {
+    if (pairNeedWild > wildCount) return false;
+    let remainingWild = wildCount - pairNeedWild;
+    let triplets = 0;
+
+    for (let i = 0; i < values.length; i++) {
+      let c = values[i];
+      if (pairKey && Array.from(counts.keys())[i] === pairKey) {
+        c -= 2;
+      }
+      if (c < 0) return false;
+      const need = (3 - (c % 3)) % 3;
+      remainingWild -= need;
+      if (remainingWild < 0) return false;
+      triplets += Math.floor((c + need) / 3);
+    }
+
+    // 余下百搭只能按3张补成刻子
+    triplets += Math.floor(remainingWild / 3);
+    return triplets === expectedTriplets;
+  };
+
+  // 1) 普通对子
+  for (const [k, c] of counts) {
+    if (c >= 2 && tryWithPair(k, 0)) return true;
+  }
+  // 2) 单牌 + 1百搭作将
+  for (const [k, c] of counts) {
+    if (c >= 1 && tryWithPair(k, 1)) return true;
+  }
+  // 3) 2百搭作将
+  if (tryWithPair(null, 2)) return true;
+
+  return false;
 }
 
 // ===== 结算函数 =====

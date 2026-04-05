@@ -626,9 +626,31 @@ export function canWin(
 export function detectHandTypes(
   handTiles: Tile[],
   exposedOrCount: Meld[] | number,
-  wildTileIdOrChecker: string | null | WildTileChecker
+  wildTileIdOrChecker: string | null | WildTileChecker,
+  _isSelfDrawn?: boolean,
+  _flowerCount?: number,
+  _ruleConfigOrNull?: any,
+  gameStateOrWildGroup?: any
 ): HandType[] {
-  return canWin(handTiles, exposedOrCount as any, wildTileIdOrChecker as any).types;
+  let resolvedWild: string | null | WildTileChecker = wildTileIdOrChecker;
+
+  // 兼容旧调用: detectHandTypes(..., null, game.wildTileGroup)
+  // 当 wildTileId 为空时，尝试从 gameState/ruleConfig 兜底取当前百搭
+  if (!resolvedWild) {
+    const src = gameStateOrWildGroup || _ruleConfigOrNull;
+
+    if (src && typeof src === 'object') {
+      if (typeof src.customScoringMode === 'string' && src.customScoringMode.includes('-')) {
+        resolvedWild = src.customScoringMode;
+      } else if (typeof src.wildTileId === 'string') {
+        resolvedWild = src.wildTileId;
+      } else if (typeof src.wildTileSuit === 'string' && typeof src.wildTileValue === 'number') {
+        resolvedWild = `${src.wildTileSuit}-${src.wildTileValue}`;
+      }
+    }
+  }
+
+  return canWin(handTiles, exposedOrCount as any, resolvedWild as any).types;
 }
 
 // ============================================================

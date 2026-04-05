@@ -42,15 +42,26 @@ class GameManager {
   // AI托管模式:玩家ID集合,被标记的玩家由AI自动出牌
   private botModePlayers: Set<string> = new Set();
 
-  /** 获取决策犹豫期(毫秒),默认5000ms */
+  /** 训练快速模式: TRAINING_FAST_MODE=true 或 allClaimMode */
+  private isTrainingFastMode(game: GameState): boolean {
+    const fastByEnv = String(process.env.TRAINING_FAST_MODE || '').toLowerCase() === 'true';
+    return fastByEnv || !!(game as any).allClaimMode;
+  }
+
+  /** 获取决策犹豫期(毫秒):训练模式0~30ms,实战默认5000ms */
   private getHesitationWindow(game: GameState): number {
-    return game.hesitationWindow ?? 5000;
+    const raw = game.hesitationWindow ?? 5000;
+    if (this.isTrainingFastMode(game)) {
+      return Math.min(30, Math.max(0, raw));
+    }
+    return raw;
   }
 
   /** 获取犹豫等待毫秒数(用于setTimeout等) */
   private getHesitationWaitMs(gameId: string): number {
     const game = this.games.get(gameId);
-    return game?.hesitationWindow ?? 5000;
+    if (!game) return 5000;
+    return this.getHesitationWindow(game);
   }
 
   setWebSocketManager(manager: any) {
@@ -178,7 +189,7 @@ class GameManager {
       } finally {
         this.pendingActionTimers.delete(gameId);
       }
-    }, this.games.get(gameId)?.hesitationWindow ?? 5000); // 决策犹豫期(默认5秒)
+    }, this.getHesitationWaitMs(gameId)); // 决策犹豫期(训练模式可加速)
 
     this.pendingActionTimers.set(gameId, timer);
   }
@@ -613,7 +624,12 @@ class GameManager {
       thinkChances: options?.thinkChances ?? 3,
       settlementMultiplier: options?.settlementMultiplier ?? 10,
       maxBots: options?.maxBots ?? 3,  // 默认允许最多3个AI
-      hesitationWindow: options?.hesitationWindow ?? 5000, // 决策犹豫期,默认5秒(给人类足够时间吃碰)
+      hesitationWindow: (() => {
+        const raw = options?.hesitationWindow ?? 5000;
+        const fastByEnv = String(process.env.TRAINING_FAST_MODE || '').toLowerCase() === 'true';
+        const fastMode = fastByEnv || !!options?.allClaimMode;
+        return fastMode ? Math.min(30, Math.max(0, raw)) : raw;
+      })(), // 决策犹豫期:训练模式0~30ms,实战默认5秒
       thinkUsage: {},
       allClaimMode: options?.allClaimMode
     };
@@ -742,8 +758,11 @@ class GameManager {
     game.finalScores = undefined;
     game.customScoringMode = null;
     // 统一使用 hesitationWindow（决策犹豫期），所有冻结/等待时间都基于此参数
-    if (options?.hesitationWindow) {
-      game.hesitationWindow = Math.max(1000, options.hesitationWindow);
+    if (typeof options?.hesitationWindow === 'number') {
+      const fastMode = this.isTrainingFastMode(game);
+      game.hesitationWindow = fastMode
+        ? Math.min(30, Math.max(0, options.hesitationWindow))
+        : Math.max(1000, options.hesitationWindow);
     }
     game.thinkUsage = {};  // 每局重置「等我想一想」使用次数
     game.thinkFreezeUntil = undefined;
@@ -3059,7 +3078,14 @@ class GameManager {
       } catch (err) {
         console.error('[bot-discard] Error:', err);
       }
-    }, this.getHesitationWaitMs(gameId) + Math.floor(Math.random() * 500));  // 使用配置的犹豫期 + 随机0-500ms
+    }, (() => {
+      const waitMs = this.getHesitationWaitMs(gameId);
+      const g = this.games.get(gameId);
+      if (g && this.isTrainingFastMode(g)) {
+        return Math.min(30, Math.max(0, waitMs));
+      }
+      return waitMs + Math.floor(Math.random() * 500);
+    })());  // 训练模式极速响应,实战保留随机人性化延迟
 
     this.botTimers.set(gameId, timer);
   }

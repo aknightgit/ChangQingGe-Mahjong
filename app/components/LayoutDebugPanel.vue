@@ -53,7 +53,7 @@ const defaultValues: Record<string, number> = {
   '--dl-top': 6,              // discard-zone--top top %
   '--dl-bottom': 6,           // discard-zone--bottom bottom %
   '--dl-left': 6,             // discard-zone--left left %
-  '-- dl-right': 6,           // discard-zone--right right %
+  '--dl-right': 6,            // discard-zone--right right %
   '--dl-gap': 0,              // discard tile gap px
   '--dl-size': 22,            // discard tile font-size px
   '--my-gap': 2,              // self-hand gap px
@@ -64,9 +64,21 @@ const defaultValues: Record<string, number> = {
   '--oth-gap': 1,             // other hand gap px
   '--oth-mgap': 3,            // other meld gap px
   '--lbl-sz': 0.75,           // player-name-label font-size rem
+  // 牌排列方向
+  '--my-dir': 0,              // 自家手牌排列: 0=横向 1=纵向
+  '--my-reverse': 0,          // 自家手牌反向: 0=正常 1=反向
+  '--oth-dir': 0,             // 他人手牌排列: 0=横向 1=纵向
+  '--oth-reverse': 0,         // 他人手牌反向: 0=正常 1=反向
+  // 牌头方向（旋转角度）
+  '--my-rotate': 0,           // 自家牌头旋转角度 deg
+  '--dl-rotate': 0,           // 弃牌区牌头旋转角度 deg
+  '--oth-rotate': 0,          // 他人手牌旋转角度 deg
+  // 弃牌区详细参数
+  '--dl-cols': 8,             // 弃牌区每行列数
+  '--dl-tsize': 22,           // 弃牌牌大小 px
+  '--dl-rowgap': 1,           // 弃牌行间距 px
+  '--dl-zone-rotate': 0,      // 弃牌区整体旋转 deg
 }
-// fix typo
-delete defaultValues['-- dl-right']; defaultValues['--dl-right'] = 6
 
 const vals = reactive({ ...defaultValues })
 
@@ -98,6 +110,28 @@ const groups = [
   { name: '📛 名字', sliders: [
     { label: '字号', var: '--lbl-sz', min: 0.5, max: 1.2, step: 0.05, unit: 'rem' },
   ] },
+  { name: '↔️ 牌排列方向', sliders: [
+    { label: '自家排列', var: '--my-dir', min: 0, max: 1, step: 1, unit: '' },
+    { label: '自家反向', var: '--my-reverse', min: 0, max: 1, step: 1, unit: '' },
+    { label: '他人排列', var: '--oth-dir', min: 0, max: 1, step: 1, unit: '' },
+    { label: '他人反向', var: '--oth-reverse', min: 0, max: 1, step: 1, unit: '' },
+  ] },
+  { name: '🔄 牌头旋转', sliders: [
+    { label: '自家牌头', var: '--my-rotate', min: -180, max: 180, step: 5, unit: '°' },
+    { label: '弃牌牌头', var: '--dl-rotate', min: -180, max: 180, step: 5, unit: '°' },
+    { label: '他人牌头', var: '--oth-rotate', min: -180, max: 180, step: 5, unit: '°' },
+  ] },
+  { name: '🗑️ 弃牌区', sliders: [
+    { label: '上区位置', var: '--dl-top', min: 0, max: 30, step: 0.5, unit: '%' },
+    { label: '下区位置', var: '--dl-bottom', min: 0, max: 30, step: 0.5, unit: '%' },
+    { label: '左区位置', var: '--dl-left', min: 0, max: 30, step: 0.5, unit: '%' },
+    { label: '右区位置', var: '--dl-right', min: 0, max: 30, step: 0.5, unit: '%' },
+    { label: '每行列数', var: '--dl-cols', min: 4, max: 12, step: 1, unit: '' },
+    { label: '牌大小', var: '--dl-tsize', min: 16, max: 36, step: 1, unit: 'px' },
+    { label: '牌间距', var: '--dl-gap', min: -2, max: 6, step: 0.5, unit: 'px' },
+    { label: '行间距', var: '--dl-rowgap', min: -2, max: 6, step: 0.5, unit: 'px' },
+    { label: '区旋转', var: '--dl-zone-rotate', min: -180, max: 180, step: 5, unit: '°' },
+  ] },
 ]
 
 /* helpers */
@@ -124,19 +158,30 @@ function apply() {
     document.head.appendChild(styleEl)
   }
   const u = (v: string) => vals[v]
+  const myDir = u('--my-dir') === 1 ? 'column' : 'row'
+  const myRev = u('--my-reverse') === 1 ? 'row-reverse' : (myDir === 'column' ? 'column-reverse' : 'row-reverse')
+  const othDir = u('--oth-dir') === 1 ? 'column' : 'row'
+  const othRev = u('--oth-reverse') === 1 ? 'row-reverse' : (othDir === 'column' ? 'column-reverse' : 'row-reverse')
+  const dlCols = Math.round(u('--dl-cols'))
+  const dlTsize = u('--dl-tsize')
+  const dlRowgap = u('--dl-rowgap')
+  const dlZoneRotate = u('--dl-zone-rotate')
+
   styleEl.textContent = `
     .seat-left { left: ${u('--seat-left')}% !important; }
     .seat-right { right: ${u('--seat-right')}% !important; }
     .seat-top { width: ${u('--seat-top-w')}% !important; }
-    .discard-zone--top { top: ${u('--dl-top')}% !important; }
+    .discard-zone--top { top: ${u('--dl-top')}% !important; transform: rotate(${dlZoneRotate}deg) !important; }
     .discard-zone--bottom { bottom: ${u('--dl-bottom')}% !important; }
     .discard-zone--left { left: ${u('--dl-left')}% !important; }
     .discard-zone--right { right: ${u('--dl-right')}% !important; }
-    .discard-tile { gap: ${u('--dl-gap')}px !important; font-size: ${u('--dl-size')}px !important; }
-    .self-hand { gap: ${u('--my-gap')}px !important; }
-    .self-tile { gap: ${u('--my-tgap')}px !important; transform: scale(${u('--my-tsize') / 48}) !important; }
-    .other-tile { height: ${u('--oth-h')}px !important; width: ${u('--oth-w')}px !important; }
-    .player-other-hand { gap: ${u('--oth-gap')}px !important; }
+    .discards-grid { grid-template-columns: repeat(${dlCols}, ${dlTsize}px) !important; gap: ${u('--dl-gap')}px ${dlRowgap}px !important; }
+    .discards-grid .tile { width: ${dlTsize}px !important; height: ${dlTsize * 1.4}px !important; }
+    .discard-tile { gap: ${u('--dl-gap')}px !important; font-size: ${u('--dl-size')}px !important; transform: rotate(${u('--dl-rotate')}deg) !important; }
+    .self-hand { gap: ${u('--my-gap')}px !important; flex-direction: ${myDir} !important; }
+    .self-tile { gap: ${u('--my-tgap')}px !important; transform: scale(${u('--my-tsize') / 48}) rotate(${u('--my-rotate')}deg) !important; }
+    .other-tile { height: ${u('--oth-h')}px !important; width: ${u('--oth-w')}px !important; transform: rotate(${u('--oth-rotate')}deg) !important; }
+    .player-other-hand { gap: ${u('--oth-gap')}px !important; flex-direction: ${othDir} !important; }
     .player-other-melds { gap: ${u('--oth-mgap')}px !important; }
     .player-name-label { font-size: ${u('--lbl-sz')}rem !important; }
   `
@@ -149,6 +194,8 @@ function resetAll() {
 
 async function copyCSS() {
   const u = (k: string) => vals[k]
+  const myDir = u('--my-dir') === 1 ? 'column' : 'row'
+  const othDir = u('--oth-dir') === 1 ? 'column' : 'row'
   const css = `/* 告诉小虾米以下参数： */
 .seat-left { left: ${u('--seat-left')}% !important; }
 .seat-right { right: ${u('--seat-right')}% !important; }
@@ -157,11 +204,11 @@ async function copyCSS() {
 .discard-zone--bottom { bottom: ${u('--dl-bottom')}% !important; }
 .discard-zone--left { left: ${u('--dl-left')}% !important; }
 .discard-zone--right { right: ${u('--dl-right')}% !important; }
-.discard-tile { gap: ${u('--dl-gap')}px; font-size: ${u('--dl-size')}px; }
-.self-hand { gap: ${u('--my-gap')}px; }
-.self-tile { gap: ${u('--my-tgap')}px; }
-.other-tile { height: ${u('--oth-h')}px; width: ${u('--oth-w')}px; }
-.player-other-hand { gap: ${u('--oth-gap')}px; }
+.discard-tile { gap: ${u('--dl-gap')}px; font-size: ${u('--dl-size')}px; transform: rotate(${u('--dl-rotate')}deg); }
+.self-hand { gap: ${u('--my-gap')}px; flex-direction: ${myDir}; }
+.self-tile { gap: ${u('--my-tgap')}px; transform: scale(${u('--my-tsize') / 48}) rotate(${u('--my-rotate')}deg); }
+.other-tile { height: ${u('--oth-h')}px; width: ${u('--oth-w')}px; transform: rotate(${u('--oth-rotate')}deg); }
+.player-other-hand { gap: ${u('--oth-gap')}px; flex-direction: ${othDir}; }
 .player-other-melds { gap: ${u('--oth-mgap')}px; }
 .player-name-label { font-size: ${u('--lbl-sz')}rem; }`
   await navigator.clipboard.writeText(css)
