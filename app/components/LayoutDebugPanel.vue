@@ -107,6 +107,22 @@ const D: Record<string, number> = {
   '--self-dl-rotate': 0,
   '--self-dl-shadow': 0,
 
+  // ===== 座位容器 =====
+  '--seat-bottom-bottom': 0,   // 离底偏移%
+  '--seat-bottom-scale': 120,   // 整体缩放
+  '--seat-top-top': 10,        // 离顶偏移%
+  '--seat-top-width': 66,     // 宽度%
+  '--seat-top-scale': 100,
+  '--seat-top-rotate': 180,    // 旋转°
+  '--seat-left-left': 7,       // 离左偏移%
+  '--seat-left-width': 85,     // 宽度px
+  '--seat-left-scale': 100,
+  '--seat-left-rotate': 0,
+  '--seat-right-right': 7,      // 离右偏移%
+  '--seat-right-width': 85,   // 宽度px
+  '--seat-right-scale': 100,
+  '--seat-right-rotate': 0,
+
   // ===== 对家·手牌 =====
   '--opp-hand-w': 26,
   '--opp-hand-h': 36,
@@ -372,6 +388,28 @@ const groups: Group[] = [
     S('阴影方向', '--right-dl-shadow', 0, 3, 1, ''),
   ] },
 
+  // ===== 座位容器 =====
+  { name: '🪑 座位容器', sliders: [
+    // 自家（底部）
+    S('自家离底%', '--seat-bottom-bottom', -10, 20, 0.5, '%'),
+    S('自家整体缩放', '--seat-bottom-scale', 80, 200, 1, '%'),
+    // 对家（顶部）
+    S('对家离顶%', '--seat-top-top', 0, 30, 0.5, '%'),
+    S('对家宽度%', '--seat-top-width', 40, 100, 1, '%'),
+    S('对家缩放', '--seat-top-scale', 50, 200, 1, '%'),
+    S('对家旋转°', '--seat-top-rotate', 160, 200, 5, '°'),
+    // 上家（左侧）
+    S('上家离左%', '--seat-left-left', 0, 30, 0.5, '%'),
+    S('上家宽度px', '--seat-left-width', 50, 150, 5, 'px'),
+    S('上家缩放', '--seat-left-scale', 50, 200, 1, '%'),
+    S('上家旋转°', '--seat-left-rotate', -30, 30, 5, '°'),
+    // 下家（右侧）
+    S('下家离右%', '--seat-right-right', 0, 30, 0.5, '%'),
+    S('下家宽度px', '--seat-right-width', 50, 150, 5, 'px'),
+    S('下家缩放', '--seat-right-scale', 50, 200, 1, '%'),
+    S('下家旋转°', '--seat-right-rotate', -30, 30, 5, '°'),
+  ] },
+
   // ===== 牌墙 =====
   { name: '🧱 牌墙', sliders: [
     S('牌宽', '--wall-tile-w', 16, 40, 1, 'px'),
@@ -489,7 +527,7 @@ function apply() {
       align-items: ${['flex-start','center','flex-end'][Math.round(u('--self-hand-justify'))]} !important;
       transform: scale(${u('--self-hand-scale') / 100}) !important;
     }
-    .seat-bottom { bottom: ${u('--self-hand-bottom')}% !important; transform: translateX(-50%) scale(${u('--self-hand-scale') / 100}) translateY(-5%) !important; }
+    .seat-bottom { bottom: ${u('--seat-bottom-bottom')}% !important; transform: translateX(-50%) scale(${u('--seat-bottom-scale') / 100}) translateY(-5%) !important; }
     .player-hand .tile {
       width: ${u('--self-tile-w')}px !important;
       height: ${u('--self-tile-h')}px !important;
@@ -521,9 +559,9 @@ function apply() {
 
     /* ===== 对家·手牌 ===== */
     .seat-top {
-      width: ${u('--opp-hand-width')}% !important;
-      top: ${u('--opp-hand-top')}% !important;
-      transform: translateX(-50%) rotate(180deg) scale(${u('--opp-hand-scale') / 100}) !important;
+      width: ${u('--seat-top-width')}% !important;
+      top: ${u('--seat-top-top')}% !important;
+      transform: translateX(-50%) rotate(${u('--seat-top-rotate')}deg) scale(${u('--seat-top-scale') / 100}) !important;
     }
     .seat-top .tile {
       width: ${u('--opp-hand-w')}px !important;
@@ -557,8 +595,9 @@ function apply() {
 
     /* ===== 上家·手牌 ===== */
     .seat-left {
-      left: ${u('--left-hand-left')}% !important;
-      transform: scale(${u('--left-hand-scale') / 100}) !important;
+      left: ${u('--seat-left-left')}% !important;
+      width: ${u('--seat-left-width')}px !important;
+      transform: scale(${u('--seat-left-scale') / 100}) rotate(${u('--seat-left-rotate')}deg) !important;
     }
     .seat-left .tile {
       width: ${u('--left-hand-w')}px !important;
@@ -592,8 +631,9 @@ function apply() {
 
     /* ===== 下家·手牌 ===== */
     .seat-right {
-      right: ${u('--right-hand-right')}% !important;
-      transform: scale(${u('--right-hand-scale') / 100}) !important;
+      right: ${u('--seat-right-right')}% !important;
+      width: ${u('--seat-right-width')}px !important;
+      transform: scale(${u('--seat-right-scale') / 100}) rotate(${u('--seat-right-rotate')}deg) !important;
     }
     .seat-right .tile {
       width: ${u('--right-hand-w')}px !important;
