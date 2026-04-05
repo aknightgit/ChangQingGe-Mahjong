@@ -77,7 +77,7 @@ interface Props {
   highlightDelayMs: number
   compact?: boolean
   freezeUntil?: number
-  freezeDurationMs?: number
+  hesitationWindow?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -129,7 +129,7 @@ const isFreezing = computed(() => {
   return !!props.freezeUntil && props.nowTs < props.freezeUntil
 })
 const safeFreezeDurationMs = computed(() => {
-  const v = Number(props.freezeDurationMs)
+  const v = Number(props.hesitationWindow)
   return Number.isFinite(v) && v > 0 ? v : 1000
 })
 

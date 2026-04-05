@@ -203,7 +203,7 @@ export interface GameState {
   // 每局统计追踪
   roundStats?: RoundStat[];
   // 可配置参数
-  freezeDurationMs?: number;  // 冻结时长（毫秒），默认1000
+  hesitationWindow?: number;    // 决策犹豫期（毫秒），默认5000。统一控制：出牌后抢牌窗口、AI摸牌前冻结、人类摸牌前冻结
   diceRollCount?: number;     // 掷骰次数，默认2
   liangShanThreshold?: number;  // 梁山聚义被QJ线（累积赢分阈值），默认4000
   thinkChances?: number;      // 等我想一想机会次数，默认3

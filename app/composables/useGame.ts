@@ -257,7 +257,7 @@ export const useGame = () => {
     }
   }
 
-  const startGame = async (options?: { freezeDurationMs?: number }) => {
+  const startGame = async (options?: { hesitationWindow?: number }) => {
     if (!gameId.value || !playerId.value) return
 
     console.log('[startGame] Starting game:', gameId.value)
@@ -267,7 +267,7 @@ export const useGame = () => {
         body: {
           gameId: gameId.value,
           playerId: playerId.value,
-          freezeDurationMs: Math.max(1000, options?.freezeDurationMs || 1000)
+          hesitationWindow: Math.max(1000, options?.hesitationWindow ?? 5000)
         }
       })
 

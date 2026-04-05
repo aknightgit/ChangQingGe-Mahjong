@@ -265,37 +265,75 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
 /**
  * 计算向听数（0=听牌，1=一向听，2=二向听...）
  */
+// Shanten memoization cache (cleared per discard decision)
+let _shantenCache = new Map<string, number>();
+
+function tileKey(tiles: Tile[], exposedCount: number): string {
+  const counts = new Map<string, number>();
+  for (const t of tiles) {
+    const k = `${t.suit}-${t.value}`;
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  const parts = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) => `${k}:${v}`);
+  return `${parts.join(',')};e${exposedCount}`;
+}
+
+/**
+ * 轻量 shanten 估算：基于搭子/对子计数，不调 canWin
+ * 用于模拟器快速决策，精度够用
+ */
 function calculateShanten(
   tiles: Tile[],
   exposedCount: number,
   isWildTileChecker: (tile: Tile) => boolean
 ): number {
-  const currentLen = tiles.length
-  const expectedWinLen = 14 - exposedCount * 3
-  const needDraws = Math.max(0, expectedWinLen - currentLen)
+  const key = tileKey(tiles, exposedCount);
+  if (_shantenCache.has(key)) return _shantenCache.get(key)!;
 
-  const maxAdditional = 8
-  for (let drawCount = needDraws; drawCount <= maxAdditional; drawCount++) {
-    if (drawCount === 0) {
-      if (canWin(tiles, exposedCount, isWildTileChecker).canWin) return 0
-      continue
-    }
-
-    const placeholders: Tile[] = []
-    for (let i = 0; i < drawCount; i++) {
-      placeholders.push({
-        suit: TileSuit.DOTS,
-        value: 1,
-        id: `shanten-ph-${i}`,
-      })
-    }
-
-    if (canWin([...tiles, ...placeholders], exposedCount, isWildTileChecker).canWin) {
-      return drawCount - 1
-    }
+  const groups = new Map<string, number>();
+  let wildCount = 0;
+  for (const t of tiles) {
+    if (isWildTileChecker(t)) { wildCount++; continue; }
+    const k = `${t.suit}-${t.value}`;
+    groups.set(k, (groups.get(k) || 0) + 1);
   }
 
-  return 8
+  let pairs = 0, triplets = 0, sequences = 0, isolated = 0;
+  const counted = new Set<string>();
+
+  // 先找刻子
+  for (const [k, c] of groups) {
+    if (c >= 3) { triplets++; counted.add(k); }
+  }
+  // 再找顺子
+  const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+  for (const suit of numSuits) {
+    for (let v = 1; v <= 7; v++) {
+      const k1 = `${suit}-${v}`, k2 = `${suit}-${v + 1}`, k3 = `${suit}-${v + 2}`;
+      if (!counted.has(k1) && !counted.has(k2) && !counted.has(k3)) {
+        if ((groups.get(k1) || 0) > 0 && (groups.get(k2) || 0) > 0 && (groups.get(k3) || 0) > 0) {
+          sequences++;
+          counted.add(k1); counted.add(k2); counted.add(k3);
+        }
+      }
+    }
+  }
+  // 再找对子
+  for (const [k, c] of groups) {
+    if (!counted.has(k) && c >= 2) { pairs++; counted.add(k); }
+  }
+  // 孤张
+  for (const [k, c] of groups) {
+    if (!counted.has(k)) isolated++;
+  }
+
+  const melds = triplets + sequences;
+  // shanten ≈ 8 - 2*melds - max(0, pairs-1) + isolated_penalty
+  let shanten = 8 - 2 * melds - Math.max(0, pairs - 1);
+  shanten = Math.max(0, Math.min(8, shanten));
+
+  _shantenCache.set(key, shanten);
+  return shanten;
 }
 
 /**
@@ -335,6 +373,9 @@ function countEffectiveTiles(
  * Returns the tile ID.
  */
 export function selectDiscardTile(player: Player, game: GameState): string {
+  // Clear shanten cache per decision
+  _shantenCache = new Map<string, number>();
+  
   const hand = player.hand.concealedTiles
   if (hand.length === 0) return ''
 

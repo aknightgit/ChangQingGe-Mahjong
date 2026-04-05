@@ -1,10 +1,38 @@
 {
   "round": 1,
-  "totalGames": 1,
-  "wins": 0,
-  "draws": 1,
-  "winRate": "0.0%",
-  "winTypes": {},
-  "playerWins": {},
-  "timestamp": "2026-04-04T17:55:32.540Z"
+  "totalGames": 200,
+  "wins": 73,
+  "draws": 127,
+  "winRate": "36.5%",
+  "winTypes": {
+    "standard": 65,
+    "four_wild": 5,
+    "all_triplets": 3
+  },
+  "playerWins": {
+    "AI-老赵": 21,
+    "AI-阿水": 18,
+    "AI-小胖": 15,
+    "AI-AK": 19
+  },
+  "calibrationMetrics": {
+    "shantenDistribution": {
+      "AI-AK": 7.714,
+      "AI-小胖": 7.711,
+      "AI-阿水": 7.728,
+      "AI-老赵": 7.725
+    },
+    "avgFirstTingTurn": 26.333,
+    "claimWinRateDelta": {
+      "withClaim": 0,
+      "withoutClaim": 36.87,
+      "delta": -36.87
+    },
+    "stageSurvivalRate": {
+      "early": 99.5,
+      "mid": 93,
+      "late": 7
+    }
+  },
+  "timestamp": "2026-04-05T01:29:20.467Z"
 }

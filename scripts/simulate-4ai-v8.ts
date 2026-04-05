@@ -13,7 +13,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createDeck, shuffleTiles, isFlower, groupTiles } from '../server/utils/tiles';
 import { Tile, TileSuit, MeldType, ActionType, type Meld, type Player, type GameState } from '../server/types/game';
-import { canWin, findBestDiscardForTing, checkChowPongExclusion, updateChowPongExclusion, checkTing as checkTingInfo, HandType, ChowPongExclusionState } from '../server/utils/handValidator';
+import { canWin, findBestDiscardForTing, checkChowPongExclusion, updateChowPongExclusion, isTing as checkTingInfo, HandType, ChowPongExclusionState } from '../server/utils/handValidator';
 import { selectDiscardTile, shouldClaimPendingAction } from '../server/services/botService';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -302,13 +302,57 @@ interface GameMetrics {
 }
 
 function calcShanten(hand: Tile[], exposed: Meld[], wildTileId: string | null = null): number {
-  return checkTingInfo(hand, exposed, wildTileId as any).shanten;
+  const isWild = (tile: Tile): boolean => {
+    if (!wildTileId) return false;
+    const parts = wildTileId.split('-');
+    const wSuit = parts.slice(0, -1).join('-');
+    const wVal = parseInt(parts[parts.length - 1]);
+    return tile.suit === wSuit && tile.value === wVal;
+  };
+  const exposedCount = exposed.length;
+  const expectedWinLen = 14 - exposedCount * 3;
+  const needDraws = Math.max(0, expectedWinLen - hand.length);
+  const maxAdditional = 8;
+  for (let drawCount = needDraws; drawCount <= maxAdditional; drawCount++) {
+    if (drawCount === 0) {
+      if (canWin(hand, exposed, wildTileId).canWin) return 0;
+      continue;
+    }
+    const placeholders: Tile[] = [];
+    for (let i = 0; i < drawCount; i++) {
+      placeholders.push({ suit: TileSuit.DOTS, value: 1, id: `sh-ph-${i}`, isFlower: false });
+    }
+    if (canWin([...hand, ...placeholders], exposed, wildTileId).canWin) {
+      return drawCount - 1;
+    }
+  }
+  return 8;
 }
 
 function classifyStage(turn: number): 'early' | 'mid' | 'late' {
   if (turn <= 24) return 'early';
   if (turn <= 48) return 'mid';
   return 'late';
+}
+
+// ========== Timeout protection ==========
+const DECISION_TIMEOUT_MS = 5000; // 单次决策超时
+const GAME_TIMEOUT_MS = 60000;   // 单局超时
+
+function withTimeout<T>(fn: () => T, ms: number, label: string): T | null {
+  let done = false;
+  let result: T | null = null;
+  const timer = setTimeout(() => { if (!done) console.error(`[TIMEOUT] ${label} exceeded ${ms}ms`); }, ms);
+  try {
+    result = fn();
+    done = true;
+    clearTimeout(timer);
+    return result;
+  } catch (e) {
+    done = true;
+    clearTimeout(timer);
+    throw e;
+  }
 }
 
 function playOneGame(): { winner: string | null; winTypes: HandType[]; score: number; metrics: GameMetrics } {
@@ -332,6 +376,7 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
   
   let maxTurns = 300;
   let turn = 0;
+  const gameStartTime = Date.now();
 
   const shantenSums = [0, 0, 0, 0];
   const shantenSnapshots = [0, 0, 0, 0];
@@ -340,6 +385,12 @@ function playOneGame(): { winner: string | null; winTypes: HandType[]; score: nu
   let endedStage: 'early' | 'mid' | 'late' = 'late';
   
   while (turn < maxTurns) {
+    // 单局超时保护
+    if (Date.now() - gameStartTime > GAME_TIMEOUT_MS) {
+      console.error(`[GAME TIMEOUT] Game exceeded ${GAME_TIMEOUT_MS}ms at turn ${turn}, player=${currentPlayer}`);
+      break;
+    }
+    
     turn++;
     const player = players[currentPlayer];
     
@@ -702,6 +753,7 @@ async function main() {
     };
     
     for (let game = 0; game < gamesPerRound; game++) {
+      if (game % 50 === 0) process.stdout.write(`  game ${game}/${gamesPerRound}...\n`);
       stats.totalGames++;
       const result = playOneGame();
 

@@ -625,7 +625,7 @@
                 :now-ts="nowTs"
                 :highlight-delay-ms="ACTION_HIGHLIGHT_DELAY_MS"
                 :freeze-until="currentFreezeUntil"
-                :freeze-duration-ms="freezeDurationMs"
+                :hesitation-window="hesitationWindow"
                 @action="handleCircularAction"
               />
           </div>
@@ -897,7 +897,7 @@ const isDoubleRound = computed(() => {
 const effectiveMaxRolls = computed(() => isDoubleRound.value ? 1 : maxDiceRolls.value)
 const showDoubleReminder = ref(false)
 // 决策犹豫期（毫秒），优先从游戏状态读取，兜底5秒
-const freezeDurationMs = computed(() => {
+const hesitationWindow = computed(() => {
   const hw = (gameState.value as any)?.hesitationWindow
   return typeof hw === 'number' && hw > 0 ? hw : 5000
 })
@@ -1252,7 +1252,7 @@ const isDrawOverlay = computed(() => overlayReason.value === GameEndReason.WALL_
 const startNextRound = async () => { 
   showSettlement.value = false;
   try {
-    await startGame({ freezeDurationMs: freezeDurationMs.value });
+    await startGame({ hesitationWindow: hesitationWindow.value });
     await forceRefreshState();
     console.log('[startNextRound] Game restarted, phase:', gameState.value?.phase);
   } catch (e) {
@@ -1715,7 +1715,7 @@ const onThinkOption = async (action: string) => {
 const actionCountdownRatio = computed(() => {
   const pending = myPendingAction.value
   if (!pending?.expiresAt) return 1
-  const totalMs = freezeDurationMs.value // 决策犹豫期
+  const totalMs = hesitationWindow.value // 决策犹豫期
   const leftMs = Math.max(0, pending.expiresAt - Date.now())
   return Math.max(0, Math.min(1, leftMs / totalMs))
 })
@@ -2095,7 +2095,7 @@ const onDealTiles = async () => {
   await new Promise(resolve => setTimeout(resolve, 350))
   console.log('[onDealTiles] Calling startGame API...')
   try {
-    await startGame({ freezeDurationMs: freezeDurationMs.value })
+    await startGame({ hesitationWindow: hesitationWindow.value })
     console.log('[onDealTiles] startGame done, forcing fresh state...')
     // 强制刷新（绕过debounce），确保开局后立刻看到正确的可用操作
     await forceRefreshState()
