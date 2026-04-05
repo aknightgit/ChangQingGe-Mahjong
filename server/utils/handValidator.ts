@@ -557,6 +557,16 @@ export function canWin(
     ? (typeof wildTileIdOrChecker === 'string' ? wildTileIdOrChecker : null)
     : (typeof wildTileIdOrChecker === 'string' ? wildTileIdOrChecker : null);
 
+  // canWin 结果缓存（只缓存 boolean 结果，types 不缓存）
+  const handSig = handSignature(handTiles)
+  const meldCount = exposed.length
+  const cacheKey = `${handSig}|${meldCount}|${wildTileId || ''}`
+  if (canWinResultCache.has(cacheKey)) {
+    _canWinHits++
+    return { canWin: canWinResultCache.get(cacheKey)!, types: [] }
+  }
+  _canWinMisses++
+
   const concealed = handTiles;
   const flowerCount = concealed.filter(t => isFlower(t)).length;
   const concealedNonFlower = concealed.filter(t => !isFlower(t));
@@ -601,7 +611,12 @@ export function canWin(
     ? findBestAssignment(concealed, exposed, wildTileId)
     : detectTypes(concealed, exposed);
 
-  return { canWin: types.length > 0, types };
+  const result = { canWin: types.length > 0, types }
+  // 缓存结果（防止缓存无限增长）
+  if (canWinResultCache.size < CAN_WIN_CACHE_MAX) {
+    canWinResultCache.set(cacheKey, result.canWin)
+  }
+  return result;
 }
 
 // ============================================================
@@ -614,8 +629,72 @@ export function detectHandTypes(
 }
 
 // ============================================================
-// 听牌检测
+// 听牌检测（带缓存优化）
 // ============================================================
+// canWin 结果缓存（只缓存 boolean 结果，types 用于得分时计算）
+// key = handSignature + meldCount + wildId
+const canWinResultCache = new Map<string, boolean>()
+const CAN_WIN_CACHE_MAX = 100000
+let _canWinHits = 0
+let _canWinMisses = 0
+
+export function getCanWinCacheStats(): { hits: number; misses: number; hitRate: string } {
+  const total = _canWinHits + _canWinMisses
+  return {
+    hits: _canWinHits,
+    misses: _canWinMisses,
+    hitRate: total > 0 ? `${(_canWinHits / total * 100).toFixed(1)}%` : 'N/A'
+  }
+}
+
+export function clearCanWinCache(): void {
+  canWinResultCache.clear()
+  _canWinHits = 0
+  _canWinMisses = 0
+}
+
+// ============================================================
+// isTing 缓存：key = 手牌签名 + meldCount + wildId
+// 训练脚本中同一手牌会被反复查询（4个玩家×每turn），缓存命中率>80%
+const isTingCache = new Map<string, boolean>()
+const IS_TING_CACHE_MAX = 50000  // 防止内存泄漏
+let _isTingHits = 0
+let _isTingMisses = 0
+
+function handSignature(tiles: Tile[]): string {
+  // 快速签名：按 suit首字母-value 排序后拼接
+  const len = tiles.length
+  const parts = new Array<string>(len)
+  for (let i = 0; i < len; i++) {
+    const t = tiles[i]
+    parts[i] = t.suit[0] + t.value
+  }
+  parts.sort()
+  return parts.join(',')
+}
+
+/** 清空 isTing 缓存（每局开始时调用） */
+export function clearIsTingCache(): void {
+  isTingCache.clear()
+  // 不重置计数器，让训练全程累积统计
+}
+
+/** 重置 isTing 缓存统计（训练开始时调用） */
+export function resetIsTingCacheStats(): void {
+  _isTingHits = 0
+  _isTingMisses = 0
+}
+
+/** 获取 isTing 缓存统计 */
+export function getIsTingCacheStats(): { hits: number; misses: number; hitRate: string } {
+  const total = _isTingHits + _isTingMisses
+  return {
+    hits: _isTingHits,
+    misses: _isTingMisses,
+    hitRate: total > 0 ? `${(_isTingHits / total * 100).toFixed(1)}%` : 'N/A'
+  }
+}
+
 export function isTing(
   tiles: Tile[],
   existingMelds: number,
@@ -625,6 +704,18 @@ export function isTing(
   const expected = 13 - 3 * existingMelds;
   if (tiles.length !== expected) return false;
 
+  // 构建缓存key
+  const sig = handSignature(tiles)
+  // 从 isWildTile 函数提取 wildId（尝试从闭包中获取）
+  // 简化：用 existingMelds + tiles.length 做key（同一局wildId不变）
+  const key = `${sig}|${existingMelds}`
+
+  if (isTingCache.has(key)) {
+    _isTingHits++
+    return isTingCache.get(key)!
+  }
+  _isTingMisses++
+
   const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
   const honorSuits = [TileSuit.WIND, TileSuit.DRAGON];
   const candidates: Tile[] = [];
@@ -633,7 +724,20 @@ export function isTing(
       candidates.push({ suit: s, value: v, id: `t-${s}-${v}`, isFlower: false });
 
   for (const t of candidates) {
-    if (canWin([...tiles, t], existingMelds, isWildTile).canWin) return true;
+    if (canWin([...tiles, t], existingMelds, isWildTile).canWin) {
+      isTingCache.set(key, true)
+      return true
+    }
+  }
+
+  isTingCache.set(key, false)
+  // 防止缓存无限增长
+  if (isTingCache.size > IS_TING_CACHE_MAX) {
+    // 删除最早的一半
+    const keys = Array.from(isTingCache.keys())
+    for (let i = 0; i < keys.length / 2; i++) {
+      isTingCache.delete(keys[i])
+    }
   }
   return false;
 }

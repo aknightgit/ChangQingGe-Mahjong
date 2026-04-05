@@ -10,7 +10,8 @@ import {
 } from '../server/utils/tiles'
 import {
   canWin, buildWildTileChecker,
-  detectHandTypes, HandType, isTing
+  detectHandTypes, HandType, isTing, clearIsTingCache, clearCanWinCache,
+  getIsTingCacheStats, getCanWinCacheStats, resetIsTingCacheStats
 } from '../server/utils/handValidator'
 import {
   calculateScore
@@ -1171,6 +1172,10 @@ function runGameWithFightToLast(akPolicy: BotPolicy, otherPolicies: BotPolicy[])
 
 // ========== Game Loop ==========
 function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | null {
+  // 每局开始时清空 isTing 缓存（不同局wild牌不同）
+  clearIsTingCache()
+  clearCanWinCache()
+  const gameStart = performance.now()
   const g = setupGame(akPolicy, otherPolicies)
   const events: GameEvent[] = []
   const settlementLog: SettlementEntry[] = []
@@ -1630,6 +1635,11 @@ function main() {
   // Ensure output dir
   if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true })
 
+  // 重置 isTing 缓存统计
+  resetIsTingCacheStats()
+  // 重置 canWin 缓存统计（通过 clearCanWinCache）
+  // 注：clearCanWinCache 已由每局 setupGame 调用
+
   // Load fixed opponent policies
   const fixedPolicies = [
     loadCharacter('AI-小胖'),
@@ -1774,6 +1784,14 @@ function main() {
       logLines.push('', formatRoundMarkdown(round, bestEvalResult, roundBestPolicy), '')
     }
   }  // End round loop
+
+  // Print cache stats
+  const tingStats = getIsTingCacheStats()
+  const canWinStats = getCanWinCacheStats()
+  console.log(`\n[性能] isTing缓存: 命中${tingStats.hits} 未命中${tingStats.misses} 命中率${tingStats.hitRate}`)
+  console.log(`[性能] canWin缓存: 命中${canWinStats.hits} 未命中${canWinStats.misses} 命中率${canWinStats.hitRate}`)
+  logLines.push(`\n[性能] isTing缓存: 命中${tingStats.hits} 未命中${tingStats.misses} 命中率${tingStats.hitRate}`)
+  logLines.push(`[性能] canWin缓存: 命中${canWinStats.hits} 未命中${canWinStats.misses} 命中率${canWinStats.hitRate}`)
 
   // Final evaluation
   console.log('\n--- 最终评估 (1000局) ---')
