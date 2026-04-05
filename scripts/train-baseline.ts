@@ -9,7 +9,7 @@ import {
   shuffleTiles, isFlower, groupTiles, sortTiles, tilesEqual
 } from '../server/utils/tiles'
 import {
-  canWin, canWinStandard, buildWildTileChecker,
+  canWin, buildWildTileChecker,
   detectHandTypes, HandType, isTing
 } from '../server/utils/handValidator'
 import {
@@ -144,7 +144,7 @@ const DEFAULT_POLICY: BotPolicy = {
   id: 'default',
   selfWinChance: 1.0, discardHuChance: 1.0,
   selfWinWildBoost: 0.1, discardHuWildPenalty: 0.2, discardHuMenQingPenalty: 0.05,
-  pengChance: 0.9, kongChance: 0.7, chowChance: 0.4, anKongChance: 0.95,
+  pengChance: 1.0, kongChance: 0.9, chowChance: 0.8, anKongChance: 0.95,
   pengWildBoost: 0.06, kongWildBoost: 0.14, chowWildPenalty: 0.18,
   menqingKeepBonus: 0.0, meldPenalty: 0.00,
   allPungsPursuit: 0.7, pureFlushPursuit: 0.5, halfFlushWeight: 0.6,
@@ -230,14 +230,14 @@ const MUTATE_KEYS: (keyof BotPolicy)[] = [
 ]
 
 const PARAM_RANGES: Record<string, { min: number; max: number; step: number }> = {
-  selfWinChance:              { min: 0.3,  max: 1.0,  step: 0.05 },
-  discardHuChance:            { min: 0.3,  max: 1.0,  step: 0.05 },
+  selfWinChance:              { min: 0.8,  max: 1.0,  step: 0.02 },
+  discardHuChance:            { min: 0.8,  max: 1.0,  step: 0.02 },
   selfWinWildBoost:           { min: 0.0,  max: 0.3,  step: 0.02 },
   discardHuWildPenalty:       { min: 0.0,  max: 0.8,  step: 0.03 },
   discardHuMenQingPenalty:    { min: 0.0,  max: 0.4,  step: 0.02 },
-  pengChance:                 { min: 0.3,  max: 1.0,  step: 0.05 },
-  kongChance:                 { min: 0.1,  max: 1.0,  step: 0.05 },
-  chowChance:                 { min: 0.05,  max: 0.8,  step: 0.05 },
+  pengChance:                 { min: 0.7,  max: 1.0,  step: 0.03 },
+  kongChance:                 { min: 0.5,  max: 1.0,  step: 0.05 },
+  chowChance:                 { min: 0.4,  max: 1.0,  step: 0.05 },
   anKongChance:               { min: 0.5,  max: 1.0,  step: 0.05 },
   pengWildBoost:              { min: 0.0,  max: 0.3,  step: 0.02 },
   kongWildBoost:              { min: 0.0,  max: 0.4,  step: 0.02 },
@@ -842,7 +842,8 @@ function findTingPaiDiscard(p: BotPlayer, isWT: (t: Tile, p: BotPlayer) => boole
     for (const [suit, value] of ALL) {
       const testTile: Tile = { id: `tp-${suit}-${value}`, suit, value }
       const testHand = [...after, testTile, ...nonFlower.filter(t => isWT(t, p))]
-      if (canWinStandard(testHand, p.exposedMelds.length, (t: Tile) => isWT(t, p))) {
+      const result = canWin(testHand, p.exposedMelds.length, (t: Tile) => isWT(t, p))
+      if (result.canWin) {
         waitingCount++
       }
     }
@@ -862,7 +863,7 @@ function findTingPaiDiscard(p: BotPlayer, isWT: (t: Tile, p: BotPlayer) => boole
 // - 前 N 回合：机械规则（最短门→风箭→对子），纯快速搭牌
 // - N+ 回合：无论远近都跑 route evaluator，持续选路线+验证+推进
 // - 听牌阶段（distance ≤ 2）：精收口，选最优弃牌最大化待胡池
-const EARLY_ROUNDS = process.env.EARLY_ROUNDS ? parseInt(process.env.EARLY_ROUNDS) : 5
+const EARLY_ROUNDS = process.env.EARLY_ROUNDS ? parseInt(process.env.EARLY_ROUNDS) : 3
 const TENPAI_THRESHOLD = process.env.TENPAI_THRESHOLD ? parseInt(process.env.TENPAI_THRESHOLD) : 2
 
 function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[] = [],
@@ -883,34 +884,29 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     return mechanicalDiscard(p, discardPile)
   }
 
-  // 阶段2：N+回合 → route evaluator 持续选路+验证+推进
+  // 阶段2：N+回合 → shanten优先 + route evaluator tie-break
   const phase = determinePhase(hand.length, p.exposedMelds.length, deckLen - wallIdx)
-  const routes = evaluateAllRoutes(hand, p.exposedMelds, wilds.length, phase, deckLen - wallIdx, gameMultiplier >= 4 ? 'trailing' : 'mid', p.wildSuit, p.wildValue)
-  const bestRoute = routes[0]?.route
-
-  // 阶段3：听牌（distance ≤ 2）→ 精收口模式：额外加权找最大待胡池
   const tenpaiDistance = tenpaiDist(hand, p.exposedMelds, p.wildSuit, p.wildValue)
-  const isCloseToTenpai = tenpaiDistance <= TENPAI_THRESHOLD
 
-  let worstTile = nonWild[0]
-  let worstScore = Infinity
+  let bestTile = nonWild[0]
+  let bestShanten = Infinity
+  let bestRouteScore = -Infinity
 
   for (const t of nonWild) {
     const remaining = hand.filter(x => x.id !== t.id)
+    const shanten = tenpaiDist(remaining, p.exposedMelds, p.wildSuit, p.wildValue)
     const remainingPhase = determinePhase(remaining.length, p.exposedMelds.length, deckLen - wallIdx)
     const newRoutes = evaluateAllRoutes(remaining, p.exposedMelds, wilds.length, remainingPhase, deckLen - wallIdx, gameMultiplier >= 4 ? 'trailing' : 'mid', p.wildSuit, p.wildValue)
-    const totalScore = newRoutes.reduce((s, r) => s + r.score, 0)
+    const routeScore = newRoutes.reduce((s, r) => s + r.score, 0)
 
-    // 如果接近听牌，额外加分给能最大化待胡池的牌
-    let adjustedScore = totalScore
-    // ...（待胡池计算开销大，简单用路线分排序就够了）
-
-    if (adjustedScore < worstScore) {
-      worstScore = adjustedScore
-      worstTile = t
+    // shanten 优先（越小越好），route score 做 tie-break（越大越好）
+    if (shanten < bestShanten || (shanten === bestShanten && routeScore > bestRouteScore)) {
+      bestShanten = shanten
+      bestRouteScore = routeScore
+      bestTile = t
     }
   }
-  return worstTile
+  return bestTile
 }
 
 /** 机械弃牌规则（K哥：最短门单张→风箭→对子）- 仅用于前N回合快速搭牌 */

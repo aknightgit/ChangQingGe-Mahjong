@@ -347,10 +347,17 @@ export function selectDiscard(hand: Tile[], exposedMelds: M[], wildCount: number
 /** 吃碰决策 */
 /**
  * 吃碰概率计算（返回 0-1）
- * 百搭多+门清+一色长 → 概率高（可达 70%）
- * 百搭少/非门清 → 概率低
+ * 核心原则：接近听牌时强制吃碰，加快听牌速度
+ * 距离≤2：100%吃碰
+ * 距离=3：高概率吃碰（80%）
+ * 其他：按K哥规则计算
  */
 export function shouldClaim(action: string, hand: Tile[], exposedMelds: M[], wildCount: number, phase: Phase, wallRemaining: number, scorePosition: string, isMenqing: boolean, wildSuit?: TileSuit, wildValue?: number): number {
+  // ===== 近听优先：distance ≤ 2 强制吃碰 =====
+  const tenpaiDist = calcTenpaiDistance(hand, exposedMelds, wildSuit, wildValue)
+  if (tenpaiDist <= 2) return 1.0     // 距离≤2：必吃碰
+  if (tenpaiDist === 3) return 0.8     // 距离=3：高概率吃碰
+
   const routes = evaluateAllRoutes(hand, exposedMelds, wildCount, phase, wallRemaining, scorePosition, wildSuit, wildValue)
   const bestScore = routes[0]?.score ?? 0
   const bestRoute = routes[0]?.route
