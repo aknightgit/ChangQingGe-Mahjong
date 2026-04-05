@@ -84,6 +84,8 @@ const D: Record<string, number> = {
   '--self-hand-reverse': 0,
   '--self-hand-bottom': 0,
   '--self-hand-scale': 120,
+  '--self-hand-align': 1,  // 0=左, 1=居中, 2=右
+  '--self-hand-justify': 1, // 0=flex-start, 1=center, 2=flex-end
 
   // ===== 自家·门口牌 =====
   '--self-meld-gap': 8,
@@ -92,6 +94,8 @@ const D: Record<string, number> = {
   '--self-meld-tile-h': 36,
   '--self-meld-dir': 0,
   '--self-meld-rotate': 0,
+  '--self-meld-order': 0,   // 0=手牌左, 1=手牌右
+  '--self-meld-align': 1,   // 0=top, 1=center, 2=bottom
 
   // ===== 自家·弃牌区 =====
   '--self-dl-top': 31,
@@ -111,6 +115,7 @@ const D: Record<string, number> = {
   '--opp-hand-width': 90,
   '--opp-hand-top': 10,
   '--opp-hand-scale': 100,
+  '--opp-hand-align': 1,    // 0=左, 1=居中, 2=右
 
   // ===== 对家·门口牌 =====
   '--opp-meld-gap': 8,
@@ -118,6 +123,8 @@ const D: Record<string, number> = {
   '--opp-meld-tile-w': 26,
   '--opp-meld-tile-h': 36,
   '--opp-meld-rotate': 180,
+  '--opp-meld-order': 0,
+  '--opp-meld-align': 1,
 
   // ===== 对家·弃牌区 =====
   '--opp-dl-top': 31,
@@ -136,6 +143,7 @@ const D: Record<string, number> = {
   '--left-hand-rotate': 90,
   '--left-hand-left': 7,
   '--left-hand-scale': 100,
+  '--left-hand-align': 1,
 
   // ===== 上家·门口牌 =====
   '--left-meld-gap': 8,
@@ -143,6 +151,8 @@ const D: Record<string, number> = {
   '--left-meld-tile-w': 26,
   '--left-meld-tile-h': 36,
   '--left-meld-rotate': 90,
+  '--left-meld-order': 0,
+  '--left-meld-align': 1,
 
   // ===== 上家·弃牌区 =====
   '--left-dl-left': 21.6,
@@ -161,6 +171,7 @@ const D: Record<string, number> = {
   '--right-hand-rotate': -90,
   '--right-hand-right': 7,
   '--right-hand-scale': 100,
+  '--right-hand-align': 1,
 
   // ===== 下家·门口牌 =====
   '--right-meld-gap': 8,
@@ -168,6 +179,8 @@ const D: Record<string, number> = {
   '--right-meld-tile-w': 26,
   '--right-meld-tile-h': 36,
   '--right-meld-rotate': -90,
+  '--right-meld-order': 0,
+  '--right-meld-align': 1,
 
   // ===== 下家·弃牌区 =====
   '--right-dl-right': 21.6,
@@ -244,6 +257,8 @@ const groups: Group[] = [
     S('反向', '--self-hand-reverse', 0, 1, 1, ''),
     S('整体缩放', '--self-hand-scale', 80, 150, 1, '%'),
     S('离底距离', '--self-hand-bottom', 0, 15, 1, '%'),
+    S('水平对齐', '--self-hand-align', 0, 2, 1, '0左1中2右'),
+    S('垂直对齐', '--self-hand-justify', 0, 2, 1, '0上1中2下'),
   ] },
   { name: '🫵 自家·门口牌', sliders: [
     S('牌宽', '--self-meld-tile-w', 20, 40, 1, 'px'),
@@ -252,6 +267,8 @@ const groups: Group[] = [
     S('门间距', '--self-meld-mgap', 0, 12, 1, 'px'),
     S('排列', '--self-meld-dir', 0, 1, 1, ''),
     S('旋转', '--self-meld-rotate', -180, 180, 5, '°'),
+    S('相对位置', '--self-meld-order', 0, 1, 1, '0手牌左1手牌右'),
+    S('垂直对齐', '--self-meld-align', 0, 2, 1, '0上1中2下'),
   ] },
   { name: '🫵 自家·弃牌区', sliders: [
     S('距底%', '--self-dl-top', 0, 50, 0.5, '%'),
@@ -273,6 +290,7 @@ const groups: Group[] = [
     S('座位宽度%', '--opp-hand-width', 50, 100, 1, '%'),
     S('距顶%', '--opp-hand-top', 0, 30, 0.5, '%'),
     S('整体缩放', '--opp-hand-scale', 50, 150, 1, '%'),
+    S('水平对齐', '--opp-hand-align', 0, 2, 1, '0左1中2右'),
   ] },
   { name: '👆 对家·门口牌', sliders: [
     S('牌宽', '--opp-meld-tile-w', 20, 40, 1, 'px'),
@@ -280,6 +298,8 @@ const groups: Group[] = [
     S('组间距', '--opp-meld-gap', 2, 20, 1, 'px'),
     S('门间距', '--opp-meld-mgap', 0, 12, 1, 'px'),
     S('旋转', '--opp-meld-rotate', -180, 180, 5, '°'),
+    S('相对位置', '--opp-meld-order', 0, 1, 1, '0手牌左1手牌右'),
+    S('垂直对齐', '--opp-meld-align', 0, 2, 1, '0上1中2下'),
   ] },
   { name: '👆 对家·弃牌区', sliders: [
     S('距顶%', '--opp-dl-top', 0, 50, 0.5, '%'),
@@ -300,6 +320,7 @@ const groups: Group[] = [
     S('旋转', '--left-hand-rotate', -180, 180, 5, '°'),
     S('距左%', '--left-hand-left', 0, 30, 0.5, '%'),
     S('整体缩放', '--left-hand-scale', 50, 150, 1, '%'),
+    S('水平对齐', '--left-hand-align', 0, 2, 1, '0左1中2右'),
   ] },
   { name: '👈 上家·门口牌', sliders: [
     S('牌宽', '--left-meld-tile-w', 20, 40, 1, 'px'),
@@ -307,6 +328,8 @@ const groups: Group[] = [
     S('组间距', '--left-meld-gap', 2, 20, 1, 'px'),
     S('门间距', '--left-meld-mgap', 0, 12, 1, 'px'),
     S('旋转', '--left-meld-rotate', -180, 180, 5, '°'),
+    S('相对位置', '--left-meld-order', 0, 1, 1, '0手牌左1手牌右'),
+    S('垂直对齐', '--left-meld-align', 0, 2, 1, '0上1中2下'),
   ] },
   { name: '👈 上家·弃牌区', sliders: [
     S('距左%', '--left-dl-left', 0, 50, 0.5, '%'),
@@ -327,6 +350,7 @@ const groups: Group[] = [
     S('旋转', '--right-hand-rotate', -180, 180, 5, '°'),
     S('距右%', '--right-hand-right', 0, 30, 0.5, '%'),
     S('整体缩放', '--right-hand-scale', 50, 150, 1, '%'),
+    S('水平对齐', '--right-hand-align', 0, 2, 1, '0左1中2右'),
   ] },
   { name: '👉 下家·门口牌', sliders: [
     S('牌宽', '--right-meld-tile-w', 20, 40, 1, 'px'),
@@ -334,6 +358,8 @@ const groups: Group[] = [
     S('组间距', '--right-meld-gap', 2, 20, 1, 'px'),
     S('门间距', '--right-meld-mgap', 0, 12, 1, 'px'),
     S('旋转', '--right-meld-rotate', -180, 180, 5, '°'),
+    S('相对位置', '--right-meld-order', 0, 1, 1, '0手牌左1手牌右'),
+    S('垂直对齐', '--right-meld-align', 0, 2, 1, '0上1中2下'),
   ] },
   { name: '👉 下家·弃牌区', sliders: [
     S('距右%', '--right-dl-right', 0, 50, 0.5, '%'),
@@ -459,6 +485,8 @@ function apply() {
       max-width: ${u('--self-hand-maxw')}px !important;
       flex-direction: ${selfDir} !important;
       flex-wrap: ${u('--self-hand-rows') > 1 ? 'wrap' : 'nowrap'} !important;
+      justify-content: ${['flex-start','center','flex-end'][Math.round(u('--self-hand-align'))]} !important;
+      align-items: ${['flex-start','center','flex-end'][Math.round(u('--self-hand-justify'))]} !important;
       transform: scale(${u('--self-hand-scale') / 100}) !important;
     }
     .seat-bottom { bottom: ${u('--self-hand-bottom')}% !important; transform: translateX(-50%) scale(${u('--self-hand-scale') / 100}) translateY(-5%) !important; }
@@ -469,7 +497,7 @@ function apply() {
     }
 
     /* ===== 自家·门口牌 ===== */
-    .player-melds { gap: ${u('--self-meld-gap')}px !important; }
+    .player-melds { gap: ${u('--self-meld-gap')}px !important; order: ${u('--self-meld-order')} !important; align-items: ${['flex-start','center','flex-end'][Math.round(u('--self-meld-align'))]} !important; }
     .player-melds .meld { gap: ${u('--self-meld-mgap')}px !important; flex-direction: ${selfMeldDir} !important; }
     .player-melds .tile {
       width: ${u('--self-meld-tile-w')}px !important;
@@ -502,11 +530,11 @@ function apply() {
       height: ${u('--opp-hand-h')}px !important;
       transform: rotate(${u('--opp-hand-rotate')}deg) !important;
     }
-    .seat-top .hand-segment { gap: ${u('--opp-hand-gap')}px !important; }
+    .seat-top .hand-segment { gap: ${u('--opp-hand-gap')}px !important; justify-content: ${['flex-start','center','flex-end'][Math.round(u('--opp-hand-align'))]} !important; }
 
     /* ===== 对家·门口牌 ===== */
-    .seat-top .meld-group-h { gap: ${u('--opp-meld-gap')}px !important; }
-    .seat-top .meld-segment { gap: ${u('--opp-meld-mgap')}px !important; }
+    .seat-top .meld-group-h { gap: ${u('--opp-meld-gap')}px !important; order: ${u('--opp-meld-order')} !important; }
+    .seat-top .meld-segment { gap: ${u('--opp-meld-mgap')}px !important; align-items: ${['flex-start','center','flex-end'][Math.round(u('--opp-meld-align'))]} !important; }
     .seat-top .meld-group-h .tile {
       width: ${u('--opp-meld-tile-w')}px !important;
       height: ${u('--opp-meld-tile-h')}px !important;
@@ -537,11 +565,11 @@ function apply() {
       height: ${u('--left-hand-h')}px !important;
       transform: rotate(${u('--left-hand-rotate')}deg) !important;
     }
-    .seat-left .hand-segment { gap: ${u('--left-hand-gap')}px !important; }
+    .seat-left .hand-segment { gap: ${u('--left-hand-gap')}px !important; align-items: ${['flex-start','center','flex-end'][Math.round(u('--left-hand-align'))]} !important; }
 
     /* ===== 上家·门口牌 ===== */
-    .seat-left .meld-group-v { gap: ${u('--left-meld-gap')}px !important; }
-    .seat-left .meld-segment { gap: ${u('--left-meld-mgap')}px !important; }
+    .seat-left .meld-group-v { gap: ${u('--left-meld-gap')}px !important; order: ${u('--left-meld-order')} !important; }
+    .seat-left .meld-segment { gap: ${u('--left-meld-mgap')}px !important; align-items: ${['flex-start','center','flex-end'][Math.round(u('--left-meld-align'))]} !important; }
     .seat-left .meld-group-v .tile {
       width: ${u('--left-meld-tile-w')}px !important;
       height: ${u('--left-meld-tile-h')}px !important;
@@ -572,11 +600,11 @@ function apply() {
       height: ${u('--right-hand-h')}px !important;
       transform: rotate(${u('--right-hand-rotate')}deg) !important;
     }
-    .seat-right .hand-segment { gap: ${u('--right-hand-gap')}px !important; }
+    .seat-right .hand-segment { gap: ${u('--right-hand-gap')}px !important; align-items: ${['flex-start','center','flex-end'][Math.round(u('--right-hand-align'))]} !important; }
 
     /* ===== 下家·门口牌 ===== */
-    .seat-right .meld-group-v { gap: ${u('--right-meld-gap')}px !important; }
-    .seat-right .meld-segment { gap: ${u('--right-meld-mgap')}px !important; }
+    .seat-right .meld-group-v { gap: ${u('--right-meld-gap')}px !important; order: ${u('--right-meld-order')} !important; }
+    .seat-right .meld-segment { gap: ${u('--right-meld-mgap')}px !important; align-items: ${['flex-start','center','flex-end'][Math.round(u('--right-meld-align'))]} !important; }
     .seat-right .meld-group-v .tile {
       width: ${u('--right-meld-tile-w')}px !important;
       height: ${u('--right-meld-tile-h')}px !important;
