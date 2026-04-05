@@ -1,4 +1,4 @@
-<!-- 布局热调面板 - 拖动滑块改CSS值 -->
+<!-- 布局热调面板 v2 — 按每家/每区域分组，全覆盖 -->
 <template>
   <Teleport to="body">
     <div
@@ -7,21 +7,32 @@
       @mousedown="drag"
     >
       <div class="hdr" @click.stop="collapsed = !collapsed">
-        <span>🔧 布局调试</span>
+        <span>🔧 布局调试 v2</span>
         <button class="close" @click.stop="$emit('close')">✕</button>
       </div>
       <div v-if="!collapsed" class="body">
-        <div v-for="g in groups" :key="g.name" class="grp">
-          <div class="grp-title">{{ g.name }}</div>
-          <div v-for="s in g.sliders" :key="s.var" class="row">
-            <label>{{ s.label }}</label>
-            <input type="range" :min="s.min" :max="s.max" :step="s.step"
-              :value="vals[s.var]" @input="set(s.var, +$event.target.value)" />
-            <span class="v">{{ fmt(s.var, vals[s.var]) }}</span>
+        <!-- 搜索过滤 -->
+        <div class="search-row">
+          <input v-model="search" placeholder="搜索参数..." class="search-input" />
+          <button v-if="search" @click="search=''" class="search-clear">✕</button>
+        </div>
+
+        <div v-for="g in filteredGroups" :key="g.name" class="grp">
+          <div class="grp-title" @click="toggleGroup(g.name)">
+            <span class="grp-arrow">{{ openGroups.has(g.name) ? '▼' : '▶' }}</span>
+            {{ g.name }}
+          </div>
+          <div v-if="openGroups.has(g.name)" class="grp-body">
+            <div v-for="s in g.sliders" :key="s.var" class="row">
+              <label :title="s.var">{{ s.label }}</label>
+              <input type="range" :min="s.min" :max="s.max" :step="s.step"
+                :value="vals[s.var]" @input="set(s.var, +$event.target.value)" />
+              <span class="v">{{ fmt(s.var, vals[s.var]) }}</span>
+            </div>
           </div>
         </div>
         <div class="btns">
-          <button @click="resetAll">重置</button>
+          <button @click="resetAll">重置全部</button>
           <button @click="copyCSS">📋 复制CSS</button>
         </div>
       </div>
@@ -44,123 +55,353 @@ const drag = (e: MouseEvent) => {
 }
 
 const collapsed = ref(false)
+const search = ref('')
+const openGroups = ref<Set<string>>(new Set(['🫵 自家·手牌', '🃏 牌桌', '🎮 操作按钮']))
+const toggleGroup = (name: string) => {
+  if (openGroups.value.has(name)) openGroups.value.delete(name)
+  else openGroups.value.add(name)
+}
 
-/* ---------- sliders ---------- */
-const defaultValues: Record<string, number> = {
-  // 座位
-  '--seat-left': -10,
-  '--seat-right': -10,
-  '--seat-top-w': 90,
-  '--seat-bottom-scale': 120,
-  // 弃牌区位置
-  '--dl-top': 31,
-  '--dl-bottom': 31,
-  '--dl-left': 21.6,
-  '--dl-right': 21.6,
-  // 弃牌区网格
-  '--dl-cols': 8,
-  '--dl-tsize': 22,
-  '--dl-gap': 1,
-  '--dl-rowgap': 1,
-  '--dl-zone-rotate': 0,
-  // 自家手牌
-  '--my-gap': 4,
-  '--my-tgap': 2,
-  '--my-tsize': 48,
-  '--my-maxw': 440,
-  '--my-rotate': 0,
-  '--my-dir': 0,
-  '--my-reverse': 0,
-  // 他人手牌
-  '--oth-h': 26,
-  '--oth-w': 36,
-  '--oth-gap': 1,
-  '--oth-mgap': 3,
-  '--oth-rotate': 0,
-  '--oth-dir': 0,
-  '--oth-reverse': 0,
-  // 门口牌
-  '--meld-gap': 8,
-  '--meld-tile-sz': 36,
-  // 名字
-  '--lbl-sz': 0.75,
-  // 操作按钮区
+/* ---------- 默认值 ---------- */
+const D: Record<string, number> = {
+  // ===== 牌桌 =====
+  '--tbl-maxw': 1200,
+  '--tbl-aspect': 1.333,
+  '--tbl-border': 12,
+  '--tbl-frame': '#3a2006',
+  '--felt-pad': 0,
+  '--felt-inner': 'rgba(40,90,50,0.95)',
+
+  // ===== 自家·手牌 =====
+  '--self-hand-gap': 2,
+  '--self-hand-maxw': 440,
+  '--self-hand-rows': 1,
+  '--self-tile-w': 32,
+  '--self-tile-h': 45,
+  '--self-tile-scale': 100,
+  '--self-tile-rotate': 0,
+  '--self-hand-dir': 0,
+  '--self-hand-reverse': 0,
+  '--self-hand-bottom': 0,
+  '--self-hand-scale': 120,
+
+  // ===== 自家·门口牌 =====
+  '--self-meld-gap': 8,
+  '--self-meld-mgap': 3,
+  '--self-meld-tile-w': 26,
+  '--self-meld-tile-h': 36,
+  '--self-meld-dir': 0,
+  '--self-meld-rotate': 0,
+
+  // ===== 自家·弃牌区 =====
+  '--self-dl-top': 31,
+  '--self-dl-cols': 8,
+  '--self-dl-tile-w': 22,
+  '--self-dl-tile-h': 31,
+  '--self-dl-gap': 1,
+  '--self-dl-rowgap': 1,
+  '--self-dl-rotate': 0,
+  '--self-dl-shadow': 0,
+
+  // ===== 对家·手牌 =====
+  '--opp-hand-w': 26,
+  '--opp-hand-h': 36,
+  '--opp-hand-gap': 2,
+  '--opp-hand-rotate': 180,
+  '--opp-hand-width': 90,
+  '--opp-hand-top': 10,
+  '--opp-hand-scale': 100,
+
+  // ===== 对家·门口牌 =====
+  '--opp-meld-gap': 8,
+  '--opp-meld-mgap': 3,
+  '--opp-meld-tile-w': 26,
+  '--opp-meld-tile-h': 36,
+  '--opp-meld-rotate': 180,
+
+  // ===== 对家·弃牌区 =====
+  '--opp-dl-top': 31,
+  '--opp-dl-cols': 8,
+  '--opp-dl-tile-w': 22,
+  '--opp-dl-tile-h': 31,
+  '--opp-dl-gap': 1,
+  '--opp-dl-rowgap': 1,
+  '--opp-dl-rotate': 180,
+  '--opp-dl-shadow': 0,
+
+  // ===== 上家·手牌 =====
+  '--left-hand-w': 26,
+  '--left-hand-h': 36,
+  '--left-hand-gap': 2,
+  '--left-hand-rotate': 90,
+  '--left-hand-left': 7,
+  '--left-hand-scale': 100,
+
+  // ===== 上家·门口牌 =====
+  '--left-meld-gap': 8,
+  '--left-meld-mgap': 3,
+  '--left-meld-tile-w': 26,
+  '--left-meld-tile-h': 36,
+  '--left-meld-rotate': 90,
+
+  // ===== 上家·弃牌区 =====
+  '--left-dl-left': 21.6,
+  '--left-dl-cols': 8,
+  '--left-dl-tile-w': 22,
+  '--left-dl-tile-h': 31,
+  '--left-dl-gap': 1,
+  '--left-dl-rowgap': 1,
+  '--left-dl-rotate': 90,
+  '--left-dl-shadow': 0,
+
+  // ===== 下家·手牌 =====
+  '--right-hand-w': 26,
+  '--right-hand-h': 36,
+  '--right-hand-gap': 2,
+  '--right-hand-rotate': -90,
+  '--right-hand-right': 7,
+  '--right-hand-scale': 100,
+
+  // ===== 下家·门口牌 =====
+  '--right-meld-gap': 8,
+  '--right-meld-mgap': 3,
+  '--right-meld-tile-w': 26,
+  '--right-meld-tile-h': 36,
+  '--right-meld-rotate': -90,
+
+  // ===== 下家·弃牌区 =====
+  '--right-dl-right': 21.6,
+  '--right-dl-cols': 8,
+  '--right-dl-tile-w': 22,
+  '--right-dl-tile-h': 31,
+  '--right-dl-gap': 1,
+  '--right-dl-rowgap': 1,
+  '--right-dl-rotate': -90,
+  '--right-dl-shadow': 0,
+
+  // ===== 牌墙 =====
+  '--wall-tile-w': 28,
+  '--wall-tile-h': 40,
+  '--wall-overlap': 30,
+  '--wall-voverlap': 30,
+  '--wall-layer-offset': 1,
+  '--wall-top-pct': 16,
+  '--wall-bottom-pct': 16,
+  '--wall-left-pct': 16,
+  '--wall-right-pct': 16,
+  '--wall-opacity': 100,
+
+  // ===== 2.5D 阴影 =====
+  '--shadow-depth': 4,
+  '--shadow-color': 'rgba(0,0,0,0.3)',
+  '--shadow-side-color': '#8a7a5a',
+  '--shadow-side-color2': '#6a5a3a',
+  '--shadow-self-dir': 0,
+  '--shadow-opp-dir': 0,
+  '--shadow-left-dir': 0,
+  '--shadow-right-dir': 0,
+  '--shadow-highlight': 0,
+
+  // ===== 操作按钮 =====
   '--act-panel-w': 100,
   '--act-panel-pad': 12,
   '--act-btn-sz': 44,
   '--act-draw-sz': 72,
   '--act-gap': 6,
   '--act-panel-mt': 0,
-  // 牌桌
-  '--table-w': 1200,
-  '--table-aspect': 1.333,
-  '--felt-pad': 0,
+
+  // ===== 名字 =====
+  '--lbl-sz': 0.75,
 }
 
-const vals = reactive({ ...defaultValues })
+const vals = reactive({ ...D })
 
-const groups = [
-  { name: '🪑 座位', sliders: [
-    { label: '左家', var: '--seat-left', min: -40, max: 0, step: 1, unit: '%' },
-    { label: '右家', var: '--seat-right', min: -40, max: 0, step: 1, unit: '%' },
-    { label: '对家宽', var: '--seat-top-w', min: 50, max: 100, step: 1, unit: '%' },
-    { label: '自家缩放', var: '--seat-bottom-scale', min: 80, max: 150, step: 1, unit: '%' },
-  ] },
-  { name: '🗑️ 弃牌区位置', sliders: [
-    { label: '上%', var: '--dl-top', min: 0, max: 50, step: 0.5, unit: '%' },
-    { label: '下%', var: '--dl-bottom', min: 0, max: 50, step: 0.5, unit: '%' },
-    { label: '左%', var: '--dl-left', min: 0, max: 50, step: 0.5, unit: '%' },
-    { label: '右%', var: '--dl-right', min: 0, max: 50, step: 0.5, unit: '%' },
-    { label: '区旋转', var: '--dl-zone-rotate', min: -180, max: 180, step: 5, unit: '°' },
-  ] },
-  { name: '🗑️ 弃牌网格', sliders: [
-    { label: '列数', var: '--dl-cols', min: 4, max: 12, step: 1, unit: '' },
-    { label: '牌大小', var: '--dl-tsize', min: 16, max: 36, step: 1, unit: 'px' },
-    { label: '牌间距', var: '--dl-gap', min: -2, max: 6, step: 0.5, unit: 'px' },
-    { label: '行间距', var: '--dl-rowgap', min: -2, max: 6, step: 0.5, unit: 'px' },
-  ] },
-  { name: '🫵 自家手牌', sliders: [
-    { label: '行间距', var: '--my-gap', min: 0, max: 16, step: 1, unit: 'px' },
-    { label: '牌间距', var: '--my-tgap', min: 0, max: 8, step: 0.5, unit: 'px' },
-    { label: '牌大小', var: '--my-tsize', min: 32, max: 64, step: 1, unit: 'px' },
-    { label: '最大宽', var: '--my-maxw', min: 200, max: 800, step: 10, unit: 'px' },
-    { label: '旋转', var: '--my-rotate', min: -180, max: 180, step: 5, unit: '°' },
-    { label: '排列', var: '--my-dir', min: 0, max: 1, step: 1, unit: '' },
-    { label: '反向', var: '--my-reverse', min: 0, max: 1, step: 1, unit: '' },
-  ] },
-  { name: '🧑 他人手牌', sliders: [
-    { label: '牌高', var: '--oth-h', min: 18, max: 40, step: 1, unit: 'px' },
-    { label: '牌宽', var: '--oth-w', min: 24, max: 50, step: 1, unit: 'px' },
-    { label: '手间距', var: '--oth-gap', min: 0, max: 8, step: 0.5, unit: 'px' },
-    { label: '门间距', var: '--oth-mgap', min: 0, max: 12, step: 1, unit: 'px' },
-    { label: '旋转', var: '--oth-rotate', min: -180, max: 180, step: 5, unit: '°' },
-    { label: '排列', var: '--oth-dir', min: 0, max: 1, step: 1, unit: '' },
-    { label: '反向', var: '--oth-reverse', min: 0, max: 1, step: 1, unit: '' },
-  ] },
-  { name: '🏠 门口牌', sliders: [
-    { label: '间距', var: '--meld-gap', min: 2, max: 20, step: 1, unit: 'px' },
-    { label: '牌大小', var: '--meld-tile-sz', min: 24, max: 52, step: 1, unit: 'px' },
-  ] },
-  { name: '📛 名字', sliders: [
-    { label: '字号', var: '--lbl-sz', min: 0.5, max: 1.5, step: 0.05, unit: 'rem' },
-  ] },
-  { name: '🎮 操作按钮', sliders: [
-    { label: '面板宽', var: '--act-panel-w', min: 50, max: 100, step: 1, unit: '%' },
-    { label: '内边距', var: '--act-panel-pad', min: 4, max: 24, step: 1, unit: 'px' },
-    { label: '小按钮', var: '--act-btn-sz', min: 28, max: 64, step: 1, unit: 'px' },
-    { label: '摸牌钮', var: '--act-draw-sz', min: 40, max: 100, step: 1, unit: 'px' },
-    { label: '按钮间距', var: '--act-gap', min: 2, max: 16, step: 1, unit: 'px' },
-    { label: '上边距', var: '--act-panel-mt', min: 0, max: 32, step: 1, unit: 'px' },
-  ] },
+/* ---------- 分组定义 ---------- */
+type Slider = { label: string; var: string; min: number; max: number; step: number; unit: string }
+type Group = { name: string; sliders: Slider[] }
+
+const S = (label: string, v: string, min: number, max: number, step: number, unit: string): Slider =>
+  ({ label, var: v, min, max, step, unit })
+
+const groups: Group[] = [
   { name: '🃏 牌桌', sliders: [
-    { label: '最大宽', var: '--table-w', min: 600, max: 1600, step: 20, unit: 'px' },
-    { label: '宽高比', var: '--table-aspect', min: 1.0, max: 2.0, step: 0.05, unit: '' },
-    { label: '桌布内边距', var: '--felt-pad', min: 0, max: 60, step: 2, unit: 'px' },
+    S('最大宽度', '--tbl-maxw', 600, 1600, 20, 'px'),
+    S('宽高比', '--tbl-aspect', 1.0, 2.0, 0.05, ''),
+    S('外框粗细', '--tbl-border', 4, 24, 1, 'px'),
+    S('桌布内边距', '--felt-pad', 0, 60, 2, 'px'),
+  ] },
+
+  // ===== 自家 =====
+  { name: '🫵 自家·手牌', sliders: [
+    S('牌宽', '--self-tile-w', 24, 48, 1, 'px'),
+    S('牌高', '--self-tile-h', 34, 64, 1, 'px'),
+    S('缩放', '--self-tile-scale', 50, 150, 1, '%'),
+    S('旋转', '--self-tile-rotate', -180, 180, 5, '°'),
+    S('牌间距', '--self-hand-gap', 0, 8, 0.5, 'px'),
+    S('最大宽度', '--self-hand-maxw', 200, 900, 10, 'px'),
+    S('行数', '--self-hand-rows', 1, 3, 1, ''),
+    S('排列', '--self-hand-dir', 0, 1, 1, ''),
+    S('反向', '--self-hand-reverse', 0, 1, 1, ''),
+    S('整体缩放', '--self-hand-scale', 80, 150, 1, '%'),
+    S('离底距离', '--self-hand-bottom', 0, 15, 1, '%'),
+  ] },
+  { name: '🫵 自家·门口牌', sliders: [
+    S('牌宽', '--self-meld-tile-w', 20, 40, 1, 'px'),
+    S('牌高', '--self-meld-tile-h', 28, 52, 1, 'px'),
+    S('组间距', '--self-meld-gap', 2, 20, 1, 'px'),
+    S('门间距', '--self-meld-mgap', 0, 12, 1, 'px'),
+    S('排列', '--self-meld-dir', 0, 1, 1, ''),
+    S('旋转', '--self-meld-rotate', -180, 180, 5, '°'),
+  ] },
+  { name: '🫵 自家·弃牌区', sliders: [
+    S('距底%', '--self-dl-top', 0, 50, 0.5, '%'),
+    S('列数', '--self-dl-cols', 4, 12, 1, ''),
+    S('牌宽', '--self-dl-tile-w', 16, 36, 1, 'px'),
+    S('牌高', '--self-dl-tile-h', 22, 50, 1, 'px'),
+    S('牌间距', '--self-dl-gap', -2, 6, 0.5, 'px'),
+    S('行间距', '--self-dl-rowgap', -2, 6, 0.5, 'px'),
+    S('区旋转', '--self-dl-rotate', -180, 180, 5, '°'),
+    S('阴影方向', '--self-dl-shadow', 0, 3, 1, ''),
+  ] },
+
+  // ===== 对家 =====
+  { name: '👆 对家·手牌', sliders: [
+    S('牌宽', '--opp-hand-w', 20, 40, 1, 'px'),
+    S('牌高', '--opp-hand-h', 28, 52, 1, 'px'),
+    S('牌间距', '--opp-hand-gap', 0, 8, 0.5, 'px'),
+    S('旋转', '--opp-hand-rotate', -180, 180, 5, '°'),
+    S('座位宽度%', '--opp-hand-width', 50, 100, 1, '%'),
+    S('距顶%', '--opp-hand-top', 0, 30, 0.5, '%'),
+    S('整体缩放', '--opp-hand-scale', 50, 150, 1, '%'),
+  ] },
+  { name: '👆 对家·门口牌', sliders: [
+    S('牌宽', '--opp-meld-tile-w', 20, 40, 1, 'px'),
+    S('牌高', '--opp-meld-tile-h', 28, 52, 1, 'px'),
+    S('组间距', '--opp-meld-gap', 2, 20, 1, 'px'),
+    S('门间距', '--opp-meld-mgap', 0, 12, 1, 'px'),
+    S('旋转', '--opp-meld-rotate', -180, 180, 5, '°'),
+  ] },
+  { name: '👆 对家·弃牌区', sliders: [
+    S('距顶%', '--opp-dl-top', 0, 50, 0.5, '%'),
+    S('列数', '--opp-dl-cols', 4, 12, 1, ''),
+    S('牌宽', '--opp-dl-tile-w', 16, 36, 1, 'px'),
+    S('牌高', '--opp-dl-tile-h', 22, 50, 1, 'px'),
+    S('牌间距', '--opp-dl-gap', -2, 6, 0.5, 'px'),
+    S('行间距', '--opp-dl-rowgap', -2, 6, 0.5, 'px'),
+    S('区旋转', '--opp-dl-rotate', -180, 180, 5, '°'),
+    S('阴影方向', '--opp-dl-shadow', 0, 3, 1, ''),
+  ] },
+
+  // ===== 上家 =====
+  { name: '👈 上家·手牌', sliders: [
+    S('牌宽', '--left-hand-w', 20, 40, 1, 'px'),
+    S('牌高', '--left-hand-h', 28, 52, 1, 'px'),
+    S('牌间距', '--left-hand-gap', 0, 8, 0.5, 'px'),
+    S('旋转', '--left-hand-rotate', -180, 180, 5, '°'),
+    S('距左%', '--left-hand-left', 0, 30, 0.5, '%'),
+    S('整体缩放', '--left-hand-scale', 50, 150, 1, '%'),
+  ] },
+  { name: '👈 上家·门口牌', sliders: [
+    S('牌宽', '--left-meld-tile-w', 20, 40, 1, 'px'),
+    S('牌高', '--left-meld-tile-h', 28, 52, 1, 'px'),
+    S('组间距', '--left-meld-gap', 2, 20, 1, 'px'),
+    S('门间距', '--left-meld-mgap', 0, 12, 1, 'px'),
+    S('旋转', '--left-meld-rotate', -180, 180, 5, '°'),
+  ] },
+  { name: '👈 上家·弃牌区', sliders: [
+    S('距左%', '--left-dl-left', 0, 50, 0.5, '%'),
+    S('列数', '--left-dl-cols', 4, 12, 1, ''),
+    S('牌宽', '--left-dl-tile-w', 16, 36, 1, 'px'),
+    S('牌高', '--left-dl-tile-h', 22, 50, 1, 'px'),
+    S('牌间距', '--left-dl-gap', -2, 6, 0.5, 'px'),
+    S('行间距', '--left-dl-rowgap', -2, 6, 0.5, 'px'),
+    S('区旋转', '--left-dl-rotate', -180, 180, 5, '°'),
+    S('阴影方向', '--left-dl-shadow', 0, 3, 1, ''),
+  ] },
+
+  // ===== 下家 =====
+  { name: '👉 下家·手牌', sliders: [
+    S('牌宽', '--right-hand-w', 20, 40, 1, 'px'),
+    S('牌高', '--right-hand-h', 28, 52, 1, 'px'),
+    S('牌间距', '--right-hand-gap', 0, 8, 0.5, 'px'),
+    S('旋转', '--right-hand-rotate', -180, 180, 5, '°'),
+    S('距右%', '--right-hand-right', 0, 30, 0.5, '%'),
+    S('整体缩放', '--right-hand-scale', 50, 150, 1, '%'),
+  ] },
+  { name: '👉 下家·门口牌', sliders: [
+    S('牌宽', '--right-meld-tile-w', 20, 40, 1, 'px'),
+    S('牌高', '--right-meld-tile-h', 28, 52, 1, 'px'),
+    S('组间距', '--right-meld-gap', 2, 20, 1, 'px'),
+    S('门间距', '--right-meld-mgap', 0, 12, 1, 'px'),
+    S('旋转', '--right-meld-rotate', -180, 180, 5, '°'),
+  ] },
+  { name: '👉 下家·弃牌区', sliders: [
+    S('距右%', '--right-dl-right', 0, 50, 0.5, '%'),
+    S('列数', '--right-dl-cols', 4, 12, 1, ''),
+    S('牌宽', '--right-dl-tile-w', 16, 36, 1, 'px'),
+    S('牌高', '--right-dl-tile-h', 22, 50, 1, 'px'),
+    S('牌间距', '--right-dl-gap', -2, 6, 0.5, 'px'),
+    S('行间距', '--right-dl-rowgap', -2, 6, 0.5, 'px'),
+    S('区旋转', '--right-dl-rotate', -180, 180, 5, '°'),
+    S('阴影方向', '--right-dl-shadow', 0, 3, 1, ''),
+  ] },
+
+  // ===== 牌墙 =====
+  { name: '🧱 牌墙', sliders: [
+    S('牌宽', '--wall-tile-w', 16, 40, 1, 'px'),
+    S('牌高', '--wall-tile-h', 24, 56, 1, 'px'),
+    S('水平重叠', '--wall-overlap', 16, 40, 1, 'px'),
+    S('垂直重叠', '--wall-voverlap', 16, 40, 1, 'px'),
+    S('层偏移', '--wall-layer-offset', 0, 4, 0.5, 'px'),
+    S('上墙距顶%', '--wall-top-pct', 5, 30, 0.5, '%'),
+    S('下墙距底%', '--wall-bottom-pct', 5, 30, 0.5, '%'),
+    S('左墙距左%', '--wall-left-pct', 5, 30, 0.5, '%'),
+    S('右墙距右%', '--wall-right-pct', 5, 30, 0.5, '%'),
+    S('透明度', '--wall-opacity', 0, 100, 5, '%'),
+  ] },
+
+  // ===== 2.5D 阴影 =====
+  { name: '🌑 2.5D 阴影', sliders: [
+    S('阴影深度', '--shadow-depth', 0, 10, 0.5, 'px'),
+    S('侧面颜色1', '--shadow-side-color', 0, 360, 5, 'hue'),
+    S('侧面颜色2', '--shadow-side-color2', 0, 360, 5, 'hue'),
+    S('自家阴影方向', '--shadow-self-dir', 0, 3, 1, ''),
+    S('对家阴影方向', '--shadow-opp-dir', 0, 3, 1, ''),
+    S('上家阴影方向', '--shadow-left-dir', 0, 3, 1, ''),
+    S('下家阴影方向', '--shadow-right-dir', 0, 3, 1, ''),
+    S('高光强度', '--shadow-highlight', 0, 100, 5, '%'),
+  ] },
+
+  // ===== 操作按钮 =====
+  { name: '🎮 操作按钮', sliders: [
+    S('面板宽%', '--act-panel-w', 50, 100, 1, '%'),
+    S('内边距', '--act-panel-pad', 4, 24, 1, 'px'),
+    S('小按钮', '--act-btn-sz', 28, 64, 1, 'px'),
+    S('摸牌钮', '--act-draw-sz', 40, 100, 1, 'px'),
+    S('按钮间距', '--act-gap', 2, 16, 1, 'px'),
+    S('上边距', '--act-panel-mt', 0, 32, 1, 'px'),
+  ] },
+
+  // ===== 名字 =====
+  { name: '📛 名字', sliders: [
+    S('字号', '--lbl-sz', 0.5, 1.5, 0.05, 'rem'),
   ] },
 ]
 
-/* helpers */
-const sliders: Record<string, typeof groups[number]['sliders'][number]> = {}
+/* ---------- 搜索过滤 ---------- */
+const filteredGroups = computed(() => {
+  if (!search.value) return groups
+  const q = search.value.toLowerCase()
+  return groups.map(g => ({
+    ...g,
+    sliders: g.sliders.filter(s =>
+      s.label.toLowerCase().includes(q) || s.var.toLowerCase().includes(q)
+    )
+  })).filter(g => g.sliders.length > 0 || g.name.toLowerCase().includes(q))
+})
+
+/* ---------- helpers ---------- */
+const sliders: Record<string, Slider> = {}
 for (const g of groups) for (const s of g.sliders) sliders[s.var] = s
 
 function set(v: string, n: number) {
@@ -171,7 +412,7 @@ function fmt(v: string, n: number) {
   return n + (sliders[v]?.unit ?? '')
 }
 
-/* inject CSS */
+/* ---------- CSS 注入 ---------- */
 let styleEl: HTMLStyleElement | null = null
 function apply() {
   const root = document.documentElement
@@ -182,108 +423,274 @@ function apply() {
     document.head.appendChild(styleEl)
   }
   const u = (v: string) => vals[v]
-  const myDir = u('--my-dir') === 1 ? 'column' : 'row'
-  const myRev = u('--my-reverse') === 1 ? 'row-reverse' : (myDir === 'column' ? 'column-reverse' : 'row-reverse')
-  const othDir = u('--oth-dir') === 1 ? 'column' : 'row'
-  const othRev = u('--oth-reverse') === 1 ? 'row-reverse' : (othDir === 'column' ? 'column-reverse' : 'row-reverse')
-  const dlCols = Math.round(u('--dl-cols'))
-  const dlTsize = u('--dl-tsize')
-  const dlRowgap = u('--dl-rowgap')
-  const dlZoneRotate = u('--dl-zone-rotate')
-  const meldTileSz = u('--meld-tile-sz')
-  const meldTileH = Math.round(meldTileSz * 1.4)
+
+  // 排列方向
+  const selfDir = u('--self-hand-dir') === 1 ? 'column' : 'row'
+  const selfRev = u('--self-hand-reverse') === 1 ? (selfDir === 'column' ? 'column-reverse' : 'row-reverse') : selfDir
+  const selfMeldDir = u('--self-meld-dir') === 1 ? 'column' : 'row'
+
+  // 阴影方向映射: 0=下, 1=上, 2=左, 3=右
+  const shadowDirs = [
+    { bx: 0, by: 1, sx: 0, sy: -1 },  // 0=下
+    { bx: 0, by: -1, sx: 0, sy: 1 },   // 1=上
+    { bx: 1, by: 0, sx: -1, sy: 0 },   // 2=左
+    { bx: -1, by: 0, sx: 1, sy: 0 },   // 3=右
+  ]
+  const sd = (dir: number) => shadowDirs[dir % 4]
+
+  const selfSd = sd(u('--shadow-self-dir'))
+  const oppSd = sd(u('--shadow-opp-dir'))
+  const leftSd = sd(u('--shadow-left-dir'))
+  const rightSd = sd(u('--shadow-right-dir'))
+
+  const depth = u('--shadow-depth')
+  const sideC1 = u('--shadow-side-color')
+  const sideC2 = u('--shadow-side-color2')
+  const highlight = u('--shadow-highlight')
 
   styleEl.textContent = `
-    /* 座位 */
-    .seat-left { left: ${u('--seat-left')}% !important; }
-    .seat-right { right: ${u('--seat-right')}% !important; }
-    .seat-top { width: ${u('--seat-top-w')}% !important; }
-    .seat-bottom { transform: translateX(-50%) scale(${u('--seat-bottom-scale') / 100}) translateY(-5%) !important; }
+    /* ===== 牌桌 ===== */
+    .mahjong-table { max-width: ${u('--tbl-maxw')}px !important; aspect-ratio: ${u('--tbl-aspect')} / 1 !important; border-width: ${u('--tbl-border')}px !important; }
+    .table-felt { padding: ${u('--felt-pad')}px !important; }
 
-    /* 弃牌区位置 */
-    .discard-zone--top { top: ${u('--dl-top')}% !important; transform: translateX(-50%) rotate(${dlZoneRotate}deg) !important; }
-    .discard-zone--bottom { bottom: ${u('--dl-bottom')}% !important; transform: translateX(-50%) rotate(${dlZoneRotate}deg) !important; }
-    .discard-zone--left { left: calc(${u('--dl-left')}% + 20px) !important; transform: translateY(-50%) rotate(${dlZoneRotate + 90}deg) !important; }
-    .discard-zone--right { right: calc(${u('--dl-right')}% + 20px) !important; transform: translateY(-50%) rotate(${dlZoneRotate - 90}deg) !important; }
+    /* ===== 自家·手牌 ===== */
+    .player-hand {
+      gap: ${u('--self-hand-gap')}px !important;
+      max-width: ${u('--self-hand-maxw')}px !important;
+      flex-direction: ${selfDir} !important;
+      flex-wrap: ${u('--self-hand-rows') > 1 ? 'wrap' : 'nowrap'} !important;
+      transform: scale(${u('--self-hand-scale') / 100}) !important;
+    }
+    .seat-bottom { bottom: ${u('--self-hand-bottom')}% !important; transform: translateX(-50%) scale(${u('--self-hand-scale') / 100}) translateY(-5%) !important; }
+    .player-hand .tile {
+      width: ${u('--self-tile-w')}px !important;
+      height: ${u('--self-tile-h')}px !important;
+      transform: scale(${u('--self-tile-scale') / 100}) rotate(${u('--self-tile-rotate')}deg) !important;
+    }
 
-    /* 弃牌网格 */
-    .discards-grid { grid-template-columns: repeat(${dlCols}, ${dlTsize}px) !important; gap: ${u('--dl-gap')}px ${dlRowgap}px !important; }
-    .discards-grid .tile { width: ${dlTsize}px !important; height: ${Math.round(dlTsize * 1.4)}px !important; }
+    /* ===== 自家·门口牌 ===== */
+    .player-melds { gap: ${u('--self-meld-gap')}px !important; }
+    .player-melds .meld { gap: ${u('--self-meld-mgap')}px !important; flex-direction: ${selfMeldDir} !important; }
+    .player-melds .tile {
+      width: ${u('--self-meld-tile-w')}px !important;
+      height: ${u('--self-meld-tile-h')}px !important;
+      transform: rotate(${u('--self-meld-rotate')}deg) !important;
+    }
 
-    /* 自家手牌 */
-    .player-hand { gap: ${u('--my-tgap')}px !important; max-width: ${u('--my-maxw')}px !important; }
-    .player-hand .tile { transform: scale(${u('--my-tsize') / 48}) rotate(${u('--my-rotate')}deg) !important; }
+    /* ===== 自家·弃牌区 ===== */
+    .discard-zone--bottom {
+      bottom: ${u('--self-dl-top')}% !important;
+      transform: translateX(-50%) rotate(${u('--self-dl-rotate')}deg) !important;
+    }
+    .discard-zone--bottom .discards-grid {
+      grid-template-columns: repeat(${Math.round(u('--self-dl-cols'))}, ${u('--self-dl-tile-w')}px) !important;
+      gap: ${u('--self-dl-gap')}px ${u('--self-dl-rowgap')}px !important;
+    }
+    .discard-zone--bottom .tile {
+      width: ${u('--self-dl-tile-w')}px !important;
+      height: ${u('--self-dl-tile-h')}px !important;
+    }
 
-    /* 他人手牌 */
-    .other-tile { height: ${u('--oth-h')}px !important; width: ${u('--oth-w')}px !important; transform: rotate(${u('--oth-rotate')}deg) !important; }
-    .player-other-hand { gap: ${u('--oth-gap')}px !important; }
-    .player-other-melds { gap: ${u('--oth-mgap')}px !important; }
+    /* ===== 对家·手牌 ===== */
+    .seat-top {
+      width: ${u('--opp-hand-width')}% !important;
+      top: ${u('--opp-hand-top')}% !important;
+      transform: translateX(-50%) rotate(180deg) scale(${u('--opp-hand-scale') / 100}) !important;
+    }
+    .seat-top .tile {
+      width: ${u('--opp-hand-w')}px !important;
+      height: ${u('--opp-hand-h')}px !important;
+      transform: rotate(${u('--opp-hand-rotate')}deg) !important;
+    }
+    .seat-top .hand-segment { gap: ${u('--opp-hand-gap')}px !important; }
 
-    /* 门口牌 */
-    .player-melds { gap: ${u('--meld-gap')}px !important; }
-    .player-melds .tile { width: ${meldTileSz}px !important; height: ${meldTileH}px !important; }
+    /* ===== 对家·门口牌 ===== */
+    .seat-top .meld-group-h { gap: ${u('--opp-meld-gap')}px !important; }
+    .seat-top .meld-segment { gap: ${u('--opp-meld-mgap')}px !important; }
+    .seat-top .meld-group-h .tile {
+      width: ${u('--opp-meld-tile-w')}px !important;
+      height: ${u('--opp-meld-tile-h')}px !important;
+      transform: rotate(${u('--opp-meld-rotate')}deg) !important;
+    }
 
-    /* 名字 */
-    .player-name-label { font-size: ${u('--lbl-sz')}rem !important; }
+    /* ===== 对家·弃牌区 ===== */
+    .discard-zone--top {
+      top: ${u('--opp-dl-top')}% !important;
+      transform: translateX(-50%) rotate(${u('--opp-dl-rotate')}deg) !important;
+    }
+    .discard-zone--top .discards-grid {
+      grid-template-columns: repeat(${Math.round(u('--opp-dl-cols'))}, ${u('--opp-dl-tile-w')}px) !important;
+      gap: ${u('--opp-dl-gap')}px ${u('--opp-dl-rowgap')}px !important;
+    }
+    .discard-zone--top .tile {
+      width: ${u('--opp-dl-tile-w')}px !important;
+      height: ${u('--opp-dl-tile-h')}px !important;
+    }
 
-    /* 操作按钮 */
-    .action-panel { padding: ${u('--act-panel-pad')}px !important; width: ${u('--act-panel-w')}% !important; margin-top: ${u('--act-panel-mt')}px !important; }
+    /* ===== 上家·手牌 ===== */
+    .seat-left {
+      left: ${u('--left-hand-left')}% !important;
+      transform: scale(${u('--left-hand-scale') / 100}) !important;
+    }
+    .seat-left .tile {
+      width: ${u('--left-hand-w')}px !important;
+      height: ${u('--left-hand-h')}px !important;
+      transform: rotate(${u('--left-hand-rotate')}deg) !important;
+    }
+    .seat-left .hand-segment { gap: ${u('--left-hand-gap')}px !important; }
+
+    /* ===== 上家·门口牌 ===== */
+    .seat-left .meld-group-v { gap: ${u('--left-meld-gap')}px !important; }
+    .seat-left .meld-segment { gap: ${u('--left-meld-mgap')}px !important; }
+    .seat-left .meld-group-v .tile {
+      width: ${u('--left-meld-tile-w')}px !important;
+      height: ${u('--left-meld-tile-h')}px !important;
+      transform: rotate(${u('--left-meld-rotate')}deg) !important;
+    }
+
+    /* ===== 上家·弃牌区 ===== */
+    .discard-zone--left {
+      left: calc(${u('--left-dl-left')}% + 20px) !important;
+      transform: translateY(-50%) rotate(${u('--left-dl-rotate')}deg) !important;
+    }
+    .discard-zone--left .discards-grid {
+      grid-template-columns: repeat(${Math.round(u('--left-dl-cols'))}, ${u('--left-dl-tile-w')}px) !important;
+      gap: ${u('--left-dl-gap')}px ${u('--left-dl-rowgap')}px !important;
+    }
+    .discard-zone--left .tile {
+      width: ${u('--left-dl-tile-w')}px !important;
+      height: ${u('--left-dl-tile-h')}px !important;
+    }
+
+    /* ===== 下家·手牌 ===== */
+    .seat-right {
+      right: ${u('--right-hand-right')}% !important;
+      transform: scale(${u('--right-hand-scale') / 100}) !important;
+    }
+    .seat-right .tile {
+      width: ${u('--right-hand-w')}px !important;
+      height: ${u('--right-hand-h')}px !important;
+      transform: rotate(${u('--right-hand-rotate')}deg) !important;
+    }
+    .seat-right .hand-segment { gap: ${u('--right-hand-gap')}px !important; }
+
+    /* ===== 下家·门口牌 ===== */
+    .seat-right .meld-group-v { gap: ${u('--right-meld-gap')}px !important; }
+    .seat-right .meld-segment { gap: ${u('--right-meld-mgap')}px !important; }
+    .seat-right .meld-group-v .tile {
+      width: ${u('--right-meld-tile-w')}px !important;
+      height: ${u('--right-meld-tile-h')}px !important;
+      transform: rotate(${u('--right-meld-rotate')}deg) !important;
+    }
+
+    /* ===== 下家·弃牌区 ===== */
+    .discard-zone--right {
+      right: calc(${u('--right-dl-right')}% + 20px) !important;
+      transform: translateY(-50%) rotate(${u('--right-dl-rotate')}deg) !important;
+    }
+    .discard-zone--right .discards-grid {
+      grid-template-columns: repeat(${Math.round(u('--right-dl-cols'))}, ${u('--right-dl-tile-w')}px) !important;
+      gap: ${u('--right-dl-gap')}px ${u('--right-dl-rowgap')}px !important;
+    }
+    .discard-zone--right .tile {
+      width: ${u('--right-dl-tile-w')}px !important;
+      height: ${u('--right-dl-tile-h')}px !important;
+    }
+
+    /* ===== 牌墙 ===== */
+    .tile-wall { opacity: ${u('--wall-opacity') / 100} !important; }
+    .tile-slot {
+      width: ${u('--wall-tile-w')}px !important;
+      height: ${u('--wall-tile-h')}px !important;
+    }
+    .tile-slot--vertical {
+      width: ${u('--wall-tile-h')}px !important;
+      height: ${u('--wall-tile-w')}px !important;
+    }
+
+    /* ===== 2.5D 阴影 ===== */
+    .discard-zone--bottom .tile {
+      box-shadow:
+        ${selfSd.bx * depth}px ${selfSd.by * depth}px ${depth}px rgba(0,0,0,0.3),
+        ${selfSd.sx * (depth + 2)}px ${selfSd.sy * (depth + 2)}px 0 hsl(${sideC1}, 30%, 45%),
+        ${selfSd.sx * (depth + 4)}px ${selfSd.sy * (depth + 4)}px 0 hsl(${sideC2}, 25%, 35%) !important;
+    }
+    .discard-zone--top .tile {
+      box-shadow:
+        ${oppSd.bx * depth}px ${oppSd.by * depth}px ${depth}px rgba(0,0,0,0.3),
+        ${oppSd.sx * (depth + 2)}px ${oppSd.sy * (depth + 2)}px 0 hsl(${sideC1}, 30%, 45%),
+        ${oppSd.sx * (depth + 4)}px ${oppSd.sy * (depth + 4)}px 0 hsl(${sideC2}, 25%, 35%) !important;
+    }
+    .discard-zone--left .tile {
+      box-shadow:
+        ${leftSd.bx * depth}px ${leftSd.by * depth}px ${depth}px rgba(0,0,0,0.3),
+        ${leftSd.sx * (depth + 2)}px ${leftSd.sy * (depth + 2)}px 0 hsl(${sideC1}, 30%, 45%),
+        ${leftSd.sx * (depth + 4)}px ${leftSd.sy * (depth + 4)}px 0 hsl(${sideC2}, 25%, 35%) !important;
+    }
+    .discard-zone--right .tile {
+      box-shadow:
+        ${rightSd.bx * depth}px ${rightSd.by * depth}px ${depth}px rgba(0,0,0,0.3),
+        ${rightSd.sx * (depth + 2)}px ${rightSd.sy * (depth + 2)}px 0 hsl(${sideC1}, 30%, 45%),
+        ${rightSd.sx * (depth + 4)}px ${rightSd.sy * (depth + 4)}px 0 hsl(${sideC2}, 25%, 35%) !important;
+    }
+
+    /* ===== 操作按钮 ===== */
+    .action-panel {
+      padding: ${u('--act-panel-pad')}px !important;
+      width: ${u('--act-panel-w')}% !important;
+      margin-top: ${u('--act-panel-mt')}px !important;
+    }
     .action-btn--small { width: ${u('--act-btn-sz')}px !important; height: ${u('--act-btn-sz')}px !important; }
     .action-btn--draw { width: ${u('--act-draw-sz')}px !important; height: ${u('--act-draw-sz')}px !important; }
     .action-grid { gap: ${u('--act-gap')}px !important; }
     .action-grid-secondary { gap: ${u('--act-gap')}px !important; }
 
-    /* 牌桌 */
-    .mahjong-table { max-width: ${u('--table-w')}px !important; aspect-ratio: ${u('--table-aspect')} / 1 !important; }
-    .table-felt { padding: ${u('--felt-pad')}px !important; }
+    /* ===== 名字 ===== */
+    .player-name-label { font-size: ${u('--lbl-sz')}rem !important; }
   `
 }
 
 function resetAll() {
-  Object.assign(vals, defaultValues)
+  Object.assign(vals, D)
   apply()
 }
 
 async function copyCSS() {
   const u = (k: string) => vals[k]
-  const myDir = u('--my-dir') === 1 ? 'column' : 'row'
-  const othDir = u('--oth-dir') === 1 ? 'column' : 'row'
+  const selfDir = u('--self-hand-dir') === 1 ? 'column' : 'row'
   const css = `/* 告诉小虾米以下参数： */
-/* 座位 */
-.seat-left { left: ${u('--seat-left')}% }
-.seat-right { right: ${u('--seat-right')}% }
-.seat-top { width: ${u('--seat-top-w')}% }
-.seat-bottom { transform: translateX(-50%) scale(${u('--seat-bottom-scale') / 100}) }
-
-/* 弃牌区 */
-.discard-zone--top { top: ${u('--dl-top')}% }
-.discard-zone--bottom { bottom: ${u('--dl-bottom')}% }
-.discard-zone--left { left: calc(${u('--dl-left')}% + 20px) }
-.discard-zone--right { right: calc(${u('--dl-right')}% + 20px) }
-.discard-zone { transform: rotate(${u('--dl-zone-rotate')}deg) }
-
-/* 弃牌网格 */
-.discards-grid { grid-template-columns: repeat(${Math.round(u('--dl-cols'))}, ${u('--dl-tsize')}px); gap: ${u('--dl-gap')}px ${u('--dl-rowgap')}px; }
+/* 牌桌 */
+.mahjong-table { max-width: ${u('--tbl-maxw')}px; aspect-ratio: ${u('--tbl-aspect')}/1; }
 
 /* 自家手牌 */
-.player-hand { gap: ${u('--my-tgap')}px; max-width: ${u('--my-maxw')}px; }
-.player-hand .tile { transform: scale(${u('--my-tsize') / 48}) rotate(${u('--my-rotate')}deg); }
+.player-hand { gap: ${u('--self-hand-gap')}px; max-width: ${u('--self-hand-maxw')}px; flex-direction: ${selfDir}; }
+.player-hand .tile { width: ${u('--self-tile-w')}px; height: ${u('--self-tile-h')}px; transform: scale(${u('--self-tile-scale')/100}) rotate(${u('--self-tile-rotate')}deg); }
 
-/* 他人手牌 */
-.other-tile { height: ${u('--oth-h')}px; width: ${u('--oth-w')}px; transform: rotate(${u('--oth-rotate')}deg); }
-.player-other-hand { gap: ${u('--oth-gap')}px; }
-.player-other-melds { gap: ${u('--oth-mgap')}px; }
+/* 对家手牌 */
+.seat-top { width: ${u('--opp-hand-width')}%; top: ${u('--opp-hand-top')}%; }
+.seat-top .tile { width: ${u('--opp-hand-w')}px; height: ${u('--opp-hand-h')}px; transform: rotate(${u('--opp-hand-rotate')}deg); }
 
-/* 门口牌 */
-.player-melds { gap: ${u('--meld-gap')}px; }
+/* 上家手牌 */
+.seat-left { left: ${u('--left-hand-left')}%; }
+.seat-left .tile { width: ${u('--left-hand-w')}px; height: ${u('--left-hand-h')}px; transform: rotate(${u('--left-hand-rotate')}deg); }
+
+/* 下家手牌 */
+.seat-right { right: ${u('--right-hand-right')}%; }
+.seat-right .tile { width: ${u('--right-hand-w')}px; height: ${u('--right-hand-h')}px; transform: rotate(${u('--right-hand-rotate')}deg); }
+
+/* 弃牌区 */
+.discard-zone--bottom { bottom: ${u('--self-dl-top')}%; }
+.discard-zone--top { top: ${u('--opp-dl-top')}%; }
+.discard-zone--left { left: calc(${u('--left-dl-left')}% + 20px); }
+.discard-zone--right { right: calc(${u('--right-dl-right')}% + 20px); }
+
+/* 牌墙 */
+.tile-slot { width: ${u('--wall-tile-w')}px; height: ${u('--wall-tile-h')}px; }
 
 /* 操作按钮 */
 .action-panel { padding: ${u('--act-panel-pad')}px; width: ${u('--act-panel-w')}%; }
 .action-btn--small { width: ${u('--act-btn-sz')}px; height: ${u('--act-btn-sz')}px; }
-.action-btn--draw { width: ${u('--act-draw-sz')}px; height: ${u('--act-draw-sz')}px; }
-
-/* 牌桌 */
-.mahjong-table { max-width: ${u('--table-w')}px; aspect-ratio: ${u('--table-aspect')} / 1; }`
+.action-btn--draw { width: ${u('--act-draw-sz')}px; height: ${u('--act-draw-sz')}px; }`
   await navigator.clipboard.writeText(css)
 }
 </script>
@@ -291,13 +698,13 @@ async function copyCSS() {
 <style scoped>
 .layout-debug-panel {
   position: fixed; z-index: 9999;
-  width: 260px; background: #111118;
+  width: 280px; background: #111118;
   border: 1px solid #00ffaa66; border-radius: 8px;
   color: #eee; font-size: 12px;
   box-shadow: 0 8px 24px rgba(0,0,0,.7);
   user-select: none;
   transition: background .2s;
-  max-height: 85vh; overflow-y: auto;
+  max-height: 90vh; overflow-y: auto;
 }
 .collapsed { max-height: 38px; overflow: hidden; }
 .hdr {
@@ -308,15 +715,39 @@ async function copyCSS() {
 .hdr:active { cursor: grabbing; }
 .close { background: none; border: none; color: #f88; font-size: 16px; cursor: pointer; }
 .body { padding: 10px 12px 14px; }
-.grp { margin-bottom: 14px; }
+
+.search-row {
+  position: relative; margin-bottom: 10px;
+}
+.search-input {
+  width: 100%; padding: 6px 24px 6px 8px; border-radius: 6px;
+  border: 1px solid #333; background: #1a1a2e; color: #eee; font-size: 12px;
+  outline: none;
+}
+.search-input:focus { border-color: #00ffaa; }
+.search-clear {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: #888; cursor: pointer; font-size: 14px;
+}
+
+.grp { margin-bottom: 6px; }
 .grp-title {
   font-weight: 600; font-size: 11px; color: #00ffaa;
-  border-bottom: 1px solid #222; padding-bottom: 3px; margin-bottom: 6px;
+  padding: 6px 8px; cursor: pointer;
+  border-bottom: 1px solid #222; background: #151520;
+  border-radius: 6px 6px 0 0;
+  display: flex; align-items: center; gap: 4px;
+  user-select: none;
 }
-.row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
-.row label { min-width: 52px; font-size: 11px; color: #bbb; }
-.row input[type="range"] { flex: 1; }
-.v { font-family: ui-monospace, monospace; min-width: 42px; text-align: right; color: #888; }
+.grp-title:hover { background: #1a1a2e; }
+.grp-arrow { font-size: 9px; opacity: 0.6; }
+.grp-body { padding: 6px 8px 10px; background: #13131a; border-radius: 0 0 6px 6px; }
+
+.row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.row label { min-width: 60px; font-size: 10px; color: #bbb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row input[type="range"] { flex: 1; height: 14px; }
+.v { font-family: ui-monospace, monospace; min-width: 42px; text-align: right; color: #888; font-size: 10px; }
+
 .btns { display: flex; gap: 6px; margin-top: 10px; }
 .btns button {
   flex: 1; padding: 6px; font-size: 11px; background: #2a2a3e; color: #ccc;
