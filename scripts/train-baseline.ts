@@ -1683,8 +1683,11 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
   const winRates: Record<string, number> = {}
   for (const n of AI_NAMES) winRates[n] = (wins[n] || 0) / games
 
-  // 计算指标导向fitness
+  // 计算指标导向fitness（核心目标：压低流局率，提升进攻与胡牌）
   const drawRate = draws / games
+  const huRate = 1 - drawRate
+  const readyRate = games > 0 ? fightToLastGames / games : 0
+  const avgRounds = games > 0 ? totalRounds / games : 0
   const selfDrawRate = winGames > 0 ? selfDrawGames / winGames : 0
   const discardWinRate = winGames > 0 ? discardWinGames / winGames : 0
   const fightToLastRate = winGames > 0 ? fightToLastGames / Math.max(1, games - draws) : 0
@@ -1692,22 +1695,40 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
   const menqingWinRate = winGames > 0 ? menqingWinGames / winGames : 0
 
   let mf = 0
-  // 胡牌率 = 1 - drawRate（目标≥90%）
-  const huRate = 1 - drawRate
-  mf -= Math.max(0, drawRate - 0.10) * 2000       // 流局率惩罚翻倍（目标<10%）
-  mf += Math.max(0, huRate - 0.90) * 1000          // 胡牌率奖励翻倍
-  // 自摸率（目标40-60%，中心50%）
-  mf -= Math.max(0, Math.abs(selfDrawRate - 0.50) - 0.10) * 400
-  // 捉冲率（目标40-60%，中心50%）
-  mf -= Math.max(0, Math.abs(discardWinRate - 0.50) - 0.10) * 400
-  // 血战率（目标>80%）
-  mf -= Math.max(0, 0.80 - fightToLastRate) * 500
-  // 大牌率（目标3-8%）
-  if (bigHandRate < 0.03) mf -= (0.03 - bigHandRate) * 500
-  if (bigHandRate > 0.08) mf -= (bigHandRate - 0.08) * 500
-  // 门清胡牌率（目标7-12%）
-  if (menqingWinRate < 0.07) mf -= (0.07 - menqingWinRate) * 400
-  if (menqingWinRate > 0.12) mf -= (menqingWinRate - 0.12) * 400
+
+  // 1) 流局率重罚：>10% 后每+1% 扣 500；>50% 额外加倍
+  const drawExcess = Math.max(0, drawRate - 0.10)
+  let drawPenalty = drawExcess * 50000
+  if (drawRate > 0.50) drawPenalty *= 2
+  mf -= drawPenalty
+
+  // 2) 胡牌率重奖：每+1% 奖 500（以 50% 为基线）
+  mf += Math.max(0, huRate - 0.50) * 50000
+
+  // 3) 听牌率（readyRate）激励：<50% 惩罚，>80% 奖励
+  if (readyRate < 0.50) mf -= (0.50 - readyRate) * 20000
+  if (readyRate > 0.80) mf += (readyRate - 0.80) * 15000
+
+  // 4) 速度奖励：<30 回合奖励，>80 回合惩罚
+  if (avgRounds < 30) mf += (30 - avgRounds) * 400
+  if (avgRounds > 80) mf -= (avgRounds - 80) * 500
+
+  // 5) 自摸/捉冲平衡（低优先级，维持 40%-60%）
+  mf -= Math.max(0, Math.abs(selfDrawRate - 0.50) - 0.10) * 250
+  mf -= Math.max(0, Math.abs(discardWinRate - 0.50) - 0.10) * 250
+
+  // 血战率（保留轻量约束）
+  mf -= Math.max(0, 0.80 - fightToLastRate) * 300
+
+  // 6) 大牌率（目标 3%-8%）：当胡牌率<50% 时不奖励大牌，避免为大牌牺牲胡牌
+  if (huRate >= 0.50) {
+    if (bigHandRate < 0.03) mf -= (0.03 - bigHandRate) * 300
+    if (bigHandRate > 0.08) mf -= (bigHandRate - 0.08) * 300
+  }
+
+  // 门清胡牌率（保留但弱化）
+  if (menqingWinRate < 0.07) mf -= (0.07 - menqingWinRate) * 200
+  if (menqingWinRate > 0.12) mf -= (menqingWinRate - 0.12) * 200
 
   // 手牌类型分布（K哥目标：混一色40% 碰碰胡25% 清一色20% 清碰/风一色5% 风碰1%）
   if (winGames > 10) {
