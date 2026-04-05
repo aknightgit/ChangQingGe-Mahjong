@@ -241,6 +241,13 @@ const D: Record<string, number> = {
 
   // ===== 名字 =====
   '--lbl-sz': 0.75,
+
+  // ===== 游戏配置 =====
+  '--font-scale': 100,
+  '--ui-opacity': 100,
+  '--tile-gap': 0,
+  '--animation-speed': 1,
+  '--shadow-intensity': 50,
 }
 
 const vals = reactive({ ...D })
@@ -449,6 +456,15 @@ const groups: Group[] = [
   // ===== 名字 =====
   { name: '📛 名字', sliders: [
     S('字号', '--lbl-sz', 0.5, 1.5, 0.05, 'rem'),
+  ] },
+
+  // ===== 游戏配置 =====
+  { name: '🎮 游戏配置', sliders: [
+    S('字号缩放', '--font-scale', 50, 150, 1, '%'),
+    S('UI透明度', '--ui-opacity', 50, 100, 1, '%'),
+    S('全局牌间距', '--tile-gap', 0, 10, 0.5, 'px'),
+    S('动画速度', '--animation-speed', 0.1, 2, 0.1, 'x'),
+    S('阴影强度', '--shadow-intensity', 0, 100, 5, '%'),
   ] },
 ]
 
@@ -715,6 +731,18 @@ function apply() {
 
     /* ===== 名字 ===== */
     .player-name-label { font-size: ${u('--lbl-sz')}rem !important; }
+
+    /* ===== 游戏配置 ===== */
+    :root {
+      font-size: ${u('--font-scale')}% !important;
+      --global-ui-opacity: ${u('--ui-opacity') / 100} !important;
+      --global-tile-gap: ${u('--tile-gap')}px !important;
+      --global-animation-speed: ${u('--animation-speed')} !important;
+      --global-shadow-intensity: ${u('--shadow-intensity')}% !important;
+    }
+    .ui-element { opacity: var(--global-ui-opacity) !important; }
+    .tile { gap: var(--global-tile-gap) !important; }
+    .animated { transition-duration: calc(0.3s / var(--global-animation-speed)) !important; }
   `
 }
 
@@ -758,7 +786,10 @@ async function copyCSS() {
 /* 操作按钮 */
 .action-panel { padding: ${u('--act-panel-pad')}px; width: ${u('--act-panel-w')}%; }
 .action-btn--small { width: ${u('--act-btn-sz')}px; height: ${u('--act-btn-sz')}px; }
-.action-btn--draw { width: ${u('--act-draw-sz')}px; height: ${u('--act-draw-sz')}px; }`
+.action-btn--draw { width: ${u('--act-draw-sz')}px; height: ${u('--act-draw-sz')}px; }
+
+/* 游戏配置 */
+:root { font-size: ${u('--font-scale')}%; --global-ui-opacity: ${u('--ui-opacity') / 100}; --global-tile-gap: ${u('--tile-gap')}px; --global-animation-speed: ${u('--animation-speed')}; --global-shadow-intensity: ${u('--shadow-intensity')}%; }`
   await navigator.clipboard.writeText(css)
 }
 </script>

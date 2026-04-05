@@ -731,13 +731,15 @@ function checkAllTripletsWithoutWild(
  * @param winnerIndex 赢家位置
  * @param allPlayerIndices 所有存活玩家位置
  * @param mutualBailout 互包关系 Map<playerIndex, {partnerIndex, type: '三口'|'四口'}>
+ * @param discarderId 放冲者ID（捉冲时传入，自摸时忽略）
  */
 export function calculateSettlement(
   winnerScore: number,
   isSelfDrawn: boolean,
   winnerIndex: number,
   allPlayerIndices: number[],
-  mutualBailout?: Map<number, { partnerIndex: number; type: '三口' | '四口' }>
+  mutualBailout?: Map<number, { partnerIndex: number; type: '三口' | '四口' }>,
+  discarderId?: number
 ): Map<number, number> {
   const deltas = new Map<number, number>();
   
@@ -764,23 +766,35 @@ export function calculateSettlement(
       deltas.set(winnerIndex, (deltas.get(winnerIndex) || 0) + pay);
     }
   } else {
-    // 放冲：放冲者全额赔付，互包方也赔付
-    // 需要外部指定谁放冲
-    // 这里简化为所有未胡玩家均分
-    for (const idx of allPlayerIndices) {
-      if (idx === winnerIndex) continue;
-      
+    // 捉冲（放冲）：只有放冲者全额赔付
+    if (discarderId !== undefined && allPlayerIndices.includes(discarderId)) {
+      // 有指定放冲者：仅放冲者赔付
       let multiplier = 1;
       
-      const bailout = mutualBailout?.get(idx);
+      const bailout = mutualBailout?.get(discarderId);
       if (bailout && bailout.partnerIndex === winnerIndex) {
-        // 互包双方互相放冲 = ×2
-        multiplier = 2;
+        multiplier = bailout.type === '四口' ? 5 : 3;
       }
       
       const pay = winnerScore * multiplier;
-      deltas.set(idx, (deltas.get(idx) || 0) - pay);
+      deltas.set(discarderId, (deltas.get(discarderId) || 0) - pay);
       deltas.set(winnerIndex, (deltas.get(winnerIndex) || 0) + pay);
+    } else {
+      // 兼容旧调用：未传入 discarderId，沿用所有非赢家均摊
+      for (const idx of allPlayerIndices) {
+        if (idx === winnerIndex) continue;
+        
+        let multiplier = 1;
+        
+        const bailout = mutualBailout?.get(idx);
+        if (bailout && bailout.partnerIndex === winnerIndex) {
+          multiplier = 2;
+        }
+        
+        const pay = winnerScore * multiplier;
+        deltas.set(idx, (deltas.get(idx) || 0) - pay);
+        deltas.set(winnerIndex, (deltas.get(winnerIndex) || 0) + pay);
+      }
     }
   }
 

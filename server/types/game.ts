@@ -90,6 +90,8 @@ export interface Player {
   winOrder: number | null;
   winRound: number | null;
   winTimestamp: number | null;
+  isSelfDrawn?: boolean; // 是否自摸
+  discarderId?: string; // 捉冲时放冲者ID
   score: number;
 }
 

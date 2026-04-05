@@ -40,7 +40,7 @@
           <span
             v-if="meld.sourcePosition !== undefined"
             class="meld-arrow"
-            :class="`meld-arrow--${meld.type}`"
+            :class="[getSourceArrowClass(meld.sourcePosition)]"
           >{{ getSourceArrow(meld.sourcePosition) }}</span>
           <!-- 兼容旧字段 sourceIndex -->
           <span
@@ -103,10 +103,16 @@ const isFlowerMeld = (meld: Meld): boolean => {
 }
 
 // 吃碰箭头：根据sourcePosition（相对位置偏移）显示方向
-// 0=自己, 1=下家(右), 2=对家(上), 3=上家(左)
+// 0=自己(极少), 1=下家(右), 2=对家(上), 3=上家(左)
 function getSourceArrow(sourcePosition: number): string {
-  const arrows = ['自摸→', '←下家', '↑对家', '→上家']
+  const arrows = ['自摸', '←下', '↑对', '→上']
   return arrows[sourcePosition] || '?'
+}
+
+// 箭头颜色 class：按来源方向区分
+function getSourceArrowClass(sourcePosition: number): string {
+  const classes = ['meld-arrow--self', 'meld-arrow--lower', 'meld-arrow--opposite', 'meld-arrow--upper']
+  return classes[sourcePosition] || ''
 }
 
 // 弃牌区每行6张，自动换行（由CSS flex-wrap处理，无需computed）
@@ -293,7 +299,7 @@ const onPointerCancel = () => {
   vertical-align: middle;
 }
 
-/* 副露来源标记 */
+/* 副露来源标记（旧兼容） */
 .meld-source {
   display: inline-block;
   width: 8px;
@@ -302,6 +308,40 @@ const onPointerCancel = () => {
   margin-left: 2px;
   vertical-align: super;
   border: 1px solid rgba(255,255,255,0.5);
+}
+
+/* 吃碰来源箭头 */
+.meld-arrow {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 5px;
+  margin-left: 4px;
+  border-radius: 4px;
+  color: #fff;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* 下家来源 = 蓝色 */
+.meld-arrow--lower {
+  background: #1e88e5;
+}
+
+/* 对家来源 = 绿色 */
+.meld-arrow--opposite {
+  background: #43a047;
+}
+
+/* 上家来源 = 红色 */
+.meld-arrow--upper {
+  background: #e53935;
+}
+
+/* 自摸 = 灰色 */
+.meld-arrow--self {
+  background: #757575;
 }
 
 /* 互包警告 */

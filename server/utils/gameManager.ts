@@ -14,7 +14,7 @@ import {
 } from '../types/game';
 import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isFivePoison } from './tiles';
 import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
-import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier } from './scoring';
+import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier, calculateSettlement } from './scoring';
 import { randomUUID } from 'crypto';
 import { saveGameState, loadGameState, loadAllGameStates, deleteGameState } from './gamePersistence';
 import { MatchHistoryService } from '../services/matchHistoryService';
@@ -2196,6 +2196,10 @@ class GameManager {
 
     player.wonFan = scoreResult.baseFan;
     player.winHandType = scoreResult.handTypeName;
+    player.isSelfDrawn = isSelfDrawn;
+    if (!isSelfDrawn) {
+      player.discarderId = this.getLastDiscardPlayerId(game) ?? undefined;
+    }
 
     const remainingActive = game.players.filter(p => p.status === PlayerStatus.PLAYING).length;
     if (remainingActive <= 1) {
@@ -3168,7 +3172,52 @@ class GameManager {
         finalScores[player.id] = isWinner ? 1 : -1;
       }
     } else {
-      finalScores = calculateGameResult(game.players, winners);
+      // 精确赔付:每个赢家独立结算
+      // - 自摸:所有未胡玩家均摊赔付
+      // - 捉冲:只有放冲者全额赔付
+      finalScores = {};
+      for (const p of game.players) {
+        finalScores[p.id] = 0;
+      }
+
+      const activePlayerIndices = game.players.map((p, i) => i);
+      const mutualBailoutRelations = this.getMutualBailoutRelations(game.gameId);
+      // 构建 mutualBailout Map<playerIndex, {partnerIndex, type}>
+      const mutualBailout = new Map<number, { partnerIndex: number; type: '三口' | '四口' }>();
+      for (const rel of mutualBailoutRelations) {
+        const p1Idx = game.players.findIndex(p => p.id === rel.player1);
+        const p2Idx = game.players.findIndex(p => p.id === rel.player2);
+        if (p1Idx >= 0 && p2Idx >= 0) {
+          mutualBailout.set(p1Idx, { partnerIndex: p2Idx, type: rel.type });
+          mutualBailout.set(p2Idx, { partnerIndex: p1Idx, type: rel.type });
+        }
+      }
+
+      for (const winner of winners) {
+        const winnerIdx = game.players.findIndex(p => p.id === winner.id);
+        if (winnerIdx < 0) continue;
+
+        // 捉冲时找放冲者index
+        let discarderIdx: number | undefined;
+        if (!winner.isSelfDrawn && winner.discarderId) {
+          discarderIdx = game.players.findIndex(p => p.id === winner.discarderId);
+        }
+
+        const winnerScore = winner.wonFan;
+        const deltas = calculateSettlement(
+          winnerScore,
+          winner.isSelfDrawn ?? false,
+          winnerIdx,
+          activePlayerIndices,
+          mutualBailout,
+          discarderIdx
+        );
+
+        for (const [idx, delta] of deltas) {
+          const pid = game.players[idx].id;
+          finalScores[pid] = (finalScores[pid] ?? 0) + delta;
+        }
+      }
     }
 
     game.finalScores = finalScores;
