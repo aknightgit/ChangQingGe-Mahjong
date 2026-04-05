@@ -1983,7 +1983,7 @@ class GameManager {
       const robHandTypes = detectHandTypes(testHand, candidate.hand.exposedMelds, false, candidate.hand.flowerTiles.length, null, game.wildTileGroup);
       if (robHandTypes.length === 0) continue;
 
-      // 规则:若抢杠牌型为碰碰胡/混一色,门口必须有花牌
+      // 规则:若抢杠牌型为碰碰胡/混一色,门口必须有花牌或风箭刻或任意杠牌
       const flowerCount = candidate.hand.exposedMelds
         .flatMap(m => m.tiles)
         .filter(t => isFlower(t)).length;
@@ -1998,8 +1998,15 @@ class GameManager {
 
       const hasDaDiao = false; // 大吊已移除独立牌型
       const requiresFlowerGate = (handTypes.includes(HandType.ALL_TRIPLETS) || handTypes.includes(HandType.HALF_FLUSH)) && !hasDaDiao;
+      // 新规则：花牌 或 风箭刻 或 任意杠牌 满足其一即可
       const hasFlowerAtDoor = flowerCount > 0;
-      if (requiresFlowerGate && !hasFlowerAtDoor) continue;
+      const hasWindDragonTriplet = candidate.hand.exposedMelds.some(m =>
+        (m.type === MeldType.TRIPLET || m.type === MeldType.KONG) &&
+        m.tiles[0] && (isWind(m.tiles[0]) || isDragon(m.tiles[0]))
+      );
+      const hasAnyKong = candidate.hand.exposedMelds.some(m => m.type === MeldType.KONG);
+      const hasGatePass = hasFlowerAtDoor || hasWindDragonTriplet || hasAnyKong;
+      if (requiresFlowerGate && !hasGatePass) continue;
 
       robbers.push({
         playerId: candidate.id,
@@ -2623,7 +2630,7 @@ class GameManager {
       const testHand = [...player.hand.concealedTiles, discardedTile];
       const winCheck = canWin(testHand, player.hand.exposedMelds.length, isWildTile);
       if (winCheck.canWin) {
-        // 规则:碰碰胡/混一色捉冲需要门口有花;但"大吊"例外,可随时捉冲
+        // 规则:碰碰胡/混一色捉冲需要门口有花牌或风箭刻或任意杠牌;但"大吊"例外,可随时捉冲
         const flowerCount = player.hand.exposedMelds
           .flatMap(m => m.tiles)
           .filter(t => isFlower(t)).length;
@@ -2639,9 +2646,16 @@ class GameManager {
 
         const hasDaDiao = false; // 大吊已移除独立牌型
         const requiresFlowerGate = (handTypes.includes(HandType.ALL_TRIPLETS) || handTypes.includes(HandType.HALF_FLUSH)) && !hasDaDiao;
+        // 新规则：花牌 或 风箭刻 或 任意杠牌 满足其一即可
         const hasFlowerAtDoor = flowerCount > 0;
+        const hasWindDragonTriplet = player.hand.exposedMelds.some(m =>
+          (m.type === MeldType.TRIPLET || m.type === MeldType.KONG) &&
+          m.tiles[0] && (isWind(m.tiles[0]) || isDragon(m.tiles[0]))
+        );
+        const hasAnyKong = player.hand.exposedMelds.some(m => m.type === MeldType.KONG);
+        const hasGatePass = hasFlowerAtDoor || hasWindDragonTriplet || hasAnyKong;
 
-        if (!requiresFlowerGate || hasFlowerAtDoor) {
+        if (!requiresFlowerGate || hasGatePass) {
           actions.push(ActionType.HU);
         }
       }
