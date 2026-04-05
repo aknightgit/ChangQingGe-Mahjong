@@ -839,9 +839,6 @@ const handleAutoAction = () => {
     executeAction(ActionType.DRAW)
   }
   // 2. 有优先操作（吃/碰/杠/胡）→ 自动过
-  else if (showPass.value) {
-    onPass()
-  }
   // 3. 有摸到的牌但没出 → 自动打出摸到的牌
   else if (currentPlayer.value?.hand?.concealedTiles?.length) {
     const lastTile = currentPlayer.value.hand.concealedTiles.at(-1)
@@ -1449,7 +1446,6 @@ const showChow = computed(() => shouldShowActionButton(ActionType.CHOW))
 const showPeng = computed(() => shouldShowActionButton(ActionType.PENG))
 const showKong = computed(() => shouldShowActionButton(ActionType.KONG))
 const showHu = computed(() => shouldShowActionButton(ActionType.HU))
-const showPass = computed(() => availableActions.value.includes(ActionType.PASS))
 const showRebel = computed(() => availableActions.value.includes(ActionType.REBEL))
 const showThink = computed(() => availableActions.value.includes(ActionType.THINK))
 const thinkRemaining = computed(() => {
@@ -1764,7 +1760,6 @@ const hideActionButtonsNow = () => {
 const onChow = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-chow'); executeAction(ActionType.CHOW) }
 const onPeng = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-pong'); executeAction(ActionType.PENG) }
 const onKong = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-kong'); executeAction(ActionType.KONG) }
-const onPass = () => { resetAutoCount(); executeAction(ActionType.PASS) }
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); executeAction(ActionType.REBEL) }
 const onThink = () => { resetAutoCount(); executeAction(ActionType.THINK) }
 const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); executeAction(ActionType.CHEAT_HU) }
@@ -2820,12 +2815,6 @@ const forceDiscard = async (p: Player) => {
   50% { box-shadow: 0 0 18px rgba(239,83,80,0.8); }
 }
 
-.inline-action-btn--pass {
-  background: rgba(60, 60, 60, 0.85);
-  color: #fff;
-  border-color: rgba(255,255,255,0.1);
-  font-size: 0.75rem;
-}
 
 .inline-action-btn--rebel {
   background: linear-gradient(135deg, #dc2626, #b91c1c);
