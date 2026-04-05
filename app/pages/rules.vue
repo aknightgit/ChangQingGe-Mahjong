@@ -5,7 +5,7 @@
         <button class="ghost-button" @click="goBack">← 返回</button>
         <div>
           <h1>🀄 长清阁麻将规则</h1>
-          <p class="subtitle">完整规则速查手册</p>
+          <p class="subtitle">人人对战规则 v1.0 · 2026-04-05</p>
         </div>
       </header>
 
@@ -20,9 +20,9 @@
       </nav>
 
       <div class="rules-content">
-        <!-- 一、基础 -->
+        <!-- 一、基础配置 -->
         <section :id="'basic'" class="rule-section">
-          <h2>📋 基础规则</h2>
+          <h2>📋 基础配置</h2>
           <div class="rule-grid">
             <div class="rule-card">
               <h3>牌具</h3>
@@ -31,7 +31,7 @@
                 <li>万子 × 筒子 × 条子 各36张</li>
                 <li>风牌 16张（东南西北）</li>
                 <li>箭牌 12张（中发白）</li>
-                <li>花牌 8张（梅兰竹菊春夏秋冬）</li>
+                <li>花牌 8张（春夏秋冬梅兰竹菊）</li>
               </ul>
             </div>
             <div class="rule-card">
@@ -39,16 +39,19 @@
               <ul>
                 <li><strong>4人</strong>对局</li>
                 <li>庄家 <strong>14张</strong>，闲家 <strong>13张</strong></li>
-                <li>两颗骰子决定摸牌位置</li>
-                <li>可重复掷骰（默认2次）</li>
+                <li>骰子决定庄家</li>
+                <li><strong>血战到底</strong>：胡牌离场，剩1人或牌墙摸完结束</li>
               </ul>
             </div>
           </div>
         </section>
 
-        <!-- 二、操作 -->
+        <!-- 二、回合流程 -->
         <section :id="'actions'" class="rule-section">
-          <h2>🎮 操作与优先级</h2>
+          <h2>🎮 回合流程</h2>
+          <div class="flow-box">
+            <code>摸牌 → 可杠/可胡 → 打牌 → 他人抢牌窗口 → 下家摸牌</code>
+          </div>
           <div class="priority-list">
             <div class="priority-item" v-for="action in actions" :key="action.name"
               :style="{ borderLeftColor: action.color }">
@@ -64,7 +67,7 @@
           </div>
         </section>
 
-        <!-- 三、迟滞摸牌（抢牌窗口） -->
+        <!-- 三、决策犹豫期（抢牌窗口） -->
         <section :id="'freeze'" class="rule-section">
           <h2>⏰ 决策犹豫期（抢牌窗口）</h2>
           <div class="freeze-flow">
@@ -80,7 +83,7 @@
               <div class="freeze-icon">⚡</div>
               <div>
                 <strong>两个并行流程</strong>
-                <p>① 抢牌窗口：其他人可碰/杠/胡<br>② 下家等待决策期结束</p>
+                <p>① 抢牌窗口：其他人可碰/杠/胡<br>② 下家冻结等待，时间到自动摸牌</p>
               </div>
             </div>
             <div class="freeze-arrow">→</div>
@@ -88,7 +91,7 @@
               <div class="freeze-icon">🏁</div>
               <div>
                 <strong>谁先完成谁赢</strong>
-                <p>有人抢 → 接管回合<br>没人抢 → 下家自动摸牌</p>
+                <p>有人抢 → 立即执行，接管回合<br>没人抢 → 下家自动摸牌</p>
               </div>
             </div>
           </div>
@@ -97,26 +100,51 @@
           </div>
         </section>
 
-        <!-- 四、胡牌牌型 -->
+        <!-- 四、百搭系统 -->
+        <section :id="'wild'" class="rule-section">
+          <h2>🃏 百搭系统</h2>
+          <div class="rule-grid">
+            <div class="rule-card">
+              <h3>百搭确定</h3>
+              <ul>
+                <li>每局<strong>随机指定一张</strong>为百搭（不从牌墙移除）</li>
+                <li>百搭可替代任意牌参与胡牌</li>
+                <li>百搭打出后<strong>不可被吃/碰/杠</strong></li>
+                <li>百搭打出触发<strong>一圈冷冻</strong>（4人各出一张后解冻），期间不可吃/碰/捉冲</li>
+              </ul>
+            </div>
+            <div class="rule-card">
+              <h3>花牌百搭</h3>
+              <ul>
+                <li>百搭为春夏秋冬 → <strong>四张花牌全部为百搭</strong></li>
+                <li>百搭为梅兰竹菊 → <strong>四张花牌全部为百搭</strong></li>
+                <li>百搭花牌摸到后<strong>进入手牌</strong>（不放门口，不补花）</li>
+                <li>普通花牌摸到后放门口，等回合补花</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- 五、胡牌牌型 -->
         <section :id="'patterns'" class="rule-section">
           <h2>🏆 胡牌牌型</h2>
           <div class="pattern-table">
             <div class="pattern-row header">
-              <span>牌型</span><span>固定点数</span><span>说明</span>
+              <span>牌型</span><span>点数</span><span>说明</span>
             </div>
             <div class="pattern-row" v-for="p in handPatterns" :key="p.name"
               :class="{ 'is-highlight': p.points >= 20 }">
               <span class="pattern-name">{{ p.name }}</span>
-              <span class="pattern-points">{{ p.points }}点</span>
+              <span class="pattern-points">{{ p.points }}</span>
               <span class="pattern-desc">{{ p.desc }}</span>
             </div>
           </div>
           <div class="rule-note">
-            <strong>优先级</strong>：风碰(40) → 风一色(20) → 清碰(20) → 八花(10) → 清一色(10) → 混一色 → 碰碰胡 → 四百搭(10)
+            <strong>优先级</strong>：风碰(40) → 风一色(20) → 清碰(20) → 大吊(10) → 杠开(10) → 八花自摸(10) → 无花自摸(10) → 清一色(10) → 混碰(10) → 四百搭(10) → 混一色(公式) → 碰碰胡(公式)
           </div>
         </section>
 
-        <!-- 四、公式计算 -->
+        <!-- 六、公式计算 -->
         <section :id="'formula'" class="rule-section">
           <h2>🔢 公式计算（碰碰胡/混一色）</h2>
           <div class="formula-box">
@@ -139,207 +167,196 @@
               <h3>额外翻倍</h3>
               <ul>
                 <li>无百搭 → <strong>×2</strong></li>
-                <li>门清 → <strong>×2</strong></li>
+                <li>门清（无吃/碰/明杠，暗杠不破）→ <strong>×2</strong></li>
                 <li>可叠加！（最高 ×4）</li>
               </ul>
               <h3 style="margin-top: 10px">最终公式</h3>
-              <code class="formula-final">最终 = 牌型点 × 回合倍 × 全局倍 × 额外翻倍</code>
+              <code class="formula-final">最终点数 = 牌型点数 × 额外翻倍 × 全局倍数</code>
             </div>
           </div>
         </section>
 
-        <!-- 五、特殊规则 -->
-        <section :id="'special'" class="rule-section">
-          <h2>⚡ 特殊规则</h2>
-          <div class="rule-grid">
-            <div class="rule-card special-card rebel-card">
-              <h3>🚨 造反（五毒散）</h3>
-              <p>首轮摸牌后，手牌<strong>同时满足</strong>：</p>
-              <ul>
-                <li>万筒条三门都有</li>
-                <li>有风牌 + 有箭牌</li>
-                <li>无花牌 + 无百搭</li>
-                <li>无对子或刻子</li>
-              </ul>
-              <p class="special-effect">✨ 效果：本局结束，<strong>下局翻倍</strong>，造反者当庄</p>
-            </div>
-            <div class="rule-card special-card">
-              <h3>🔄 血战到底</h3>
-              <ul>
-                <li>胡牌玩家<strong>离场</strong></li>
-                <li>剩一人或牌墙摸完才结束</li>
-                <li>支持<strong>一炮多响</strong></li>
-              </ul>
-            </div>
-            <div class="rule-card special-card">
-              <h3>📦 包三家/包四家</h3>
-              <ul>
-                <li>吃/碰/杠同一人 <strong>3口 → ×3</strong></li>
-                <li>吃/碰/杠同一人 <strong>4口 → ×5</strong></li>
-                <li>互包放冲 → 统一 <strong>×2</strong></li>
-                <li>四口自摸 → 互包方付 <strong>×5</strong>，其余不付</li>
-              </ul>
-            </div>
-            <div class="rule-card special-card">
-              <h3>🃏 百搭规则</h3>
-              <ul>
-                <li>随机选一张（不移除牌墙）</li>
-                <li>可替代任意牌</li>
-                <li>打出百搭 → 不可吃碰杠</li>
-                <li>打出百搭 → 仅允许自摸</li>
-              </ul>
-            </div>
+        <!-- 七、捉冲/抢杠限制 -->
+        <section :id="'restriction'" class="rule-section">
+          <h2>🚧 捉冲/抢杠限制</h2>
+          <div class="rule-card special-card rebel-card">
+            <h3>有效番数要求</h3>
+            <p>碰碰胡/混一色捉冲或抢杠时，门口必须有<strong>有效番数</strong>之一：</p>
+            <ul>
+              <li>🌸 <strong>花牌</strong>（门口有花）</li>
+              <li>🌬️ <strong>风箭刻</strong>（风牌/箭牌的刻子或杠）</li>
+              <li>🎯 <strong>任意杠牌</strong>（明杠/暗杠/补杠均可）</li>
+            </ul>
+            <p class="special-effect">✅ 例外：大吊不受此限，可随时捉冲</p>
+            <p class="special-effect">✅ 例外：固定点数≥10的牌型不受此限</p>
           </div>
         </section>
 
-        <!-- 六、梁山聚义 -->
-        <section :id="'liangshan'" class="rule-section">
-          <h2>🔥 梁山聚义</h2>
-          <div class="rule-grid">
-            <div class="rule-card special-card rebel-card">
-              <h3>📜 聚义规则</h3>
-              <ul>
-                <li>仅<strong>4人全是真人</strong>时开启</li>
-                <li>有AI参与的局<strong>不显示</strong>此按钮</li>
-                <li>仅前<strong>3个回合</strong>可投票</li>
-                <li>每个活跃玩家可点击一次</li>
-                <li>点击后不可撤回</li>
-              </ul>
-            </div>
-            <div class="rule-card special-card">
-              <h3>🎯 投票机制</h3>
-              <ul>
-                <li>全员同意 → 本局<strong>立即结束</strong></li>
-                <li>下局全局倍数 <strong>×2</strong></li>
-                <li>未胡牌玩家标记为输</li>
-                <li>已胡牌玩家正常结算</li>
-              </ul>
-              <p class="special-effect">🔥 第1人 → "XXX 发起了梁山聚义！"</p>
-              <p class="special-effect">🔥 N人 → "有N名玩家响应了梁山聚义！"</p>
-              <p class="special-effect">🔥🔥🔥 全员 → "全员响应梁山聚义！本局结束，下把翻倍！"</p>
-            </div>
-            <div class="rule-card special-card">
-              <h3>💰 被聚义QJ线</h3>
-              <ul>
-                <li>建房时可设置（默认 <strong>1000</strong>）</li>
-                <li>累积赢分超过QJ线的玩家</li>
-                <li><strong>无否决权</strong>，自动视为同意</li>
-                <li>仅计算有效战绩（纯人类对局）</li>
-              </ul>
-              <p class="special-effect">⚠️ 已经赢真人玩家超过设定数字的人类玩家，没有"梁山聚义"的否决权，只能被动接受。</p>
-            </div>
-          </div>
-        </section>
-
-        <!-- 七、杠与抢杠 -->
+        <!-- 八、杠与抢杠 -->
         <section :id="'kong'" class="rule-section">
           <h2>🎯 杠与抢杠</h2>
           <div class="rule-grid">
             <div class="rule-card">
               <h3>杠的类型</h3>
               <ul>
-                <li><strong>暗杠</strong>：手里4张，不公开，不破门清</li>
-                <li><strong>明杠</strong>：别人打出第4张</li>
-                <li><strong>补杠</strong>：碰后自摸第4张</li>
-                <li><strong>杠花</strong>：花牌自动补牌</li>
+                <li><strong>暗杠</strong>：手里4张，不露牌面，不破门清</li>
+                <li><strong>明杠</strong>：他人打出第4张</li>
+                <li><strong>补杠</strong>：门口刻子 + 自摸第4张</li>
               </ul>
             </div>
             <div class="rule-card">
               <h3>抢杠</h3>
               <ul>
-                <li>仅<strong>自摸补杠</strong>可被抢</li>
-                <li>手牌暗杠不可抢</li>
-                <li>碰碰胡/混一色抢杠需<strong>门口有花</strong></li>
-                <li>抢杠结算：<strong>×3</strong></li>
-                <li>杠开：固定 <strong>10点</strong></li>
+                <li>仅<strong>补杠</strong>可被抢杠</li>
+                <li>暗杠/明杠<strong>不可抢</strong></li>
+                <li>抢杠结算：<strong>牌型点数 × 3</strong>，仅杠家赔付</li>
+                <li>杠开（杠后补牌自摸）：固定 <strong>10点</strong></li>
               </ul>
             </div>
           </div>
         </section>
 
-        <!-- 七、翻倍系统 -->
-        <section :id="'multiplier'" class="rule-section">
-          <h2>✖️ 翻倍系统</h2>
+        <!-- 九、互包规则 -->
+        <section :id="'bao'" class="rule-section">
+          <h2>📦 互包规则（包三/包四）</h2>
           <div class="rule-grid">
             <div class="rule-card">
-              <h3>回合倍数（骰子）</h3>
+              <h3>触发条件</h3>
+              <ul>
+                <li>吃/碰/杠同一人 <strong>3口 → ×3</strong></li>
+                <li>吃/碰/杠同一人 <strong>4口 → ×5</strong></li>
+              </ul>
+            </div>
+            <div class="rule-card">
+              <h3>结算规则</h3>
+              <ul>
+                <li>互包双方互相放冲 → 统一 <strong>×2</strong></li>
+                <li>第三方放冲 → 放冲者×1，互包输家向胜者×1</li>
+                <li>自摸（三口）→ 互包输家×3，其他玩家×1</li>
+                <li>自摸（四口）→ 互包输家×5，其他玩家<strong>不赔付</strong></li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- 十、点数结算 -->
+        <section :id="'multiplier'" class="rule-section">
+          <h2>✖️ 点数结算</h2>
+          <div class="formula-box">
+            <code>全局倍数 = min(8, 骰子倍数 × 流局倍数 × 继承倍数)</code>
+          </div>
+          <div class="rule-grid">
+            <div class="rule-card">
+              <h3>骰子倍数</h3>
               <ul>
                 <li>1+1 或 4+4 → <strong>×4</strong></li>
                 <li>其他对子 → <strong>×2</strong></li>
-                <li>1+4 → <strong>×2</strong></li>
-                <li>其他组合 → <strong>×1</strong></li>
+                <li>其他 → <strong>×1</strong></li>
               </ul>
             </div>
             <div class="rule-card">
-              <h3>全局倍数（跨局累积）</h3>
+              <h3>流局与继承</h3>
               <ul>
                 <li>流局 → 下局 <strong>×2</strong></li>
                 <li>造反 → 下局 <strong>×2</strong></li>
-                <li>可叠加，<strong>上限 ×8</strong></li>
+                <li>封顶×8后，翻倍因子继续后台继承到下局</li>
+                <li>非流局/非造反结局时，流局倍数和继承倍数恢复×1</li>
               </ul>
             </div>
           </div>
         </section>
 
-        <!-- 八、门清与无花自摸 -->
-        <section :id="'bonus'" class="rule-section">
-          <h2>🌟 加成牌型</h2>
+        <!-- 十一、特色玩法 -->
+        <section :id="'special'" class="rule-section">
+          <h2>⚡ 特色玩法</h2>
           <div class="rule-grid">
-            <div class="rule-card">
-              <h3>门清</h3>
+            <div class="rule-card special-card rebel-card">
+              <h3>🚨 造反（五毒散）</h3>
+              <p>首轮摸满手牌，<strong>同时满足</strong>：</p>
               <ul>
-                <li>没有吃/碰/明杠</li>
-                <li>暗杠和杠花<strong>不破</strong>门清</li>
-                <li>胡牌时<strong>额外 ×2</strong></li>
+                <li>筒/万/条三门都有</li>
+                <li>有风牌 + 有箭牌</li>
+                <li>无花牌、无百搭、无对子/刻子</li>
+              </ul>
+              <p class="special-effect">✨ 效果：本局结束 → 下局全局倍数 ×2 → 造反者成庄家</p>
+            </div>
+            <div class="rule-card special-card">
+              <h3>🔥 梁山聚义</h3>
+              <ul>
+                <li>仅<strong>4人全真人</strong>局，前3回合可发起</li>
+                <li>累积赢分超过 QJ线（默认4000）的玩家<strong>无否决权</strong></li>
+                <li>全员通过 → 本局结束，下局翻倍</li>
               </ul>
             </div>
-            <div class="rule-card">
-              <h3>无花自摸（10点）</h3>
+            <div class="rule-card special-card">
+              <h3>🙏 谢谢带头大哥</h3>
               <ul>
-                <li>碰碰胡或混一色</li>
-                <li><strong>自摸</strong>胡牌</li>
-                <li>门口无花牌</li>
-                <li>手牌无风向刻/杠</li>
+                <li>某玩家打出某张牌</li>
+                <li>随后<strong>同回合内其他3玩家全部打出同样牌</strong></li>
+                <li>该玩家赔付其余三家每家 <strong>10分</strong>（胡牌结算时一起扣除，带备注）</li>
+              </ul>
+            </div>
+            <div class="rule-card special-card">
+              <h3>🪑 换座</h3>
+              <ul>
+                <li>有效输分达到 QJ线（默认4000）可发起</li>
+                <li>输4000=1次，输8000=2次，输12000=3次（最多10次）</li>
+                <li>下一局开始前生效</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- 十二、花牌规则 -->
+        <section :id="'flower'" class="rule-section">
+          <h2>🌸 花牌规则</h2>
+          <div class="rule-card">
+            <ul>
+              <li>摸到花牌 → 放入副露区 → 从牌墙<strong>尾部</strong>补牌</li>
+              <li>补到花牌 → 继续补，直到非花牌</li>
+              <li>花牌不参与胡牌牌型判断</li>
+              <li><strong>八花自摸</strong>：独家摸齐8朵花 + 自摸 = 固定10点</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- 十三、流局 -->
+        <section :id="'draw'" class="rule-section">
+          <h2>🔄 流局</h2>
+          <div class="rule-card">
+            <ul>
+              <li>牌墙摸完无人胡牌 → <strong>流局</strong></li>
+              <li>流局 → 下局全局倍数 <strong>×2</strong></li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- 十四、AI与超时规则 -->
+        <section :id="'ai'" class="rule-section">
+          <h2>🤖 AI与超时规则</h2>
+          <div class="rule-grid">
+            <div class="rule-card special-card">
+              <h3>⏱️ 超时规则</h3>
+              <ul>
+                <li>摸牌后 <strong>60秒</strong> 未出牌 → 自动打出摸到的牌</li>
+                <li>连续 <strong>2次</strong> 超时 → AI 接管该玩家</li>
+                <li>点击「我回来了」恢复控制</li>
+              </ul>
+            </div>
+            <div class="rule-card special-card rebel-card">
+              <h3>⚠️ AI接管惩罚</h3>
+              <ul>
+                <li>本局被AI接管的玩家</li>
+                <li>赢牌时得分 <strong>÷2</strong>（少收一半）</li>
+                <li>下局恢复正常</li>
               </ul>
             </div>
           </div>
         </section>
       </div>
 
-      <!-- 九、AI与超时规则 -->
-      <section :id="'ai'" class="rule-section">
-        <h2>🤖 AI与超时规则</h2>
-        <div class="rule-grid">
-          <div class="rule-card special-card">
-            <h3>⏱️ 超时规则</h3>
-            <ul>
-              <li>出牌倒计时 <strong>60秒</strong></li>
-              <li>超时自动打出摸到的牌</li>
-              <li>连续 2次 超时 → AI接管</li>
-            </ul>
-          </div>
-          <div class="rule-card special-card rebel-card">
-            <h3>⚠️ AI接管惩罚</h3>
-            <ul>
-              <li>本局被AI接管的玩家</li>
-              <li>赢牌时得分 <strong>÷2</strong>（少收一半）</li>
-              <li>惩罚仅对<strong>赢方</strong>生效</li>
-              <li>手动点击"托管"也触发此惩罚</li>
-            </ul>
-          </div>
-          <div class="rule-card special-card">
-            <h3>🪑 离席与托管</h3>
-            <ul>
-              <li><strong>暂时离席</strong>：下把起身，位置空出</li>
-              <li><strong>托管</strong>：AI接管出牌，继续游戏</li>
-              <li>托管中可点击"我回来了"恢复</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
       <footer class="rules-footer">
-        <p>长清阁麻将 · 规则速查 v2.4</p>
+        <p>长清阁麻将 · 人人对战规则 v1.0</p>
         <button class="ghost-button" @click="goBack">返回</button>
       </footer>
     </div>
@@ -350,7 +367,6 @@
 const router = useRouter()
 
 const goBack = () => {
-  // 返回上一页，如果没有历史则回首页
   if (window.history.length > 1) {
     router.back()
   } else {
@@ -362,15 +378,18 @@ const activeSection = ref('basic')
 
 const sections = [
   { id: 'basic', title: '基础', icon: '📋' },
-  { id: 'actions', title: '操作', icon: '🎮' },
-  { id: 'freeze', title: '迟滞', icon: '❄️' },
+  { id: 'actions', title: '流程', icon: '🎮' },
+  { id: 'freeze', title: '犹豫期', icon: '⏰' },
+  { id: 'wild', title: '百搭', icon: '🃏' },
   { id: 'patterns', title: '牌型', icon: '🏆' },
   { id: 'formula', title: '公式', icon: '🔢' },
-  { id: 'special', title: '特殊', icon: '⚡' },
-  { id: 'liangshan', title: '聚义', icon: '🔥' },
+  { id: 'restriction', title: '捉冲限制', icon: '🚧' },
   { id: 'kong', title: '杠', icon: '🎯' },
-  { id: 'multiplier', title: '翻倍', icon: '✖️' },
-  { id: 'bonus', title: '加成', icon: '🌟' },
+  { id: 'bao', title: '互包', icon: '📦' },
+  { id: 'multiplier', title: '结算', icon: '✖️' },
+  { id: 'special', title: '特色', icon: '⚡' },
+  { id: 'flower', title: '花牌', icon: '🌸' },
+  { id: 'draw', title: '流局', icon: '🔄' },
   { id: 'ai', title: 'AI规则', icon: '🤖' },
 ]
 
@@ -383,25 +402,26 @@ const scrollTo = (id: string) => {
 }
 
 const actions = [
-  { name: '胡', priority: 1, desc: '自摸/捉冲/抢杠', color: '#ef5350' },
+  { name: '自摸', priority: 1, desc: '自己摸牌成胡', color: '#ef5350' },
+  { name: '捉冲', priority: 1, desc: '他人打牌成胡', color: '#ef5350' },
   { name: '杠', priority: 2, desc: '明杠/暗杠/补杠', color: '#ab47bc' },
-  { name: '碰', priority: 3, desc: '任意家打出第3张', color: '#ff9800' },
+  { name: '碰', priority: 3, desc: '任意家打牌可碰', color: '#ff9800' },
   { name: '吃', priority: 4, desc: '仅上家打出的牌', color: '#42a5f5' },
 ]
 
 const handPatterns = [
-  { name: '风碰', points: 40, desc: '全风牌 + 碰碰胡' },
-  { name: '风一色', points: 20, desc: '全部是风牌' },
-  { name: '清碰', points: 20, desc: '清一色 + 碰碰胡' },
-  { name: '八花自摸', points: 10, desc: '手牌+副露共8朵花' },
-  { name: '清一色', points: 10, desc: '同一种花色' },
-  { name: '杠开', points: 10, desc: '杠牌/杠花后补牌自摸' },
-  { name: '无花自摸', points: 10, desc: '碰碰胡/混一色+无花+自摸' },
-  { name: '四百搭', points: 10, desc: '手牌有4张百搭' },
-  { name: '大吊', points: 10, desc: '手牌仅剩单张听牌' },
-  { name: '混碰', points: 10, desc: '混一色 + 碰碰胡' },
-  { name: '混一色', points: '-', desc: '一门花色 + 风/箭（公式计算）' },
-  { name: '碰碰胡', points: '-', desc: '全是刻子/对子（公式计算）' },
+  { name: '风碰', points: '40', desc: '风一色 + 碰碰胡' },
+  { name: '风一色', points: '20', desc: '全风牌/箭牌' },
+  { name: '清碰', points: '20', desc: '清一色 + 碰碰胡' },
+  { name: '大吊', points: '10', desc: '手牌仅剩1张单听' },
+  { name: '杠开', points: '10', desc: '杠后补牌自摸' },
+  { name: '八花自摸', points: '10', desc: '独家摸齐8朵花 + 自摸' },
+  { name: '无花自摸', points: '10', desc: '碰碰胡/混一色 + 自摸 + 门口无花 + 无风向刻杠' },
+  { name: '清一色', points: '10', desc: '仅一门花色' },
+  { name: '混碰', points: '10', desc: '混一色 + 碰碰胡' },
+  { name: '四百搭', points: '10', desc: '手牌有4张百搭' },
+  { name: '混一色', points: '公式', desc: '一门花色 + 字牌' },
+  { name: '碰碰胡', points: '公式', desc: '全刻子 + 对子' },
 ]
 </script>
 
@@ -545,6 +565,21 @@ const handPatterns = [
   font-size: 0.85rem;
   margin-top: 8px;
   color: #ffd36a;
+}
+
+/* 流程框 */
+.flow-box {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.flow-box code {
+  font-size: 1rem;
+  color: #ffd36a;
+  font-weight: 600;
 }
 
 /* 操作优先级 */
