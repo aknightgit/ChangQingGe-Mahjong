@@ -57,6 +57,11 @@
             <p class="approval-title">{{ actionApprovalEvent.requesterAction === '吃' ? '吃碰/胡冲突' : actionApprovalEvent.requesterAction === '碰' ? '碰胡冲突' : '杠胡冲突' }}！</p>
             <p class="approval-sub">{{ actionApprovalEvent.requesterName }} 要{{ actionApprovalEvent.requesterAction }}这张牌</p>
             <p class="approval-question">你要用{{ actionApprovalEvent.availableActions.map(a => a === 'hu' ? '胡' : a === 'peng' ? '碰' : '杠').join('/') }}吗？</p>
+            <!-- 3秒倒计时 -->
+            <div class="approval-countdown" :class="{ 'approval-countdown--urgent': approvalCountdownRatio < 0.3 }">
+              <div class="approval-countdown-bar" :style="{ width: `${approvalCountdownRatio * 100}%` }"></div>
+              <span class="approval-countdown-text">{{ approvalCountdownSec }}s</span>
+            </div>
             <div class="approval-buttons">
               <button
                 v-if="actionApprovalEvent.availableActions.includes('hu')"
@@ -1640,6 +1645,30 @@ const isMyApprovalWaiting = computed(() => {
   if (!myPending) return false
   return actionApprovalEvent.value.candidatePlayerId !== currentPlayer.value?.id
 })
+
+// 审批弹窗倒计时（3秒）
+const APPROVAL_COUNTDOWN_MS = 3000
+const approvalCountdownStart = ref(0)
+const approvalCountdownRatio = computed(() => {
+  if (!actionApprovalEvent.value || approvalCountdownStart.value === 0) return 1
+  const elapsed = Date.now() - approvalCountdownStart.value
+  return Math.max(0, 1 - elapsed / APPROVAL_COUNTDOWN_MS)
+})
+const approvalCountdownSec = computed(() => {
+  return Math.ceil(approvalCountdownRatio.value * 3)
+})
+
+// 监听审批事件，重置倒计时
+watch(
+  () => actionApprovalEvent.value?.timestamp,
+  (ts) => {
+    if (ts) {
+      approvalCountdownStart.value = Date.now()
+    } else {
+      approvalCountdownStart.value = 0
+    }
+  }
+)
 watch(
   [
     () => gameState.value?.pendingActions,
@@ -3329,6 +3358,40 @@ const forceDiscard = async (p: Player) => {
 .approval-btn--kong { background: linear-gradient(135deg, #E65100, #FF9800); color: #fff; border-color: rgba(255,152,0,0.5); }
 .approval-btn--peng { background: linear-gradient(135deg, #1565C0, #42A5F5); color: #fff; border-color: rgba(66,165,245,0.5); }
 .approval-btn--pass { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.6); border-color: rgba(255,255,255,0.2); }
+
+/* ===== 审批倒计时 ===== */
+.approval-countdown {
+  position: relative;
+  width: 100%;
+  height: 24px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 12px;
+  margin: 8px 0;
+  overflow: hidden;
+}
+.approval-countdown-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #4CAF50, #8BC34A);
+  border-radius: 12px;
+  transition: width 0.1s linear, background 0.3s;
+}
+.approval-countdown--urgent .approval-countdown-bar {
+  background: linear-gradient(90deg, #f44336, #FF5722);
+}
+.approval-countdown-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  z-index: 1;
+}
 
 /* ===== 审批等待提示 ===== */
 .approval-waiting-overlay {
