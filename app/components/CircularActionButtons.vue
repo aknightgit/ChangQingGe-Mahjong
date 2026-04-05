@@ -101,17 +101,7 @@
         @click="$emit('action', 'liangshan')"
       >🔥</button>
 
-      <!-- 过 -->
-      <button
-        v-if="hasPass"
-        class="action-btn action-btn--small action-btn--pass"
-        :class="{
-          'action-btn--active': hasPass,
-          'action-btn--highlight': hasPass && !isDelaying
-        }"
-        :disabled="!hasPass || isDelaying || isInteractionLocked || !isConnected"
-        @click="$emit('action', 'pass')"
-      >过</button>
+
     </div>
 
   </div>
@@ -157,9 +147,8 @@ const hasHu = computed(() => props.availableActions.includes(ActionType.HU))
 const hasThink = computed(() => props.availableActions.includes(ActionType.THINK))
 const hasRebel = computed(() => props.availableActions.includes(ActionType.REBEL))
 const hasLiangShan = computed(() => props.availableActions.includes(ActionType.LIANG_SHAN))
-const hasPass = computed(() => props.availableActions.includes(ActionType.PASS))
 
-const hasAnySecondaryAction = computed(() => hasThink.value || hasRebel.value || hasLiangShan.value || hasPass.value)
+const hasAnySecondaryAction = computed(() => hasThink.value || hasRebel.value || hasLiangShan.value)
 
 // 使用 props（父组件传入实际值）
 const effectiveCanUseThink = computed(() => props.canUseThink ?? true)
@@ -426,14 +415,7 @@ onUnmounted(() => {
   align-items: center;
 }
 
-/* 过按钮 */
-.action-btn--pass {
-  width: 44px; height: 44px; border-radius: 50%; font-size: 0.85rem;
-  background: rgba(80, 80, 80, 0.6); color: #ccc;
-  border: 1.5px solid rgba(255, 255, 255, 0.15);
-}
-.action-btn--pass.action-btn--highlight { border-color: rgba(255, 200, 50, 0.6); color: #ffd36a; }
-.action-btn--pass:disabled { opacity: 0.3; cursor: not-allowed; }
+
 
 /* 慢按钮（紫色） */
 .action-btn--think {

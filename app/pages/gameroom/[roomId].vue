@@ -2005,9 +2005,6 @@ const handleCircularAction = (type: string) => {
     case 'liangshan':
       onLiangShan()
       break
-    case 'pass':
-      onPass()
-      break
   }
 }
 
