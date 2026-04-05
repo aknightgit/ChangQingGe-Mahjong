@@ -631,6 +631,9 @@
                 :highlight-delay-ms="ACTION_HIGHLIGHT_DELAY_MS"
                 :freeze-until="currentFreezeUntil"
                 :hesitation-window="hesitationWindow"
+                :think-remaining="thinkRemaining"
+                :can-use-think="canUseThink"
+                :has-voted-liangshan="hasVotedLiangShan"
                 @action="handleCircularAction"
               />
           </div>
@@ -1992,6 +1995,18 @@ const handleCircularAction = (type: string) => {
       break
     case 'hu':
       onHu()
+      break
+    case 'think':
+      onThinkPopup()
+      break
+    case 'rebel':
+      onRebel()
+      break
+    case 'liangshan':
+      onLiangShan()
+      break
+    case 'pass':
+      onPass()
       break
   }
 }

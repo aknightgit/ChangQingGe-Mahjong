@@ -61,6 +61,59 @@
       <span class="draw-label">摸</span>
     </button>
 
+    <!-- 第二行：特殊操作按钮 -->
+    <div class="action-grid-secondary" v-if="hasAnySecondaryAction">
+      <!-- 慢（容我想一想） -->
+      <button
+        v-if="hasThink"
+        class="action-btn action-btn--small action-btn--think"
+        :class="{
+          'action-btn--active': hasThink,
+          'action-btn--highlight': hasThink && !isDelaying,
+          'action-btn--disabled': !canUseThink
+        }"
+        :disabled="!hasThink || !effectiveCanUseThink || isDelaying || isInteractionLocked || !isConnected"
+        @click="$emit('action', 'think')"
+      >慢{{ effectiveThinkRemaining > 0 ? effectiveThinkRemaining : '' }}</button>
+
+      <!-- 造反 -->
+      <button
+        v-if="hasRebel"
+        class="action-btn action-btn--small action-btn--rebel"
+        :class="{
+          'action-btn--active': hasRebel,
+          'action-btn--highlight': hasRebel && !isDelaying
+        }"
+        :disabled="!hasRebel || isDelaying || isInteractionLocked || !isConnected"
+        @click="$emit('action', 'rebel')"
+      >🚨</button>
+
+      <!-- 梁山聚义 -->
+      <button
+        v-if="hasLiangShan"
+        class="action-btn action-btn--small action-btn--liangshan"
+        :class="{
+          'action-btn--active': hasLiangShan,
+          'action-btn--highlight': hasLiangShan && !isDelaying,
+          'action-btn--voted': hasVotedLiangShan
+        }"
+        :disabled="!hasLiangShan || isDelaying || isInteractionLocked || !isConnected || effectiveHasVotedLiangShan"
+        @click="$emit('action', 'liangshan')"
+      >🔥</button>
+
+      <!-- 过 -->
+      <button
+        v-if="hasPass"
+        class="action-btn action-btn--small action-btn--pass"
+        :class="{
+          'action-btn--active': hasPass,
+          'action-btn--highlight': hasPass && !isDelaying
+        }"
+        :disabled="!hasPass || isDelaying || isInteractionLocked || !isConnected"
+        @click="$emit('action', 'pass')"
+      >过</button>
+    </div>
+
   </div>
 </template>
 
@@ -78,6 +131,9 @@ interface Props {
   compact?: boolean
   freezeUntil?: number
   hesitationWindow?: number
+  thinkRemaining?: number
+  canUseThink?: boolean
+  hasVotedLiangshan?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -96,6 +152,19 @@ const hasKong = computed(() =>
   props.availableActions.includes(ActionType.EXTENDED_KONG)
 )
 const hasHu = computed(() => props.availableActions.includes(ActionType.HU))
+
+// 特殊操作按钮
+const hasThink = computed(() => props.availableActions.includes(ActionType.THINK))
+const hasRebel = computed(() => props.availableActions.includes(ActionType.REBEL))
+const hasLiangShan = computed(() => props.availableActions.includes(ActionType.LIANG_SHAN))
+const hasPass = computed(() => props.availableActions.includes(ActionType.PASS))
+
+const hasAnySecondaryAction = computed(() => hasThink.value || hasRebel.value || hasLiangShan.value || hasPass.value)
+
+// 使用 props（父组件传入实际值）
+const effectiveCanUseThink = computed(() => props.canUseThink ?? true)
+const effectiveThinkRemaining = computed(() => props.thinkRemaining ?? 0)
+const effectiveHasVotedLiangShan = computed(() => props.hasVotedLiangshan ?? false)
 
 const hasAnyPriorityAction = computed(() => hasChow.value || hasPeng.value || hasKong.value || hasHu.value)
 const hasAnyAction = computed(() => hasAnyPriorityAction.value || canDraw.value)
@@ -349,6 +418,14 @@ onUnmounted(() => {
 .action-panel--compact .action-btn--draw { width: 56px; height: 56px; font-size: 1rem; }
 .action-panel--compact .action-grid { gap: 4px; }
 
+/* 第二行：特殊操作按钮 */
+.action-grid-secondary {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 /* 过按钮 */
 .action-btn--pass {
   width: 44px; height: 44px; border-radius: 50%; font-size: 0.85rem;
@@ -357,6 +434,68 @@ onUnmounted(() => {
 }
 .action-btn--pass.action-btn--highlight { border-color: rgba(255, 200, 50, 0.6); color: #ffd36a; }
 .action-btn--pass:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* 慢按钮（紫色） */
+.action-btn--think {
+  background: rgba(124, 58, 237, 0.3);
+  color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(139, 92, 246, 0.3);
+  font-size: 0.75rem;
+}
+.action-btn--think.action-btn--active {
+  border-color: rgba(139, 92, 246, 0.6);
+  color: #c4b5fd;
+}
+.action-btn--think.action-btn--highlight {
+  background: rgba(124, 58, 237, 0.5);
+  border-color: rgba(139, 92, 246, 0.8);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.4);
+}
+.action-btn--think.action-btn--disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* 造反按钮（红色心跳） */
+.action-btn--rebel {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  color: #fff;
+  border-color: #ffd700;
+  animation: heartbeat 1.2s ease-in-out infinite;
+}
+.action-btn--rebel.action-btn--highlight {
+  box-shadow: 0 0 16px rgba(239, 83, 80, 0.6);
+}
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  15% { transform: scale(1.08); }
+  30% { transform: scale(1); }
+  45% { transform: scale(1.05); }
+  60% { transform: scale(1); }
+}
+
+/* 梁山聚义按钮（火焰红） */
+.action-btn--liangshan {
+  background: linear-gradient(135deg, rgba(198, 40, 40, 0.5), rgba(239, 83, 80, 0.35));
+  color: #ff8a80;
+  border-color: rgba(239, 83, 80, 0.6);
+  font-size: 0.75rem;
+  animation: liangshan-btn-pulse 2s ease-in-out infinite;
+}
+.action-btn--liangshan.action-btn--highlight {
+  box-shadow: 0 0 16px rgba(239, 83, 80, 0.5);
+}
+.action-btn--liangshan.action-btn--voted {
+  background: rgba(40, 40, 40, 0.5);
+  color: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.1);
+  animation: none;
+}
+@keyframes liangshan-btn-pulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(239, 83, 80, 0.2); }
+  50% { box-shadow: 0 0 16px rgba(239, 83, 80, 0.5); }
+}
 
 @media (max-width: 768px) {
   .action-btn--small { width: 40px; height: 40px; }
