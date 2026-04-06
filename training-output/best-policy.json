@@ -1,10 +1,10 @@
 {
   "metrics": {
-    "fitness": -19200,
-    "huRate": 0.031,
-    "drawRate": 0.911,
-    "totalGames": 5000,
-    "note": "AI-AK iterative training - 10x500"
+    "fitness": 0,
+    "huRate": 0,
+    "drawRate": 1,
+    "totalGames": 5,
+    "note": "AI-AK iterative training - 1x5"
   },
   "policy": {
     "id": "AI-AK",

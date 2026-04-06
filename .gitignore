@@ -24,4 +24,4 @@ logs
 !.env.example
 
 test-results
-playwright-artifacts
+playwright-artifactstraining-output/
