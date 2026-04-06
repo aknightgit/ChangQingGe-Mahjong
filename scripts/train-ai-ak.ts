@@ -11,7 +11,9 @@ import {
 import {
   canWin, buildWildTileChecker,
   detectHandTypes, HandType, isTing, clearIsTingCache, clearCanWinCache,
-  getIsTingCacheStats, getCanWinCacheStats, resetIsTingCacheStats
+  getIsTingCacheStats, getCanWinCacheStats, resetIsTingCacheStats,
+  checkChowPongExclusion, updateChowPongExclusion,
+  type ChowPongExclusionState
 } from '../server/utils/handValidator'
 import {
   calculateScore
@@ -411,6 +413,8 @@ interface BotPlayer {
   meldSources: number[]
   // 我打过的牌（用于安全牌分析）
   discardedTiles: Tile[]
+  // 吃碰排斥状态（K哥铁律）
+  chowPongExclusion: ChowPongExclusionState
 }
 
 interface GameState {
@@ -445,7 +449,8 @@ function setupGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameState {
     name, pos: i, hand: [] as Tile[], exposedMelds: [] as Meld[], flowerTiles: [] as Tile[],
     isBot: true, isTing: false, score: 0, wildSuit: ws, wildValue: wv, kongCount: 0, id: `p${i}`,
     status: 'playing' as const, policy: policies[i],
-    meldSources: [0, 0, 0, 0], discardedTiles: [] as Tile[]
+    meldSources: [0, 0, 0, 0], discardedTiles: [] as Tile[],
+    chowPongExclusion: { firstActionSuit: null, firstActionType: null }
   }))
 
   const gameMultiplier = nextGameMultiplier()
@@ -1338,6 +1343,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       const opp = g.players[otherIdx]
       if (opp.exposedMelds.length >= 4) continue  // 最多4组牌
       if (canPeng(opp, discard)) {
+        if (!checkChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)) continue;  // K哥铁律：吃碰排斥
         let pengChance = opp.policy.pengChance
         if (opp.wildSuit && opp.wildValue && discard.suit === opp.wildSuit && discard.value === opp.wildValue)
           pengChance += opp.policy.pengWildBoost
@@ -1349,6 +1355,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             console.error(`小胖_CLAIM: hand=${opp.hand.length} melds=${opp.exposedMelds.length} kong=${km} exp=${expBefore} tile=${tileStr(discard)}`)
           }
           applyPeng(opp, discard, curr)
+          opp.chowPongExclusion = updateChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)  // K哥铁律：记录碰行动
           // 放炮胡检查（claim后draw前，手牌=expectedLen）
           const handAfterPeng = normalizeHand(opp.hand)
           const kongAfterPeng = opp.exposedMelds.filter(m => m.type === MeldType.KONG).length
@@ -1403,7 +1410,9 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     // Check chow (only next player)
     const nextP = g.players[nextPlayer]
     if (canChow(nextP, discard) && Math.random() < nextP.policy.chowChance) {
+      if (!checkChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)) continue;  // K哥铁律：吃碰排斥
       applyChow(nextP, discard, curr)
+      nextP.chowPongExclusion = updateChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)  // K哥铁律：记录吃行动
       // 放炮胡检查（claim后draw前，手牌=expectedLen）
       const handAfterChow = normalizeHand(nextP.hand)
       const kongAfterChow = nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length

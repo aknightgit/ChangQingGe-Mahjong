@@ -803,7 +803,7 @@ export function isTing(
 // 新增：吃碰排斥规则
 // 规则（K哥铁律）：
 // 吃了A门：只能继续吃A门，禁止碰A门，禁止吃/碰BC门
-// 碰了A门：只能继续碰A门，禁止吃A门，禁止吃/碰BC门
+// 碰了A门：禁止吃任何门，允许碰BC门（碰碰胡）
 // ============================================================
 export interface ChowPongExclusionState {
   firstActionSuit: string | null;
@@ -826,9 +826,9 @@ export function checkChowPongExclusion(
       return false;
 
     case 'pong':
-      // 碰了A门：仅同门A允许继续碰；其他操作/门全部禁止
-      if (isSameSuit) return actionType === 'pong';
-      return false;
+      // 碰了A门：允许继续碰BC门（碰碰胡）；禁止吃任何门
+      if (actionType === 'chow') return false;
+      return true;
 
     default:
       return true;
