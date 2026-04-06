@@ -415,6 +415,9 @@ interface BotPlayer {
   discardedTiles: Tile[]
   // 吃碰排斥状态（K哥铁律）
   chowPongExclusion: ChowPongExclusionState
+  // 调试追踪
+  _lastPhase?: string
+  _lastHand?: number
 }
 
 interface GameState {
@@ -538,11 +541,16 @@ function checkHandInvariant(p: BotPlayer, phase: 'draw' | 'discard' | 'claim' | 
   }
   const expected = base - 3 * meldCount
   if (len !== expected) {
-    // 小胖专诊
-    if (p.name === 'AI-小胖' && phase === 'discard' && len === 3 && meldCount === 3) {
-      console.error(`[小胖_3_3] hand=${len} melds=${meldCount} expected=${expected} wild=${p.wildSuit ? tileStr({suit:p.wildSuit,value:p.wildValue} as Tile) : 'none'}`)
-    }
-    console.error(`[铁律违规] ${p.name} phase=${phase} hand=${len} melds=${meldCount} expected=${expected}`)
+    // 追踪违规来源
+    const prevPhase = p._lastPhase || '?'
+    const prevHand = p._lastHand || '?'
+    console.error(`[铁律违规] ${p.name} phase=${phase} hand=${len} melds=${meldCount} expected=${expected} prevPhase=${prevPhase} prevHand=${prevHand}`)
+    p._lastPhase = phase
+    p._lastHand = len
+  } else {
+    p._lastPhase = phase
+    p._lastHand = len
+  }
     return false
   }
   return true
