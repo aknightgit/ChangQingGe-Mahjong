@@ -438,7 +438,12 @@ export function isPair(tiles: Tile[]): boolean {
  */
 export function isKong(tiles: Tile[]): boolean {
   if (tiles.length !== 4) return false;
-  return tilesEqual(tiles[0], tiles[1]) && 
-         tilesEqual(tiles[1], tiles[2]) && 
+  return tilesEqual(tiles[0], tiles[1]) &&
+         tilesEqual(tiles[1], tiles[2]) &&
          tilesEqual(tiles[2], tiles[3]);
+}
+
+/** 过滤 undefined + 花牌，返回有效手牌（K哥铁律用） */
+export function normalizeHand(hand: Tile[]): Tile[] {
+  return hand.filter(t => t && !isFlower(t));
 }
