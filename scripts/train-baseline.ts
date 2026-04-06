@@ -588,10 +588,11 @@ function isClaimSuitAllowed(p: BotPlayer, tile: Tile, action: 'chow' | 'peng' = 
 
 function canMingKong(p: BotPlayer, tile: Tile): boolean {
   if (!tile) return false
-  return p.hand.filter(t => t && tileEq(t, tile)).length >= 3
+  return normalizeHand(p.hand).filter(t => tileEq(t, tile)).length >= 3  // K哥铁律：统一normalize
 }
 function canAnKong(p: BotPlayer): Tile[] {
-  const groups = groupTiles(p.hand.filter(t => t))
+  const hand = normalizeHand(p.hand)  // K哥铁律：统一normalize过滤花牌+undefined
+  const groups = groupTiles(hand)
   const result: Tile[] = []
   for (const [k, tiles] of groups) { if (tiles.length === 4 && tiles[0]) result.push(tiles[0]) }
   return result
