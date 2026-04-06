@@ -825,9 +825,9 @@ export function checkChowPongExclusion(
       return isSameSuit;
 
     case 'pong':
-      // 碰了A门：A门可吃/碰；BC门仅禁止吃
-      if (actionType === 'chow') return isSameSuit;
-      return true;
+      // 碰了A门：A门可吃/碰；BC门仅禁止吃，允许碰
+      if (actionType === 'chow') return isSameSuit;  // A门可吃，BC门禁吃
+      return true;                                   // 碰任何门均允许
 
     default:
       return true;
