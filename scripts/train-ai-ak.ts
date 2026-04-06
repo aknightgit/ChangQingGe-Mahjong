@@ -603,8 +603,17 @@ function applyChow(p: BotPlayer, tile: Tile, sourcePos?: number): void {
   if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
 }
 function applyMingKong(p: BotPlayer, tile: Tile, sourcePos?: number): void {
-  const matches = p.hand.filter(t => t && tileEq(t, tile)).slice(0, 3)
-  for (const u of matches) { const idx = p.hand.findIndex(rt => rt && rt.id === u.id); if (idx >= 0) p.hand.splice(idx, 1) }
+  p.hand = normalizeHand(p.hand)  // 铁律：先normalize
+  const tileCount = p.hand.filter(t => tileEq(t, tile)).length
+  if (tileCount < 3) {
+    console.error(`BUG applyMingKong: ${p.name} tileCount=${tileCount} < 3 tile=${tileStr(tile)}`)
+    return
+  }
+  const before = p.hand.length
+  const matches = p.hand.filter(t => tileEq(t, tile)).slice(0, 3)
+  for (const u of matches) { const idx = p.hand.findIndex(rt => rt.id === u.id); if (idx >= 0) p.hand.splice(idx, 1) }
+  const after = p.hand.length
+  if (after !== before - 3) { console.error(`BUG applyMingKong: ${p.name} before=${before} after=${after}`); return }
   p.exposedMelds.push({ type: MeldType.KONG, tiles: [tile, tile, tile, tile], isConcealed: false })
   p.kongCount++
   if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
@@ -1376,8 +1385,6 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     g.discardPile.push(discard)
     g.playerDiscards[curr].push(discard)
     log(player.name, '出牌', `${tileStr(discard)} [手牌: ${player.hand.map(t => tileStr(t)).join(' ')}]`)
-    const rawLen = player.hand.length; player.hand = player.hand.filter(t => t && t.id !== discard.id); const filteredLen = player.hand.length; player.discardedTiles.push(discard)
-    if (rawLen !== filteredLen + 1) console.error(`[DISCARD_DEBUG] ${player.name} raw=${rawLen} after_remove=${filteredLen} discard=${tileStr(discard)}`)
     checkHandInvariant(player, 'discard')  // 出牌后铁律：13/10/7/4/1张
 
     // Others check hu
@@ -1417,12 +1424,6 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         if (opp.wildSuit && opp.wildValue && discard.suit === opp.wildSuit && discard.value === opp.wildValue)
           pengChance += opp.policy.pengWildBoost
         if (Math.random() < pengChance) {
-          // AI-小胖专诊断：追踪pong claim全流程
-          if (opp.name === 'AI-小胖') {
-            const km = opp.exposedMelds.filter(m => m.type === MeldType.KONG).length
-            const expBefore = 14 - (opp.exposedMelds.length - km) * 3 - km * 4
-            console.error(`小胖_CLAIM: hand=${opp.hand.length} melds=${opp.exposedMelds.length} kong=${km} exp=${expBefore} tile=${tileStr(discard)}`)
-          }
           applyPeng(opp, discard, curr)  // 内部已normalize
           opp.chowPongExclusion = updateChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)  // K哥铁律：记录碰行动
           checkHandInvariant(opp, 'claim')  // claim后（11/8/5/2张）
@@ -1430,7 +1431,6 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           const handAfterPeng = normalizeHand(opp.hand)
           const kongAfterPeng = opp.exposedMelds.filter(m => m.type === MeldType.KONG).length
           const expAfterPeng = 14 - (opp.exposedMelds.length - kongAfterPeng) * 3 - kongAfterPeng * 4
-          console.error(`PENG_HU_CHECK: ${opp.name} hand=${handAfterPeng.length} expected=${expAfterPeng} melds=${opp.exposedMelds.length}`)
           if (canWin(handAfterPeng, opp.exposedMelds.length, makeWT(opp), kongAfterPeng).canWin) {
             const huChance = opp.policy.discardHuChance
             if (Math.random() < huChance) {
@@ -1442,7 +1442,6 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
               return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: opp, roundNum: turn }
             }
           }
-          checkHandInvariant(opp, 'claim')  // 碰后铁律：11/8/5/2张（K哥铁律：碰后不摸牌）
           if (canWin(normalizeHand(opp.hand), opp.exposedMelds.length, makeWT(opp), opp.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
             const baseScore = calcScore(opp, true, false, g.gameMultiplier)
             opp.score += baseScore * 3
