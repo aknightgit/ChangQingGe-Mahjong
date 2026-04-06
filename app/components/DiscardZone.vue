@@ -36,6 +36,8 @@ const props = defineProps<{
 .discard-zone {
   position: absolute;
   z-index: 5;
+  /* P0 FIX: 弃牌区严格受容器裁剪 */
+  overflow: hidden;
 }
 
 /* 空区域不占位 */
@@ -49,6 +51,8 @@ const props = defineProps<{
   grid-template-columns: repeat(8, 28px);
   gap: 1px;
   justify-items: center;
+  /* P0 FIX: 网格内也裁剪 */
+  overflow: hidden;
 }
 
 /* 左右弃牌区：每排6张 */

@@ -4,8 +4,7 @@
  * 用法: npx tsx scripts/extremeTest100.ts [num_games]
  */
 import {
-  canWin, buildWildTileChecker, detectHandTypes, HandType,
-  type WildTileChecker
+  canWin, buildWildTileChecker, detectHandTypes,
 } from '../server/utils/handValidator'
 import { TileSuit, type Tile, type Meld, MeldType } from '../server/types/game'
 import { randomUUID } from 'crypto'
@@ -184,22 +183,55 @@ function selectDiscard(p: BotPlayer): Tile {
 }
 
 // ═══ Stats ═══
+const ALLOWED_WIN_TYPES = new Set([
+  '风一色', '风碰', '清碰', '混碰', '清一色', '混一色', '八花', '四百搭', '碰碰胡', '大吊'
+])
+
 const stats = {
   wins: 0, draws: 0, selfDraws: 0, discardWins: 0,
   chows: 0, pengs: 0,
   winTypes: {} as Record<string, number>,
   winPlayers: {} as Record<string, number>,
   winTurns: [] as number[],
+  handLimitViolations: 0,
+  handLimitViolationLogs: [] as string[],
+  winTypeWhitelistViolations: 0,
+  winTypeWhitelistViolationLogs: [] as string[],
+  chowPengConflicts: 0,
+  chowPengConflictLogs: [] as string[],
+}
+
+function totalTileCount(p: BotPlayer): number {
+  const meldTileCount = p.exposedMelds.reduce((acc, m) => acc + m.tiles.length, 0)
+  return p.hand.length + meldTileCount
+}
+
+function checkHandLimit(gameNo: number, turnNo: number): void {
+  for (const p of G.players) {
+    const total = totalTileCount(p)
+    if (total > 14) {
+      stats.handLimitViolations++
+      stats.handLimitViolationLogs.push(`[Game ${gameNo} Turn ${turnNo}] ${p.name} totalTiles=${total} hand=${p.hand.length} meldTiles=${total - p.hand.length}`)
+    }
+  }
+}
+
+function checkWinTypeWhitelist(gameNo: number, turnNo: number, p: BotPlayer, handType: string, mode: 'self_draw' | 'discard'): void {
+  if (!ALLOWED_WIN_TYPES.has(handType)) {
+    stats.winTypeWhitelistViolations++
+    stats.winTypeWhitelistViolationLogs.push(`[Game ${gameNo} Turn ${turnNo}] ${p.name} ${mode} handType=${handType}`)
+  }
 }
 
 // ═══ Play one game ═══
-function playGame(): void {
+function playGame(gameNo: number): void {
   G = setupGame()
   let turns = 0
   let lastDiscard: { tile: Tile; playerIdx: number } | null = null
 
   while (turns < MAX_TURNS) {
     turns++
+    checkHandLimit(gameNo, turns)
     const pi = G.currentTurnIdx
     const p = G.players[pi]
     if (p.status !== 'playing') { G.currentTurnIdx = (pi + 1) % 4; continue }
@@ -208,6 +240,7 @@ function playGame(): void {
     const wtStr = G.wildSuit && G.wildValue ? `${G.wildSuit}-${G.wildValue}` : null
     const selfWin = checkWinForPlayer(p.hand, p.exposedMelds, p.flowerTiles.length, wtStr)
     if (selfWin.win) {
+      checkWinTypeWhitelist(gameNo, turns, p, selfWin.handType, 'self_draw')
       p.status = 'won'; p.winMode = 'self_draw'
       stats.wins++; stats.selfDraws++
       stats.winTypes[selfWin.handType] = (stats.winTypes[selfWin.handType] || 0) + 1
@@ -223,6 +256,7 @@ function playGame(): void {
     // ── Check self-win (after draw) ──
     const selfWin2 = checkWinForPlayer(p.hand, p.exposedMelds, p.flowerTiles.length, wtStr)
     if (selfWin2.win) {
+      checkWinTypeWhitelist(gameNo, turns, p, selfWin2.handType, 'self_draw')
       p.status = 'won'; p.winMode = 'self_draw'
       stats.wins++; stats.selfDraws++
       stats.winTypes[selfWin2.handType] = (stats.winTypes[selfWin2.handType] || 0) + 1
@@ -243,26 +277,34 @@ function playGame(): void {
         // Check discard win first (捉冲)
         const tempHand = [...claimer.hand, lastDiscard.tile]
         const discWin = canWin(tempHand, claimer.exposedMelds.length, buildWildTileChecker(wtStr))
-        if (discWin) {
+        if (discWin.canWin) {
           claimer.hand = tempHand; claimer.status = 'won'; claimer.winMode = 'discard'
           const ht = detectHandTypes(tempHand, claimer.exposedMelds, false, claimer.flowerTiles.length, wtStr)
           stats.wins++; stats.discardWins++
-          const htStr = ht.length > 0 ? ht[0] : 'standard'
+          const htStr = ht.length > 0 ? ht[0] : ''
+          checkWinTypeWhitelist(gameNo, turns, claimer, htStr, 'discard')
           stats.winTypes[htStr] = (stats.winTypes[htStr] || 0) + 1
           stats.winPlayers[claimer.name] = (stats.winPlayers[claimer.name] || 0) + 1
           stats.winTurns.push(turns)
           return
         }
 
+        const pengPossible = canPeng(claimer, lastDiscard.tile)
+        const chowPossible = canChowFrom(claimer, lastDiscard.tile, lastDiscard.playerIdx)
+        if (pengPossible && chowPossible) {
+          stats.chowPengConflicts++
+          stats.chowPengConflictLogs.push(`[Game ${gameNo} Turn ${turns}] ${claimer.name} both chow+peng on ${lastDiscard.tile.suit}-${lastDiscard.tile.value}`)
+        }
+
         // Check peng (extreme: peng chance=1.0)
-        if (canPeng(claimer, lastDiscard.tile)) {
+        if (pengPossible) {
           if (applyPeng(claimer, lastDiscard.tile)) {
             stats.pengs++; G.currentTurnIdx = cIdx; lastDiscard = null; someoneClaimed = true; break
           }
         }
 
         // Check chow (extreme: chow chance=1.0) — only if no peng
-        if (!someoneClaimed && canChowFrom(claimer, lastDiscard.tile, lastDiscard.playerIdx)) {
+        if (!someoneClaimed && chowPossible) {
           if (applyChow(claimer, lastDiscard.tile)) {
             stats.chows++; G.currentTurnIdx = cIdx; lastDiscard = null; someoneClaimed = true; break
           }
@@ -288,7 +330,7 @@ function main() {
   console.log(`🀄️  极端测试: ${TOTAL_GAMES}局 | 4AI | 有吃必吃/有碰必碰/有胡必胡 (canWin 公式: 14-3*melds)\n`)
 
   for (let i = 1; i <= TOTAL_GAMES; i++) {
-    playGame()
+    playGame(i)
   }
 
   const totalGames = stats.wins + stats.draws
@@ -296,7 +338,7 @@ function main() {
   console.log(`📊 极端测试报告 (${TOTAL_GAMES}局)`)
   console.log(`═══════════════════════════════════════`)
   console.log(`胡牌: ${stats.wins} 局 (${totalGames > 0 ? (stats.wins/totalGames*100).toFixed(1) : 0}%)`)
-  console.log(`流局: ${stats.draws}`)
+  console.log(`流局: ${stats.draws} 局 (${totalGames > 0 ? (stats.draws/totalGames*100).toFixed(1) : 0}%)`)
   console.log(`自摸胡: ${stats.selfDraws}`)
   console.log(`捉冲胡: ${stats.discardWins}`)
   console.log(`吃牌: ${stats.chows}次`)
@@ -310,6 +352,24 @@ function main() {
     ? (stats.winTurns.reduce((a, b) => a + b, 0) / stats.winTurns.length).toFixed(1)
     : 'N/A'
   console.log(`\n平均每局胡牌步数: ${avgTurns}`)
+
+  console.log(`\n🧪 断言检查:`)
+  console.log(`  手牌上限检查(<=14): ${stats.handLimitViolations === 0 ? 'PASS' : 'FAIL'} | violations=${stats.handLimitViolations}`)
+  console.log(`  牌型白名单检查(10种): ${stats.winTypeWhitelistViolations === 0 ? 'PASS' : 'FAIL'} | violations=${stats.winTypeWhitelistViolations}`)
+  console.log(`  吃碰互斥冲突计数: ${stats.chowPengConflicts === 0 ? 'PASS' : 'FAIL'} | conflicts=${stats.chowPengConflicts}`)
+
+  if (stats.handLimitViolationLogs.length > 0) {
+    console.log(`\n⚠️ 手牌上限异常日志:`)
+    for (const log of stats.handLimitViolationLogs.slice(0, 20)) console.log(`  ${log}`)
+  }
+  if (stats.winTypeWhitelistViolationLogs.length > 0) {
+    console.log(`\n⚠️ 牌型白名单异常日志:`)
+    for (const log of stats.winTypeWhitelistViolationLogs.slice(0, 20)) console.log(`  ${log}`)
+  }
+  if (stats.chowPengConflictLogs.length > 0) {
+    console.log(`\n⚠️ 吃碰冲突异常日志:`)
+    for (const log of stats.chowPengConflictLogs.slice(0, 20)) console.log(`  ${log}`)
+  }
 
   console.log(`\n【诊断】`)
   if (stats.wins > 0) {

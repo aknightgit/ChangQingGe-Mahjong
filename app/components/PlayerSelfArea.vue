@@ -219,11 +219,14 @@ const onPointerCancel = () => {
   font-size: 0.6rem;
 }
 
-/* 主行：melds 左 + 手牌右 */
+/* 主行：melds 左 + 手牌右（统一容器，统一裁剪） */
 .player-main-row {
   display: flex;
   align-items: flex-end;
   gap: 8px;
+  /* P0 FIX: 统一裁剪 — 手牌区和门口牌区共同受该容器约束 */
+  overflow: hidden;
+  max-width: 100%;
 }
 
 
@@ -232,6 +235,9 @@ const onPointerCancel = () => {
   align-items: center;
   gap: 8px;
   min-height: 50px;
+  /* P0 FIX: 门口牌受容器裁剪 */
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 .meld {
@@ -266,6 +272,8 @@ const onPointerCancel = () => {
   flex-direction: column;
   align-items: center;
   width: 100%;
+  /* P0 FIX: 手牌区也受裁剪约束 */
+  overflow: hidden;
 }
 
 .player-hand {

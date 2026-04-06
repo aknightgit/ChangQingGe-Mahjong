@@ -2673,6 +2673,8 @@ const forceDiscard = async (p: Player) => {
   align-items: center;
   z-index: 5; /* 在牌墙z-index=1之上 */
   transition: transform 0.15s ease, filter 0.15s ease;
+  /* P0 FIX: 统一容器裁剪 — 每家手牌+门口牌共同受该容器裁剪，不再越界 */
+  overflow: hidden;
 }
 
 .seat-active {
