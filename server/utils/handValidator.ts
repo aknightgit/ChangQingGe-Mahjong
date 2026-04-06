@@ -355,6 +355,11 @@ function detectTypes(
     else if (windSuits.includes(s) || s === TileSuit.DRAGON) windCount++;
   }
 
+  // ---- 检测是否"禁止的普通胡" ----
+  // K哥铁律：多门(>=2门) + 有顺子(非全刻子) = 禁止的普通胡
+  // 条件：numSuitCount>=2 且 不是ALL_TRIPLETS（=有顺子）
+  const isForbiddenOrdinary = numSuitCount >= 2 && !types.includes(HandType.ALL_TRIPLETS);
+
   const isFullFlushHand = numSuitCount === 1 && windCount === 0;
   const isHalfFlushHand = numSuitCount === 1 && windCount >= 1;
 
@@ -376,8 +381,9 @@ function detectTypes(
     types.push(HandType.DA_DIAO);
   }
 
-  // 基础胡牌：满足3n+2格式但没有特殊牌型
-  if (types.length === 0 && satisfiesFormat) {
+  // 基础胡牌：满足3n+2格式但没有特殊牌型，且不是"禁止的普通胡"
+  // 禁止的普通胡 = 多门(>=2门) + 含顺子（= 非全刻子）→ 直接过滤，不加入STANDARD
+  if (types.length === 0 && satisfiesFormat && !isForbiddenOrdinary) {
     types.push(HandType.STANDARD);
   }
 
@@ -635,7 +641,7 @@ export function canWin(
     ? findBestAssignment(concealed, exposed, wildTileId)
     : detectTypes(concealed, exposed);
 
-  // 过滤掉STANDARD：只有特定牌型才能胡
+  // K哥规则：过滤掉STANDARD（只有特殊牌型才能胡）
   const validTypes = types.filter(t => t !== HandType.STANDARD);
 
   const result = { canWin: validTypes.length > 0, types: validTypes }
@@ -749,9 +755,11 @@ export function isTing(
   existingMelds: number,
   isWildTile: WildTileChecker = () => false
 ): boolean {
-  // 摸牌后手牌数 = 13 - 3*existingMelds（每有一个面子，手牌少3张）
-  const expected = 13 - 3 * existingMelds;
-  if (tiles.length !== expected) return false;
+  // 摸牌后手牌数 = 14 - 3*existingMelds（每有一个面子，手牌少3张；起手13+摸牌1=14）
+  const expected = 14 - 3 * existingMelds;
+  if (tiles.length !== expected) {
+    return false;
+  }
 
   // 构建缓存key
   const sig = handSignature(tiles)
@@ -793,7 +801,9 @@ export function isTing(
 
 // ============================================================
 // 新增：吃碰排斥规则
-// 规则：吃A门后禁止吃碰BC门；碰A门后禁止吃BC门
+// 规则（K哥铁律）：
+// 吃了A门：只能继续吃A门，禁止碰A门，禁止吃/碰BC门
+// 碰了A门：只能继续碰A门，禁止吃A门，禁止吃/碰BC门
 // ============================================================
 export interface ChowPongExclusionState {
   firstActionSuit: string | null;
@@ -805,13 +815,24 @@ export function checkChowPongExclusion(
   actionType: 'chow' | 'pong',
   tileSuit: string
 ): boolean {
-  if (!state.firstActionSuit || !state.firstActionType) return true;
-  if (tileSuit === state.firstActionSuit) return true;
-  // 吃A门后 → 禁止吃/碰BC门
-  if (state.firstActionType === 'chow') return false;
-  // 碰A门后 → 禁止吃BC门（允许碰BC门）
-  if (state.firstActionType === 'pong' && actionType === 'chow') return false;
-  return true;
+  if (!state.firstActionSuit || !state.firstActionType) return true;  // 无→自由
+
+  const isSameSuit = tileSuit === state.firstActionSuit;
+
+  switch (state.firstActionType) {
+    case 'chow':
+      // 吃了A门：仅同门A允许继续吃；其他操作/门全部禁止
+      if (isSameSuit) return actionType === 'chow';
+      return false;
+
+    case 'pong':
+      // 碰了A门：仅同门A允许继续碰；其他操作/门全部禁止
+      if (isSameSuit) return actionType === 'pong';
+      return false;
+
+    default:
+      return true;
+  }
 }
 
 export function updateChowPongExclusion(
