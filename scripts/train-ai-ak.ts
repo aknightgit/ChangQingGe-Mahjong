@@ -499,10 +499,11 @@ function canChow(p: BotPlayer, tile: Tile): boolean {
 }
 function canMingKong(p: BotPlayer, tile: Tile): boolean {
   if (!tile) return false
-  return p.hand.filter(t => t && tileEq(t, tile)).length >= 3
+  return normalizeHand(p.hand).filter(t => tileEq(t, tile)).length >= 3  // K哥铁律：统一normalize
 }
 function canAnKong(p: BotPlayer): Tile[] {
-  const groups = groupTiles(p.hand.filter(t => t))
+  const hand = normalizeHand(p.hand)  // K哥铁律：统一用normalize过的hand
+  const groups = groupTiles(hand)
   const result: Tile[] = []
   for (const [k, tiles] of groups) { if (tiles.length === 4 && tiles[0]) result.push(tiles[0]) }
   return result
@@ -558,8 +559,15 @@ function applyPeng(p: BotPlayer, tile: Tile, sourcePos?: number): void {
     console.error(`BUG applyPeng: ${p.name} before=${before} melds=${meldCount} valid=${validBefore} matches=${matches.length} tile=${tileStr(tile)} hand=${p.hand.map(t=>tileStr(t)).join(',')}`)
     return
   }
+  // 小胖专诊：追踪pong后hand
+  if (p.name === 'AI-小胖' && before === 4 && meldCount === 3) {
+    console.error(`[小胖_PONG] before=${before} melds=${meldCount} matches=${matches.map(t=>tileStr(t)).join(',')} tile=${tileStr(tile)}`)
+  }
   for (const u of matches) { const idx = p.hand.findIndex(rt => rt.id === u.id); if (idx >= 0) p.hand.splice(idx, 1) }
   const after = p.hand.length
+  if (p.name === 'AI-小胖' && after === 3 && meldCount === 3) {
+    console.error(`[小胖_PONG_AFTER] before=${before} after=${after} melds=${meldCount} newMeld=${tileStr(tile)}`)
+  }
   if (after !== before - 2) console.error(`BUG applyPeng: ${p.name} before=${before} matches=${matches.length} after=${after}`)
   p.exposedMelds.push({ type: MeldType.TRIPLET, tiles: [tile, tile, tile], isConcealed: false })
   if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
