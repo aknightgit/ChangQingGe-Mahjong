@@ -1,11 +1,10 @@
 /**
  * training-reporter.ts
- * 长清阁麻将训练输出标准化模块
+ * 长清阁麻将训练输出标准化模块（严格按 training-output-template.md 模板）
  *
- * 设计原则：
- * 1. 每轮独立文件 {roundNum}-{timestamp}.md
- * 2. 统一模板：JSON摘要 + 标准化Markdown
- * 3. 独立模块，可被 train-ai-ak.ts / train-baseline.ts 共用
+ * 模板规范：
+ * - 每轮独立文件 round-XXX-{timestamp}.md
+ * - 统一模板：训练指标 Summary + 胡牌牌型分布 + 策略参数 + 最大赢输局明细
  */
 import * as fs from 'fs'
 import * as path from 'path'
@@ -64,214 +63,232 @@ export interface EvalResult {
   handTypeDist: Record<string, number>
   winningGames: WinningGameRecord[]
   worstSingleLoss: any
+  scores: Record<string, number>
+  winRates: Record<string, number>
+  akWins: number
   playerStats: PlayerStats[]
 }
 
-// ========== Markdown 模板 ==========
-
-function escapeMd(s: any): string {
-  if (s === null || s === undefined) return '—'
-  return String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ')
-}
+// ========== 工具函数 ==========
 
 function formatTimestamp(ts: string): string {
-  // 2026-04-06T19:00:00.000Z → 2026-04-06 19:00:00
   return ts.replace('T', ' ').replace(/\.\d+Z$/, '')
 }
 
-/** 每轮训练报告 Markdown 模板 */
+function checkTarget(actual: number, target: string, lowBetter = false): string {
+  const targetNum = parseFloat(target.replace(/[^.\d]/g, ''))
+  if (isNaN(targetNum)) return '—'
+  const ok = lowBetter ? actual < targetNum : actual >= targetNum
+  return ok ? '✅' : '❌'
+}
+
+// ========== 模板（严格按 training-output-template.md） ==========
+
 export function formatRoundReport(report: RoundReport): string {
   const lines: string[] = []
   const { round, timestamp, metrics, policy, playerStats, topWins, topLosses, worstLossGames } = report
   const ts = formatTimestamp(timestamp)
-  const winRate = ((metrics.winGames / Math.max(1, metrics.totalGames)) * 100).toFixed(2)
-  const drawRate = ((metrics.drawGames / Math.max(1, metrics.totalGames)) * 100).toFixed(2)
-  const selfDrawRate = metrics.winGames > 0 ? ((metrics.selfDrawGames / metrics.winGames) * 100).toFixed(2) : '0.00'
-  const bigWinRate = metrics.winGames > 0 ? ((metrics.bigWinGames / metrics.winGames) * 100).toFixed(2) : '0.00'
-  const menqingRate = metrics.winGames > 0 ? ((metrics.menqingWinGames / metrics.winGames) * 100).toFixed(2) : '0.00'
+  const winRate = parseFloat((metrics.winGames / Math.max(1, metrics.totalGames) * 100).toFixed(1))
+  const drawRate = parseFloat((metrics.drawGames / Math.max(1, metrics.totalGames) * 100).toFixed(1))
+  const selfDrawRate = metrics.winGames > 0 ? parseFloat((metrics.selfDrawGames / metrics.winGames * 100).toFixed(1)) : 0
+  const bigWinRate = metrics.winGames > 0 ? parseFloat((metrics.bigWinGames / metrics.winGames * 100).toFixed(1)) : 0
+  const menqingRate = metrics.winGames > 0 ? parseFloat((metrics.menqingWinGames / metrics.winGames * 100).toFixed(1)) : 0
 
   // ===== 标题块 =====
   lines.push('---')
-  lines.push(`Round ${round} 训练报告`)
-  lines.push(`时间: ${ts}`)
-  lines.push(`局数: ${metrics.totalGames}`)
+  lines.push(`创建时间: ${timestamp}`)
+  lines.push(`训练脚本: train-ai-ak.ts`)
+  lines.push(`Config: 1 rounds × ${metrics.totalGames} games = ${metrics.totalGames} total`)
   lines.push('---')
   lines.push('')
 
-  // ===== 1. 核心指标 =====
-  lines.push('## 1. 核心指标')
-  lines.push('')
-  lines.push('| 指标 | 数值 |')
-  lines.push('|------|------|')
-  lines.push(`| 总局数 | ${metrics.totalGames} |`)
-  lines.push(`| 胡牌局 | ${metrics.winGames} (${winRate}%) |`)
-  lines.push(`| 流局 | ${metrics.drawGames} (${drawRate}%) |`)
-  lines.push(`| 自摸率 | ${selfDrawRate}% |`)
-  lines.push(`| 大牌率 | ${bigWinRate}% |`)
-  lines.push(`| 门清率 | ${menqingRate}% |`)
-  lines.push(`| Fitness | ${metrics.akScore.toFixed(4)} |`)
+  // ===== Section: Round X 训练报告 =====
+  lines.push(`## Round ${round} (${ts})`)
   lines.push('')
 
-  // ===== 2. 牌型分布 =====
-  lines.push('## 2. 牌型分布')
+  // ===== 训练指标 Summary（带K哥目标） =====
+  lines.push('### 📊 训练指标 Summary')
   lines.push('')
-  const sortedTypes = Object.entries(metrics.handTypeDist || {})
-    .sort((a, b) => b[1] - a[1])
-  if (sortedTypes.length === 0) {
-    lines.push('_（无胡牌局）_')
-  } else {
-    lines.push('| 牌型 | 局数 | 占比 |')
-    lines.push('|------|------|------|')
-    for (const [type, count] of sortedTypes) {
-      const pct = ((count / metrics.winGames) * 100).toFixed(1)
-      lines.push(`| ${type} | ${count} | ${pct}% |`)
-    }
+  lines.push('| 指标 | 值 | K哥目标 | 达标 |')
+  lines.push('|------|-----|---------|------|')
+  lines.push(`| 胡牌率 | ${winRate}% | ≥90% | ${checkTarget(winRate, '90')} |`)
+  lines.push(`| 流局率 | ${drawRate}% | <10% | ${checkTarget(drawRate, '10', true)} |`)
+  lines.push(`| 自摸率 | ${selfDrawRate}% | 40-60% | ${checkTarget(selfDrawRate, '40')} |`)
+  lines.push(`| 捉冲率 | — | 40-60% | — |`)
+  lines.push(`| 血战率 | — | >80% | — |`)
+  lines.push(`| 大牌率 | ${bigWinRate}% | 3-8% | ${checkTarget(bigWinRate, '3')} |`)
+  lines.push(`| 门清率 | ${menqingRate}% | 7-12% | ${checkTarget(menqingRate, '7')} |`)
+  lines.push(`| Fitness | ${metrics.akScore.toFixed(1)} | ↑ | — |`)
+  lines.push('')
+
+  // ===== 胡牌牌型分布（固定9种） =====
+  lines.push('### 🀄 胡牌牌型分布')
+  lines.push('')
+  lines.push('| 牌型 | 局数 | 占比 | K哥目标 |')
+  lines.push('|------|------|------|---------|')
+  const dist = metrics.handTypeDist || {}
+  const totalWins = metrics.winGames
+  const TYPES = [
+    ['混一色', '≥40%'],
+    ['碰碰胡', '>25%'],
+    ['清一色', '>20%'],
+    ['清碰', '~5%'],
+    ['风一色', '~5%'],
+    ['风碰', '~1%'],
+    ['混碰', '—'],
+    ['八花', '—'],
+    ['四百搭', '—'],
+  ] as [string, string][]
+  for (const [type, target] of TYPES) {
+    const cnt = dist[type] ?? 0
+    const pct = totalWins > 0 ? ((cnt / totalWins) * 100).toFixed(1) : '0.0'
+    lines.push(`| ${type} | ${cnt} | ${pct}% | ${target} |`)
   }
   lines.push('')
 
-  // ===== 3. 策略参数 =====
-  lines.push('## 3. 策略参数')
+  // ===== 训练明细 =====
+  lines.push('### 训练明细')
+  lines.push('')
+  lines.push(`- Games: ${metrics.totalGames}`)
+  lines.push(`- 胡牌局: ${metrics.winGames} (${winRate}%)`)
+  lines.push(`- 流局: ${metrics.drawGames} (${drawRate}%)`)
+  lines.push(`- 血战到最后一人: ${metrics.fightToLastGames} —`)
+  lines.push(`- 平均回合: —`)
+  lines.push(`- 平均总筹码: —`)
+  lines.push(`- 自摸率(胡牌中): ${selfDrawRate}%`)
+  lines.push(`- 大牌率(胡牌中): ${bigWinRate}%`)
+  lines.push(`- 门清胡牌率(胡牌中): ${menqingRate}%`)
+  lines.push(`- Fitness: ${metrics.akScore.toFixed(4)}`)
+  lines.push('')
+
+  // ===== 本轮最佳策略参数 =====
+  lines.push('### 本轮最佳策略参数')
   lines.push('')
   lines.push('```json')
   lines.push(JSON.stringify(policy, null, 2))
   lines.push('```')
   lines.push('')
 
-  // ===== 4. 玩家得分 =====
-  lines.push('## 4. 玩家得分')
-  lines.push('')
-  lines.push('| 玩家 | 总分 | 胜局 |')
-  lines.push('|------|------|------|')
-  for (const p of playerStats) {
-    lines.push(`| ${p.name} | ${p.score} | ${p.wins} |`)
-  }
+  // ===== 最大输赢局明细 =====
+  lines.push('### 最大输赢局明细（本轮）')
   lines.push('')
 
-  // ===== 5. TOP3 最大盈利 =====
-  lines.push('## 5. TOP3 最大盈利')
-  lines.push('')
+  // 最大赢局
+  lines.push('#### 最大赢局')
   if (topWins.length === 0) {
-    lines.push('_（无盈利局）_')
+    lines.push('- 无盈利局')
   } else {
-    for (let i = 0; i < Math.min(3, topWins.length); i++) {
-      const w = topWins[i]
-      lines.push(`**${i + 1}. +${w.akDelta}** (${w.winnerName} ${w.isSelfDraw ? '自摸' : '放炮'})`)
-      lines.push(`- 牌型: ${w.handTypes.join(', ')} | 倍率: ×${w.multiplier}`)
-      lines.push(`- 手牌: ${w.hand}`)
-      lines.push(`- 门口牌: ${Array.isArray(w.melds) ? (w.melds as string[]).join('') : (w.melds || '无')}`)
-      lines.push('')
+    const w = topWins[0]
+    const r = w.result || {}
+    const winnerSnap = r.snapshots?.[r.winner]
+    const loserSnap = r.snapshots?.find((p: any) => p.name !== w.winnerName)
+    lines.push(`- 最大赢利: ${w.winnerName} +${w.akDelta} 点（绝对值 ${Math.abs(w.akDelta)}）`)
+    lines.push(`- 局号: ${w.gameIdx}`)
+    lines.push(`- 回合: ${w.roundNum || '—'}`)
+    lines.push(`- 总筹码: ${Math.abs(w.akDelta)}`)
+    lines.push(`- 百搭: ${winnerSnap?.wildTile || '—'}（${winnerSnap?.wildCount ?? 0}张）`)
+    lines.push(`- 回合/全局倍数信息:`)
+    lines.push(`  - 骰子点数: —`)
+    lines.push(`  - 骰子倍数: ×${r.multiplier || '—'}`)
+    lines.push(`  - 全局倍数: ×${r.multiplier || '—'}`)
+    lines.push('')
+    lines.push('**胡牌玩家明细：**')
+    if (winnerSnap) {
+      lines.push(`  - 玩家: ${winnerSnap.name}`)
+      lines.push(`    - 胡牌方式: ${w.isSelfDraw ? '自摸' : '放冲'}`)
+      lines.push(`    - 牌型/基础番/最终点: ${w.handTypes.join(', ') || '—'} / — / ${Math.abs(w.akDelta)}`)
+      lines.push(`    - 手牌牌面: ${winnerSnap.hand || '—'}`)
+      lines.push(`    - 门口牌（吃/碰/杠）: ${winnerSnap.melds?.join(' ; ') || '(无)'}`)
+      lines.push(`    - 花牌: ${winnerSnap.flowers?.join(' ') || '(无)'}`)
     }
-  }
-
-  // ===== 6. TOP3 最大亏损 =====
-  lines.push('## 6. TOP3 最大亏损')
-  lines.push('')
-  if (topLosses.length === 0) {
-    lines.push('_（无亏损局）_')
-  } else {
-    for (let i = 0; i < Math.min(3, topLosses.length); i++) {
-      const w = topLosses[i]
-      lines.push(`**${i + 1}. ${w.akDelta}** (被 ${w.winnerName} ${w.isSelfDraw ? '自摸' : '放炮'}胡)`)
-      lines.push(`- 牌型: ${w.handTypes.join(', ')} | 倍率: ×${w.multiplier}`)
-      lines.push(`- 手牌: ${w.hand}`)
-      lines.push(`- 门口牌: ${Array.isArray(w.melds) ? (w.melds as string[]).join('') : (w.melds || '无')}`)
-      lines.push('')
-    }
-  }
-
-  // ===== 7. 最大单局亏损明细 =====
-  lines.push('## 7. 最大单局亏损明细')
-  lines.push('')
-  if (worstLossGames.length === 0) {
-    lines.push('_（无数据）_')
-  } else {
-    for (const loss of worstLossGames.slice(0, 3)) {
-      const r = loss.result
-      const winner = r.snapshots?.[r.winner]
-      const loser = r.snapshots?.find(p => p.name === loss.loser)
-      const wildTile = loser?.wildTile || winner?.wildTile || '—'
-      const roundNum = r.roundNum || loss.roundNum || 0
-      lines.push(`**${loss.loser} 输 ${loss.score} 点** (局次${loss.gameIdx} | 回合${roundNum} | ×${r.multiplier || '—'})`)
-      lines.push(`**百搭**: ${wildTile} (${loser?.wildCount ?? 0}张 / ${winner?.wildCount ?? 0}张)`)
-      // 结算明细
-      if (r.settlementLog && r.settlementLog.length > 0) {
-        lines.push('```')
-        for (const s of r.settlementLog) {
-          const multStr = s.mult ? ` [${s.amount / s.mult}×${s.mult}]` : ''
-          lines.push(`[${s.reason}] ${s.from} → ${s.to}: ${s.amount}${multStr}`)
-        }
-        lines.push('```')
-      }
-      // 胡牌玩家详情
-      if (winner) {
-        const isSelfDraw = r.events.some((e: any) => e.action.includes('自摸'))
-        const wp = r.winnerPlayer
-        if (wp) {
-          lines.push(`**胡牌**: ${winner.name} | ${isSelfDraw ? '自摸' : '放炮'} | 手牌: ${winner.hand} | 门口牌: ${winner.melds?.join(' | ') || '无'}`)
-        }
-      }
-      // 三口关系
-      const baoRelations: string[] = []
-      if (r.snapshots) {
-        for (let si = 0; si < r.snapshots.length; si++) {
-          const snap = r.snapshots[si]
-          for (let ci = 0; ci < 4; ci++) {
-            if (snap.meldSources?.[ci] >= 3) {
-              const partner = r.snapshots[ci]
-              if (partner) {
-                const level = snap.meldSources[ci] >= 4 ? '四口' : '三口'
-                baoRelations.push(`${snap.name} ↔ ${partner.name}: ${level}`)
-              }
+    // 三口/四口关系
+    const baoRelations: string[] = []
+    if (r.snapshots) {
+      for (let si = 0; si < r.snapshots.length; si++) {
+        const snap = r.snapshots[si]
+        for (let ci = 0; ci < 4; ci++) {
+          const cnt = snap.meldSources?.[ci]
+          if (cnt >= 3) {
+            const partner = r.snapshots[ci]
+            if (partner) {
+              const level = cnt >= 4 ? '四口' : '三口'
+              baoRelations.push(`  - ${snap.name} <-> ${partner.name}: ${level} (A->B:${cnt}, B->A:${partner.meldSources?.[si] || 0})`)
             }
           }
         }
       }
-      if (baoRelations.length > 0) {
-        lines.push(`**三口关系**: ${baoRelations.join(' | ')}`)
+    }
+    if (baoRelations.length > 0) {
+      lines.push('**三口/四口关系：**')
+      lines.push(...baoRelations)
+    }
+    // 结算逐笔
+    if (r.settlementLog?.length > 0) {
+      lines.push('**结算逐笔明细：**')
+      for (const s of r.settlementLog) {
+        const multStr = s.mult ? ` (${s.amount / s.mult}x${s.mult})` : ''
+        lines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
       }
-      lines.push('')
     }
   }
+  lines.push('')
 
-  // ===== 8. 胡牌明细 =====
-  lines.push('## 8. 胡牌明细（全）')
-  lines.push('')
-  if (metrics.winGames === 0) {
-    lines.push('_（无胡牌局）_')
+  // 最大输局
+  lines.push('#### 最大输局')
+  if (topLosses.length === 0) {
+    lines.push('- 无亏损局')
   } else {
-    lines.push('| 局次 | 玩家 | 方式 | 牌型 | 倍率 | 手牌 | 门口牌 |')
-    lines.push('|------|------|------|------|------|------|------|')
-    for (const w of report.topWins || []) {
-      const melds = Array.isArray(w.melds) ? (w.melds as string[]).join('') : (w.melds || '无')
-      lines.push(`| ${w.gameIdx} | ${w.winnerName} | ${w.isSelfDraw ? '自摸' : '放炮'} | ${w.handTypes.join(', ')} | ×${w.multiplier} | ${w.hand} | ${melds} |`)
+    const w = topLosses[0]
+    const r = w.result || {}
+    const winnerSnap = r.snapshots?.[r.winner]
+    lines.push(`- 最大亏损: ${w.winnerName} -${Math.abs(w.akDelta)} 点（绝对值 ${Math.abs(w.akDelta)}）`)
+    lines.push(`- 局号: ${w.gameIdx}`)
+    lines.push(`- 回合: ${w.roundNum || '—'}`)
+    lines.push(`- 总筹码: ${Math.abs(w.akDelta)}`)
+    lines.push(`- 百搭: ${winnerSnap?.wildTile || '—'}（${winnerSnap?.wildCount ?? 0}张）`)
+    lines.push(`- 回合/全局倍数: ×${r.multiplier || '—'} / ×${r.multiplier || '—'}`)
+    lines.push('')
+    lines.push('**胡牌玩家明细：**')
+    if (winnerSnap) {
+      lines.push(`  - 玩家: ${winnerSnap.name}`)
+      lines.push(`    - 胡牌方式: ${w.isSelfDraw ? '自摸' : '放冲'}`)
+      lines.push(`    - 牌型/基础番/最终点: ${w.handTypes.join(', ') || '—'} / — / ${Math.abs(w.akDelta)}`)
+      lines.push(`    - 手牌牌面: ${winnerSnap.hand || '—'}`)
+      lines.push(`    - 门口牌（吃/碰/杠）: ${winnerSnap.melds?.join(' ; ') || '(无)'}`)
+      lines.push(`    - 花牌: ${winnerSnap.flowers?.join(' ') || '(无)'}`)
+    }
+    if (r.settlementLog?.length > 0) {
+      lines.push('**结算逐笔明细：**')
+      for (const s of r.settlementLog) {
+        const multStr = s.mult ? ` (${s.amount / s.mult}x${s.mult})` : ''
+        lines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
+      }
     }
   }
   lines.push('')
+  lines.push(`- 高倍数局数(骰子>=2): —`)
+  lines.push('')
+  lines.push('---')
 
   return lines.join('\n')
 }
 
-/** 适配器：将 train-ai-ak.ts 内部 EvalResult 转换为标准化 RoundReport */
+// ========== 构建 RoundReport ==========
+
 export function buildRoundReport(
   round: number,
-  internalResult: {
-    akScore: number; totalGames: number; winGames: number
-    selfDrawGames: number; bigWinGames: number; menqingWinGames: number
-    fightToLastGames: number; handTypeDist: Record<string, number>
-    winningGames: WinningGameRecord[]; worstSingleLoss: any; scores: Record<string, number>
-    winRates: Record<string, number>; akWins: number
-  },
+  internalResult: any,
   policy: Record<string, number>,
   playerNames: string[]
 ): RoundReport {
   const topWins = (internalResult.winningGames || [])
-    .filter((w: WinningGameRecord) => w.akDelta > 0)
-    .sort((a: WinningGameRecord, b: WinningGameRecord) => b.akDelta - a.akDelta)
+    .filter((w: any) => w.akDelta > 0)
+    .sort((a: any, b: any) => b.akDelta - a.akDelta)
     .slice(0, 3)
 
   const topLosses = (internalResult.winningGames || [])
-    .filter((w: WinningGameRecord) => w.akDelta < 0)
-    .sort((a: WinningGameRecord, b: WinningGameRecord) => a.akDelta - b.akDelta)
+    .filter((w: any) => w.akDelta < 0)
+    .sort((a: any, b: any) => a.akDelta - b.akDelta)
     .slice(0, 3)
 
   const playerStats: PlayerStats[] = playerNames.map(name => ({
@@ -303,32 +320,22 @@ export function buildRoundReport(
   }
 }
 
-/** 写入每轮独立文件 */
-export function writeRoundFile(
-  outDir: string,
-  report: RoundReport
-): string {
-  if (!fs.existsSync(outDir)) {
-    fs.mkdirSync(outDir, { recursive: true })
-  }
+// ========== 写入文件 ==========
+
+export function writeRoundFile(outDir: string, report: RoundReport): string {
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
   const ts = report.timestamp.replace(/[:.]/g, '-').slice(0, 19)
   const filename = `round-${String(report.round).padStart(3, '0')}-${ts}.md`
   const filePath = path.join(outDir, filename)
-  const content = formatRoundReport(report)
-  fs.writeFileSync(filePath, content, 'utf-8')
+  fs.writeFileSync(filePath, formatRoundReport(report), 'utf-8')
   return filename
 }
 
-/** 生成 index.md（所有轮次索引） */
 export function writeIndexFile(outDir: string, rounds: RoundReport[]): string {
-  if (!fs.existsSync(outDir)) {
-    fs.mkdirSync(outDir, { recursive: true })
-  }
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
   const lines: string[] = []
-  const ts = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '')
   lines.push('# 长清阁训练报告汇总')
-  lines.push('')
-  lines.push(`> 生成时间: ${ts}`)
+  lines.push(`> 生成时间: ${new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '')}`)
   lines.push('')
   lines.push('| Round | 时间 | 总局数 | 胡牌率 | Fitness |')
   lines.push('|-------|------|--------|--------|---------|')
