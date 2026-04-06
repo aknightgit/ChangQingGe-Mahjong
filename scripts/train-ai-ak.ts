@@ -469,6 +469,7 @@ function drawTile(g: GameState, p: BotPlayer): Tile | null {
   // const kongC = p.exposedMelds.filter(m => m.type === MeldType.KONG).length
   // const exp = 14 - (p.exposedMelds.length - kongC) * 3 - kongC * 4
   // if (p.hand.length !== exp) console.error(`DRAW: ${p.name} hand=${p.hand.length} expected=${exp} melds=${p.exposedMelds.length} kongs=${kongC}`)
+  if (process.env.DEBUG_DISCARD === '1') console.error(`[DISCARD_RET] ${p.name} returns=${tileStr(tile)} hand_before=${hand.length}`)
   return tile
 }
 
@@ -518,25 +519,25 @@ function canJiaGang(p: BotPlayer): Tile[] {
 }
 
 // ========== 手牌铁律验证（K哥铁律）==========
-// 正常摸牌后、出牌前：hand = 14 - 3*meldCount
-// 出牌后：hand = 13 - 3*meldCount
-// 吃碰后（直接出牌前）：hand = 11 - 3*meldCount（claim扣2，无摸牌）
-// 吃碰后出牌：hand = 10 - 3*meldCount
-const VALID_DRAW           = [14, 11, 8, 5, 2];   // 正常摸牌后
-const VALID_DISCARD         = [13, 10, 7, 4, 1];    // 出牌后
-const VALID_CLAIM          = [11, 8, 5, 2];         // 吃碰后（无摸牌）
-const VALID_CLAIM_DISCARD  = [10, 7, 4, 1];         // 吃碰后出牌
+// 手牌 = 14 - 3*普通面子(顺/刻) - 4*杠
+// 摸牌后：14 - 3*普通面子 - 4*杠
+// 出牌后：13 - 3*普通面子 - 4*杠
+// 吃碰后：11 - 3*普通面子 - 4*杠（claim扣2，无摸牌）
+// 吃碰后出牌：10 - 3*普通面子 - 4*杠
 function checkHandInvariant(p: BotPlayer, phase: 'draw' | 'discard' | 'claim' | 'claim_discard'): boolean {
-  const len = p.hand.length;
-  let valid: number[];
+  const len = normalizeHand(p.hand).length;
+  const kongCount = p.exposedMelds.filter(m => m.type === MeldType.KONG).length;
+  const nonKongMelds = p.exposedMelds.length - kongCount;  // 普通面子（顺/刻）
+  let base: number;
   switch (phase) {
-    case 'discard':       valid = VALID_DISCARD; break;
-    case 'claim':         valid = VALID_CLAIM; break;
-    case 'claim_discard': valid = VALID_CLAIM_DISCARD; break;
-    default:              valid = VALID_DRAW; break;
+    case 'discard':       base = 13; break;
+    case 'claim':         base = 14; break;
+    case 'claim_discard':  base = 13; break;  // claim后再出牌=再减1
+    default:              base = 14; break;
   }
-  if (!valid.includes(len)) {
-    console.error(`[铁律违规] ${p.name} phase=${phase} hand=${len} melds=${p.exposedMelds.length} expected=${valid.join('/')} meldDetail=${p.exposedMelds.map(m=>`${MeldType[m.type]}:${m.tiles.length}`).join(',')}`);
+  const expected = base - 3 * nonKongMelds - 4 * kongCount;
+  if (len !== expected) {
+    console.error(`[铁律违规] ${p.name} phase=${phase} hand=${len} nonKong=${nonKongMelds} kongs=${kongCount} expected=${expected} meldDetail=${p.exposedMelds.map(m=>`${m.type}:${m.tiles.length}`).join(',')}`);
     return false;
   }
   return true;
@@ -544,20 +545,31 @@ function checkHandInvariant(p: BotPlayer, phase: 'draw' | 'discard' | 'claim' | 
 
 // ========== Apply melds ==========
 function applyPeng(p: BotPlayer, tile: Tile, sourcePos?: number): void {
+  p.hand = normalizeHand(p.hand)  // 铁律：apply前先normalize
   const before = p.hand.length
-  const matches = p.hand.filter(t => t && tileEq(t, tile)).slice(0, 2)
-  if (before !== 13 && before !== 11) console.error(`PENG_STATE: ${p.name} hand=${before} tile=${tileStr(tile)}`)
-  for (const u of matches) { const idx = p.hand.findIndex(rt => rt && rt.id === u.id); if (idx >= 0) p.hand.splice(idx, 1) }
+  const kongCount = p.exposedMelds.filter(m => m.type === MeldType.KONG).length
+  const nonKong = p.exposedMelds.length - kongCount
+  const validBefore = before === 13 - 3 * nonKong - 4 * kongCount  // pong前必须是13-面子数
+  const matches = p.hand.filter(t => tileEq(t, tile)).slice(0, 2)
+  if (!validBefore || matches.length < 2) {
+    console.error(`BUG applyPeng: ${p.name} before=${before} nonKong=${nonKong} kong=${kongCount} valid=${validBefore} matches=${matches.length} tile=${tileStr(tile)} hand=${p.hand.map(t=>tileStr(t)).join(',')}`)
+    return  // 铁律被违反，中止操作（不push面子）
+  }
+  for (const u of matches) { const idx = p.hand.findIndex(rt => rt.id === u.id); if (idx >= 0) p.hand.splice(idx, 1) }
   const after = p.hand.length
-  if (after !== before - 2) console.error(`BUG applyPeng: ${p.name} before=${before} matches=${matches.length} after=${after} (expected ${before-2}) tile=${tileStr(tile)}`)
+  if (after !== before - 2) console.error(`BUG applyPeng: ${p.name} before=${before} matches=${matches.length} after=${after}`)
   p.exposedMelds.push({ type: MeldType.TRIPLET, tiles: [tile, tile, tile], isConcealed: false })
   if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
 }
 function applyChow(p: BotPlayer, tile: Tile, sourcePos?: number): void {
+  p.hand = normalizeHand(p.hand)  // 铁律：apply前先normalize
   const before = p.hand.length
+  const kongCount = p.exposedMelds.filter(m => m.type === MeldType.KONG).length
+  const nonKong = p.exposedMelds.length - kongCount
+  const validBefore = before === 13 - 3 * nonKong - 4 * kongCount  // chow前必须是13-面子数
   const v = tile.value
-  const findTile = (suit: TileSuit, val: number) => p.hand.find(t => t && t.suit === suit && t.value === val)
-  const removeTile = (t: Tile) => { const idx = p.hand.findIndex(h => h && h.id === t.id); if (idx >= 0) p.hand.splice(idx, 1) }
+  const findTile = (suit: TileSuit, val: number) => p.hand.find(t => t.suit === suit && t.value === val)
+  const removeTile = (t: Tile) => { const idx = p.hand.findIndex(h => h.id === t.id); if (idx >= 0) p.hand.splice(idx, 1) }
 
   // 三种吃牌模式，与canChow一致
   let t1: Tile | undefined, t2: Tile | undefined
@@ -577,7 +589,10 @@ function applyChow(p: BotPlayer, tile: Tile, sourcePos?: number): void {
     t2 = findTile(tile.suit, v + 2)
   }
 
-  if (!t1 || !t2) return
+  if (!validBefore || !t1 || !t2) {
+    console.error(`BUG applyChow: ${p.name} before=${before} nonKong=${nonKong} kong=${kongCount} valid=${validBefore} t1=${t1?.id} t2=${t2?.id} tile=${tileStr(tile)}`)
+    if (!validBefore) return
+  }
   if (t1.id === t2.id) { console.error(`BUG applyChow: same tile! ${p.name} tile=${tileStr(tile)} t1=t2=${t1.id}`); return }
   removeTile(t1); removeTile(t2)
   const after = p.hand.length
@@ -595,15 +610,37 @@ function applyMingKong(p: BotPlayer, tile: Tile, sourcePos?: number): void {
   if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
 }
 function applyAnKong(p: BotPlayer, tile: Tile): void {
-  p.hand = p.hand.filter(t => t && !tileEq(t, tile))
+  p.hand = normalizeHand(p.hand)  // 铁律：先normalize
+  const tileCount = p.hand.filter(t => tileEq(t, tile)).length
+  const kongCount = p.exposedMelds.filter(m => m.type === MeldType.KONG).length
+  const nonKong = p.exposedMelds.length - kongCount
+  // 验证：手牌必须有4张目标牌
+  if (tileCount < 4) {
+    console.error(`BUG applyAnKong: ${p.name} tileCount=${tileCount} < 4 tile=${tileStr(tile)} hand=${p.hand.map(t=>tileStr(t)).join(',')}`)
+    return
+  }
+  const before = p.hand.length
+  p.hand = p.hand.filter(t => !tileEq(t, tile))
+  const after = p.hand.length
+  if (after !== before - 4) { console.error(`BUG applyAnKong: ${p.name} before=${before} after=${after} (expected ${before-4})`); return }
   p.exposedMelds.push({ type: MeldType.KONG, tiles: [tile, tile, tile, tile], isConcealed: true })
   p.kongCount++
 }
 function applyJiaGang(p: BotPlayer, tile: Tile): void {
+  p.hand = normalizeHand(p.hand)  // 铁律：先normalize
+  const tileCount = p.hand.filter(t => tileEq(t, tile)).length
+  if (tileCount < 1) {
+    console.error(`BUG applyJiaGang: ${p.name} tileCount=${tileCount} < 1 tile=${tileStr(tile)}`)
+    return
+  }
   const meld = p.exposedMelds.find(m => m.type === MeldType.TRIPLET && tileEq(m.tiles[0], tile))
   if (!meld) return
   meld.type = MeldType.KONG; meld.tiles = [tile, tile, tile, tile]; meld.isConcealed = false
-  p.hand = p.hand.filter(t => t && !tileEq(t, tile)); p.kongCount++
+  const before = p.hand.length
+  p.hand = p.hand.filter(t => !tileEq(t, tile))
+  const after = p.hand.length
+  if (after !== before - 1) { console.error(`BUG applyJiaGang: ${p.name} before=${before} after=${after}`); return }
+  p.kongCount++
 }
 
 // ========== Scoring (with multiplier simulation) ==========
@@ -759,8 +796,11 @@ function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
 // ========== AI Discard (长清阁规则) ==========
 function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[] = [],
   wallIdx: number = 0, deckLen: number = 144, allPlayers: BotPlayer[] = [], myPos: number = 0): Tile {
+  // 铁律：hand可能含undefined，在计算前先normalize
+  p.hand = normalizeHand(p.hand)
   const policy = p.policy
   const hand = p.hand
+  if (process.env.DEBUG_DISCARD === '1') console.error(`[DISCARD] ${p.name} hand_before=${hand.length} pos=${p.pos}`)
   const wildCount = hand.filter(t => isWT(t, p)).length
   const isMenqing = p.exposedMelds.length === 0
   const totalMelds = p.exposedMelds.length
@@ -1336,6 +1376,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     g.discardPile.push(discard)
     g.playerDiscards[curr].push(discard)
     log(player.name, '出牌', `${tileStr(discard)} [手牌: ${player.hand.map(t => tileStr(t)).join(' ')}]`)
+    const rawLen = player.hand.length; player.hand = player.hand.filter(t => t && t.id !== discard.id); const filteredLen = player.hand.length; player.discardedTiles.push(discard)
+    if (rawLen !== filteredLen + 1) console.error(`[DISCARD_DEBUG] ${player.name} raw=${rawLen} after_remove=${filteredLen} discard=${tileStr(discard)}`)
     checkHandInvariant(player, 'discard')  // 出牌后铁律：13/10/7/4/1张
 
     // Others check hu
@@ -1381,9 +1423,9 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             const expBefore = 14 - (opp.exposedMelds.length - km) * 3 - km * 4
             console.error(`小胖_CLAIM: hand=${opp.hand.length} melds=${opp.exposedMelds.length} kong=${km} exp=${expBefore} tile=${tileStr(discard)}`)
           }
-          applyPeng(opp, discard, curr)
+          applyPeng(opp, discard, curr)  // 内部已normalize
           opp.chowPongExclusion = updateChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)  // K哥铁律：记录碰行动
-          checkHandInvariant(opp, 'claim_discard')  // 碰后（出牌后阶段）铁律：11/8/5/2张
+          checkHandInvariant(opp, 'claim')  // claim后（11/8/5/2张）
           // 放炮胡检查（claim后draw前，手牌=expectedLen）
           const handAfterPeng = normalizeHand(opp.hand)
           const kongAfterPeng = opp.exposedMelds.filter(m => m.type === MeldType.KONG).length
@@ -1440,8 +1482,16 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     const nextP = g.players[nextPlayer]
     if (canChow(nextP, discard) && Math.random() < nextP.policy.chowChance) {
       if (!checkChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)) continue;  // K哥铁律：吃碰排斥
+      const beforeChowHand = nextP.hand.length
+      const beforeChowMelds = nextP.exposedMelds.length
+      const beforeChowNorm = normalizeHand(nextP.hand).length
       applyChow(nextP, discard, curr)
+      const afterChowNorm = normalizeHand(nextP.hand).length
       nextP.chowPongExclusion = updateChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)  // K哥铁律：记录吃行动
+      const afterChowMelds = nextP.exposedMelds.length
+      if (afterChowMelds === beforeChowMelds) {
+        console.error(`CHOW_NO_APPLY: ${nextP.name} beforeNorm=${beforeChowNorm} melds=${beforeChowMelds} afterNorm=${afterChowNorm} afterMelds=${afterChowMelds} tile=${tileStr(discard)}`)
+      }
       checkHandInvariant(nextP, 'claim_discard')  // 吃后（出牌后阶段）铁律：11/8/5/2张
       // 放炮胡检查（claim后draw前，手牌=expectedLen）
       const handAfterChow = normalizeHand(nextP.hand)
