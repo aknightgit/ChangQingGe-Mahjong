@@ -38,6 +38,7 @@ export interface WinningGameRecord {
   hand: string
   melds: string | string[]
   multiplier: number
+  roundNum: number
   result: any
 }
 
@@ -186,7 +187,12 @@ export function formatRoundReport(report: RoundReport): string {
   } else {
     for (const loss of worstLossGames.slice(0, 3)) {
       const r = loss.result
-      lines.push(`**${loss.loser} 输 ${loss.score} 点** (局次${loss.gameIdx} | ×${r.gameMultiplier})`)
+      const winner = r.snapshots?.[r.winner]
+      const loser = r.snapshots?.find(p => p.name === loss.loser)
+      const wildTile = loser?.wildTile || winner?.wildTile || '—'
+      const roundNum = r.roundNum || loss.roundNum || 0
+      lines.push(`**${loss.loser} 输 ${loss.score} 点** (局次${loss.gameIdx} | 回合${roundNum} | ×${r.multiplier || '—'})`)
+      lines.push(`**百搭**: ${wildTile} (${loser?.wildCount ?? 0}张 / ${winner?.wildCount ?? 0}张)`)
       // 结算明细
       if (r.settlementLog && r.settlementLog.length > 0) {
         lines.push('```')
@@ -196,15 +202,26 @@ export function formatRoundReport(report: RoundReport): string {
         }
         lines.push('```')
       }
+      // 胡牌玩家详情
+      if (winner) {
+        const isSelfDraw = r.events.some((e: any) => e.action.includes('自摸'))
+        const wp = r.winnerPlayer
+        if (wp) {
+          lines.push(`**胡牌**: ${winner.name} | ${isSelfDraw ? '自摸' : '放炮'} | 手牌: ${winner.hand} | 门口牌: ${winner.melds?.join(' | ') || '无'}`)
+        }
+      }
       // 三口关系
       const baoRelations: string[] = []
-      for (const snap of r.snapshots || []) {
-        for (let ci = 0; ci < 4; ci++) {
-          if (snap.meldSources?.[ci] >= 3) {
-            const partner = r.snapshots?.[ci]
-            if (partner) {
-              const level = snap.meldSources[ci] >= 4 ? '四口' : '三口'
-              baoRelations.push(`${snap.name} ↔ ${partner.name}: ${level}`)
+      if (r.snapshots) {
+        for (let si = 0; si < r.snapshots.length; si++) {
+          const snap = r.snapshots[si]
+          for (let ci = 0; ci < 4; ci++) {
+            if (snap.meldSources?.[ci] >= 3) {
+              const partner = r.snapshots[ci]
+              if (partner) {
+                const level = snap.meldSources[ci] >= 4 ? '四口' : '三口'
+                baoRelations.push(`${snap.name} ↔ ${partner.name}: ${level}`)
+              }
             }
           }
         }
