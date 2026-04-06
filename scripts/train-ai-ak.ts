@@ -517,6 +517,22 @@ function canJiaGang(p: BotPlayer): Tile[] {
   return result
 }
 
+// ========== 手牌铁律验证（K哥铁律）==========
+// 摸牌后、出牌前：hand = 14 - 3*meldCount
+// 出牌后：hand = 13 - 3*meldCount
+const VALID_CONCEALED_DRAW    = [14, 11, 8, 5, 2];
+const VALID_CONCEALED_DISCARD = [13, 10, 7, 4, 1];
+function checkHandInvariant(p: BotPlayer, phase: 'draw' | 'discard' | 'claim'): boolean {
+  const mc = p.exposedMelds.length;
+  const len = p.hand.length;
+  const valid = phase === 'discard' ? VALID_CONCEALED_DISCARD : VALID_CONCEALED_DRAW;
+  if (!valid.includes(len)) {
+    console.error(`[铁律违规] ${p.name} phase=${phase} hand=${len} melds=${mc} expected=${valid.join('/')} meldDetail=${p.exposedMelds.map(m=>`${MeldType[m.type]}:${m.tiles.length}`).join(',')}`);
+    return false;
+  }
+  return true;
+}
+
 // ========== Apply melds ==========
 function applyPeng(p: BotPlayer, tile: Tile, sourcePos?: number): void {
   const before = p.hand.length
@@ -1233,6 +1249,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     if (!drawn) { console.error(`⚠️ 流局: 牌墙耗尽 round=${round} wallIdx=${g.wallIdx}/${g.deck.length}`); return null }
     if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); continue }
     log(player.name, '摸牌', tileStr(drawn))
+    checkHandInvariant(player, 'draw')  // 摸牌后铁律：14/11/8/5/2张
 
     // Self-draw win check
     const normalizedHand = normalizeHand(player.hand)
@@ -1310,6 +1327,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     g.discardPile.push(discard)
     g.playerDiscards[curr].push(discard)
     log(player.name, '出牌', `${tileStr(discard)} [手牌: ${player.hand.map(t => tileStr(t)).join(' ')}]`)
+    checkHandInvariant(player, 'discard')  // 出牌后铁律：13/10/7/4/1张
 
     // Others check hu
     for (let other = 0; other < 4; other++) {
@@ -1356,6 +1374,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           }
           applyPeng(opp, discard, curr)
           opp.chowPongExclusion = updateChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)  // K哥铁律：记录碰行动
+          checkHandInvariant(opp, 'claim')  // 碰后铁律：14/11/8/5/2张
           // 放炮胡检查（claim后draw前，手牌=expectedLen）
           const handAfterPeng = normalizeHand(opp.hand)
           const kongAfterPeng = opp.exposedMelds.filter(m => m.type === MeldType.KONG).length
@@ -1374,6 +1393,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           }
           const d = drawTile(g, opp)
           if (!d) return null
+          checkHandInvariant(opp, 'draw')  // 碰后摸牌铁律
           if (canWin(normalizeHand(opp.hand), opp.exposedMelds.length, makeWT(opp), opp.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
             const baseScore = calcScore(opp, true, false, g.gameMultiplier)
             opp.score += baseScore * 3
@@ -1385,6 +1405,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           for (const ak of canAnKong(opp)) {
             applyAnKong(opp, ak)
             const extra = drawTile(g, opp)
+            if (!extra) return null
+            checkHandInvariant(opp, 'draw')  // 加杠后摸牌铁律
             if (extra && !isFlower(extra)) {
               if (canWin(normalizeHand(opp.hand), opp.exposedMelds.length, makeWT(opp), opp.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
                 const kongBaseScore = calcScore(opp, true, true, g.gameMultiplier)
@@ -1413,6 +1435,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       if (!checkChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)) continue;  // K哥铁律：吃碰排斥
       applyChow(nextP, discard, curr)
       nextP.chowPongExclusion = updateChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)  // K哥铁律：记录吃行动
+      checkHandInvariant(nextP, 'claim')  // 吃后铁律：14/11/8/5/2张
       // 放炮胡检查（claim后draw前，手牌=expectedLen）
       const handAfterChow = normalizeHand(nextP.hand)
       const kongAfterChow = nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length
@@ -1429,6 +1452,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       }
       const d = drawTile(g, nextP)
       if (!d) return null
+      checkHandInvariant(nextP, 'draw')  // 吃后摸牌铁律
       if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds.length, makeWT(nextP), nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
         const baseScore = calcScore(nextP, true, false, g.gameMultiplier)
         nextP.score += baseScore * 3
@@ -1440,6 +1464,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       for (const ak of canAnKong(nextP)) {
         applyAnKong(nextP, ak)
         const extra = drawTile(g, nextP)
+        if (!extra) return null
+        checkHandInvariant(nextP, 'draw')  // 吃后加杠摸牌铁律
         if (extra && !isFlower(extra)) {
           if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds.length, makeWT(nextP), nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length).canWin) {
             const kongBaseScore = calcScore(nextP, true, true, g.gameMultiplier)
