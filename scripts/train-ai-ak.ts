@@ -20,6 +20,7 @@ import { TileSuit, MeldType, WinType, type Tile, type Meld } from '../server/typ
 import * as fs from 'fs'
 import * as path from 'path'
 import { fileURLToPath } from 'url'
+import { writeRoundFile, buildRoundReport, writeIndexFile } from './training-reporter'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -1472,6 +1473,8 @@ interface EvalResult {
   // 新增：每轮详情
   winningGames: WinningGameRecord[]  // 所有胡牌局明细
   handTypeDist: Record<string, number>  // 牌型分布计数
+  // 玩家得分统计（用于报告）
+  playerStats: { name: string; score: number; wins: number; deltas: number[] }[]
 }
 
 function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy: BotPolicy): string {
@@ -1689,7 +1692,8 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
     akScore: scores['AI-AK'], akWins: wins['AI-AK'], winRates, scores, draws,
     bigWin, bigLoss, totalGames: games, winGames, selfDrawGames,
     fightToLastGames, bigWinGames, menqingWinGames, metricsFitness: mf, worstSingleLoss,
-    winningGames, handTypeDist
+    winningGames, handTypeDist,
+    playerStats: AI_NAMES.map(name => ({ name, score: scores[name] || 0, wins: wins[name] || 0, deltas: [] })),
   }
 }
 
@@ -1749,6 +1753,7 @@ function main() {
   // Track history for adaptive mutation
   const scoreHistory: number[] = [baseline.akScore]
   let plateauCount = 0
+  const roundReports: ReturnType<typeof buildRoundReport>[] = []
 
   // Training rounds
   for (let round = 1; round <= ROUNDS; round++) {
@@ -1848,68 +1853,12 @@ function main() {
     console.log(roundLines.join('\n'))
     logLines.push(...roundLines)
 
-    // 每轮单独输出文件
+    // 每轮单独输出文件（使用标准化reporter）
     if (bestEvalResult) {
-      const roundTs = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-      const roundFile = path.join(OUT_DIR, `round-${round}-${roundTs}.md`)
-      const distLines: string[] = []
-      distLines.push(`# Round ${round} 详情 (${roundTs})`)
-      distLines.push('')
-      distLines.push('## 牌型分布（共${bestEvalResult.winGames}局胡牌）')
-      const sortedTypes = Object.entries(bestEvalResult.handTypeDist || {}).sort((a, b) => b[1] - a[1])
-      for (const [type, count] of sortedTypes) {
-        const pct = (count / Math.max(1, bestEvalResult.winGames) * 100).toFixed(1)
-        distLines.push(`- ${type}: ${count}局 (${pct}%)`)
-      }
-      distLines.push('')
-      distLines.push('## AK最大赢局 TOP3')
-      const akWins = (bestEvalResult.winningGames || [])
-        .filter(w => w.akDelta > 0)
-        .sort((a, b) => b.akDelta - a.akDelta)
-        .slice(0, 3)
-      for (const w of akWins) {
-        distLines.push(`### +${w.akDelta} (${w.winnerName} ${w.isSelfDraw ? '自摸' : '放炮'})`)
-        distLines.push(`- 牌型: ${w.handTypes.join(', ')}  倍率: x${w.multiplier}`)
-        distLines.push(`- 手牌: ${w.hand}`)
-        distLines.push(`- 门口牌: ${w.melds.join(' | ') || '无'}`)
-      }
-      distLines.push('')
-      distLines.push('## AK最大输局 TOP3')
-      const akLosses = (bestEvalResult.winningGames || [])
-        .filter(w => w.akDelta < 0)
-        .sort((a, b) => a.akDelta - b.akDelta)
-        .slice(0, 3)
-      for (const w of akLosses) {
-        distLines.push(`### ${w.akDelta} (被 ${w.winnerName} ${w.isSelfDraw ? '自摸' : '放炮'}胡)`)
-        distLines.push(`- 牌型: ${w.handTypes.join(', ')}  倍率: x${w.multiplier}`)
-        distLines.push(`- 手牌: ${w.hand}`)
-        distLines.push(`- 门口牌: ${w.melds.join(' | ') || '无'}`)
-      }
-      distLines.push('')
-      distLines.push('## 全局最大单人亏损 TOP3')
-      // 找每局中输得最多的那个人
-      const worstPerGame: { gameIdx: number; loser: string; score: number; winnerName: string; handTypes: string[] }[] = []
-      for (const w of (bestEvalResult.winningGames || [])) {
-        const loserEntry = (w.result.settlementLog || [])
-          .filter(s => s.amount < 0)
-          .sort((a, b) => a.amount - b.amount)
-        if (loserEntry.length > 0) {
-          worstPerGame.push({ gameIdx: w.gameIdx, loser: loserEntry[0].from, score: loserEntry[0].amount, winnerName: w.winnerName, handTypes: w.handTypes })
-        }
-      }
-      worstPerGame.sort((a, b) => a.score - b.score)
-      for (const e of worstPerGame.slice(0, 3)) {
-        distLines.push(`### ${e.score} (局次${e.gameIdx} 赢家:${e.winnerName})`)
-        distLines.push(`- 最大输家: ${e.loser}  牌型: ${e.handTypes.join(', ')}`)
-      }
-      distLines.push('')
-      distLines.push('## 胡牌明细（全部）')
-      for (const w of (bestEvalResult.winningGames || [])) {
-        distLines.push(`- [${w.gameIdx}] ${w.winnerName} ${w.isSelfDraw ? '自摸' : '放炮'} | 牌型:${w.handTypes.join(',')} | ${w.hand} | ${w.melds.join('|') || '无副露'}`)
-      }
-      fs.writeFileSync(roundFile, distLines.join('\n'), 'utf-8')
-      console.log(`  → 轮次详情已保存: round-${round}.md`)
-
+      const report = buildRoundReport(round, bestEvalResult, roundBestPolicy as any, AI_NAMES)
+      roundReports.push(report)
+      const filename = writeRoundFile(OUT_DIR, report)
+      console.log(`  → 轮次详情已保存: ${filename}`)
       logLines.push('', formatRoundMarkdown(round, bestEvalResult, roundBestPolicy), '')
     }
   }  // End round loop
@@ -2049,10 +1998,12 @@ function main() {
   fs.writeFileSync(mdFile, logLines.join('\n'), 'utf-8')
   fs.writeFileSync(policyFile, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
   fs.writeFileSync(policyLatest, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
+  const indexFile = writeIndexFile(OUT_DIR, roundReports)
 
   console.log(`\nLog saved: ${mdFile}`)
   console.log(`Policy saved: ${policyFile}`)
   console.log(`Policy latest: ${policyLatest}`)
+  console.log(`Index saved: ${indexFile}`)
 }
 
 main()
