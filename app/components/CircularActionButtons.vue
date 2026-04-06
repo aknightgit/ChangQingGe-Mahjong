@@ -192,35 +192,50 @@ const safeFreezeDurationMs = computed(() => {
 })
 
 const freezeProgress = ref('0')
-let freezeProgressTimer: ReturnType<typeof setInterval> | null = null
+let freezeRafId: number | null = null
 
-const updateFreezeProgress = () => {
+const animateFreeze = () => {
   if (!props.freezeUntil) {
     freezeProgress.value = '0'
+    freezeRafId = null
     return
   }
+  const now = Date.now()
+  const remaining = props.freezeUntil - now
+  if (remaining <= 0) {
+    freezeProgress.value = '1'
+    freezeRafId = null
+    return
+  }
+  // 扇形和圆环统一用 freezeUntil 作为唯一时间源
+  // progress = elapsed / total，其中 total = freezeUntil - freezeStart
+  // freezeStart = freezeUntil - safeFreezeDurationMs（假设freezeUntil在freeze开始时设置）
   const total = safeFreezeDurationMs.value
-  const remaining = Math.max(0, props.freezeUntil - Date.now())
   const elapsed = total - remaining
   freezeProgress.value = String(Math.min(1, Math.max(0, elapsed / total)))
+  freezeRafId = requestAnimationFrame(animateFreeze)
 }
 
 watch(
-  () => [props.freezeUntil, safeFreezeDurationMs.value],
-  () => {
-    updateFreezeProgress()
+  () => props.freezeUntil,
+  (newUntil) => {
+    if (freezeRafId) {
+      cancelAnimationFrame(freezeRafId)
+      freezeRafId = null
+    }
+    if (newUntil && newUntil > Date.now()) {
+      freezeRafId = requestAnimationFrame(animateFreeze)
+    } else {
+      freezeProgress.value = '0'
+    }
   },
   { immediate: true }
 )
 
-onMounted(() => {
-  freezeProgressTimer = setInterval(updateFreezeProgress, 50)
-})
-
 onUnmounted(() => {
-  if (freezeProgressTimer) {
-    clearInterval(freezeProgressTimer)
-    freezeProgressTimer = null
+  if (freezeRafId) {
+    cancelAnimationFrame(freezeRafId)
+    freezeRafId = null
   }
 })
 </script>
@@ -353,7 +368,8 @@ onUnmounted(() => {
   mask: radial-gradient(circle, transparent 55%, black 58%);
   -webkit-mask: radial-gradient(circle, transparent 55%, black 58%);
   pointer-events: none;
-  transition: background var(--freeze-duration-ms, 1000ms) linear;
+  /* 扇形动画由 JS RAF 驱动，不再依赖 CSS transition */
+  transition: none;
   clip-path: circle(50%);
 }
 
