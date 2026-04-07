@@ -1114,13 +1114,8 @@ class GameManager {
     }
 
     // If it's the player's turn, allow turn actions
-    // freeze 百搭期间不能出牌/摸牌
-    // 其他玩家有 pending claim 时,当前玩家等待(冻结窗口给抢牌机会)
+    // freeze 百搭期间不能出牌(响应其他玩家弃牌),但可以摸牌(自己的回合动作)
     if (currentPlayer.id === playerId) {
-      // 百搭冻结期间:不响应出牌/摸牌
-      if (game.freezeRound && game.roundNumber <= game.freezeRound) {
-        return [];
-      }
       // 有其他玩家在抢牌(pending claim),当前玩家等待决策窗口
       if (game.pendingActions.length > 0) {
         return [];
