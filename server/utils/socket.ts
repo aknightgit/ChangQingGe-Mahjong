@@ -124,7 +124,7 @@ export async function initializeSocketIO(server: HTTPServer) {
         // But GameManager is in-memory and uses gameId as the key.
         // The frontend uses gameId as roomId in the URL usually.
         // Let's assume gameId == roomId for broadcasting purposes in this context
-        emitToRoom(gameId, 'game:state-changed', data)
+        emitToRoom(gameId, event, data)
       }
     })
 

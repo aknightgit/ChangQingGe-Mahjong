@@ -1374,6 +1374,16 @@ class GameManager {
     if (this.isWildTile(game, tile)) {
       game.freezeRound = game.roundNumber;
       game.pendingActions = [];
+      // 广播百搭打出
+      if (this.wsManager) {
+        this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+          id: Date.now(),
+          text: `🃏 ${player.name}打出了百搭，本轮不能吃碰捉冲！`,
+          type: 'warn',
+          timestamp: Date.now(),
+          timeLabel: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+        });
+      }
       await this.persistGame(game);
       this.broadcastGameState(game.gameId);
       await this.moveToNextPlayer(game);
@@ -1770,6 +1780,25 @@ class GameManager {
 
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
     this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.SEQUENCE);
+
+    // 吃牌达到两口时广播（不等到三口）
+    if (sourcePlayerId) {
+      const gameBailout = this.mutualBailout.get(game.gameId);
+      const eatCount = gameBailout?.get(player.id)?.get(sourcePlayerId) || 0;
+      if (eatCount === 2) {
+        const source = game.players.find(p => p.id === sourcePlayerId);
+        if (source && this.wsManager) {
+          this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+            id: Date.now(),
+            text: `🐉 ${player.name}吃了${source.name}两口了！`,
+            type: 'special',
+            timestamp: Date.now(),
+            timeLabel: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+          });
+        }
+      }
+    }
+
     this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
 
     for (const tile of handTiles) {
@@ -2323,6 +2352,17 @@ class GameManager {
 
     // 造反者成为庄家
     game.dealerIndex = player.position;
+
+    // 广播造反成功
+    if (this.wsManager) {
+      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+        id: Date.now(),
+        text: `⚔️ ${player.name}造反成功！下把翻倍！`,
+        type: 'special',
+        timestamp: Date.now(),
+        timeLabel: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      });
+    }
   }
 
   /**
