@@ -567,7 +567,8 @@ export function findBestHandTypes(
 export function canWin(
   handTiles: Tile[],
   exposedOrCount: Meld[] | number,
-  wildTileIdOrChecker: string | null | WildTileChecker
+  wildTileIdOrChecker: string | null | WildTileChecker,
+  isSelfDraw = true  // [BugFix] 四百搭只能自摸，捉冲时跳过
 ): { canWin: boolean; types: HandType[] } {
   const isOldSig = typeof exposedOrCount === 'number';
   const exposed: Meld[] = isOldSig ? [] : exposedOrCount;
@@ -621,8 +622,8 @@ export function canWin(
   const concealedNonFlower = concealed.filter(t => !isFlower(t));
   const flowerCount = concealedFlowers.length + exposed.flatMap(m => m.tiles).filter(t => isFlower(t)).length;
 
-  // 四百搭（花是百搭时，不需要八花检测；花是普通牌时，可能含花）
-  if (wildTileId) {
+  // 四百搭（只能自摸，捉冲时跳过）
+  if (wildTileId && isSelfDraw) {
     const wildTileFn = buildWildTileChecker(wildTileId);
     const wildCount = concealed.filter(t => wildTileFn(t)).length;
     if (wildCount >= 4) {

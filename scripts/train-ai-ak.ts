@@ -1401,7 +1401,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       if (other === curr) continue
       const opp = g.players[other]
       const testHand = [...opp.hand.filter(t => t !== undefined), discard]
-      if (canWin(testHand, opp.exposedMelds, makeWT(opp)).canWin) {
+      if (canWin(testHand, opp.exposedMelds, makeWT(opp), false).canWin) {
         let huChance = opp.policy.discardHuChance
         const wildCount = opp.hand.filter(t => isWT(t, opp)).length
         huChance -= wildCount * opp.policy.discardHuWildPenalty
@@ -1443,7 +1443,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           const handAfterPeng = normalizeHand(opp.hand)
           const kongAfterPeng = opp.exposedMelds.filter(m => m.type === MeldType.KONG).length
           const expAfterPeng = 14 - (opp.exposedMelds.length - kongAfterPeng) * 3 - kongAfterPeng * 4
-          if (canWin(handAfterPeng, opp.exposedMelds, makeWT(opp)).canWin) {
+          if (canWin(handAfterPeng, opp.exposedMelds, makeWT(opp), false).canWin) {
             const huChance = opp.policy.discardHuChance
             if (Math.random() < huChance) {
               const score = calcScore(opp, false, false, g.gameMultiplier)
@@ -1501,7 +1501,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       // 放炮胡检查（claim后draw前，手牌=expectedLen）
       const handAfterChow = normalizeHand(nextP.hand)
       const kongAfterChow = nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length
-      if (canWin(handAfterChow, nextP.exposedMelds, makeWT(nextP)).canWin) {
+      if (canWin(handAfterChow, nextP.exposedMelds, makeWT(nextP), false).canWin) {
         const huChance = nextP.policy.discardHuChance
         if (Math.random() < huChance) {
           const score = calcScore(nextP, false, false, g.gameMultiplier)
