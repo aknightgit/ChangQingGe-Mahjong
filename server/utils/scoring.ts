@@ -18,8 +18,10 @@ const FIXED_FAN: Record<string, number> = {
   '混碰': 10,         // 混一色 + 碰碰胡
   '大吊碰碰胡': 10,    // 碰碰胡 + 大吊
   '大吊混一色': 10,    // 混一色 + 大吊
-  '大吊清一色': 40,    // 清一色 + 大吊
-  '大吊风一色': 40,    // 风一色 + 大吊
+  '大吊清一色': 10,    // 清一色 + 大吊
+  '大吊清碰': 20,      // 清碰 + 大吊
+  '大吊风一色': 20,    // 风一色 + 大吊
+  '大吊风碰': 40,      // 风碰 + 大吊
   '大吊': 10,         // 大吊（无特殊牌型组合）
   '清一色': 10,       // 全部一门花色
   '无花自摸': 10,     // 碰碰胡/混一色，门口无花，自摸
@@ -614,9 +616,9 @@ function getFixedFanName(type: HandType, isSelfDrawn: boolean, isKongFlower: boo
   // 大吊组合：优先级最高，直接返回对应固定番
   if (isDaDiao) {
     if (handTypes) {
-      if (handTypes.includes(HandType.FENG_PENG)) return '大吊风一色';
+      if (handTypes.includes(HandType.FENG_PENG)) return '大吊风碰';
       if (handTypes.includes(HandType.ALL_WIND)) return '大吊风一色';
-      if (handTypes.includes(HandType.QING_PENG)) return '大吊清一色';
+      if (handTypes.includes(HandType.QING_PENG)) return '大吊清碰';
       if (handTypes.includes(HandType.ALL_TRIPLETS)) return '大吊碰碰胡';
       if (handTypes.includes(HandType.HALF_FLUSH)) return '大吊混一色';
       if (handTypes.includes(HandType.FULL_FLUSH)) return '大吊清一色';
