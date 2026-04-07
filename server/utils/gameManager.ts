@@ -2258,7 +2258,9 @@ class GameManager {
       globalIncludesRound: true
     });
 
-    player.wonFan = scoreResult.baseFan;
+    // wonFan 存最终点数（baseFan × extraMultipliers × globalMultiplier）
+    // calculateScore.finalPoints 已经包含了门清/无百搭翻倍和全局倍数
+    player.wonFan = scoreResult.finalPoints;
     player.winHandType = scoreResult.handTypeName;
     player.isSelfDrawn = isSelfDrawn;
     if (!isSelfDrawn) {
