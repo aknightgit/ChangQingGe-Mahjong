@@ -391,8 +391,8 @@ function detectTypes(
     types.push(HandType.FENG_PENG);
   }
 
-  // 大吊
-  if (concealedNonFlower.length === 2 && exposed.length >= 1) {
+  // 大吊：2张手牌 + 至少1个副露，且手牌必须能组成有效对子（satisfiesFormat验证）
+  if (concealedNonFlower.length === 2 && exposed.length >= 1 && satisfiesFormat) {
     types.push(HandType.DA_DIAO);
   }
 
