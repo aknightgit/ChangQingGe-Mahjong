@@ -369,6 +369,19 @@ function detectTypes(
     types.push(HandType.ALL_TRIPLETS);
   }
 
+  // ---- 大吊时碰碰胡检测 ----
+  // 大吊（1张手牌）：门口4组面子全为刻子/杠时，算碰碰胡
+  if (concealedNonFlower.length === 1) {
+    const exposedAllTriplets = exposed.every(m =>
+      m.type === MeldType.TRIPLET ||
+      m.type === MeldType.KONG ||
+      m.type === MeldType.CONCEALED_KONG
+    );
+    if (!hasExposedSequence && exposedAllTriplets) {
+      types.push(HandType.ALL_TRIPLETS);
+    }
+  }
+
   // ---- 花色构成 ----
   const allExposedNonFlower = exposed.flatMap(m => m.tiles).filter(t => !isFlower(t));
   const allNonFlower = [...concealedNonFlower, ...allExposedNonFlower];

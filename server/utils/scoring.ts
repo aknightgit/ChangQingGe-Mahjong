@@ -22,7 +22,6 @@ const FIXED_FAN: Record<string, number> = {
   '大吊清碰': 20,      // 清碰 + 大吊
   '大吊风一色': 20,    // 风一色 + 大吊
   '大吊风碰': 40,      // 风碰 + 大吊
-  '大吊': 10,         // 大吊（无特殊牌型组合）
   '清一色': 10,       // 全部一门花色
   '无花自摸': 10,     // 碰碰胡/混一色，门口无花，自摸
   '杠开': 10,         // 杠牌/杠花后补牌自摸
@@ -623,7 +622,6 @@ function getFixedFanName(type: HandType, isSelfDrawn: boolean, isKongFlower: boo
       if (handTypes.includes(HandType.HALF_FLUSH)) return '大吊混一色';
       if (handTypes.includes(HandType.FULL_FLUSH)) return '大吊清一色';
     }
-    return '大吊';
   }
   switch (type) {
     case HandType.FENG_PENG: return '风碰';

@@ -1326,19 +1326,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     // 当前玩家摸牌后：hand = 14 - 3*普通面子 - 4*杠
     // 简化：只打印诊断，不做严格校验
     const numPungs = player.exposedMelds.filter(m => m.type === MeldType.TRIPLET || m.type === MeldType.SEQUENCE).length
-    const numKongs = player.exposedMelds.filter(m => m.type === MeldType.KONG).length
-    const expectedLen = 14 - numPungs * 3 - numKongs * 4
-    if (normalizedHand.length !== expectedLen) {
-      console.error(`⚠️ 手牌长度异常: ${player.name} round=${round} hand=${normalizedHand.length} expected=${expectedLen} pungs=${numPungs} kongs=${numKongs}`)
-    }
     const winCheck = canWin(normalizedHand, player.exposedMelds, makeWT(player))
-    // [DEBUG] 临时强制自摸 + 日志
-    console.error(`[CANWIN-D] ${player.name} round=${round} hand=${normalizedHand.length} exposed=${player.exposedMelds.length} wild=${makeWT(player)} → canWin=${winCheck.canWin} types=${JSON.stringify(winCheck.types)}`)
     if (winCheck.canWin) {
-      let winChance = 1.0 // [DEBUG] 临时强制自摸，验证canWin是否被调用
-      const wildCount = player.hand.filter(t => isWT(t, player)).length
-      winChance += wildCount * player.policy.selfWinWildBoost
-      winChance -= player.exposedMelds.length * player.policy.meldPenalty
+      // [DEBUG FORCE SELF-DRAW] 强制100%自摸，验证AI能否正常做成特殊牌型
+      const winChance = 1.0
       if (Math.random() < winChance) {
         const baseScore = calcScore(player, true, false, g.gameMultiplier)
         // 自摸：每人赔baseScore，赢家得3倍
@@ -1402,10 +1393,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       const opp = g.players[other]
       const testHand = [...opp.hand.filter(t => t !== undefined), discard]
       if (canWin(testHand, opp.exposedMelds, makeWT(opp), false).canWin) {
-        let huChance = opp.policy.discardHuChance
-        const wildCount = opp.hand.filter(t => isWT(t, opp)).length
-        huChance -= wildCount * opp.policy.discardHuWildPenalty
-        if (opp.exposedMelds.length === 0) huChance -= opp.policy.discardHuMenQingPenalty
+        // [DEBUG FORCE HU] 强制100%捉冲，只要能胡就必胡
+        const huChance = 1.0
         if (Math.random() < huChance) {
           const score = calcScore(opp, false, false, g.gameMultiplier)
           opp.score += score; player.score -= score
@@ -1444,7 +1433,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           const kongAfterPeng = opp.exposedMelds.filter(m => m.type === MeldType.KONG).length
           const expAfterPeng = 14 - (opp.exposedMelds.length - kongAfterPeng) * 3 - kongAfterPeng * 4
           if (canWin(handAfterPeng, opp.exposedMelds, makeWT(opp), false).canWin) {
-            const huChance = opp.policy.discardHuChance
+            // [DEBUG FORCE HU] 强制100%捉冲
+            const huChance = 1.0
             if (Math.random() < huChance) {
               const score = calcScore(opp, false, false, g.gameMultiplier)
               opp.score += score; g.players[curr].score -= score
@@ -1502,7 +1492,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       const handAfterChow = normalizeHand(nextP.hand)
       const kongAfterChow = nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length
       if (canWin(handAfterChow, nextP.exposedMelds, makeWT(nextP), false).canWin) {
-        const huChance = nextP.policy.discardHuChance
+        // [DEBUG FORCE HU] 强制100%捉冲
+        const huChance = 1.0
         if (Math.random() < huChance) {
           const score = calcScore(nextP, false, false, g.gameMultiplier)
           nextP.score += score; g.players[curr].score -= score
