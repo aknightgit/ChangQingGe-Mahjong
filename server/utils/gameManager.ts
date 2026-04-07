@@ -2206,6 +2206,10 @@ class GameManager {
     const wildSuit = wildParts && wildParts[0] ? wildParts[0] as TileSuit : undefined;
     const wildValue = wildParts && wildParts[1] ? parseInt(wildParts[1], 10) : undefined;
 
+    // 大吊检测：手牌（非花牌）剩1张
+    const concealedNonFlower = player.hand.concealedTiles.filter(t => !isFlower(t));
+    const isDaDiao = concealedNonFlower.length === 1;
+
     // 计算番数
     const scoreResult = calculateScore({
       handTiles: player.hand.concealedTiles,
@@ -2216,6 +2220,7 @@ class GameManager {
       isKongFlower,
       isRobbingKong,
       isMenQing,
+      isDaDiao,
       wildTileSuit: wildSuit,
       wildTileValue: wildValue,
       wildTileGroup: game.wildTileGroup,
