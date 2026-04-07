@@ -71,6 +71,26 @@ export interface EvalResult {
 
 // ========== 工具函数 ==========
 
+const SUIT_CN: Record<string, string> = {
+  WAN: '万', BAM: '筒', STR: '条', WIND: '风', DRAGON: '字',
+  FLOWER: '花', SEASON: '季', DOT: '点'
+}
+const NUM_CN: Record<number, string> = { 1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 6: '六', 7: '七', 8: '八', 9: '九' }
+const WIND_CN: Record<number, string> = { 1: '东', 2: '南', 3: '西', 4: '北' }
+const DRAGON_CN: Record<number, string> = { 1: '中', 2: '发', 3: '白' }
+const FLOWER_CN: Record<number, string> = { 1: '梅', 2: '兰', 3: '竹', 4: '菊', 5: '春', 6: '夏', 7: '秋', 8: '冬' }
+
+function wildTileToName(wildTile: string): string {
+  // wildTile format: "wan-9" or "bamboo-1" or "dot-5" etc.
+  if (!wildTile || wildTile === 'unknown') return '无百搭'
+  const [suitPart, valPart] = wildTile.split('-')
+  const value = parseInt(valPart)
+  if (isNaN(value)) return wildTile
+  const suitMap: Record<string, string> = { wan: '万', bamboo: '筒', dot: '筒', wind: '风', dragon: '字' }
+  const numPart = NUM_CN[value] || value
+  return `${numPart}${suitMap[suitPart] || suitPart}`
+}
+
 function formatTimestamp(ts: string): string {
   return ts.replace('T', ' ').replace(/\.\d+Z$/, '')
 }
@@ -186,7 +206,7 @@ export function formatRoundReport(report: RoundReport): string {
     lines.push(`- 局号: ${w.gameIdx}`)
     lines.push(`- 回合: ${w.roundNum || '—'}`)
     lines.push(`- 总筹码: ${Math.abs(w.akDelta)}`)
-    lines.push(`- 百搭: ${winnerSnap?.wildTile || '—'}（${winnerSnap?.wildCount ?? 0}张）`)
+    lines.push(`- 百搭: ${wildTileToName(winnerSnap?.wildTile || '')}（${winnerSnap?.wildCount ?? 0}张）`)
     lines.push(`- 回合/全局倍数信息:`)
     lines.push(`  - 骰子点数: —`)
     lines.push(`  - 骰子倍数: ×${r.multiplier || '—'}`)
@@ -196,7 +216,7 @@ export function formatRoundReport(report: RoundReport): string {
     if (winnerSnap) {
       lines.push(`  - 玩家: ${winnerSnap.name}`)
       lines.push(`    - 胡牌方式: ${w.isSelfDraw ? '自摸' : '放冲'}`)
-      lines.push(`    - 牌型/基础番/最终点: ${w.handTypes.join(', ') || '—'} / — / ${Math.abs(w.akDelta)}`)
+      lines.push(`    - 牌型/基础番/最终点: ${w.handTypes.join(', ') || '—'} / ${r.winnerDetails?.[0]?.baseFan ?? '—'} / ${(r.winnerDetails?.[0]?.finalPoints ?? 0) * 10 * (r.multiplier || 1)}`)
       lines.push(`    - 手牌牌面: ${winnerSnap.hand || '—'}`)
       lines.push(`    - 门口牌（吃/碰/杠）: ${winnerSnap.melds?.join(' ; ') || '(无)'}`)
       lines.push(`    - 花牌: ${winnerSnap.flowers?.join(' ') || '(无)'}`)
@@ -226,7 +246,10 @@ export function formatRoundReport(report: RoundReport): string {
     if (r.settlementLog?.length > 0) {
       lines.push('**结算逐笔明细：**')
       for (const s of r.settlementLog) {
-        const multStr = s.mult ? ` (${s.amount / s.mult}x${s.mult})` : ''
+        // amount = basePoints * SETTLEMENT_MULT(=10) * gameMultiplier
+        const basePoints = s.mult ? Math.round(s.amount / s.mult / 10) : s.amount
+        const mult = s.mult || 1
+        const multStr = ` (${basePoints}×10×${mult})`
         lines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
       }
     }
@@ -245,14 +268,14 @@ export function formatRoundReport(report: RoundReport): string {
     lines.push(`- 局号: ${w.gameIdx}`)
     lines.push(`- 回合: ${w.roundNum || '—'}`)
     lines.push(`- 总筹码: ${Math.abs(w.akDelta)}`)
-    lines.push(`- 百搭: ${winnerSnap?.wildTile || '—'}（${winnerSnap?.wildCount ?? 0}张）`)
+    lines.push(`- 百搭: ${wildTileToName(winnerSnap?.wildTile || '')}（${winnerSnap?.wildCount ?? 0}张）`)
     lines.push(`- 回合/全局倍数: ×${r.multiplier || '—'} / ×${r.multiplier || '—'}`)
     lines.push('')
     lines.push('**胡牌玩家明细：**')
     if (winnerSnap) {
       lines.push(`  - 玩家: ${winnerSnap.name}`)
       lines.push(`    - 胡牌方式: ${w.isSelfDraw ? '自摸' : '放冲'}`)
-      lines.push(`    - 牌型/基础番/最终点: ${w.handTypes.join(', ') || '—'} / — / ${Math.abs(w.akDelta)}`)
+      lines.push(`    - 牌型/基础番/最终点: ${w.handTypes.join(', ') || '—'} / ${r.winnerDetails?.[0]?.baseFan ?? '—'} / ${(r.winnerDetails?.[0]?.finalPoints ?? 0) * 10 * (r.multiplier || 1)}`)
       lines.push(`    - 手牌牌面: ${winnerSnap.hand || '—'}`)
       lines.push(`    - 门口牌（吃/碰/杠）: ${winnerSnap.melds?.join(' ; ') || '(无)'}`)
       lines.push(`    - 花牌: ${winnerSnap.flowers?.join(' ') || '(无)'}`)
@@ -260,7 +283,10 @@ export function formatRoundReport(report: RoundReport): string {
     if (r.settlementLog?.length > 0) {
       lines.push('**结算逐笔明细：**')
       for (const s of r.settlementLog) {
-        const multStr = s.mult ? ` (${s.amount / s.mult}x${s.mult})` : ''
+        // amount = basePoints * SETTLEMENT_MULT(=10) * gameMultiplier
+        const basePoints = s.mult ? Math.round(s.amount / s.mult / 10) : s.amount
+        const mult = s.mult || 1
+        const multStr = ` (${basePoints}×10×${mult})`
         lines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
       }
     }

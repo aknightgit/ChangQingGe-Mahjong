@@ -441,6 +441,14 @@ function tileStr(t: Tile): string {
 }
 function isHonor(t: Tile): boolean { return t.suit === TileSuit.WIND || t.suit === TileSuit.DRAGON }
 function isWild(t: Tile, ws?: TileSuit, wv?: number): boolean { return ws && wv ? t.suit === ws && t.value === wv : false }
+function wildTileStrToName(wildTileStr: string): string {
+  if (!wildTileStr || wildTileStr === 'unknown') return '无百搭'
+  const [suitPart, valPart] = wildTileStr.split('-')
+  const value = parseInt(valPart)
+  if (isNaN(value)) return wildTileStr
+  const suitMap: Record<string, string> = { wan: '万', dots: '筒', tiao: '条', feng: '风', jian: '字' }
+  return `${NUM_CN[value] || value}${suitMap[suitPart] || suitPart}`
+}
 
 // ========== Config ==========
 const AI_NAMES = ['AI-AK', 'AI-小胖', 'AI-阿水', 'AI-老赵']
@@ -1482,7 +1490,7 @@ function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy
     gLines.push(`- 局号: ${gameIdx}`)
     gLines.push(`- 回合: ${r.roundNum}`)
     gLines.push(`- 总筹码: ${totalPot}`)
-    gLines.push(`- 百搭: ${r.wildTile || '未知'}`)
+    gLines.push(`- 百搭: ${wildTileStrToName(r.wildTile || 'unknown')}`)
     gLines.push(`- 回合/全局倍数信息:`)
     gLines.push(`  - 骰子点数: ${r.dice1 || '?'} + ${r.dice2 || '?'}`)
     gLines.push(`  - 骰子倍数（清晰明了）: x${r.diceMultiplier || '?'}`)
