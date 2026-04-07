@@ -321,7 +321,9 @@ function detectTypes(
   const types: HandType[] = [];
 
   const concealedNonFlower = concealed.filter(t => !isFlower(t));
-  const flowerCount = concealed.filter(t => isFlower(t)).length;
+  // 八花统计范围：concealed（手牌）+ exposed（门口/副露区）合计
+  const flowerCount = concealed.filter(t => isFlower(t)).length
+    + exposed.flatMap(m => m.tiles).filter(t => isFlower(t)).length;
 
   // ---- 第一层：特殊牌型（必须在 isValidHandSize 之前检测！）----
   // 8花自摸：无论手里有多少废牌，8花都直接胡（不能被 isValidHandSize(0) 拦掉）
@@ -614,8 +616,10 @@ export function canWin(
   const concealed = handTiles;
   // 花=百搭时：花计入 flowerCount，参与手牌数计算（当做正常手牌）
   // 花=普通牌时：花不参与手牌数计算，在 detectTypes 里处理八花
-  const flowerCount = concealed.filter(t => isFlower(t)).length;
+  // 八花统计范围：concealed（手牌）+ exposed（门口/副露区）合计
+  const concealedFlowers = concealed.filter(t => isFlower(t));
   const concealedNonFlower = concealed.filter(t => !isFlower(t));
+  const flowerCount = concealedFlowers.length + exposed.flatMap(m => m.tiles).filter(t => isFlower(t)).length;
 
   // 四百搭（花是百搭时，不需要八花检测；花是普通牌时，可能含花）
   if (wildTileId) {
