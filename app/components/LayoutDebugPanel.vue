@@ -56,7 +56,16 @@ const drag = (e: MouseEvent) => {
 
 const collapsed = ref(false)
 const search = ref('')
-const openGroups = ref<Set<string>>(new Set(['🫵 自家·手牌', '🃏 牌桌', '🎮 操作按钮']))
+const openGroups = ref<Set<string>>(new Set([
+  '🃏 牌桌',
+  '🫵 自家·手牌', '🫵 自家·门口牌', '🫵 自家·弃牌区',
+  '👆 对家·手牌', '👆 对家·门口牌', '👆 对家·弃牌区',
+  '👈 上家·手牌', '👈 上家·门口牌', '👈 上家·弃牌区',
+  '👉 下家·手牌', '👉 下家·门口牌', '👉 下家·弃牌区',
+  '🪑 座位容器',
+  '🧱 牌墙', '🌑 2.5D 阴影',
+  '🎮 操作按钮', '📛 名字', '🎮 游戏配置',
+]))
 const toggleGroup = (name: string) => {
   if (openGroups.value.has(name)) openGroups.value.delete(name)
   else openGroups.value.add(name)
