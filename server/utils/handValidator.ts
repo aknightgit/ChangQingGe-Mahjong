@@ -333,7 +333,8 @@ function detectTypes(
   if (flowerCount >= 8) types.push(HandType.EIGHT_FLOWERS);
 
   // 手牌数校验（8花特殊牌型已处理，跳过花牌后手牌数）
-  if (types.length === 0 && !isValidHandSize(concealedNonFlower.length)) return [];
+  // 允许1张手牌：大吊等待状态（与8花一样，不需要常规手牌数校验）
+  if (types.length === 0 && !isValidHandSize(concealedNonFlower.length) && concealedNonFlower.length !== 1) return [];
 
   const allWind = concealedNonFlower.length > 0 &&
     concealedNonFlower.every(t => isWind(t) || isDragon(t));
@@ -342,17 +343,28 @@ function detectTypes(
   // ---- 从手牌张数推导需要的面子数 ----
   // 3n+2 格式：concealed = 3*remainingMelds + 2
   // 14张→4面子, 11张→3面子, 8张→2面子, 5张→1面子, 2张→0面子
-  const remainingMelds = (concealedNonFlower.length - 2) / 3;
-  if (!Number.isInteger(remainingMelds) || remainingMelds < 0) return [];
+  // 特殊：1张手牌 → 大吊等待状态（4+组副露 + 1单张），可胡
+  let remainingMelds: number;
+  if (concealedNonFlower.length === 1) {
+    remainingMelds = 0; // 大吊：1张手牌不参与组面子
+  } else {
+    remainingMelds = (concealedNonFlower.length - 2) / 3;
+    if (!Number.isInteger(remainingMelds) || remainingMelds < 0) return [];
+  }
 
   // ---- 统计已暴露面子 ----
   const hasExposedSequence = exposed.some(m => m.type === MeldType.SEQUENCE);
 
   // ---- 3n+2 格式检测 ----
-  const satisfiesFormat = canFormMelds(concealedNonFlower, remainingMelds, () => false);
+  // 大吊（1张手牌）不需要检测satisfiesFormat，直接跳过
+  const satisfiesFormat = concealedNonFlower.length === 1
+    ? true
+    : canFormMelds(concealedNonFlower, remainingMelds, () => false);
 
   // 碰碰胡：所有面子都是刻子/杠子（门口+手牌都不能有顺子）
-  const canFormOnlyTriplets = canFormOnlyTripletsFrom(concealedNonFlower, remainingMelds, () => false);
+  const canFormOnlyTriplets = concealedNonFlower.length === 1
+    ? false // 大吊不做碰碰胡判断
+    : canFormOnlyTripletsFrom(concealedNonFlower, remainingMelds, () => false);
   if (!hasExposedSequence && canFormOnlyTriplets) {
     types.push(HandType.ALL_TRIPLETS);
   }
@@ -391,10 +403,8 @@ function detectTypes(
     types.push(HandType.FENG_PENG);
   }
 
-  // 大吊：2张手牌 + 至少1个副露，且手牌必须能组成有效对子（satisfiesFormat验证）
-  if (concealedNonFlower.length === 2 && exposed.length >= 1 && satisfiesFormat) {
-    types.push(HandType.DA_DIAO);
-  }
+  // 大吊：不做为胡牌前置判断，只在算分阶段检测（见calcScore）
+  // 大吊 = 手牌剩1张时自摸或捉冲，胡牌判断按正常牌型走
 
   // 基础胡牌：满足3n+2格式但没有特殊牌型，且不是"禁止的普通胡"
   // 禁止的普通胡 = 多门(>=2门) + 含顺子（= 非全刻子）→ 直接过滤，不加入STANDARD
