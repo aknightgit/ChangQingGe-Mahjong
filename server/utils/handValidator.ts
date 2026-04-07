@@ -322,8 +322,11 @@ function detectTypes(
 
   const concealedNonFlower = concealed.filter(t => !isFlower(t));
   // 八花统计范围：concealed（手牌）+ exposed（门口/副露区）合计
-  const flowerCount = concealed.filter(t => isFlower(t)).length
-    + exposed.flatMap(m => m.tiles).filter(t => isFlower(t)).length;
+  // 优化：只有 concealed 里 >=6 花才统计 exposed
+  const concealedFlowerCount = concealed.filter(t => isFlower(t)).length;
+  const flowerCount = concealedFlowerCount >= 6
+    ? concealedFlowerCount + exposed.flatMap(m => m.tiles).filter(t => isFlower(t)).length
+    : concealedFlowerCount;
 
   // ---- 第一层：特殊牌型（必须在 isValidHandSize 之前检测！）----
   // 8花自摸：无论手里有多少废牌，8花都直接胡（不能被 isValidHandSize(0) 拦掉）
@@ -567,8 +570,7 @@ export function findBestHandTypes(
 export function canWin(
   handTiles: Tile[],
   exposedOrCount: Meld[] | number,
-  wildTileIdOrChecker: string | null | WildTileChecker,
-  isSelfDraw = true  // [BugFix] 四百搭只能自摸，捉冲时跳过
+  wildTileIdOrChecker: string | null | WildTileChecker
 ): { canWin: boolean; types: HandType[] } {
   const isOldSig = typeof exposedOrCount === 'number';
   const exposed: Meld[] = isOldSig ? [] : exposedOrCount;
@@ -610,6 +612,7 @@ export function canWin(
   if (canWinResultCache.has(cacheKey)) {
     _canWinHits++
     const cached = canWinResultCache.get(cacheKey)!
+
     return { canWin: cached.canWin, types: cached.types }
   }
   _canWinMisses++
@@ -620,10 +623,13 @@ export function canWin(
   // 八花统计范围：concealed（手牌）+ exposed（门口/副露区）合计
   const concealedFlowers = concealed.filter(t => isFlower(t));
   const concealedNonFlower = concealed.filter(t => !isFlower(t));
-  const flowerCount = concealedFlowers.length + exposed.flatMap(m => m.tiles).filter(t => isFlower(t)).length;
+  // 八花优化：只有 concealed 里 >=6 花才需要统计 exposed（节省遍历开销）
+  const flowerCount = concealedFlowers.length >= 6
+    ? concealedFlowers.length + exposed.flatMap(m => m.tiles).filter(t => isFlower(t)).length
+    : concealedFlowers.length;
 
-  // 四百搭（只能自摸，捉冲时跳过）
-  if (wildTileId && isSelfDraw) {
+  // 四百搭（只能靠concealed自摸，exposed不可能有百搭）
+  if (wildTileId) {
     const wildTileFn = buildWildTileChecker(wildTileId);
     const wildCount = concealed.filter(t => wildTileFn(t)).length;
     if (wildCount >= 4) {
@@ -672,6 +678,9 @@ export function canWin(
 
   // K哥规则：过滤掉STANDARD（只有特殊牌型才能胡）
   const validTypes = types;
+  if (types.length === 0) {
+  } else {
+  }
 
   const result = { canWin: validTypes.length > 0, types: validTypes }
   // 缓存结果（同时缓存 boolean 和 types）
