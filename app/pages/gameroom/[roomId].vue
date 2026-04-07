@@ -2526,7 +2526,8 @@ const forceDiscard = async (p: Player) => {
 :deep(.discard-zone--bottom) {
   bottom: 31%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) scale(1.2);
+  transform-origin: bottom center;
 }
 :deep(.discard-zone--left) {
   top: 50%;
@@ -2691,7 +2692,7 @@ const forceDiscard = async (p: Player) => {
   top: 10%;
   left: 50%;
   transform: translateX(-50%) rotate(180deg);
-  width: 66%;
+  width: 75%;
   height: auto;
 }
 

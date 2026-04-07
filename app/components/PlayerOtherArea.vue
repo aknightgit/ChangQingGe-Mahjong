@@ -360,20 +360,20 @@ const meldTileRotateStyle = computed(() => {
   overflow: hidden;
 }
 
-/* 左家门口牌（横向，牌头朝右） */
+/* 左家门口牌（竖向堆叠，整体旋转90°） */
 .meld-zone--left {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
   gap: var(--left-meld-gap, 3px);
   flex-shrink: 0;
   overflow: hidden;
 }
 
-/* 左家手牌（横向，牌头朝右） */
+/* 左家手牌（竖向堆叠，整体旋转90° → 牌头朝右） */
 .hand-zone--left {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
   gap: var(--left-hand-gap, 2px);
   flex-shrink: 0;
@@ -384,20 +384,20 @@ const meldTileRotateStyle = computed(() => {
    右家（右侧）：垂直列
    ============================================================ */
 
-/* 右家门口牌（横向，牌头朝左） */
+/* 右家门口牌（竖向堆叠，整体旋转-90°） */
 .meld-zone--right {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
   gap: var(--right-meld-gap, 3px);
   flex-shrink: 0;
   overflow: hidden;
 }
 
-/* 右家手牌（横向，牌头朝左） */
+/* 右家手牌（竖向堆叠，整体旋转-90° → 牌头朝左） */
 .hand-zone--right {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
   gap: var(--right-hand-gap, 2px);
   flex-shrink: 0;
