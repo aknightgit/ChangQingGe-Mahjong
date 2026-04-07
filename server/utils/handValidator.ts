@@ -611,16 +611,12 @@ export function canWin(
   _canWinMisses++
 
   const concealed = handTiles;
+  // 花=百搭时：花计入 flowerCount，参与手牌数计算（当做正常手牌）
+  // 花=普通牌时：花不参与手牌数计算，在 detectTypes 里处理八花
   const flowerCount = concealed.filter(t => isFlower(t)).length;
   const concealedNonFlower = concealed.filter(t => !isFlower(t));
 
-  // 第一层：特殊牌型（无需3n+2，无需手牌数校验）
-  // 八花自摸优先
-  if (flowerCount >= 8 && concealedNonFlower.length === 0) {
-    return { canWin: true, types: [HandType.EIGHT_FLOWERS] };
-  }
-
-  // 四百搭（手牌有4张百搭即可胡）
+  // 四百搭（花是百搭时，不需要八花检测；花是普通牌时，可能含花）
   if (wildTileId) {
     const wildTileFn = buildWildTileChecker(wildTileId);
     const wildCount = concealed.filter(t => wildTileFn(t)).length;
@@ -629,19 +625,33 @@ export function canWin(
     }
   }
 
-  // 手牌数校验（特殊牌型已处理过）
-  if (!isValidHandSize(concealedNonFlower.length)) {
-    return { canWin: false, types: [] };
+  // 手牌数校验
+  // 有 wildTile 时：花=百搭，计入手牌数 → 用 concealed.length
+  // 无 wildTile 时：花=普通牌，不参与组牌 → 用 concealedNonFlower.length
+  if (wildTileId) {
+    // 花做百搭：花参与手牌数计算
+    if (!isValidHandSize(concealed.length)) {
+      return { canWin: false, types: [] };
+    }
+  } else {
+    // 花做普通牌：花不参与手牌数计算
+    // 但8花特殊——无论手里有多少废牌，8花都直接胡
+    if (flowerCount >= 8) {
+      return { canWin: true, types: [HandType.EIGHT_FLOWERS] };
+    }
+    if (!isValidHandSize(concealedNonFlower.length)) {
+      return { canWin: false, types: [] };
+    }
   }
 
   const isWildTileFn = buildWildTileChecker(wildTileId);
 
-  // 第一层：特殊牌型（无需3n+2）
-  if (wildTileId) {
-    const wildCount = concealed.filter(t => isWildTileFn(t)).length;
-    if (wildCount >= 4) return { canWin: true, types: [HandType.FOUR_WILD] };
+  // 八花自摸：只有花是普通牌时才检测（wildTile 路径不检测八花）
+  // 花=普通牌时：8张花即可胡（门口+手牌）
+  // 花=百搭时：不检测八花，只检测四百搭（上面已处理）
+  if (!wildTileId && flowerCount >= 8) {
+    return { canWin: true, types: [HandType.EIGHT_FLOWERS] };
   }
-  if (flowerCount >= 8) return { canWin: true, types: [HandType.EIGHT_FLOWERS] };
 
   const allWind = concealedNonFlower.length > 0 &&
     concealedNonFlower.every(t => isWind(t) || isDragon(t) || isWildTileFn(t));
