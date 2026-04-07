@@ -323,11 +323,12 @@ function detectTypes(
   const concealedNonFlower = concealed.filter(t => !isFlower(t));
   const flowerCount = concealed.filter(t => isFlower(t)).length;
 
-  // 手牌数校验
-  if (!isValidHandSize(concealedNonFlower.length)) return [];
-
-  // ---- 第一层：特殊牌型 ----
+  // ---- 第一层：特殊牌型（必须在 isValidHandSize 之前检测！）----
+  // 8花自摸：无论手里有多少废牌，8花都直接胡（不能被 isValidHandSize(0) 拦掉）
   if (flowerCount >= 8) types.push(HandType.EIGHT_FLOWERS);
+
+  // 手牌数校验（8花特殊牌型已处理，跳过花牌后手牌数）
+  if (types.length === 0 && !isValidHandSize(concealedNonFlower.length)) return [];
 
   const allWind = concealedNonFlower.length > 0 &&
     concealedNonFlower.every(t => isWind(t) || isDragon(t));
