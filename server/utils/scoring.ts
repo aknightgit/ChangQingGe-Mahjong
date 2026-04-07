@@ -60,8 +60,8 @@ export function calculateScore(params: {
   wildTileSuit?: TileSuit;     // 百搭牌的花色
   wildTileValue?: number;      // 百搭牌的数值
   wildTileGroup?: string[];    // 花牌百搭组
-  roundMultiplier: number;     // 回合倍数（骰子）
-  globalMultiplier: number;    // 全局倍数（流局/造反继承）
+  roundMultiplier?: number;     // 回合倍数（骰子）
+  globalMultiplier?: number;    // 全局倍数（流局/造反继承）
   globalIncludesRound?: boolean; // 是否把回合倍数并入全局倍数（默认true）
 }): ScoreResult {
   const {
@@ -83,7 +83,9 @@ export function calculateScore(params: {
       finalPoints: 0,
       handTypeName: '无效牌型',
       details: ['无有效牌型'],
-      multiplier: 0
+      roundMultiplier: 0,
+      globalMultiplier: 0,
+      extraMultipliers: 0
     }
   }
 
@@ -102,14 +104,14 @@ export function calculateScore(params: {
 
   // 2. 如果没有固定番数，用公式计算（碰碰胡/混一色）
   if (baseFan === 0) {
-    const formulaResult = calculateFormulaFan(handTiles, exposedMelds, flowerTiles, wildTileSuit, wildTileValue);
+    const formulaResult = calculateFormulaFan(handTiles, exposedMelds, flowerTiles, wildTileSuit, wildTileValue, wildTileGroup);
     baseFan = formulaResult.fan;
     details.push(...formulaResult.details);
   }
 
   // 3. 检查无花自摸（碰碰胡/混一色 + 自摸 + 门口无花 + 无风向刻杠）
   //    特殊规则：如果百搭牌是花牌，本局不触发"无花自摸"，用普通公式结算
-  if (baseFan === 0 || baseFan < 10) {
+  if (baseFan < 10) {
     if (isSelfDrawn && !isKongFlower) {
       const isWildFlower = wildTileGroup && wildTileGroup.length > 0;
       if (!isWildFlower) {
@@ -146,7 +148,7 @@ export function calculateScore(params: {
 
   // 6. 如果仍然是0（无特殊牌型），使用基础公式
   if (baseFan === 0) {
-    const formulaResult = calculateFormulaFan(handTiles, exposedMelds, flowerTiles, wildTileSuit, wildTileValue);
+    const formulaResult = calculateFormulaFan(handTiles, exposedMelds, flowerTiles, wildTileSuit, wildTileValue, wildTileGroup);
     baseFan = formulaResult.fan;
     details.push(...formulaResult.details);
   }
@@ -197,8 +199,8 @@ export function calculateScore(params: {
   }
 
   // 9. 最终点数
-  const effectiveRoundMultiplier = Math.max(1, roundMultiplier);
-  const baseGlobal = Math.max(1, globalMultiplier);
+  const effectiveRoundMultiplier = Math.max(1, roundMultiplier ?? 1);
+  const baseGlobal = Math.max(1, globalMultiplier ?? 1);
 
   // 新口径：若全局已包含回合倍数，则综合倍数= min(8, 回合 × 全局)
   // 否则沿用旧口径（回合倍数与全局倍数分乘）
@@ -235,6 +237,7 @@ export interface WinOption {
   score: number;
   details: string[];
   type: 'self_draw' | 'discard';
+  _decompKey?: string; // 内部字段，标记该选项来自哪个牌型分解
 }
 
 /**
@@ -294,7 +297,7 @@ export function generateWinOptions(params: {
       } else if (selfDrawResult.finalPoints > existing.score) {
         existing.score = selfDrawResult.finalPoints;
         existing.details = [...selfDrawResult.details];
-        (existing as any)._decompKey = decompKey;
+        existing._decompKey = decompKey;
       }
     }
 
@@ -320,7 +323,7 @@ export function generateWinOptions(params: {
       } else if (discardResult.finalPoints > existing.score) {
         existing.score = discardResult.finalPoints;
         existing.details = [...discardResult.details];
-        (existing as any)._decompKey = decompKey;
+        existing._decompKey = decompKey;
       }
     }
   }
@@ -438,7 +441,8 @@ function calculateFormulaFan(
   exposedMelds: Meld[],
   flowerTiles: Tile[],
   wildTileSuit?: TileSuit,
-  wildTileValue?: number
+  wildTileValue?: number,
+  wildTileGroup?: string[]
 ): FormulaResult {
   const details: string[] = [];
   let comboPoints = 0;
