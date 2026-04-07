@@ -1703,9 +1703,9 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
       if (winnerSnap && result.winnerPlayer) {
         const isSelfDraw = result.events.some(e => e.action.includes('自摸'))
         const wp = result.winnerPlayer
+        const wildTileId = wp.wildSuit && wp.wildValue ? `${wp.wildSuit}-${wp.wildValue}` : null
         const types = detectHandTypes(
-          wp.hand, wp.exposedMelds, isSelfDraw, wp.flowerTiles.length,
-          wp.wildSuit && wp.wildValue ? `${wp.wildSuit}-${wp.wildValue}` : null
+          wp.hand, wp.exposedMelds, wildTileId, isSelfDraw, wp.flowerTiles.length
         )
         const HAND_TYPE_NAMES: Record<number, string> = {
           [HandType.FENG_PENG]: '风碰',
