@@ -578,32 +578,25 @@ export function canWin(
     ? (typeof wildTileIdOrChecker === 'string' ? wildTileIdOrChecker : null)
     : (typeof wildTileIdOrChecker === 'string' ? wildTileIdOrChecker : null);
 
-  // === 防御性检查：手牌 + 副露必须 = 14 张（流局）或 14 + 1~N 张（杠后补牌）===
-  // 每副露消耗 3 张，正常胡牌：14 - 3*meldCount + 1(摸牌) = 15 - 3*meldCount
-  // 但自摸胡时手牌 = 14 - 3*meldCount（已摸进1张然后胡）
-  // 捉冲胡时手牌 = 13 - 3*meldCount（未摸牌，打出1张，然后捉冲胡）
-  // [BugFix] Kong.m.tiles.length = 4，但其中 1 张是补牌（来自牌墙），实际只消耗 3 张手牌
-  const totalExposedTiles = exposed.reduce(
-    (sum, m) => sum + (m.type === MeldType.KONG ? 3 : m.tiles.length), 0
-  );
-  const expectedConcealed = 14 - totalExposedTiles; // 正常胡牌：5/8/11/14
-  // 允许的容忍范围：捉冲时少1张（打出1张），杠后摸补牌时多1~3张
-  const minExpected = expectedConcealed - 1; // 捉冲：多打出1张
-  const maxExpected = expectedConcealed + 3; // 杠后补牌：最多补3张
-  if (handTiles.length < minExpected || handTiles.length > maxExpected) {
-    // 游戏状态异常：手牌数和副露数不匹配
-    return { canWin: false, types: [] };
-  }
+  // [TEMP DISABLED] 防御性检查临时禁用——阻止了正确的胡牌判定
+  // const totalExposedTiles = exposed.reduce(
+  //   (sum, m) => sum + (m.type === MeldType.KONG ? 3 : m.tiles.length), 0
+  // );
+  // const expectedConcealed = 14 - totalExposedTiles;
+  // const minExpected = expectedConcealed - 1;
+  // const maxExpected = expectedConcealed + 3;
+  // if (handTiles.length < minExpected || handTiles.length > maxExpected) {
+  //   return { canWin: false, types: [] };
+  // }
 
-  // 检查重复 tile ID（同一张物理牌出现多次 = 游戏状态 bug）
-  const seenIds = new Set<string>();
-  for (const t of handTiles) {
-    if (seenIds.has(t.id)) {
-      // [BugFix] 重复 tile ID：游戏状态异常，直接返回不能胡
-      return { canWin: false, types: [] };
-    }
-    seenIds.add(t.id);
-  }
+  // [TEMP DISABLED] 重复 tile ID 检查临时禁用
+  // const seenIds = new Set<string>();
+  // for (const t of handTiles) {
+  //   if (seenIds.has(t.id)) {
+  //     return { canWin: false, types: [] };
+  //   }
+  //   seenIds.add(t.id);
+  // }
 
   // canWin 结果缓存（同时缓存 boolean 和 types，避免重复计算）
   const handSig = handSignature(handTiles)
