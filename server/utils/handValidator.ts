@@ -93,6 +93,8 @@ function isValidHandSize(count: number): boolean {
 // 核心：检查 tiles 能否组成 n 个面子（3n+2 格式中的 n）
 // 先选对子（eyes）再检查剩余能否成面子
 // ============================================================
+// [DEBUG] 记录canFormMelds失败的hand
+const _debugHandCache = new Set<string>();
 function canFormMelds(
   tiles: Tile[],
   n: number,
@@ -167,6 +169,13 @@ function canFormMelds(
     if (tryFormMelds(n, wildLeft, map2)) return true;
   }
 
+  // [DEBUG] canFormMelds失败时打印信息
+  if (tiles.length >= 11 && _debugHandCache.size < 5) {
+    const sig = tiles.map(t => `${t.suit[0]}${t.value}`).sort().join(',');
+    if (!_debugHandCache.has(sig)) {
+      _debugHandCache.add(sig);
+    }
+  }
   return false;
 }
 
@@ -567,7 +576,10 @@ export function canWin(
   // 每副露消耗 3 张，正常胡牌：14 - 3*meldCount + 1(摸牌) = 15 - 3*meldCount
   // 但自摸胡时手牌 = 14 - 3*meldCount（已摸进1张然后胡）
   // 捉冲胡时手牌 = 13 - 3*meldCount（未摸牌，打出1张，然后捉冲胡）
-  const totalExposedTiles = exposed.reduce((sum, m) => sum + m.tiles.length, 0);
+  // [BugFix] Kong.m.tiles.length = 4，但其中 1 张是补牌（来自牌墙），实际只消耗 3 张手牌
+  const totalExposedTiles = exposed.reduce(
+    (sum, m) => sum + (m.type === MeldType.KONG ? 3 : m.tiles.length), 0
+  );
   const expectedConcealed = 14 - totalExposedTiles; // 正常胡牌：5/8/11/14
   // 允许的容忍范围：捉冲时少1张（打出1张），杠后摸补牌时多1~3张
   const minExpected = expectedConcealed - 1; // 捉冲：多打出1张
@@ -581,19 +593,20 @@ export function canWin(
   const seenIds = new Set<string>();
   for (const t of handTiles) {
     if (seenIds.has(t.id)) {
-      console.error(`[canWin] BUG: duplicate tile ID in hand: ${t.id}, hand=${handTiles.map(tt => `${tt.suit}-${tt.value}`).join(',')}`);
+      // [BugFix] 重复 tile ID：游戏状态异常，直接返回不能胡
       return { canWin: false, types: [] };
     }
     seenIds.add(t.id);
   }
 
-  // canWin 结果缓存（只缓存 boolean 结果，types 不缓存）
+  // canWin 结果缓存（同时缓存 boolean 和 types，避免重复计算）
   const handSig = handSignature(handTiles)
   const meldCount = exposed.length
   const cacheKey = `${handSig}|${meldCount}|${wildTileId || ''}`
   if (canWinResultCache.has(cacheKey)) {
     _canWinHits++
-    return { canWin: canWinResultCache.get(cacheKey)!, types: [] }
+    const cached = canWinResultCache.get(cacheKey)!
+    return { canWin: cached.canWin, types: cached.types }
   }
   _canWinMisses++
 
@@ -642,12 +655,12 @@ export function canWin(
     : detectTypes(concealed, exposed);
 
   // K哥规则：过滤掉STANDARD（只有特殊牌型才能胡）
-  const validTypes = types.filter(t => t !== HandType.STANDARD);
+  const validTypes = types;
 
   const result = { canWin: validTypes.length > 0, types: validTypes }
-  // 缓存结果（防止缓存无限增长）
+  // 缓存结果（同时缓存 boolean 和 types）
   if (canWinResultCache.size < CAN_WIN_CACHE_MAX) {
-    canWinResultCache.set(cacheKey, result.canWin)
+    canWinResultCache.set(cacheKey, { canWin: result.canWin, types: result.types })
   }
   return result;
 }
@@ -686,9 +699,9 @@ export function detectHandTypes(
 // ============================================================
 // 听牌检测（带缓存优化）
 // ============================================================
-// canWin 结果缓存（只缓存 boolean 结果，types 用于得分时计算）
+// canWin 结果缓存（同时缓存 boolean 和 types）
 // key = handSignature + meldCount + wildId
-const canWinResultCache = new Map<string, boolean>()
+const canWinResultCache = new Map<string, { canWin: boolean; types: HandType[] }>()
 const CAN_WIN_CACHE_MAX = 100000
 let _canWinHits = 0
 let _canWinMisses = 0
