@@ -716,8 +716,8 @@ function nextGameMultiplier(): number {
 }
 
 function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean, gameMultiplier: number): number {
-  const types = detectHandTypes(p.hand, p.exposedMelds, isSelfDraw, p.flowerTiles.length,
-    p.wildSuit && p.wildValue ? `${p.wildSuit}-${p.wildValue}` : null)
+  const wildTileId = p.wildSuit && p.wildValue ? `${p.wildSuit}-${p.wildValue}` : null
+  const types = detectHandTypes(p.hand, p.exposedMelds, wildTileId, isSelfDraw, p.flowerTiles.length)
   const result = calculateScore({
     handTiles: p.hand, exposedMelds: p.exposedMelds,
     flowerTiles: p.flowerTiles, handTypes: types,
@@ -796,7 +796,7 @@ function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
   }
 
   if (wildCount === 0) {
-    const types = detectHandTypes(hand, [], false, flowerCount, null)
+    const types = detectHandTypes(hand, [], null, false, flowerCount)
     const base = types.length > 0 ? (typeScore[types[0]] || 0) : 0
     const final = base * 2  // 无百搭×2
     return { bestType: types[0] || '基础胡', bestScore: final, keepWildScore: final }
@@ -805,7 +805,7 @@ function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
   const nonWild = hand.filter(t => !isWild(t, undefined, undefined))
 
   // 评估1：保留百搭不使用（无百搭翻倍×2）
-  const typesNoWild = detectHandTypes(nonWild, [], false, flowerCount, null)
+  const typesNoWild = detectHandTypes(nonWild, [], null, false, flowerCount)
   const baseNoWild = typesNoWild.length > 0 ? (typeScore[typesNoWild[0]] || 0) : 0
   const keepWildScore = baseNoWild * 2
 
@@ -1249,6 +1249,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         huChance -= wildCount * opp.policy.discardHuWildPenalty
         if (opp.exposedMelds.length === 0) huChance -= opp.policy.discardHuMenQingPenalty
         if (Math.random() < huChance) {
+          opp.hand = normalizeHand(testHand)
           const score = calcScore(opp, false, false, g.gameMultiplier)
           opp.score += score; player.score -= score
           // 互包结算：如果有人对opp有包三，且放炮者不是包家
@@ -1291,14 +1292,6 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           }
           const d = drawTile(g, opp)
           if (!d) return null
-          if (canWinWithType(normalizeHand(opp.hand), opp, makeWT, opp.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
-            const baseScore = calcScore(opp, true, false, g.gameMultiplier)
-            opp.score += baseScore * 3
-            for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= baseScore }
-            applyBaoSettlement(g, otherIdx, true, null, baseScore)
-            const winInfo4 = getWinInfo(opp, true, false)
-            return buildResult(otherIdx, '自摸', winInfo4.finalPoints, winInfo4.handType, winInfo4.baseFan)
-          }
           for (const ak of canAnKong(opp)) {
             applyAnKong(opp, ak)
             const extra = drawTile(g, opp)
@@ -1347,14 +1340,6 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       }
       const d = drawTile(g, nextP)
       if (!d) return null
-      if (canWinWithType(normalizeHand(nextP.hand), nextP, makeWT, nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
-        const baseScore = calcScore(nextP, true, false, g.gameMultiplier)
-        nextP.score += baseScore * 3
-        for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= baseScore }
-        applyBaoSettlement(g, nextPlayer, true, null, baseScore)
-        const winInfo7 = getWinInfo(nextP, true, false)
-        return buildResult(nextPlayer, '自摸', winInfo7.finalPoints, winInfo7.handType, winInfo7.baseFan)
-      }
       for (const ak of canAnKong(nextP)) {
         applyAnKong(nextP, ak)
         const extra = drawTile(g, nextP)

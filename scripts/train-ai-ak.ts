@@ -1440,6 +1440,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         // [DEBUG FORCE HU] 强制100%捉冲，只要能胡就必胡
         const huChance = 1.0
         if (Math.random() < huChance) {
+          opp.hand = normalizeHand(testHand)
           const score = calcScore(opp, false, false, g.gameMultiplier)
           opp.score += score; player.score -= score
           // 互包结算：如果有人对opp有包三，且放炮者不是包家
@@ -1479,12 +1480,11 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           checkHandInvariant(opp, 'claim')  // claim后（11/8/5/2张）
           // 放炮胡检查（claim后draw前，手牌=expectedLen）
           const handAfterPeng = normalizeHand(opp.hand)
-          const kongAfterPeng = opp.exposedMelds.filter(m => m.type === MeldType.KONG).length
-          const expAfterPeng = 14 - (opp.exposedMelds.length - kongAfterPeng) * 3 - kongAfterPeng * 4
           if (canWin(handAfterPeng, opp.exposedMelds, makeWT(opp), false).canWin) {
             // [DEBUG FORCE HU] 强制100%捉冲
             const huChance = 1.0
             if (Math.random() < huChance) {
+              // 计分用手牌=含弃牌的真实手牌（不是testHand，opp.hand已含）
               const score = calcScore(opp, false, false, g.gameMultiplier)
               opp.score += score; g.players[curr].score -= score
               applyBaoSettlement(g, otherIdx, false, curr, score, g.gameMultiplier)
@@ -1498,19 +1498,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
               return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: opp, roundNum: turn, winnersThisGame: winnersThisGame.slice() }
             }
           }
-          if (canWin(normalizeHand(opp.hand), opp.exposedMelds, makeWT(opp)).canWin) {
-            const baseScore = calcScore(opp, true, false, g.gameMultiplier)
-            opp.score += baseScore * 3
-            for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= baseScore }
-            applyBaoSettlement(g, otherIdx, true, null, baseScore, g.gameMultiplier)
-            log(opp.name, '碰后自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
-            opp.wonFan = baseScore
-            const wt_ps = detectHandTypes(opp.hand, opp.exposedMelds, opp.wildSuit && opp.wildValue ? `${opp.wildSuit}-${opp.wildValue}` : null, true, opp.flowerTiles.length)
-            opp.winHandType = wt_ps.map(t => String(t)).join(',')
-            opp.status = 'won'
-            recordWinner(opp, otherIdx, true, baseScore, turn)
-            return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: opp, roundNum: turn, winnersThisGame: winnersThisGame.slice() }
-          }
+          // 碰后自摸：必须先摸牌，删掉这里的错误判断
           for (const ak of canAnKong(opp)) {
             applyAnKong(opp, ak)
             const extra = drawTile(g, opp)
@@ -1554,7 +1542,6 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       checkHandInvariant(nextP, 'claim')  // 吃后（未出牌）铁律
       // 放炮胡检查（claim后draw前，手牌=expectedLen）
       const handAfterChow = normalizeHand(nextP.hand)
-      const kongAfterChow = nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length
       if (canWin(handAfterChow, nextP.exposedMelds, makeWT(nextP), false).canWin) {
         // [DEBUG FORCE HU] 强制100%捉冲
         const huChance = 1.0
@@ -1572,19 +1559,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: nextP, roundNum: turn, winnersThisGame: winnersThisGame.slice() }
         }
       }
-      if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds, makeWT(nextP)).canWin) {
-        const baseScore = calcScore(nextP, true, false, g.gameMultiplier)
-        nextP.score += baseScore * 3
-        for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= baseScore }
-        applyBaoSettlement(g, nextPlayer, true, null, baseScore, g.gameMultiplier)
-        log(nextP.name, '吃后自摸', `${nextP.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
-        nextP.wonFan = baseScore
-        const wt_np_s = detectHandTypes(nextP.hand, nextP.exposedMelds, nextP.wildSuit && nextP.wildValue ? `${nextP.wildSuit}-${nextP.wildValue}` : null, true, nextP.flowerTiles.length)
-        nextP.winHandType = wt_np_s.map(t => String(t)).join(',')
-        nextP.status = 'won'
-        recordWinner(nextP, nextPlayer, true, baseScore, turn)
-        return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: nextP, roundNum: turn, winnersThisGame: winnersThisGame.slice() }
-      }
+      // 吃后自摸：必须先摸牌，删掉这里的错误判断
       for (const ak of canAnKong(nextP)) {
         applyAnKong(nextP, ak)
         const extra = drawTile(g, nextP)
