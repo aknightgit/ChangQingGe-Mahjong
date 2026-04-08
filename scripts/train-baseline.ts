@@ -799,7 +799,7 @@ function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
     const types = detectHandTypes(hand, [], null, false, flowerCount)
     const base = types.length > 0 ? (typeScore[types[0]] || 0) : 0
     const final = base * 2  // 无百搭×2
-    return { bestType: types[0] || '基础胡', bestScore: final, keepWildScore: final }
+    return { bestType: types[0] || '未知牌型', bestScore: final, keepWildScore: final }
   }
 
   const nonWild = hand.filter(t => !isWild(t, undefined, undefined))
@@ -1003,7 +1003,7 @@ function mechanicalDiscard(p: BotPlayer, discardPile: Tile[] = []): Tile {
 // ========== 游戏明细记录 ==========
 interface GameEvent { turn: number; player: string; action: string; detail: string }
 interface SettlementEntry { from: string; to: string; amount: number; reason: string; mult?: number }
-interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers: string[]; meldSources: number[] }
+interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers: string[]; meldSources: number[]; wildTile: string }
 interface GameResult {
   winner: number; scores: number[]; events: GameEvent[]; multiplier: number
   settlementLog: SettlementEntry[]; snapshots: PlayerSnapshot[]; roundNum: number
@@ -1071,12 +1071,18 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     settlementLog.push({ from, to, amount, reason, mult })
   }
   const recordSnapshots = (): PlayerSnapshot[] => {
-    return g.players.map(p => ({
-      name: p.name, hand: p.hand.map(t => tileStr(t)).join(' '),
-      melds: p.exposedMelds.map(m => `${m.type===MeldType.TRIPLET?'碰':m.type===MeldType.SEQUENCE?'吃':m.type===MeldType.KONG?'杠':'?'}:${m.tiles.map(t=>tileStr(t)).join(' ')}`),
-      flowers: p.flowerTiles.map(t => tileStr(t)),
-      meldSources: [...p.meldSources]
-    }))
+    return g.players.map(p => {
+      // 完整手牌 = 手牌 + 所有面子里的牌
+      const fullHandTiles = [...p.hand, ...p.exposedMelds.flatMap(m => m.tiles)]
+      const wildTileName = (g.wildSuit && g.wildValue) ? tileStr({suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭'
+      return {
+        name: p.name, hand: fullHandTiles.map(t => tileStr(t)).join(' '),
+        melds: p.exposedMelds.map(m => `${m.type===MeldType.TRIPLET?'碰':m.type===MeldType.SEQUENCE?'吃':m.type===MeldType.KONG?'杠':'?'}:${m.tiles.map(t=>tileStr(t)).join(' ')}`),
+        flowers: p.flowerTiles.map(t => tileStr(t)),
+        meldSources: [...p.meldSources],
+        wildTile: wildTileName
+      }
+    })
   }
 
   // 构建完整 GameResult 的辅助函数
@@ -1122,9 +1128,9 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         roundMultiplier: 1, globalMultiplier: g.gameMultiplier
       })
       const finalTypes = validTypes.length > 0 ? validTypes : types
-      return { handType: result.handTypeName || finalTypes[0] || '基础胡', baseFan: result.baseFan || 0, finalPoints: result.finalPoints || 0 }
+      return { handType: result.handTypeName || finalTypes[0] || '未知牌型', baseFan: result.baseFan || 0, finalPoints: result.finalPoints || 0 }
     } catch (e) {
-      return { handType: '基础胡', baseFan: 0, finalPoints: 0 }
+      return { handType: '未知牌型', baseFan: 0, finalPoints: 0 }
     }
   }
 

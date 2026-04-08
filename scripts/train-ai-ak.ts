@@ -39,7 +39,7 @@ const HAND_TYPE_NAMES: Record<string, string> = {
   [HandType.FENG_PENG]: '风碰', [HandType.ALL_WIND]: '风一色', [HandType.QING_PENG]: '清碰',
   [HandType.HUN_PENG]: '混碰', [HandType.EIGHT_FLOWERS]: '八花', [HandType.FULL_FLUSH]: '清一色',
   [HandType.HALF_FLUSH]: '混一色', [HandType.FOUR_WILD]: '四百搭', [HandType.ALL_TRIPLETS]: '碰碰胡',
-  [HandType.DA_DIAO]: '大吊', [HandType.STANDARD]: '基础胡'
+  [HandType.DA_DIAO]: '大吊'
 }
 
 interface BotPolicy {
@@ -1385,15 +1385,18 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
   // 快照：只记录字符串化数据，避免引用悬浮
   const recordSnapshots = (): PlayerSnapshot[] => {
     return g.players.map(p => {
-      const wildTileStr = (p.wildSuit && p.wildValue) ? `${p.wildSuit}-${p.wildValue}` : null
-      const wildCount = p.hand.filter(t => isWT(t, p)).length
+      const wildSuit = p.wildSuit, wildVal = p.wildValue
+      const wildTileStr = (wildSuit && wildVal) ? `${wildSuit}-${wildVal}` : null
+      const wildTileName = wildTileStr ? tileStr({suit: wildSuit as TileSuit, value: wildVal, id: '' }) : '(无百搭)'
+      // 完整手牌 = 手牌 + 所有面子里的牌（都算作手牌）
+      const fullHandTiles = [...p.hand, ...p.exposedMelds.flatMap(m => m.tiles)]
       return {
-        name: p.name, hand: p.hand.map(t => tileStr(t)).join(' '),
+        name: p.name, hand: fullHandTiles.map(t => tileStr(t)).join(' '),
         melds: p.exposedMelds.map(m => `${m.type===MeldType.TRIPLET?'碰':m.type===MeldType.SEQUENCE?'吃':m.type===MeldType.KONG?'杠':'?'}:${m.tiles.map(t=>tileStr(t)).join(' ')}`),
         flowers: p.flowerTiles.map(t => tileStr(t)),
         meldSources: [...p.meldSources],
-        wildCount,
-        wildTile: wildTileStr ?? '(无百搭)',
+        wildCount: p.hand.filter(t => isWT(t, p)).length,
+        wildTile: wildTileName,
         wonFan: p.wonFan,
         winHandType: p.winHandType,
         status: p.status
@@ -1897,7 +1900,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
         if (winnerCount >= 1 && winnerCount <= 4) multiWinDist[winnerCount - 1]++
         for (const w of gameWinners) {
           const typeNums = w.winHandType ? w.winHandType.split(',').map(Number).filter(n => !isNaN(n)) : []
-          const typeNames = typeNums.map(n => HAND_TYPE_NAMES[n] || String(n))
+          const typeNames = typeNums.filter(n => n !== HandType.STANDARD).map(n => HAND_TYPE_NAMES[n] || String(n))
           // K哥铁律：不存在普通胡/基础胡；detectHandTypes返回空时跳过（不是错误）
           const bigTypes = [HandType.FENG_PENG, HandType.ALL_WIND, HandType.QING_PENG]
           if (typeNums.some(n => bigTypes.includes(n))) bigWinGames++
