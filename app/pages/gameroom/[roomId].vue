@@ -636,6 +636,25 @@
                 :has-voted-liangshan="hasVotedLiangShan"
                 @action="handleCircularAction"
               />
+              <!-- 更多特殊操作：常驻显示慢/聚义/造反 -->
+              <div class="extra-actions-bar">
+                <span class="extra-actions-label">更多操作</span>
+                <button
+                  class="extra-action-btn extra-action-btn--think"
+                  :disabled="!canUseThink || isInteractionLocked || !isConnected || thinkFreezeActive"
+                  @click="onThink"
+                >🧠 慢{{ thinkRemaining > 0 ? thinkRemaining : '' }}</button>
+                <button
+                  class="extra-action-btn extra-action-btn--liangshan"
+                  :disabled="canLiangShan === false || isInteractionLocked || !isConnected || hasVotedLiangShan || thinkFreezeActive"
+                  @click="onLiangShan"
+                >🔥 {{ hasVotedLiangShan ? '已聚义' : '聚义' }}</button>
+                <button
+                  class="extra-action-btn extra-action-btn--rebel"
+                  :disabled="showRebel === false || isInteractionLocked || !isConnected || thinkFreezeActive"
+                  @click="onRebel"
+                >🚨 造反</button>
+              </div>
           </div>
         </aside>
       </main>
@@ -2556,6 +2575,69 @@ const forceDiscard = async (p: Player) => {
   margin-top: auto;
   flex-shrink: 0;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 更多特殊操作横条 */
+.extra-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(10, 20, 15, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  flex-wrap: wrap;
+}
+
+.extra-actions-label {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.35);
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+
+.extra-action-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(20, 40, 28, 0.8);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.extra-action-btn:hover:not(:disabled) {
+  filter: brightness(1.2);
+  transform: translateY(-1px);
+}
+
+.extra-action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.extra-action-btn--think:not(:disabled) {
+  background: rgba(124, 58, 237, 0.3);
+  border-color: rgba(139, 92, 246, 0.4);
+  color: #c4b5fd;
+}
+
+.extra-action-btn--liangshan:not(:disabled) {
+  background: rgba(198, 40, 40, 0.3);
+  border-color: rgba(239, 83, 80, 0.4);
+  color: #ff8a80;
+}
+
+.extra-action-btn--rebel:not(:disabled) {
+  background: rgba(220, 38, 38, 0.3);
+  border-color: rgba(255, 215, 0, 0.4);
+  color: #ffd6d6;
 }
 
 /* 桌面端严格 1/4 宽 */
