@@ -1204,7 +1204,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
 // ========== 游戏明细记录 ==========
 interface GameEvent { turn: number; player: string; action: string; detail: string }
 interface SettlementEntry { from: string; to: string; amount: number; reason: string; mult?: number }
-interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers: string[]; meldSources: number[]; wildCount: number; wildTile: string }
+interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers: string[]; meldSources: number[]; wildCount: number; wildTile: string; wonFan?: number; winHandType?: string; status: string }
 interface WinningGameRecord {
   gameIdx: number; winnerName: string; hand: string; melds: string[]; handTypes: string[];
   isSelfDraw: boolean; score: number; multiplier: number; roundNum: number;
@@ -1297,7 +1297,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         flowers: p.flowerTiles.map(t => tileStr(t)),
         meldSources: [...p.meldSources],
         wildCount,
-        wildTile: wildTileStr ?? '(无百搭)'
+        wildTile: wildTileStr ?? '(无百搭)',
+        wonFan: p.wonFan,
+        winHandType: p.winHandType,
+        status: p.status
       }
     })
   }
@@ -1562,6 +1565,7 @@ interface EvalResult {
   worstSingleLoss: { loser: string; score: number; gameIdx: number; result: GameResult } | null
   // 新增：每轮详情
   winningGames: WinningGameRecord[]  // 所有胡牌局明细
+  multiWinDist: number[]  // [n1,n2,n3,n4] = n玩家同时胡牌的局数分布
   handTypeDist: Record<string, number>  // 牌型分布计数
   // 玩家得分统计（用于报告）
   playerStats: { name: string; score: number; wins: number; deltas: number[] }[]
@@ -1681,6 +1685,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   let bigLoss: EvalResult['bigLoss'] = null
   let worstSingleLoss: EvalResult['worstSingleLoss'] = null
   const winningGames: WinningGameRecord[] = []
+  const multiWinDist = [0, 0, 0, 0]  // [单人赢,双人赢,三人赢,四人赢] 局数
   const handTypeDist: Record<string, number> = {}
   prevRoundWasDraw = false
 
@@ -1703,15 +1708,13 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
       if (akDelta > 0 && (!bigWin || akDelta > bigWin.score)) bigWin = { gameIdx: g, result, score: akDelta }
       if (akDelta < 0 && (!bigLoss || akDelta < bigLoss.score)) bigLoss = { gameIdx: g, result, score: akDelta }
 
-      // 记录胡牌明细 + 牌型分布
-      const winnerSnap = result.snapshots?.[result.winner]
-      if (winnerSnap && result.winnerPlayer) {
-        const isSelfDraw = result.events.some(e => e.action.includes('自摸'))
-        const wp = result.winnerPlayer
-        const wildTileId = wp.wildSuit && wp.wildValue ? `${wp.wildSuit}-${wp.wildValue}` : null
-        const types = detectHandTypes(
-          wp.hand, wp.exposedMelds, wildTileId, isSelfDraw, wp.flowerTiles.length
-        )
+      // 记录胡牌明细 + 牌型分布（所有赢家）
+      const allWinners = (result.snapshots || []).filter((s: PlayerSnapshot) => s.status === 'won')
+      const winnerCount = allWinners.length
+      if (winnerCount > 0) {
+        if (winnerCount >= 2) fightToLastGames++
+        if (winnerCount >= 1 && winnerCount <= 4) multiWinDist[winnerCount - 1]++
+
         const HAND_TYPE_NAMES: Record<number, string> = {
           [HandType.FENG_PENG]: '风碰',
           [HandType.ALL_WIND]: '风一色',
@@ -1725,19 +1728,34 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
           [HandType.DA_DIAO]: '大吊',
           [HandType.STANDARD]: '基础胡',
         }
-        const typeNames = types.map(t => HAND_TYPE_NAMES[t] ?? String(t))
-        const bigTypes = [HandType.FENG_PENG, HandType.ALL_WIND, HandType.QING_PENG]
-        if (types.some(t => bigTypes.includes(t))) bigWinGames++
-        if (wp.exposedMelds.length === 0 && types.length > 0) menqingWinGames++
-        for (const t of typeNames) handTypeDist[t] = (handTypeDist[t] || 0) + 1
-        if (typeNames.length === 0) handTypeDist['普通'] = (handTypeDist['普通'] || 0) + 1
-        winningGames.push({
-          gameIdx: g, winnerName: winnerSnap.name, hand: winnerSnap.hand,
-          melds: winnerSnap.melds, handTypes: typeNames.length > 0 ? typeNames : ['普通'],
-          isSelfDraw, score: result.scores[result.winner], multiplier: result.multiplier, roundNum: result.roundNum,
-          akDelta, result,
-          wonFan: wp.wonFan, winHandType: wp.winHandType
-        })
+
+        for (const snap of allWinners) {
+          const wp = result.winnerPlayer?.name === snap.name ? result.winnerPlayer : null
+          const isSelfDraw = wp ? result.events.some(e => e.player === snap.name && e.action.includes('自摸')) : false
+          const wildTileId = snap.wildTile && snap.wildTile !== '(无百搭)' ? snap.wildTile : null
+          // 用snapshot的原始手牌（逗号分隔字符串）还原为Tile数组
+          const handTiles = snap.hand.split(' ').filter(t => t).map(t => parseTile(t))
+          // exposedMelds从snap.melds字符串还原（略过，仍用detectHandTypes走gameManager的已有结果）
+          const types = snap.winHandType
+            ? [Number(Object.entries(HandType).find(([, v]) => v === snap.winHandType || snap.winHandType?.includes(String(v)))?.[0] ?? HandType.STANDARD)]
+            : [HandType.STANDARD]
+          const typeNames = snap.winHandType ? [snap.winHandType] : ['普通']
+          const bigTypes = [HandType.FENG_PENG, HandType.ALL_WIND, HandType.QING_PENG]
+          if (typeNames.some(t => bigTypes.includes(Number(Object.entries(HandType).find(([, v]) => v === t)?.[0])))) bigWinGames++
+          if (snap.melds.length === 0 && typeNames.length > 0) menqingWinGames++
+          for (const t of typeNames) handTypeDist[t] = (handTypeDist[t] || 0) + 1
+
+          const akIsWinner = snap.name === 'AI-AK'
+          const akDeltaForWinner = akIsWinner ? result.scores[AI_NAMES.indexOf('AI-AK')] * SETTLEMENT_MULT : 0
+          winningGames.push({
+            gameIdx: g, winnerName: snap.name, hand: snap.hand,
+            melds: snap.melds, handTypes: typeNames.length > 0 ? typeNames : ['普通'],
+            isSelfDraw, score: akIsWinner ? result.scores[AI_NAMES.indexOf('AI-AK')] : 0,
+            multiplier: result.multiplier, roundNum: result.roundNum,
+            akDelta: akDeltaForWinner, result,
+            wonFan: snap.wonFan, winHandType: snap.winHandType
+          })
+        }
       }
 
       // 找全局最大单人亏损
@@ -1783,7 +1801,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
     akScore: scores['AI-AK'], akWins: wins['AI-AK'], winRates, scores, draws,
     bigWin, bigLoss, totalGames: games, winGames, selfDrawGames,
     fightToLastGames, bigWinGames, menqingWinGames, metricsFitness: mf, worstSingleLoss,
-    winningGames, handTypeDist,
+    winningGames, handTypeDist, multiWinDist,
     playerStats: AI_NAMES.map(name => ({ name, score: scores[name] || 0, wins: wins[name] || 0, deltas: [] })),
   }
 }

@@ -38,6 +38,8 @@ export interface WinningGameRecord {
   melds: string | string[]
   multiplier: number
   roundNum: number
+  wonFan?: number
+  winHandType?: string
   result: any
 }
 
@@ -50,6 +52,8 @@ export interface RoundReport {
   topWins: WinningGameRecord[]
   topLosses: WinningGameRecord[]
   worstLossGames: any[]
+  multiWinDist: number[]
+  allWinningGames: WinningGameRecord[]
 }
 
 export interface EvalResult {
@@ -67,6 +71,7 @@ export interface EvalResult {
   winRates: Record<string, number>
   akWins: number
   playerStats: PlayerStats[]
+  multiWinDist: number[]
 }
 
 // ========== 工具函数 ==========
@@ -106,7 +111,7 @@ function checkTarget(actual: number, target: string, lowBetter = false): string 
 
 export function formatRoundReport(report: RoundReport): string {
   const lines: string[] = []
-  const { round, timestamp, metrics, policy, playerStats, topWins, topLosses, worstLossGames } = report
+  const { round, timestamp, metrics, policy, playerStats, topWins, topLosses, worstLossGames, multiWinDist, allWinningGames } = report
   const ts = formatTimestamp(timestamp)
   const winRate = parseFloat((metrics.winGames / Math.max(1, metrics.totalGames) * 100).toFixed(1))
   const drawRate = parseFloat((metrics.drawGames / Math.max(1, metrics.totalGames) * 100).toFixed(1))
@@ -127,6 +132,7 @@ export function formatRoundReport(report: RoundReport): string {
   lines.push('')
 
   // ===== 训练指标 Summary（带K哥目标） =====
+  const fightToLastRate = metrics.winGames > 0 ? parseFloat(((metrics.fightToLastGames / metrics.winGames) * 100).toFixed(1)) : 0
   lines.push('### 📊 训练指标 Summary')
   lines.push('')
   lines.push('| 指标 | 值 | K哥目标 | 达标 |')
@@ -135,10 +141,17 @@ export function formatRoundReport(report: RoundReport): string {
   lines.push(`| 流局率 | ${drawRate}% | <10% | ${checkTarget(drawRate, '10', true)} |`)
   lines.push(`| 自摸率 | ${selfDrawRate}% | 40-60% | ${checkTarget(selfDrawRate, '40')} |`)
   lines.push(`| 捉冲率 | — | 40-60% | — |`)
-  lines.push(`| 血战率 | — | >80% | — |`)
+  lines.push(`| 血战率 | ${fightToLastRate}% | >80% | ${checkTarget(fightToLastRate, '80')} |`)
   lines.push(`| 大牌率 | ${bigWinRate}% | 3-8% | ${checkTarget(bigWinRate, '3')} |`)
   lines.push(`| 门清率 | ${menqingRate}% | 7-12% | ${checkTarget(menqingRate, '7')} |`)
   lines.push(`| Fitness | ${metrics.akScore.toFixed(1)} | ↑ | — |`)
+  lines.push('')
+  // 每局获胜人数分布
+  const mw = multiWinDist || [0, 0, 0, 0]
+  const mwTotal = mw.reduce((a: number, b: number) => a + b, 0)
+  lines.push('**每局获胜人数分布**（本轮所有胡牌局）')
+  lines.push(`- 单人胡牌: ${mw[0]}局 | 双人胡牌: ${mw[1]}局 | 三人胡牌: ${mw[2]}局 | 四人胡牌: ${mw[3]}局`)
+  lines.push(`- 多人胡牌率: ${mwTotal > 0 ? ((mw[1] + mw[2] + mw[3]) / mwTotal * 100).toFixed(1) : 0}%（目标>80%时血战才有意义）`)
   lines.push('')
 
   // ===== 胡牌牌型分布（固定9种） =====
@@ -172,7 +185,7 @@ export function formatRoundReport(report: RoundReport): string {
   lines.push(`- Games: ${metrics.totalGames}`)
   lines.push(`- 胡牌局: ${metrics.winGames} (${winRate}%)`)
   lines.push(`- 流局: ${metrics.drawGames} (${drawRate}%)`)
-  lines.push(`- 血战到最后一人: ${metrics.fightToLastGames} —`)
+  lines.push(`- 血战到最后一人: ${metrics.fightToLastGames} (${fightToLastRate}%)`)
   lines.push(`- 平均回合: —`)
   lines.push(`- 平均总筹码: —`)
   lines.push(`- 自摸率(胡牌中): ${selfDrawRate}%`)
@@ -180,6 +193,22 @@ export function formatRoundReport(report: RoundReport): string {
   lines.push(`- 门清胡牌率(胡牌中): ${menqingRate}%`)
   lines.push(`- Fitness: ${metrics.akScore.toFixed(4)}`)
   lines.push('')
+
+  // ===== 所有胡牌局明细（所有玩家） =====
+  if (allWinningGames && allWinningGames.length > 0) {
+    lines.push('### 所有胡牌局明细（所有玩家）')
+    lines.push('')
+    let lastGameIdx = -1
+    for (const w of allWinningGames) {
+      const r = w.result || {}
+      if (w.gameIdx !== lastGameIdx) {
+        lines.push(`**局次${w.gameIdx}**（${w.isSelfDraw ? '自摸' : '放冲'} · ×${w.multiplier || '?'}）`)
+        lastGameIdx = w.gameIdx
+      }
+      lines.push(`  - ${w.winnerName}: ${w.handTypes.join(', ') || '普通'} · ${w.hand} · ${w.melds?.join('; ') || '(无副露)'} ${w.wonFan ? `→ ${w.wonFan}点` : ''}`)
+    }
+    lines.push('')
+  }
 
   // ===== 本轮最佳策略参数 =====
   lines.push('### 本轮最佳策略参数')
@@ -343,6 +372,8 @@ export function buildRoundReport(
     topWins,
     topLosses,
     worstLossGames: internalResult.worstSingleLoss ? [internalResult.worstSingleLoss] : [],
+    multiWinDist: internalResult.multiWinDist || [0, 0, 0, 0],
+    allWinningGames: (internalResult.winningGames || []).sort((a: any, b: any) => a.gameIdx - b.gameIdx),
   }
 }
 
