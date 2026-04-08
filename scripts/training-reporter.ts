@@ -216,7 +216,7 @@ export function formatRoundReport(report: RoundReport): string {
     if (winnerSnap) {
       lines.push(`  - 玩家: ${winnerSnap.name}`)
       lines.push(`    - 胡牌方式: ${w.isSelfDraw ? '自摸' : '放冲'}`)
-      lines.push(`    - 牌型/基础番/最终点: ${w.handTypes.join(', ') || '—'} / ${r.winnerDetails?.[0]?.baseFan ?? '—'} / ${(r.winnerDetails?.[0]?.finalPoints ?? 0) * 10 * (r.multiplier || 1)}`)
+      lines.push(`    - 牌型/基础番/最终点: ${w.handTypes.join(', ') || '—'} / ${w.wonFan ? Math.round(w.wonFan / 10) : '—'} / ${w.wonFan ?? '—'}`)
       lines.push(`    - 手牌牌面: ${winnerSnap.hand || '—'}`)
       lines.push(`    - 门口牌（吃/碰/杠）: ${winnerSnap.melds?.join(' ; ') || '(无)'}`)
       lines.push(`    - 花牌: ${winnerSnap.flowers?.join(' ') || '(无)'}`)
@@ -275,7 +275,7 @@ export function formatRoundReport(report: RoundReport): string {
     if (winnerSnap) {
       lines.push(`  - 玩家: ${winnerSnap.name}`)
       lines.push(`    - 胡牌方式: ${w.isSelfDraw ? '自摸' : '放冲'}`)
-      lines.push(`    - 牌型/基础番/最终点: ${w.handTypes.join(', ') || '—'} / ${r.winnerDetails?.[0]?.baseFan ?? '—'} / ${(r.winnerDetails?.[0]?.finalPoints ?? 0) * 10 * (r.multiplier || 1)}`)
+      lines.push(`    - 牌型/基础番/最终点: ${w.handTypes.join(', ') || '—'} / ${w.wonFan ? Math.round(w.wonFan / 10) : '—'} / ${w.wonFan ?? '—'}`)
       lines.push(`    - 手牌牌面: ${winnerSnap.hand || '—'}`)
       lines.push(`    - 门口牌（吃/碰/杠）: ${winnerSnap.melds?.join(' ; ') || '(无)'}`)
       lines.push(`    - 花牌: ${winnerSnap.flowers?.join(' ') || '(无)'}`)

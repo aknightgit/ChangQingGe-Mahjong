@@ -418,6 +418,9 @@ interface BotPlayer {
   // 调试追踪
   _lastPhase?: string
   _lastHand?: number
+  // 胡牌得分信息
+  wonFan?: number
+  winHandType?: string
 }
 
 interface GameState {
@@ -1206,6 +1209,8 @@ interface WinningGameRecord {
   gameIdx: number; winnerName: string; hand: string; melds: string[]; handTypes: string[];
   isSelfDraw: boolean; score: number; multiplier: number; roundNum: number;
   akDelta: number;  // AK的分数变化（正=赢，负=输）
+  wonFan?: number;   // 最终点数（baseFan × all multipliers）
+  winHandType?: string;  // 牌型名称
   result?: any  // GameResult，用于settlementLog
 }
 interface GameResult {
@@ -1284,7 +1289,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
   }
   const recordSnapshots = (): PlayerSnapshot[] => {
     return g.players.map(p => {
-      const wildTileStr = (p.wildSuit && p.wildValue) ? `${p.wildSuit}${p.wildValue}` : null
+      const wildTileStr = (p.wildSuit && p.wildValue) ? `${p.wildSuit}-${p.wildValue}` : null
       const wildCount = p.hand.filter(t => isWT(t, p)).length
       return {
         name: p.name, hand: p.hand.map(t => tileStr(t)).join(' '),
@@ -1730,7 +1735,8 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
           gameIdx: g, winnerName: winnerSnap.name, hand: winnerSnap.hand,
           melds: winnerSnap.melds, handTypes: typeNames.length > 0 ? typeNames : ['普通'],
           isSelfDraw, score: result.scores[result.winner], multiplier: result.multiplier, roundNum: result.roundNum,
-          akDelta, result
+          akDelta, result,
+          wonFan: wp.wonFan, winHandType: wp.winHandType
         })
       }
 
