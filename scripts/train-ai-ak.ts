@@ -1358,15 +1358,20 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     return groups
   }
   const recordWinner = (p: BotPlayer, idx: number, isSelfDraw: boolean, wonFan: number, roundNum: number) => {
-    // 手牌：普通牌在前，百搭移到最后并标注*
+    // 手牌分组：按花色分组，普通牌+百搭，百搭后加(*)
     const wildSuit = p.wildSuit, wildVal = p.wildValue
     const isWT2 = (t: Tile) => wildSuit && wildVal ? t.suit === wildSuit && t.value === wildVal : false
     const normalTiles = p.hand.filter(t => !isFlower(t) && !isWT2(t))
     const wildTiles = p.hand.filter(t => !isFlower(t) && isWT2(t))
-    const handStr = [
-      ...normalTiles.map(t => tileStr(t)),
-      ...wildTiles.map(t => `*${tileStr(t)}（百搭）`)
-    ].join(' ')
+    // 按花色分组手牌
+    const suitGroups: string[] = []
+    for (const suit of ['Wan','Tong','Tiao'] as TileSuit[]) {
+      const normal = normalTiles.filter(t => t.suit === suit)
+      const wild = wildTiles.filter(t => t.suit === suit)
+      const parts: string[] = [...normal.map(t => tileStr(t)), ...wild.map(t => tileStr(t) + '(*)')]
+      if (parts.length > 0) suitGroups.push(parts.join(' '))
+    }
+    const handStr = suitGroups.join(' ; ')
     // 门口牌：分组格式
     const meldStrs = formatMelds(p.exposedMelds, wildTiles.length)
     if (wildTiles.length > 0) meldStrs.push(`百搭:${wildTiles.length}张（${wildSuit}-${wildVal}）`)
