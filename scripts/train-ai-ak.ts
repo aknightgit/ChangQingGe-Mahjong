@@ -1358,17 +1358,25 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     return groups
   }
   const recordWinner = (p: BotPlayer, idx: number, isSelfDraw: boolean, wonFan: number, roundNum: number) => {
-    const wildTileStr = (p.wildSuit && p.wildValue) ? `${tileStr({suit: p.wildSuit as TileSuit, value: p.wildValue!, id: ''})}（${p.wildSuit}-${p.wildValue}）` : null
-    const wildCount = p.hand.filter(t => isWT(t, p)).length
-    const meldStrs = formatMelds(p.exposedMelds, wildCount)
-    if (wildCount > 0 && wildTileStr) meldStrs.push(`百搭:${wildCount}张（${p.wildSuit}-${p.wildValue}）`)
+    // 手牌：普通牌在前，百搭移到最后并标注*
+    const wildSuit = p.wildSuit, wildVal = p.wildValue
+    const isWT2 = (t: Tile) => wildSuit && wildVal ? t.suit === wildSuit && t.value === wildVal : false
+    const normalTiles = p.hand.filter(t => !isFlower(t) && !isWT2(t))
+    const wildTiles = p.hand.filter(t => !isFlower(t) && isWT2(t))
+    const handStr = [
+      ...normalTiles.map(t => tileStr(t)),
+      ...wildTiles.map(t => `*${tileStr(t)}（百搭）`)
+    ].join(' ')
+    // 门口牌：分组格式
+    const meldStrs = formatMelds(p.exposedMelds, wildTiles.length)
+    if (wildTiles.length > 0) meldStrs.push(`百搭:${wildTiles.length}张（${wildSuit}-${wildVal}）`)
     winnersThisGame.push({
       playerIndex: idx, name: p.name,
-      hand: p.hand.map(t => tileStr(t)).join(' '),
+      hand: handStr,
       melds: meldStrs,
       flowers: p.flowerTiles.map(t => tileStr(t)),
       isSelfDraw, wonFan, winHandType: p.winHandType || '', roundNum,
-      wildTile: wildTileStr ?? '(无百搭)', wildTileValue: p.wildValue ?? 0
+      wildTile: wildTiles.length > 0 ? `${wildSuit}-${wildVal}` : '(无百搭)', wildTileValue: wildVal ?? 0
     })
   }
   // 快照：只记录字符串化数据，避免引用悬浮
