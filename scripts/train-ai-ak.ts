@@ -1358,12 +1358,11 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     return groups
   }
   const recordWinner = (p: BotPlayer, idx: number, isSelfDraw: boolean, wonFan: number, roundNum: number) => {
-    // 手牌分组：按花色分组，普通牌+百搭，百搭后加(*)
+    // 手牌分组：按花色分组，普通牌在前，百搭在后并加(*)
     const wildSuit = p.wildSuit, wildVal = p.wildValue
     const isWT2 = (t: Tile) => wildSuit && wildVal ? t.suit === wildSuit && t.value === wildVal : false
     const normalTiles = p.hand.filter(t => !isFlower(t) && !isWT2(t))
     const wildTiles = p.hand.filter(t => !isFlower(t) && isWT2(t))
-    // 按花色分组手牌
     const suitGroups: string[] = []
     for (const suit of ['Wan','Tong','Tiao'] as TileSuit[]) {
       const normal = normalTiles.filter(t => t.suit === suit)
@@ -1372,9 +1371,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       if (parts.length > 0) suitGroups.push(parts.join(' '))
     }
     const handStr = suitGroups.join(' ; ')
-    // 门口牌：分组格式
+    // 门口牌分组（百搭不在这里重复显示，手牌里已标(*)）
     const meldStrs = formatMelds(p.exposedMelds, wildTiles.length)
-    if (wildTiles.length > 0) meldStrs.push(`百搭:${wildTiles.length}张（${wildSuit}-${wildVal}）`)
     winnersThisGame.push({
       playerIndex: idx, name: p.name,
       hand: handStr,
@@ -1814,6 +1812,7 @@ function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy
     const winEvent = r.events.find(e => e.action.includes('自摸') || e.action.includes('放炮胡') || e.action.includes('胡'))
     const winType = winEvent?.action?.includes('自摸') ? '自摸' : winEvent?.action?.includes('放炮') ? '放冲' : '胡牌'
     lines.push(`    - 胡牌方式: ${winType}`)
+    lines.push(`    - 百搭牌: ${winnerSnap.wildTile || '(无百搭)'}`)
     lines.push(`    - 手牌牌面: ${winnerSnap.hand || '(空)'}`)
     lines.push(`    - 门口牌（吃/碰/杠）: ${winnerSnap.melds.length > 0 ? winnerSnap.melds.join(' ; ') : '(无)'}`)
     lines.push(`    - 花牌: ${winnerSnap.flowers.length > 0 ? winnerSnap.flowers.join(' ') : '(无)'}`)
