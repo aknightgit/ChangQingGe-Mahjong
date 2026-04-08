@@ -1709,7 +1709,8 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
       if (akDelta < 0 && (!bigLoss || akDelta < bigLoss.score)) bigLoss = { gameIdx: g, result, score: akDelta }
 
       // 记录胡牌明细 + 牌型分布（所有赢家）
-      const allWinners = (result.snapshots || []).filter((s: PlayerSnapshot) => s.status === 'won')
+      // 注意：自摸时endRound不触发，winner的status仍为PLAYING，用wonFan判断
+      const allWinners = (result.snapshots || []).filter((s: PlayerSnapshot) => s.wonFan !== undefined && s.wonFan > 0)
       const winnerCount = allWinners.length
       if (winnerCount > 0) {
         if (winnerCount >= 2) fightToLastGames++
