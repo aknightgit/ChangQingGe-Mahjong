@@ -1347,6 +1347,11 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         applyBaoSettlement(g, curr, true, null, baseScore, g.gameMultiplier)
         for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore * g.gameMultiplier, '自摸', g.gameMultiplier) }
         log(player.name, '自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3×${g.gameMultiplier}=${baseScore*3*g.gameMultiplier}] [手牌${normalizedHand.length}张+副露${player.exposedMelds.length}]`)
+        // 记录赢家得分信息（供evaluatePolicy统计使用）
+        player.wonFan = baseScore
+        const wt = detectHandTypes(player.hand, player.exposedMelds, player.wildSuit && player.wildValue ? `${player.wildSuit}-${player.wildValue}` : null, true, player.flowerTiles.length)
+        player.winHandType = wt.map(t => String(t)).join(',')
+        player.status = 'won'
         return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: player, roundNum: turn }
       }
     }
@@ -1363,6 +1368,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
             applyBaoSettlement(g, curr, true, null, baseScore, g.gameMultiplier)
             log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
+            player.wonFan = baseScore
+            const wt_aK = detectHandTypes(player.hand, player.exposedMelds, player.wildSuit && player.wildValue ? `${player.wildSuit}-${player.wildValue}` : null, true, player.flowerTiles.length)
+            player.winHandType = wt_aK.map(t => String(t)).join(',')
+            player.status = 'won'
             return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: player, roundNum: turn }
           }
         }
@@ -1379,6 +1388,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
             applyBaoSettlement(g, curr, true, null, baseScore, g.gameMultiplier)
             log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
+            player.wonFan = baseScore
+            const wt_jg = detectHandTypes(player.hand, player.exposedMelds, player.wildSuit && player.wildValue ? `${player.wildSuit}-${player.wildValue}` : null, true, player.flowerTiles.length)
+            player.winHandType = wt_jg.map(t => String(t)).join(',')
+            player.status = 'won'
             return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: player, roundNum: turn }
           }
         }
@@ -1410,6 +1423,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           applyBaoSettlement(g, other, false, curr, score, g.gameMultiplier)
           recordPayment(player.name, opp.name, score * g.gameMultiplier, '放炮', g.gameMultiplier)
           log(opp.name, '放炮胡', `${player.name}出${tileStr(discard)}→${opp.hand.map(t => tileStr(t)).join(' ')} [${score}]`)
+          opp.wonFan = score
+          const wt_d = detectHandTypes(opp.hand, opp.exposedMelds, opp.wildSuit && opp.wildValue ? `${opp.wildSuit}-${opp.wildValue}` : null, false, opp.flowerTiles.length)
+          opp.winHandType = wt_d.map(t => String(t)).join(',')
+          opp.status = 'won'
           return { winner: other, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: opp, roundNum: turn }
         }
       }
@@ -1449,6 +1466,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
               applyBaoSettlement(g, otherIdx, false, curr, score, g.gameMultiplier)
               recordPayment(g.players[curr].name, opp.name, score * g.gameMultiplier, '碰后放炮', g.gameMultiplier)
               log(opp.name, '碰后放炮胡', `${tileStr(discard)} [${score}]`)
+              opp.wonFan = score
+              const wt_pp = detectHandTypes(opp.hand, opp.exposedMelds, opp.wildSuit && opp.wildValue ? `${opp.wildSuit}-${opp.wildValue}` : null, false, opp.flowerTiles.length)
+              opp.winHandType = wt_pp.map(t => String(t)).join(',')
+              opp.status = 'won'
               return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: opp, roundNum: turn }
             }
           }
@@ -1458,6 +1479,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= baseScore }
             applyBaoSettlement(g, otherIdx, true, null, baseScore, g.gameMultiplier)
             log(opp.name, '碰后自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
+            opp.wonFan = baseScore
+            const wt_ps = detectHandTypes(opp.hand, opp.exposedMelds, opp.wildSuit && opp.wildValue ? `${opp.wildSuit}-${opp.wildValue}` : null, true, opp.flowerTiles.length)
+            opp.winHandType = wt_ps.map(t => String(t)).join(',')
+            opp.status = 'won'
             return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: opp, roundNum: turn }
           }
           for (const ak of canAnKong(opp)) {
@@ -1472,6 +1497,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
                 for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
                 applyBaoSettlement(g, otherIdx, true, null, kongBaseScore, g.gameMultiplier)
                 log(opp.name, '碰杠后自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3=${kongBaseScore*3}]`)
+                opp.wonFan = kongBaseScore
+                const wt_pgs = detectHandTypes(opp.hand, opp.exposedMelds, opp.wildSuit && opp.wildValue ? `${opp.wildSuit}-${opp.wildValue}` : null, true, opp.flowerTiles.length)
+                opp.winHandType = wt_pgs.map(t => String(t)).join(',')
+                opp.status = 'won'
                 return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: opp, roundNum: turn }
               }
             }
@@ -1508,6 +1537,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           applyBaoSettlement(g, nextPlayer, false, curr, score, g.gameMultiplier)
           recordPayment(g.players[curr].name, nextP.name, score * g.gameMultiplier, '吃后放炮', g.gameMultiplier)
           log(nextP.name, '吃后放炮胡', `${tileStr(discard)} [${score}]`)
+          nextP.wonFan = score
+          const wt_np_d = detectHandTypes(nextP.hand, nextP.exposedMelds, nextP.wildSuit && nextP.wildValue ? `${nextP.wildSuit}-${nextP.wildValue}` : null, false, nextP.flowerTiles.length)
+          nextP.winHandType = wt_np_d.map(t => String(t)).join(',')
+          nextP.status = 'won'
           return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: nextP, roundNum: turn }
         }
       }
@@ -1517,6 +1550,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= baseScore }
         applyBaoSettlement(g, nextPlayer, true, null, baseScore, g.gameMultiplier)
         log(nextP.name, '吃后自摸', `${nextP.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
+        nextP.wonFan = baseScore
+        const wt_np_s = detectHandTypes(nextP.hand, nextP.exposedMelds, nextP.wildSuit && nextP.wildValue ? `${nextP.wildSuit}-${nextP.wildValue}` : null, true, nextP.flowerTiles.length)
+        nextP.winHandType = wt_np_s.map(t => String(t)).join(',')
+        nextP.status = 'won'
         return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: nextP, roundNum: turn }
       }
       for (const ak of canAnKong(nextP)) {
@@ -1531,6 +1568,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= kongBaseScore }
             applyBaoSettlement(g, nextPlayer, true, null, kongBaseScore, g.gameMultiplier)
             log(nextP.name, '吃杠后自摸', `${nextP.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3=${kongBaseScore*3}]`)
+            nextP.wonFan = kongBaseScore
+            const wt_np_k = detectHandTypes(nextP.hand, nextP.exposedMelds, nextP.wildSuit && nextP.wildValue ? `${nextP.wildSuit}-${nextP.wildValue}` : null, true, nextP.flowerTiles.length)
+            nextP.winHandType = wt_np_k.map(t => String(t)).join(',')
+            nextP.status = 'won'
             return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: nextP, roundNum: turn }
           }
         }
@@ -1731,26 +1772,34 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
         }
 
         for (const snap of allWinners) {
-          const wp = result.winnerPlayer?.name === snap.name ? result.winnerPlayer : null
-          const isSelfDraw = wp ? result.events.some(e => e.player === snap.name && e.action.includes('自摸')) : false
-          const wildTileId = snap.wildTile && snap.wildTile !== '(无百搭)' ? snap.wildTile : null
-          // 用snapshot的原始手牌（逗号分隔字符串）还原为Tile数组
-          const handTiles = snap.hand.split(' ').filter(t => t).map(t => parseTile(t))
-          // exposedMelds从snap.melds字符串还原（略过，仍用detectHandTypes走gameManager的已有结果）
-          const types = snap.winHandType
-            ? [Number(Object.entries(HandType).find(([, v]) => v === snap.winHandType || snap.winHandType?.includes(String(v)))?.[0] ?? HandType.STANDARD)]
-            : [HandType.STANDARD]
-          const typeNames = snap.winHandType ? [snap.winHandType] : ['普通']
+          // 赢家通过wonFan>0判断；typeNames从winHandType字段解析（逗号分隔的数字字符串）
+          const isSelfDraw = result.events.some(e => e.player === snap.name && e.action.includes('自摸'))
+          const typeNums = snap.winHandType ? snap.winHandType.split(',').map(Number).filter(n => !isNaN(n)) : []
+          const HAND_TYPE_NAMES: Record<number, string> = {
+            [HandType.FENG_PENG]: '风碰',
+            [HandType.ALL_WIND]: '风一色',
+            [HandType.QING_PENG]: '清碰',
+            [HandType.HUN_PENG]: '混碰',
+            [HandType.EIGHT_FLOWERS]: '八花',
+            [HandType.FULL_FLUSH]: '清一色',
+            [HandType.HALF_FLUSH]: '混一色',
+            [HandType.FOUR_WILD]: '四百搭',
+            [HandType.ALL_TRIPLETS]: '碰碰胡',
+            [HandType.DA_DIAO]: '大吊',
+            [HandType.STANDARD]: '基础胡',
+          }
+          const typeNames = typeNums.map(n => HAND_TYPE_NAMES[n] || String(n))
+          if (typeNames.length === 0) typeNames.push('普通')
           const bigTypes = [HandType.FENG_PENG, HandType.ALL_WIND, HandType.QING_PENG]
-          if (typeNames.some(t => bigTypes.includes(Number(Object.entries(HandType).find(([, v]) => v === t)?.[0])))) bigWinGames++
-          if (snap.melds.length === 0 && typeNames.length > 0) menqingWinGames++
+          if (typeNums.some(n => bigTypes.includes(n))) bigWinGames++
+          if (snap.melds.length === 0 && typeNums.length > 0) menqingWinGames++
           for (const t of typeNames) handTypeDist[t] = (handTypeDist[t] || 0) + 1
 
           const akIsWinner = snap.name === 'AI-AK'
           const akDeltaForWinner = akIsWinner ? result.scores[AI_NAMES.indexOf('AI-AK')] * SETTLEMENT_MULT : 0
           winningGames.push({
             gameIdx: g, winnerName: snap.name, hand: snap.hand,
-            melds: snap.melds, handTypes: typeNames.length > 0 ? typeNames : ['普通'],
+            melds: snap.melds, handTypes: typeNames,
             isSelfDraw, score: akIsWinner ? result.scores[AI_NAMES.indexOf('AI-AK')] : 0,
             multiplier: result.multiplier, roundNum: result.roundNum,
             akDelta: akDeltaForWinner, result,
