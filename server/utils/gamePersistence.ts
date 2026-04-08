@@ -22,7 +22,7 @@ type PersistedMahjongGame = MahjongGame & {
   pendingActions?: PendingAction[]
   dice?: [number, number]
   roundMultiplier?: number
-  globalMultiplier?: number
+  inheritMultiplier?: number
   inheritedGlobalMultiplier?: number
   rebelEvent?: { playerId: string; playerName: string; newDealerIndex: number }
   hesitationWindow?: number
@@ -135,7 +135,7 @@ const gameStateToDocument = (game: GameState): PersistedMahjongGame => ({
   pendingActions: game.pendingActions,
   dice: game.dice,
   roundMultiplier: game.roundMultiplier,
-  globalMultiplier: game.globalMultiplier,
+  inheritMultiplier: game.inheritMultiplier,
   inheritedGlobalMultiplier: game.inheritedGlobalMultiplier,
   rebelEvent: game.rebelEvent,
   hesitationWindow: game.hesitationWindow,
@@ -162,7 +162,7 @@ const documentToGameState = (doc: PersistedMahjongGame): GameState => ({
   pendingActions: doc.pendingActions ?? [],
   dice: doc.dice,
   roundMultiplier: doc.roundMultiplier,
-  globalMultiplier: doc.globalMultiplier,
+  inheritMultiplier: doc.inheritMultiplier,
   inheritedGlobalMultiplier: doc.inheritedGlobalMultiplier,
   rebelEvent: doc.rebelEvent,
   hesitationWindow: doc.hesitationWindow,

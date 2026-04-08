@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
       isRobbingKong: false,
       isMenQing: melds.length === 0,
       roundMultiplier: game.roundMultiplier || 1,
-      globalMultiplier: game.globalMultiplier || 1,
+      inheritMultiplier: game.inheritMultiplier || 1,
     });
 
     // 按分数降序排列

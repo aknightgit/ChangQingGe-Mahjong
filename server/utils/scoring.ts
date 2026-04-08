@@ -38,7 +38,7 @@ export interface ScoreResult {
   baseFan: number;           // 基础番数
   extraMultipliers: number;  // 额外翻倍（无百搭×2 + 门清×2）
   roundMultiplier: number;   // 回合倍数（骰子决定）
-  globalMultiplier: number;  // 全局倍数（流局/造反叠加）
+  inheritMultiplier: number;  // 全局倍数（流局/造反叠加）
   finalPoints: number;       // 最终点数
   handTypeName: string;      // 牌型名称
   details: string[];         // 计算明细
@@ -61,14 +61,14 @@ export function calculateScore(params: {
   wildTileValue?: number;      // 百搭牌的数值
   wildTileGroup?: string[];    // 花牌百搭组
   roundMultiplier?: number;     // 回合倍数（骰子）
-  globalMultiplier?: number;    // 全局倍数（流局/造反继承）
+  inheritMultiplier?: number;    // 全局倍数（流局/造反继承）
   globalIncludesRound?: boolean; // 是否把回合倍数并入全局倍数（默认true）
 }): ScoreResult {
   const {
     handTiles, exposedMelds, flowerTiles, handTypes,
     isSelfDrawn, isKongFlower, isRobbingKong, isMenQing,
     isDaDiao = false,
-    wildTileSuit, wildTileValue, wildTileGroup, roundMultiplier, globalMultiplier,
+    wildTileSuit, wildTileValue, wildTileGroup, roundMultiplier, inheritMultiplier,
     globalIncludesRound = true
   } = params;
 
@@ -84,7 +84,7 @@ export function calculateScore(params: {
       handTypeName: '无效牌型',
       details: ['无有效牌型'],
       roundMultiplier: 0,
-      globalMultiplier: 0,
+      inheritMultiplier: 0,
       extraMultipliers: 0
     }
   }
@@ -200,7 +200,7 @@ export function calculateScore(params: {
 
   // 9. 最终点数
   const effectiveRoundMultiplier = Math.max(1, roundMultiplier ?? 1);
-  const baseGlobal = Math.max(1, globalMultiplier ?? 1);
+  const baseGlobal = Math.max(1, inheritMultiplier ?? 1);
 
   // 新口径：若全局已包含回合倍数，则综合倍数= min(8, 回合 × 全局)
   // 否则沿用旧口径（回合倍数与全局倍数分乘）
@@ -223,7 +223,7 @@ export function calculateScore(params: {
     baseFan,
     extraMultipliers,
     roundMultiplier: effectiveRoundMultiplier,
-    globalMultiplier: effectiveGlobalMultiplier,
+    inheritMultiplier: effectiveGlobalMultiplier,
     finalPoints,
     handTypeName,
     details
@@ -257,7 +257,7 @@ export function generateWinOptions(params: {
   wildTileValue?: number;
   wildTileGroup?: string[];
   roundMultiplier?: number;
-  globalMultiplier?: number;
+  inheritMultiplier?: number;
 }): WinOption[] {
   const options: WinOption[] = [];
   const baseParams = { ...params };

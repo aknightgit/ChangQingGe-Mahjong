@@ -194,7 +194,7 @@ export interface GameState {
   // 倍数/继承状态
   dice?: [number, number];
   roundMultiplier?: number;
-  globalMultiplier?: number;
+  inheritMultiplier?: number;
   inheritedGlobalMultiplier?: number;
   rebelEvent?: RebelEvent;
   liangShanVotes?: string[];  // 梁山聚义投票者ID列表

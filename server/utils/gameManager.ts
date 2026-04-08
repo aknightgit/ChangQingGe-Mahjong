@@ -616,7 +616,7 @@ class GameManager {
       multiHuStarterIndex: undefined,
       dice: undefined,
       roundMultiplier: undefined,
-      globalMultiplier: undefined,
+      inheritMultiplier: undefined,
       inheritedGlobalMultiplier: options?.firstRoundDouble ? 2 : 1,
       rebelEvent: undefined,
       diceRollCount: options?.diceRollCount ?? 2,
@@ -914,10 +914,10 @@ class GameManager {
     // 继承上局全局倍数(或从造反事件继承)
     const prevGlobal = game.inheritedGlobalMultiplier ?? 1;
     if (game.rebelEvent) {
-      game.globalMultiplier = calculateGlobalMultiplier(prevGlobal, '造反');
+      game.inheritMultiplier = calculateGlobalMultiplier(prevGlobal, '造反');
       game.rebelEvent = undefined;
     } else {
-      game.globalMultiplier = prevGlobal;
+      game.inheritMultiplier = prevGlobal;
     }
     game.inheritedGlobalMultiplier = undefined;
 
@@ -1091,7 +1091,7 @@ class GameManager {
       // 只有4人全是真人玩家时才开启梁山聚义
       const allHuman = game.players.length >= 4 && game.players.every(p => !this.isPlayerBotControlled(p));
       // 全局倍数已达8倍上限时,禁止梁山聚义
-      const atMultiplierCap = (game.globalMultiplier ?? 1) >= 8;
+      const atMultiplierCap = (game.inheritMultiplier ?? 1) >= 8;
       if (allHuman && !atMultiplierCap) {
         const votes = game.liangShanVotes || [];
         if (!votes.includes(playerId)) {
@@ -2249,11 +2249,11 @@ class GameManager {
       wildTileValue: wildValue,
       wildTileGroup: game.wildTileGroup,
       roundMultiplier: game.roundMultiplier ?? 1,
-      globalMultiplier: game.globalMultiplier ?? 1,
+      inheritMultiplier: game.inheritMultiplier ?? 1,
       globalIncludesRound: true
     });
 
-    // wonFan 存最终点数（baseFan × extraMultipliers × globalMultiplier）
+    // wonFan 存最终点数（baseFan × extraMultipliers × inheritMultiplier）
     // calculateScore.finalPoints 已经包含了门清/无百搭翻倍和全局倍数
     player.wonFan = scoreResult.finalPoints;
     player.winHandType = scoreResult.handTypeName;
@@ -2373,7 +2373,7 @@ class GameManager {
     if (player.status !== PlayerStatus.PLAYING) return;
 
     // 全局倍数已达8倍上限时,禁止梁山聚义
-    if ((game.globalMultiplier ?? 1) >= 8) return;
+    if ((game.inheritMultiplier ?? 1) >= 8) return;
 
     // 只有4人全是真人时才允许
     const allHuman = game.players.length >= 4 && game.players.every(p => !this.isPlayerBotControlled(p));
@@ -2429,7 +2429,7 @@ class GameManager {
       }
 
       // 下局全局倍数 ×2(溢出继承:effective = doubled × roundMultiplier, 超过8倍部分继承)
-      const doubled = Math.min((game.globalMultiplier ?? 1) * 2, 8);
+      const doubled = Math.min((game.inheritMultiplier ?? 1) * 2, 8);
       const roundMul = game.roundMultiplier ?? 1;
       const effective = doubled * roundMul;
       // 全局倍数封顶8,溢出部分继承
@@ -3397,11 +3397,11 @@ class GameManager {
     this.checkQJThresholdAlerts(game);
 
     // 倍数继承链:溢出倍数继承(超过8倍封顶的部分传递给下一把)
-    // 规则:effective = globalMultiplier × roundMultiplier,封顶8,超出部分 = effective/8 继承给下把
+    // 规则:effective = inheritMultiplier × roundMultiplier,封顶8,超出部分 = effective/8 继承给下把
     // 注意:聚义/造反已经自行设置 inheritedGlobalMultiplier,不要覆盖
     if (reason === GameEndReason.WALL_EXHAUSTED) {
       // 流局:先翻倍,再算溢出(但全局倍数封顶8)
-      const currentGlobal = game.globalMultiplier ?? 1;
+      const currentGlobal = game.inheritMultiplier ?? 1;
       const roundMul = game.roundMultiplier ?? 1;
       // 先翻倍,封顶8
       const doubled = Math.min(currentGlobal * 2, 8);
@@ -3410,7 +3410,7 @@ class GameManager {
       game.inheritedGlobalMultiplier = Math.min(effective > 8 ? Math.floor(effective / 8) : 1, 8);
     } else if (game.inheritedGlobalMultiplier === undefined) {
       // 正常结算(有人胡了)且没有被聚义/造反提前设置
-      const currentGlobal = game.globalMultiplier ?? 1;
+      const currentGlobal = game.inheritMultiplier ?? 1;
       const roundMul = game.roundMultiplier ?? 1;
       const effective = currentGlobal * roundMul;
       // 全局倍数封顶8,溢出部分继承
