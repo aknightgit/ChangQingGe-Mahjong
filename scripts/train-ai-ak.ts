@@ -1212,13 +1212,15 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
 interface GameEvent { turn: number; player: string; action: string; detail: string }
 interface SettlementEntry { from: string; to: string; amount: number; reason: string; mult?: number }
 interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers: string[]; meldSources: number[]; wildCount: number; wildTile: string; wonFan?: number; winHandType?: string; status: string }
-interface WinnerInfo { playerIndex: number; name: string; hand: string; melds: string[]; flowers: string[]; isSelfDraw: boolean; wonFan: number; winHandType: string; roundNum: number }
+interface WinnerInfo { playerIndex: number; name: string; hand: string; melds: string[]; flowers: string[]; isSelfDraw: boolean; wonFan: number; winHandType: string; roundNum: number; wildTile: string; wildTileValue?: number }
 interface WinningGameRecord {
   gameIdx: number; winnerName: string; hand: string; melds: string[]; handTypes: string[];
   isSelfDraw: boolean; score: number; multiplier: number; roundNum: number;
   akDelta: number;  // AK的分数变化（正=赢，负=输）
   wonFan?: number;   // 最终点数（baseFan × all multipliers）
   winHandType?: string;  // 牌型名称
+  wildTile?: string;     // 百搭牌描述
+  wildTileValue?: number; // 百搭数值（百搭所在位置）
   result?: any  // GameResult，用于settlementLog
 }
 interface GameResult {
@@ -1284,6 +1286,8 @@ function runGameWithFightToLast(akPolicy: BotPolicy, otherPolicies: BotPolicy[])
 }
 
 // ========== Game Loop ==========
+// 血战到底模式：有人胡牌后继续打，直到流局或只剩1人
+// 所有赢家都记录到 winnersThisGame，最后一起 return
 function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | null {
   // 每局开始时清空 isTing 缓存（不同局wild牌不同）
   clearIsTingCache()
@@ -1292,19 +1296,79 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
   const g = setupGame(akPolicy, otherPolicies)
   const events: GameEvent[] = []
   const settlementLog: SettlementEntry[] = []
-  const winnersThisGame: WinnerInfo[] = []  // 追踪本 sub-game 所有赢家
+  const winnersThisGame: WinnerInfo[] = []  // 追踪本局所有赢家（血战到底）
+  const finishedPlayers = new Set<number>()  // 已胡牌退出的玩家（血战）
   let turn = 0
+
+  // buildResult: 血战模式统一出口，构造 GameResult
+  const buildResult = (
+    primaryWinner: number, winMode: string, baseScore: number,
+    handType: string, fanScore: number, discarder: number | undefined
+  ): GameResult => {
+    const winnerPlayer = g.players[primaryWinner]
+    return {
+      winner: primaryWinner,
+      scores: g.players.map(p => p.score),
+      events,
+      multiplier: g.gameMultiplier,
+      settlementLog,
+      snapshots: recordSnapshots(),
+      winnerPlayer,
+      roundNum: turn,
+      winnersThisGame
+    }
+  }
+
   const recordPayment = (from: string, to: string, amount: number, reason: string, mult?: number) => {
     settlementLog.push({ from, to, amount, reason, mult })
   }
   // 记录赢家到winnersThisGame（每个winner return前调用）
+  // 格式化面子：按花色分组，同花色内刻→顺→杠，用分号分隔
+  const formatMelds = (melds: Meld[], wildCount: number): string[] => {
+    if (melds.length === 0) return []
+    // 排序：先花色，再类型（碰>顺>杠）
+    const sorted = [...melds].sort((a, b) => {
+      if (a.tiles[0].suit !== b.tiles[0].suit) return a.tiles[0].suit.localeCompare(b.tiles[0].suit)
+      const order = (t: Meld) => t.type === MeldType.TRIPLET ? 0 : t.type === MeldType.SEQUENCE ? 1 : 2
+      return order(a) - order(b)
+    })
+    // 按花色分组
+    const groups: string[] = []
+    let currentSuit: string | null = null
+    let currentType: MeldType | null = null
+    let groupTiles: Tile[] = []
+    for (const m of sorted) {
+      const suit = m.tiles[0].suit
+      if (suit !== currentSuit || m.type !== currentType) {
+        if (groupTiles.length > 0 && currentSuit !== null) {
+          const typeStr = currentType === MeldType.TRIPLET ? '碰' : currentType === MeldType.SEQUENCE ? '顺' : '杠'
+          groups.push(`${typeStr}:${groupTiles.map(t => tileStr(t)).join(' ')}`)
+        }
+        currentSuit = suit
+        currentType = m.type
+        groupTiles = [...m.tiles]
+      } else {
+        groupTiles.push(...m.tiles)
+      }
+    }
+    if (groupTiles.length > 0 && currentSuit !== null) {
+      const typeStr = currentType === MeldType.TRIPLET ? '碰' : currentType === MeldType.SEQUENCE ? '顺' : '杠'
+      groups.push(`${typeStr}:${groupTiles.map(t => tileStr(t)).join(' ')}`)
+    }
+    return groups
+  }
   const recordWinner = (p: BotPlayer, idx: number, isSelfDraw: boolean, wonFan: number, roundNum: number) => {
+    const wildTileStr = (p.wildSuit && p.wildValue) ? `${tileStr({suit: p.wildSuit as TileSuit, value: p.wildValue!, id: ''})}（${p.wildSuit}-${p.wildValue}）` : null
+    const wildCount = p.hand.filter(t => isWT(t, p)).length
+    const meldStrs = formatMelds(p.exposedMelds, wildCount)
+    if (wildCount > 0 && wildTileStr) meldStrs.push(`百搭:${wildCount}张（${p.wildSuit}-${p.wildValue}）`)
     winnersThisGame.push({
       playerIndex: idx, name: p.name,
       hand: p.hand.map(t => tileStr(t)).join(' '),
-      melds: p.exposedMelds.map(m => `${m.type===MeldType.TRIPLET?'碰':m.type===MeldType.SEQUENCE?'吃':m.type===MeldType.KONG?'杠':'?'}:${m.tiles.map(t=>tileStr(t)).join(' ')}`),
+      melds: meldStrs,
       flowers: p.flowerTiles.map(t => tileStr(t)),
-      isSelfDraw, wonFan, winHandType: p.winHandType || '', roundNum
+      isSelfDraw, wonFan, winHandType: p.winHandType || '', roundNum,
+      wildTile: wildTileStr ?? '(无百搭)', wildTileValue: p.wildValue ?? 0
     })
   }
   // 快照：只记录字符串化数据，避免引用悬浮
@@ -1373,8 +1437,14 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         const wt = detectHandTypes(player.hand, player.exposedMelds, player.wildSuit && player.wildValue ? `${player.wildSuit}-${player.wildValue}` : null, true, player.flowerTiles.length)
         player.winHandType = wt.map(t => String(t)).join(',')
         player.status = 'won'
+        finishedPlayers.add(curr)
         recordWinner(player, curr, true, baseScore, turn)
-        return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: player, roundNum: turn, winnersThisGame }
+        log(player.name, '胡牌(血战)', `自摸 ${player.winHandType || '自摸'} [${baseScore}×3]`)
+        if (finishedPlayers.size >= 3) {
+          return buildResult(curr, '自摸', baseScore, player.winHandType || '自摸', baseScore, undefined)
+        }
+        g.current = (curr + 1) % 4
+        continue
       }
     }
 
@@ -1394,8 +1464,14 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             const wt_aK = detectHandTypes(player.hand, player.exposedMelds, player.wildSuit && player.wildValue ? `${player.wildSuit}-${player.wildValue}` : null, true, player.flowerTiles.length)
             player.winHandType = wt_aK.map(t => String(t)).join(',')
             player.status = 'won'
+            finishedPlayers.add(curr)
             recordWinner(player, curr, true, baseScore, turn)
-            return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: player, roundNum: turn, winnersThisGame: winnersThisGame.slice() }
+            log(player.name, '胡牌(血战)', `暗杠自摸 [${baseScore}×3]`)
+            if (finishedPlayers.size >= 3) {
+              return buildResult(curr, '杠上自摸', baseScore, player.winHandType || '杠上自摸', baseScore, undefined)
+            }
+            g.current = (curr + 1) % 4
+            continue
           }
         }
       }
@@ -1415,7 +1491,14 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             const wt_jg = detectHandTypes(player.hand, player.exposedMelds, player.wildSuit && player.wildValue ? `${player.wildSuit}-${player.wildValue}` : null, true, player.flowerTiles.length)
             player.winHandType = wt_jg.map(t => String(t)).join(',')
             player.status = 'won'
-            return { winner: curr, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: player, roundNum: turn, winnersThisGame: winnersThisGame.slice() }
+            finishedPlayers.add(curr)
+            recordWinner(player, curr, true, baseScore, turn)
+            log(player.name, '胡牌(血战)', `加杠自摸 [${baseScore}×3]`)
+            if (finishedPlayers.size >= 3) {
+              return buildResult(curr, '杠上自摸', baseScore, player.winHandType || '杠上自摸', baseScore, undefined)
+            }
+            g.current = (curr + 1) % 4
+            continue
           }
         }
       }
@@ -1451,8 +1534,14 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           const wt_d = detectHandTypes(opp.hand, opp.exposedMelds, opp.wildSuit && opp.wildValue ? `${opp.wildSuit}-${opp.wildValue}` : null, false, opp.flowerTiles.length)
           opp.winHandType = wt_d.map(t => String(t)).join(',')
           opp.status = 'won'
+          finishedPlayers.add(other)
           recordWinner(opp, other, false, score, turn)
-          return { winner: other, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: opp, roundNum: turn, winnersThisGame: winnersThisGame.slice() }
+          log(opp.name, '胡牌(血战)', `放冲 [${score}]`)
+          if (finishedPlayers.size >= 3) {
+            return buildResult(other, '放冲', score, opp.winHandType || '放冲', score, curr)
+          }
+          g.current = (other + 1) % 4
+          continue
         }
       }
     }
@@ -1494,8 +1583,14 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
               const wt_pp = detectHandTypes(opp.hand, opp.exposedMelds, opp.wildSuit && opp.wildValue ? `${opp.wildSuit}-${opp.wildValue}` : null, false, opp.flowerTiles.length)
               opp.winHandType = wt_pp.map(t => String(t)).join(',')
               opp.status = 'won'
+              finishedPlayers.add(otherIdx)
               recordWinner(opp, otherIdx, false, score, turn)
-              return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: opp, roundNum: turn, winnersThisGame: winnersThisGame.slice() }
+              log(opp.name, '胡牌(血战)', `碰后放冲 [${score}]`)
+              if (finishedPlayers.size >= 3) {
+                return buildResult(otherIdx, '放冲', score, opp.winHandType || '碰后放冲', score, curr)
+              }
+              g.current = (otherIdx + 1) % 4
+              continue
             }
           }
           // 碰后自摸：必须先摸牌，删掉这里的错误判断
@@ -1515,8 +1610,14 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
                 const wt_pgs = detectHandTypes(opp.hand, opp.exposedMelds, opp.wildSuit && opp.wildValue ? `${opp.wildSuit}-${opp.wildValue}` : null, true, opp.flowerTiles.length)
                 opp.winHandType = wt_pgs.map(t => String(t)).join(',')
                 opp.status = 'won'
+                finishedPlayers.add(otherIdx)
                 recordWinner(opp, otherIdx, true, kongBaseScore, turn)
-                return { winner: otherIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: opp, roundNum: turn, winnersThisGame: winnersThisGame.slice() }
+                log(opp.name, '胡牌(血战)', `碰杠后自摸 [${kongBaseScore}×3]`)
+                if (finishedPlayers.size >= 3) {
+                  return buildResult(otherIdx, '杠上自摸', kongBaseScore, opp.winHandType || '杠上自摸', kongBaseScore, undefined)
+                }
+                g.current = (otherIdx + 1) % 4
+                continue
               }
             }
           }
@@ -1555,8 +1656,14 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           const wt_np_d = detectHandTypes(nextP.hand, nextP.exposedMelds, nextP.wildSuit && nextP.wildValue ? `${nextP.wildSuit}-${nextP.wildValue}` : null, false, nextP.flowerTiles.length)
           nextP.winHandType = wt_np_d.map(t => String(t)).join(',')
           nextP.status = 'won'
+          finishedPlayers.add(nextPlayer)
           recordWinner(nextP, nextPlayer, false, score, turn)
-          return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: nextP, roundNum: turn, winnersThisGame: winnersThisGame.slice() }
+          log(nextP.name, '胡牌(血战)', `吃后放冲 [${score}]`)
+          if (finishedPlayers.size >= 3) {
+            return buildResult(nextPlayer, '放冲', score, nextP.winHandType || '放冲', score, curr)
+          }
+          g.current = (nextPlayer + 1) % 4
+          continue
         }
       }
       // 吃后自摸：必须先摸牌，删掉这里的错误判断
@@ -1576,8 +1683,14 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             const wt_np_k = detectHandTypes(nextP.hand, nextP.exposedMelds, nextP.wildSuit && nextP.wildValue ? `${nextP.wildSuit}-${nextP.wildValue}` : null, true, nextP.flowerTiles.length)
             nextP.winHandType = wt_np_k.map(t => String(t)).join(',')
             nextP.status = 'won'
+            finishedPlayers.add(nextPlayer)
             recordWinner(nextP, nextPlayer, true, kongBaseScore, turn)
-            return { winner: nextPlayer, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: recordSnapshots(), winnerPlayer: nextP, roundNum: turn, winnersThisGame: winnersThisGame.slice() }
+            log(nextP.name, '胡牌(血战)', `吃杠后自摸 [${kongBaseScore}×3]`)
+            if (finishedPlayers.size >= 3) {
+              return buildResult(nextPlayer, '杠上自摸', kongBaseScore, nextP.winHandType || '杠上自摸', kongBaseScore, undefined)
+            }
+            g.current = (nextPlayer + 1) % 4
+            continue
           }
         }
       }
@@ -1590,7 +1703,17 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
 
     g.current = nextPlayer
     consecutiveDraws++
-    if (consecutiveDraws > MAX_ROUNDS * 4) return null
+    if (consecutiveDraws > MAX_ROUNDS * 4) {
+      // 流局：返回已有赢家（如果有的话）
+      if (winnersThisGame.length > 0) {
+        return buildResult(winnersThisGame[0].playerIndex, '流局', 0, '流局', 0, undefined)
+      }
+      return null
+    }
+  }
+  // 牌墙耗尽：同上
+  if (winnersThisGame.length > 0) {
+    return buildResult(winnersThisGame[0].playerIndex, '流局', 0, '流局', 0, undefined)
   }
   return null
 }
@@ -1763,7 +1886,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
         for (const w of gameWinners) {
           const typeNums = w.winHandType ? w.winHandType.split(',').map(Number).filter(n => !isNaN(n)) : []
           const typeNames = typeNums.map(n => HAND_TYPE_NAMES[n] || String(n))
-          if (typeNames.length === 0) typeNames.push('普通')
+          // K哥铁律：不存在普通胡/基础胡；detectHandTypes返回空时跳过（不是错误）
           const bigTypes = [HandType.FENG_PENG, HandType.ALL_WIND, HandType.QING_PENG]
           if (typeNums.some(n => bigTypes.includes(n))) bigWinGames++
           if (w.melds.length === 0 && typeNums.length > 0) menqingWinGames++
@@ -1777,7 +1900,8 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
             isSelfDraw: w.isSelfDraw, score: winnerScore,
             multiplier: result.multiplier, roundNum: w.roundNum,
             akDelta: akDeltaForWinner, result,
-            wonFan: w.wonFan, winHandType: w.winHandType
+            wonFan: w.wonFan, winHandType: w.winHandType,
+            wildTile: w.wildTile, wildTileValue: w.wildTileValue
           })
         }
       }
