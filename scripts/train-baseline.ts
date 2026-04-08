@@ -1026,12 +1026,12 @@ function normalizeHand(hand: Tile[]): Tile[] {
 // 每局有人胡牌后，记录赢家，剩余玩家继续开新局，直到最后1人
 // 注意：每局都是完整4人局（runGame不改），通过记录哪些玩家已赢来模拟"退出"
 function runGameWithFightToLast(policy: BotPolicy): {
-  winners: { idx: number; selfDraw: boolean; score: number; snapshot: PlayerSnapshot; handType: string }[]
+  winners: { idx: number; selfDraw: boolean; score: number; snapshot: PlayerSnapshot; handType: string; wonFan: number; winHandType: string }[]
   totalSubGames: number
   allEvents: GameEvent[]
   drawCount: number
 } {
-  const winners: { idx: number; selfDraw: boolean; score: number; snapshot: PlayerSnapshot }[] = []
+  const winners: { idx: number; selfDraw: boolean; score: number; snapshot: PlayerSnapshot; handType: string; wonFan: number; winHandType: string }[] = []
   const allEvents: GameEvent[] = []
   let drawCount = 0
   // 已赢的玩家：在后续局中"不积极"（但仍参与，因为runGame固定4人）
@@ -1048,7 +1048,8 @@ function runGameWithFightToLast(policy: BotPolicy): {
     const snapshot = result.snapshots?.[winnerIdx] || { name: AI_NAMES[winnerIdx], hand: '', melds: [], flowers: [], meldSources: [0,0,0,0] }
     // winnerDetails[0].handType 已有 getWinInfo 计算好的正确值
     const winHandType = result.winnerDetails?.[0]?.handType || '未知'
-    winners.push({ idx: winnerIdx, selfDraw: isSelfDraw, score: result.scores[winnerIdx], snapshot, handType: winHandType })
+    const wonFan = result.winnerDetails?.[0]?.finalPoints || 0
+    winners.push({ idx: winnerIdx, selfDraw: isSelfDraw, score: result.scores[winnerIdx], snapshot, handType: winHandType, wonFan, winHandType })
     allEvents.push(...result.events)
     // 如果已经产生3个赢家（血战到最后一人），结束
     if (winners.length >= 3) break
