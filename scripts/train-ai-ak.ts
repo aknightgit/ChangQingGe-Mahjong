@@ -1721,7 +1721,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
           [HandType.STANDARD]: '基础胡',
         }
         const typeNames = types.map(t => HAND_TYPE_NAMES[t] ?? String(t))
-        const bigTypes = [HandType.FENG_PENG, HandType.ALL_WIND, HandType.QING_PENG, HandType.EIGHT_FLOWERS, HandType.FOUR_WILD, HandType.DA_DIAO, HandType.ALL_TRIPLETS]
+        const bigTypes = [HandType.FENG_PENG, HandType.ALL_WIND, HandType.QING_PENG]
         if (types.some(t => bigTypes.includes(t))) bigWinGames++
         if (wp.exposedMelds.length === 0 && types.length > 0) menqingWinGames++
         for (const t of typeNames) handTypeDist[t] = (handTypeDist[t] || 0) + 1
