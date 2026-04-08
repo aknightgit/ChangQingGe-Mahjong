@@ -1379,7 +1379,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       melds: meldStrs,
       flowers: p.flowerTiles.map(t => tileStr(t)),
       isSelfDraw, wonFan, winHandType: p.winHandType || '', roundNum,
-      wildTile: wildTiles.length > 0 ? `${wildSuit}-${wildVal}` : '(无百搭)', wildTileValue: wildVal ?? 0
+      wildTile: wildTiles.length > 0 ? tileStr({suit: wildSuit, value: wildVal, id: '' }) : '(无百搭)', wildTileValue: wildVal ?? 0
     })
   }
   // 快照：只记录字符串化数据，避免引用悬浮
