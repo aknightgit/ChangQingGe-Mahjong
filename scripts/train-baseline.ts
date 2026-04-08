@@ -1017,11 +1017,6 @@ interface GameResult {
   }>
 }
 
-// ========== 手牌规范化（胡牌前必调） ==========
-function normalizeHand(hand: Tile[]): Tile[] {
-  return hand.filter(t => t && !isFlower(t))
-}
-
 // ========== 血战到最后一人 ==========
 // 每局有人胡牌后，记录赢家，剩余玩家继续开新局，直到最后1人
 // 注意：每局都是完整4人局（runGame不改），通过记录哪些玩家已赢来模拟"退出"

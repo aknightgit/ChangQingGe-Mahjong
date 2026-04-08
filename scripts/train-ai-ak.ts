@@ -482,7 +482,7 @@ function drawTile(g: GameState, p: BotPlayer): Tile | null {
   // const kongC = p.exposedMelds.filter(m => m.type === MeldType.KONG).length
   // const exp = 14 - (p.exposedMelds.length - kongC) * 3 - kongC * 4
   // if (p.hand.length !== exp) console.error(`DRAW: ${p.name} hand=${p.hand.length} expected=${exp} melds=${p.exposedMelds.length} kongs=${kongC}`)
-  if (process.env.DEBUG_DISCARD === '1') console.error(`[DISCARD_RET] ${p.name} returns=${tileStr(tile)} hand_before=${hand.length}`)
+  if (process.env.DEBUG_DISCARD === '1') console.error(`[DISCARD_RET] ${p.name} returns=${tileStr(tile)} hand_before=${p.hand.length}`)
   return tile
 }
 
@@ -831,7 +831,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   p.hand = normalizeHand(p.hand)
   const policy = p.policy
   const hand = p.hand
-  if (process.env.DEBUG_DISCARD === '1') console.error(`[DISCARD] ${p.name} hand_before=${hand.length} pos=${p.pos}`)
+  if (process.env.DEBUG_DISCARD === '1') console.error(`[DISCARD] ${p.name} hand_before=${p.hand.length} pos=${p.pos}`)
   const wildCount = hand.filter(t => isWT(t, p)).length
   const isMenqing = p.exposedMelds.length === 0
   const totalMelds = p.exposedMelds.length
@@ -1365,7 +1365,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         player.score += baseScore * 3
         for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
         // 互包结算
-        applyBaoSettlement(g, curr, true, null, baseScore, g.gameMultiplier)
+        applyBaoSettlement(g, curr, true, null, baseScore, 1)
         for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore * g.gameMultiplier, '自摸', g.gameMultiplier) }
         log(player.name, '自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3×${g.gameMultiplier}=${baseScore*3*g.gameMultiplier}] [手牌${normalizedHand.length}张+副露${player.exposedMelds.length}]`)
         // 记录赢家得分信息（供evaluatePolicy统计使用）
@@ -1388,7 +1388,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             const baseScore = calcScore(player, true, true, g.gameMultiplier)
             player.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
-            applyBaoSettlement(g, curr, true, null, baseScore, g.gameMultiplier)
+            applyBaoSettlement(g, curr, true, null, baseScore, 1)
             log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
             player.wonFan = baseScore
             const wt_aK = detectHandTypes(player.hand, player.exposedMelds, player.wildSuit && player.wildValue ? `${player.wildSuit}-${player.wildValue}` : null, true, player.flowerTiles.length)
@@ -1409,7 +1409,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             const baseScore = calcScore(player, true, true, g.gameMultiplier)
             player.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
-            applyBaoSettlement(g, curr, true, null, baseScore, g.gameMultiplier)
+            applyBaoSettlement(g, curr, true, null, baseScore, 1)
             log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
             player.wonFan = baseScore
             const wt_jg = detectHandTypes(player.hand, player.exposedMelds, player.wildSuit && player.wildValue ? `${player.wildSuit}-${player.wildValue}` : null, true, player.flowerTiles.length)
@@ -1444,7 +1444,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           const score = calcScore(opp, false, false, g.gameMultiplier)
           opp.score += score; player.score -= score
           // 互包结算：如果有人对opp有包三，且放炮者不是包家
-          applyBaoSettlement(g, other, false, curr, score, g.gameMultiplier)
+          applyBaoSettlement(g, other, false, curr, score, 1)
           recordPayment(player.name, opp.name, score * g.gameMultiplier, '放炮', g.gameMultiplier)
           log(opp.name, '放炮胡', `${player.name}出${tileStr(discard)}→${opp.hand.map(t => tileStr(t)).join(' ')} [${score}]`)
           opp.wonFan = score
@@ -1487,7 +1487,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
               // 计分用手牌=含弃牌的真实手牌（不是testHand，opp.hand已含）
               const score = calcScore(opp, false, false, g.gameMultiplier)
               opp.score += score; g.players[curr].score -= score
-              applyBaoSettlement(g, otherIdx, false, curr, score, g.gameMultiplier)
+              applyBaoSettlement(g, otherIdx, false, curr, score, 1)
               recordPayment(g.players[curr].name, opp.name, score * g.gameMultiplier, '碰后放炮', g.gameMultiplier)
               log(opp.name, '碰后放炮胡', `${tileStr(discard)} [${score}]`)
               opp.wonFan = score
@@ -1509,7 +1509,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
                 const kongBaseScore = calcScore(opp, true, true, g.gameMultiplier)
                 opp.score += kongBaseScore * 3
                 for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
-                applyBaoSettlement(g, otherIdx, true, null, kongBaseScore, g.gameMultiplier)
+                applyBaoSettlement(g, otherIdx, true, null, kongBaseScore, 1)
                 log(opp.name, '碰杠后自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3=${kongBaseScore*3}]`)
                 opp.wonFan = kongBaseScore
                 const wt_pgs = detectHandTypes(opp.hand, opp.exposedMelds, opp.wildSuit && opp.wildValue ? `${opp.wildSuit}-${opp.wildValue}` : null, true, opp.flowerTiles.length)
@@ -1548,7 +1548,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         if (Math.random() < huChance) {
           const score = calcScore(nextP, false, false, g.gameMultiplier)
           nextP.score += score; g.players[curr].score -= score
-          applyBaoSettlement(g, nextPlayer, false, curr, score, g.gameMultiplier)
+          applyBaoSettlement(g, nextPlayer, false, curr, score, 1)
           recordPayment(g.players[curr].name, nextP.name, score * g.gameMultiplier, '吃后放炮', g.gameMultiplier)
           log(nextP.name, '吃后放炮胡', `${tileStr(discard)} [${score}]`)
           nextP.wonFan = score
@@ -1570,7 +1570,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             const kongBaseScore = calcScore(nextP, true, true, g.gameMultiplier)
             nextP.score += kongBaseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= kongBaseScore }
-            applyBaoSettlement(g, nextPlayer, true, null, kongBaseScore, g.gameMultiplier)
+            applyBaoSettlement(g, nextPlayer, true, null, kongBaseScore, 1)
             log(nextP.name, '吃杠后自摸', `${nextP.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3=${kongBaseScore*3}]`)
             nextP.wonFan = kongBaseScore
             const wt_np_k = detectHandTypes(nextP.hand, nextP.exposedMelds, nextP.wildSuit && nextP.wildValue ? `${nextP.wildSuit}-${nextP.wildValue}` : null, true, nextP.flowerTiles.length)
