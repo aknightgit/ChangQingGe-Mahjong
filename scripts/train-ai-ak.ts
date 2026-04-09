@@ -492,7 +492,7 @@ function makeWT(p: BotPlayer): string | null { return p.wildSuit && p.wildValue 
 // ========== Meld detection ==========
 function canPeng(p: BotPlayer, tile: Tile): boolean {
   if (!tile) return false
-  return p.hand.filter(t => t && tileEq(t, tile)).length >= 2
+  return normalizeHand(p.hand).filter(t => tileEq(t, tile)).length >= 2  // K哥铁律：统一normalize
 }
 function canChow(p: BotPlayer, tile: Tile): boolean {
   if (!tile || isHonor(tile) || tile.suit === TileSuit.FLOWER) return false
@@ -501,7 +501,8 @@ function canChow(p: BotPlayer, tile: Tile): boolean {
   // 1) 中间牌：需要 v-1 和 v+1（如 3+5 吃 4），v范围2-8
   // 2) 最低牌（tile是最大的）：需要 v-1 和 v-2（如 3+4 吃 5），v范围3-9
   // 3) 最高牌（tile是最小的）：需要 v+1 和 v+2（如 4+5 吃 3），v范围1-7
-  const has = (val: number) => p.hand.some(t => t.suit === tile.suit && t.value === val)
+  const normalized = normalizeHand(p.hand)  // K哥铁律：统一normalize
+  const has = (val: number) => normalized.some(t => t.suit === tile.suit && t.value === val)
   // 中间牌
   if (v >= 2 && v <= 8 && has(v - 1) && has(v + 1)) return true
   // 最低牌：tile是被吃序列中最大的
@@ -541,6 +542,7 @@ function canJiaGang(p: BotPlayer): Tile[] {
 // 注意：杠也是一口，扣3张（暗杠4张-补1=净3；jiaKong/明杠：碰的3张不变，只补1打1=净3）
 function checkHandInvariant(p: BotPlayer, phase: 'draw' | 'discard' | 'claim' | 'claim_discard'): boolean {
   const len = normalizeHand(p.hand).length
+    console.error(`CHI: ${p.name} phase=${phase} len=${len} meldCount=${meldCount} base=${base} expected=${expectedLen}`)
   const meldCount = p.exposedMelds.length  // 所有面子（顺/刻/杠）都算1口
   let base: number
   switch (phase) {
@@ -1581,32 +1583,6 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           meldTaken = true
           opp.chowPongExclusion = updateChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)  // K哥铁律：记录碰行动
           checkHandInvariant(opp, 'claim')  // claim后（11/8/5/2张）
-          // 放炮胡检查（claim后draw前，手牌=expectedLen）
-          const handAfterPeng = normalizeHand(opp.hand)
-          if (canWin(handAfterPeng, opp.exposedMelds, makeWT(opp), false).canWin) {
-            // [DEBUG FORCE HU] 强制100%捉冲
-            const huChance = 1.0
-            if (Math.random() < huChance) {
-              // 计分用手牌=含弃牌的真实手牌（不是testHand，opp.hand已含）
-              const score = calcScore(opp, false, false, g.gameMultiplier)
-              opp.score += score; g.players[curr].score -= score
-              applyBaoSettlement(g, otherIdx, false, curr, score, 1)
-              recordPayment(g.players[curr].name, opp.name, score * g.gameMultiplier, '碰后放炮', g.gameMultiplier)
-              log(opp.name, '碰后放炮胡', `${tileStr(discard)} [${score}]`)
-              opp.wonFan = score
-              const wt_pp = detectHandTypes(opp.hand, opp.exposedMelds, opp.wildSuit && opp.wildValue ? `${opp.wildSuit}-${opp.wildValue}` : null, false, opp.flowerTiles.length)
-              opp.winHandType = wt_pp.map(t => String(t)).join(',')
-              opp.status = 'won'
-              finishedPlayers.add(otherIdx)
-              recordWinner(opp, otherIdx, false, score, turn)
-              log(opp.name, '胡牌(血战)', `碰后放冲 [${score}]`)
-              if (finishedPlayers.size >= 3) {
-                return buildResult(otherIdx, '放冲', score, opp.winHandType || '碰后放冲', score, curr)
-              }
-              g.current = (otherIdx + 1) % 4
-              continue
-            }
-          }
           // 碰后自摸：必须先摸牌，删掉这里的错误判断
           for (const ak of canAnKong(opp)) {
             applyAnKong(opp, ak)
@@ -1638,7 +1614,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           const pengDiscard = aiDiscard(opp, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, otherIdx)
           opp.hand = opp.hand.filter(t => t.id !== pengDiscard.id)
           g.discardPile.push(pengDiscard)
-          g.current = otherIdx
+          g.current = (otherIdx + 1) % 4  // K哥铁律：碰后下家摸牌，不是碰家继续
           meldTaken = true
           break
         }
@@ -1711,7 +1687,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       const chowDiscard = aiDiscard(nextP, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, nextPlayer)
       nextP.hand = nextP.hand.filter(t => t.id !== chowDiscard.id)
       g.discardPile.push(chowDiscard)
-      g.current = nextPlayer
+      g.current = (nextPlayer + 1) % 4  // K哥铁律：吃后下家摸牌，不是吃家继续
       continue
     }
 
