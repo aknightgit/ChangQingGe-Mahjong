@@ -1005,12 +1005,33 @@ function mechanicalDiscard(p: BotPlayer, discardPile: Tile[] = []): Tile {
 interface GameEvent { turn: number; player: string; action: string; detail: string }
 interface SettlementEntry { from: string; to: string; amount: number; reason: string; mult?: number }
 interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers: string[]; meldSources: number[]; wildTile: string }
+
+// 每回合快照：记录一回合内所有4个玩家的完整状态
+interface TurnSnapshot {
+  turn: number
+  currentPlayer: number        // 当前行动的玩家索引
+  drawnTile: string            // 当前玩家摸的牌（若无摸牌则为-）
+  discardedTile: string        // 当前玩家本回合打出的牌（若无则为-）
+  lastDiscardBy: number         // 最近一次出牌者索引（供捉冲用）
+  lastDiscard: string          // 最近打出的牌
+  players: Array<{
+    name: string
+    hand: string               // 手牌（concealed tiles）
+    exposed: string[]           // 门口副露（面子）描述
+    meldSources: number[]       // 互包关系
+    handCount: number           // 手牌数
+  }>
+  wildTile: string             // 百搭信息
+  gameMultiplier: number        // 本局倍数
+}
+
 interface GameResult {
   winner: number; scores: number[]; events: GameEvent[]; multiplier: number
   settlementLog: SettlementEntry[]; snapshots: PlayerSnapshot[]; roundNum: number
   wildTile: string; wildSuit?: TileSuit; wildValue?: number
   dice1: number; dice2: number; diceMultiplier: number
   totalPot: number
+  turnSnapshots: TurnSnapshot[]  // 每回合快照（用于单局详细分析）
   // 每个赢家的详细信息
   winnerDetails: Array<{
     name: string; winMode: string; handType: string; baseFan: number; finalPoints: number
@@ -1101,7 +1122,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     return {
       winner: winnerIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier,
       settlementLog, snapshots, roundNum: turn, wildTile: wildTileStr, wildSuit: g.wildSuit, wildValue: g.wildValue,
-      dice1, dice2, diceMultiplier, totalPot, winnerDetails
+      dice1, dice2, diceMultiplier, totalPot, winnerDetails, turnSnapshots
     }
   }
 
@@ -1160,14 +1181,45 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
   const MAX_ROUNDS = 200
   let consecutiveDraws = 0
 
+  // 每回合快照追踪
+  const turnSnapshots: TurnSnapshot[] = []
+  let prevDrawn: Tile | null = null    // 上回合本玩家摸的牌
+  let prevDiscard: Tile | null = null  // 上回合本玩家打的牌
+
+  const recordTurnSnapshot = (curr: number) => {
+    const lastDiscard = g.discardPile[g.discardPile.length - 1] || null
+    turnSnapshots.push({
+      turn,
+      currentPlayer: curr,
+      drawnTile: prevDrawn ? tileStr(prevDrawn) : '-',
+      discardedTile: prevDiscard ? tileStr(prevDiscard) : '-',
+      lastDiscardBy: lastDiscard ? (g.playerDiscards[0].findIndex(d => d.id === lastDiscard.id) >= 0 ? 0 :
+        g.playerDiscards[1].findIndex(d => d.id === lastDiscard.id) >= 0 ? 1 :
+        g.playerDiscards[2].findIndex(d => d.id === lastDiscard.id) >= 0 ? 2 : 3) : -1,
+      lastDiscard: lastDiscard ? tileStr(lastDiscard) : '-',
+      players: g.players.map(p => ({
+        name: p.name,
+        hand: p.hand.map(t => tileStr(t)).join(' '),
+        exposed: p.exposedMelds.map(m =>
+          `${m.type === MeldType.TRIPLET ? '碰' : m.type === MeldType.SEQUENCE ? '吃' : m.type === MeldType.KONG ? '明杠' : m.type === MeldType.CONCEALED_KONG ? '暗杠' : '?'}:${m.tiles.map(t => tileStr(t)).join(' ')}`
+        ),
+        meldSources: [...p.meldSources],
+        handCount: p.hand.length
+      })),
+      wildTile: g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : '无百搭',
+      gameMultiplier: g.gameMultiplier
+    })
+  }
+
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const curr = g.current
     const player = g.players[curr]
     turn = round
     const drawn = drawTile(g, player)
     if (!drawn) { return null }
-    if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); continue }
+    if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); prevDrawn = drawn; prevDiscard = null as Tile | null; recordTurnSnapshot(curr); continue }
     log(player.name, '摸牌', tileStr(drawn))
+    prevDrawn = drawn
 
     // Self-draw win check
     const normalizedHand = normalizeHand(player.hand)
@@ -1193,6 +1245,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore, '自摸') }
         log(player.name, '自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}] [手牌${normalizedHand.length}张+副露${player.exposedMelds.length}]`)
         const winInfo = getWinInfo(player, true, false)
+        recordTurnSnapshot(curr)
         return buildResult(curr, '自摸', winInfo.finalPoints, winInfo.handType, winInfo.baseFan)
       }
     }
@@ -1209,6 +1262,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
             applyBaoSettlement(g, curr, true, null, baseScore)
             const winInfo = getWinInfo(player, true, true)
+            recordTurnSnapshot(curr)
             return buildResult(curr, '杠上自摸', winInfo.finalPoints, winInfo.handType, winInfo.baseFan)
           }
         }
@@ -1225,6 +1279,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
             applyBaoSettlement(g, curr, true, null, baseScore)
             const winInfo1 = getWinInfo(player, true, true)
+            recordTurnSnapshot(curr)
             return buildResult(curr, '杠上自摸', winInfo1.finalPoints, winInfo1.handType, winInfo1.baseFan)
           }
         }
@@ -1239,6 +1294,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     g.discardPile.push(discard)
     g.playerDiscards[curr].push(discard)
     log(player.name, '出牌', `${tileStr(discard)} [手牌: ${player.hand.map(t => tileStr(t)).join(' ')}]`)
+    prevDiscard = discard
 
     // Others check hu
     for (let other = 0; other < 4; other++) {
@@ -1258,6 +1314,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           applyBaoSettlement(g, other, false, curr, score)
           recordPayment(player.name, opp.name, score, '放炮')
           const winInfo2 = getWinInfo(opp, false, false)
+          recordTurnSnapshot(curr)
           return buildResult(other, '放冲', winInfo2.finalPoints, winInfo2.handType, winInfo2.baseFan, player.name)
         }
       }
@@ -1289,6 +1346,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
               applyBaoSettlement(g, otherIdx, false, curr, score)
               recordPayment(g.players[curr].name, opp.name, score, '碰后放炮')
               const winInfo3 = getWinInfo(opp, false, false)
+              recordTurnSnapshot(curr)
               return buildResult(otherIdx, '放冲', winInfo3.finalPoints, winInfo3.handType, winInfo3.baseFan, g.players[curr].name)
             }
           }
@@ -1304,6 +1362,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
                 for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
                 applyBaoSettlement(g, otherIdx, true, null, kongBaseScore)
                 const winInfo5 = getWinInfo(opp, true, true)
+                recordTurnSnapshot(curr)
                 return buildResult(otherIdx, '杠上自摸', winInfo5.finalPoints, winInfo5.handType, winInfo5.baseFan)
               }
             }
@@ -1311,6 +1370,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           const pengDiscard = aiDiscard(opp, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, otherIdx)
           opp.hand = opp.hand.filter(t => t.id !== pengDiscard.id)
           g.discardPile.push(pengDiscard)
+          prevDiscard = pengDiscard
+          recordTurnSnapshot(otherIdx)
           g.current = otherIdx
           meldTaken = true
           break
@@ -1337,6 +1398,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           applyBaoSettlement(g, nextPlayer, false, curr, score)
           recordPayment(g.players[curr].name, nextP.name, score, '吃后放炮')
           const winInfo6 = getWinInfo(nextP, false, false)
+          recordTurnSnapshot(curr)
           return buildResult(nextPlayer, '放冲', winInfo6.finalPoints, winInfo6.handType, winInfo6.baseFan, g.players[curr].name)
         }
       }
@@ -1352,6 +1414,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= kongBaseScore }
             applyBaoSettlement(g, nextPlayer, true, null, kongBaseScore)
             const winInfo8 = getWinInfo(nextP, true, true)
+            recordTurnSnapshot(curr)
             return buildResult(nextPlayer, '杠上自摸', winInfo8.finalPoints, winInfo8.handType, winInfo8.baseFan)
           }
         }
@@ -1359,11 +1422,14 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       const chowDiscard = aiDiscard(nextP, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, nextPlayer)
       nextP.hand = nextP.hand.filter(t => t.id !== chowDiscard.id)
       g.discardPile.push(chowDiscard)
+      prevDiscard = chowDiscard
+      recordTurnSnapshot(nextPlayer)
       g.current = nextPlayer
       continue
     }
 
     g.current = nextPlayer
+    recordTurnSnapshot(curr)
     consecutiveDraws++
     if (consecutiveDraws > MAX_ROUNDS * 4) return null
   }
@@ -1705,7 +1771,7 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
 
   // 1) 流局率重罚：>10% 后每+1% 扣 500；>50% 额外加倍
   const drawExcess = Math.max(0, drawRate - 0.10)
-  let drawPenalty = drawExcess * 50000
+  let drawPenalty = drawExcess * 100000
   if (drawRate > 0.50) drawPenalty *= 2
   mf -= drawPenalty
 
@@ -1980,4 +2046,73 @@ async function main() {
   console.log(`Policy: ${policyFile}`)
 }
 
-main()
+// ========== 单局测试：强制进攻，打印每回合完整明细 ==========
+function testOneGame() {
+  const policy: BotPolicy = {
+    selfWinChance: 1.0, discardHuChance: 1.0,
+    anKongChance: 0.8, kakanAggression: 0.8,
+    menqingKeepBonus: 2.5, wildPairBonus: 0.2, adjacentBonus: 0.15,
+    selfWinWildBoost: 0.05, discardHuWildPenalty: 0.05, discardHuMenQingPenalty: 0.0,
+    pengChance: 0.9, pengWildBoost: 0.1, meldPenalty: 0.0,
+    chowChance: 0.5, routeThreshold: 0.3,
+    safeDrawThreshold: 0.4, riskySafeThreshold: 0.6,
+    flowermeldsToKeep: 1,
+  }
+
+  console.error('[TEST] 启动单局测试，强制胡牌模式...')
+  const result = runGame(policy, [policy, policy, policy])
+  if (!result) {
+    console.error('[TEST] 流局（超时或空牌），AI手牌未能成和')
+    return
+  }
+
+  const winnerDetail = result.winnerDetails?.[0]
+  console.error(`[TEST] 结果: ${winnerDetail?.name || result.winner} 通过 ${winnerDetail?.winMode || '?'} 获胜`)
+  console.error(`[TEST] 牌型: ${winnerDetail?.handType || '?'} 番数: ${winnerDetail?.baseFan || 0} 最终得分: ${winnerDetail?.finalPoints || 0}`)
+  console.error(`[TEST] 手牌: ${winnerDetail?.handTiles || '?'}`)
+  console.error(`[TEST] 副露: ${(winnerDetail?.melds || []).join(' | ') || '无'}`)
+  console.error(`[TEST] 花牌: ${(winnerDetail?.flowers || []).join(' ')}`)
+  console.error(`[TEST] 门清: ${winnerDetail?.isMenQing ? '是' : '否'}`)
+  console.error(`[TEST] 总回合数: ${result.roundNum}`)
+  console.error(`[TEST] 百搭: ${result.wildTile || '无'}`)
+
+  // 打印每回合快照
+  if (result.turnSnapshots && result.turnSnapshots.length > 0) {
+    console.error('\n========== 每回合明细 ==========')
+    for (const snap of result.turnSnapshots) {
+      const currName = result.events?.[snap.turn]?.player || `P${snap.currentPlayer}`
+      console.error(`\n--- 回合${snap.turn} [${currName}] ---`)
+      console.error(`  摸牌: ${snap.drawnTile}  |  出牌: ${snap.discardedTile}`)
+      console.error(`  最近出牌: ${snap.lastDiscard} (by P${snap.lastDiscardBy ?? '?'})`)
+      console.error(`  百搭: ${snap.wildTile}  |  局倍: ×${snap.gameMultiplier}`)
+      for (const p of snap.players) {
+        const handDesc = p.handCount < 5 ? p.hand : `(${p.handCount}张)`
+        console.error(`  ${p.name}: 手牌=${handDesc} 副露=${p.exposed.join(' | ') || '无'}`)
+      }
+    }
+  } else {
+    console.error('[TEST] 无回合快照（游戏未正常结束）')
+  }
+
+  // 同时输出到 round 文件
+  const outDir = path.join(__dirname, '..', 'training-output', 'test')
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
+  const testReport = buildRoundReport(-1, {
+    totalGames: 1, winGames: 1,
+    selfDrawGames: winnerDetail?.winMode === '自摸' ? 1 : 0,
+    bigWinGames: (winnerDetail?.finalPoints || 0) > 2000 ? 1 : 0,
+    menqingWinGames: winnerDetail?.isMenQing ? 1 : 0,
+    fightToLastGames: 0, akScore: 0,
+    handTypeDist: { [winnerDetail?.handType || '?']: 1 },
+    winningGames: [],
+    turnSnapshots: result.turnSnapshots,
+    scores: Object.fromEntries(result.scores.map((s, i) => [i, s])),
+  }, policy, AI_NAMES)
+  const fname = writeRoundFile(outDir, testReport)
+  console.error(`[TEST] 详细报告已写入: ${fname}`)
+}
+
+
+console.error(`[注意] 临时运行 testOneGame，正式训练请还原为 main()`)
+testOneGame()
+process.exit(0)
