@@ -118,7 +118,11 @@ export function calculateScore(params: {
     if (!isWildFlower) {
       const hasNoFlowers = flowerTiles.length === 0 &&
         exposedMelds.every(m => m.tiles.every(t => !isFlower(t)));
-      const hasNoBlocks = !hasWindMelds(exposedMelds, handTiles);  // 含：风刻+箭刻+杠牌
+      // hasWindMelds：检查风刻/风杠；新增三个函数分别检查：明杠、暗杠、箭刻
+      const hasNoBlocks = !hasWindMelds(exposedMelds, handTiles) &&
+        hasNoArrowMelds(exposedMelds) &&
+        hasNoMingKong(exposedMelds) &&
+        hasNoAnKong(exposedMelds);
 
       if (hasNoFlowers && hasNoBlocks) {
         const isPengOrHun = handTypes.includes(HandType.ALL_TRIPLETS) ||
@@ -659,6 +663,24 @@ function hasWindMelds(exposedMelds: Meld[], handTiles: Tile[]): boolean {
     }
   }
   return false;
+}
+
+// 无花自摸专用：检查门口无明杠
+function hasNoMingKong(exposedMelds: Meld[]): boolean {
+  return !exposedMelds.some(m => m.type === MeldType.KONG && !m.isConcealed);
+}
+
+// 无花自摸专用：检查门口无暗杠
+function hasNoAnKong(exposedMelds: Meld[]): boolean {
+  return !exposedMelds.some(m => m.type === MeldType.CONCEALED_KONG);
+}
+
+// 无花自摸专用：检查门口无箭刻/箭杠（发财/红中/白板）
+function hasNoArrowMelds(exposedMelds: Meld[]): boolean {
+  return !exposedMelds.some(m => {
+    if (m.tiles.length === 0) return false;
+    return isDragon(m.tiles[0]);
+  });
 }
 
 function countWildTiles(tiles: Tile[], wildSuit: TileSuit, wildValue: number, wildGroup?: string[]): number {
