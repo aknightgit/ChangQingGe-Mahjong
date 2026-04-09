@@ -27,6 +27,11 @@ A出牌
 - 杠后补摸检查自摸
 - **碰后不检查自摸**（碰不补摸）
 
+### 无花自摸（门前清一色）
+- 条件：`isSelfDrawn=true` + 门前（exposedMelds）无：花、风刻、**箭刻**、**杠牌**
+- 适用牌型：碰碰胡、混一色
+- **注**：门前暗杠同样破坏无花自摸资格
+
 ### 手牌数约束
 - 摸牌后：14/11/8/5/2 张
 - 碰后：11/8/5/2 张（净减3张，不补摸）
@@ -36,20 +41,23 @@ A出牌
 
 ## 待修复 Bug（2026-04-09 发现）
 
-### Bug 1: 碰后多了一次 canWin 检查
-- **位置**: train-ai-ak.ts line 1594
-- **问题**: `applyPeng` 后还有一个 `canWin` 检查放炮胡（碰后不能胡！）
-- **修复**: 删除碰后的 canWin 检查，碰后直接出牌
-
-### Bug 2: menqingKeepBonus 过高
+### Bug 1: menqingKeepBonus 过高（已部分修复）
 - **位置**: train-baseline.ts DEFAULT_POLICY
-- **问题**: menqingKeepBonus=0.0 导致 GA 搜索到 2.8，Bots 死守 menqing 路线
-- **修复**: 已将初始值改为 0.8，搜索上限改为 3.0
+- **问题**: menqingKeepBonus=0.0 导致 GA 搜索到 2.8，Bots 死守 menqing 路线导致普通胡牌率崩溃
+- **修复**: 初始值改为 0.8，搜索上限改为 3.0（commit `59f5295`）
+- **状态**: 正在 10×1000 局测试中
+
+### Bug 2: 无花自摸缺失箭刻和杠牌检查
+- **位置**: scoring.ts `hasWindMelds()`
+- **问题**: 无花自摸的"门前无拦"只检查了花，实际还应检查**箭刻**和**门口杠牌**
+- **修复**: `hasWindMelds` 扩展检查风刻/箭刻/明杠/暗杠/加杠（commit `9d84ab6`）
+- **另**: `applyAnKong` 推 `CONCEALED_KONG` 而非 `KONG`，与 `hasWindMelds` 对齐（commit `726348d`）
 
 ---
 
-## 当前训练状态（2026-04-09）
+## 当前训练状态（2026-04-10）
 
-- menqingKeepBonus=0.8 正在测试（10×1000 局训练中）
 - 目标：胡牌率≥90%，门清率 7-12%
-- 碰后逻辑待修复
+- drawPenalty 加倍（50000→100000）惩罚流局（commit `c480ab6`）
+- 每回合快照 + testOneGame 单局调试工具（commit `c480ab6`）
+- 无花自摸完整化 + 暗杠类型修复
