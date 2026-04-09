@@ -2048,15 +2048,26 @@ async function main() {
 
 // ========== 单局测试：强制进攻，打印每回合完整明细 ==========
 function testOneGame() {
-  const policy: BotPolicy = {
-    selfWinChance: 1.0, discardHuChance: 1.0,
-    anKongChance: 0.8, kakanAggression: 0.8,
-    menqingKeepBonus: 2.5, wildPairBonus: 0.2, adjacentBonus: 0.15,
-    selfWinWildBoost: 0.05, discardHuWildPenalty: 0.05, discardHuMenQingPenalty: 0.0,
-    pengChance: 0.9, pengWildBoost: 0.1, meldPenalty: 0.0,
-    chowChance: 0.5, routeThreshold: 0.3,
-    safeDrawThreshold: 0.4, riskySafeThreshold: 0.6,
-    flowermeldsToKeep: 1,
+  // 优先用 GA 优化过的 policy（best-policy.json），fallback 到默认参数
+  let policy: BotPolicy | null = null
+  try {
+    const policyPath = path.join(__dirname, '..', 'training-output', 'best-policy.json')
+    if (fs.existsSync(policyPath)) {
+      const saved = JSON.parse(fs.readFileSync(policyPath, 'utf-8'))
+      if (saved.policy) { policy = saved.policy; console.error(`[TEST] 使用 GA 优化过的 policy`) }
+    }
+  } catch (e) { /* ignore */ }
+  if (!policy) {
+    policy = {
+      selfWinChance: 1.0, discardHuChance: 1.0,
+      anKongChance: 0.8, kakanAggression: 0.8,
+      menqingKeepBonus: 2.5, wildPairBonus: 0.2, adjacentBonus: 0.15,
+      selfWinWildBoost: 0.05, discardHuWildPenalty: 0.05, discardHuMenQingPenalty: 0.0,
+      pengChance: 0.9, pengWildBoost: 0.1, meldPenalty: 0.0,
+      chowChance: 0.5, routeThreshold: 0.3,
+      safeDrawThreshold: 0.4, riskySafeThreshold: 0.6,
+      flowermeldsToKeep: 1,
+    }
   }
 
   console.error('[TEST] 启动单局测试，强制胡牌模式...')
@@ -2076,18 +2087,14 @@ function testOneGame() {
   console.error(`[TEST] 总回合数: ${result.roundNum}`)
   console.error(`[TEST] 百搭: ${result.wildTile || '无'}`)
 
-  // 打印每回合快照
+  // 打印每回合快照（精简格式）
   if (result.turnSnapshots && result.turnSnapshots.length > 0) {
     console.error('\n========== 每回合明细 ==========')
     for (const snap of result.turnSnapshots) {
-      const currName = result.events?.[snap.turn]?.player || `P${snap.currentPlayer}`
-      console.error(`\n--- 回合${snap.turn} [${currName}] ---`)
-      console.error(`  摸牌: ${snap.drawnTile}  |  出牌: ${snap.discardedTile}`)
-      console.error(`  最近出牌: ${snap.lastDiscard} (by P${snap.lastDiscardBy ?? '?'})`)
-      console.error(`  百搭: ${snap.wildTile}  |  局倍: ×${snap.gameMultiplier}`)
+      const currP = snap.players[snap.currentPlayer]
+      console.error(`\n[回合${snap.turn}] ${currP?.name || 'P' + snap.currentPlayer} 摸了${snap.drawnTile} 打${snap.discardedTile} | 百搭${snap.wildTile} ×${snap.gameMultiplier}`)
       for (const p of snap.players) {
-        const handDesc = p.handCount < 5 ? p.hand : `(${p.handCount}张)`
-        console.error(`  ${p.name}: 手牌=${handDesc} 副露=${p.exposed.join(' | ') || '无'}`)
+        console.error(`  ${p.name}: ${p.hand || '(无闲家手牌)'} 副露:${p.exposed.join('|') || '无'} 剩${p.handCount}张`)
       }
     }
   } else {
@@ -2112,7 +2119,4 @@ function testOneGame() {
   console.error(`[TEST] 详细报告已写入: ${fname}`)
 }
 
-
-console.error(`[注意] 临时运行 testOneGame，正式训练请还原为 main()`)
-testOneGame()
-process.exit(0)
+main()

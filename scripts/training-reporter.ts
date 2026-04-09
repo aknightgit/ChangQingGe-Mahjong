@@ -328,27 +328,15 @@ export function formatRoundReport(report: RoundReport): string {
 
   // ===== 每回合详细快照（单局测试时有效） =====
   if (report.turnSnapshots && report.turnSnapshots.length > 0) {
-    lines.push('### 🔍 每回合详细快照')
+    lines.push('### 🔍 每回合明细（血战到底）')
     lines.push('')
     const playerNames = report.playerStats?.map(p => p.name) || ['P0', 'P1', 'P2', 'P3']
     for (const snap of report.turnSnapshots) {
       const currName = playerNames[snap.currentPlayer] || `P${snap.currentPlayer}`
-      lines.push(`**回合 ${snap.turn}** \`${currName}\``)
-      lines.push('')
-      lines.push(`| 项目 | 信息 |`)
-      lines.push(`|------|------|`)
-      lines.push(`| 摸牌 | ${snap.drawnTile} |`)
-      lines.push(`| 出牌 | ${snap.discardedTile} |`)
-      lines.push(`| 最近出牌 | ${snap.lastDiscard} (by P${snap.lastDiscardBy ?? '?'}) |`)
-      lines.push(`| 百搭 | ${snap.wildTile} |`)
-      lines.push(`| 局倍数 | ×${snap.gameMultiplier} |`)
-      lines.push('')
-      lines.push('| 玩家 | 手牌 | 副露 | 牌数 |')
-      lines.push('|------|------|------|------|')
+      lines.push(`**[回合${snap.turn}]** ${currName} 摸${snap.drawnTile} 打${snap.discardedTile} | 百搭${snap.wildTile} ×${snap.gameMultiplier}`)
       for (const p of (snap.players || [])) {
-        const handShort = p.hand.length > 20 ? p.hand.slice(0, 20) + '...' : p.hand
-        const exposedStr = p.exposed?.join(' | ') || '无'
-        lines.push(`| ${p.name} | ${handShort} | ${exposedStr} | ${p.handCount} |`)
+        const exposedStr = p.exposed?.join('|') || '无'
+        lines.push(`  ${p.name}: ${p.hand || '(无闲家手牌)'} 副露:${exposedStr} 剩${p.handCount}张`)
       }
       lines.push('')
     }
