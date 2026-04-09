@@ -1618,6 +1618,43 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
     for (const otherIdx of [nextPlayer, prevPlayer, oppositePlayer]) {
       const opp = g.players[otherIdx]
       if (opp.exposedMelds.length >= 4) continue  // 最多4组牌
+      // 碰之前先检查明杠：已有3张碰了，打出的第4张可以直接明杠（优先级高于碰）
+      if (canMingKong(opp, discard)) {
+        if (Math.random() < opp.policy.kongChance) {
+          applyMingKong(opp, discard, curr)
+          const extra = drawTile(g, opp)
+          if (!extra) return null
+          checkHandInvariant(opp, 'draw')  // 杠后摸牌
+          if (extra && !isFlower(extra)) {
+            if (canWin(normalizeHand(opp.hand), opp.exposedMelds, makeWT(opp)).canWin) {
+              const kongBaseScore = calcScore(opp, true, true, g.gameMultiplier)
+              opp.score += kongBaseScore * 3
+              for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
+              applyBaoSettlement(g, otherIdx, true, null, kongBaseScore, 1)
+              log(opp.name, '明杠自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3]（杠开）`)
+              opp.wonFan = kongBaseScore
+              const wt = detectHandTypes(opp.hand, opp.exposedMelds, opp.wildSuit && opp.wildValue ? `${opp.wildSuit}-${opp.wildValue}` : null, true, opp.flowerTiles.length)
+              opp.winHandType = wt.map(t => String(t)).join(',')
+              opp.status = 'won'
+              finishedPlayers.add(otherIdx)
+              recordWinner(opp, otherIdx, true, kongBaseScore, turn)
+              log(opp.name, '胡牌(血战)', `明杠自摸 [${kongBaseScore}×3]`)
+              if (finishedPlayers.size >= 3) {
+                return buildResult(otherIdx, '杠上自摸', kongBaseScore, opp.winHandType || '明杠自摸', kongBaseScore, undefined)
+              }
+              g.current = (otherIdx + 1) % 4
+              continue
+            }
+          }
+          // 明杠后补摸，非自摸则打出
+          const kongDiscard = aiDiscard(opp, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, otherIdx)
+          opp.hand = opp.hand.filter(t => t.id !== kongDiscard.id)
+          g.discardPile.push(kongDiscard)
+          g.current = (otherIdx + 1) % 4
+          meldTaken = true
+          break
+        }
+      }
       if (canPeng(opp, discard)) {
         if (!checkChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)) continue;  // K哥铁律：吃碰排斥
         let pengChance = opp.policy.pengChance
