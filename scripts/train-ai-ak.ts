@@ -50,7 +50,7 @@ interface BotPolicy {
   pengWildBoost: number; kongWildBoost: number; chowWildPenalty: number
   menqingKeepBonus: number; meldPenalty: number
   allPungsPursuit: number; pureFlushPursuit: number; halfFlushWeight: number
-  sevenPairsPursuit: number; allHonorsPursuit: number; allHonorsPungsPursuit: number
+  allHonorsPursuit: number; allHonorsPungsPursuit: number
   qingPengPursuit: number; hunPengPursuit: number
   windEastKeep: number; windSouthKeep: number; windWestKeep: number; windNorthKeep: number
   windGeneralKeep: number
@@ -111,7 +111,7 @@ const DEFAULT_POLICY: BotPolicy = {
   pengWildBoost: 0.06, kongWildBoost: 0.14, chowWildPenalty: 0.18,
   menqingKeepBonus: 5.0, meldPenalty: 0.05,
   allPungsPursuit: 1.5, pureFlushPursuit: 1.5, halfFlushWeight: 1.0,
-  sevenPairsPursuit: 1.0, allHonorsPursuit: 1.0, allHonorsPungsPursuit: 1.0,
+  allHonorsPursuit: 1.0, allHonorsPungsPursuit: 1.0,
   qingPengPursuit: 1.5, hunPengPursuit: 1.5,
   windEastKeep: 2.0, windSouthKeep: 1.0, windWestKeep: 1.0, windNorthKeep: 1.0,
   windGeneralKeep: 1.5,
@@ -156,7 +156,7 @@ const MUTATE_KEYS: (keyof BotPolicy)[] = [
   'pengWildBoost', 'kongWildBoost', 'chowWildPenalty',
   'menqingKeepBonus', 'meldPenalty',
   'allPungsPursuit', 'pureFlushPursuit', 'halfFlushWeight',
-  'sevenPairsPursuit', 'allHonorsPursuit', 'allHonorsPungsPursuit',
+  'allHonorsPursuit', 'allHonorsPungsPursuit',
   'qingPengPursuit', 'hunPengPursuit',
   'windEastKeep', 'windSouthKeep', 'windWestKeep', 'windNorthKeep', 'windGeneralKeep',
   'dragonRedKeep', 'dragonGreenKeep', 'dragonWhiteKeep', 'dragonGeneralKeep',
@@ -210,7 +210,6 @@ const PARAM_RANGES: Record<string, { min: number; max: number; step: number }> =
   allPungsPursuit:            { min: 0.0,  max: 2.0,  step: 0.1 },
   pureFlushPursuit:           { min: 0.0,  max: 2.0,  step: 0.1 },
   halfFlushWeight:            { min: 0.0,  max: 2.0,  step: 0.1 },
-  sevenPairsPursuit:          { min: 0.0,  max: 2.0,  step: 0.1 },
   allHonorsPursuit:           { min: 0.0,  max: 2.0,  step: 0.1 },
   allHonorsPungsPursuit:      { min: 0.0,  max: 2.0,  step: 0.1 },
   qingPengPursuit:            { min: 0.0,  max: 2.0,  step: 0.1 },
@@ -873,9 +872,10 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   const hand = p.hand
   if (process.env.DEBUG_DISCARD === '1') console.error(`[DISCARD] ${p.name} hand_before=${p.hand.length} pos=${p.pos}`)
   const wildCount = hand.filter(t => isWT(t, p)).length
-  const isMenqing = p.exposedMelds.filter(m => !m.isConcealed).length === 0
-  // 暗杠不破门清：统计副露时排除暗杠（暗杠属于手牌，不算门口副露）
-  const totalMelds = p.exposedMelds.filter(m => !m.isConcealed).length
+  // 暗杠不破门清：visibleMelds不算暗杠（暗杠属于手牌，不算门口副露）
+  const visibleMelds = p.exposedMelds.filter(m => !m.isConcealed).length
+  const totalMelds = p.exposedMelds.length  // 含暗杠，用于 meldsNeeded 计算
+  const isMenqing = visibleMelds === 0
   const suits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
   const suitCounts = suits.map(s => hand.filter(t => t.suit === s).length)
   const maxSuitIdx = suitCounts.indexOf(Math.max(...suitCounts))
@@ -883,7 +883,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   const honorCount = hand.filter(t => isHonor(t)).length
 
   // 百搭全局最优评估
-  const wildEval = wildCount > 0 ? evalWildDeployment(hand, totalMelds, wildCount, p.flowerTiles.length, gameMultiplier) : null
+  const wildEval = wildCount > 0 ? evalWildDeployment(hand, visibleMelds, wildCount, p.flowerTiles.length, gameMultiplier) : null
   const wildIsOptimal = wildEval && wildEval.bestType !== '保留百搭' && wildEval.bestScore > wildEval.keepWildScore
 
   // ====== 对手出牌观察：前N轮别人打的牌 ======
@@ -940,8 +940,6 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   const isHalfFlushRoute = maxSuitCount >= hand.length * 0.5 && honorCount >= 2
   const isAllHonorsRoute = honorCount >= hand.length * 0.6 && honorCount >= 6
   const isAllPungsRoute = (tripletCount * 3 + quadCount * 4) >= hand.length * 0.6
-  const isSevenPairsRoute = pairCount >= 4 && totalMelds === 0
-
   // 倍数×起手牌质量联合路线
   const handQuality = maxSuitCount >= 7 ? 7 : maxSuitCount >= 6 ? 6 : maxSuitCount >= 5 ? 5 : 0
   // 使用实际游戏倍数（≥4为高倍数）
@@ -1068,12 +1066,6 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
       if (count >= 2) keepScore += policy.allPungsPursuit * 5
       if (count === 1 && !isHonor(tile)) keepScore -= policy.allPungsPursuit * 2
     }
-    if (policy.sevenPairsPursuit > 0 && isSevenPairsRoute) {
-      if (count === 2) keepScore += policy.sevenPairsPursuit * 8
-      if (count >= 3) keepScore -= policy.sevenPairsPursuit * 3
-      if (count === 1) keepScore -= policy.sevenPairsPursuit * 1
-    }
-
     if (isMenqing) {
       const mv = wildCount === 0 ? policy.wild0MenqingKeep : wildCount === 1 ? policy.wild1MenqingKeep : policy.wild2MenqingKeep
       keepScore += mv * policy.menqingDoubleAwareness
@@ -1136,7 +1128,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
 
     // 百搭分级：包三包四推进
     const baoPush = wildCount === 1 ? policy.wild1BaoPush : wildCount === 2 ? policy.wild2BaoPush : wildCount >= 3 ? policy.wild3BaoPush : 0
-    if (baoPush > 0 && totalMelds >= policy.baoThreshold) keepScore += baoPush * 4 * aggression
+    if (baoPush > 0 && visibleMelds >= policy.baoThreshold) keepScore += baoPush * 4 * aggression
     if (wildCount >= 1) keepScore += aggression * 2
 
     // 速度vs大牌
@@ -1149,7 +1141,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     }
 
     // 包三四风险（无百搭加持时更保守）
-    if (policy.baoRiskAversion > 0 && totalMelds >= policy.baoThreshold && baoPush < 0.3)
+    if (policy.baoRiskAversion > 0 && visibleMelds >= policy.baoThreshold && baoPush < 0.3)
       keepScore += policy.baoRiskAversion * 3
 
     // ====== 0百搭特殊策略 ======
@@ -2217,7 +2209,7 @@ function main() {
   // Print all key parameters
   const keyParams: (keyof BotPolicy)[] = [
     'selfWinChance', 'discardHuChance', 'pengChance', 'chowChance', 'anKongChance',
-    'allPungsPursuit', 'pureFlushPursuit', 'halfFlushWeight', 'sevenPairsPursuit',
+    'allPungsPursuit', 'pureFlushPursuit', 'halfFlushWeight',
     'menqingKeepBonus', 'noWildDoubleAwareness',
     'wild0Aggression', 'wild1Aggression', 'wild2Aggression', 'wild3PlusAggression',
     'wild1RouteMeldPush', 'wild2RouteMeldPush', 'wild3RouteMeldPush',
