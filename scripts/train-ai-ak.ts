@@ -656,7 +656,7 @@ function applyAnKong(p: BotPlayer, tile: Tile): void {
   p.hand = p.hand.filter(t => !tileEq(t, tile))
   const after = p.hand.length
   if (after !== before - 4) { console.error(`BUG applyAnKong: ${p.name} before=${before} after=${after} (expected ${before-4})`); return }
-  p.exposedMelds.push({ type: MeldType.KONG, tiles: [tile, tile, tile, tile], isConcealed: true })
+  p.exposedMelds.push({ type: MeldType.CONCEALED_KONG, tiles: [tile, tile, tile, tile], isConcealed: true })
   p.kongCount++
 }
 function applyJiaGang(p: BotPlayer, tile: Tile): void {
