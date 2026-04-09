@@ -22,6 +22,7 @@ import * as path from 'path'
 import { fileURLToPath } from 'url'
 import mysql from 'mysql2/promise'
 import { evaluateAllRoutes, selectDiscard as routeSelectDiscard, shouldClaim as routeShouldClaim, determinePhase, Phase, Route, PARAMS, calcTenpaiDistance as tenpaiDist } from './route-evaluator'
+import { writeRoundFile, buildRoundReport } from './training-reporter'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -1894,6 +1895,10 @@ async function main() {
       fs.writeFileSync(mdFile, logLines.join('\n'), 'utf-8')
       // MariaDB 备份
       await saveRoundToMariaDB(round, bestEvalResult, roundBestPolicy)
+      // 标准化轮次文件（training-reporter 统一格式）
+      const report = buildRoundReport(round, bestEvalResult, roundBestPolicy, AI_NAMES)
+      const filename = writeRoundFile(OUT_DIR, report)
+      console.log(`  → 轮次详情已保存: ${filename}`)
     }
   }
 
