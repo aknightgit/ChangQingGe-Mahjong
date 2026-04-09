@@ -766,40 +766,71 @@ function applyBaoSettlement(
 
 // ========== 百搭最优利用：全局评分 ==========
 // 根据手牌评估不同百搭使用方式的得分，选择最高分
-// 长清阁牌型固定/公式得分：
-//   清一色=10, 风一色=20, 风碰=40, 清碰=20, 混碰=公式, 碰碰胡=公式(max10), 混一色=公式
-//   无百搭×2, 门清×2
+// 长清阁得分公式：
+//   最终点数 = 牌型基础分 × extraMultipliers(无百搭×2, 门清×2) × globalMultiplier
+//
+// extraMultipliers 说明：
+//   - 无百搭：手牌不含百搭 → ×2
+//   - 门清：没有吃过牌、碰过牌、明杠 → ×2
+//   - 两者可叠加（最高×4）
+// globalMultiplier：骰子倍数 × 流局继承（封顶8）
+//
+// 牌型基础分：清一色=10, 风一色=20, 风碰=40, 清碰=20, 混碰=公式(2+花数+面子分,上限10),
+//             碰碰胡=公式, 混一色=公式
 function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
-  flowerCount: number): { bestType: string; bestScore: number; keepWildScore: number } {
+  flowerCount: number, globalMult: number = 1): { bestType: string; bestScore: number; keepWildScore: number } {
 
-  // 牌型基础分查找
-  const typeScore: Record<string, number> = {
-    '清一色': 10, '风一色': 20, '风碰': 40, '清碰': 20,
-    '混碰': Math.min(10, 2 + flowerCount), '碰碰胡': Math.min(10, 2 + flowerCount),
-    '混一色': Math.min(10, 2 + flowerCount),
+  // 门清判断：没有副露（吃/碰/明杠）即为门清
+  // 注意：暗杠不破门清，但 evalWildDeployment 调用时还不知道有没有暗杠
+  // 这里用 meldCount≈0 来近似
+  const isMenqing = meldCount === 0
+
+  // extraMultipliers 辅助计算
+  const calcExtra = (hasWild: boolean, menqing: boolean): number => {
+    let m = 1
+    if (!hasWild) m *= 2   // 无百搭×2
+    if (menqing) m *= 2    // 门清×2
+    return m
+  }
+
+  // 牌型基础分（HandType 枚举值 = 字符串键）
+  // HandType.FULL_FLUSH = 'full_flush', HandType.ALL_TRIPLETS = 'all_triplets', etc.
+  const typeBaseScore: Record<string, number> = {
+    [HandType.FENG_PENG]: 40,  // 风碰=40（最高固定番）
+    [HandType.ALL_WIND]: 20,   // 风一色=20
+    [HandType.QING_PENG]: 20,  // 清碰=20
+    [HandType.FULL_FLUSH]: 10, // 清一色=10
+    [HandType.HUN_PENG]: 10,   // 混碰=10
+    [HandType.ALL_TRIPLETS]: 10, // 碰碰胡=10（公式上限）
+    [HandType.HALF_FLUSH]: 10,  // 混一色=10（公式上限）
+    [HandType.FOUR_WILD]: 10,  // 四百搭=10
+    [HandType.DA_DIAO]: 10,    // 大吊=10
+    [HandType.EIGHT_FLOWERS]: 10, // 八花=10
   }
 
   if (wildCount === 0) {
+    // 无百搭时：手牌本身即无百搭，肯定有×2
     const types = detectHandTypes(hand, [], null, false, flowerCount)
-    const base = types.length > 0 ? (typeScore[types[0]] || 0) : 0
-    const final = base * 2  // 无百搭×2
-    return { bestType: types[0] || '基础胡', bestScore: final, keepWildScore: final }
+    const base = types.length > 0 ? (typeBaseScore[types[0]] || 0) : 0
+    // 无百搭×2 × globalMult（门清由调用方另外判断，这里只处理无百搭）
+    const final = base * 2 * globalMult
+    const typeName = types.length > 0 ? HAND_TYPE_NAMES[types[0]] || types[0] : '基础胡'
+    return { bestType: typeName, bestScore: final, keepWildScore: final }
   }
 
   const nonWild = hand.filter(t => !isWild(t, undefined, undefined))
 
-  // 评估1：保留百搭不使用（无百搭翻倍×2）
+  // 评估1：保留百搭不使用 → 无百搭×2；门清存在时再×2
   const typesNoWild = detectHandTypes(nonWild, [], null, false, flowerCount)
-  const baseNoWild = typesNoWild.length > 0 ? (typeScore[typesNoWild[0]] || 0) : 0
-  const keepWildScore = baseNoWild * 2
+  const baseNoWild = typesNoWild.length > 0 ? (typeBaseScore[typesNoWild[0]] || 0) : 0
+  const keepWildScore = baseNoWild * calcExtra(false, isMenqing) * globalMult
 
   // 评估2：百搭做清一色（最长花色+百搭>=13张）
   let flushScore = 0
   if (meldCount === 0) {
     for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
       const suitTiles = nonWild.filter(t => t.suit === suit)
-      const wilds = hand.filter(t => isWild(t, undefined, undefined))
-      if (suitTiles.length + wilds.length >= 13) { flushScore = 10; break }
+      if (suitTiles.length + wildCount >= 13) { flushScore = 10; break }
     }
   }
 
@@ -808,18 +839,27 @@ function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
   let fengPengScore = 0
   if (honorCount + wildCount >= 13) fengPengScore = 40  // 风碰=40
 
-  // 评估4：百搭做碰碰胡
+  // 评估4：百搭做碰碰胡（公式：2 + 花数 + 面子分，上限10）
   const groups = groupTiles(nonWild)
   let pairPotential = 0
   for (const [, tiles] of groups) { if (tiles.length >= 2) pairPotential++ }
-  const pungScore = (pairPotential + wildCount >= 4) ? Math.min(10, 2 + flowerCount) : 0
+  // 面子分估算：pairPotential≥4 → 约4组面子 ≈ 面子分≈4
+  const pungScore = (pairPotential + wildCount >= 4)
+    ? Math.min(10, 2 + flowerCount + Math.max(0, pairPotential - 1))
+    : 0
+
+  // 使用百搭时：无百搭×2不成立；是否门清取决于meldCount
+  const useWildExtra = isMenqing ? 2 : 1
+  const flushFinal = flushScore * useWildExtra * globalMult
+  const fengPengFinal = fengPengScore * useWildExtra * globalMult
+  const pungFinal = pungScore * useWildExtra * globalMult
 
   // 取最高分
   const options = [
     { type: '保留百搭', score: keepWildScore },
-    { type: '清一色', score: flushScore },
-    { type: '风碰', score: fengPengScore },
-    { type: '碰碰胡', score: pungScore }
+    { type: '清一色', score: flushFinal },
+    { type: '风碰', score: fengPengFinal },
+    { type: '碰碰胡', score: pungFinal }
   ]
   options.sort((a, b) => b.score - a.score)
 
@@ -844,7 +884,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   const honorCount = hand.filter(t => isHonor(t)).length
 
   // 百搭全局最优评估
-  const wildEval = wildCount > 0 ? evalWildDeployment(hand, totalMelds, wildCount, p.flowerTiles.length) : null
+  const wildEval = wildCount > 0 ? evalWildDeployment(hand, totalMelds, wildCount, p.flowerTiles.length, gameMultiplier) : null
   const wildIsOptimal = wildEval && wildEval.bestType !== '保留百搭' && wildEval.bestScore > wildEval.keepWildScore
 
   // ====== 对手出牌观察：前N轮别人打的牌 ======
@@ -1266,7 +1306,9 @@ function runGameWithFightToLast(akPolicy: BotPolicy, otherPolicies: BotPolicy[])
     const result = runGame(policies[0], policies.slice(1))
     if (!result) {
       // 流局，所有人还在
+      console.error(`[runGameWithFightToLast] game=${gameNum} result=null active=${active.length} players`)
       gameNum++
+      if (gameNum >= 3) break  // 防止无限循环
       continue
     }
     // 有人赢了
@@ -1291,6 +1333,7 @@ function runGameWithFightToLast(akPolicy: BotPolicy, otherPolicies: BotPolicy[])
 // 血战到底模式：有人胡牌后继续打，直到流局或只剩1人
 // 所有赢家都记录到 winnersThisGame，最后一起 return
 export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | null {
+  const runGameStart = performance.now()
   // 每局开始时清空 isTing 缓存（不同局wild牌不同）
   clearIsTingCache()
   clearCanWinCache()
@@ -1432,14 +1475,17 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
 
     // Self-draw win check
     const normalizedHand = normalizeHand(player.hand)
-    // 当前玩家摸牌后：hand = 14 - 3*普通面子 - 4*杠
-    // 简化：只打印诊断，不做严格校验
+    // [DEBUG] 追踪canWin诊断
     const numPungs = player.exposedMelds.filter(m => m.type === MeldType.TRIPLET || m.type === MeldType.SEQUENCE).length
     const winCheck = canWin(normalizedHand, player.exposedMelds, makeWT(player))
+    if (round < 3 || winCheck.canWin) {
+      console.error(`[DEBUG round=${round} curr=${curr} ${player.name}] drawn=${tileStr(drawn)} hand=${normalizedHand.length} exposed=${player.exposedMelds.length} wild=${makeWT(player)} canWin=${winCheck.canWin} types=${winCheck.types.join(',')}`)
+    }
     if (winCheck.canWin) {
       // [DEBUG FORCE SELF-DRAW] 强制100%自摸，验证AI能否正常做成特殊牌型
       const winChance = 1.0
       if (Math.random() < winChance) {
+        console.error(`[SELF-WIN! round=${round} curr=${curr} ${player.name}] hand=${normalizedHand.length} exposed=${player.exposedMelds.length} canWin=${winCheck.canWin}`)
         const baseScore = calcScore(player, true, false, g.gameMultiplier)
         // 自摸：每人赔baseScore，赢家得3倍
         player.score += baseScore * 3
@@ -1461,6 +1507,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
         }
         g.current = (curr + 1) % 4
         continue
+      } else {
       }
     }
 
