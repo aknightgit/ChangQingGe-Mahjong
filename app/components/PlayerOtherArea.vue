@@ -38,6 +38,7 @@
               :key="t.id"
               :tile="t"
               :small="true"
+              :back="isConcealedMeld(m)"
               :dimmed="isWinner"
               :style="meldTileRotateStyle"
             />
@@ -87,6 +88,7 @@
               :key="t.id"
               :tile="t"
               :small="true"
+              :back="isConcealedMeld(m)"
               :dimmed="isWinner"
               :style="meldTileRotateStyle"
             />
@@ -112,6 +114,7 @@
               :key="t.id"
               :tile="t"
               :small="true"
+              :back="isConcealedMeld(m)"
               :dimmed="isWinner"
               :style="meldTileRotateStyle"
             />
@@ -296,6 +299,10 @@ const meldTileRotateStyle = computed(() => {
   )
   return { transform: `rotate(${angle}deg)` }
 })
+
+const isConcealedMeld = (meld: Meld): boolean => {
+  return meld.type === 'concealed_kong' || !!(meld as any).isConcealed
+}
 </script>
 
 <style scoped>

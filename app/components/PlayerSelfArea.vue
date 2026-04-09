@@ -34,6 +34,7 @@
             :key="tile.id"
             :tile="tile"
             :small="true"
+            :back="isConcealedMeld(meld)"
             :dimmed="isWinner"
           />
           <!-- 吃碰杠箭头指示来源 -->
@@ -100,6 +101,10 @@ const colors = computed(() => props.playerColors || ['#e53935', '#43a047', '#1e8
 
 const isFlowerMeld = (meld: Meld): boolean => {
   return meld.tiles.some(t => t.suit === 'hua' || t.isFlower)
+}
+
+const isConcealedMeld = (meld: Meld): boolean => {
+  return meld.type === 'concealed_kong' || !!(meld as any).isConcealed
 }
 
 // 吃碰箭头：根据sourcePosition（相对位置偏移）显示方向
