@@ -497,6 +497,7 @@ function setupGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameState {
   const w = nonFlower[Math.floor(Math.random() * nonFlower.length)]
   const ws = w.suit as TileSuit, wv = w.value
 
+
   const policies = [akPolicy, otherPolicies[0], otherPolicies[1], otherPolicies[2]]
 
   const players = AI_NAMES.map((name, i) => ({
