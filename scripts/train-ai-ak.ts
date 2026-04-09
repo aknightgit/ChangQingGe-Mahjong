@@ -706,7 +706,7 @@ function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean, gameMu
     handTiles: p.hand, exposedMelds: p.exposedMelds,
     flowerTiles: p.flowerTiles, handTypes: types,
     isSelfDrawn: isSelfDraw, isKongFlower: isKongWin,
-    isRobbingKong: false, isMenQing: p.exposedMelds.length === 0,
+    isRobbingKong: false, isMenQing: p.exposedMelds.filter(m => !m.isConcealed).length === 0,
     wildTileSuit: p.wildSuit, wildTileValue: p.wildValue,
     roundMultiplier: 1, globalMultiplier: gameMultiplier
   })
@@ -780,10 +780,8 @@ function applyBaoSettlement(
 function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
   flowerCount: number, globalMult: number = 1): { bestType: string; bestScore: number; keepWildScore: number } {
 
-  // 门清判断：没有副露（吃/碰/明杠）即为门清
-  // 注意：暗杠不破门清，但 evalWildDeployment 调用时还不知道有没有暗杠
-  // 这里用 meldCount≈0 来近似
-  const isMenqing = meldCount === 0
+  // 门清：没有吃过牌、碰过牌、明杠即为门清；暗杠不破门清（暗杠是手牌暗搓搓的杠，不算副露）
+  const isMenqing = meldCount === 0  // meldCount 已由调用方过滤为非暗杠副露数，此处直接用
 
   // extraMultipliers 辅助计算
   const calcExtra = (hasWild: boolean, menqing: boolean): number => {
@@ -875,8 +873,9 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   const hand = p.hand
   if (process.env.DEBUG_DISCARD === '1') console.error(`[DISCARD] ${p.name} hand_before=${p.hand.length} pos=${p.pos}`)
   const wildCount = hand.filter(t => isWT(t, p)).length
-  const isMenqing = p.exposedMelds.length === 0
-  const totalMelds = p.exposedMelds.length
+  const isMenqing = p.exposedMelds.filter(m => !m.isConcealed).length === 0
+  // 暗杠不破门清：统计副露时排除暗杠（暗杠属于手牌，不算门口副露）
+  const totalMelds = p.exposedMelds.filter(m => !m.isConcealed).length
   const suits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
   const suitCounts = suits.map(s => hand.filter(t => t.suit === s).length)
   const maxSuitIdx = suitCounts.indexOf(Math.max(...suitCounts))
