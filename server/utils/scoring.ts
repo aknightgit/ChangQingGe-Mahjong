@@ -111,21 +111,21 @@ export function calculateScore(params: {
 
   // 3. 检查无花自摸（碰碰胡/混一色 + 自摸 + 门口无花 + 无风向刻杠）
   //    特殊规则：如果百搭牌是花牌，本局不触发"无花自摸"，用普通公式结算
-  if (baseFan < 10) {
-    if (isSelfDrawn && !isKongFlower) {
-      const isWildFlower = wildTileGroup && wildTileGroup.length > 0;
-      if (!isWildFlower) {
-        const hasNoFlowers = flowerTiles.length === 0 && 
-          exposedMelds.every(m => m.tiles.every(t => !isFlower(t)));
-        const hasNoWindMelds = !hasWindMelds(exposedMelds, handTiles);
-        
-        if (hasNoFlowers && hasNoWindMelds) {
-          const isPengOrHun = handTypes.includes(HandType.ALL_TRIPLETS) || 
-                              handTypes.includes(HandType.HALF_FLUSH);
-          if (isPengOrHun) {
-            baseFan = Math.max(baseFan, 10);
-            details.push('无花自摸 = 10番');
-          }
+  // 无花自摸（碰碰胡/混一色 + 自摸 + 门前无花/无风刻/无箭刻/无杠）
+  // 与杠开后自摸互斥（baseFan >= 10 时走杠开逻辑，不走无花自摸）
+  if (baseFan < 10 && isSelfDrawn) {
+    const isWildFlower = wildTileGroup && wildTileGroup.length > 0;
+    if (!isWildFlower) {
+      const hasNoFlowers = flowerTiles.length === 0 &&
+        exposedMelds.every(m => m.tiles.every(t => !isFlower(t)));
+      const hasNoBlocks = !hasWindMelds(exposedMelds, handTiles);  // 含：风刻+箭刻+杠牌
+
+      if (hasNoFlowers && hasNoBlocks) {
+        const isPengOrHun = handTypes.includes(HandType.ALL_TRIPLETS) ||
+                            handTypes.includes(HandType.HALF_FLUSH);
+        if (isPengOrHun) {
+          baseFan = Math.max(baseFan, 10);
+          details.push('无花自摸 = 10番');
         }
       }
     }
@@ -640,13 +640,18 @@ function getFixedFanName(type: HandType, isSelfDrawn: boolean, isKongFlower: boo
 }
 
 function hasWindMelds(exposedMelds: Meld[], handTiles: Tile[]): boolean {
-  // 检查门口是否有风牌刻子/杠
+  // 检查门口（exposedMelds）是否有阻挡物：无花自摸要求门前无花、无风刻、无箭刻、无杠牌
   for (const meld of exposedMelds) {
-    if (meld.tiles.length > 0 && isWind(meld.tiles[0])) {
-      return true;
-    }
+    if (meld.tiles.length === 0) continue;
+    const lead = meld.tiles[0];
+    // 风刻/风杠
+    if (isWind(lead)) return true;
+    // 箭刻/箭杠（发财/红中/白板）
+    if (isDragon(lead)) return true;
+    // 任意杠（明杠/暗杠/加杠）
+    if (meld.type === MeldType.KONG || meld.type === MeldType.CONCEALED_KONG) return true;
   }
-  // 检查手牌中的风牌刻子
+  // 检查手牌中的风牌刻子（不影响门前判断，但影响牌型本身）
   const groups = groupTiles(handTiles);
   for (const [key, group] of groups) {
     if (group.length >= 3 && isWind(group[0])) {
