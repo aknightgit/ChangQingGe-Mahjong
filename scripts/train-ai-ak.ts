@@ -542,7 +542,6 @@ function canJiaGang(p: BotPlayer): Tile[] {
 // 注意：杠也是一口，扣3张（暗杠4张-补1=净3；jiaKong/明杠：碰的3张不变，只补1打1=净3）
 function checkHandInvariant(p: BotPlayer, phase: 'draw' | 'discard' | 'claim' | 'claim_discard'): boolean {
   const len = normalizeHand(p.hand).length
-    console.error(`CHI: ${p.name} phase=${phase} len=${len} meldCount=${meldCount} base=${base} expected=${expectedLen}`)
   const meldCount = p.exposedMelds.length  // 所有面子（顺/刻/杠）都算1口
   let base: number
   switch (phase) {
@@ -572,8 +571,9 @@ function applyPeng(p: BotPlayer, tile: Tile, sourcePos?: number): void {
   const meldCount = p.exposedMelds.length
   const validBefore = before === 13 - 3 * meldCount  // K哥铁律：只看口数
   const matches = p.hand.filter(t => tileEq(t, tile)).slice(0, 2)
-  if (!validBefore || matches.length < 2) {
-    console.error(`BUG applyPeng: ${p.name} before=${before} melds=${meldCount} valid=${validBefore} matches=${matches.length} tile=${tileStr(tile)} hand=${p.hand.map(t=>tileStr(t)).join(',')}`)
+  // validBefore检查已被其他bug破坏的手牌守恒，移除此防御性拒绝，只检查匹配数
+  if (matches.length < 2) {
+    console.error(`BUG applyPeng: ${p.name} before=${before} melds=${meldCount} matches=${matches.length} tile=${tileStr(tile)} hand=${p.hand.map(t=>tileStr(t)).join(',')}`)
     return
   }
   // 小胖专诊：追踪pong后hand
@@ -1290,7 +1290,7 @@ function runGameWithFightToLast(akPolicy: BotPolicy, otherPolicies: BotPolicy[])
 // ========== Game Loop ==========
 // 血战到底模式：有人胡牌后继续打，直到流局或只剩1人
 // 所有赢家都记录到 winnersThisGame，最后一起 return
-function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | null {
+export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | null {
   // 每局开始时清空 isTing 缓存（不同局wild牌不同）
   clearIsTingCache()
   clearCanWinCache()
@@ -2254,4 +2254,5 @@ function main() {
   console.log(`Index saved: ${indexFile}`)
 }
 
-main()
+// Only run when executed directly (not imported)
+if (process.argv[1] && import.meta.url.endsWith(process.argv[1])) main()

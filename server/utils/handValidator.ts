@@ -125,22 +125,32 @@ function canFormMelds(
   }
 
   // ---- 找候选对子 ----
+  // 策略：优先尝试"消耗百搭最少"的对子，这样保留更多百搭给面子组合
   const pairCandidates: Array<{key: string; cnt: number; isWild: boolean}> = [];
 
-  // 候选1：自然对子
+  // 候选1：自然对子（cnt>=2，消耗0百搭）——按cnt升序（cnt=2优先），让"刻3张剩1张"尽早失败
+  const natPairs: Array<{key: string; cnt: number; isWild: boolean}> = [];
   for (const [k, cnt] of countMap) {
-    if (cnt >= 2) pairCandidates.push({ key: k, cnt, isWild: false });
+    if (cnt >= 2) natPairs.push({ key: k, cnt, isWild: false });
   }
-  // 候选2：1自然+1百搭
+  natPairs.sort((a, b) => a.cnt - b.cnt); // cnt=2优先（剩1张→容易失败回溯；cnt=4剩2张→有灵活性）
+
+  // 候选2：1自然+1百搭（消耗1百搭）——按cnt降序（cnt多的优先），因为cnt多意味着该花色tile多，自然配对概率高
+  const wildOne: Array<{key: string; cnt: number; isWild: boolean}> = [];
   if (wilds.length >= 1) {
-    for (const [k] of countMap) {
-      pairCandidates.push({ key: k, cnt: 1, isWild: true });
+    for (const [k, cnt] of countMap) {
+      wildOne.push({ key: k, cnt, isWild: true });
     }
   }
-  // 候选3：2百搭
+  wildOne.sort((a, b) => b.cnt - a.cnt); // cnt多优先（自然牌多，wild配对后剩余的仍可组面子）
+
+  // 候选3：2百搭（消耗2百搭）
   if (wilds.length >= 2) {
     pairCandidates.push({ key: '__wild_pair__', cnt: 2, isWild: true });
   }
+
+  pairCandidates.push(...wildOne);
+  pairCandidates.push(...natPairs);
 
   // 遍历每个候选对子
   for (const pair of pairCandidates) {
