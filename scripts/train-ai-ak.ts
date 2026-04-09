@@ -117,7 +117,7 @@ const DEFAULT_POLICY: BotPolicy = {
   windGeneralKeep: 1.5,
   dragonRedKeep: 3.0, dragonGreenKeep: 3.0, dragonWhiteKeep: 2.5, dragonGeneralKeep: 3.0,
   pairWeight: 4.0, nearWeight: 3.6, tripletKeepBonus: 4.7, terminalPenalty: 1.0,
-  wildKeepPenalty: 1400, wildBailoutThreshold: 3,
+  wildKeepPenalty: 3000, wildBailoutThreshold: 3,  // K哥: 只有极少情况才打百搭，调到最大惩罚
   wild0Aggression: 0.3, wild1Aggression: 0.5, wild2Aggression: 0.7, wild3PlusAggression: 0.9,
   wild1RouteMeldPush: 0.3, wild2RouteMeldPush: 0.6, wild3RouteMeldPush: 0.9,
   wild1RouteFlushBoost: 0.1, wild2RouteFlushBoost: 0.3, wild3RouteFlushBoost: 0.5,
