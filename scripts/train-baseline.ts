@@ -1033,6 +1033,7 @@ interface GameResult {
   dice1: number; dice2: number; diceMultiplier: number
   totalPot: number
   turnSnapshots: TurnSnapshot[]  // 每回合快照（用于单局详细分析）
+  isDraw?: boolean
   // 每个赢家的详细信息
   winnerDetails: Array<{
     name: string; winMode: string; handType: string; baseFan: number; finalPoints: number
@@ -1078,6 +1079,7 @@ function runGameWithFightToLast(policy: BotPolicy): {
 // ========== Game Loop ==========
 function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | null {
   const g = setupGame(akPolicy, otherPolicies)
+  if (!g) return null
   const events: GameEvent[] = []
   const settlementLog: SettlementEntry[] = []
   let turn = 0
@@ -1124,6 +1126,16 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       winner: winnerIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier,
       settlementLog, snapshots, roundNum: turn, wildTile: wildTileStr, wildSuit: g.wildSuit, wildValue: g.wildValue,
       dice1, dice2, diceMultiplier, totalPot, winnerDetails, turnSnapshots
+    }
+  }
+
+  const buildDrawResult = (): GameResult => {
+    const snapshots = recordSnapshots()
+    const totalPot = g.players.reduce((s, p) => s + Math.abs(p.score), 0)
+    return {
+      winner: -1, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier,
+      settlementLog, snapshots, roundNum: turn, wildTile: wildTileStr, wildSuit: g.wildSuit, wildValue: g.wildValue,
+      dice1, dice2, diceMultiplier, totalPot, winnerDetails: [], turnSnapshots, isDraw: true
     }
   }
 
@@ -1217,7 +1229,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     const player = g.players[curr]
     turn = round
     const drawn = drawTile(g, player)
-    if (!drawn) { return null }
+    if (!drawn) return buildDrawResult()
     if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); prevDrawn = drawn; prevDiscard = null as Tile | null; recordTurnSnapshot(curr); continue }
     log(player.name, '摸牌', tileStr(drawn))
     prevDrawn = drawn
@@ -1352,7 +1364,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
             }
           }
           const d = drawTile(g, opp)
-          if (!d) return null
+          if (!d) return buildDrawResult()
           for (const ak of canAnKong(opp)) {
             applyAnKong(opp, ak)
             const extra = drawTile(g, opp)
@@ -1404,7 +1416,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         }
       }
       const d = drawTile(g, nextP)
-      if (!d) return null
+      if (!d) return buildDrawResult()
       for (const ak of canAnKong(nextP)) {
         applyAnKong(nextP, ak)
         const extra = drawTile(g, nextP)
@@ -1432,9 +1444,9 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     g.current = nextPlayer
     recordTurnSnapshot(curr)
     consecutiveDraws++
-    if (consecutiveDraws > MAX_ROUNDS * 4) return null
+    if (consecutiveDraws > MAX_ROUNDS * 4) return buildDrawResult()
   }
-  return null
+  return buildDrawResult()
 }
 
 // ========== Batch Evaluation ==========
@@ -2073,18 +2085,18 @@ function testOneGame() {
 
   console.error('[TEST] 启动单局测试，强制胡牌模式...')
   const result = runGame(policy, [policy, policy, policy])
-  if (!result) {
-    console.error('[TEST] 流局（超时或空牌），AI手牌未能成和')
-    return
-  }
 
   const winnerDetail = result.winnerDetails?.[0]
-  console.error(`[TEST] 结果: ${winnerDetail?.name || result.winner} 通过 ${winnerDetail?.winMode || '?'} 获胜`)
-  console.error(`[TEST] 牌型: ${winnerDetail?.handType || '?'} 番数: ${winnerDetail?.baseFan || 0} 最终得分: ${winnerDetail?.finalPoints || 0}`)
-  console.error(`[TEST] 手牌: ${winnerDetail?.handTiles || '?'}`)
-  console.error(`[TEST] 副露: ${(winnerDetail?.melds || []).join(' | ') || '无'}`)
-  console.error(`[TEST] 花牌: ${(winnerDetail?.flowers || []).join(' ')}`)
-  console.error(`[TEST] 门清: ${winnerDetail?.isMenQing ? '是' : '否'}`)
+  if (result.isDraw) {
+    console.error(`[TEST] 结果: 流局（${result.roundNum}回合）`)
+  } else {
+    console.error(`[TEST] 结果: ${winnerDetail?.name || result.winner} 通过 ${winnerDetail?.winMode || '?'} 获胜`)
+    console.error(`[TEST] 牌型: ${winnerDetail?.handType || '?'} 番数: ${winnerDetail?.baseFan || 0} 最终得分: ${winnerDetail?.finalPoints || 0}`)
+    console.error(`[TEST] 手牌: ${winnerDetail?.handTiles || '?'}`)
+    console.error(`[TEST] 副露: ${(winnerDetail?.melds || []).join(' | ') || '无'}`)
+    console.error(`[TEST] 花牌: ${(winnerDetail?.flowers || []).join(' ')}`)
+    console.error(`[TEST] 门清: ${winnerDetail?.isMenQing ? '是' : '否'}`)
+  }
   console.error(`[TEST] 总回合数: ${result.roundNum}`)
   console.error(`[TEST] 百搭: ${result.wildTile || '无'}`)
 
@@ -2102,16 +2114,18 @@ function testOneGame() {
     console.error('[TEST] 无回合快照（游戏未正常结束）')
   }
 
-  // 同时输出到 round 文件
+  // 同时输出到 round 文件（流局也写）
   const outDir = path.join(__dirname, '..', 'training-output', 'test')
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
   const testReport = buildRoundReport(-1, {
-    totalGames: 1, winGames: 1,
+    totalGames: 1,
+    winGames: result.isDraw ? 0 : 1,
+    drawGames: result.isDraw ? 1 : 0,
     selfDrawGames: winnerDetail?.winMode === '自摸' ? 1 : 0,
     bigWinGames: (winnerDetail?.finalPoints || 0) > 2000 ? 1 : 0,
     menqingWinGames: winnerDetail?.isMenQing ? 1 : 0,
     fightToLastGames: 0, akScore: 0,
-    handTypeDist: { [winnerDetail?.handType || '?']: 1 },
+    handTypeDist: winnerDetail ? { [winnerDetail.handType]: 1 } : {},
     winningGames: [],
     turnSnapshots: result.turnSnapshots,
     scores: Object.fromEntries(result.scores.map((s, i) => [i, s])),
@@ -2120,4 +2134,5 @@ function testOneGame() {
   console.error(`[TEST] 详细报告已写入: ${fname}`)
 }
 
-main()
+testOneGame()
+process.exit(0)
