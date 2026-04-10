@@ -874,7 +874,7 @@ function findTingPaiDiscard(p: BotPlayer, isWT: (t: Tile, p: BotPlayer) => boole
     for (const [suit, value] of ALL) {
       const testTile: Tile = { id: `tp-${suit}-${value}`, suit, value }
       const testHand = [...after, testTile, ...nonFlower.filter(t => isWT(t, p))]
-      const result = canWin(testHand, p.exposedMelds.length, (t: Tile) => isWT(t, p))
+      const result = canWin(testHand, p.exposedMelds.length, p.wildSuit && p.wildValue ? `${p.wildSuit}-${p.wildValue}` : null)
       if (result.canWin) {
         waitingCount++
       }
@@ -907,13 +907,13 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   // 百搭永远不打
   if (nonWild.length === 0 && wilds.length > 0) return wilds[0]
 
-  // 当前回合：墙剩余 → 推算第几回合
-  const myRound = Math.floor((wallIdx / 4) + 0.5)  // 每4张牌≈1回合（每人1张）
-  const isEarly = myRound <= EARLY_ROUNDS
+  // 当前回合：从发牌后(52)开始计数，每4张=1回合
+  const myRound = Math.floor((wallIdx - 52) / 4)
+  const isEarly = myRound < EARLY_ROUNDS
 
   // 阶段1：前N回合 → 纯机械规则（快速搭牌）
   if (isEarly) {
-    return mechanicalDiscard(p, discardPile)
+    return mechanicalDiscard(p, discardPile, myRound)
   }
 
   // 阶段2：N+回合 → shanten优先 + route evaluator tie-break
@@ -942,7 +942,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
 }
 
 /** 机械弃牌规则（K哥：最短门单张→风箭→对子）- 仅用于前N回合快速搭牌 */
-function mechanicalDiscard(p: BotPlayer, discardPile: Tile[] = []): Tile {
+function mechanicalDiscard(p: BotPlayer, discardPile: Tile[] = [], myRound: number = 0): Tile {
   const mHand = p.hand
   const mNonWild = mHand.filter(t => !isWT(t, p))
 
@@ -1148,7 +1148,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       const tilesWithWild = player.hand  // use concealed tiles as-is
       const types = detectHandTypes(tilesWithWild, player.exposedMelds, wsVal)
       // canWin also check to compare
-      const canWinResult = canWin(tilesWithWild, player.exposedMelds, wsVal ? (t => !!(t.suit === g.wildSuit && t.value === g.wildValue)) : () => false)
+      const canWinResult = canWin(tilesWithWild, player.exposedMelds, wsVal)
       const validTypes = types.filter(t => t !== HandType.STANDARD)
       // 诊断
       if (validTypes.length === 0) {
@@ -1169,21 +1169,37 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     }
   }
 
-  // 胡牌检测：K哥铁律过滤STANDARD + 详细诊断
+  // 垃圾胡检测：3n+2 + 数牌≥2门 + 至少一个顺子（不是碰碰胡）
+  const isGarbageHand = (tiles: Tile[], isWildTile: WildTileChecker): boolean => {
+    const nonFlower = tiles.filter(t => !isFlower(t))
+    const nonHonor = nonFlower.filter(t => t.suit === TileSuit.DOTS || t.suit === TileSuit.CHARACTERS || t.suit === TileSuit.BAMBOOS)
+    const suitCount = new Set(nonHonor.map(t => t.suit)).size
+    if (suitCount < 2) return false
+    // 检查是否存在顺子（3张连续同花色）
+    for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+      const vals = nonHonor.filter(t => t.suit === suit).map(t => t.value).sort((a, b) => a - b)
+      const uniqueVals = [...new Set(vals)]
+      for (let i = 0; i < uniqueVals.length - 2; i++) {
+        if (uniqueVals[i + 2] - uniqueVals[i] === 2) {
+          const needed = [uniqueVals[i], uniqueVals[i] + 1, uniqueVals[i] + 2]
+          const wildCount = needed.filter(v => isWildTile({ suit, value: v })).length
+          const naturalCount = needed.filter(v => vals.includes(v)).length
+          if (naturalCount + wildCount >= 3) return true
+        }
+      }
+    }
+    return false
+  }
+
+  // 胡牌检测：修复P1传参 + K哥铁律垃圾胡过滤
   const canWinWithType = (tiles: Tile[], p: BotPlayer, makeWT: (p: BotPlayer) => WildTileChecker, kongCount = 0): boolean => {
-    const win = canWin(tiles, p.exposedMelds.length, makeWT(p), kongCount)
-    if (!win.canWin) {
-      // 诊断：哪些无效手牌在尝试胡
-      const wsVal = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : null
-      // console.error(`[WIN_BLOCKED] ${p.name} concealed=${tiles.length} exposed=${p.exposedMelds.length} kongCount=${kongCount} canWin=${win.canWin} types=[${win.types.join(',')}] ws=${wsVal}`)
-      return false
-    }
-    const validTypes = win.types.filter(t => t !== HandType.STANDARD)
-    if (validTypes.length === 0) {
-      const wsVal = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : null
-      // console.error(`[WIN_BLOCKED_STD] ${p.name} concealed=${tiles.length} exposed=${p.exposedMelds.length} types=[${win.types.join(',')}] ws=${wsVal}`)
-      return false
-    }
+    const isWildTile = makeWT(p)
+    const wildTileId = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : null
+    const win = canWin(tiles, p.exposedMelds, wildTileId)
+    if (!win.canWin) return false
+    const specialTypes = win.types.filter(t => t !== HandType.STANDARD)
+    if (specialTypes.length > 0) return true
+    if (isGarbageHand(tiles, isWildTile)) return false
     return true
   }
 
@@ -2100,14 +2116,23 @@ function testOneGame() {
   console.error(`[TEST] 总回合数: ${result.roundNum}`)
   console.error(`[TEST] 百搭: ${result.wildTile || '无'}`)
 
-  // 打印每回合快照（精简格式）
+  // 打印每回合快照（合并格式：一回合=4人各摸打，展示完整一圈动态+结果）
   if (result.turnSnapshots && result.turnSnapshots.length > 0) {
     console.error('\n========== 每回合明细 ==========')
-    for (const snap of result.turnSnapshots) {
-      const currP = snap.players[snap.currentPlayer]
-      console.error(`\n[回合${snap.turn}] ${currP?.name || 'P' + snap.currentPlayer} 摸了${snap.drawnTile} 打${snap.discardedTile} | 百搭${snap.wildTile} ×${snap.gameMultiplier}`)
-      for (const p of snap.players) {
-        console.error(`  ${p.name}: ${p.hand || '(无闲家手牌)'} 副露:${p.exposed.join('|') || '无'} 剩${p.handCount}张`)
+    // 每4个快照=1完整回合（0=北家,1=下家,2=对家,3=上家）
+    for (let roundStart = 0; roundStart < result.turnSnapshots.length; roundStart += 4) {
+      const snaps = result.turnSnapshots.slice(roundStart, roundStart + 4)
+      if (!snaps.length) break
+      const baseSnap = snaps[0]
+      console.error(`\n===== 【第${Math.floor(roundStart / 4)}回合】百搭${baseSnap.wildTile} ×${baseSnap.gameMultiplier} =====`)
+      // 每人的摸打动态
+      for (const snap of snaps) {
+        const p = snap.players[snap.currentPlayer]
+        console.error(`  ${p?.name || 'P' + snap.currentPlayer}：摸${snap.drawnTile} → 打${snap.discardedTile}`)
+      }
+      // 4家手牌（整理后）
+      for (const p of baseSnap.players) {
+        console.error(`  ${p.name}：${p.hand || '(无)'}｜副露:${p.exposed.join('|') || '无'}｜${p.handCount}张`)
       }
     }
   } else {
