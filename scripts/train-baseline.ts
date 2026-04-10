@@ -2116,24 +2116,37 @@ function testOneGame() {
   console.error(`[TEST] 总回合数: ${result.roundNum}`)
   console.error(`[TEST] 百搭: ${result.wildTile || '无'}`)
 
-  // 打印每回合快照（合并格式：一回合=4人各摸打，展示完整一圈动态+结果）
+  // 打印每回合快照（合并格式：一圈=4人各摸打一次，有吃碰/杠则断开重开）
   if (result.turnSnapshots && result.turnSnapshots.length > 0) {
     console.error('\n========== 每回合明细 ==========')
-    // 每4个快照=1完整回合（0=北家,1=下家,2=对家,3=上家）
-    for (let roundStart = 0; roundStart < result.turnSnapshots.length; roundStart += 4) {
-      const snaps = result.turnSnapshots.slice(roundStart, roundStart + 4)
-      if (!snaps.length) break
-      const baseSnap = snaps[0]
-      console.error(`\n===== 【第${Math.floor(roundStart / 4)}回合】百搭${baseSnap.wildTile} ×${baseSnap.gameMultiplier} =====`)
-      // 每人的摸打动态
-      for (const snap of snaps) {
-        const p = snap.players[snap.currentPlayer]
-        console.error(`  ${p?.name || 'P' + snap.currentPlayer}：摸${snap.drawnTile} → 打${snap.discardedTile}`)
+    let circleCount = 0
+    let prevExposed: string[] = []   // 4家上次的副露字符串（检测吃碰）
+    let circleStart = 0               // 当前圈的第一个快照索引
+    let snapIdx = 0
+    while (snapIdx < result.turnSnapshots.length) {
+      const snap = result.turnSnapshots[snapIdx]
+      const currExposed = snap.players.map(p => p.exposed.join('|'))
+      // 检测吃碰/杠：4家任一副露变化 → 开新圈
+      const hadMeld = prevExposed.length > 0 && currExposed.some((ex, i) => ex !== prevExposed[i])
+      // 新圈条件：(1)首快照 (2)有吃碰 (3)回到起始玩家（完整4人了一圈）
+      const backToStart = snapIdx > 0 && snap.currentPlayer === result.turnSnapshots[circleStart].currentPlayer
+      if (snapIdx === 0 || hadMeld || backToStart) {
+        if (snapIdx > 0 && !backToStart && !hadMeld) {
+          // 正常一圈结束但不足4人（游戏结束），跳过
+        }
+        if (snapIdx > 0) circleCount++
+        circleStart = snapIdx
+        console.error(`\n【第${circleCount}圈】百搭${snap.wildTile}｜×${snap.gameMultiplier}`)
+        // 打印4家手牌（整理后）
+        for (const pp of snap.players) {
+          console.error(`  ${pp.name}：${pp.hand || '(无)'}｜副露:${pp.exposed.join('|') || '无'}｜${pp.handCount}张`)
+        }
       }
-      // 4家手牌（整理后）
-      for (const p of baseSnap.players) {
-        console.error(`  ${p.name}：${p.hand || '(无)'}｜副露:${p.exposed.join('|') || '无'}｜${p.handCount}张`)
-      }
+      // 打印当前人摸打
+      const p = snap.players[snap.currentPlayer]
+      console.error(`  ▶ ${p?.name || 'P' + snap.currentPlayer}：摸${snap.drawnTile} → 打${snap.discardedTile}`)
+      prevExposed = currExposed
+      snapIdx++
     }
   } else {
     console.error('[TEST] 无回合快照（游戏未正常结束）')
