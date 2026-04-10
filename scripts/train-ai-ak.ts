@@ -986,6 +986,78 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     const count = hand.filter(t => tileEq(t, tile)).length
     const sameSuit = hand.filter(t => t.suit === tile.suit && !tileEq(t, tile))
 
+    // ====== 拆门决策层（每回合动态判断各门潜力和最优路线） ======
+    // ---- 1. 各门分析：孤立张 vs 有用牌 ----
+    const suitAnalysis = suits.map((s, suitIdx) => {
+      const suitTiles = hand.filter(t => t.suit === s)
+      const usefulTiles = suitTiles.filter(t => {
+        const tileCount = suitTiles.filter(o => tileEq(o, t)).length
+        if (tileCount >= 3) return true
+        const others = suitTiles.filter(o => !tileEq(o, t))
+        if (others.some(o => o.value === t.value)) return true
+        return others.some(o => Math.abs(o.value - t.value) <= 2)
+      })
+      return { suitIdx, count: suitTiles.length, usefulCount: usefulTiles.length, isolatedCount: suitTiles.length - usefulTiles.length }
+    })
+
+    // ---- 2. 各门排序：最长 / 次短 / 最短 ----
+    const sortedSuits = [...suitAnalysis].sort((a, b) => b.count - a.count)
+    const longestSuit = sortedSuits[0]
+    const secondSuit = sortedSuits[1]
+    const shortestSuit = sortedSuits[sortedSuits.length - 1]
+    const thirdSuit = sortedSuits.length >= 3 ? sortedSuits[2] : null
+
+    // ---- 3. 判断各路线是否可行 ----
+    const canPureFlush = longestSuit.count >= 8 && longestSuit.isolatedCount <= 5
+    const canHalfFlush = longestSuit.count >= 6 && honorCount >= 2
+    const pengHuGroups = pairCount + tripletCount + quadCount * 2
+    const canAllPungs = pengHuGroups >= 4
+    const canAllHonors = honorCount >= 6
+
+    // ---- 4. 选择最优目标路线（按潜力分数量化） ----
+    let targetRoute: 'pure' | 'half' | 'pungs' | 'honors' | 'normal' = 'normal'
+    let targetRouteScore = 0
+    if (canPureFlush) { const s = longestSuit.count * 5 - longestSuit.isolatedCount * 3 + 100; if (s > targetRouteScore) { targetRouteScore = s; targetRoute = 'pure' } }
+    if (canHalfFlush) { const s = longestSuit.count * 4 + honorCount * 3 + (pairCount >= 1 ? 20 : 0) + 80; if (s > targetRouteScore) { targetRouteScore = s; targetRoute = 'half' } }
+    if (canAllPungs) { const s = pengHuGroups * 30 + pairCount * 10 + 60; if (s > targetRouteScore) { targetRouteScore = s; targetRoute = 'pungs' } }
+    if (canAllHonors) { const s = honorCount * 10 + 50; if (s > targetRouteScore) { targetRouteScore = s; targetRoute = 'honors' } }
+
+    // ---- 5. 确定非目标门的惩罚力度 ----
+    const forceDiscardShortest = (targetRoute === 'pure' || targetRoute === 'half')
+    const forceDiscardSecond = (targetRoute === 'pure' || targetRoute === 'half')
+    const forceBreakPairs = (targetRoute === 'pure' || targetRoute === 'half')
+
+    // ---- 6. 各门 index ----
+    const shortestSuitIdx = shortestSuit.suitIdx
+    const secondSuitIdx = secondSuit.suitIdx
+    const thirdSuitIdx = thirdSuit ? thirdSuit.suitIdx : -1
+    const targetSuitIdx = (targetRoute === 'pure' || targetRoute === 'half') ? longestSuit.suitIdx : -1
+
+    // ---- 7. 孤立张判断 ----
+    const isIsolated = sameSuit.every(o => o.value !== tile.value && Math.abs(o.value - tile.value) > 2)
+
+    // ---- 8. 拆门加分（核心） ----
+    const isInTargetSuit = targetSuitIdx >= 0 && tile.suit === suits[targetSuitIdx]
+    const isInShortestSuit = tile.suit === suits[shortestSuitIdx]
+    const isInSecondSuit = tile.suit === suits[secondSuitIdx]
+
+    // 最短门孤立张 → 必须打
+    if (forceDiscardShortest && isInShortestSuit && isIsolated) keepScore -= 50
+    // 次短门孤立张 → 必须打（做一色时）
+    if (forceDiscardSecond && isInSecondSuit && isIsolated) keepScore -= 40
+    // 做一色时，次短门对子也要拆
+    if (forceDiscardSecond && isInSecondSuit && count >= 2 && forceBreakPairs) keepScore -= 35
+    // 做一色时，最短门对子也要拆
+    if (forceDiscardShortest && isInShortestSuit && count >= 2 && forceBreakPairs) keepScore -= 45
+    // 无明确路线时，最短门孤立张也适度惩罚
+    if (targetRoute === 'normal' && isInShortestSuit && isIsolated) keepScore -= 20
+    // 目标门加分（做某门时，该门所有牌都加分）
+    if (isInTargetSuit) keepScore += 15
+    // 非目标门孤立张适度惩罚
+    if (!isInTargetSuit && isIsolated && !isInShortestSuit && !isInSecondSuit) keepScore -= 8
+    // 碰碰胡保留对子
+    if (targetRoute === 'pungs' && count >= 2) keepScore += 10
+
     if (count >= 2) keepScore += policy.pairWeight
     if (count >= 3) keepScore += policy.tripletKeepBonus
     if (count >= 4) keepScore += policy.tripletKeepBonus * 2
