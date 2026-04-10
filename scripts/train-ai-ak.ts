@@ -1057,42 +1057,53 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     // 非目标门孤立张适度惩罚
     if (!isInTargetSuit && isIsolated && !isInShortestSuit && !isInSecondSuit) keepScore -= 8
 
-    // ====== 时序决策层 ======
-    // 每出一次牌计数+1（碰/杠后手牌骤减，计数器会自动重置到低位，阶段判断自然调整）
-    ;(p as any)._discardTurns = ((p as any)._discardTurns ?? 0) + 1
-    const myTurns = (p as any)._discardTurns
-    // 方案B：用手牌数量判断（14张=刚开局，<4张=接近胡牌）
-    const PHASE_LATE = hand.length <= 4
-    // Phase 1（开局前3次出牌）：强制拆散牌，不管任何路线
-    if (myTurns < 3) {
+    // ====== K哥时序决策层（按牌墙剩余数量分段） ======
+    // deckLen - wallIdx = 牌墙剩余张数（约144张开始，摸一张少一张）
+    const wallRemaining = deckLen - wallIdx
+    // Phase 1（≥75张）：机械式弃牌，只管拆散牌，不管路线
+    if (wallRemaining >= 75) {
       if (isInShortestSuit && isIsolated) keepScore -= 80
       if (isInSecondSuit && isIsolated) keepScore -= 50
       if (isInShortestSuit && count >= 2) keepScore -= 30
       if (isInSecondSuit && count >= 2) keepScore -= 15
-    } else if (myTurns < 6 && !PHASE_LATE) {
-      // Phase 1.5（4-6次出牌）：继续拆门，力度减弱
-      if (isInShortestSuit && isIsolated) keepScore -= 50
-      if (isInSecondSuit && isIsolated) keepScore -= 30
-    } else if (!PHASE_LATE) {
-      // Phase 2（6次出牌以后）：检查路线是否有效，无效则强制换方向
-      const hadMelds = (p as any)._prevMelds ?? p.exposedMelds.length
-      const meldsNow = p.exposedMelds.length
-      const handImproved = meldsNow > hadMelds
-      ;(p as any)._prevMelds = meldsNow
-      if (!handImproved && myTurns - ((p as any)._lastMeldTurn ?? myTurns) >= 6) {
-        // 连续6+次出牌无副露增加 → 当前路线失败，强制换方向
-        if (targetRoute === 'pure' || targetRoute === 'half') {
-          if (isInShortestSuit && isIsolated) keepScore -= 40
-          if (isInSecondSuit && isIsolated) keepScore -= 25
-        }
-      }
-      if (handImproved) (p as any)._lastMeldTurn = myTurns
     }
-
-    // Phase 3（≤4张）：精细收口
-    if (PHASE_LATE) {
-      if (count >= 2) keepScore += 20
-      if (count === 1 && isIsolated) keepScore -= 30
+    // Phase 2（50-75张）：抉择方向阶段
+    // 如果还没确定路线（targetRoute=normal），根据现有手牌选一个；否则沿用已有路线
+    else if (wallRemaining >= 50) {
+      if (!(p as any)._chosenRoute) {
+        // 各路线潜力分（复用已有的局部变量）
+        const pureScore = longestSuit.count  // 某门最多有几张
+        const pungsScore = (tripletCount * 3 + pairCount) * 4
+        const honorsScore = honorCount * 5
+        const best = Math.max(pureScore, pungsScore, honorsScore)
+        if (best === pureScore) (p as any)._chosenRoute = 'pure'
+        else if (best === pungsScore) (p as any)._chosenRoute = 'pungs'
+        else (p as any)._chosenRoute = 'honors'
+      }
+      // 继续拆非目标门的散牌
+      const route = (p as any)._chosenRoute
+      if (route === 'pure' && !isInTargetSuit && isIsolated) keepScore -= 30
+      if (route === 'pungs' && count >= 2) keepScore += 5  // 留对子刻子
+      if (route === 'honors' && !isHonor && isIsolated) keepScore -= 30
+    }
+    // Phase 3（<50张）：按路线弃牌，保目标门，弃其他门/孤风箭
+    else {
+      // 碰碰胡路线：留对子刻子，其他全清
+      if (targetRoute === 'pungs') {
+        if (count >= 2) keepScore += 15   // 对/刻子保留
+        if (count === 1) keepScore -= 20  // 单张打出
+      }
+      // 清一色/混一色路线：留目标门，其他全清
+      else if (targetRoute === 'pure' || targetRoute === 'half') {
+        if (!isInTargetSuit && isIsolated) keepScore -= 30
+        if (count >= 2 && !isInTargetSuit) keepScore -= 15  // 非目标门对子也拆
+      }
+      // 风一色路线：留风牌，其他清
+      else if (targetRoute === 'honors') {
+        const isHonor = t.suit === TileSuit.WIND || t.suit === TileSuit.DRAGON
+        if (!isHonor && isIsolated) keepScore -= 30
+        if (!isHonor && count >= 2) keepScore -= 15
+      }
     }
 
     // ====== 原有评分逻辑保留 ======
