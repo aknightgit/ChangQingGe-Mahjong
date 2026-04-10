@@ -405,11 +405,6 @@ function detectTypes(
     else if (windSuits.includes(s) || s === TileSuit.DRAGON) windCount++;
   }
 
-  // ---- 检测是否"禁止的普通胡" ----
-  // K哥铁律：多门(>=2门) + 有顺子(非全刻子) = 禁止的普通胡
-  // 条件：numSuitCount>=2 且 不是ALL_TRIPLETS（=有顺子）
-  const isForbiddenOrdinary = numSuitCount >= 2 && !types.includes(HandType.ALL_TRIPLETS);
-
   const isFullFlushHand = numSuitCount === 1 && windCount === 0;
   const isHalfFlushHand = numSuitCount === 1 && windCount >= 1;
 
@@ -429,9 +424,9 @@ function detectTypes(
   // 大吊：不做为胡牌前置判断，只在算分阶段检测（见calcScore）
   // 大吊 = 手牌剩1张时自摸或捉冲，胡牌判断按正常牌型走
 
-  // 基础胡牌：满足3n+2格式但没有特殊牌型，且不是"禁止的普通胡"
-  // 禁止的普通胡 = 多门(>=2门) + 含顺子（= 非全刻子）→ 直接过滤，不加入STANDARD
-  if (types.length === 0 && satisfiesFormat && !isForbiddenOrdinary) {
+  // 基础胡牌：满足 3n+2 格式且没有更高优先级特殊牌型时，视为 STANDARD
+  // 修复：此前把“多门 + 顺子”的标准胡错误过滤，导致合法 14 张 3n+2 手牌返回 []
+  if (types.length === 0 && satisfiesFormat) {
     types.push(HandType.STANDARD);
   }
 
@@ -697,12 +692,11 @@ export function canWin(
     return { canWin: true, types: [HandType.ALL_WIND] };
   }
 
-  // 第二层：标准3n+2 — K哥铁律：没有"普通胡/基础胡"！
+  // 第二层：标准 3n+2 / 特殊牌型检测
   const types = wildTileId
     ? findBestAssignment(concealed, exposed, wildTileId)
     : detectTypes(concealed, exposed);
 
-  // K哥规则：过滤掉STANDARD（只有特殊牌型才能胡）
   const validTypes = types;
   if (types.length === 0) {
   } else {
