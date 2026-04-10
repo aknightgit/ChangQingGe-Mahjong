@@ -1894,8 +1894,9 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
       const chowDiscard = aiDiscard(nextP, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, nextPlayer, round * 4 + nextPlayer)
       nextP.hand = nextP.hand.filter(t => t.id !== chowDiscard.id)
       g.discardPile.push(chowDiscard)
+      meldTaken = true
       g.current = (nextPlayer + 1) % 4  // K哥铁律：吃后下家摸牌，不是吃家继续
-      continue
+      break  // 吃后退出循环，防止其他家继续碰/杠
     }
 
     g.current = nextPlayer
