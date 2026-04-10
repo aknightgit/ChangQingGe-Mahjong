@@ -941,64 +941,108 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   return bestTile
 }
 
-/** 机械弃牌规则（K哥：最短门单张→风箭→对子）- 仅用于前N回合快速搭牌 */
+/**
+ * 机械弃牌规则 v2（K哥铁律）
+ * 默认方向：混一色/清一色（保最长门）
+ * 例外：对子多→碰碰胡，风向多→风一色
+ */
 function mechanicalDiscard(p: BotPlayer, discardPile: Tile[] = [], myRound: number = 0): Tile {
   const mHand = p.hand
   const mNonWild = mHand.filter(t => !isWT(t, p))
 
-  // 花色统计
+  // ── 1. 统计 ──
+  const mainSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
   const suitTiles: Record<string, Tile[]> = {}
   for (const t of mNonWild) {
     if (!suitTiles[t.suit]) suitTiles[t.suit] = []
     suitTiles[t.suit].push(t)
   }
-  const mainSuitList = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
-  const suitCounts = mainSuitList.map(s => suitTiles[s]?.length || 0)
-  const minSuitIdx = suitCounts.indexOf(Math.min(...suitCounts.filter(c => c > 0)))
+  const suitCounts = mainSuits.map(s => suitTiles[s]?.length || 0)
+  const maxCount = Math.max(...suitCounts)
+  const maxSuit = mainSuits[suitCounts.indexOf(maxCount)]
+  const secondCount = [...suitCounts].sort((a, b) => b - a)[1] || 0
 
-  // 弃牌区计数
-  const discardCount: Record<string, number> = {}
-  for (const t of discardPile) {
-    discardCount[`${t.suit}-${t.value}`] = (discardCount[`${t.suit}-${t.value}`] || 0) + 1
+  // 统计对子数（碰碰胡方向判断）
+  const pairCount = mainSuits.reduce((cnt, s) => {
+    const group = suitTiles[s] || []
+    const vals = group.map(t => t.value)
+    const valCount = new Map<number, number>()
+    for (const v of vals) valCount.set(v, (valCount.get(v) || 0) + 1)
+    return cnt + [...valCount.values()].filter(c => c >= 2).length
+  }, 0)
+
+  // 统计风向牌数（风一色方向判断）
+  const honorCount = mNonWild.filter(t => isHonor(t)).length
+
+  // ── 2. 确定方向 ──
+  let direction: 'flush' | 'half_flush' | 'all_triplets' | 'all_wind' = 'flush'
+  if (honorCount >= 5 && maxCount < 4) {
+    direction = 'all_wind'   // 风向多 → 风一色
+  } else if (pairCount >= 3 && maxCount < 5) {
+    direction = 'all_triplets' // 对子多(≥3) → 碰碰胡
+  } else if (maxCount >= 7) {
+    direction = 'flush'       // 长门≥7张 → 冲清一色
+  } else {
+    direction = 'half_flush'  // 默认混一色
   }
 
-  // 评分：弃牌价值（越低越应该打）
-  type DiscardCandidate = { tile: Tile, score: number }
-  const candidates: DiscardCandidate[] = []
-  const suitNames = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
+  // ── 3. 弃牌区已现数 ──
+  const discardCount: Record<string, number> = {}
+  for (const t of discardPile) discardCount[`${t.suit}-${t.value}`] = (discardCount[`${t.suit}-${t.value}`] || 0) + 1
+
+  // ── 4. 评分弃牌 ──
+  type Cand = { tile: Tile; score: number }
+  const candidates: Cand[] = []
 
   for (const t of mNonWild) {
-    let score = 50 // 基础分
+    let score = 0
 
-    // 风向箭牌：已出现 >2 → 优先打
-    if (isHonor(t)) {
-      const appeared = discardCount[`${t.suit}-${t.value}`] || 0
-      score -= appeared >= 3 ? 30 : appeared >= 2 ? 20 : appeared >= 1 ? 10 : -5
+    if (direction === 'all_wind') {
+      // 风一色：打数牌，留风向
+      if (mainSuits.includes(t.suit)) {
+        score = 80  // 打数牌（无害）
+      } else {
+        score = -200 // 留风向，极高优先
+      }
+    } else if (direction === 'all_triplets') {
+      // 碰碰胡：打分牌，留对子/刻子
+      const group = suitTiles[t.suit] || []
+      const sameVal = group.filter(o => o.value === t.value)
+      if (sameVal.length >= 3) {
+        score = 100  // 刻子/杠 ← 留
+      } else if (sameVal.length === 2) {
+        score = 50   // 对子 ← 留
+      } else {
+        score = -50  // 单张 ← 优先打
+      }
+    } else {
+      // 混一色/清一色：K哥铁律 — 绝对不能打最长门的牌！
+      const fromLongest = t.suit === maxSuit
+      if (fromLongest) {
+        // 打最长门 → 极重惩罚（即使是有相邻的牌）
+        // 唯一例外：1/9孤张（无相邻且本门张数少到无法成顺子）
+        const vals = (suitTiles[maxSuit] || []).map(o => o.value)
+        const adjacentVals = vals.filter(v => Math.abs(v - t.value) <= 2 && v !== t.value)
+        const isEdgeAndLonely = (t.value === 1 || t.value === 9) && adjacentVals.length === 0
+        score = isEdgeAndLonely ? 5 : -999  // -999 = 绝对不打
+      } else {
+        // 非最长门的牌 → 可以打
+        if (isHonor(t)) {
+          // 风向箭牌：已现≥2 → 优先打
+          const appeared = discardCount[`${t.suit}-${t.value}`] || 0
+          score = appeared >= 2 ? 70 : 40
+        } else {
+          // 打短门（筒/条/万里非最长门的）
+          score = 30
+          // 幺九加分（容易成废牌）
+          if (t.value === 1 || t.value === 9) score += 20
+        }
+      }
     }
-
-    // 单张（同花色无相邻）
-    const suitGroup = suitTiles[t.suit] || []
-    const isSingle = !suitGroup.some(o => o.id !== t.id && (o.value === t.value - 1 || o.value === t.value + 1))
-    if (isSingle && !isHonor(t)) score -= 15
-
-    // 最短门单张 → 优先打
-    if (t.suit === suitNames[minSuitIdx] && isSingle) {
-      const appeared = discardCount[`${t.suit}-${t.value}`] || 0
-      score -= appeared >= 2 ? 25 : appeared >= 1 ? 15 : 5
-    }
-
-    // 最短门对子 → 第4优先
-    if (t.suit === suitNames[minSuitIdx] && !isSingle) {
-      score -= 5
-    }
-
-    // 幺九牌 → 加分打
-    if (t.value === 1 || t.value === 9) score -= 8
 
     candidates.push({ tile: t, score })
   }
 
-  // 按评分排序，选最低分的打
   candidates.sort((a, b) => a.score - b.score)
   return candidates[0].tile
 }
