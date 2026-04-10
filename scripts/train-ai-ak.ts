@@ -1057,63 +1057,42 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     // 非目标门孤立张适度惩罚
     if (!isInTargetSuit && isIsolated && !isInShortestSuit && !isInSecondSuit) keepScore -= 8
 
-    // ====== 时序决策层：开局/中期/接近胡牌的不同策略 ======
-    // turnNumber = round*4+curr，当前局内玩家已进行的手牌轮数约
-    // Phase 1（开局0-20）：强制执行最短门孤立张必打，不管任何路线
-    // Phase 2（中期20-50）：评估当前路线是否有效，无效则强制换方向
-    // Phase 3（接近胡牌≤4张）：精细收口，保留听牌面最宽的出法
-    const PHASE_EARLY = turnNumber < 20
-    const PHASE_EARLY_STRICT = turnNumber < 10
+    // ====== 时序决策层 ======
+    // 每出一次牌计数+1（碰/杠后手牌骤减，计数器会自动重置到低位，阶段判断自然调整）
+    ;(p as any)._discardTurns = ((p as any)._discardTurns ?? 0) + 1
+    const myTurns = (p as any)._discardTurns
+    // 方案B：用手牌数量判断（14张=刚开局，<4张=接近胡牌）
     const PHASE_LATE = hand.length <= 4
-
-    // Phase 1 强制：开局（前10轮）不管路线，先把最短门孤立张打干净
-    if (PHASE_EARLY_STRICT) {
-      if (isInShortestSuit && isIsolated) keepScore -= 80   // 最短门孤立张 → 必须打
-      if (isInSecondSuit && isIsolated) keepScore -= 50   // 次短门孤立张 → 强烈倾向打
-      if (isInShortestSuit && count >= 2) keepScore -= 30 // 最短门对子也要拆（开局不养牌）
-      if (isInSecondSuit && count >= 2) keepScore -= 15   // 次短门对子也可以拆
-    } else if (PHASE_EARLY) {
-      // 早期（10-20轮）：继续执行拆门，但力度减弱
+    // Phase 1（开局前3次出牌）：强制拆散牌，不管任何路线
+    if (myTurns < 3) {
+      if (isInShortestSuit && isIsolated) keepScore -= 80
+      if (isInSecondSuit && isIsolated) keepScore -= 50
+      if (isInShortestSuit && count >= 2) keepScore -= 30
+      if (isInSecondSuit && count >= 2) keepScore -= 15
+    } else if (myTurns < 6 && !PHASE_LATE) {
+      // Phase 1.5（4-6次出牌）：继续拆门，力度减弱
       if (isInShortestSuit && isIsolated) keepScore -= 50
       if (isInSecondSuit && isIsolated) keepScore -= 30
-    }
-
-    // Phase 2 中期（20-40）：检查路线是否有效
-    // 有效 = 自上次评估以来，visibleMelds增加了，或者手牌质量提升了
-    // 无效 = 多轮无变化 → 强制切换路线
-    if (turnNumber >= 20 && turnNumber <= 50) {
-      // 检查手牌有没有形成刻子/顺子（副露是否增加）
-      const hadMeldsBefore = (p as any)._prevMelds ?? p.exposedMelds.length
+    } else if (!PHASE_LATE) {
+      // Phase 2（6次出牌以后）：检查路线是否有效，无效则强制换方向
+      const hadMelds = (p as any)._prevMelds ?? p.exposedMelds.length
       const meldsNow = p.exposedMelds.length
-      const handImproved = meldsNow > hadMeldsBefore
+      const handImproved = meldsNow > hadMelds
       ;(p as any)._prevMelds = meldsNow
-
-      if (!handImproved && turnNumber - ((p as any)._lastMeldTurn ?? turnNumber) >= 8) {
-        // 连续8+轮没有副露增加 → 当前路线失败，强制换方向
-        // 清一色/混一色失败 → 改碰碰胡或风一色
+      if (!handImproved && myTurns - ((p as any)._lastMeldTurn ?? myTurns) >= 6) {
+        // 连续6+次出牌无副露增加 → 当前路线失败，强制换方向
         if (targetRoute === 'pure' || targetRoute === 'half') {
-          // 换不成清/混一色 → 全面打孤张，不考虑路线
           if (isInShortestSuit && isIsolated) keepScore -= 40
           if (isInSecondSuit && isIsolated) keepScore -= 25
         }
       }
-      if (handImproved) {
-        ;(p as any)._lastMeldTurn = turnNumber  // 记录上次有进展的轮
-      }
+      if (handImproved) (p as any)._lastMeldTurn = myTurns
     }
 
-    // Phase 3 接近胡牌（≤4张手牌）：精细收口
-    // 目标：保留听牌面最宽的牌
+    // Phase 3（≤4张）：精细收口
     if (PHASE_LATE) {
-      // 如果这张牌打出后还剩3张，那3张里有没有可能胡？
-      // 简化：到了4张阶段，只要是对子/刻子就保留，不管其他
-      if (count >= 2) {
-        keepScore += 20  // 对子/刻子强保留
-      }
-      // 单张（既不是对子也不是刻子）→ 几乎必打
-      if (count === 1 && isIsolated) {
-        keepScore -= 30
-      }
+      if (count >= 2) keepScore += 20
+      if (count === 1 && isIsolated) keepScore -= 30
     }
 
     // ====== 原有评分逻辑保留 ======
