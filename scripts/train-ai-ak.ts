@@ -1100,15 +1100,15 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
         if (count >= 2) keepScore += 15   // 对/刻子保留
         if (count === 1 && isIsolated) keepScore -= 25  // 孤立单张打出
       }
-      else if (targetRoute === 'pungs') {
+      else if ((p as any)._chosenRoute === 'pungs') {
         if (count >= 2) keepScore += 15
         if (count === 1) keepScore -= 20
       }
-      else if (targetRoute === 'pure' || targetRoute === 'half') {
+      else if ((p as any)._chosenRoute === 'pure' || (p as any)._chosenRoute === 'half') {
         if (!isInTargetSuit && isIsolated) keepScore -= 30
         if (count >= 2 && !isInTargetSuit) keepScore -= 15
       }
-      else if (targetRoute === 'honors') {
+      else if ((p as any)._chosenRoute === 'honors') {
         if (!isHonor && isIsolated) keepScore -= 30
         if (!isHonor && count >= 2) keepScore -= 15
       }
