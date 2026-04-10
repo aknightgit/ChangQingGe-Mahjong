@@ -1089,8 +1089,13 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     }
     // Phase 3（≥6次出牌 OR 牌墙<50张）：按路线弃牌
     else {
-      // 精细收口条件：手牌≤7张 OR 牌墙≤30张（门清13张不减少时用牌墙判断）
+      // 精细收口条件（满足任一即触发）：
+      // 1. 手牌≤7张（大量拆牌后，接近听牌）
+      // 2. 牌墙≤30张（全局进度接近尾局）
+      // 3. 某数字门≥9张（这门很强，越多越需要精细化）
+      // 4. 某数字门+百搭≥10张（百搭大幅提升该门潜力）
       const NEAR_WIN = hand.length <= 7 || wallRemaining <= 30
+        || longestSuit.count >= 9 || (longestSuit.count + wildCount) >= 10
       if (NEAR_WIN) {
         if (count >= 2) keepScore += 15   // 对/刻子保留
         if (count === 1 && isIsolated) keepScore -= 25  // 孤立单张打出
