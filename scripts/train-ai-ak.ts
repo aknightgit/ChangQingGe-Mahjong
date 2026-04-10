@@ -1088,8 +1088,16 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     }
     // Phase 3（<50张）：按路线弃牌，保目标门，弃其他门/孤风箭
     else {
+      // 接近听/胡牌（差1-3张就胡）→ 精细收口，不管路线
+      // 判断：手牌≤7张（已过大量拆牌期）或者全局牌墙≤30张
+      const NEAR_WIN = hand.length <= 7 || wallRemaining <= 30
+      if (NEAR_WIN) {
+        // 精细收口：保留对子/刻子，打出单张孤立牌
+        if (count >= 2) keepScore += 15   // 对/刻子保留
+        if (count === 1 && isIsolated) keepScore -= 25  // 孤立单张打出
+      }
       // 碰碰胡路线：留对子刻子，其他全清
-      if (targetRoute === 'pungs') {
+      else if (targetRoute === 'pungs') {
         if (count >= 2) keepScore += 15   // 对/刻子保留
         if (count === 1) keepScore -= 20  // 单张打出
       }
