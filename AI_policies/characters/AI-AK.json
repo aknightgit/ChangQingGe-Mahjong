@@ -27,7 +27,7 @@
     "pengWildBoost": 0.06282849518815241,
     "kongWildBoost": 0.17074969758870698,
     "chowWildPenalty": 0.22,
-    "menqingKeepBonus": 2.8,
+    "menqingKeepBonus": 0,
     "meldPenalty": 0.025679867261555692,
     "allPungsPursuit": 0.52,
     "pureFlushPursuit": 0.39155902112680335,
