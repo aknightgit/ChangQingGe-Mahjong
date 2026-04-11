@@ -30,6 +30,7 @@ const __dirname = path.dirname(__filename)
 const ROUNDS = parseInt(process.argv[2] || '10')
 const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000')
 const BASELINE_MODE = process.argv[4] === '--baseline'  // 基线训练：优化指标而非得分
+const DETAIL_MODE = process.argv.includes('--detail')  // 每圈明细开关，默认关闭
 const SETTLEMENT_MULT = 10
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
 const OUT_DIR = path.resolve(__dirname, '..', 'training-output')
@@ -2428,11 +2429,17 @@ function main() {
     logLines.push(...roundLines)
 
     // 每轮单独输出文件（使用标准化reporter）
-    if (bestEvalResult) {
+    if (DETAIL_MODE && bestEvalResult) {
       const report = buildRoundReport(round, bestEvalResult, roundBestPolicy as any, AI_NAMES)
       roundReports.push(report)
-      const filename = writeRoundFile(OUT_DIR, report)
+      const filename = writeRoundFile(OUT_DIR, report, true)  // showDetail=true
       console.log(`  → 轮次详情已保存: ${filename}`)
+    } else if (!DETAIL_MODE) {
+      // 依然构建 report（用于汇总），但不写 round 文件
+      if (bestEvalResult) {
+        const report = buildRoundReport(round, bestEvalResult, roundBestPolicy as any, AI_NAMES)
+        roundReports.push(report)
+      }
     }
   }  // End round loop
 

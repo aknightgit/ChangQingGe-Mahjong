@@ -111,7 +111,7 @@ function checkTarget(actual: number, target: string, lowBetter = false): string 
 
 // ========== 模板（严格按 training-output-template.md） ==========
 
-export function formatRoundReport(report: RoundReport): string {
+export function formatRoundReport(report: RoundReport, showDetail = true): string {
   const lines: string[] = []
   const { round, timestamp, metrics, policy, playerStats, topWins, topLosses, worstLossGames, multiWinDist, allWinningGames } = report
   const ts = formatTimestamp(timestamp)
@@ -326,8 +326,8 @@ export function formatRoundReport(report: RoundReport): string {
   lines.push(`- 高倍数局数(骰子>=2): —`)
   lines.push('')
 
-  // ===== 每圈详细快照（--detail 时有数据才输出） =====
-  if (report.turnSnapshots && report.turnSnapshots.length > 0) {
+  // ===== 每圈详细快照（showDetail 时有数据才输出） =====
+  if (showDetail && report.turnSnapshots && report.turnSnapshots.length > 0) {
     lines.push('### 🔍 每圈明细（血战到底）')
     lines.push('')
     const snaps = report.turnSnapshots
@@ -453,12 +453,12 @@ export function buildRoundReport(
 
 // ========== 写入文件 ==========
 
-export function writeRoundFile(outDir: string, report: RoundReport): string {
+export function writeRoundFile(outDir: string, report: RoundReport, showDetail = true): string {
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
   const ts = report.timestamp.replace(/[:.]/g, '-').slice(0, 19)
   const filename = `round-${String(report.round).padStart(3, '0')}-${ts}.md`
   const filePath = path.join(outDir, filename)
-  fs.writeFileSync(filePath, formatRoundReport(report), 'utf-8')
+  fs.writeFileSync(filePath, formatRoundReport(report, showDetail), 'utf-8')
   return filename
 }
 

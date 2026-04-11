@@ -1996,7 +1996,7 @@ async function main() {
       await saveRoundToMariaDB(round, bestEvalResult, roundBestPolicy)
       // 标准化轮次文件（training-reporter 统一格式）
       const report = buildRoundReport(round, bestEvalResult, roundBestPolicy, AI_NAMES)
-      const filename = writeRoundFile(OUT_DIR, report)
+      const filename = writeRoundFile(OUT_DIR, report, DETAIL_MODE)
       console.log(`  → 轮次详情已保存: ${filename}`)
     }
   }
