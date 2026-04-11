@@ -1101,8 +1101,12 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       // 完整手牌 = 手牌 + 所有面子里的牌
       const fullHandTiles = [...p.hand, ...p.exposedMelds.flatMap(m => m.tiles)]
       const wildTileName = (g.wildSuit && g.wildValue) ? tileStr({suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭'
+      const handWithWildMark = fullHandTiles.map(t => {
+        const base = tileStr(t)
+        return (g.wildSuit && g.wildValue && t.suit === g.wildSuit && t.value === g.wildValue) ? base + '*' : base
+      }).join(' ')
       return {
-        name: p.name, hand: fullHandTiles.map(t => tileStr(t)).join(' '),
+        name: p.name, hand: handWithWildMark,
         melds: p.exposedMelds.map(m => `${m.type===MeldType.TRIPLET?'碰':m.type===MeldType.SEQUENCE?'吃':m.type===MeldType.KONG?'杠':'?'}:${m.tiles.map(t=>tileStr(t)).join(' ')}`),
         flowers: p.flowerTiles.map(t => tileStr(t)),
         meldSources: [...p.meldSources],
@@ -1986,7 +1990,6 @@ async function main() {
     logLines.push(...roundLines)
 
     if (bestEvalResult) {
-      logLines.push('', formatRoundMarkdown(round, bestEvalResult, roundBestPolicy), '')
       // 每轮结束立刻写入文件，方便实时跟踪进度
       fs.writeFileSync(mdFile, logLines.join('\n'), 'utf-8')
       // MariaDB 备份
