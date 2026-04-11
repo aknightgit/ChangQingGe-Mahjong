@@ -1008,7 +1008,8 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
       const suitTiles = hand.filter(t => t.suit === s)
       const usefulTiles = suitTiles.filter(t => {
         const tileCount = suitTiles.filter(o => tileEq(o, t)).length
-        if (tileCount >= 3) return true
+        if (tileCount >= 3) return true   // 刻子（碰/杠）
+        if (tileCount === 2) return true   // 对子（进张可碰/可碰）← 修复：漏算对子
         const others = suitTiles.filter(o => !tileEq(o, t))
         if (others.some(o => o.value === t.value)) return true
         return others.some(o => Math.abs(o.value - t.value) <= 2)
@@ -1024,7 +1025,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     const thirdSuit = sortedSuits.length >= 3 ? sortedSuits[2] : null
 
     // ---- 3. 判断各路线是否可行 ----
-    const canPureFlush = longestSuit.count >= 8 && longestSuit.isolatedCount <= 5
+    const canPureFlush = longestSuit.count >= 7 && longestSuit.isolatedCount <= 6
     const canHalfFlush = longestSuit.count >= 6 && honorCount >= 2
     const pengHuGroups = pairCount + tripletCount + quadCount * 2
     const canAllPungs = pengHuGroups >= 4
