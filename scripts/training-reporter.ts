@@ -47,6 +47,7 @@ export interface WinningGameRecord {
   roundNum: number
   wonFan?: number
   winHandType?: string
+  isMenQing?: boolean
   result: any
 }
 
@@ -114,6 +115,55 @@ function wildTileToName(wildTile: string): string {
   const suitMap: Record<string, string> = { wan: '万', bamboo: '筒', dot: '筒', wind: '风', dragon: '字' }
   const numPart = NUM_CN[value] || value
   return `${numPart}${suitMap[suitPart] || suitPart}`
+}
+
+/** 把单张牌名解析为 { suit, value, isWild } */
+function parseTileName(name: string): { suit: string; value: number; isWild: boolean } {
+  const isWild = name.endsWith('*')
+  const tile = isWild ? name.slice(0, -1) : name
+  // tile格式: "二万", "五筒", "八条", "东风", "红中", "梅花"
+  const suitMap: Record<string, string> = { '万': 'wan', '筒': 'bam', '条': 'str', '风': 'wind', '字': 'drg', '花': 'flw' }
+  const numMap: Record<string, number> = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '东': 1, '南': 2, '西': 3, '北': 4, '中': 1, '发': 2, '白': 3 }
+  const suitChar = tile.slice(-1)
+  const suit = suitMap[suitChar] || suitChar
+  const valueStr = tile.slice(0, -1)
+  const value = numMap[valueStr] || parseInt(valueStr) || 0
+  return { suit, value, isWild }
+}
+
+/**
+ * 把原始手牌字符串格式化为分组字符串（相同花色数字的牌归在一起）
+ * 示例: "二万 五万 九条 五万 二条 二条 四筒* 八条 八条 五万"
+ * → "五万五万五万 二条二条二条 九条九条 四筒* 八条八条"
+ */
+function formatGroupedHand(handStr: string): string {
+  if (!handStr) return '(空)'
+  const tiles = handStr.split(' ').filter(t => t.length > 0)
+  // 按花色+数值分组
+  const groups: Record<string, string[]> = {}
+  for (const tile of tiles) {
+    const { suit, value, isWild } = parseTileName(tile)
+    const key = `${suit}-${value}`
+    if (!groups[key]) groups[key] = []
+    groups[key].push(tile)
+  }
+  // 按固定顺序排列：万 > 筒 > 条 > 风 > 字 > 花
+  const suitOrder = ['wan', 'bam', 'str', 'wind', 'drg', 'flw']
+  const sortedKeys = Object.keys(groups).sort((a, b) => {
+    const [suitA, valA] = a.split('-'), [suitB, valB] = b.split('-')
+    const idxA = suitOrder.indexOf(suitA), idxB = suitOrder.indexOf(suitB)
+    if (idxA !== idxB) return idxA - idxB
+    return parseInt(valA) - parseInt(valB)
+  })
+  return sortedKeys.map(key => groups[key].join('')).join(' ')
+}
+
+/** 格式化副露字符串 */
+function formatMelds(meldStr: string | string[] | undefined): string {
+  if (!meldStr) return '(无副露)'
+  const melds = Array.isArray(meldStr) ? meldStr : [meldStr]
+  if (melds.length === 0 || melds.every(m => !m)) return '(无副露)'
+  return melds.filter(m => m).join(' ')
 }
 
 function formatTimestamp(ts: string): string {
@@ -253,7 +303,11 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
         lines.push(`**局次${w.gameIdx}**（${w.isSelfDraw ? '自摸' : '放冲'} · ×${w.multiplier || '?'}）`)
         lastGameIdx = w.gameIdx
       }
-      lines.push(`  - ${w.winnerName || '未知玩家'}: ${w.handTypes?.join(', ') || '—'} · ${w.hand || '(空)'} · ${Array.isArray(w.melds) ? w.melds.join('; ') : w.melds || '(无副露)'} ${w.wonFan ? `→ ${w.wonFan}点` : ''}`)
+      const menqingTag = (w.isMenQing !== false && (!w.melds || (Array.isArray(w.melds) ? w.melds.length === 0 : String(w.melds).trim() === ''))) ? '[门清] ' : ''
+      const handTypesStr = w.handTypes?.join(', ') || '—'
+      const groupedHand = formatGroupedHand(w.hand)
+      const meldsStr = formatMelds(w.melds)
+      lines.push(`  - ${w.winnerName || '未知玩家'}: ${menqingTag}${handTypesStr} · ${groupedHand} · ${meldsStr} ${w.wonFan ? `→ ${w.wonFan}点` : ''}`)
     }
     lines.push('')
   }

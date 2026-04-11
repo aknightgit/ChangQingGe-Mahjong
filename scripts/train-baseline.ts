@@ -1768,6 +1768,7 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
         roundNum: bloodResult.totalSubGames,
         wonFan: w.wonFan,
         winHandType: w.winHandType,
+        isMenQing: (w.snapshot?.melds || []).length === 0,
         result: { winner: w.idx, snapshots: [w.snapshot], multiplier: 1, scores: [0,0,0,0] }
       })
     }

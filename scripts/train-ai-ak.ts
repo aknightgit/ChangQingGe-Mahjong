@@ -1392,7 +1392,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
 interface GameEvent { turn: number; player: string; action: string; detail: string }
 interface SettlementEntry { from: string; to: string; amount: number; reason: string; mult?: number }
 interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers: string[]; meldSources: number[]; wildCount: number; wildTile: string; wonFan?: number; winHandType?: string; status: string }
-interface WinnerInfo { playerIndex: number; name: string; hand: string; melds: string[]; flowers: string[]; isSelfDraw: boolean; wonFan: number; winHandType: string; roundNum: number; wildTile: string; wildTileValue?: number }
+interface WinnerInfo { playerIndex: number; name: string; hand: string; melds: string[]; flowers: string[]; isSelfDraw: boolean; wonFan: number; winHandType: string; roundNum: number; wildTile: string; wildTileValue?: number; isMenQing: boolean }
 
 interface TurnSnapshot {
   turn: number
@@ -1587,7 +1587,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
       melds: meldStrs,
       flowers: p.flowerTiles.map(t => tileStr(t)),
       isSelfDraw, wonFan, winHandType: p.winHandType || '', roundNum,
-      wildTile: wildTiles.length > 0 ? tileStr({suit: wildSuit, value: wildVal, id: '' }) : '(无百搭)', wildTileValue: wildVal ?? 0
+      wildTile: wildTiles.length > 0 ? tileStr({suit: wildSuit, value: wildVal, id: '' }) : '(无百搭)', wildTileValue: wildVal ?? 0,
+      isMenQing: p.exposedMelds.length === 0,
     })
   }
   // 快照：只记录字符串化数据，避免引用悬浮
@@ -2223,7 +2224,8 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
             multiplier: result.multiplier, roundNum: w.roundNum,
             akDelta: winnerScore * SETTLEMENT_MULT, result,
             wonFan: w.wonFan, winHandType: w.winHandType,
-            wildTile: w.wildTile, wildTileValue: w.wildTileValue
+            wildTile: w.wildTile, wildTileValue: w.wildTileValue,
+            isMenQing: w.isMenQing,
           })
         }
       }
