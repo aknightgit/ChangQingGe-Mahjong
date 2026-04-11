@@ -1,0 +1,21 @@
+{
+  "round": 7,
+  "totalGames": 500,
+  "wins": 43,
+  "draws": 457,
+  "winRate": "8.6%",
+  "winTypes": {
+    "all_triplets": 35,
+    "hun_peng": 2,
+    "half_flush": 7,
+    "full_flush": 4,
+    "qing_peng": 1
+  },
+  "playerWins": {
+    "AI-阿水": 18,
+    "AI-AK": 11,
+    "AI-小胖": 8,
+    "AI-老赵": 6
+  },
+  "timestamp": "2026-04-04T12:05:53.888Z"
+}

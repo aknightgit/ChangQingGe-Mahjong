@@ -1,0 +1,37 @@
+{
+  "metrics": {
+    "fitness": 11000,
+    "huRate": 0.195,
+    "drawRate": 0.251,
+    "totalGames": 5,
+    "note": "AI-AK iterative training - 1x5"
+  },
+  "policy": {
+    "id": "AI-AK",
+    "selfWinChance": 0.7858092172743146,
+    "discardHuChance": 0.8115934361077879,
+    "selfWinWildBoost": 0.1208112420313466,
+    "discardHuWildPenalty": 0.3983208547792693,
+    "discardHuMenQingPenalty": 0.1428287165987719,
+    "pengChance": 0.7879843399876654,
+    "kongChance": 0.4668986793344297,
+    "chowChance": 0.03251253050429123,
+    "pengWildBoost": 0.06282849518815241,
+    "kongWildBoost": 0.1421905200074164,
+    "chowWildPenalty": 0.18034095942711378,
+    "bailoutBuildWildBoost": 0.23414001285839295,
+    "bailoutHuPenaltyPerMeld": 0.03609835708724171,
+    "honorRushThreshold": 3.938432939142619,
+    "honorRushBoost": 0.47248580736293005,
+    "pairWeight": 3.8627551046431843,
+    "nearWeight": 3.598531442540699,
+    "honorPairBonus": 1.343825374066855,
+    "wildKeepPenalty": 1398.9156572399816,
+    "dominantSuitBonus": 0,
+    "tripletKeepBonus": 4.709633963783557,
+    "honorTripletKeepBonus": 8.936635474603115,
+    "windDragonPairKeepBonus": 11.836265385481415,
+    "tripletComboBonus": 1.3808875380252752,
+    "flushChaseBonus": 1.9372010313649672
+  }
+}

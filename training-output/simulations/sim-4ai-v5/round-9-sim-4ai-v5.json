@@ -1,0 +1,21 @@
+{
+  "round": 9,
+  "totalGames": 500,
+  "wins": 14,
+  "draws": 486,
+  "winRate": "2.8%",
+  "winTypes": {
+    "all_triplets": 10,
+    "half_flush": 4
+  },
+  "playerWins": {
+    "AI-小胖": 6,
+    "AI-阿水": 4,
+    "AI-AK": 1,
+    "AI-老赵": 3
+  },
+  "timestamp": "2026-04-04T11:17:13.740Z",
+  "issues": [
+    "[R9] 胡牌率过低 (2.8%)，可能需要调整AI策略"
+  ]
+}

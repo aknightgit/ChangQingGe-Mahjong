@@ -1,0 +1,20 @@
+{
+  "round": 10,
+  "totalGames": 500,
+  "wins": 8,
+  "draws": 492,
+  "winRate": "1.6%",
+  "winTypes": {
+    "half_flush": 2,
+    "full_flush": 2,
+    "all_triplets": 4
+  },
+  "playerWins": {
+    "AI-小胖": 5,
+    "AI-阿水": 3
+  },
+  "timestamp": "2026-04-04T11:23:31.110Z",
+  "issues": [
+    "[R10] 胡牌率过低 (1.6%)，可能需要调整AI策略"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "round": 2,
+  "totalGames": 10,
+  "wins": 1,
+  "draws": 9,
+  "winRate": "10%",
+  "winTypes": {
+    "full_flush": 1
+  },
+  "playerWins": {
+    "AI-AK": 1
+  },
+  "timestamp": "2026-04-04T10:49:20.834Z",
+  "issues": []
+}

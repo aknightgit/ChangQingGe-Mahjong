@@ -1,0 +1,38 @@
+{
+  "savedAt": "2026-03-31T03:58:00.000Z",
+  "round": 10,
+  "metrics": {
+    "fitness": 12500,
+    "huRate": 0.208,
+    "drawRate": 0.178,
+    "note": "Best of 10 training rounds - Round 3 config"
+  },
+  "policy": {
+    "id": "AI-AK",
+    "selfWinChance": 0.85,
+    "selfWinWildBoost": 0.1135428568912606,
+    "discardHuChance": 0.84,
+    "discardHuWildPenalty": 0.3983208547792693,
+    "discardHuMenQingPenalty": 0.1428287165987719,
+    "pengChance": 0.7879843399876654,
+    "kongChance": 0.47051020348964717,
+    "chowChance": 0.03251253050429123,
+    "pengWildBoost": 0.06282849518815241,
+    "kongWildBoost": 0.1421905200074164,
+    "chowWildPenalty": 0.18034095942711378,
+    "bailoutBuildWildBoost": 0.23414001285839295,
+    "bailoutHuPenaltyPerMeld": 0.03609835708724171,
+    "honorRushThreshold": 4,
+    "honorRushBoost": 0.47248580736293005,
+    "pairWeight": 3.5,
+    "nearWeight": 3.608862694409921,
+    "honorPairBonus": 1.343825374066855,
+    "wildKeepPenalty": 1398.9156572399816,
+    "dominantSuitBonus": 0.5,
+    "tripletKeepBonus": 5.2,
+    "honorTripletKeepBonus": 8.936635474603115,
+    "windDragonPairKeepBonus": 11.836265385481415,
+    "tripletComboBonus": 1.3792828659635474,
+    "flushChaseBonus": 2.5
+  }
+}
