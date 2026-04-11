@@ -1984,14 +1984,48 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
       if (winnersThisGame.length > 0) {
         return buildResult(winnersThisGame[0].playerIndex, '流局', 0, '流局', 0, undefined)
       }
-      return null
+      return {
+        winner: -1,
+        scores: g.players.map(p => p.score),
+        events: [],
+        multiplier: g.gameMultiplier,
+        settlementLog: [],
+        snapshots: recordSnapshots(),
+        winnerPlayer: undefined,
+        roundNum: turn,
+        winnersThisGame: [],
+        turnSnapshots,
+      }
+    }
+    return {
+      winner: -1,
+      scores: g.players.map(p => p.score),
+      events: [],
+      multiplier: g.gameMultiplier,
+      settlementLog: [],
+      snapshots: recordSnapshots(),
+      winnerPlayer: undefined,
+      roundNum: turn,
+      winnersThisGame: [],
+      turnSnapshots,
     }
   }
   // 牌墙耗尽：同上
   if (winnersThisGame.length > 0) {
     return buildResult(winnersThisGame[0].playerIndex, '流局', 0, '流局', 0, undefined)
   }
-  return null
+  return {
+    winner: -1,
+    scores: g.players.map(p => p.score),
+    events: [],
+    multiplier: g.gameMultiplier,
+    settlementLog: [],
+    snapshots: recordSnapshots(),
+    winnerPlayer: undefined,
+    roundNum: turn,
+    winnersThisGame: [],
+    turnSnapshots,
+  }
 }
 
 // ========== Batch Evaluation ==========
