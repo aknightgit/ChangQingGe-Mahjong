@@ -2433,7 +2433,9 @@ function main() {
       for (const e of evs.slice(-8)) roundLines.push(`- ${e.player} ${e.action}: ${e.detail}`)
     }
 
-    // console.log(roundLines.join('\n')) // 临时调试，注释掉避免刷屏
+    console.log(roundLines.join('\n'))
+    if (DETAIL_MODE) logLines.push(...roundLines)
+
     // 每轮单独输出文件（使用标准化reporter）
     if (DETAIL_MODE && bestEvalResult) {
       const report = buildRoundReport(round, bestEvalResult, roundBestPolicy as any, AI_NAMES, 'train-ai-ak.ts')
@@ -2581,8 +2583,9 @@ function main() {
     saveCharacter('AI-AK', bestPolicy, metrics)
   }
 
-  // 主日志：只保留每轮报告正文
-  const mainOut: string[] = []
+  // 主日志：Header + Round0 + 每轮明细(DETAIL_MODE) + formatRoundReport + 最终评估
+  // 与 train-baseline.ts 行为完全一致
+  const mainOut: string[] = [...logLines]
   for (const report of roundReports) {
     mainOut.push(formatRoundReport(report, true))
   }
