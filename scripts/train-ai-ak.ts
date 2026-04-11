@@ -30,7 +30,6 @@ const __dirname = path.dirname(__filename)
 const ROUNDS = parseInt(process.argv[2] || '10')
 const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000')
 const BASELINE_MODE = process.argv[4] === '--baseline'  // 基线训练：优化指标而非得分
-const DETAIL_MODE = process.argv.includes('--detail')  // 每圈明细开关，默认关闭
 const SETTLEMENT_MULT = 10
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
 const OUT_DIR = path.resolve(__dirname, '..', 'training-output')
@@ -2142,8 +2141,8 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   for (let g = 0; g < games; g++) {
     const result = runGame(akPolicy, otherPolicies)
     if (result) {
-      // --detail: 收集每局每圈快照
-      if (DETAIL_MODE && result.turnSnapshots) allTurnSnapshots.push(...result.turnSnapshots)
+      // 收集每局每圈快照
+      if (result.turnSnapshots) allTurnSnapshots.push(...result.turnSnapshots)
       const winner = AI_NAMES[result.winner]
       wins[winner]++
       winGames++
