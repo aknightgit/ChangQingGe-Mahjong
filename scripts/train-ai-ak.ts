@@ -2433,9 +2433,7 @@ function main() {
       for (const e of evs.slice(-8)) roundLines.push(`- ${e.player} ${e.action}: ${e.detail}`)
     }
 
-    console.log(roundLines.join('\n'))
-    logLines.push(...roundLines)
-
+    // console.log(roundLines.join('\n')) // 临时调试，注释掉避免刷屏
     // 每轮单独输出文件（使用标准化reporter）
     if (DETAIL_MODE && bestEvalResult) {
       const report = buildRoundReport(round, bestEvalResult, roundBestPolicy as any, AI_NAMES, 'train-ai-ak.ts')
