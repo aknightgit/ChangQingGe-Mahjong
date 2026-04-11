@@ -1617,9 +1617,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
   }
   const log = (player: string, action: string, detail: string) => { events.push({ turn, player, action, detail }) }
 
-  // 每回合快照（--detail 时收集）：记录当前玩家摸打，供每圈明细使用
+  // 每回合快照：记录当前玩家摸打，供每圈明细使用
   const recordTurnSnapshot = (curr: number) => {
-    if (!DETAIL_MODE) return
     const lastDiscard = g.discardPile[g.discardPile.length - 1] || null
     turnSnapshots.push({
       turn,
@@ -1632,7 +1631,10 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
       lastDiscard: lastDiscard ? tileStr(lastDiscard) : '-',
       players: g.players.map(p => ({
         name: p.name,
-        hand: sortTiles([...p.hand]).map(t => tileStr(t)).join(' '),
+        hand: sortTiles([...p.hand]).map(t => {
+          const base = tileStr(t)
+          return isWT(t, p) ? base + '*' : base
+        }).join(' '),
         exposed: p.exposedMelds.map(m =>
           `${m.type === MeldType.TRIPLET ? '碰' : m.type === MeldType.SEQUENCE ? '吃' : m.type === MeldType.KONG ? '明杠' : m.type === MeldType.CONCEALED_KONG ? '暗杠' : '?'}:${sortTiles([...m.tiles]).map(t => tileStr(t)).join(' ')}`
         ),
