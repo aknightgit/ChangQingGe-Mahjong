@@ -22,7 +22,7 @@ import { TileSuit, MeldType, WinType, type Tile, type Meld } from '../server/typ
 import * as fs from 'fs'
 import * as path from 'path'
 import { fileURLToPath } from 'url'
-import { writeRoundFile, buildRoundReport, writeIndexFile } from './training-reporter'
+import { writeRoundFile, buildRoundReport, formatRoundReport, writeIndexFile } from './training-reporter'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -2575,7 +2575,34 @@ function main() {
     saveCharacter('AI-AK', bestPolicy, metrics)
   }
 
-  fs.writeFileSync(mdFile, logLines.join('\n'), 'utf-8')
+  // 主日志：用 formatRoundReport 统一格式（Summary + 每圈明细 when DETAIL_MODE）
+  const mainOut: string[] = []
+  const mainHeader = [
+    '# 长清阁麻将 AI-AK 训练日志',
+    '',
+    `- 创建时间: ${new Date().toISOString()}`,
+    `- 训练脚本: train-ai-ak.ts`,
+    `- Config: ${ROUNDS} rounds × ${GAMES_PER_ROUND} games = ${ROUNDS * GAMES_PER_ROUND} total`,
+    `- 对手: AI-小胖, AI-阿水, AI-老赵 (固定)`,
+    `- 目标: 最高盈利总分`,
+    '',
+    '> 每轮记录训练指标 + 策略参数 + 最大单人亏损局明细 + 结算逐笔',
+  ]
+  mainOut.push(...mainHeader)
+  // 基线成绩（第0轮）
+  mainOut.push('\n## 基线成绩（第0轮）')
+  const baseEval = evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
+  mainOut.push(`AI-AK baseline: score=${baseEval.akScore}  wins=${baseEval.winGames}/${GAMES_PER_ROUND}  draws=${baseEval.drawGames}`)
+  // 每轮用 formatRoundReport
+  for (const report of roundReports) {
+    mainOut.push(formatRoundReport(report, DETAIL_MODE))
+  }
+  // 性能统计
+  const tsTing = getIsTingCacheStats()
+  const tsCanWin = getCanWinCacheStats()
+  mainOut.push(`\n[性能] isTing缓存: 命中${tsTing.hits} 未命中${tsTing.misses} 命中率${tsTing.hitRate}`)
+  mainOut.push(`[性能] canWin缓存: 命中${tsCanWin.hits} 未命中${tsCanWin.misses} 命中率${tsCanWin.hitRate}`)
+  fs.writeFileSync(mdFile, mainOut.join('\n'), 'utf-8')
   fs.writeFileSync(policyFile, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
   fs.writeFileSync(policyLatest, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
   const indexFile = writeIndexFile(OUT_DIR, roundReports)
