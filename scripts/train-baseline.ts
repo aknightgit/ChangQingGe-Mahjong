@@ -1990,12 +1990,9 @@ async function main() {
     console.log(roundLines.join('\n'))
     logLines.push(...roundLines)
 
+    // 收集轮次报告（用于主日志 formatRoundReport）
     if (bestEvalResult) {
-      // 每轮结束立刻写入文件，方便实时跟踪进度
-      fs.writeFileSync(mdFile, logLines.join('\n'), 'utf-8')
-      // MariaDB 备份
       await saveRoundToMariaDB(round, bestEvalResult, roundBestPolicy)
-      // 标准化轮次文件（training-reporter 统一格式）
       const report = buildRoundReport(round, bestEvalResult, roundBestPolicy, AI_NAMES)
       roundReports.push(report)
       if (DETAIL_MODE) {
@@ -2005,75 +2002,81 @@ async function main() {
     }
   }
 
-  // Final evaluation
-  console.log('\n--- 最终评估 ---')
-  logLines.push('\n--- 最终评估 ---')
-
-  const finalEval = evaluatePolicy(bestPolicy, 1000)
-  const finalLines = [
-    `| 指标 | 值 | 目标 | 达标 |`,
-    `|------|-----|------|------|`,
-    `| 胡牌率 | ${((1-finalEval.draws/1000)*100).toFixed(1)}% | ≥90% | ${((1-finalEval.draws/1000)>=0.9?'✅':'❌')} |`,
-    `| 流局率 | ${(finalEval.draws/1000*100).toFixed(1)}% | <10% | ${(finalEval.draws/1000<0.1?'✅':'❌')} |`,
-    `| 自摸率 | ${(finalEval.selfDrawGames/Math.max(1,finalEval.winGames)*100).toFixed(1)}% | 40-60% | ${(finalEval.selfDrawGames/Math.max(1,finalEval.winGames)>=0.4&&finalEval.selfDrawGames/Math.max(1,finalEval.winGames)<=0.6?'✅':'❌')} |`,
-    `| 捉冲率 | ${(finalEval.discardWinGames/Math.max(1,finalEval.winGames)*100).toFixed(1)}% | 40-60% | ${(finalEval.discardWinGames/Math.max(1,finalEval.winGames)>=0.4&&finalEval.discardWinGames/Math.max(1,finalEval.winGames)<=0.6?'✅':'❌')} |`,
-    `| 血战率 | ${(finalEval.fightToLastGames/Math.max(1,1000-finalEval.draws)*100).toFixed(1)}% | >80% | ${(finalEval.fightToLastGames/Math.max(1,1000-finalEval.draws)>0.8?'✅':'❌')} |`,
-    `| 大牌率 | ${(finalEval.bigWinGames/Math.max(1,finalEval.winGames)*100).toFixed(1)}% | 3-8% | ${((finalEval.bigWinGames/Math.max(1,finalEval.winGames))>=0.03&&(finalEval.bigWinGames/Math.max(1,finalEval.winGames))<=0.08?'✅':'❌')} |`,
-    `| 门清率 | ${(finalEval.menqingWinGames/Math.max(1,finalEval.winGames)*100).toFixed(1)}% | 7-12% | ${((finalEval.menqingWinGames/Math.max(1,finalEval.winGames))>=0.07&&(finalEval.menqingWinGames/Math.max(1,finalEval.winGames))<=0.12?'✅':'❌')} |`,
-    ``,
-    `Fitness: ${finalEval.metricsFitness.toFixed(0)}`,
-  ]
-  finalLines.push(`\n  最佳策略参数 (关键):`)
-  const keyParams: (keyof BotPolicy)[] = [
-    'selfWinChance', 'discardHuChance', 'pengChance', 'chowChance', 'anKongChance',
-    'allPungsPursuit', 'pureFlushPursuit', 'halfFlushWeight', 'sevenPairsPursuit',
-    'menqingKeepBonus', 'noWildDoubleAwareness',
-    'wild0Aggression', 'wild1Aggression', 'wild2Aggression', 'wild3PlusAggression',
-    'wild0MenqingKeep', 'wild1MenqingKeep', 'wild2MenqingKeep',
-    'multHighValueBias', 'wallLateDefense', 'safeTilePriority',
-  ]
-  for (const k of keyParams) {
-    const val = (bestPolicy as any)[k]
-    finalLines.push(`    ${k}: ${typeof val === 'number' ? (Number.isInteger(val) ? val : val.toFixed(4)) : val}`)
+  // Final evaluation: 1×1 模式跳过（只跑 1 局不需要额外评估）
+  const finalEvalGames = (ROUNDS === 1 && GAMES_PER_ROUND === 1) ? 0 : 1000
+  let finalEval: any = null
+  let metrics: any = null
+  if (finalEvalGames > 0) {
+    console.log('\n--- 最终评估 ---')
+    logLines.push('\n--- 最终评估 ---')
+    finalEval = evaluatePolicy(bestPolicy, finalEvalGames)
+    const finalLines = [
+      `| 指标 | 值 | 目标 | 达标 |`,
+      `|------|-----|------|------|`,
+      `| 胡牌率 | ${((1-finalEval.draws/1000)*100).toFixed(1)}% | ≥90% | ${((1-finalEval.draws/1000)>=0.9?'✅':'❌')} |`,
+      `| 流局率 | ${(finalEval.draws/1000*100).toFixed(1)}% | <10% | ${(finalEval.draws/1000<0.1?'✅':'❌')} |`,
+      `| 自摸率 | ${(finalEval.selfDrawGames/Math.max(1,finalEval.winGames)*100).toFixed(1)}% | 40-60% | ${(finalEval.selfDrawGames/Math.max(1,finalEval.winGames)>=0.4&&finalEval.selfDrawGames/Math.max(1,finalEval.winGames)<=0.6?'✅':'❌')} |`,
+      `| 捉冲率 | ${(finalEval.discardWinGames/Math.max(1,finalEval.winGames)*100).toFixed(1)}% | 40-60% | ${(finalEval.discardWinGames/Math.max(1,finalEval.winGames)>=0.4&&finalEval.discardWinGames/Math.max(1,finalEval.winGames)<=0.6?'✅':'❌')} |`,
+      `| 血战率 | ${(finalEval.fightToLastGames/Math.max(1,1000-finalEval.draws)*100).toFixed(1)}% | >80% | ${(finalEval.fightToLastGames/Math.max(1,1000-finalEval.draws)>0.8?'✅':'❌')} |`,
+      `| 大牌率 | ${(finalEval.bigWinGames/Math.max(1,finalEval.winGames)*100).toFixed(1)}% | 3-8% | ${((finalEval.bigWinGames/Math.max(1,finalEval.winGames))>=0.03&&(finalEval.bigWinGames/Math.max(1,finalEval.winGames))<=0.08?'✅':'❌')} |`,
+      `| 门清率 | ${(finalEval.menqingWinGames/Math.max(1,finalEval.winGames)*100).toFixed(1)}% | 7-12% | ${((finalEval.menqingWinGames/Math.max(1,finalEval.winGames))>=0.07&&(finalEval.menqingWinGames/Math.max(1,finalEval.winGames))<=0.12?'✅':'❌')} |`,
+      ``,
+      `Fitness: ${finalEval.metricsFitness.toFixed(0)}`,
+    ]
+    finalLines.push(`\n  最佳策略参数 (关键):`)
+    const keyParams: (keyof BotPolicy)[] = [
+      'selfWinChance', 'discardHuChance', 'pengChance', 'chowChance', 'anKongChance',
+      'allPungsPursuit', 'pureFlushPursuit', 'halfFlushWeight', 'sevenPairsPursuit',
+      'menqingKeepBonus', 'noWildDoubleAwareness',
+      'wild0Aggression', 'wild1Aggression', 'wild2Aggression', 'wild3PlusAggression',
+      'wild0MenqingKeep', 'wild1MenqingKeep', 'wild2MenqingKeep',
+      'multHighValueBias', 'wallLateDefense', 'safeTilePriority',
+    ]
+    for (const k of keyParams) {
+      const val = (bestPolicy as any)[k]
+      finalLines.push(`    ${k}: ${typeof val === 'number' ? (Number.isInteger(val) ? val : val.toFixed(4)) : val}`)
+    }
+    console.log(finalLines.join('\n'))
+    logLines.push(...finalLines)
+    await saveRoundToMariaDB(ROUNDS + 1, finalEval, bestPolicy)
+    metrics = {
+      fitness: finalEval.metricsFitness,
+      huRate: 1 - finalEval.draws / 1000,
+      drawRate: finalEval.draws / 1000,
+      selfDrawRate: finalEval.selfDrawGames / Math.max(1, finalEval.winGames),
+      discardWinRate: finalEval.discardWinGames / Math.max(1, finalEval.winGames),
+      fightToLastRate: finalEval.fightToLastGames / Math.max(1, 1000 - finalEval.draws),
+      bigHandRate: finalEval.bigWinGames / Math.max(1, finalEval.winGames),
+      menqingWinRate: finalEval.menqingWinGames / Math.max(1, finalEval.winGames),
+      totalGames: ROUNDS * GAMES_PER_ROUND,
+      note: `Baseline convergence - ${ROUNDS}x${GAMES_PER_ROUND}`
+    }
+  } else {
+    // 1×1 模式：用最后一轮的评估结果作为 metrics
+    if (roundReports.length > 0) {
+      const last = roundReports[roundReports.length - 1]
+      metrics = {
+        fitness: last.metrics.fitness,
+        huRate: last.metrics.winGames / Math.max(1, last.metrics.totalGames),
+        drawRate: last.metrics.drawGames / Math.max(1, last.metrics.totalGames),
+        selfDrawRate: last.metrics.selfDrawGames / Math.max(1, last.metrics.winGames),
+        discardWinRate: last.metrics.discardWinGames / Math.max(1, last.metrics.winGames),
+        fightToLastRate: last.metrics.fightToLastGames / Math.max(1, last.metrics.totalGames - last.metrics.drawGames),
+        bigHandRate: last.metrics.bigWinGames / Math.max(1, last.metrics.winGames),
+        menqingWinRate: last.metrics.menqingWinGames / Math.max(1, last.metrics.winGames),
+        totalGames: last.metrics.totalGames,
+        note: `Baseline quick test - ${ROUNDS}x${GAMES_PER_ROUND}`
+      }
+    }
   }
-
-  // 最大输赢局明细（只显示胡牌事件，不显示每回合操作）
-  const winActions = ['自摸', '放炮胡', '杠上自摸', '碰后放炮胡', '碰后自摸', '碰杠后自摸', '吃后放炮胡', '吃后自摸', '吃杠后自摸']
-  if (finalEval.bigWin) {
-    const evs = finalEval.bigWin.result.events.filter(e => winActions.some(a => e.action.includes(a)))
-    finalLines.push(`\n  【最大赢局】+${finalEval.bigWin.score} (倍×${finalEval.bigWin.result.multiplier})`)
-    for (const e of evs) finalLines.push(`    ${e.player} ${e.action}: ${e.detail}`)
-  }
-  if (finalEval.bigLoss) {
-    const evs = finalEval.bigLoss.result.events.filter(e => winActions.some(a => e.action.includes(a)))
-    finalLines.push(`\n  【最大输局】${finalEval.bigLoss.score} (倍×${finalEval.bigLoss.result.multiplier})`)
-    for (const e of evs) finalLines.push(`    ${e.player} ${e.action}: ${e.detail}`)
-  }
-
-  console.log(finalLines.join('\n'))
-  logLines.push(...finalLines)
-
-  // 最终评估也写MariaDB
-  await saveRoundToMariaDB(ROUNDS + 1, finalEval, bestPolicy)
 
   // Save all 4 AIs with same policy
-  const metrics = {
-    fitness: finalEval.metricsFitness,
-    huRate: 1 - finalEval.draws / 1000,
-    drawRate: finalEval.draws / 1000,
-    selfDrawRate: finalEval.selfDrawGames / Math.max(1, finalEval.winGames),
-    discardWinRate: finalEval.discardWinGames / Math.max(1, finalEval.winGames),
-    fightToLastRate: finalEval.fightToLastGames / Math.max(1, 1000 - finalEval.draws),
-    bigHandRate: finalEval.bigWinGames / Math.max(1, finalEval.winGames),
-    menqingWinRate: finalEval.menqingWinGames / Math.max(1, finalEval.winGames),
-    totalGames: ROUNDS * GAMES_PER_ROUND,
-    note: `Baseline convergence - ${ROUNDS}x${GAMES_PER_ROUND}`
+  if (metrics) {
+    for (const name of AI_NAMES) {
+      saveCharacter(name, { ...bestPolicy, id: name }, metrics)
+    }
+    console.log(`\nAll 4 AIs saved: ${AI_NAMES.join(', ')}`)
   }
-
-  for (const name of AI_NAMES) {
-    saveCharacter(name, { ...bestPolicy, id: name }, metrics)
-  }
-  console.log(`\nAll 4 AIs saved: ${AI_NAMES.join(', ')}`)
 
   // 主日志：用 formatRoundReport 统一格式（Summary + 每圈明细 when DETAIL_MODE）
   const mainHeader = [
@@ -2088,13 +2091,14 @@ async function main() {
   const mainOut: string[] = [...mainHeader, '## 基线成绩（第0轮）']
   const baseEval = evaluatePolicy(bestPolicy, GAMES_PER_ROUND)
   mainOut.push(`胡牌率=${((1-baseEval.draws/GAMES_PER_ROUND)*100).toFixed(1)}%  流局率=${(baseEval.draws/GAMES_PER_ROUND*100).toFixed(1)}%  Fitness=${baseEval.metricsFitness.toFixed(2)}`)
-  for (const r of roundReports) mainOut.push(formatRoundReport(r, DETAIL_MODE))
+  for (const r of roundReports) mainOut.push(formatRoundReport(r, false))
   fs.writeFileSync(mdFile, mainOut.join('\n'), 'utf-8')
   fs.writeFileSync(policyFile, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
   fs.writeFileSync(policyLatest, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
 
   console.log(`\nLog: ${mdFile}`)
   console.log(`Policy: ${policyFile}`)
+  process.exit(0)
 }
 
 // ========== 单局测试：强制进攻，打印每回合完整明细 ==========
@@ -2200,7 +2204,6 @@ function testOneGame() {
 // 入口：根据参数决定运行模式
 if (process.argv.length > 2) {
   main().catch(e => { console.error('[MAIN ERROR]', e); process.exit(1) })
-  // 不要在这里 process.exit(0)，让 main() 正常返回
 } else {
   testOneGame()
   process.exit(0)
