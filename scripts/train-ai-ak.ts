@@ -108,7 +108,7 @@ const DEFAULT_POLICY: BotPolicy = {
   id: 'default',
   selfWinChance: 0.8, discardHuChance: 0.8,
   selfWinWildBoost: 0.1, discardHuWildPenalty: 0.4, discardHuMenQingPenalty: 0.14,
-  pengChance: 0.79, kongChance: 0.47, chowChance: 0.03, anKongChance: 0.95,
+  pengChance: 1.0, kongChance: 0.47, chowChance: 1.0, anKongChance: 0.95,
   pengWildBoost: 0.06, kongWildBoost: 0.14, chowWildPenalty: 0.18,
   menqingKeepBonus: 0.0, meldPenalty: 0.05,  // K哥基线训练：门清bonus最低
   allPungsPursuit: 1.5, pureFlushPursuit: 1.5, halfFlushWeight: 1.0,
@@ -201,7 +201,7 @@ const PARAM_RANGES: Record<string, { min: number; max: number; step: number }> =
   discardHuMenQingPenalty:    { min: 0.0,  max: 0.4,  step: 0.02 },
   pengChance:                 { min: 0.3,  max: 1.0,  step: 0.05 },
   kongChance:                 { min: 0.1,  max: 1.0,  step: 0.05 },
-  chowChance:                 { min: 0.0,  max: 0.5,  step: 0.02 },
+  chowChance:                 { min: 0.0,  max: 1.0,  step: 0.05 },
   anKongChance:               { min: 0.5,  max: 1.0,  step: 0.05 },
   pengWildBoost:              { min: 0.0,  max: 0.3,  step: 0.02 },
   kongWildBoost:              { min: 0.0,  max: 0.4,  step: 0.02 },
