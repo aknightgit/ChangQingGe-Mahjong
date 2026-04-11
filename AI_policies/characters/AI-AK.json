@@ -1,17 +1,12 @@
 {
-  "savedAt": "2026-04-09T01:12:25.352Z",
+  "savedAt": "2026-04-11T12:04:41.952Z",
   "round": 0,
   "metrics": {
-    "fitness": -85731.74074074073,
-    "huRate": 0.027000000000000024,
-    "drawRate": 0.973,
-    "selfDrawRate": 0.25925925925925924,
-    "discardWinRate": 0.7407407407407407,
-    "fightToLastRate": 0,
-    "bigHandRate": 0,
-    "menqingWinRate": 0.8518518518518519,
-    "totalGames": 50,
-    "note": "Baseline convergence - 1x50"
+    "fitness": 0,
+    "huRate": 0,
+    "drawRate": 1,
+    "totalGames": 1,
+    "note": "AI-AK iterative training - 1x1"
   },
   "policy": {
     "id": "AI-AK",
@@ -32,7 +27,6 @@
     "allPungsPursuit": 0.52,
     "pureFlushPursuit": 0.39155902112680335,
     "halfFlushWeight": 0.6,
-    "sevenPairsPursuit": 0.15,
     "allHonorsPursuit": 0.14083222760517888,
     "allHonorsPungsPursuit": 0.08389067735611558,
     "qingPengPursuit": 0.49316917551025014,
@@ -129,6 +123,7 @@
     "flushVsPungsBalance": 0.1,
     "honorVsSuitedBalance": -0.06499699959801614,
     "sequenceVsTripletBias": 0.15,
+    "sevenPairsPursuit": 0.15,
     "wildOffenseStrategy": 0.5,
     "wildBailoutMeldBoost": 0.0635363073051163,
     "wildDefenseKeep": 0.3,
