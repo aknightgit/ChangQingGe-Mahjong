@@ -2394,7 +2394,6 @@ function main() {
       roundReports.push(report)
       const filename = writeRoundFile(OUT_DIR, report)
       console.log(`  → 轮次详情已保存: ${filename}`)
-      logLines.push('', formatRoundMarkdown(round, bestEvalResult, roundBestPolicy), '')
     }
   }  // End round loop
 
