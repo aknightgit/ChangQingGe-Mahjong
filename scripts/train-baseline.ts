@@ -22,7 +22,7 @@ import * as path from 'path'
 import { fileURLToPath } from 'url'
 import mysql from 'mysql2/promise'
 import { evaluateAllRoutes, selectDiscard as routeSelectDiscard, shouldClaim as routeShouldClaim, determinePhase, Phase, Route, PARAMS, calcTenpaiDistance as tenpaiDist } from './route-evaluator'
-import { writeRoundFile, buildRoundReport } from './training-reporter'
+import { writeRoundFile, buildRoundReport, formatRoundReport } from './training-reporter'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -1277,7 +1277,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         // 互包结算
         applyBaoSettlement(g, curr, true, null, baseScore)
         for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore, '自摸') }
-        log(player.name, '自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}] [手牌${normalizedHand.length}张+副露${player.exposedMelds.length}]`)
+        log(player.name, '自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}] [手牌${player.hand.length}张+副露${player.exposedMelds.length}]`)
         const winInfo = getWinInfo(player, true, false)
         recordTurnSnapshot(curr)
         return buildResult(curr, '自摸', winInfo.finalPoints, winInfo.handType, winInfo.baseFan)
@@ -1879,6 +1879,7 @@ async function main() {
   let bestPolicy = loadCharacter('AI-AK')
   let bestScore = -Infinity
   let logLines: string[] = []
+  const roundReports: any[] = []
 
   const header = [
     '# 长清阁麻将 全员基线收敛训练日志',
@@ -1996,8 +1997,11 @@ async function main() {
       await saveRoundToMariaDB(round, bestEvalResult, roundBestPolicy)
       // 标准化轮次文件（training-reporter 统一格式）
       const report = buildRoundReport(round, bestEvalResult, roundBestPolicy, AI_NAMES)
-      const filename = writeRoundFile(OUT_DIR, report, DETAIL_MODE)
-      console.log(`  → 轮次详情已保存: ${filename}`)
+      roundReports.push(report)
+      if (DETAIL_MODE) {
+        const filename = writeRoundFile(OUT_DIR, report, true)
+        console.log(`  → 轮次详情已保存: ${filename}`)
+      }
     }
   }
 
@@ -2071,7 +2075,21 @@ async function main() {
   }
   console.log(`\nAll 4 AIs saved: ${AI_NAMES.join(', ')}`)
 
-  fs.writeFileSync(mdFile, logLines.join('\n'), 'utf-8')
+  // 主日志：用 formatRoundReport 统一格式（Summary + 每圈明细 when DETAIL_MODE）
+  const mainHeader = [
+    '# 长清阁麻将 全员基线收敛训练日志',
+    '',
+    `- 创建时间: ${new Date().toISOString()}`,
+    `- 训练脚本: train-baseline.ts`,
+    `- Config: ${ROUNDS} rounds × ${GAMES_PER_ROUND} games = ${ROUNDS * GAMES_PER_ROUND} total`,
+    `- 模式: 4人共用同一策略，血战到最后一人`,
+    `- 目标: 胡牌率≥90% 流局率<10% 血战率>80%`,
+  ]
+  const mainOut: string[] = [...mainHeader, '## 基线成绩（第0轮）']
+  const baseEval = evaluatePolicy(bestPolicy, GAMES_PER_ROUND)
+  mainOut.push(`胡牌率=${((1-baseEval.draws/GAMES_PER_ROUND)*100).toFixed(1)}%  流局率=${(baseEval.draws/GAMES_PER_ROUND*100).toFixed(1)}%  Fitness=${baseEval.metricsFitness.toFixed(2)}`)
+  for (const r of roundReports) mainOut.push(formatRoundReport(r, DETAIL_MODE))
+  fs.writeFileSync(mdFile, mainOut.join('\n'), 'utf-8')
   fs.writeFileSync(policyFile, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
   fs.writeFileSync(policyLatest, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
 
@@ -2179,5 +2197,11 @@ function testOneGame() {
   }
 }
 
-testOneGame()
-process.exit(0)
+// 入口：根据参数决定运行模式
+if (process.argv.length > 2) {
+  main().catch(e => { console.error('[MAIN ERROR]', e); process.exit(1) })
+  // 不要在这里 process.exit(0)，让 main() 正常返回
+} else {
+  testOneGame()
+  process.exit(0)
+}
