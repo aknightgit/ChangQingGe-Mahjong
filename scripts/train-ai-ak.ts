@@ -2382,7 +2382,7 @@ function main() {
         : `  Candidate ${c+1}: score=${result.akScore}  wins=${result.akWins}/${GAMES_PER_ROUND} (${(result.winRates['AI-AK']*100).toFixed(1)}%)  draws=${result.draws}`
       roundLines.push(line)
 
-      if (score > roundBestScore) {
+      if (score >= roundBestScore) {
         roundBestScore = score
         roundBestPolicy = candidates[c]
         roundBigWin = result.bigWin
