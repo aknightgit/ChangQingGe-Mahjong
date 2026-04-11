@@ -1596,10 +1596,14 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
       const wildSuit = p.wildSuit, wildVal = p.wildValue
       const wildTileStr = (wildSuit && wildVal) ? `${wildSuit}-${wildVal}` : null
       const wildTileName = wildTileStr ? tileStr({suit: wildSuit as TileSuit, value: wildVal, id: '' }) : '(无百搭)'
-      // 完整手牌 = 手牌 + 所有面子里的牌（都算作手牌）
+      // 完整手牌 = 手牌 + 所有面子里的牌（都算作手牌），百搭加*
       const fullHandTiles = [...p.hand, ...p.exposedMelds.flatMap(m => m.tiles)]
+      const handWithWildMark = fullHandTiles.map(t => {
+        const base = tileStr(t)
+        return isWT(t, p) ? base + '*' : base
+      }).join(' ')
       return {
-        name: p.name, hand: fullHandTiles.map(t => tileStr(t)).join(' '),
+        name: p.name, hand: handWithWildMark,
         melds: p.exposedMelds.map(m => `${m.type===MeldType.TRIPLET?'碰':m.type===MeldType.SEQUENCE?'吃':m.type===MeldType.KONG?'杠':'?'}:${m.tiles.map(t=>tileStr(t)).join(' ')}`),
         flowers: p.flowerTiles.map(t => tileStr(t)),
         meldSources: [...p.meldSources],

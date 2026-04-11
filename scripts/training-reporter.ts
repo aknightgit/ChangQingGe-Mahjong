@@ -352,9 +352,10 @@ export function formatRoundReport(report: RoundReport): string {
           const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-', discardFrom: -1 }
           const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
           const discardStr = d.discarded !== '-' ? ` → 打${d.discarded}` : ''
-          const discardNote = d.discardFrom >= 0 ? ` ← ${snaps[circleStart].players[d.discardFrom]?.name || `P${d.discardFrom}`}打出` : ''
+          const discardNote = d.discardFrom >= 0 ? ` ← ${snaps[circleStart].players[d.discardFrom]?.name || `P${d.discardFrom}`}` : ''
           const exposedStr = pp.exposed?.join('|') || '无'
-          lines.push(`  - ${pp.name}：${pp.hand || '(无)'}｜副露:${exposedStr}｜${pp.handCount}张${drawStr}${discardStr}${discardNote}`)
+          const handMarked = (pp.hand || '').split(' ').map(t => t.endsWith('(*)') ? t : (t + '*')).join(' ')
+          lines.push(`  - ${pp.name}：${handMarked || '(无)'}｜副露:${exposedStr}｜${pp.handCount}张${drawStr}${discardStr}${discardNote}`)
         }
         lines.push('')
         circleStart = i
@@ -387,9 +388,10 @@ export function formatRoundReport(report: RoundReport): string {
       const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-', discardFrom: -1 }
       const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
       const discardStr = d.discarded !== '-' ? ` → 打${d.discarded}` : ''
-      const discardNote = d.discardFrom >= 0 ? ` ← ${snaps[circleStart].players[d.discardFrom]?.name || `P${d.discardFrom}`}打出` : ''
+      const discardNote = d.discardFrom >= 0 ? ` ← ${snaps[circleStart].players[d.discardFrom]?.name || `P${d.discardFrom}`}` : ''
       const exposedStr = pp.exposed?.join('|') || '无'
-      lines.push(`  - ${pp.name}：${pp.hand || '(无)'}｜副露:${exposedStr}｜${pp.handCount}张${drawStr}${discardStr}${discardNote}`)
+      const handMarked = (pp.hand || '').split(' ').map(t => t.endsWith('(*)') ? t : (t + '*')).join(' ')
+      lines.push(`  - ${pp.name}：${handMarked || '(无)'}｜副露:${exposedStr}｜${pp.handCount}张${drawStr}${discardStr}${discardNote}`)
     }
     lines.push('')
   }
