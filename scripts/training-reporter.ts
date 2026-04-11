@@ -20,12 +20,19 @@ export interface RoundMetrics {
   totalGames: number
   winGames: number
   drawGames: number
+  winnerInstances?: number
   selfDrawGames: number
+  discardWinGames?: number
   bigWinGames: number
   menqingWinGames: number
   fightToLastGames: number
   akScore: number
+  fitness?: number
   handTypeDist: Record<string, number>
+  avgRounds?: number
+  avgPot?: number
+  avgWinnerPoints?: number
+  highMultGameCount?: number
 }
 
 export interface WinningGameRecord {
@@ -46,6 +53,7 @@ export interface WinningGameRecord {
 export interface RoundReport {
   round: number
   timestamp: string
+  scriptName?: string
   metrics: RoundMetrics
   policy: Record<string, number>
   playerStats: PlayerStats[]
@@ -61,19 +69,29 @@ export interface RoundReport {
 export interface EvalResult {
   totalGames: number
   winGames: number
+  winnerInstances?: number
   selfDrawGames: number
+  discardWinGames?: number
   bigWinGames: number
   menqingWinGames: number
   fightToLastGames: number
   akScore: number
-  handTypeDist: Record<string, number>
-  winningGames: WinningGameRecord[]
+  metricsFitness?: number
+  handTypeDist?: Record<string, number>
+  handTypeCounts?: Record<string, number>
+  winningGames?: WinningGameRecord[]
   worstSingleLoss: any
+  biggestSingleWin?: any
   scores: Record<string, number>
   winRates: Record<string, number>
   akWins: number
-  playerStats: PlayerStats[]
-  multiWinDist: number[]
+  playerStats?: PlayerStats[]
+  multiWinDist?: number[]
+  draws?: number
+  avgRounds?: number
+  avgPot?: number
+  avgWinnerPoints?: number
+  highMultGameCount?: number
 }
 
 // ========== 工具函数 ==========
@@ -113,57 +131,75 @@ function checkTarget(actual: number, target: string, lowBetter = false): string 
 
 export function formatRoundReport(report: RoundReport, showDetail = true): string {
   const lines: string[] = []
-  const { round, timestamp, metrics, policy, playerStats, topWins, topLosses, worstLossGames, multiWinDist, allWinningGames } = report
+  const { round, timestamp, metrics, policy, topWins, topLosses, multiWinDist, allWinningGames } = report
   const ts = formatTimestamp(timestamp)
   const winRate = parseFloat((metrics.winGames / Math.max(1, metrics.totalGames) * 100).toFixed(1))
   const drawRate = parseFloat((metrics.drawGames / Math.max(1, metrics.totalGames) * 100).toFixed(1))
-  const selfDrawRate = metrics.winGames > 0 ? parseFloat((metrics.selfDrawGames / metrics.winGames * 100).toFixed(1)) : 0
-  const bigWinRate = metrics.winGames > 0 ? parseFloat((metrics.bigWinGames / metrics.winGames * 100).toFixed(1)) : 0
-  const menqingRate = metrics.winGames > 0 ? parseFloat((metrics.menqingWinGames / metrics.winGames * 100).toFixed(1)) : 0
+  const winnerInstances = metrics.winnerInstances ?? allWinningGames?.length ?? metrics.winGames
+  const selfDrawRate = winnerInstances > 0 ? parseFloat((metrics.selfDrawGames / winnerInstances * 100).toFixed(1)) : 0
+  const discardWinRate = winnerInstances > 0 ? parseFloat((((metrics.discardWinGames || 0) / winnerInstances) * 100).toFixed(1)) : 0
+  const bigWinRate = winnerInstances > 0 ? parseFloat((metrics.bigWinGames / winnerInstances * 100).toFixed(1)) : 0
+  const menqingRate = winnerInstances > 0 ? parseFloat((metrics.menqingWinGames / winnerInstances * 100).toFixed(1)) : 0
+  const nonDrawGames = Math.max(0, metrics.totalGames - metrics.drawGames)
+  const fightToLastRate = nonDrawGames > 0 ? parseFloat(((metrics.fightToLastGames / nonDrawGames) * 100).toFixed(1)) : 0
 
-  // ===== 标题块 =====
-  lines.push('---')
-  lines.push(`创建时间: ${timestamp}`)
-  lines.push(`训练脚本: train-ai-ak.ts`)
-  lines.push(`Config: 1 rounds × ${metrics.totalGames} games = ${metrics.totalGames} total`)
-  lines.push('---')
-  lines.push('')
-
-  // ===== Section: Round X 训练报告 =====
   lines.push(`## Round ${round} (${ts})`)
   lines.push('')
 
-  // ===== 训练指标 Summary（带K哥目标） =====
-  const fightToLastRate = metrics.winGames > 0 ? parseFloat(((metrics.fightToLastGames / metrics.winGames) * 100).toFixed(1)) : 0
+  // Summary
   lines.push('### 📊 训练指标 Summary')
   lines.push('')
   lines.push('| 指标 | 值 | K哥目标 | 达标 |')
   lines.push('|------|-----|---------|------|')
-  lines.push(`| 胡牌率 | ${winRate}% | ≥90% | ${checkTarget(winRate, '90')} |`)
-  lines.push(`| 流局率 | ${drawRate}% | <10% | ${checkTarget(drawRate, '10', true)} |`)
-  lines.push(`| 自摸率 | ${selfDrawRate}% | 40-60% | ${checkTarget(selfDrawRate, '40')} |`)
-  lines.push(`| 捉冲率 | — | 40-60% | — |`)
-  lines.push(`| 血战率 | ${fightToLastRate}% | >80% | ${checkTarget(fightToLastRate, '80')} |`)
-  lines.push(`| 大牌率 | ${bigWinRate}% | 3-8% | ${checkTarget(bigWinRate, '3')} |`)
-  lines.push(`| 门清率 | ${menqingRate}% | 7-12% | ${checkTarget(menqingRate, '7')} |`)
-  lines.push(`| Fitness | ${metrics.akScore.toFixed(1)} | ↑ | — |`)
+  lines.push(`| Games | ${metrics.totalGames} | — | — |`)
+  lines.push(`| 胡牌局 | ${metrics.winGames} (${winRate}%) | ≥90% | ${checkTarget(winRate, '90')} |`)
+  lines.push(`| 流局 | ${metrics.drawGames} (${drawRate}%) | <10% | ${checkTarget(drawRate, '10', true)} |`)
+  lines.push(`| 血战到最后一人 | ${metrics.fightToLastGames} (${fightToLastRate}%) | >80% | ${checkTarget(fightToLastRate, '80')} |`)
+  lines.push(`| 平均回合 | ${metrics.avgRounds != null ? metrics.avgRounds.toFixed(1) : '—'} | — | — |`)
+  lines.push(`| 平均总筹码 | ${metrics.avgPot != null ? metrics.avgPot.toFixed(1) : '—'} | — | — |`)
+  lines.push(`| 胡牌实例 | ${winnerInstances} | — | — |`)
+  lines.push(`| 自摸率(胡牌中) | ${selfDrawRate}% | 40-60% | ${checkTarget(selfDrawRate, '40')} |`)
+  lines.push(`| 捉冲率(胡牌中) | ${discardWinRate}% | 40-60% | ${checkTarget(discardWinRate, '40')} |`)
+  lines.push(`| 大牌率(胡牌中) | ${bigWinRate}% | 3-8% | ${checkTarget(bigWinRate, '3')} |`)
+  lines.push(`| 门清胡牌率(胡牌中) | ${menqingRate}% | 7-12% | ${checkTarget(menqingRate, '7')} |`)
+  lines.push(`| 高倍数局数(骰子>=2) | ${metrics.highMultGameCount ?? 0} | — | — |`)
+  lines.push(`| Fitness | ${(metrics.fitness ?? metrics.akScore).toFixed(1)} | ↑ | — |`)
   lines.push('')
+
   // 每局获胜人数分布
   const mw = multiWinDist || [0, 0, 0, 0]
   const mwTotal = mw.reduce((a: number, b: number) => a + b, 0)
   lines.push('**每局获胜人数分布**（本轮所有胡牌局）')
-  lines.push(`- 单人胡牌: ${mw[0]}局 | 双人胡牌: ${mw[1]}局 | 三人胡牌: ${mw[2]}局 | 四人胡牌: ${mw[3]}局`)
-  lines.push(`- 多人胡牌率: ${mwTotal > 0 ? ((mw[1] + mw[2] + mw[3]) / mwTotal * 100).toFixed(1) : 0}%（目标>80%时血战才有意义）`)
+  lines.push('')
+  lines.push('| 类型 | 局数 | 占比 |')
+  lines.push('|------|------|------|')
+  lines.push(`| 单人胡牌 | ${mw[0]} | ${mwTotal > 0 ? ((mw[0] / mwTotal) * 100).toFixed(1) : '0.0'}% |`)
+  lines.push(`| 双人胡牌 | ${mw[1]} | ${mwTotal > 0 ? ((mw[1] / mwTotal) * 100).toFixed(1) : '0.0'}% |`)
+  lines.push(`| 三人胡牌 | ${mw[2]} | ${mwTotal > 0 ? ((mw[2] / mwTotal) * 100).toFixed(1) : '0.0'}% |`)
+  lines.push(`| 四人胡牌 | ${mw[3]} | ${mwTotal > 0 ? ((mw[3] / mwTotal) * 100).toFixed(1) : '0.0'}% |`)
+  lines.push(`| 多人胡牌率 | ${mwTotal > 0 ? (((mw[1] + mw[2] + mw[3]) / mwTotal) * 100).toFixed(1) : '0.0'}% | 目标>80% |`)
   lines.push('')
 
-  // ===== 胡牌牌型分布（固定9种） =====
+  // 胡牌牌型分布
   lines.push('### 🀄 胡牌牌型分布')
   lines.push('')
   lines.push('| 牌型 | 局数 | 占比 | K哥目标 |')
   lines.push('|------|------|------|---------|')
-  const dist = metrics.handTypeDist || {}
-  const totalWins = metrics.winGames
-  const TYPES = [
+  const dist: Record<string, number> = {}
+  // 计算按 gameIdx 去重后的真实胡牌局数（多人胡同一局只算1局）
+  const winningGameIndices = new Set<number>()
+  if (allWinningGames && allWinningGames.length > 0) {
+    for (const w of allWinningGames) {
+      winningGameIndices.add(w.gameIdx)
+      const types = w.handTypes && w.handTypes.length > 0 ? w.handTypes : []
+      for (const t of types) dist[t] = (dist[t] || 0) + 1
+    }
+  } else if (metrics.handTypeDist) {
+    for (const [k, v] of Object.entries(metrics.handTypeDist)) dist[k] = (dist[k] || 0) + (v || 0)
+  }
+  // winnerInstances = 真实胡牌局数（按gameIdx去重）
+  const realWinnerInstances = winningGameIndices.size
+  const TYPES: [string, string][] = [
     ['混一色', '≥40%'],
     ['碰碰胡', '>25%'],
     ['清一色', '>20%'],
@@ -173,46 +209,56 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
     ['混碰', '—'],
     ['八花', '—'],
     ['四百搭', '—'],
-  ] as [string, string][]
+  ]
   for (const [type, target] of TYPES) {
-    const cnt = dist[type] ?? 0
-    const pct = totalWins > 0 ? ((cnt / totalWins) * 100).toFixed(1) : '0.0'
+    const cnt = dist[type] || 0
+    const pct = realWinnerInstances > 0 ? ((cnt / realWinnerInstances) * 100).toFixed(1) : '0.0'
     lines.push(`| ${type} | ${cnt} | ${pct}% | ${target} |`)
   }
   lines.push('')
 
-  // ===== 训练明细 =====
-  lines.push('### 训练明细')
+  // 最大输赢局明细
+  lines.push('### 最大输赢局明细（本轮）')
   lines.push('')
-  lines.push(`- Games: ${metrics.totalGames}`)
-  lines.push(`- 胡牌局: ${metrics.winGames} (${winRate}%)`)
-  lines.push(`- 流局: ${metrics.drawGames} (${drawRate}%)`)
-  lines.push(`- 血战到最后一人: ${metrics.fightToLastGames} (${fightToLastRate}%)`)
-  lines.push(`- 平均回合: —`)
-  lines.push(`- 平均总筹码: —`)
-  lines.push(`- 自摸率(胡牌中): ${selfDrawRate}%`)
-  lines.push(`- 大牌率(胡牌中): ${bigWinRate}%`)
-  lines.push(`- 门清胡牌率(胡牌中): ${menqingRate}%`)
-  lines.push(`- Fitness: ${metrics.akScore.toFixed(4)}`)
+  lines.push('#### 最大赢局')
+  if (!topWins || topWins.length === 0) {
+    lines.push('- 无盈利局（AI-AK本轮无正收益局）')
+  } else {
+    const w = topWins[0]
+    const r = w.result || {}
+    lines.push(`- 赢家: ${w.winnerName} | 得分: +${w.akDelta} | 局号: ${w.gameIdx}`)
+    lines.push(`- 牌型: ${w.handTypes?.join(', ') || '—'} | 自摸: ${w.isSelfDraw ? '是' : '否'} | 番数: ${w.wonFan ?? '—'}`)
+    lines.push(`- 底数: ${w.wonFan ? Math.round(w.wonFan / 10) : '—'} | 倍数: ×${r.multiplier || '—'}`)
+  }
+  lines.push('')
+  lines.push('#### 最大输局')
+  if (!topLosses || topLosses.length === 0) {
+    lines.push('- 无亏损局（AI-AK本轮无负收益局）')
+  } else {
+    const w = topLosses[0]
+    const r = w.result || {}
+    lines.push(`- 输家: ${w.winnerName} | 损失: ${Math.abs(w.akDelta)} | 局号: ${w.gameIdx}`)
+    lines.push(`- 牌型: ${w.handTypes?.join(', ') || '—'} | 自摸: ${w.isSelfDraw ? '是' : '否'} | 番数: ${w.wonFan ?? '—'}`)
+    lines.push(`- 底数: ${w.wonFan ? Math.round(w.wonFan / 10) : '—'} | 倍数: ×${r.multiplier || '—'}`)
+  }
   lines.push('')
 
-  // ===== 所有胡牌局明细（所有玩家） =====
+  // 所有胡牌局明细
   if (allWinningGames && allWinningGames.length > 0) {
     lines.push('### 所有胡牌局明细（所有玩家）')
     lines.push('')
     let lastGameIdx = -1
     for (const w of allWinningGames) {
-      const r = w.result || {}
       if (w.gameIdx !== lastGameIdx) {
         lines.push(`**局次${w.gameIdx}**（${w.isSelfDraw ? '自摸' : '放冲'} · ×${w.multiplier || '?'}）`)
         lastGameIdx = w.gameIdx
       }
-      lines.push(`  - ${w.winnerName}: ${w.handTypes.join(', ') || '普通'} · ${w.hand} · ${w.melds?.join('; ') || '(无副露)'} ${w.wonFan ? `→ ${w.wonFan}点` : ''}`)
+      lines.push(`  - ${w.winnerName || '未知玩家'}: ${w.handTypes?.join(', ') || '—'} · ${w.hand || '(空)'} · ${Array.isArray(w.melds) ? w.melds.join('; ') : w.melds || '(无副露)'} ${w.wonFan ? `→ ${w.wonFan}点` : ''}`)
     }
     lines.push('')
   }
 
-  // ===== 本轮最佳策略参数 =====
+  // 最佳策略参数
   lines.push('### 本轮最佳策略参数')
   lines.push('')
   lines.push('```json')
@@ -220,113 +266,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
   lines.push('```')
   lines.push('')
 
-  // ===== 最大输赢局明细 =====
-  lines.push('### 最大输赢局明细（本轮）')
-  lines.push('')
-
-  // 最大赢局
-  lines.push('#### 最大赢局')
-  if (topWins.length === 0) {
-    lines.push('- 无盈利局')
-  } else {
-    const w = topWins[0]
-    const r = w.result || {}
-    const winnerSnap = r.snapshots?.[r.winner]
-    const loserSnap = r.snapshots?.find((p: any) => p.name !== w.winnerName)
-    lines.push(`- 最大赢利: ${w.winnerName} +${w.akDelta} 点（绝对值 ${Math.abs(w.akDelta)}）`)
-    lines.push(`- 局号: ${w.gameIdx}`)
-    lines.push(`- 回合: ${w.roundNum || '—'}`)
-    lines.push(`- 总筹码: ${Math.abs(w.akDelta)}`)
-    lines.push(`- 百搭: ${wildTileToName(winnerSnap?.wildTile || '')}（${winnerSnap?.wildCount ?? 0}张）`)
-    lines.push(`- 回合/全局倍数信息:`)
-    lines.push(`  - 骰子点数: —`)
-    lines.push(`  - 骰子倍数: ×${r.multiplier || '—'}`)
-    lines.push(`  - 全局倍数: ×${r.multiplier || '—'}`)
-    lines.push('')
-    lines.push('**胡牌玩家明细：**')
-    if (winnerSnap) {
-      lines.push(`  - 玩家: ${winnerSnap.name}`)
-      lines.push(`    - 胡牌方式: ${w.isSelfDraw ? '自摸' : '放冲'}`)
-      lines.push(`    - 牌型/基础番/最终点: ${w.handTypes.join(', ') || '—'} / ${w.wonFan ? Math.round(w.wonFan / 10) : '—'} / ${w.wonFan ?? '—'}`)
-      lines.push(`    - 手牌牌面: ${winnerSnap.hand || '—'}`)
-      lines.push(`    - 门口牌（吃/碰/杠）: ${winnerSnap.melds?.join(' ; ') || '(无)'}`)
-      lines.push(`    - 花牌: ${winnerSnap.flowers?.join(' ') || '(无)'}`)
-    }
-    // 三口/四口关系
-    const baoRelations: string[] = []
-    if (r.snapshots) {
-      for (let si = 0; si < r.snapshots.length; si++) {
-        const snap = r.snapshots[si]
-        for (let ci = 0; ci < 4; ci++) {
-          const cnt = snap.meldSources?.[ci]
-          if (cnt >= 3) {
-            const partner = r.snapshots[ci]
-            if (partner) {
-              const level = cnt >= 4 ? '四口' : '三口'
-              baoRelations.push(`  - ${snap.name} <-> ${partner.name}: ${level} (A->B:${cnt}, B->A:${partner.meldSources?.[si] || 0})`)
-            }
-          }
-        }
-      }
-    }
-    if (baoRelations.length > 0) {
-      lines.push('**三口/四口关系：**')
-      lines.push(...baoRelations)
-    }
-    // 结算逐笔
-    if (r.settlementLog?.length > 0) {
-      lines.push('**结算逐笔明细：**')
-      for (const s of r.settlementLog) {
-        // amount = basePoints * SETTLEMENT_MULT(=10) * gameMultiplier
-        const basePoints = s.mult ? Math.round(s.amount / s.mult / 10) : s.amount
-        const mult = s.mult || 1
-        const multStr = ` (${basePoints}×10×${mult})`
-        lines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
-      }
-    }
-  }
-  lines.push('')
-
-  // 最大输局
-  lines.push('#### 最大输局')
-  if (topLosses.length === 0) {
-    lines.push('- 无亏损局')
-  } else {
-    const w = topLosses[0]
-    const r = w.result || {}
-    const winnerSnap = r.snapshots?.[r.winner]
-    lines.push(`- 最大亏损: ${w.winnerName} -${Math.abs(w.akDelta)} 点（绝对值 ${Math.abs(w.akDelta)}）`)
-    lines.push(`- 局号: ${w.gameIdx}`)
-    lines.push(`- 回合: ${w.roundNum || '—'}`)
-    lines.push(`- 总筹码: ${Math.abs(w.akDelta)}`)
-    lines.push(`- 百搭: ${wildTileToName(winnerSnap?.wildTile || '')}（${winnerSnap?.wildCount ?? 0}张）`)
-    lines.push(`- 回合/全局倍数: ×${r.multiplier || '—'} / ×${r.multiplier || '—'}`)
-    lines.push('')
-    lines.push('**胡牌玩家明细：**')
-    if (winnerSnap) {
-      lines.push(`  - 玩家: ${winnerSnap.name}`)
-      lines.push(`    - 胡牌方式: ${w.isSelfDraw ? '自摸' : '放冲'}`)
-      lines.push(`    - 牌型/基础番/最终点: ${w.handTypes.join(', ') || '—'} / ${w.wonFan ? Math.round(w.wonFan / 10) : '—'} / ${w.wonFan ?? '—'}`)
-      lines.push(`    - 手牌牌面: ${winnerSnap.hand || '—'}`)
-      lines.push(`    - 门口牌（吃/碰/杠）: ${winnerSnap.melds?.join(' ; ') || '(无)'}`)
-      lines.push(`    - 花牌: ${winnerSnap.flowers?.join(' ') || '(无)'}`)
-    }
-    if (r.settlementLog?.length > 0) {
-      lines.push('**结算逐笔明细：**')
-      for (const s of r.settlementLog) {
-        // amount = basePoints * SETTLEMENT_MULT(=10) * gameMultiplier
-        const basePoints = s.mult ? Math.round(s.amount / s.mult / 10) : s.amount
-        const mult = s.mult || 1
-        const multStr = ` (${basePoints}×10×${mult})`
-        lines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
-      }
-    }
-  }
-  lines.push('')
-  lines.push(`- 高倍数局数(骰子>=2): —`)
-  lines.push('')
-
-  // ===== 每圈详细快照（showDetail 时有数据才输出） =====
+  // 每圈详细快照（仅 round 文件需要；主文件 showDetail=false 时不输出）
   if (showDetail && report.turnSnapshots && report.turnSnapshots.length > 0) {
     lines.push('### 🔍 每圈明细（血战到底）')
     lines.push('')
@@ -396,8 +336,69 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
     lines.push('')
   }
 
-  lines.push('---')
+  return lines.join('\n')
+}
 
+/**
+ * 只输出每圈明细（用于 round 文件，--detail 时写入）
+ */
+export function formatCircleDetailsOnly(report: RoundReport): string {
+  const lines: string[] = []
+  if (!report.turnSnapshots || report.turnSnapshots.length === 0) {
+    lines.push('(无每圈明细)')
+    return lines.join('\n')
+  }
+  lines.push('### 🔍 每圈明细（血战到底）')
+  lines.push('')
+  const snaps = report.turnSnapshots
+  let circleCount = 0
+  let prevExposed: string[] = []
+  let circleStart = 0
+  const drawnThisCircle: Record<string, {drawn: string, discarded: string}> = {}
+
+  const flushCircle = (startIdx: number) => {
+    const startSnap = snaps[startIdx]
+    if (!startSnap) return
+    lines.push(`**【第${circleCount}圈】百搭${startSnap.wildTile}｜×${startSnap.gameMultiplier}**`)
+    for (const pp of startSnap.players) {
+      const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-' }
+      const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
+      const discardStr = d.discarded !== '-' ? ` → 打${d.discarded}` : ''
+      const exposedStr = pp.exposed?.join('|') || '无'
+      lines.push(`- ${pp.name}：${pp.hand || '(无)'}｜副露:${exposedStr}｜${pp.handCount}张${drawStr}${discardStr}`)
+    }
+    lines.push('')
+  }
+
+  for (let i = 0; i < snaps.length; i++) {
+    const snap = snaps[i]
+    const players = snap.players || []
+    const currExposed = players.map((p: any) => (p.exposed || []).join('|'))
+    const hadMeld = prevExposed.length > 0 && currExposed.some((ex: string, idx: number) => ex !== prevExposed[idx])
+
+    if (i === 0) {
+      for (const pp of players) drawnThisCircle[pp.name] = { drawn: '-', discarded: '-' }
+    } else if (hadMeld) {
+      flushCircle(circleStart)
+      circleCount++
+      circleStart = i
+      for (const pp of players) drawnThisCircle[pp.name] = { drawn: '-', discarded: '-' }
+    }
+
+    const currP = players[snap.currentPlayer]
+    if (currP) {
+      drawnThisCircle[currP.name] = {
+        drawn: snap.drawnTile || '-',
+        discarded: snap.discardedTile || '-'
+      }
+    }
+    prevExposed = currExposed
+  }
+
+  // 打印最后一圈（即便无胡牌/无副露也要如实记录）
+  flushCircle(circleStart)
+  lines.push('')
+  lines.push('---')
   return lines.join('\n')
 }
 
@@ -407,38 +408,52 @@ export function buildRoundReport(
   round: number,
   internalResult: any,
   policy: Record<string, number>,
-  playerNames: string[]
+  playerNames: string[],
+  scriptName?: string
 ): RoundReport {
-  const topWins = (internalResult.winningGames || [])
-    .filter((w: any) => w.akDelta > 0)
-    .sort((a: any, b: any) => b.akDelta - a.akDelta)
+  const winningGames = (internalResult.winningGames || []).sort((a: any, b: any) => a.gameIdx - b.gameIdx)
+  const topWins = winningGames
+    .filter((w: any) => (w.akDelta ?? 0) > 0)
+    .sort((a: any, b: any) => (b.akDelta ?? 0) - (a.akDelta ?? 0))
     .slice(0, 3)
-
-  const topLosses = (internalResult.winningGames || [])
-    .filter((w: any) => w.akDelta < 0)
-    .sort((a: any, b: any) => a.akDelta - b.akDelta)
+  const topLosses = winningGames
+    .filter((w: any) => (w.akDelta ?? 0) < 0)
+    .sort((a: any, b: any) => (a.akDelta ?? 0) - (b.akDelta ?? 0))
     .slice(0, 3)
 
   const playerStats: PlayerStats[] = playerNames.map(name => ({
     name,
     score: internalResult.scores?.[name] ?? 0,
-    wins: 0,
+    wins: internalResult.winRates?.[name] && internalResult.totalGames ? Math.round(internalResult.winRates[name] * internalResult.totalGames) : 0,
     deltas: [],
   }))
+
+  const handTypeDist = internalResult.handTypeDist || internalResult.handTypeCounts || {}
+  const drawGames = typeof internalResult.draws === 'number'
+    ? internalResult.draws
+    : Math.max(0, (internalResult.totalGames || 0) - (internalResult.winGames || 0))
 
   return {
     round,
     timestamp: new Date().toISOString(),
+    scriptName,
     metrics: {
-      totalGames: internalResult.totalGames,
-      winGames: internalResult.winGames,
-      drawGames: internalResult.totalGames - internalResult.winGames,
-      selfDrawGames: internalResult.selfDrawGames,
-      bigWinGames: internalResult.bigWinGames,
-      menqingWinGames: internalResult.menqingWinGames,
-      fightToLastGames: internalResult.fightToLastGames,
-      akScore: internalResult.akScore,
-      handTypeDist: internalResult.handTypeDist || {},
+      totalGames: internalResult.totalGames || 0,
+      winGames: internalResult.winGames || 0,
+      drawGames,
+      selfDrawGames: internalResult.selfDrawGames || 0,
+      discardWinGames: internalResult.discardWinGames || 0,
+      bigWinGames: internalResult.bigWinGames || 0,
+      menqingWinGames: internalResult.menqingWinGames || 0,
+      fightToLastGames: internalResult.fightToLastGames || 0,
+      akScore: internalResult.akScore || 0,
+      fitness: internalResult.metricsFitness,
+      handTypeDist,
+      winnerInstances: internalResult.winnerInstances || winningGames.length,
+      avgRounds: internalResult.avgRounds,
+      avgPot: internalResult.avgPot,
+      avgWinnerPoints: internalResult.avgWinnerPoints,
+      highMultGameCount: internalResult.highMultGameCount,
     },
     policy,
     playerStats,
@@ -446,7 +461,7 @@ export function buildRoundReport(
     topLosses,
     worstLossGames: internalResult.worstSingleLoss ? [internalResult.worstSingleLoss] : [],
     multiWinDist: internalResult.multiWinDist || [0, 0, 0, 0],
-    allWinningGames: (internalResult.winningGames || []).sort((a: any, b: any) => a.gameIdx - b.gameIdx),
+    allWinningGames: winningGames,
     turnSnapshots: internalResult.turnSnapshots || [],
   }
 }
@@ -458,7 +473,9 @@ export function writeRoundFile(outDir: string, report: RoundReport, showDetail =
   const ts = report.timestamp.replace(/[:.]/g, '-').slice(0, 19)
   const filename = `round-${String(report.round).padStart(3, '0')}-${ts}.md`
   const filePath = path.join(outDir, filename)
-  fs.writeFileSync(filePath, formatRoundReport(report, showDetail), 'utf-8')
+  // round 文件只输出每圈明细（showDetail 控制是否写文件）
+  const content = showDetail ? formatCircleDetailsOnly(report) : ''
+  if (content) fs.writeFileSync(filePath, content, 'utf-8')
   return filename
 }
 

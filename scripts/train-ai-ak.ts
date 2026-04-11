@@ -1641,7 +1641,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
         meldSources: [...p.meldSources],
         handCount: p.hand.length
       })),
-      wildTile: g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : '无百搭',
+      wildTile: g.wildSuit && g.wildValue ? tileStr({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭',
       gameMultiplier: g.gameMultiplier
     })
     prevDrawn = null
@@ -1649,6 +1649,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
   }
 
   for (let i = 0; i < 13; i++) { for (let p = 0; p < 4; p++) drawTile(g, g.players[p]) }
+  // 初始13张明细也记录
+  recordTurnSnapshot(g.current)
   // 发牌后每人13张（摸牌后=14）
   for (const p of g.players) {
     if (p.name === 'AI-小胖' && p.hand.length !== 13) {
@@ -2037,7 +2039,7 @@ interface EvalResult {
   bigWin: { gameIdx: number; result: GameResult; score: number } | null
   bigLoss: { gameIdx: number; result: GameResult; score: number } | null
   // 模板输出用
-  totalGames: number; winGames: number; selfDrawGames: number
+  totalGames: number; winGames: number; winnerInstances?: number; selfDrawGames: number; discardWinGames?: number
   fightToLastGames: number  // 血战到最后一人（多赢家局）
   bigWinGames: number       // 大牌局数（清碰/风一色/风碰/门清清一色）
   menqingWinGames: number  // 门清胡牌局数
@@ -2160,7 +2162,9 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   for (const n of AI_NAMES) { scores[n] = 0; wins[n] = 0 }
   let draws = 0
   let winGames = 0
+  let winnerInstances = 0
   let selfDrawGames = 0
+  let discardWinGames = 0
   let fightToLastGames = 0
   let bigWinGames = 0
   let menqingWinGames = 0
@@ -2178,14 +2182,17 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
     if (result) {
       // 收集每局每圈快照
       if (result.turnSnapshots) allTurnSnapshots.push(...result.turnSnapshots)
+      const gameWinners = result.winnersThisGame || []
+      if (result.winner == null || result.winner < 0 || gameWinners.length === 0) {
+        draws++
+        prevRoundWasDraw = true
+        continue
+      }
+
       const winner = AI_NAMES[result.winner]
       wins[winner]++
       winGames++
       prevRoundWasDraw = false
-
-      // 判断是否自摸
-      const winEvents = result.events.filter(e => e.action.includes('自摸'))
-      if (winEvents.length > 0) selfDrawGames++
 
       const akDelta = result.scores[0] * SETTLEMENT_MULT
       for (let i = 0; i < AI_NAMES.length; i++) {
@@ -2195,28 +2202,26 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
       if (akDelta < 0 && (!bigLoss || akDelta < bigLoss.score)) bigLoss = { gameIdx: g, result, score: akDelta }
 
       // === 用 winnersThisGame（runGame 里每个赢家直接 push 的）统计 ===
-      const gameWinners = result.winnersThisGame || []
       const winnerCount = gameWinners.length
       if (winnerCount > 0) {
         if (winnerCount >= 2) fightToLastGames++
         if (winnerCount >= 1 && winnerCount <= 4) multiWinDist[winnerCount - 1]++
+        winnerInstances += gameWinners.length
         for (const w of gameWinners) {
           const typeNums = w.winHandType ? w.winHandType.split(',').map(Number).filter(n => !isNaN(n)) : []
-          const typeNames = typeNums.filter(n => n !== HandType.STANDARD).map(n => HAND_TYPE_NAMES[n] || String(n))
-          // K哥铁律：不存在普通胡/基础胡；detectHandTypes返回空时跳过（不是错误）
+          const typeNamesRaw = typeNums.filter(n => n !== HandType.STANDARD).map(n => HAND_TYPE_NAMES[n] || String(n))
+          const typeNames = typeNamesRaw.length > 0 ? typeNamesRaw : ['普通']
           const bigTypes = [HandType.FENG_PENG, HandType.ALL_WIND, HandType.QING_PENG]
           if (typeNums.some(n => bigTypes.includes(n))) bigWinGames++
-          if (w.melds.length === 0 && typeNums.length > 0) menqingWinGames++
+          if (w.melds.length === 0) menqingWinGames++
           for (const t of typeNames) handTypeDist[t] = (handTypeDist[t] || 0) + 1
-          const akIsWinner = w.name === 'AI-AK'
           const winnerScore = result.scores[w.playerIndex] || 0
-          const akDeltaForWinner = akIsWinner ? winnerScore * SETTLEMENT_MULT : 0
           winningGames.push({
             gameIdx: g, winnerName: w.name, hand: w.hand,
             melds: w.melds, handTypes: typeNames,
             isSelfDraw: w.isSelfDraw, score: winnerScore,
             multiplier: result.multiplier, roundNum: w.roundNum,
-            akDelta: akDeltaForWinner, result,
+            akDelta: winnerScore * SETTLEMENT_MULT, result,
             wonFan: w.wonFan, winHandType: w.winHandType,
             wildTile: w.wildTile, wildTileValue: w.wildTileValue
           })
@@ -2241,11 +2246,11 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
 
   // 计算指标导向fitness
   const drawRate = draws / games
-  const selfDrawRate = winGames > 0 ? selfDrawGames / winGames : 0
-  const discardWinRate = winGames > 0 ? (winGames - selfDrawGames) / winGames : 0
-  const fightToLastRate = winGames > 0 ? fightToLastGames / winGames : 0  // TODO: 血战需要多赢家支持
-  const bigHandRate = winGames > 0 ? bigWinGames / winGames : 0  // TODO: 大牌率需要手牌分析
-  const menqingWinRate = winGames > 0 ? menqingWinGames / winGames : 0  // TODO: 门清需要判定
+  const selfDrawRate = winnerInstances > 0 ? selfDrawGames / winnerInstances : 0
+  const discardWinRate = winnerInstances > 0 ? discardWinGames / winnerInstances : 0
+  const fightToLastRate = winGames > 0 ? fightToLastGames / winGames : 0
+  const bigHandRate = winnerInstances > 0 ? bigWinGames / winnerInstances : 0
+  const menqingWinRate = winnerInstances > 0 ? menqingWinGames / winnerInstances : 0
 
   let mf = 0
   mf -= Math.max(0, drawRate - 0.10) * 1000  // 流局率惩罚（目标<10%）
@@ -2264,7 +2269,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
 
   return {
     akScore: scores['AI-AK'], akWins: wins['AI-AK'], winRates, scores, draws,
-    bigWin, bigLoss, totalGames: games, winGames, selfDrawGames,
+    bigWin, bigLoss, totalGames: games, winGames, winnerInstances, selfDrawGames, discardWinGames,
     fightToLastGames, bigWinGames, menqingWinGames, metricsFitness: mf, worstSingleLoss,
     winningGames, handTypeDist, multiWinDist,
     playerStats: AI_NAMES.map(name => ({ name, score: scores[name] || 0, wins: wins[name] || 0, deltas: [] })),
@@ -2321,7 +2326,7 @@ function main() {
   const selfDRate = baseline.winGames > 0 ? (baseline.selfDrawGames/baseline.winGames*100).toFixed(1) : '0'
   const baseLine = BASELINE_MODE
     ? `| Bot | 总分 | 胜率 | 排名 |\n|-----|------|------|------|\n` + AI_NAMES.map(n => `| ${n} | ${baseline.scores[n]} | ${(baseline.winRates[n]*100).toFixed(1)}% | - |`).join('\n') + `\n| 流局率 | ${(baseline.draws/GAMES_PER_ROUND*100).toFixed(1)}% | | |`
-    : `AI-AK baseline: score=${baseline.akScore}  wins=${baseline.akWins}/${GAMES_PER_ROUND}  draws=${baseline.draws}`
+    : `AI-AK baseline: score=${baseline.akScore}  wins=${baseline.akWins}/${GAMES_PER_ROUND}  draws=${baseline.draws ?? 0}`
   console.log(baseLine)
   logLines.push(baseLine)
 
@@ -2430,14 +2435,14 @@ function main() {
 
     // 每轮单独输出文件（使用标准化reporter）
     if (DETAIL_MODE && bestEvalResult) {
-      const report = buildRoundReport(round, bestEvalResult, roundBestPolicy as any, AI_NAMES)
+      const report = buildRoundReport(round, bestEvalResult, roundBestPolicy as any, AI_NAMES, 'train-ai-ak.ts')
       roundReports.push(report)
       const filename = writeRoundFile(OUT_DIR, report, true)  // showDetail=true
       console.log(`  → 轮次详情已保存: ${filename}`)
     } else if (!DETAIL_MODE) {
       // 依然构建 report（用于汇总），但不写 round 文件
       if (bestEvalResult) {
-        const report = buildRoundReport(round, bestEvalResult, roundBestPolicy as any, AI_NAMES)
+        const report = buildRoundReport(round, bestEvalResult, roundBestPolicy as any, AI_NAMES, 'train-ai-ak.ts')
         roundReports.push(report)
       }
     }
@@ -2575,33 +2580,11 @@ function main() {
     saveCharacter('AI-AK', bestPolicy, metrics)
   }
 
-  // 主日志：用 formatRoundReport 统一格式（Summary + 每圈明细 when DETAIL_MODE）
+  // 主日志：只保留每轮报告正文
   const mainOut: string[] = []
-  const mainHeader = [
-    '# 长清阁麻将 AI-AK 训练日志',
-    '',
-    `- 创建时间: ${new Date().toISOString()}`,
-    `- 训练脚本: train-ai-ak.ts`,
-    `- Config: ${ROUNDS} rounds × ${GAMES_PER_ROUND} games = ${ROUNDS * GAMES_PER_ROUND} total`,
-    `- 对手: AI-小胖, AI-阿水, AI-老赵 (固定)`,
-    `- 目标: 最高盈利总分`,
-    '',
-    '> 每轮记录训练指标 + 策略参数 + 最大单人亏损局明细 + 结算逐笔',
-  ]
-  mainOut.push(...mainHeader)
-  // 基线成绩（第0轮）
-  mainOut.push('\n## 基线成绩（第0轮）')
-  const baseEval = evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
-  mainOut.push(`AI-AK baseline: score=${baseEval.akScore}  wins=${baseEval.winGames}/${GAMES_PER_ROUND}  draws=${baseEval.drawGames}`)
-  // 每轮用 formatRoundReport
   for (const report of roundReports) {
-    mainOut.push(formatRoundReport(report, DETAIL_MODE))
+    mainOut.push(formatRoundReport(report, true))
   }
-  // 性能统计
-  const tsTing = getIsTingCacheStats()
-  const tsCanWin = getCanWinCacheStats()
-  mainOut.push(`\n[性能] isTing缓存: 命中${tsTing.hits} 未命中${tsTing.misses} 命中率${tsTing.hitRate}`)
-  mainOut.push(`[性能] canWin缓存: 命中${tsCanWin.hits} 未命中${tsCanWin.misses} 命中率${tsCanWin.hitRate}`)
   fs.writeFileSync(mdFile, mainOut.join('\n'), 'utf-8')
   fs.writeFileSync(policyFile, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
   fs.writeFileSync(policyLatest, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
