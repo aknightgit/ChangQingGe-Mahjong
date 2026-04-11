@@ -30,6 +30,7 @@ const __dirname = path.dirname(__filename)
 const ROUNDS = parseInt(process.argv[2] || '10')
 const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000')
 const BASELINE_MODE = process.argv[4] === '--baseline'  // 基线训练：优化指标而非得分
+const DETAIL_MODE = process.argv.includes('--detail')  // 每圈明细开关，默认关闭
 const SETTLEMENT_MULT = 10
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
 const OUT_DIR = path.resolve(__dirname, '..', 'training-output')
@@ -109,7 +110,7 @@ const DEFAULT_POLICY: BotPolicy = {
   selfWinWildBoost: 0.1, discardHuWildPenalty: 0.4, discardHuMenQingPenalty: 0.14,
   pengChance: 0.79, kongChance: 0.47, chowChance: 0.03, anKongChance: 0.95,
   pengWildBoost: 0.06, kongWildBoost: 0.14, chowWildPenalty: 0.18,
-  menqingKeepBonus: 5.0, meldPenalty: 0.05,
+  menqingKeepBonus: 0.0, meldPenalty: 0.05,  // K哥基线训练：门清bonus最低
   allPungsPursuit: 1.5, pureFlushPursuit: 1.5, halfFlushWeight: 1.0,
   allHonorsPursuit: 1.0, allHonorsPungsPursuit: 1.0,
   qingPengPursuit: 1.5, hunPengPursuit: 1.5,
@@ -565,26 +566,40 @@ function checkHandInvariant(p: BotPlayer, phase: 'draw' | 'discard' | 'claim' | 
 
 // ========== Apply melds ==========
 function applyPeng(p: BotPlayer, tile: Tile, sourcePos?: number): void {
+  const rawHand = p.hand.length
+  const rawMelds = p.exposedMelds.length
   p.hand = normalizeHand(p.hand)  // 铁律：apply前先normalize
   const before = p.hand.length
   const meldCount = p.exposedMelds.length
   const validBefore = before === 13 - 3 * meldCount  // K哥铁律：只看口数
   const matches = p.hand.filter(t => tileEq(t, tile)).slice(0, 2)
+  // 入口诊断：打印关键状态
+  console.error(`[PENG_ENTER] ${p.name} raw=(hand=${rawHand},melds=${rawMelds}) norm_before=(hand=${before},melds=${meldCount}) tile=${tileStr(tile)}`)
+  console.error(`[PENG_ENTER] ${p.name} matches=${matches.length} matchStrs=${matches.map(t=>tileStr(t)).join(',')} handStrs=${p.hand.map(t=>tileStr(t)).join(',')}`)
   // validBefore检查已被其他bug破坏的手牌守恒，移除此防御性拒绝，只检查匹配数
   if (matches.length < 2) {
-    console.error(`BUG applyPeng: ${p.name} before=${before} melds=${meldCount} matches=${matches.length} tile=${tileStr(tile)} hand=${p.hand.map(t=>tileStr(t)).join(',')}`)
+    console.error(`BUG applyPeng: ${p.name} before=${before} melds=${meldCount} matches=${matches.length} tile=${tileStr(tile)} handIDs=${p.hand.map(t=>t.id).join(',')}`)
     return
   }
-  // 小胖专诊：追踪pong后hand
+  // 诊断：追踪移除过程
+  const matchIds = matches.map(m => m.id)
+  const handIds_before = p.hand.map(h => h.id)
+  let removedCount = 0
+  for (const u of matches) {
+    const idx = p.hand.findIndex(rt => rt.id === u.id)
+    if (idx >= 0) { p.hand.splice(idx, 1); removedCount++ }
+    else console.error(`[PENG_ID_FAIL] ${p.name} match=${u.id} NOT_IN_HAND matchIds=${matchIds.join(',')} handIds=${handIds_before.join(',')}`)
+  }
+  const after = p.hand.length
+  if (removedCount !== 2 || after !== before - 2) {
+    console.error(`[PENG_REMOVAL] ${p.name} removed=${removedCount}/2 before=${before} after=${after} matchIds=${matchIds.join(',')} handIds_after=${p.hand.map(h=>h.id).join(',')}`)
+  }
   if (p.name === 'AI-小胖' && before === 4 && meldCount === 3) {
     console.error(`[小胖_PONG] before=${before} melds=${meldCount} matches=${matches.map(t=>tileStr(t)).join(',')} tile=${tileStr(tile)}`)
   }
-  for (const u of matches) { const idx = p.hand.findIndex(rt => rt.id === u.id); if (idx >= 0) p.hand.splice(idx, 1) }
-  const after = p.hand.length
   if (p.name === 'AI-小胖' && after === 3 && meldCount === 3) {
     console.error(`[小胖_PONG_AFTER] before=${before} after=${after} melds=${meldCount} newMeld=${tileStr(tile)}`)
   }
-  if (after !== before - 2) console.error(`BUG applyPeng: ${p.name} before=${before} matches=${matches.length} after=${after}`)
   p.exposedMelds.push({ type: MeldType.TRIPLET, tiles: [tile, tile, tile], isConcealed: false })
   if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
 }
@@ -1378,6 +1393,24 @@ interface GameEvent { turn: number; player: string; action: string; detail: stri
 interface SettlementEntry { from: string; to: string; amount: number; reason: string; mult?: number }
 interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers: string[]; meldSources: number[]; wildCount: number; wildTile: string; wonFan?: number; winHandType?: string; status: string }
 interface WinnerInfo { playerIndex: number; name: string; hand: string; melds: string[]; flowers: string[]; isSelfDraw: boolean; wonFan: number; winHandType: string; roundNum: number; wildTile: string; wildTileValue?: number }
+
+interface TurnSnapshot {
+  turn: number
+  currentPlayer: number
+  drawnTile: string
+  discardedTile: string
+  lastDiscardBy: number
+  lastDiscard: string
+  players: Array<{
+    name: string
+    hand: string
+    exposed: string[]
+    meldSources: number[]
+    handCount: number
+  }>
+  wildTile: string
+  gameMultiplier: number
+}
 interface WinningGameRecord {
   gameIdx: number; winnerName: string; hand: string; melds: string[]; handTypes: string[];
   isSelfDraw: boolean; score: number; multiplier: number; roundNum: number;
@@ -1393,6 +1426,7 @@ interface GameResult {
   settlementLog: SettlementEntry[]; snapshots: PlayerSnapshot[]; roundNum: number
   winnerPlayer?: BotPlayer  // 用于detectHandTypes
   winnersThisGame: WinnerInfo[]  // runGame 内所有赢家的追踪
+  turnSnapshots: TurnSnapshot[]  // 每回合快照（--detail 时收集）
 }
 
 // ========== 手牌规范化（胡牌前必调） ==========
@@ -1468,6 +1502,11 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
   const finishedPlayers = new Set<number>()  // 已胡牌退出的玩家（血战）
   let turn = 0
 
+  // 每回合快照（--detail 时收集）
+  const turnSnapshots: TurnSnapshot[] = []
+  let prevDrawn: Tile | null = null
+  let prevDiscard: Tile | null = null
+
   // buildResult: 血战模式统一出口，构造 GameResult
   const buildResult = (
     primaryWinner: number, winMode: string, baseScore: number,
@@ -1483,7 +1522,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
       snapshots: recordSnapshots(),
       winnerPlayer,
       roundNum: turn,
-      winnersThisGame
+      winnersThisGame,
+      turnSnapshots
     }
   }
 
@@ -1573,6 +1613,35 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
   }
   const log = (player: string, action: string, detail: string) => { events.push({ turn, player, action, detail }) }
 
+  // 每回合快照（--detail 时收集）：记录当前玩家摸打，供每圈明细使用
+  const recordTurnSnapshot = (curr: number) => {
+    if (!DETAIL_MODE) return
+    const lastDiscard = g.discardPile[g.discardPile.length - 1] || null
+    turnSnapshots.push({
+      turn,
+      currentPlayer: curr,
+      drawnTile: prevDrawn ? tileStr(prevDrawn) : '-',
+      discardedTile: prevDiscard ? tileStr(prevDiscard) : '-',
+      lastDiscardBy: lastDiscard ? (g.playerDiscards[0].findIndex(d => d.id === lastDiscard.id) >= 0 ? 0 :
+        g.playerDiscards[1].findIndex(d => d.id === lastDiscard.id) >= 0 ? 1 :
+        g.playerDiscards[2].findIndex(d => d.id === lastDiscard.id) >= 0 ? 2 : 3) : -1,
+      lastDiscard: lastDiscard ? tileStr(lastDiscard) : '-',
+      players: g.players.map(p => ({
+        name: p.name,
+        hand: sortTiles([...p.hand]).map(t => tileStr(t)).join(' '),
+        exposed: p.exposedMelds.map(m =>
+          `${m.type === MeldType.TRIPLET ? '碰' : m.type === MeldType.SEQUENCE ? '吃' : m.type === MeldType.KONG ? '明杠' : m.type === MeldType.CONCEALED_KONG ? '暗杠' : '?'}:${sortTiles([...m.tiles]).map(t => tileStr(t)).join(' ')}`
+        ),
+        meldSources: [...p.meldSources],
+        handCount: p.hand.length
+      })),
+      wildTile: g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : '无百搭',
+      gameMultiplier: g.gameMultiplier
+    })
+    prevDrawn = null
+    prevDiscard = null
+  }
+
   for (let i = 0; i < 13; i++) { for (let p = 0; p < 4; p++) drawTile(g, g.players[p]) }
   // 发牌后每人13张（摸牌后=14）
   for (const p of g.players) {
@@ -1590,10 +1659,13 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
     const curr = g.current
     const player = g.players[curr]
     turn = round
+    // --detail: 每回合快照（摸打前记录，显示上一人的摸打）
+    recordTurnSnapshot(curr)
     const drawn = drawTile(g, player)
     if (!drawn) { console.error(`⚠️ 流局: 牌墙耗尽 round=${round} wallIdx=${g.wallIdx}/${g.deck.length}`); return null }
-    if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); continue }
+    if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); prevDrawn = drawn; continue }
     log(player.name, '摸牌', tileStr(drawn))
+    prevDrawn = drawn  // 记录本次摸牌，供下一快照使用
     checkHandInvariant(player, 'draw')  // 摸牌后铁律：14/11/8/5/2张
 
     // Self-draw win check
@@ -1698,6 +1770,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
     g.discardPile.push(discard)
     g.playerDiscards[curr].push(discard)
     log(player.name, '出牌', `${tileStr(discard)} [手牌: ${player.hand.map(t => tileStr(t)).join(' ')}]`)
+    prevDiscard = discard  // 记录本次出牌，供下一快照使用
     checkHandInvariant(player, 'discard')  // 出牌后铁律：13/10/7/4/1张
 
     // Others check hu
@@ -1935,7 +2008,9 @@ interface EvalResult {
   multiWinDist: number[]  // [n1,n2,n3,n4] = n玩家同时胡牌的局数分布
   handTypeDist: Record<string, number>  // 牌型分布计数
   // 玩家得分统计（用于报告）
-  playerStats: { name: string; score: number; wins: number; deltas: number[] }[]
+  playerStats: { name: string; score: number; wins: number; deltas: number }[]
+  // 每回合快照（--detail 时收集，用于 round 文件每圈明细）
+  turnSnapshots: any[]
 }
 
 function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy: BotPolicy): string {
@@ -2055,11 +2130,14 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   const winningGames: WinningGameRecord[] = []
   const multiWinDist = [0, 0, 0, 0]  // [单人赢,双人赢,三人赢,四人赢] 局数
   const handTypeDist: Record<string, number> = {}
+  const allTurnSnapshots: any[] = []  // --detail 时收集
   prevRoundWasDraw = false
 
   for (let g = 0; g < games; g++) {
     const result = runGame(akPolicy, otherPolicies)
     if (result) {
+      // --detail: 收集每局每圈快照
+      if (DETAIL_MODE && result.turnSnapshots) allTurnSnapshots.push(...result.turnSnapshots)
       const winner = AI_NAMES[result.winner]
       wins[winner]++
       winGames++
@@ -2150,6 +2228,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
     fightToLastGames, bigWinGames, menqingWinGames, metricsFitness: mf, worstSingleLoss,
     winningGames, handTypeDist, multiWinDist,
     playerStats: AI_NAMES.map(name => ({ name, score: scores[name] || 0, wins: wins[name] || 0, deltas: [] })),
+    turnSnapshots: allTurnSnapshots,
   }
 }
 

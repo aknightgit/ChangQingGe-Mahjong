@@ -30,6 +30,7 @@ const __dirname = path.dirname(__filename)
 const ROUNDS = parseInt(process.argv[2] || '10')
 const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000')
 const BASELINE_MODE = process.argv[4] === '--baseline'  // 基线训练：优化指标而非得分
+const DETAIL_MODE = process.argv.includes('--detail')  // 每圈明细开关，默认关闭
 const SETTLEMENT_MULT = 10
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
 const OUT_DIR = path.resolve(__dirname, '..', 'training-output')
@@ -911,15 +912,12 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   const myRound = Math.floor((wallIdx - 52) / 4)
   const isEarly = myRound < EARLY_ROUNDS
 
-  // 阶段1：前N回合 → 纯机械规则（快速搭牌）
+  // 前N回合：机械规则（更稳，不乱拆对子）
   if (isEarly) {
-    return mechanicalDiscard(p, discardPile, myRound)
+    return mechanicalDiscard(p, discardPile)
   }
 
-  // 阶段2：N+回合 → shanten优先 + route evaluator tie-break
-  const phase = determinePhase(hand.length, p.exposedMelds.length, deckLen - wallIdx)
-  const tenpaiDistance = tenpaiDist(hand, p.exposedMelds, p.wildSuit, p.wildValue)
-
+  // N+回合：听牌距离优先 + 路线评分 tie-break
   let bestTile = nonWild[0]
   let bestShanten = Infinity
   let bestRouteScore = -Infinity
@@ -931,7 +929,6 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     const newRoutes = evaluateAllRoutes(remaining, p.exposedMelds, wilds.length, remainingPhase, deckLen - wallIdx, gameMultiplier >= 4 ? 'trailing' : 'mid', p.wildSuit, p.wildValue)
     const routeScore = newRoutes.reduce((s, r) => s + r.score, 0)
 
-    // shanten 优先（越小越好），route score 做 tie-break（越大越好）
     if (shanten < bestShanten || (shanten === bestShanten && routeScore > bestRouteScore)) {
       bestShanten = shanten
       bestRouteScore = routeScore
@@ -946,103 +943,63 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
  * 默认方向：混一色/清一色（保最长门）
  * 例外：对子多→碰碰胡，风向多→风一色
  */
-function mechanicalDiscard(p: BotPlayer, discardPile: Tile[] = [], myRound: number = 0): Tile {
+function mechanicalDiscard(p: BotPlayer, discardPile: Tile[] = []): Tile {
   const mHand = p.hand
   const mNonWild = mHand.filter(t => !isWT(t, p))
 
-  // ── 1. 统计 ──
-  const mainSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
+  // 花色统计
   const suitTiles: Record<string, Tile[]> = {}
   for (const t of mNonWild) {
     if (!suitTiles[t.suit]) suitTiles[t.suit] = []
     suitTiles[t.suit].push(t)
   }
-  const suitCounts = mainSuits.map(s => suitTiles[s]?.length || 0)
-  const maxCount = Math.max(...suitCounts)
-  const maxSuit = mainSuits[suitCounts.indexOf(maxCount)]
-  const secondCount = [...suitCounts].sort((a, b) => b - a)[1] || 0
+  const mainSuitList = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
+  const suitCounts = mainSuitList.map(s => suitTiles[s]?.length || 0)
+  const minSuitIdx = suitCounts.indexOf(Math.min(...suitCounts.filter(c => c > 0)))
 
-  // 统计对子数（碰碰胡方向判断）
-  const pairCount = mainSuits.reduce((cnt, s) => {
-    const group = suitTiles[s] || []
-    const vals = group.map(t => t.value)
-    const valCount = new Map<number, number>()
-    for (const v of vals) valCount.set(v, (valCount.get(v) || 0) + 1)
-    return cnt + [...valCount.values()].filter(c => c >= 2).length
-  }, 0)
-
-  // 统计风向牌数（风一色方向判断）
-  const honorCount = mNonWild.filter(t => isHonor(t)).length
-
-  // ── 2. 确定方向 ──
-  let direction: 'flush' | 'half_flush' | 'all_triplets' | 'all_wind' = 'flush'
-  if (honorCount >= 5 && maxCount < 4) {
-    direction = 'all_wind'   // 风向多 → 风一色
-  } else if (pairCount >= 3 && maxCount < 5) {
-    direction = 'all_triplets' // 对子多(≥3) → 碰碰胡
-  } else if (maxCount >= 7) {
-    direction = 'flush'       // 长门≥7张 → 冲清一色
-  } else {
-    direction = 'half_flush'  // 默认混一色
+  // 弃牌区计数
+  const discardCount: Record<string, number> = {}
+  for (const t of discardPile) {
+    discardCount[`${t.suit}-${t.value}`] = (discardCount[`${t.suit}-${t.value}`] || 0) + 1
   }
 
-  // ── 3. 弃牌区已现数 ──
-  const discardCount: Record<string, number> = {}
-  for (const t of discardPile) discardCount[`${t.suit}-${t.value}`] = (discardCount[`${t.suit}-${t.value}`] || 0) + 1
-
-  // ── 4. 评分弃牌 ──
-  type Cand = { tile: Tile; score: number }
-  const candidates: Cand[] = []
+  // 评分：弃牌价值（越低越应该打）
+  type DiscardCandidate = { tile: Tile, score: number }
+  const candidates: DiscardCandidate[] = []
+  const suitNames = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
 
   for (const t of mNonWild) {
-    let score = 0
+    let score = 50 // 基础分
 
-    if (direction === 'all_wind') {
-      // 风一色：打数牌，留风向
-      if (mainSuits.includes(t.suit)) {
-        score = 80  // 打数牌（无害）
-      } else {
-        score = -200 // 留风向，极高优先
-      }
-    } else if (direction === 'all_triplets') {
-      // 碰碰胡：打分牌，留对子/刻子
-      const group = suitTiles[t.suit] || []
-      const sameVal = group.filter(o => o.value === t.value)
-      if (sameVal.length >= 3) {
-        score = 100  // 刻子/杠 ← 留
-      } else if (sameVal.length === 2) {
-        score = 50   // 对子 ← 留
-      } else {
-        score = -50  // 单张 ← 优先打
-      }
-    } else {
-      // 混一色/清一色：K哥铁律 — 绝对不能打最长门的牌！
-      const fromLongest = t.suit === maxSuit
-      if (fromLongest) {
-        // 打最长门 → 极重惩罚（即使是有相邻的牌）
-        // 唯一例外：1/9孤张（无相邻且本门张数少到无法成顺子）
-        const vals = (suitTiles[maxSuit] || []).map(o => o.value)
-        const adjacentVals = vals.filter(v => Math.abs(v - t.value) <= 2 && v !== t.value)
-        const isEdgeAndLonely = (t.value === 1 || t.value === 9) && adjacentVals.length === 0
-        score = isEdgeAndLonely ? 5 : -999  // -999 = 绝对不打
-      } else {
-        // 非最长门的牌 → 可以打
-        if (isHonor(t)) {
-          // 风向箭牌：已现≥2 → 优先打
-          const appeared = discardCount[`${t.suit}-${t.value}`] || 0
-          score = appeared >= 2 ? 70 : 40
-        } else {
-          // 打短门（筒/条/万里非最长门的）
-          score = 30
-          // 幺九加分（容易成废牌）
-          if (t.value === 1 || t.value === 9) score += 20
-        }
-      }
+    // 风向箭牌：已出现 >2 → 优先打
+    if (isHonor(t)) {
+      const appeared = discardCount[`${t.suit}-${t.value}`] || 0
+      score -= appeared >= 3 ? 30 : appeared >= 2 ? 20 : appeared >= 1 ? 10 : -5
     }
+
+    // 单张（同花色无相邻）
+    const suitGroup = suitTiles[t.suit] || []
+    const isSingle = !suitGroup.some(o => o.id !== t.id && (o.value === t.value - 1 || o.value === t.value + 1))
+    if (isSingle && !isHonor(t)) score -= 15
+
+    // 最短门单张 → 优先打
+    if (t.suit === suitNames[minSuitIdx] && isSingle) {
+      const appeared = discardCount[`${t.suit}-${t.value}`] || 0
+      score -= appeared >= 2 ? 25 : appeared >= 1 ? 15 : 5
+    }
+
+    // 最短门对子 → 第4优先
+    if (t.suit === suitNames[minSuitIdx] && !isSingle) {
+      score -= 5
+    }
+
+    // 幺九牌 → 加分打
+    if (t.value === 1 || t.value === 9) score -= 8
 
     candidates.push({ tile: t, score })
   }
 
+  // 按评分排序，选最低分的打
   candidates.sort((a, b) => a.score - b.score)
   return candidates[0].tile
 }
@@ -1235,15 +1192,17 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     return false
   }
 
-  // 胡牌检测：修复P1传参 + K哥铁律垃圾胡过滤
+  // 胡牌检测：先按 canWin 判真，再做可选过滤
   const canWinWithType = (tiles: Tile[], p: BotPlayer, makeWT: (p: BotPlayer) => WildTileChecker, kongCount = 0): boolean => {
     const isWildTile = makeWT(p)
     const wildTileId = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : null
     const win = canWin(tiles, p.exposedMelds, wildTileId)
     if (!win.canWin) return false
-    const specialTypes = win.types.filter(t => t !== HandType.STANDARD)
-    if (specialTypes.length > 0) return true
-    if (isGarbageHand(tiles, isWildTile)) return false
+
+    // 调试阶段：禁用垃圾胡过滤，先验证“能胡”底盘
+    // const specialTypes = win.types.filter(t => t !== HandType.STANDARD)
+    // if (specialTypes.length > 0) return true
+    // if (isGarbageHand(tiles, isWildTile)) return false
     return true
   }
 
@@ -1272,9 +1231,9 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       lastDiscard: lastDiscard ? tileStr(lastDiscard) : '-',
       players: g.players.map(p => ({
         name: p.name,
-        hand: p.hand.map(t => tileStr(t)).join(' '),
+        hand: sortTiles([...p.hand]).map(t => tileStr(t)).join(' '),
         exposed: p.exposedMelds.map(m =>
-          `${m.type === MeldType.TRIPLET ? '碰' : m.type === MeldType.SEQUENCE ? '吃' : m.type === MeldType.KONG ? '明杠' : m.type === MeldType.CONCEALED_KONG ? '暗杠' : '?'}:${m.tiles.map(t => tileStr(t)).join(' ')}`
+          `${m.type === MeldType.TRIPLET ? '碰' : m.type === MeldType.SEQUENCE ? '吃' : m.type === MeldType.KONG ? '明杠' : m.type === MeldType.CONCEALED_KONG ? '暗杠' : '?'}:${sortTiles([...m.tiles]).map(t => tileStr(t)).join(' ')}`
         ),
         meldSources: [...p.meldSources],
         handCount: p.hand.length
@@ -1295,13 +1254,11 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     prevDrawn = drawn
 
     // Self-draw win check
-    const normalizedHand = normalizeHand(player.hand)
+    // 注意：用player.hand（原始，含花牌）而不是normalizeHand——canWin内部会处理花牌
     const kongCount = player.exposedMelds.filter(m => m.type === MeldType.KONG).length
-    const expectedLen = 14 - (player.exposedMelds.length - kongCount) * 3 - kongCount * 4
-    if (normalizedHand.length !== expectedLen) {
-      // console.error(`⚠️ 手牌长度异常: ${player.name} round=${round} hand=${normalizedHand.length} expected=${expectedLen} melds=${player.exposedMelds.length} kongs=${kongCount} wall=${g.deck.length - g.wallIdx}`)
-    }
-    const winCheck = canWinWithType(normalizedHand, player, makeWT, kongCount)
+    const winCheck = canWinWithType(player.hand, player, makeWT, kongCount)
+    // [DEBUG] 临时记录每次winCheck的结果
+    if (round % 4 === 0) { const sh = tenpaiDist(player.hand, player.exposedMelds, g.wildSuit, g.wildValue); console.error(`[DEBUG] round=${round} player=${player.name} hand=${player.hand.length} wild=${g.wildSuit}-${g.wildValue} shanten=${sh} winCheck=${winCheck}`) }
     if (winCheck) {
       // 普通胡也可以自摸（不需要特殊牌型）
       let winChance = player.policy.selfWinChance
@@ -2161,7 +2118,8 @@ function testOneGame() {
   console.error(`[TEST] 百搭: ${result.wildTile || '无'}`)
 
   // 打印每回合快照（合并格式：一圈=4人各摸打一次，有吃碰/杠则断开重开）
-  if (result.turnSnapshots && result.turnSnapshots.length > 0) {
+  // --detail 开关：控制是否输出每圈明细到控制台
+  if (DETAIL_MODE && result.turnSnapshots && result.turnSnapshots.length > 0) {
     console.error('\n========== 每回合明细 ==========')
     let circleCount = 0
     let prevExposed: string[] = []   // 4家上次的副露字符串（检测吃碰）
@@ -2192,28 +2150,30 @@ function testOneGame() {
       prevExposed = currExposed
       snapIdx++
     }
-  } else {
+  } else if (DETAIL_MODE) {
     console.error('[TEST] 无回合快照（游戏未正常结束）')
   }
 
-  // 同时输出到 round 文件（流局也写）
-  const outDir = path.join(__dirname, '..', 'training-output', 'test')
-  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
-  const testReport = buildRoundReport(-1, {
-    totalGames: 1,
-    winGames: result.isDraw ? 0 : 1,
-    drawGames: result.isDraw ? 1 : 0,
-    selfDrawGames: winnerDetail?.winMode === '自摸' ? 1 : 0,
-    bigWinGames: (winnerDetail?.finalPoints || 0) > 2000 ? 1 : 0,
-    menqingWinGames: winnerDetail?.isMenQing ? 1 : 0,
-    fightToLastGames: 0, akScore: 0,
-    handTypeDist: winnerDetail ? { [winnerDetail.handType]: 1 } : {},
-    winningGames: [],
-    turnSnapshots: result.turnSnapshots,
-    scores: Object.fromEntries(result.scores.map((s, i) => [i, s])),
-  }, policy, AI_NAMES)
-  const fname = writeRoundFile(outDir, testReport)
-  console.error(`[TEST] 详细报告已写入: ${fname}`)
+  // --detail 开关：控制是否输出每圈明细和 round 文件
+  if (DETAIL_MODE) {
+    const outDir = path.join(__dirname, '..', 'training-output', 'test')
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
+    const testReport = buildRoundReport(-1, {
+      totalGames: 1,
+      winGames: result.isDraw ? 0 : 1,
+      drawGames: result.isDraw ? 1 : 0,
+      selfDrawGames: winnerDetail?.winMode === '自摸' ? 1 : 0,
+      bigWinGames: (winnerDetail?.finalPoints || 0) > 2000 ? 1 : 0,
+      menqingWinGames: winnerDetail?.isMenQing ? 1 : 0,
+      fightToLastGames: 0, akScore: 0,
+      handTypeDist: winnerDetail ? { [winnerDetail.handType]: 1 } : {},
+      winningGames: [],
+      turnSnapshots: result.turnSnapshots,
+      scores: Object.fromEntries(result.scores.map((s, i) => [i, s])),
+    }, policy, AI_NAMES)
+    const fname = writeRoundFile(outDir, testReport)
+    console.error(`[TEST] 详细报告已写入: ${fname}`)
+  }
 }
 
 testOneGame()

@@ -326,20 +326,72 @@ export function formatRoundReport(report: RoundReport): string {
   lines.push(`- 高倍数局数(骰子>=2): —`)
   lines.push('')
 
-  // ===== 每回合详细快照（单局测试时有效） =====
+  // ===== 每圈详细快照（--detail 时有数据才输出） =====
   if (report.turnSnapshots && report.turnSnapshots.length > 0) {
-    lines.push('### 🔍 每回合明细（血战到底）')
+    lines.push('### 🔍 每圈明细（血战到底）')
     lines.push('')
-    const playerNames = report.playerStats?.map(p => p.name) || ['P0', 'P1', 'P2', 'P3']
-    for (const snap of report.turnSnapshots) {
-      const currName = playerNames[snap.currentPlayer] || `P${snap.currentPlayer}`
-      lines.push(`**[回合${snap.turn}]** ${currName} 摸${snap.drawnTile} 打${snap.discardedTile} | 百搭${snap.wildTile} ×${snap.gameMultiplier}`)
-      for (const p of (snap.players || [])) {
-        const exposedStr = p.exposed?.join('|') || '无'
-        lines.push(`  ${p.name}: ${p.hand || '(无闲家手牌)'} 副露:${exposedStr} 剩${p.handCount}张`)
+    const snaps = report.turnSnapshots
+    let circleCount = 0
+    let prevExposed: string[] = []
+    let circleStart = 0
+    // 追踪当前圈每人是否已摸打
+    const drawnThisCircle: Record<number, {drawn: string, discarded: string, discardFrom: number}> = {}
+
+    for (let i = 0; i < snaps.length; i++) {
+      const snap = snaps[i]
+      const players = snap.players || []
+      const currExposed = players.map((p: any) => (p.exposed || []).join('|'))
+      const hadMeld = prevExposed.length > 0 && currExposed.some((ex: string, idx: number) => ex !== prevExposed[idx])
+      const backToStart = i > 0 && snap.currentPlayer === snaps[circleStart].currentPlayer
+
+      // 新圈开始：打印上一圈结果（如有）
+      if ((i === 0 || hadMeld || backToStart) && i > 0) {
+        circleCount++
+        // 打印上一圈所有人摸打（合并到同行）
+        for (const pp of snaps[circleStart].players) {
+          const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-', discardFrom: -1 }
+          const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
+          const discardStr = d.discarded !== '-' ? ` → 打${d.discarded}` : ''
+          const discardNote = d.discardFrom >= 0 ? ` ← ${snaps[circleStart].players[d.discardFrom]?.name || `P${d.discardFrom}`}打出` : ''
+          const exposedStr = pp.exposed?.join('|') || '无'
+          lines.push(`  - ${pp.name}：${pp.hand || '(无)'}｜副露:${exposedStr}｜${pp.handCount}张${drawStr}${discardStr}${discardNote}`)
+        }
+        lines.push('')
+        circleStart = i
+        // 重置
+        for (const pp of players) drawnThisCircle[pp.name] = { drawn: '-', discarded: '-', discardFrom: -1 }
       }
-      lines.push('')
+
+      // 初始化当前圈（第一张快照）
+      if (i === 0 || (i > 0 && (hadMeld || backToStart))) {
+        circleCount = i === 0 ? 0 : circleCount
+        lines.push(`**【第${circleCount + (i > 0 ? 0 : 0)}圈】百搭${snap.wildTile}｜×${snap.gameMultiplier}**`)
+      }
+
+      // 记录当前人摸打
+      const currP = players[snap.currentPlayer]
+      if (currP) {
+        drawnThisCircle[currP.name] = {
+          drawn: snap.drawnTile || '-',
+          discarded: snap.discardedTile || '-',
+          discardFrom: snap.lastDiscardBy >= 0 ? snap.lastDiscardBy : -1
+        }
+      }
+
+      prevExposed = currExposed
     }
+
+    // 打印最后一圈
+    circleCount++
+    for (const pp of snaps[circleStart].players) {
+      const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-', discardFrom: -1 }
+      const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
+      const discardStr = d.discarded !== '-' ? ` → 打${d.discarded}` : ''
+      const discardNote = d.discardFrom >= 0 ? ` ← ${snaps[circleStart].players[d.discardFrom]?.name || `P${d.discardFrom}`}打出` : ''
+      const exposedStr = pp.exposed?.join('|') || '无'
+      lines.push(`  - ${pp.name}：${pp.hand || '(无)'}｜副露:${exposedStr}｜${pp.handCount}张${drawStr}${discardStr}${discardNote}`)
+    }
+    lines.push('')
   }
 
   lines.push('---')
