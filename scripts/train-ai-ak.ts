@@ -108,7 +108,7 @@ const DEFAULT_POLICY: BotPolicy = {
   id: 'default',
   selfWinChance: 0.8, discardHuChance: 0.8,
   selfWinWildBoost: 0.1, discardHuWildPenalty: 0.4, discardHuMenQingPenalty: 0.14,
-  pengChance: 0.7, kongChance: 0.47, chowChance: 0.6, anKongChance: 0.95,  // K哥: 降低碰吃率避免无脑碰吃破坏牌型
+  pengChance: 0.7, kongChance: 0.47, chowChance: 0.5, anKongChance: 0.95,  // K哥: 碰率0.7/吃率0.5可训练，吃率上限0.8防无脑吃
   pengWildBoost: 0.06, kongWildBoost: 0.14, chowWildPenalty: 0.18,
   menqingKeepBonus: 0.0, meldPenalty: 0.05,  // K哥基线训练：门清bonus最低
   allPungsPursuit: 1.5, pureFlushPursuit: 1.5, halfFlushWeight: 1.0,
@@ -201,7 +201,7 @@ const PARAM_RANGES: Record<string, { min: number; max: number; step: number }> =
   discardHuMenQingPenalty:    { min: 0.0,  max: 0.4,  step: 0.02 },
   pengChance:                 { min: 0.3,  max: 1.0,  step: 0.05 },
   kongChance:                 { min: 0.1,  max: 1.0,  step: 0.05 },
-  chowChance:                 { min: 0.0,  max: 1.0,  step: 0.05 },
+  chowChance:                 { min: 0.2,  max: 0.8,  step: 0.05 },  // K哥: 吃率搜索范围0.2~0.8
   anKongChance:               { min: 0.5,  max: 1.0,  step: 0.05 },
   pengWildBoost:              { min: 0.0,  max: 0.3,  step: 0.02 },
   kongWildBoost:              { min: 0.0,  max: 0.4,  step: 0.02 },
@@ -1782,6 +1782,10 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
     log(player.name, '出牌', `${tileStr(discard)} [手牌: ${player.hand.map(t => tileStr(t)).join(' ')}]`)
     prevDiscard = discard  // 记录本次出牌，供下一快照使用
     checkHandInvariant(player, 'discard')  // 出牌后铁律：13/10/7/4/1张
+    if (player.exposedMelds.length >= 2) {
+      const cw = canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player))
+      console.error(`[DISCARD_WIN] ${player.name} hand=${player.hand.length} melds=${player.exposedMelds.length} canWin=${cw.canWin} types=${cw.types.join(',')}`)
+    }
 
     // Others check hu
     for (let other = 0; other < 4; other++) {
@@ -1901,9 +1905,21 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
               }
             }
           }
+          // 碰后立即检查自摸（4副露成立时手牌=2张，还没出牌）
+          const pengWin = canWin(normalizeHand(opp.hand), opp.exposedMelds, makeWT(opp))
+          if (pengWin.canWin) {
+            const score = calcScore(opp, true, false, g.gameMultiplier)
+            opp.score += score; player.score -= score
+            applyBaoSettlement(g, otherIdx, true, curr, score, 1)
+            recordPayment(player.name, opp.name, score * g.gameMultiplier, '碰后自摸', g.gameMultiplier)
+            log(opp.name, '碰后自摸', `${player.name}碰${tileStr(draw)} → ${opp.hand.map(t => tileStr(t)).join(' ')} [${score}]`)
+            addWinEvent(opp.name, true, score, g.gameMultiplier, opp.exposedMelds.length, opp, round)
+            return { winner: otherIdx, selfDraw: true, score, roundNum: round }
+          }
           const pengDiscard = aiDiscard(opp, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, otherIdx, round * 4 + otherIdx)
           opp.hand = opp.hand.filter(t => t.id !== pengDiscard.id)
           g.discardPile.push(pengDiscard)
+          console.error(`[PENG_SUCCESS] ${opp.name} now hand=${opp.hand.length} melds=${opp.exposedMelds.length}`)
           g.current = (otherIdx + 1) % 4  // K哥铁律：碰后下家摸牌，不是碰家继续
           meldTaken = true
           break

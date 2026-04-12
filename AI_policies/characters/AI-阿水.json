@@ -22,7 +22,7 @@
     "discardHuMenQingPenalty": 0.11443176185539769,
     "pengChance": 0.7,
     "kongChance": 0.5149119649159877,
-    "chowChance": 0.6,
+    "chowChance": 0.5,
     "anKongChance": 0.9898296447948148,
     "pengWildBoost": 0.06282849518815241,
     "kongWildBoost": 0.17074969758870698,
