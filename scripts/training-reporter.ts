@@ -343,17 +343,16 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
         circleCount++
         // 打印上一圈所有人摸打（合并到同行）
         for (const pp of snaps[circleStart].players) {
-          const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-', discardFrom: -1 }
+          const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-' }
           const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
-          const discardStr = d.discarded !== '-' ? ` → 打${d.discarded}` : ''
-          const discardNote = d.discardFrom >= 0 ? ` ← ${snaps[circleStart].players[d.discardFrom]?.name || `P${d.discardFrom}`}` : ''
+          const discardStr = d.discarded !== '-' ? `｜ → 打${d.discarded}` : ''
           const exposedStr = pp.exposed?.join('|') || '无'
-          lines.push(`  - ${pp.name}：${formatGroupedHand(pp.hand || '(无)')}｜副露:${exposedStr}｜${pp.handCount}张${drawStr}${discardStr}${discardNote}`)
+          lines.push(`  - ${pp.name}：｜副露:${exposedStr}｜${pp.handCount}张${drawStr}${discardStr}｜${formatGroupedHand(pp.hand || '(无)')}`)
         }
         lines.push('')
         circleStart = i
         // 重置
-        for (const pp of players) drawnThisCircle[pp.name] = { drawn: '-', discarded: '-', discardFrom: -1 }
+        for (const pp of players) drawnThisCircle[pp.name] = { drawn: '-', discarded: '-' }
       }
 
       // 初始化当前圈（第一张快照）
@@ -367,8 +366,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
       if (currP) {
         drawnThisCircle[currP.name] = {
           drawn: snap.drawnTile || '-',
-          discarded: snap.discardedTile || '-',
-          discardFrom: snap.lastDiscardBy >= 0 ? snap.lastDiscardBy : -1
+          discarded: snap.discardedTile || '-'
         }
       }
 
@@ -378,7 +376,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
     // 打印最后一圈
     circleCount++
     for (const pp of snaps[circleStart].players) {
-      const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-', discardFrom: -1 }
+      const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-' }
       const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
       const discardStr = d.discarded !== '-' ? `｜ → 打${d.discarded}` : ''
       const exposedStr = pp.exposed?.join('|') || '无'
