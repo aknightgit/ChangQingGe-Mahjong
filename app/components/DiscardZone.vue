@@ -36,8 +36,10 @@ const props = defineProps<{
 .discard-zone {
   position: absolute;
   z-index: 5;
-  /* P0 FIX: 弃牌区严格受容器裁剪 */
-  overflow: hidden;
+  /* 固定容器尺寸，防止随弃牌数量变动导致重叠 */
+  width: 232px;   /* 8列 * 28px + 7个gap * 1px */
+  height: 70px;   /* 2行 * 35px (28px tile + 1px gap) */
+  overflow: visible;
 }
 
 /* 空区域不占位 */
@@ -47,15 +49,17 @@ const props = defineProps<{
 
 .discards-grid {
   display: grid;
-  /* 固定列宽：弃牌从第一张开始位置不变，不会随增多而移动 */
+  /* 8列固定列宽，超出自动换行，容器固定大小不撑开 */
   grid-template-columns: repeat(8, 28px);
   gap: 1px;
   justify-items: center;
-  /* P0 FIX: 网格内也裁剪 */
-  overflow: hidden;
+  /* 网格内也允许溢出，容器自己裁剪 */
+  overflow: visible;
+  width: 100%;
+  height: 100%;
 }
 
-/* 左右弃牌区：每排6张 */
+/* 左右弃牌区：同样是8列 */
 .discards-grid--left,
 .discards-grid--right {
   grid-template-columns: repeat(8, 28px);

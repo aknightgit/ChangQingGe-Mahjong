@@ -1177,7 +1177,7 @@ class GameManager {
         // Check if can win (必须有有效牌型)
         const winCheck = canWin(player.hand.concealedTiles, player.hand.exposedMelds.length, isWildTile);
         if (winCheck.canWin) {
-          const handTypes = detectHandTypes(player.hand.concealedTiles, player.hand.exposedMelds, true, player.hand.flowerTiles.length, null, game.wildTileGroup);
+          const handTypes = detectHandTypes(player.hand.concealedTiles, player.hand.exposedMelds, isWildTile, false, null, game.wildTileGroup);
           if (handTypes.length > 0) {
             actions.push(ActionType.HU);
           }
@@ -1863,6 +1863,11 @@ class GameManager {
     // Bug6: 用findIndex找并移除被碰牌
     const pdIdx = game.discardPile.findIndex(t => t.id === lastDiscard.id);
     if (pdIdx >= 0) game.discardPile.splice(pdIdx, 1);
+    // Bug1修复: 同时从弃牌者的个人弃牌列表中移除
+    const discarder = game.players.find(p => p.id === sourcePlayerId);
+    if (discarder) {
+      discarder.hand.discardedTiles = discarder.hand.discardedTiles.filter(t => t.id !== lastDiscard.id);
+    }
     game.pendingActions = [];
     game.pengChowConflict = null;
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);

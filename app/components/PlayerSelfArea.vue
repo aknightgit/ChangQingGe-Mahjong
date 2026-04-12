@@ -41,8 +41,8 @@
           <span
             v-if="meld.sourcePosition !== undefined"
             class="meld-arrow"
-            :class="[getSourceArrowClass(meld.sourcePosition)]"
-          >{{ getSourceArrow(meld.sourcePosition) }}</span>
+            :class="[getSourceArrowClass(meld.sourcePosition, playerPosition)]"
+          >{{ getSourceArrow(meld.sourcePosition, playerPosition) }}</span>
           <!-- 兼容旧字段 sourceIndex -->
           <span
             v-else-if="(meld as any).sourceIndex !== undefined"
@@ -92,6 +92,7 @@ const props = defineProps<{
   claimCandidateIds?: string[]
   bailoutCounts?: Record<string, number>
   playerColors?: string[]
+  playerPosition?: number
 }>()
 
 // 直接使用后端传来的排序，不再前端重排
@@ -107,17 +108,24 @@ const isConcealedMeld = (meld: Meld): boolean => {
   return meld.type === 'concealed_kong' || !!(meld as any).isConcealed
 }
 
-// 吃碰箭头：根据sourcePosition（相对位置偏移）显示方向
-// 0=自己(极少), 1=下家(右), 2=对家(上), 3=上家(左)
-function getSourceArrow(sourcePosition: number): string {
-  const arrows = ['自摸', '←下', '↑对', '→上']
-  return arrows[sourcePosition] || '?'
+// 吃碰箭头：后端传来的是来源玩家 absolute position，需要换算成“相对当前观察者”的方向
+// relativePos: 0=自己(极少), 1=下家(右), 2=对家(上), 3=上家(左)
+function getRelativeSourcePosition(sourcePosition: number, myPosition?: number): number {
+  const observerPos = myPosition ?? 0
+  return (sourcePosition - observerPos + 4) % 4
 }
 
-// 箭头颜色 class：按来源方向区分
-function getSourceArrowClass(sourcePosition: number): string {
+function getSourceArrow(sourcePosition: number, myPosition?: number): string {
+  const relativePos = getRelativeSourcePosition(sourcePosition, myPosition)
+  const arrows = ['自摸', '←下', '↑对', '→上']
+  return arrows[relativePos] || '?'
+}
+
+// 箭头颜色 class：按相对方向区分
+function getSourceArrowClass(sourcePosition: number, myPosition?: number): string {
+  const relativePos = getRelativeSourcePosition(sourcePosition, myPosition)
   const classes = ['meld-arrow--self', 'meld-arrow--lower', 'meld-arrow--opposite', 'meld-arrow--upper']
-  return classes[sourcePosition] || ''
+  return classes[relativePos] || ''
 }
 
 // 弃牌区每行6张，自动换行（由CSS flex-wrap处理，无需computed）

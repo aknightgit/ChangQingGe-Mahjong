@@ -128,7 +128,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   compact: false,
-  highlightDelayMs: 2000
+  highlightDelayMs: 5000
 })
 
 defineEmits<{ action: [type: string] }>()
