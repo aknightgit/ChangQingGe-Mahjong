@@ -162,14 +162,16 @@ function formatGroupedHand(handStr: string, wildTile: string): string {
   return formatTiles(handStr, wildTile) || '(空)'
 }
 
-/** 格式化副露（碰:三万三万三万 → 碰:三万三万三万*） */
-function formatExposed(melds: string[], wildTile: string): string {
+/** 格式化副露（碰:三万 三万 三万 → 碰:三万三万三万） */
+/** 格式化副露（碰:三万 三万 三万 → 碰:三万三万三万），百搭不在副露里，不加* */
+function formatExposed(melds: string[]): string {
   if (!melds || melds.length === 0) return '无'
   return melds.map(m => {
     const colonIdx = m.indexOf(':')
-    if (colonIdx < 0) return formatTiles(m, wildTile)
+    if (colonIdx < 0) return m
     const type = m.slice(0, colonIdx + 1)
-    return type + formatTiles(m.slice(colonIdx + 1).trim(), wildTile)
+    const tiles = m.slice(colonIdx + 1).trim().split(' ').filter(t => t).join('')
+    return type + tiles
   }).join('｜')
 }
 
@@ -361,7 +363,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
           const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-' }
           const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
           const discardStr = d.discarded !== '-' ? `｜ → 打${d.discarded}` : ''
-          lines.push(`  - ${pp.name}：${formatGroupedHand(pp.hand, snap.wildTile)}｜副露:${formatExposed(pp.exposed, snap.wildTile)}｜${pp.handCount}张${drawStr}${discardStr}`)
+          lines.push(`  - ${pp.name}：${formatGroupedHand(pp.hand, snap.wildTile)}｜副露:${formatExposed(pp.exposed)}｜${pp.handCount}张${drawStr}${discardStr}`)
         }
         lines.push('')
         circleStart = i
@@ -394,7 +396,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
       const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-' }
       const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
       const discardStr = d.discarded !== '-' ? `｜ → 打${d.discarded}` : ''
-      lines.push(`  - ${pp.name}：${formatGroupedHand(pp.hand, lastSnap.wildTile)}｜副露:${formatExposed(pp.exposed, lastSnap.wildTile)}｜${pp.handCount}张${drawStr}${discardStr}`)
+      lines.push(`  - ${pp.name}：${formatGroupedHand(pp.hand, lastSnap.wildTile)}｜副露:${formatExposed(pp.exposed)}｜${pp.handCount}张${drawStr}${discardStr}`)
     }
     lines.push('')
   }
