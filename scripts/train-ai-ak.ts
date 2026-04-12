@@ -1020,7 +1020,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     // ---- 2. 各门排序：最长 / 次短 / 最短 ----
     const sortedSuits = [...suitAnalysis].sort((a, b) => b.count - a.count)
     const longestSuit = sortedSuits[0]
-    const secondSuit = sortedSuits[1]
+    const secondSuit = sortedSuits[sortedSuits.length - 2]
     const shortestSuit = sortedSuits[sortedSuits.length - 1]
     const thirdSuit = sortedSuits.length >= 3 ? sortedSuits[2] : null
 
