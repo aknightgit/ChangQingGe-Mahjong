@@ -1061,7 +1061,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     // 最短门孤立张 → 必须打
     if (forceDiscardShortest && isInShortestSuit && isIsolated) keepScore -= 50
     // 次短门孤立张 → 必须打（做一色时）
-    if (forceDiscardSecond && isInSecondSuit && isIsolated) keepScore -= 40
+    if (forceDiscardSecond && isInSecondSuit && isIsolated) keepScore -= 20
     // 做一色时，次短门对子也要拆
     if (forceDiscardSecond && isInSecondSuit && count >= 2 && forceBreakPairs) keepScore -= 35
     // 做一色时，最短门对子也要拆
