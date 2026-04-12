@@ -455,6 +455,7 @@
                   name="我"
                   :hand="playerHand"
                   :melds="playerMelds"
+                  :player-position="currentPlayer?.position"
                   :selected-tile-id="selectedTileId"
                   :is-winner="isWinner"
                   @tileClick="handleTileClick"
@@ -628,7 +629,7 @@
                 :is-interaction-locked="isInteractionLocked"
                 :last-state-change-at="lastStateChangeAt"
                 :now-ts="nowTs"
-                :highlight-delay-ms="ACTION_HIGHLIGHT_DELAY_MS"
+                :highlight-delay-ms="hesitationWindow"
                 :freeze-until="currentFreezeUntil"
                 :hesitation-window="hesitationWindow"
                 :think-remaining="thinkRemaining"
@@ -748,7 +749,7 @@ import RoomStats from '~/components/RoomStats.vue'
 import GameBroadcast from '~/components/GameBroadcast.vue'
 import DiscardZone from '~/components/DiscardZone.vue'
 import LayoutDebugPanel from '~/components/LayoutDebugPanel.vue'
-import { useGame, ACTION_HIGHLIGHT_DELAY_MS } from '~/composables/useGame'
+import { useGame } from '~/composables/useGame'
 import { useSound } from '~/composables/useSound'
 import { ActionType, GamePhase, GameEndReason, type Tile, type Meld, type Player } from '~/types/game'
 
@@ -1690,6 +1691,7 @@ watch(
 watch(
   [
     () => gameState.value?.pendingActions,
+    () => gameState.value?.availableActions,
     () => gameState.value?.hesitationWindow,
     () => currentPlayer.value?.id
   ],
@@ -1697,7 +1699,8 @@ watch(
     const myId = currentPlayer.value?.id
     const pending = (gameState.value as any)?.pendingActions || []
     const mine = myId ? pending.find((pa: any) => pa.playerId === myId) : null
-    if (mine) {
+    const selfAvailableActions = availableActions.value || []
+    if (mine || selfAvailableActions.includes(ActionType.HU)) {
       actionButtonsVisibleUntil.value = Date.now() + getActionWindowMs(gameState.value)
     } else {
       actionButtonsVisibleUntil.value = 0
@@ -2545,8 +2548,7 @@ const forceDiscard = async (p: Player) => {
 :deep(.discard-zone--bottom) {
   bottom: 31%;
   left: 50%;
-  transform: translateX(-50%) scale(1.2);
-  transform-origin: bottom center;
+  transform: translateX(-50%);
 }
 :deep(.discard-zone--left) {
   top: 50%;

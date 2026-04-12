@@ -3,8 +3,6 @@ import type { GameState, Player, ActionType, Tile } from '~/types/game'
 import { GamePhase } from '~/types/game'
 import { io, type Socket } from 'socket.io-client'
 
-// 延迟高亮配置（毫秒）
-export const ACTION_HIGHLIGHT_DELAY_MS = 2000
 
 export const useGame = () => {
   const gameState = ref<GameState | null>(null)
