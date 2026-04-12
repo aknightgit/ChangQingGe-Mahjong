@@ -393,6 +393,12 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
 
 /**
  * 只输出每圈明细（用于 round 文件，--detail 时写入）
+ *
+ * 格式规则：
+ * - 每局从摸牌后开始，以4个玩家的回合为一圈
+ * - 回到起始玩家（currentPlayer=0）时结束当前圈，开始新圈
+ * - 用 === 第N局 === 分隔不同游戏
+ * - 每行格式：玩家名｜摸X｜ → 打Y｜副露:xxx｜剩余手牌
  */
 export function formatCircleDetailsOnly(report: RoundReport): string {
   const lines: string[] = []
@@ -403,53 +409,92 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
   lines.push('### 🔍 每圈明细（血战到底）')
   lines.push('')
   const snaps = report.turnSnapshots
-  let circleCount = 0
-  let prevExposed: string[] = []
-  let circleStart = 0
-  const drawnThisCircle: Record<string, {drawn: string, discarded: string}> = {}
 
-  const flushCircle = (startIdx: number) => {
-    const startSnap = snaps[startIdx]
-    if (!startSnap) return
-    lines.push(`**【第${circleCount}圈】百搭${startSnap.wildTile}｜×${startSnap.gameMultiplier}**`)
-    for (const pp of startSnap.players) {
-      const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-' }
-      const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
-      const discardStr = d.discarded !== '-' ? ` → 打${d.discarded}` : ''
+  let circleCount = 0
+  let circleStartIdx = 0
+  let gameCount = 0
+  let prevTurn = -1
+
+  // 记录每个玩家本圈摸打的 {drawn, discarded}
+  const circleActions: Record<string, {drawn: string, discarded: string}> = {}
+
+  // 初始化时重置所有玩家动作为空
+  for (const p of snaps[0]?.players || []) {
+    circleActions[p.name] = { drawn: '-', discarded: '-' }
+  }
+
+  const flushCircle = (startIdx: number, label: string) => {
+    const snap = snaps[startIdx]
+    if (!snap) return
+    lines.push(`**【${label}】百搭${snap.wildTile}｜×${snap.gameMultiplier}**`)
+    for (const pp of snap.players) {
+      // 每回合摸打显示：摸=lastDiscard(捡的别人打的牌)，打=discardedTile(自己打出的)
+      // drawnTile=当前回合开始时已有的牌(非本回合动作)，lastDiscard=当前回合别人打的(本回合捡的)
+      // discardedTile=当前回合开始时桌上最后一张(上回合自己打的，非本回合动作)
+      // 实际上在circle的snapshot中：lastDiscard是上回合打的(本回合被人捡)，discardedTile是本回合开始时桌上的(上上回合打的)
+      // 正确显示：摸=lastDiscard(本回合被捡的，即上回合自己打的)，打=discardedTile(本回合开始时桌上的，即上上回合自己打的)
+      // 这与实际动作顺序相反！
+      // 实际上每个snapshot：drawnTile=上回合摸的，discardedTile=上上回合打的，lastDiscard=上回合打的(本回合被捡)
+      // 所以：摸=lastDiscard(正确：捡的别人上回合打的)，打=discardedTile(错误：应显示本回合打的，但snapshot在打之前)
+      // 解决：snapshot顺序调整到doDiscard之后，drawnTile=本回合摸的，discardedTile=本回合打的
+      const act = circleActions[pp.name] || { drawn: '-', discarded: '-' }
+      const drawStr = act.drawn !== '-' ? `摸${act.drawn}` : (snap.lastDiscard && snap.lastDiscard !== '-' ? `摸${snap.lastDiscard}` : '')
+      const discardStr = act.discarded !== '-' ? ` → 打${act.discarded}` : ''
+      const pickFrom = snap.lastDiscardBy >= 0 && snap.lastDiscard && snap.lastDiscard !== '-' && act.drawn !== '-'
+        ? `（来自${snaps[circleStartIdx]?.players[snap.lastDiscardBy]?.name || `P${snap.lastDiscardBy}`}的打牌）`
+        : ''
       const exposedStr = pp.exposed?.join('|') || '无'
-      lines.push(`- ${pp.name}：${formatGroupedHand(pp.hand || '(无)')}｜副露:${exposedStr}｜${pp.handCount}张${drawStr}${discardStr}`)
+      const handStr = formatGroupedHand(pp.hand || '(无)')
+      const handNum = pp.handCount ?? 0
+      lines.push(`  ${pp.name}：${drawStr}${discardStr}${pickFrom}｜副露:${exposedStr}｜${handNum}张 ${handStr}`)
     }
     lines.push('')
+  }
+
+  const resetActions = () => {
+    for (const p of snaps[0]?.players || []) {
+      circleActions[p.name] = { drawn: '-', discarded: '-' }
+    }
   }
 
   for (let i = 0; i < snaps.length; i++) {
     const snap = snaps[i]
     const players = snap.players || []
-    const currExposed = players.map((p: any) => (p.exposed || []).join('|'))
-    const hadMeld = prevExposed.length > 0 && currExposed.some((ex: string, idx: number) => ex !== prevExposed[idx])
 
-    if (i === 0) {
-      for (const pp of players) drawnThisCircle[pp.name] = { drawn: '-', discarded: '-' }
-    } else if (hadMeld) {
-      flushCircle(circleStart)
-      circleCount++
-      circleStart = i
-      for (const pp of players) drawnThisCircle[pp.name] = { drawn: '-', discarded: '-' }
+    // 检测新一局（turn 重置：当前 turn < 上一 turn，说明进入新游戏）
+    if (snap.turn !== undefined && prevTurn !== -1 && snap.turn < prevTurn) {
+      // 上一局最后一圈也要 flush
+      flushCircle(circleStartIdx, `第${gameCount}圈`)
+      gameCount++
+      circleCount = 0
+      circleStartIdx = i
+      resetActions()
+      lines.push(`=== 第${gameCount}局 ===`)
+      lines.push('')
     }
 
+    // 检测一圈结束：回到起始玩家（currentPlayer=0）且不是第一张快照
+    if (i > 0 && snap.currentPlayer === 0) {
+      flushCircle(circleStartIdx, `第${circleCount}圈`)
+      circleCount++
+      circleStartIdx = i
+      resetActions()
+    }
+
+    // 记录当前玩家本回合的摸打
     const currP = players[snap.currentPlayer]
-    if (currP) {
-      drawnThisCircle[currP.name] = {
-        drawn: snap.drawnTile || '-',
+    if (currP && snap.drawnTile) {
+      circleActions[currP.name] = {
+        drawn: snap.drawnTile,
         discarded: snap.discardedTile || '-'
       }
     }
-    prevExposed = currExposed
+
+    if (snap.turn !== undefined) prevTurn = snap.turn
   }
 
-  // 打印最后一圈（即便无胡牌/无副露也要如实记录）
-  flushCircle(circleStart)
-  lines.push('')
+  // 打印最后一圈
+  flushCircle(circleStartIdx, `第${circleCount}圈`)
   lines.push('---')
   return lines.join('\n')
 }

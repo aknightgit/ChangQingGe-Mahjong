@@ -1505,8 +1505,6 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
 
   // 每回合快照（--detail 时收集）
   const turnSnapshots: TurnSnapshot[] = []
-  let prevDrawn: Tile | null = null
-  let prevDiscard: Tile | null = null
 
   // buildResult: 血战模式统一出口，构造 GameResult
   const buildResult = (
@@ -1620,13 +1618,14 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
   const log = (player: string, action: string, detail: string) => { events.push({ turn, player, action, detail }) }
 
   // 每回合快照：记录当前玩家摸打，供每圈明细使用
-  const recordTurnSnapshot = (curr: number) => {
+  // drawnTile 和 discardedTile 显式传入：表示当前玩家本回合的摸打
+  const recordTurnSnapshot = (curr: number, drawnTile: string, discardedTile: string) => {
     const lastDiscard = g.discardPile[g.discardPile.length - 1] || null
     turnSnapshots.push({
       turn,
       currentPlayer: curr,
-      drawnTile: prevDrawn ? tileStr(prevDrawn) : '-',
-      discardedTile: prevDiscard ? tileStr(prevDiscard) : '-',
+      drawnTile,
+      discardedTile,
       lastDiscardBy: lastDiscard ? (g.playerDiscards[0].findIndex(d => d.id === lastDiscard.id) >= 0 ? 0 :
         g.playerDiscards[1].findIndex(d => d.id === lastDiscard.id) >= 0 ? 1 :
         g.playerDiscards[2].findIndex(d => d.id === lastDiscard.id) >= 0 ? 2 : 3) : -1,
@@ -1646,13 +1645,11 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
       wildTile: g.wildSuit && g.wildValue ? tileStr({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭',
       gameMultiplier: g.gameMultiplier
     })
-    prevDrawn = null
-    prevDiscard = null
   }
 
   for (let i = 0; i < 13; i++) { for (let p = 0; p < 4; p++) drawTile(g, g.players[p]) }
-  // 初始13张明细也记录
-  recordTurnSnapshot(g.current)
+  // 初始13张明细也记录（每人发牌后13张，无摸打）
+  recordTurnSnapshot(g.current, '-', '-')
   // 发牌后每人13张（摸牌后=14）
   for (const p of g.players) {
     if (p.name === 'AI-小胖' && p.hand.length !== 13) {
@@ -1669,13 +1666,10 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
     const curr = g.current
     const player = g.players[curr]
     turn = round
-    // --detail: 每回合快照（摸打前记录，显示上一人的摸打）
-    recordTurnSnapshot(curr)
     const drawn = drawTile(g, player)
     if (!drawn) { console.error(`⚠️ 流局: 牌墙耗尽 round=${round} wallIdx=${g.wallIdx}/${g.deck.length}`); return null }
-    if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); prevDrawn = drawn; continue }
+    if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); recordTurnSnapshot(curr, tileStr(drawn), '-'); continue }
     log(player.name, '摸牌', tileStr(drawn))
-    prevDrawn = drawn  // 记录本次摸牌，供下一快照使用
     checkHandInvariant(player, 'draw')  // 摸牌后铁律：14/11/8/5/2张
 
     // Self-draw win check
@@ -1780,7 +1774,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
     g.discardPile.push(discard)
     g.playerDiscards[curr].push(discard)
     log(player.name, '出牌', `${tileStr(discard)} [手牌: ${player.hand.map(t => tileStr(t)).join(' ')}]`)
-    prevDiscard = discard  // 记录本次出牌，供下一快照使用
+    recordTurnSnapshot(curr, tileStr(drawn), tileStr(discard))  // 每回合快照：显示本回合摸打
     checkHandInvariant(player, 'discard')  // 出牌后铁律：13/10/7/4/1张
     if (player.exposedMelds.length >= 2) {
       const cw = canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player))
