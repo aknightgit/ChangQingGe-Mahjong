@@ -2324,25 +2324,17 @@ function main() {
   let logLines: string[] = []
 
   const header = [
-    '# 长清阁麻将 AI-AK 训练日志',
-    '',
-    `- 创建时间: ${new Date().toISOString()}`,
-    `- 训练脚本: train-ai-ak.ts`,
-    `- Config: ${ROUNDS} rounds × ${GAMES_PER_ROUND} games = ${ROUNDS * GAMES_PER_ROUND} total`,
-    `- 对手: AI-小胖, AI-阿水, AI-老赵 (固定)`,
-    `- 目标: 最高盈利总分`,
-    '',
-    '> 每轮记录训练指标 + 策略参数 + 最大单人亏损局明细 + 结算逐笔',
+    `创建时间: ${new Date().toISOString()}`,
+    '训练脚本: train-ai-ak.ts',
+    `Config: ${ROUNDS} rounds × ${GAMES_PER_ROUND} games = ${ROUNDS * GAMES_PER_ROUND} total`,
+    '---',
   ]
   console.log(header.join('\n'))
   logLines.push(...header)
 
   // Round 0: baseline evaluation
-  console.log('\n## 基线成绩（第0轮）')
-  logLines.push('\n## 基线成绩（第0轮）')
   const baseline = evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
   bestScore = BASELINE_MODE ? baseline.metricsFitness : baseline.akScore
-  const selfDRate = baseline.winGames > 0 ? (baseline.selfDrawGames/baseline.winGames*100).toFixed(1) : '0'
   const baseLine = BASELINE_MODE
     ? `| Bot | 总分 | 胜率 | 排名 |\n|-----|------|------|------|\n` + AI_NAMES.map(n => `| ${n} | ${baseline.scores[n]} | ${(baseline.winRates[n]*100).toFixed(1)}% | - |`).join('\n') + `\n| 流局率 | ${(baseline.draws/GAMES_PER_ROUND*100).toFixed(1)}% | | |`
     : `AI-AK baseline: score=${baseline.akScore}  wins=${baseline.akWins}/${GAMES_PER_ROUND}  draws=${baseline.draws ?? 0}`
