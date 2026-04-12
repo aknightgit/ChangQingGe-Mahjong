@@ -27,8 +27,8 @@ import { writeRoundFile, buildRoundReport, formatRoundReport, writeIndexFile } f
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const ROUNDS = parseInt(process.argv[2] || '10')
-const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000')
+const ROUNDS = parseInt(process.argv[2] || '10') || 10
+const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000') || 1000
 const BASELINE_MODE = process.argv[4] === '--baseline'  // 基线训练：优化指标而非得分
 const DETAIL_MODE = process.argv.includes('--detail')  // 每圈明细开关，默认关闭
 const SETTLEMENT_MULT = 10
@@ -2354,6 +2354,10 @@ function main() {
   let plateauCount = 0
   const roundReports: ReturnType<typeof buildRoundReport>[] = []
 
+  // Round 0 baseline: 也用 formatRoundReport（保持与训练轮一致的结构）
+  const baselineReport = buildRoundReport(0, baseline, bestPolicy, AI_NAMES, 'train-ai-ak.ts')
+  roundReports.push(baselineReport)
+
   // Training rounds
   for (let round = 1; round <= ROUNDS; round++) {
     // Adaptive mutation intensity
@@ -2475,57 +2479,19 @@ function main() {
   logLines.push(`\n[性能] isTing缓存: 命中${tingStats.hits} 未命中${tingStats.misses} 命中率${tingStats.hitRate}`)
   logLines.push(`[性能] canWin缓存: 命中${canWinStats.hits} 未命中${canWinStats.misses} 命中率${canWinStats.hitRate}`)
 
-  // Final evaluation
+  // Final evaluation: 用 formatRoundReport 统一结构（含胡牌牌型分布）
   console.log('\n--- 最终评估 (1000局) ---')
   logLines.push('\n--- 最终评估 (1000局) ---')
 
   const finalEval = evaluatePolicy(bestPolicy, fixedPolicies, 1000)
-  const finalLines = AI_NAMES.map((n, i) => {
-    const rank = i === 0 ? '★' : ' '
-    return `  ${rank} ${n.padEnd(8)}  score:${finalEval.scores[n].toString().padStart(8)}  wins:${finalEval.winRates[n].toFixed(3)}`
-  })
-  finalLines.push(`  Draws: ${finalEval.draws}/1000`)
-  finalLines.push(`\n  AI-AK optimal policy parameters:`)
 
-  // Print all key parameters
-  const keyParams: (keyof BotPolicy)[] = [
-    'selfWinChance', 'discardHuChance', 'pengChance', 'chowChance', 'anKongChance',
-    'allPungsPursuit', 'pureFlushPursuit', 'halfFlushWeight',
-    'menqingKeepBonus', 'noWildDoubleAwareness',
-    'wild0Aggression', 'wild1Aggression', 'wild2Aggression', 'wild3PlusAggression',
-    'wild1RouteMeldPush', 'wild2RouteMeldPush', 'wild3RouteMeldPush',
-    'wild0MenqingKeep', 'wild1MenqingKeep', 'wild2MenqingKeep',
-    'wild1BaoPush', 'wild2BaoPush', 'wild3BaoPush',
-    'multHighValueBias', 'hand7RouteBias',
-    'discardObsFlushBoost', 'discardObsWeight',
-    'bao2ClaimPenalty', 'bao3AvoidThreshold',
-    'wallLateDefense', 'safeTilePriority',
-    'oppTingDetection',
-    'multHighHand6PureFlush', 'multHighHand7PureFlush',
-    'multLowHand6AllPungs', 'multHighHand5HalfFlush',
-    'multHighHonorStart',
-  ]
-  for (const k of keyParams) {
-    const val = (bestPolicy as any)[k]
-    finalLines.push(`    ${k}: ${typeof val === 'number' ? (Number.isInteger(val) ? val : val.toFixed(4)) : val}`)
-  }
+  // 用 formatRoundReport 输出（替代老格式 finalLines）
+  const finalReport = buildRoundReport(ROUNDS + 1, finalEval, bestPolicy, AI_NAMES, 'train-ai-ak.ts')
+  const finalReportFormatted = formatRoundReport(finalReport, true)
+  console.log(finalReportFormatted)
+  logLines.push(finalReportFormatted)
 
-  // 最终评估最大赢/输明细
-  if (finalEval.bigWin) {
-    const evs = finalEval.bigWin.result.events
-    const winner = AI_NAMES[finalEval.bigWin.result.winner]
-    finalLines.push(`\n  【最终评估AK最大赢局】+${finalEval.bigWin.score} (倍×${finalEval.bigWin.result.multiplier})`)
-    for (const e of evs) finalLines.push(`    ${e.player} ${e.action}: ${e.detail}`)
-  }
-  if (finalEval.bigLoss) {
-    const evs = finalEval.bigLoss.result.events
-    finalLines.push(`\n  【最终评估AK最大输局】${finalEval.bigLoss.score} (倍×${finalEval.bigLoss.result.multiplier})`)
-    for (const e of evs) finalLines.push(`    ${e.player} ${e.action}: ${e.detail}`)
-  }
-
-  console.log(finalLines.join('\n'))
-  logLines.push(...finalLines)
-
+  // 最具参考价值的逐局明细保留到 logLines（三口/四口关系 + 结算逐笔）
   if (finalEval.worstSingleLoss) {
     const gl = finalEval.worstSingleLoss
     logLines.push('')
