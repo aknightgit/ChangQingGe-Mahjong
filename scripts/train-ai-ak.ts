@@ -108,7 +108,7 @@ const DEFAULT_POLICY: BotPolicy = {
   id: 'default',
   selfWinChance: 0.8, discardHuChance: 0.8,
   selfWinWildBoost: 0.1, discardHuWildPenalty: 0.4, discardHuMenQingPenalty: 0.14,
-  pengChance: 1.0, kongChance: 0.47, chowChance: 1.0, anKongChance: 0.95,
+  pengChance: 0.7, kongChance: 0.47, chowChance: 0.6, anKongChance: 0.95,  // K哥: 降低碰吃率避免无脑碰吃破坏牌型
   pengWildBoost: 0.06, kongWildBoost: 0.14, chowWildPenalty: 0.18,
   menqingKeepBonus: 0.0, meldPenalty: 0.05,  // K哥基线训练：门清bonus最低
   allPungsPursuit: 1.5, pureFlushPursuit: 1.5, halfFlushWeight: 1.0,
