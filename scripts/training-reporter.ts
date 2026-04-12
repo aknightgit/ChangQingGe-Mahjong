@@ -329,14 +329,6 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
     lines.push('')
   }
 
-  // 最佳策略参数
-  lines.push('### 本轮最佳策略参数')
-  lines.push('')
-  lines.push('```json')
-  lines.push(JSON.stringify(policy, null, 2))
-  lines.push('```')
-  lines.push('')
-
   // 每圈详细快照（仅 round 文件需要；主文件 showDetail=false 时不输出）
   if (showDetail && report.turnSnapshots && report.turnSnapshots.length > 0) {
     lines.push('### 🔍 每圈明细（血战到底）')
@@ -427,6 +419,7 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
   let circleStartIdx = 0
   let gameCount = 0
   let prevTurn = -1
+  let prevExposed: string[] = []
 
   // 记录每个玩家本圈摸打的 {drawn, discarded}
   const circleActions: Record<string, {drawn: string, discarded: string}> = {}
@@ -449,7 +442,7 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
       const exposedStr = pp.exposed?.join('|') || '无'
       const handStr = formatGroupedHand(pp.hand, snap.wildTile)
       const handNum = pp.handCount ?? 0
-      lines.push(`  ${pp.name}：｜副露:${exposedStr}｜${handNum}张${drawStr}${discardStr}｜${handStr}`)
+      lines.push(`  ${pp.name}：${handStr}｜副露:${exposedStr}｜${handNum}张${drawStr}${discardStr}`)
     }
     lines.push('')
   }
@@ -476,10 +469,16 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
       lines.push('')
     }
 
-    // 检测一圈结束：回到起始玩家（currentPlayer=0）且不是第一张快照
-    if (i > 0 && snap.currentPlayer === 0) {
-      flushCircle(circleStartIdx, `第${circleCount}圈`)
+    // 统一圈切分逻辑（与 formatRoundReport 一致）：
+    // hadMeld=有人吃/碰/杠，圈提前结束；backToStart=currentPlayer 回到起始位
+    const currExposed = players.map((p: any) => (p.exposed || []).join('|'))
+    const hadMeld = prevExposed.length > 0 && currExposed.some((ex: string, idx: number) => ex !== prevExposed[idx])
+    const backToStart = i > 0 && snap.currentPlayer === snaps[circleStartIdx].currentPlayer
+
+    // 新圈开始：打印上一圈结果
+    if ((i === 0 || hadMeld || backToStart) && i > 0) {
       circleCount++
+      flushCircle(circleStartIdx, `第${circleCount - 1}圈`)
       circleStartIdx = i
       resetActions()
     }
@@ -494,10 +493,13 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
     }
 
     if (snap.turn !== undefined) prevTurn = snap.turn
+    prevExposed = currExposed
   }
 
-  // 打印最后一圈
-  flushCircle(circleStartIdx, `第${circleCount}圈`)
+  // 打印最后一圈（游戏结束时最后一圈未必已flush，需要兜底）
+  if (snaps.length > 0) {
+    flushCircle(circleStartIdx, `第${circleCount}圈`)
+  }
   lines.push('---')
   return lines.join('\n')
 }

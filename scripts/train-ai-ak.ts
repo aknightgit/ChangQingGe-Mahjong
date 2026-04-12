@@ -2473,7 +2473,7 @@ function main() {
 
   // 用 formatRoundReport 输出（替代老格式 finalLines）
   const finalReport = buildRoundReport(ROUNDS + 1, finalEval, bestPolicy, AI_NAMES, 'train-ai-ak.ts')
-  const finalReportFormatted = formatRoundReport(finalReport, true)
+  const finalReportFormatted = formatRoundReport(finalReport, false)
   console.log(finalReportFormatted)
   logLines.push(finalReportFormatted)
 
