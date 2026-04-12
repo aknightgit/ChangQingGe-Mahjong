@@ -132,22 +132,22 @@ function parseTileName(name: string): { suit: string; value: number; isWild: boo
 }
 
 /**
- * 把原始手牌字符串格式化为分组字符串（相同花色数字的牌归在一起）
- * 示例: "二万 五万 九条 五万 二条 二条 四筒* 八条 八条 五万"
- * → "五万五万五万 二条二条二条 九条九条 四筒* 八条八条"
+ * 格式化一组牌（分组排序，百搭自动加*）
+ * wildTile: 牌面值如 "八条"，匹配到的牌加 * 后缀
  */
-function formatGroupedHand(handStr: string): string {
-  if (!handStr) return '(空)'
-  const tiles = handStr.split(' ').filter(t => t.length > 0)
-  // 按花色+数值分组
+function formatTiles(tileStr: string, wildTile: string): string {
+  if (!tileStr) return ''
+  const tiles = tileStr.split(' ').filter(t => t.length > 0)
+  const w = parseTileName(wildTile)
+  const wKey = w.value > 0 ? `${w.suit}-${w.value}` : ''
+
   const groups: Record<string, string[]> = {}
   for (const tile of tiles) {
-    const { suit, value, isWild } = parseTileName(tile)
-    const key = `${suit}-${value}-${isWild ? 'W' : 'N'}`
+    const { suit, value } = parseTileName(tile)
+    const key = `${suit}-${value}`
     if (!groups[key]) groups[key] = []
-    groups[key].push(tile)
+    groups[key].push((key === wKey) ? tile + '*' : tile)
   }
-  // 按固定顺序排列：万 > 筒 > 条 > 风 > 字 > 花
   const suitOrder = ['wan', 'bam', 'str', 'wind', 'drg', 'flw']
   const sortedKeys = Object.keys(groups).sort((a, b) => {
     const [suitA, valA] = a.split('-'), [suitB, valB] = b.split('-')
@@ -156,6 +156,21 @@ function formatGroupedHand(handStr: string): string {
     return parseInt(valA) - parseInt(valB)
   })
   return sortedKeys.map(key => groups[key].join('')).join(' ')
+}
+
+function formatGroupedHand(handStr: string, wildTile: string): string {
+  return formatTiles(handStr, wildTile) || '(空)'
+}
+
+/** 格式化副露（碰:三万三万三万 → 碰:三万三万三万*） */
+function formatExposed(melds: string[], wildTile: string): string {
+  if (!melds || melds.length === 0) return '无'
+  return melds.map(m => {
+    const colonIdx = m.indexOf(':')
+    if (colonIdx < 0) return formatTiles(m, wildTile)
+    const type = m.slice(0, colonIdx + 1)
+    return type + formatTiles(m.slice(colonIdx + 1).trim(), wildTile)
+  }).join('｜')
 }
 
 /** 格式化副露字符串 */
@@ -346,8 +361,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
           const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-' }
           const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
           const discardStr = d.discarded !== '-' ? `｜ → 打${d.discarded}` : ''
-          const exposedStr = pp.exposed?.join('|') || '无'
-          lines.push(`  - ${pp.name}：｜副露:${exposedStr}｜${pp.handCount}张${drawStr}${discardStr}｜${formatGroupedHand(pp.hand || '(无)')}`)
+          lines.push(`  - ${pp.name}：${formatGroupedHand(pp.hand, snap.wildTile)}｜副露:${formatExposed(pp.exposed, snap.wildTile)}｜${pp.handCount}张${drawStr}${discardStr}`)
         }
         lines.push('')
         circleStart = i
@@ -375,12 +389,12 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
 
     // 打印最后一圈
     circleCount++
-    for (const pp of snaps[circleStart].players) {
+    const lastSnap = snaps[circleStart]
+    for (const pp of lastSnap.players) {
       const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-' }
       const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
       const discardStr = d.discarded !== '-' ? `｜ → 打${d.discarded}` : ''
-      const exposedStr = pp.exposed?.join('|') || '无'
-      lines.push(`  - ${pp.name}：｜副露:${exposedStr}｜${pp.handCount}张${drawStr}${discardStr}｜${formatGroupedHand(pp.hand || '(无)')}`)
+      lines.push(`  - ${pp.name}：${formatGroupedHand(pp.hand, lastSnap.wildTile)}｜副露:${formatExposed(pp.exposed, lastSnap.wildTile)}｜${pp.handCount}张${drawStr}${discardStr}`)
     }
     lines.push('')
   }
@@ -431,7 +445,7 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
       const drawStr = act.drawn !== '-' ? `｜摸${act.drawn}` : ''
       const discardStr = act.discarded !== '-' ? `｜ → 打${act.discarded}` : ''
       const exposedStr = pp.exposed?.join('|') || '无'
-      const handStr = formatGroupedHand(pp.hand || '(无)')
+      const handStr = formatGroupedHand(pp.hand, snap.wildTile)
       const handNum = pp.handCount ?? 0
       lines.push(`  ${pp.name}：｜副露:${exposedStr}｜${handNum}张${drawStr}${discardStr}｜${handStr}`)
     }
