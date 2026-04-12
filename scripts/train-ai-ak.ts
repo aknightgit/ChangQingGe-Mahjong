@@ -2557,11 +2557,11 @@ function main() {
     saveCharacter('AI-AK', bestPolicy, metrics)
   }
 
-  // 主日志：Header + Round0 + 每轮明细(DETAIL_MODE) + formatRoundReport + 最终评估
-  // 与 train-baseline.ts 行为完全一致
+  // 主日志：Header + Round0 + 每轮训练指标（无每圈明细）
+  // round 文件（DETAIL_MODE 时）才记录每圈明细
   const mainOut: string[] = [...logLines]
   for (const report of roundReports) {
-    mainOut.push(formatRoundReport(report, true))
+    mainOut.push(formatRoundReport(report, false))
   }
   fs.writeFileSync(mdFile, mainOut.join('\n'), 'utf-8')
   fs.writeFileSync(policyFile, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
