@@ -2326,7 +2326,7 @@ function main() {
   console.log(header.join('\n'))
   logLines.push(...header)
 
-  // Round 0: baseline evaluation
+  // Round 0: baseline evaluation（仅多轮或多局时有意义）
   const baseline = evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
   bestScore = BASELINE_MODE ? baseline.metricsFitness : baseline.akScore
   const baseLine = BASELINE_MODE
@@ -2340,11 +2340,14 @@ function main() {
   let plateauCount = 0
   const roundReports: ReturnType<typeof buildRoundReport>[] = []
 
-  // Round 0 baseline: 也用 formatRoundReport（保持与训练轮一致的结构）
-  const baselineReport = buildRoundReport(0, baseline, bestPolicy, AI_NAMES, 'train-ai-ak.ts')
-  roundReports.push(baselineReport)
+  // Round 0 baseline: 仅 ROUNDS>1 或 GAMES_PER_ROUND>1 时才记录（避免 1×1 时多余）
+  if (ROUNDS > 1 || GAMES_PER_ROUND > 1) {
+    const baselineReport = buildRoundReport(0, baseline, bestPolicy, AI_NAMES, 'train-ai-ak.ts')
+    roundReports.push(baselineReport)
+  }
 
   // Training rounds
+  let lastRoundEval: EvalResult | null = null
   for (let round = 1; round <= ROUNDS; round++) {
     // Adaptive mutation intensity
     let intensity = 1.0
@@ -2421,6 +2424,7 @@ function main() {
 
     // Print opponent summary
     const evalResult = evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
+    lastRoundEval = evalResult
     const summaryLine = `  Current standings: ` + AI_NAMES.map(n =>
       `${n}:${evalResult.scores[n]}(${(evalResult.winRates[n]*100).toFixed(0)}%)`
     ).join('  ')
@@ -2465,78 +2469,79 @@ function main() {
   logLines.push(`\n[性能] isTing缓存: 命中${tingStats.hits} 未命中${tingStats.misses} 命中率${tingStats.hitRate}`)
   logLines.push(`[性能] canWin缓存: 命中${canWinStats.hits} 未命中${canWinStats.misses} 命中率${canWinStats.hitRate}`)
 
-  // Final evaluation: 用 formatRoundReport 统一结构（含胡牌牌型分布）
-  console.log('\n--- 最终评估 (1000局) ---')
-  logLines.push('\n--- 最终评估 (1000局) ---')
+  // Final evaluation: 仅多轮或多局时有意义（1×1 时跳过，避免冗余）
+  if (ROUNDS > 1 || GAMES_PER_ROUND > 1) {
+    console.log('\n--- 最终评估 (' + GAMES_PER_ROUND + '局) ---')
+    logLines.push('\n--- 最终评估 (' + GAMES_PER_ROUND + '局) ---')
 
-  const finalEval = evaluatePolicy(bestPolicy, fixedPolicies, 1000)
+    const finalEval = evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
 
-  // 用 formatRoundReport 输出（替代老格式 finalLines）
-  const finalReport = buildRoundReport(ROUNDS + 1, finalEval, bestPolicy, AI_NAMES, 'train-ai-ak.ts')
-  const finalReportFormatted = formatRoundReport(finalReport, false)
-  console.log(finalReportFormatted)
-  logLines.push(finalReportFormatted)
+    const finalReport = buildRoundReport(ROUNDS + 1, finalEval, bestPolicy, AI_NAMES, 'train-ai-ak.ts')
+    const finalReportFormatted = formatRoundReport(finalReport, false)
+    console.log(finalReportFormatted)
+    logLines.push(finalReportFormatted)
 
-  // 最具参考价值的逐局明细保留到 logLines（三口/四口关系 + 结算逐笔）
-  if (finalEval.worstSingleLoss) {
-    const gl = finalEval.worstSingleLoss
-    logLines.push('')
-    logLines.push('## 全局最大单人亏损局（跨所有轮次）')
-    logLines.push(`- 最大亏损: ${gl.loser} ${gl.score} 点（绝对值 ${Math.abs(gl.score)}）`)
-    logLines.push(`- 局号: ${gl.gameIdx}`)
-    logLines.push(`- 倍数: ×${gl.result.multiplier}`)
+    // 最具参考价值的逐局明细保留到 logLines（三口/四口关系 + 结算逐笔）
+    if (finalEval.worstSingleLoss) {
+      const gl = finalEval.worstSingleLoss
+      logLines.push('')
+      logLines.push('## 全局最大单人亏损局（跨所有轮次）')
+      logLines.push(`- 最大亏损: ${gl.loser} ${gl.score} 点（绝对值 ${Math.abs(gl.score)}）`)
+      logLines.push(`- 局号: ${gl.gameIdx}`)
+      logLines.push(`- 倍数: ×${gl.result.multiplier}`)
 
-    // 胡牌玩家明细
-    logLines.push('')
-    logLines.push('- 输出该局所有胡牌玩家明细')
-    const gWinnerSnap = gl.result.snapshots?.[gl.result.winner]
-    if (gWinnerSnap) {
-      const gWinEvent = gl.result.events.find(e => e.action.includes('自摸') || e.action.includes('放炮胡') || e.action.includes('胡'))
-      const gWinType = gWinEvent?.action?.includes('自摸') ? '自摸' : gWinEvent?.action?.includes('放冲') ? '放冲' : '胡牌'
-      logLines.push(`  - 玩家: ${gWinnerSnap.name}`)
-      logLines.push(`    - 胡牌方式: ${gWinType}`)
-      logLines.push(`    - 手牌牌面: ${gWinnerSnap.hand || '(空)'}`)
-      logLines.push(`    - 门口牌（吃/碰/杠）: ${gWinnerSnap.melds.length > 0 ? gWinnerSnap.melds.join(' ; ') : '(无)'}`)
-      logLines.push(`    - 花牌: ${gWinnerSnap.flowers.length > 0 ? gWinnerSnap.flowers.join(' ') : '(无)'}`)
-    }
+      // 胡牌玩家明细
+      logLines.push('')
+      logLines.push('- 输出该局所有胡牌玩家明细')
+      const gWinnerSnap = gl.result.snapshots?.[gl.result.winner]
+      if (gWinnerSnap) {
+        const gWinEvent = gl.result.events.find(e => e.action.includes('自摸') || e.action.includes('放炮胡') || e.action.includes('胡'))
+        const gWinType = gWinEvent?.action?.includes('自摸') ? '自摸' : gWinEvent?.action?.includes('放冲') ? '放冲' : '胡牌'
+        logLines.push(`  - 玩家: ${gWinnerSnap.name}`)
+        logLines.push(`    - 胡牌方式: ${gWinType}`)
+        logLines.push(`    - 手牌牌面: ${gWinnerSnap.hand || '(空)'}`)
+        logLines.push(`    - 门口牌（吃/碰/杠）: ${gWinnerSnap.melds.length > 0 ? gWinnerSnap.melds.join(' ; ') : '(无)'}`)
+        logLines.push(`    - 花牌: ${gWinnerSnap.flowers.length > 0 ? gWinnerSnap.flowers.join(' ') : '(无)'}`)
+      }
 
-    // 三口/四口
-    const gBao: string[] = []
-    for (const snap of gl.result.snapshots || []) {
-      for (let ci = 0; ci < 4; ci++) {
-        if (snap.meldSources[ci] >= 3) {
-          const partner = gl.result.snapshots?.[ci]
-          if (partner) {
-            const level = snap.meldSources[ci] >= 4 ? '四口' : '三口'
-            gBao.push(`  - ${snap.name} <-> ${partner.name}: ${level} (A->B:${snap.meldSources[ci]}, B->A:${partner.meldSources?.[gl.result.snapshots.indexOf(snap)] || 0})`)
+      // 三口/四口
+      const gBao: string[] = []
+      for (const snap of gl.result.snapshots || []) {
+        for (let ci = 0; ci < 4; ci++) {
+          if (snap.meldSources[ci] >= 3) {
+            const partner = gl.result.snapshots?.[ci]
+            if (partner) {
+              const level = snap.meldSources[ci] >= 4 ? '四口' : '三口'
+              gBao.push(`  - ${snap.name} <-> ${partner.name}: ${level} (A->B:${snap.meldSources[ci]}, B->A:${partner.meldSources?.[gl.result.snapshots.indexOf(snap)] || 0})`)
+            }
           }
         }
       }
-    }
-    if (gBao.length > 0) {
-      logLines.push('')
-      logLines.push('- 三口/四口关系')
-      logLines.push(...gBao)
-    }
-
-    // 结算明细
-    logLines.push('')
-    logLines.push('- 结算逐笔明细（谁付给谁、倍率和金额）')
-    if (gl.result.settlementLog && gl.result.settlementLog.length > 0) {
-      for (const s of gl.result.settlementLog) {
-        const multStr = s.mult ? ` (${s.amount / s.mult}x${s.mult})` : ''
-        logLines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
+      if (gBao.length > 0) {
+        logLines.push('')
+        logLines.push('- 三口/四口关系')
+        logLines.push(...gBao)
       }
-    } else {
-      logLines.push('  - (无)')
+
+      // 结算明细
+      logLines.push('')
+      logLines.push('- 结算逐笔明细（谁付给谁、倍率和金额）')
+      if (gl.result.settlementLog && gl.result.settlementLog.length > 0) {
+        for (const s of gl.result.settlementLog) {
+          const multStr = s.mult ? ` (${s.amount / s.mult}x${s.mult})` : ''
+          logLines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
+        }
+      } else {
+        logLines.push('  - (无)')
+      }
     }
   }
 
-  // Save
+  // Save: metrics 用 lastRoundEval（1×1 时即为真实结果，多轮时为最后一轮结果）
   const metrics = {
-    fitness: finalEval.akScore,
-    huRate: finalEval.winRates['AI-AK'],
-    drawRate: finalEval.draws / 1000,
+    fitness: lastRoundEval!.akScore,
+    huRate: lastRoundEval!.winRates['AI-AK'],
+    drawRate: lastRoundEval!.draws / Math.max(1, lastRoundEval!.totalGames),
     totalGames: ROUNDS * GAMES_PER_ROUND,
     note: `AI-AK iterative training - ${ROUNDS}x${GAMES_PER_ROUND}`
   }
