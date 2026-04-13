@@ -516,7 +516,6 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
   const flushCircle = (startIdx: number, wallRemaining: number) => {
     const snap = snaps[startIdx]
     if (!snap) return
-    lines.push(`**牌墙剩${wallRemaining}张 百搭${snap.wildTile}｜×${snap.gameMultiplier}**`)
     for (const pp of snap.players) {
       const act = circleActions[pp.name] || { drawn: '-', discarded: '-', newFlowers: [] }
       // 动作序列（按K哥格式）
@@ -528,7 +527,7 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
       const exposedStr = formatExposed(pp.exposed || [])
       const handStr = pp.hand || ''
       const handNum = pp.handCount ?? 0
-      lines.push(`  ${pp.name}：${actionSeq}→ 手牌:${handStr}｜副露:${exposedStr}｜${handNum}张`)
+      lines.push(`**${wallRemaining}** ${pp.name}：${actionSeq}→ 手牌:${handStr}｜副露:${exposedStr}｜${handNum}张`)
     }
     lines.push('')
   }
@@ -609,9 +608,9 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
     prevExposed = currExposed
   }
 
-  // 打印最后一圈
+  // 打印最后一圈（去掉 lastFlushedCircleStartIdx 检查，避免截断）
   const lastCircleIsEmpty = snaps[circleStartIdx]?.drawnTile === 'NEW_GAME'
-  if (snaps.length > 0 && lastFlushedCircleStartIdx !== circleStartIdx && !lastCircleIsEmpty) {
+  if (snaps.length > 0 && !lastCircleIsEmpty) {
     circleCount++
     const wallRem = deckLen - (snaps[circleStartIdx]?.wallIdx || 0)
     flushCircle(circleStartIdx, wallRem)
