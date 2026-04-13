@@ -304,54 +304,92 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
       const first = winners[0]
       const result = first.result as any
       const multiplier = first.multiplier || 1
+      const roundNum = first.roundNum || 0
       const wildTile = first.wildTile || '—'
-      const wonFan = first.wonFan
+      const wonFan = first.wonFan || 0
 
-      lines.push(`**局次${gameIdx}** · ×${multiplier}倍 · ${winners.length}人胡牌`)
+      // 总筹码 = 所有 settlement 条目的 amount 总和
+      const settlementLog: any[] = result?.settlementLog || []
+      const totalChips = settlementLog.reduce((sum: number, s: any) => sum + Math.abs(s.amount || 0), 0)
+
+      // 局号 / 结果
+      const resultDesc = winners.length === 0 ? '流局' : `${winners.length}人胡牌`
+      lines.push(`**局号: ${gameIdx}**`)
+      lines.push(`**结果: ${resultDesc}**`)
+      lines.push(`**回合: ${roundNum}**`)
+      lines.push(`**总筹码: ${totalChips}**`)
+      if (wildTile) lines.push(`**百搭: ${wildTile}**`)
       lines.push('')
-      lines.push('| 项目 | 内容 |')
-      lines.push('|------|------|')
-      if (wonFan) lines.push(`| 底数 | ${wonFan} |`)
-      if (wildTile !== '—') lines.push(`| 百搭 | ${wildTile} |`)
-      lines.push(`| 回合 | ${first.roundNum || 0} |`)
 
-      // 流向分析
-      if (result?.settlementLog && result.settlementLog.length > 0) {
-        const totalIn = result.settlementLog
-          .filter((s: any) => s.to && s.to.includes('AK'))
-          .reduce((sum: number, s: any) => sum + Math.abs(s.amount), 0)
-        const totalOut = result.settlementLog
-          .filter((s: any) => s.from && s.from.includes('AK'))
-          .reduce((sum: number, s: any) => sum + Math.abs(s.amount), 0)
-        if (totalIn > 0) lines.push(`| AK净入 | +${totalIn} |`)
-        if (totalOut > 0) lines.push(`| AK净出 | -${totalOut} |`)
+      // 全局倍数（各因子待后续追踪）
+      lines.push(`**全局倍数 = min(8, 骰子倍数 × 流局倍数 × 继承倍数)**`)
+      lines.push(`- 全局倍数: ×${multiplier} *(各因子待追踪)*`)
+      lines.push('')
 
-        lines.push('')
-        lines.push('**流向明细**')
-        for (const s of result.settlementLog) {
-          const amt = Math.abs(s.amount)
-          const multTag = s.mult ? ` ×${s.mult}` : ''
-          const reasonTag = s.reason ? ` (${s.reason})` : ''
-          lines.push(`- ${s.from} → ${s.to}: **${amt}**${multTag}${reasonTag}`)
+      // 从 turnSnapshots 重建该局的手牌（三口/四口关系也在这里）
+      const gameSnaps = (report.turnSnapshots || []).filter((s: any) => s.gameIdx === gameIdx)
+      const lastSnap = gameSnaps[gameSnaps.length - 1]
+      const snapPlayers: Record<string, any> = {}
+      if (lastSnap?.players) {
+        for (const p of lastSnap.players) snapPlayers[p.name] = p
+      }
+
+      // 三口/四口关系（从 meldSources 重建：chow=3, pong/kong>=4）
+      const relLines: string[] = []
+      for (const name of Object.keys(snapPlayers)) {
+        const ms: number[] = snapPlayers[name].meldSources || []
+        for (let ci = 0; ci < ms.length; ci++) {
+          if (ci !== lastSnap.currentPlayer && ms[ci] > 0) {
+            const fromName = lastSnap.players[ci]?.name || `玩家${ci}`
+            const level = ms[ci] >= 4 ? '四口' : '三口'
+            relLines.push(`  ${fromName} <-> ${name}: ${level} (${fromName}->${name}:${ms[ci]}, ${name}->${fromName}:?)`)
+          }
         }
       }
 
-      // 每位赢家详情
-      lines.push('')
-      lines.push('**赢家明细**')
+      // 胡牌玩家明细
       for (const w of winners) {
-        const handStr = typeof w.hand === 'string' ? w.hand : (w.hand?.join(' ') || '—')
-        const meldsStr = Array.isArray(w.melds) ? w.melds.join(' ') : (w.melds || '无')
+        // 手牌优先用 turnSnapshot（WinnerInfo.hand 在 Pong/Kong 自摸时可能为空）
+        const snapHand = snapPlayers[w.winnerName]?.hand || ''
+        const handStr = (w.hand && w.hand.length > 0) ? w.hand : (snapHand || '—')
+        const meldsStr = Array.isArray(w.melds) ? w.melds.join(' / ') : (w.melds || '无')
         const handTypesStr = w.handTypes?.join(', ') || '—'
-        const menqingTag = w.isMenQing ? ' [门清]' : ''
-        const flowers = (w as any).flowers
-        const flowersStr = flowers && flowers.length > 0 ? ` · 花:${flowers.join(',')}` : ''
-        lines.push(`- **${w.winnerName}**${menqingTag}`)
-        lines.push(`  - 方式: ${w.isSelfDraw ? '🔴自摸' : '🔵放冲'} · ${handTypesStr}`)
-        lines.push(`  - 手牌: ${handStr}${flowersStr}`)
-        lines.push(`  - 副露: ${meldsStr !== '无' ? meldsStr : '无'}`)
-        lines.push(`  - 得分: ${(w.wonFan || 0) > 0 ? `+${w.wonFan}` : (w as any).score || 0}`)
+        const flowersArr: string[] = (w as any).flowers || []
+        const flowersStr = flowersArr.length > 0 ? flowersArr.join(', ') : '无'
+        const menqingStr = w.isMenQing ? '是' : '否'
+        const baseFan = wonFan > 0 && multiplier > 0 ? Math.round(wonFan / multiplier) : '?'
+
+
+        lines.push(`**玩家: ${w.winnerName}**`)
+        lines.push(`  - 胡牌方式: ${w.isSelfDraw ? '自摸' : '放冲'}`)
+        lines.push(`  - 牌型/基础番/最终点: ${handTypesStr} / ${baseFan} / ${wonFan}`)
+        lines.push(`  - 手牌牌面: ${handStr}`)
+        lines.push(`  - 门口牌(吃/碰/杠): ${meldsStr !== '无' ? meldsStr : '无'}`)
+        lines.push(`  - 花牌: ${flowersStr}`)
+        lines.push(`  - 是否门清: ${menqingStr}`)
+        lines.push(`  - 是否算无百搭: *（待追踪）*`)
+        lines.push('')
       }
+
+      // 三口/四口关系
+      if (relLines.length > 0) {
+        lines.push('**三口/四口关系:**')
+        for (const r of relLines) lines.push(r)
+        lines.push('')
+      }
+
+      // 结算逐笔明细
+      if (settlementLog.length > 0) {
+        lines.push('**结算逐笔明细:**')
+        for (const s of settlementLog) {
+          const amt = Math.abs(s.amount || 0)
+          const multStr = s.mult ? `${s.mult}×` : ''
+          lines.push(`  [${s.reason || '结算'}] ${s.from} -> ${s.to}: ${amt} (${multStr}${amt})`)
+        }
+        lines.push('')
+      }
+
+      lines.push('---')
       lines.push('')
     }
   }
