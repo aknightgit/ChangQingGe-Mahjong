@@ -286,6 +286,76 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
   }
   lines.push('')
 
+  // ========== Section 5: 每局详细结算明细 ==========
+  if (allWinningGames && allWinningGames.length > 0) {
+    lines.push('### 💰 详细结算明细（本轮所有胡牌局）')
+    lines.push('')
+
+    // 按 gameIdx 分组（血战多人同时胡牌）
+    const byGame: Record<number, any[]> = {}
+    for (const w of allWinningGames) {
+      if (!byGame[w.gameIdx]) byGame[w.gameIdx] = []
+      byGame[w.gameIdx].push(w)
+    }
+
+    for (const gameIdxStr of Object.keys(byGame)) {
+      const gameIdx = parseInt(gameIdxStr)
+      const winners = byGame[gameIdx]
+      const first = winners[0]
+      const result = first.result as any
+      const multiplier = first.multiplier || 1
+      const wildTile = first.wildTile || '—'
+      const wonFan = first.wonFan
+
+      lines.push(`**局次${gameIdx}** · ×${multiplier}倍 · ${winners.length}人胡牌`)
+      lines.push('')
+      lines.push('| 项目 | 内容 |')
+      lines.push('|------|------|')
+      if (wonFan) lines.push(`| 底数 | ${wonFan} |`)
+      if (wildTile !== '—') lines.push(`| 百搭 | ${wildTile} |`)
+      lines.push(`| 回合 | ${first.roundNum || 0} |`)
+
+      // 流向分析
+      if (result?.settlementLog && result.settlementLog.length > 0) {
+        const totalIn = result.settlementLog
+          .filter((s: any) => s.to && s.to.includes('AK'))
+          .reduce((sum: number, s: any) => sum + Math.abs(s.amount), 0)
+        const totalOut = result.settlementLog
+          .filter((s: any) => s.from && s.from.includes('AK'))
+          .reduce((sum: number, s: any) => sum + Math.abs(s.amount), 0)
+        if (totalIn > 0) lines.push(`| AK净入 | +${totalIn} |`)
+        if (totalOut > 0) lines.push(`| AK净出 | -${totalOut} |`)
+
+        lines.push('')
+        lines.push('**流向明细**')
+        for (const s of result.settlementLog) {
+          const amt = Math.abs(s.amount)
+          const multTag = s.mult ? ` ×${s.mult}` : ''
+          const reasonTag = s.reason ? ` (${s.reason})` : ''
+          lines.push(`- ${s.from} → ${s.to}: **${amt}**${multTag}${reasonTag}`)
+        }
+      }
+
+      // 每位赢家详情
+      lines.push('')
+      lines.push('**赢家明细**')
+      for (const w of winners) {
+        const handStr = typeof w.hand === 'string' ? w.hand : (w.hand?.join(' ') || '—')
+        const meldsStr = Array.isArray(w.melds) ? w.melds.join(' ') : (w.melds || '无')
+        const handTypesStr = w.handTypes?.join(', ') || '—'
+        const menqingTag = w.isMenQing ? ' [门清]' : ''
+        const flowers = (w as any).flowers
+        const flowersStr = flowers && flowers.length > 0 ? ` · 花:${flowers.join(',')}` : ''
+        lines.push(`- **${w.winnerName}**${menqingTag}`)
+        lines.push(`  - 方式: ${w.isSelfDraw ? '🔴自摸' : '🔵放冲'} · ${handTypesStr}`)
+        lines.push(`  - 手牌: ${handStr}${flowersStr}`)
+        lines.push(`  - 副露: ${meldsStr !== '无' ? meldsStr : '无'}`)
+        lines.push(`  - 得分: ${(w.wonFan || 0) > 0 ? `+${w.wonFan}` : (w as any).score || 0}`)
+      }
+      lines.push('')
+    }
+  }
+
   // 每圈详细快照（仅 round 文件需要；主文件 showDetail=false 时不输出）
   if (showDetail && report.turnSnapshots && report.turnSnapshots.length > 0) {
     lines.push('### 🔍 每圈明细（血战到底）')
