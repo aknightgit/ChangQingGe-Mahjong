@@ -75,6 +75,7 @@ function normalizeTileSuit(rawSuit: string): TileSuit | null {
     case 'CHARACTERS':
       return TileSuit.CHARACTERS;
     case 'BAMBOOS':
+    case 'bamboo':
       return TileSuit.BAMBOOS;
     default:
       return null;

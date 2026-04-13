@@ -238,7 +238,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
   // 每局获胜人数分布
   const mw = multiWinDist || [0, 0, 0, 0]
   const mwTotal = mw.reduce((a: number, b: number) => a + b, 0)
-  lines.push('**每局获胜人数分布**（本轮所有胡牌局）')
+  lines.push('### 👥 每局获胜人数分布')
   lines.push('')
   lines.push('| 类型 | 局数 | 占比 |')
   lines.push('|------|------|------|')
@@ -286,52 +286,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
   }
   lines.push('')
 
-  // 最大输赢局明细
-  lines.push('### 最大输赢局明细（本轮）')
-  lines.push('')
-  lines.push('#### 最大赢局')
-  if (!topWins || topWins.length === 0) {
-    lines.push('- 无盈利局（AI-AK本轮无正收益局）')
-  } else {
-    const w = topWins[0]
-    const r = w.result || {}
-    lines.push(`- 赢家: ${w.winnerName} | 得分: +${w.akDelta} | 局号: ${w.gameIdx}`)
-    lines.push(`- 牌型: ${w.handTypes?.join(', ') || '—'} | 自摸: ${w.isSelfDraw ? '是' : '否'} | 番数: ${w.wonFan ?? '—'}`)
-    lines.push(`- 底数: ${w.wonFan ? Math.round(w.wonFan / 10) : '—'} | 倍数: ×${r.multiplier || '—'}`)
-  }
-  lines.push('')
-  lines.push('#### 最大输局')
-  if (!topLosses || topLosses.length === 0) {
-    lines.push('- 无亏损局（AI-AK本轮无负收益局）')
-  } else {
-    const w = topLosses[0]
-    const r = w.result || {}
-    lines.push(`- 输家: ${w.winnerName} | 损失: ${Math.abs(w.akDelta)} | 局号: ${w.gameIdx}`)
-    lines.push(`- 牌型: ${w.handTypes?.join(', ') || '—'} | 自摸: ${w.isSelfDraw ? '是' : '否'} | 番数: ${w.wonFan ?? '—'}`)
-    lines.push(`- 底数: ${w.wonFan ? Math.round(w.wonFan / 10) : '—'} | 倍数: ×${r.multiplier || '—'}`)
-  }
-  lines.push('')
 
-  // 所有胡牌局明细
-  if (allWinningGames && allWinningGames.length > 0) {
-    lines.push('### 所有胡牌局明细（所有玩家）')
-    lines.push('')
-    let lastGameIdx = -1
-    for (const w of allWinningGames) {
-      if (w.gameIdx !== lastGameIdx) {
-        lines.push(`**局次${w.gameIdx}**（${w.isSelfDraw ? '自摸' : '放冲'} · ×${w.multiplier || '?'}）`)
-        lastGameIdx = w.gameIdx
-      }
-      const menqingTag = (w.isMenQing !== false && (!w.melds || (Array.isArray(w.melds) ? w.melds.length === 0 : String(w.melds).trim() === ''))) ? '[门清] ' : ''
-      const handTypesStr = w.handTypes?.join(', ') || '—'
-      const groupedHand = formatGroupedHand(w.hand)
-      const meldsStr = formatMelds(w.melds)
-      lines.push(`  - ${w.winnerName || '未知玩家'}: ${menqingTag}${handTypesStr} · ${groupedHand} · ${meldsStr} ${w.wonFan ? `→ ${w.wonFan}点` : ''}`)
-    }
-    lines.push('')
-  }
-
-  // 每圈详细快照（仅 round 文件需要；主文件 showDetail=false 时不输出）
   if (showDetail && report.turnSnapshots && report.turnSnapshots.length > 0) {
     lines.push('### 🔍 每圈明细（血战到底）')
     lines.push('')
