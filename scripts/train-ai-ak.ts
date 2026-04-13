@@ -2597,21 +2597,12 @@ let finalEvalLines: string[] = []
     saveCharacter('AI-AK', bestPolicy, metrics)
   }
 
-  // 主日志：Header + 每轮中文名称 + 训练指标（无每圈明细）
-  // round 文件（DETAIL_MODE 时）才记录每圈明细
+  // 主日志：只输出实际训练的轮次（第1轮到第ROUNDS轮），不输出初始评估和最终评估
   const mainOut: string[] = [...logLines]
   for (const report of roundReports) {
-    let label: string
-    if (report.round === 0) {
-      label = '初始评估'
-    } else if (report.round === ROUNDS + 1) {
-      label = '最终评估'
-    } else {
-      label = `第${report.round}轮`
-    }
-    mainOut.push(formatRoundReport(report, false, label))
+    if (report.round === 0 || report.round === ROUNDS + 1) continue  // 跳过初始评估和最终评估
+    mainOut.push(formatRoundReport(report, false, `第${report.round}轮`))
   }
-  mainOut.push(...finalEvalLines)
   fs.writeFileSync(mdFile, mainOut.join('\n'), 'utf-8')
   fs.writeFileSync(policyFile, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
   fs.writeFileSync(policyLatest, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
