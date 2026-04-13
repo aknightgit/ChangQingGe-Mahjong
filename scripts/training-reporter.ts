@@ -523,7 +523,7 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
     for (const pp of snap.players) {
       const act = circleActions[pp.name] || { drawn: '-', discarded: '-', newFlowers: [] }
       // 动作序列（按K哥格式）
-      const flowerStr = act.newFlowers.length > 0 ? `补${len(act.newFlowers)}花 ` : ''
+      const flowerStr = act.newFlowers.length > 0 ? `补${act.newFlowers.length}花 ` : ''
       const drawStr = act.drawn !== '-' ? `摸${act.drawn} ` : ''
       const discardStr = act.discarded !== '-' ? `打${act.discarded}` : ''
       const actionSeq = flowerStr + drawStr + discardStr
