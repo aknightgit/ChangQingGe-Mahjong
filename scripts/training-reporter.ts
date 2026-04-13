@@ -59,7 +59,7 @@ export interface RoundReport {
   policy: Record<string, number>
   playerStats: PlayerStats[]
   topWins: WinningGameRecord[]
-  topLosses: WinningGameRecord[]
+  globalMaxWin?: WinningGameRecord
   worstLossGames: any[]
   multiWinDist: number[]
   allWinningGames: WinningGameRecord[]
@@ -287,8 +287,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
   lines.push('')
 
     // ========== Section 5: 最大赢/输局明细（只输出AK赢分最高和输分最多各一局）==========
-  const maxWin = topWins.length > 0 ? topWins[0] : null
-  const maxLoss = topLosses.length > 0 ? topLosses[0] : null
+  const maxWin = report.globalMaxWin || null
 
   // 通用渲染函数
   const renderGame = (w: any, label: string) => {
@@ -388,12 +387,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
     lines.push('')
     renderGame(maxWin, '赢')
   }
-  if (maxLoss) {
-    lines.push('### 💔 最大输局明细')
-    lines.push('')
-    renderGame(maxLoss, '输')
-  }
-
+  // （最大输局明细已删除，K哥 2026-04-13 确认）
 
   // 每圈详细快照（仅 round 文件需要；主文件 showDetail=false 时不输出）
   if (showDetail && report.turnSnapshots && report.turnSnapshots.length > 0) {
@@ -497,8 +491,9 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
     return lines.join('\n')
   }
   lines.push('### 🔍 每圈明细（血战到底）')
-  lines.push('')
+
   const snaps = report.turnSnapshots
+  const deckLen = 144  // 牌墙总张数固定144
 
   let circleCount = 0
   let circleStartIdx = 0
@@ -508,35 +503,42 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
   let lastFlushedCircleStartIdx = -1  // 防止最后一圈重复flush
 
   // 记录每个玩家本圈摸打的 {drawn, discarded}
-  const circleActions: Record<string, {drawn: string, discarded: string}> = {}
+  const circleActions: Record<string, {drawn: string, discarded: string, newFlowers: string[]}> = {}
 
   // 初始化时重置所有玩家动作为空
   for (const p of snaps[0]?.players || []) {
-    circleActions[p.name] = { drawn: '-', discarded: '-' }
+    circleActions[p.name] = { drawn: '-', discarded: '-', newFlowers: [] }
   }
 
-  const flushCircle = (startIdx: number, label: string) => {
+  const formatExposed = (exposed: string[]): string => {
+    if (!exposed || exposed.length === 0) return '无'
+    return exposed.join('|')
+  }
+
+  // flushCircle: 输出上一圈结果，heading使用"牌墙剩N张"
+  const flushCircle = (startIdx: number, wallRemaining: number) => {
     const snap = snaps[startIdx]
     if (!snap) return
-    lines.push(`**【${label}】百搭${snap.wildTile}｜×${snap.gameMultiplier}**`)
+    lines.push(`**牌墙剩${wallRemaining}张 百搭${snap.wildTile}｜×${snap.gameMultiplier}**`)
     for (const pp of snap.players) {
-      // 每回合摸打显示：摸=本回合从牌墙摸的牌（drawnTile），打=本回合打出的牌（discardedTile）
-      // drawnTile=本回合开始时摸的牌（非 lastDiscard，后者是别人刚打出的捡牌）
-      // 注意：副露（碰/吃/杠）后无摸牌，drawn='-'；只捡牌不摸牌时 drawn='-'
-      const act = circleActions[pp.name] || { drawn: '-', discarded: '-' }
-      const drawStr = act.drawn !== '-' ? `｜摸${act.drawn}` : ''
-      const discardStr = act.discarded !== '-' ? `｜ → 打${act.discarded}` : ''
-      const exposedStr = pp.exposed?.join('|') || '无'
-      const handStr = formatGroupedHand(pp.hand, snap.wildTile)
+      const act = circleActions[pp.name] || { drawn: '-', discarded: '-', newFlowers: [] }
+      // 动作序列（按K哥格式）
+      const flowerStr = act.newFlowers.length > 0 ? `补${len(act.newFlowers)}花 ` : ''
+      const drawStr = act.drawn !== '-' ? `摸${act.drawn} ` : ''
+      const discardStr = act.discarded !== '-' ? `打${act.discarded}` : ''
+      const actionSeq = flowerStr + drawStr + discardStr
+      // 最终手牌
+      const exposedStr = formatExposed(pp.exposed || [])
+      const handStr = pp.hand || ''
       const handNum = pp.handCount ?? 0
-      lines.push(`  ${pp.name}：${handStr}｜副露:${exposedStr}｜${handNum}张${drawStr}${discardStr}`)
+      lines.push(`  ${pp.name}：${actionSeq}→ 手牌:${handStr}｜副露:${exposedStr}｜${handNum}张`)
     }
     lines.push('')
   }
 
   const resetActions = () => {
     for (const p of snaps[0]?.players || []) {
-      circleActions[p.name] = { drawn: '-', discarded: '-' }
+      circleActions[p.name] = { drawn: '-', discarded: '-', newFlowers: [] }
     }
   }
 
@@ -549,48 +551,45 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
     const isTurnReset = snap.turn !== undefined && prevTurn !== -1 && snap.turn < prevTurn
     if (isNewGameSentinel || isTurnReset) {
       if (isNewGameSentinel) {
-        // NEW_GAME sentinel：discardedTile 携带 gameIdx（0-indexed）
-        gameCount = parseInt(snap.discardedTile || '0', 10) + 1  // 显示用 1-indexed
+        gameCount = parseInt(snap.discardedTile || '0', 10) + 1
       } else {
         gameCount++
       }
       // 上一局最后一圈也要 flush
-      if (circleStartIdx < i) flushCircle(circleStartIdx, `第${circleCount}圈`)
+      if (circleStartIdx < i) {
+        const wallRem = deckLen - (snaps[circleStartIdx]?.wallIdx || 0)
+        flushCircle(circleStartIdx, wallRem)
+      }
       circleCount = 0
       circleStartIdx = i
       resetActions()
       lines.push(`=== 第${gameCount}局 ===`)
       lines.push('')
       if (isNewGameSentinel) {
-        prevTurn = -1  // 重置，为下一局检测做准备
+        prevTurn = -1
         prevExposed = []
-        // 跳过 sentinel 本身（它没有玩家数据）
         if (snap.turn !== undefined) prevTurn = snap.turn
         continue
       }
     }
 
-    // 统一圈切分逻辑（与 formatRoundReport 一致）：
-    // hadMeld=有人吃/碰/杠，圈提前结束；backToStart=currentPlayer 回到起始位
-    // turn=0 的第一回合：如果 circleStartIdx 指向 sentinel（NEW_GAME），说明第一圈正式开始
+    // 圈切分逻辑
     const currExposed = players.map((p: any) => (p.exposed || []).join('|'))
     const circleStartIsSentinel = snaps[circleStartIdx]?.drawnTile === 'NEW_GAME'
     const hadMeld = !circleStartIsSentinel && prevExposed.length > 0 &&
       currExposed.some((ex: string, idx: number) => ex !== prevExposed[idx])
     const backToStart = i > 0 && snap.currentPlayer === snaps[circleStartIdx].currentPlayer && snap.turn > 0
-    // firstRealSnapshot：circleStartIdx 指向 sentinel，且当前是下一个快照（第一张真实游戏快照）
     const firstRealSnapshot = circleStartIsSentinel && i === circleStartIdx + 1
 
     // 新圈开始：打印上一圈结果
     if ((i === 0 || hadMeld || backToStart || firstRealSnapshot) && i > 0) {
-      // 跳过 circleStartIdx 指向 sentinel 的 flush（sentinel 无玩家数据，打印出来是空圈）
       const isCircleStartEmpty = snaps[circleStartIdx]?.drawnTile === 'NEW_GAME'
       if (!isCircleStartEmpty) {
         circleCount++
-        flushCircle(circleStartIdx, `第${circleCount}圈`)
+        const wallRem = deckLen - (snaps[circleStartIdx]?.wallIdx || 0)
+        flushCircle(circleStartIdx, wallRem)
         lastFlushedCircleStartIdx = circleStartIdx
       } else {
-        // 第一圈正式开始，重置 circleCount=0（下一圈才是真正的第1圈）
         circleCount = 0
       }
       circleStartIdx = i
@@ -599,10 +598,13 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
 
     // 记录当前玩家本回合的摸打
     const currP = players[snap.currentPlayer]
-    if (currP && snap.drawnTile) {
+    if (currP && snap.drawnTile && snap.drawnTile !== 'NEW_GAME') {
+      const existing = circleActions[currP.name]
+      const newFlowers = (snap.players[snap.currentPlayer] as any)?.flowers || []
       circleActions[currP.name] = {
         drawn: snap.drawnTile,
-        discarded: snap.discardedTile || '-'
+        discarded: snap.discardedTile || '-',
+        newFlowers: newFlowers
       }
     }
 
@@ -610,11 +612,12 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
     prevExposed = currExposed
   }
 
-  // 打印最后一圈（仅当最后一圈尚未flush，防止与循环内hadMeld/backToStart重复）
+  // 打印最后一圈
   const lastCircleIsEmpty = snaps[circleStartIdx]?.drawnTile === 'NEW_GAME'
   if (snaps.length > 0 && lastFlushedCircleStartIdx !== circleStartIdx && !lastCircleIsEmpty) {
     circleCount++
-    flushCircle(circleStartIdx, `第${circleCount}圈`)
+    const wallRem = deckLen - (snaps[circleStartIdx]?.wallIdx || 0)
+    flushCircle(circleStartIdx, wallRem)
   }
   lines.push('---')
   return lines.join('\n')
@@ -630,14 +633,18 @@ export function buildRoundReport(
   scriptName?: string
 ): RoundReport {
   const winningGames = (internalResult.winningGames || []).sort((a: any, b: any) => a.gameIdx - b.gameIdx)
+  // topWins: AK's biggest wins (用于每轮展示)
   const topWins = winningGames
     .filter((w: any) => (w.akDelta ?? 0) > 0)
     .sort((a: any, b: any) => (b.akDelta ?? 0) - (a.akDelta ?? 0))
     .slice(0, 3)
-  const topLosses = winningGames
-    .filter((w: any) => (w.akDelta ?? 0) < 0)
-    .sort((a: any, b: any) => (a.akDelta ?? 0) - (b.akDelta ?? 0))
-    .slice(0, 3)
+  // globalMaxWin: 全局最大赢局（跨所有玩家，单局净赢分最高的那一局）
+  const sortedByScore = [...winningGames].sort((a: any, b: any) => {
+    const scoreA = (a.wonFan ?? 0) * (a.multiplier ?? 1)
+    const scoreB = (b.wonFan ?? 0) * (b.multiplier ?? 1)
+    return scoreB - scoreA
+  })
+  const globalMaxWin = sortedByScore.length > 0 ? sortedByScore[0] : null
 
   const playerStats: PlayerStats[] = playerNames.map(name => ({
     name,
@@ -676,7 +683,7 @@ export function buildRoundReport(
     policy,
     playerStats,
     topWins,
-    topLosses,
+    globalMaxWin: globalMaxWin || undefined,
     worstLossGames: internalResult.worstSingleLoss ? [internalResult.worstSingleLoss] : [],
     multiWinDist: internalResult.multiWinDist || [0, 0, 0, 0],
     allWinningGames: winningGames,

@@ -36,11 +36,24 @@ export const HAND_TYPE_PRIORITY: Record<HandType, number> = {
 
 export type WildTileChecker = (tile: Tile) => boolean;
 
+// 全局统一入口：将任意 suit 别名标准化为 canonical 值
+// bamba → tiao（只认 tiao 为 canonical，bamboo 是图片/配置别名）
+export function normalizeSuitAlias(suit: string): string {
+  const s = suit.toLowerCase()
+  if (s === 'bamboo') return 'tiao'   // 配置/图片别名 → canonical
+  if (s === 'tong') return 'dots'      // 旧别名
+  if (s === 'wan') return 'wan'         // already canonical
+  if (s === 'tiao') return 'tiao'      // already canonical
+  if (s === 'dots') return 'dots'      // already canonical
+  return s  // unknown: let normalizeTileSuit handle error
+}
+
 export function buildWildTileChecker(wildTileId: string | null): WildTileChecker {
   if (!wildTileId || typeof wildTileId !== 'string') return () => false;
   const parts = wildTileId.split('-');
   if (parts.length < 2) return () => false;
-  const normalizedSuit = normalizeTileSuit(parts[0]);
+  const canonicalSuit = normalizeSuitAlias(parts[0]);  // bamboo → tiao before enum lookup
+  const normalizedSuit = normalizeTileSuit(canonicalSuit);
   if (!normalizedSuit) return () => false;
   return (t: Tile) => t.suit === normalizedSuit && String(t.value) === parts[1];
 }
@@ -55,6 +68,9 @@ function normalizeTileSuit(rawSuit: string): TileSuit | null {
       return TileSuit.CHARACTERS;
     case TileSuit.BAMBOOS:
     case 'tiao':
+      return TileSuit.BAMBOOS;
+    case 'bamboo':
+      // 外部配置使用 bamboo 别名，转换为 canonical tiao
       return TileSuit.BAMBOOS;
     case TileSuit.WIND:
     case 'feng':
@@ -730,9 +746,13 @@ export function detectHandTypes(
 
     if (src && typeof src === 'object') {
       if (typeof src.customScoringMode === 'string' && src.customScoringMode.includes('-')) {
-        resolvedWild = src.customScoringMode;
+        // 标准化 suit 别名（bamboo → tiao）
+        const [suit, ...rest] = src.customScoringMode.split('-')
+        resolvedWild = normalizeSuitAlias(suit) + '-' + rest.join('-')
       } else if (typeof src.wildTileId === 'string') {
-        resolvedWild = src.wildTileId;
+        // 标准化 suit 别名
+        const parts = src.wildTileId.split('-')
+        resolvedWild = parts.length >= 2 ? normalizeSuitAlias(parts[0]) + '-' + parts.slice(1).join('-') : src.wildTileId
       } else if (typeof src.wildTileSuit === 'string' && typeof src.wildTileValue === 'number') {
         resolvedWild = `${src.wildTileSuit}-${src.wildTileValue}`;
       }

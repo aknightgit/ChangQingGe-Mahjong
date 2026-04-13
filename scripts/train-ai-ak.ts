@@ -1426,10 +1426,12 @@ interface TurnSnapshot {
     exposed: string[]
     meldSources: number[]
     handCount: number
+    flowers: string[]
   }>
   wildTile: string
   gameMultiplier: number
   gameIdx: number  // 游戏索引（用于 reporter 分隔多局）
+  wallIdx: number  // 牌墙剩余张数 = g.deck.length - g.wallIdx
 }
 interface WinningGameRecord {
   gameIdx: number; winnerName: string; hand: string; melds: string[]; handTypes: string[];
@@ -1660,14 +1662,14 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         exposed: p.exposedMelds.map(m =>
           `${m.type === MeldType.TRIPLET ? '碰' : m.type === MeldType.SEQUENCE ? '吃' : m.type === MeldType.KONG ? '明杠' : m.type === MeldType.CONCEALED_KONG ? '暗杠' : '?'}:${sortTiles([...m.tiles]).map(t => tileStr(t)).join(' ')}`
         ),
-        // NOTE: hand 已经是 reporter 格式化后的字符串（formatGroupedHand 已在百搭后加 *）
-        // 这里直接 join 不要重复加 *，否则百搭变成 **
         meldSources: [...p.meldSources],
-        handCount: p.hand.length
+        handCount: p.hand.length,
+        flowers: p.flowerTiles.map(t => tileStr(t))
       })),
       wildTile: g.wildSuit && g.wildValue ? tileStr({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭',
       gameMultiplier: g.gameMultiplier,
-      gameIdx
+      gameIdx,
+      wallIdx: g.wallIdx
     })
   }
 
@@ -1679,7 +1681,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     players: [],
     wildTile: g.wildSuit && g.wildValue ? tileStr({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭',
     gameMultiplier: g.gameMultiplier,
-    gameIdx
+    gameIdx,
+    wallIdx: g.wallIdx
   })
 
   for (let i = 0; i < 13; i++) { for (let p = 0; p < 4; p++) drawTile(g, g.players[p]) }
@@ -2440,10 +2443,7 @@ function main() {
       const result = evaluatePolicy(candidates[c], fixedPolicies, GAMES_PER_ROUND)
       const score = BASELINE_MODE ? result.metricsFitness : result.akScore
       const selfDR = result.winGames > 0 ? (result.selfDrawGames/result.winGames*100).toFixed(0) : '0'
-      const line = BASELINE_MODE
-        ? `  Candidate ${c+1}: fitness=${score.toFixed(1)}  draws=${result.draws}(${(result.draws/GAMES_PER_ROUND*100).toFixed(0)}%)  selfDraw=${selfDR}%`
-        : `  Candidate ${c+1}: score=${result.akScore}  wins=${result.akWins}/${GAMES_PER_ROUND} (${(result.winRates['AI-AK']*100).toFixed(1)}%)  draws=${result.draws}`
-      roundLines.push(line)
+
 
       if (score >= roundBestScore) {
         roundBestScore = score
@@ -2470,10 +2470,7 @@ function main() {
     // Keep history manageable
     if (scoreHistory.length > 10) scoreHistory.shift()
 
-    const statusLine = improved
-      ? `  ★ NEW BEST! AI-AK score=${bestScore}`
-      : `  Best this round: ${roundBestScore}  (overall best: ${bestScore})  [plateau: ${plateauCount}]`
-    roundLines.push(statusLine)
+
 
     // Print opponent summary
     const evalResult = evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
@@ -2483,18 +2480,7 @@ function main() {
     ).join('  ')
     roundLines.push(summaryLine)
 
-    // 每轮最大赢/输明细
-    if (roundBigWin) {
-      const evs = roundBigWin.result.events
-      const winner = AI_NAMES[roundBigWin.result.winner]
-      roundLines.push(`\n**本轮AK最大赢局** +${roundBigWin.score} (局次${roundBigWin.gameIdx}, 倍×${roundBigWin.result.multiplier})`)
-      for (const e of evs.slice(-8)) roundLines.push(`- ${e.player} ${e.action}: ${e.detail}`)
-    }
-    if (roundBigLoss) {
-      const evs = roundBigLoss.result.events
-      roundLines.push(`\n**本轮AK最大输局** ${roundBigLoss.score} (局次${roundBigLoss.gameIdx}, 倍×${roundBigLoss.result.multiplier})`)
-      for (const e of evs.slice(-8)) roundLines.push(`- ${e.player} ${e.action}: ${e.detail}`)
-    }
+
 
     console.log(roundLines.join('\n'))
 
