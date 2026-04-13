@@ -440,7 +440,17 @@ function detectTypes(
 
   // 大吊：不做为胡牌前置判断，只在算分阶段检测（见calcScore）
   // 大吊 = 手牌剩1张时自摸或捉冲，胡牌判断按正常牌型走
-  // K哥铁律：没有"普通胡/基础胡"。满足 3n+2 但无特殊牌型 = 无效胡牌（canWin=false）
+
+  // ---- 垃圾胡过滤（K哥铁律）----
+  // 垃圾胡 = 多门(>=2门) + 含顺子（非全刻子）= 禁止的普通3n+2
+  // 多门+顺子的手牌属于低质量普通胡，不允许胡
+  const isForbiddenOrdinary = numSuitCount >= 2 && !types.includes(HandType.ALL_TRIPLETS);
+
+  // 基础胡牌：满足 3n+2 格式且没有更高优先级特殊牌型，且不是垃圾胡
+  if (types.length === 0 && satisfiesFormat && !isForbiddenOrdinary) {
+    types.push(HandType.STANDARD);
+  }
+
   return types.sort((a, b) => (HAND_TYPE_PRIORITY[b] ?? 0) - (HAND_TYPE_PRIORITY[a] ?? 0));
 }
 
