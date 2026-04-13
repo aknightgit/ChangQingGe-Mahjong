@@ -2472,7 +2472,6 @@ function main() {
     }
 
     console.log(roundLines.join('\n'))
-    if (DETAIL_MODE) logLines.push(...roundLines)
 
     // 每轮单独输出文件（使用标准化reporter）
     // 无论是否 improved，每局结束后都写 round 文件（--detail 时）
