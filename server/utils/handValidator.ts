@@ -440,13 +440,7 @@ function detectTypes(
 
   // 大吊：不做为胡牌前置判断，只在算分阶段检测（见calcScore）
   // 大吊 = 手牌剩1张时自摸或捉冲，胡牌判断按正常牌型走
-
-  // 基础胡牌：满足 3n+2 格式且没有更高优先级特殊牌型时，视为 STANDARD
-  // 修复：此前把“多门 + 顺子”的标准胡错误过滤，导致合法 14 张 3n+2 手牌返回 []
-  if (types.length === 0 && satisfiesFormat) {
-    types.push(HandType.STANDARD);
-  }
-
+  // K哥铁律：没有"普通胡/基础胡"。满足 3n+2 但无特殊牌型 = 无效胡牌（canWin=false）
   return types.sort((a, b) => (HAND_TYPE_PRIORITY[b] ?? 0) - (HAND_TYPE_PRIORITY[a] ?? 0));
 }
 

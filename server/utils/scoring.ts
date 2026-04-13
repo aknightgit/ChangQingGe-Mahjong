@@ -616,7 +616,8 @@ function getHandTypeDisplayName(type: HandType): string {
     [HandType.HALF_FLUSH]: '混一色',
     [HandType.ALL_TRIPLETS]: '碰碰胡'
   };
-  return names[type] || '普通胡';
+  if (!(type in names)) return `未知牌型[${type}]`;
+  return names[type];
 }
 
 function getFixedFanName(type: HandType, isSelfDrawn: boolean, isKongFlower: boolean, handTypes?: HandType[], isDaDiao?: boolean): string | null {
