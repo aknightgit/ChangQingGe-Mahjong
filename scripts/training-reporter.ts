@@ -197,7 +197,7 @@ function checkTarget(actual: number, target: string, lowBetter = false): string 
 
 // ========== 模板（严格按 training-output-template.md） ==========
 
-export function formatRoundReport(report: RoundReport, showDetail = true): string {
+export function formatRoundReport(report: RoundReport, showDetail = true, roundLabel?: string): string {
   const lines: string[] = []
   const { round, timestamp, metrics, policy, topWins, topLosses, multiWinDist, allWinningGames } = report
   const ts = formatTimestamp(timestamp)
@@ -211,7 +211,8 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
   const nonDrawGames = Math.max(0, metrics.totalGames - metrics.drawGames)
   const fightToLastRate = nonDrawGames > 0 ? parseFloat(((metrics.fightToLastGames / nonDrawGames) * 100).toFixed(1)) : 0
 
-  lines.push(`## Round ${round} (${ts})`)
+  const heading = roundLabel ?? `Round ${round}`
+  lines.push(`## ${heading} (${ts})`)
   lines.push('')
 
   // Summary
@@ -338,15 +339,28 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
     let circleCount = 0
     let prevExposed: string[] = []
     let circleStart = 0
+    let lastFlushedCircleStart = -1
     // 追踪当前圈每人是否已摸打
     const drawnThisCircle: Record<string, {drawn: string, discarded: string}> = {}
 
     for (let i = 0; i < snaps.length; i++) {
       const snap = snaps[i]
       const players = snap.players || []
+
+      // 跳过 NEW_GAME sentinel（没有玩家数据）
+      if (snap.drawnTile === 'NEW_GAME') {
+        prevExposed = []
+        circleStart = i
+        circleCount = 0
+        lastFlushedCircleStart = -1
+        continue
+      }
+
       const currExposed = players.map((p: any) => (p.exposed || []).join('|'))
-      const hadMeld = prevExposed.length > 0 && currExposed.some((ex: string, idx: number) => ex !== prevExposed[idx])
-      const backToStart = i > 0 && snap.currentPlayer === snaps[circleStart].currentPlayer
+      const circleStartIsSentinel = snaps[circleStart]?.drawnTile === 'NEW_GAME'
+      const hadMeld = !circleStartIsSentinel && prevExposed.length > 0 &&
+        currExposed.some((ex: string, idx: number) => ex !== prevExposed[idx])
+      const backToStart = i > 0 && snap.currentPlayer === snaps[circleStart].currentPlayer && snap.turn > 0
 
       // 新圈开始：打印上一圈结果（如有）
       if ((i === 0 || hadMeld || backToStart) && i > 0) {
@@ -360,14 +374,14 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
         }
         lines.push('')
         circleStart = i
+        lastFlushedCircleStart = circleStart
         // 重置
         for (const pp of players) drawnThisCircle[pp.name] = { drawn: '-', discarded: '-' }
       }
 
       // 初始化当前圈（第一张快照）
       if (i === 0 || (i > 0 && (hadMeld || backToStart))) {
-        circleCount = i === 0 ? 0 : circleCount
-        lines.push(`**【第${circleCount + (i > 0 ? 0 : 0)}圈】百搭${snap.wildTile}｜×${snap.gameMultiplier}**`)
+        lines.push(`**【第${circleCount + 1}圈】百搭${snap.wildTile}｜×${snap.gameMultiplier}**`)
       }
 
       // 记录当前人摸打
@@ -379,19 +393,25 @@ export function formatRoundReport(report: RoundReport, showDetail = true): strin
         }
       }
 
+      if (hadMeld) {
+        prevExposed = currExposed
+        continue
+      }
       prevExposed = currExposed
     }
 
-    // 打印最后一圈
-    circleCount++
-    const lastSnap = snaps[circleStart]
-    for (const pp of lastSnap.players) {
-      const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-' }
-      const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
-      const discardStr = d.discarded !== '-' ? `｜ → 打${d.discarded}` : ''
-      lines.push(`  - ${pp.name}：${formatGroupedHand(pp.hand, lastSnap.wildTile)}｜副露:${formatExposed(pp.exposed)}｜${pp.handCount}张${drawStr}${discardStr}`)
+    // 打印最后一圈（仅当尚未flush）
+    if (lastFlushedCircleStart !== circleStart && snaps[circleStart]?.players?.length > 0) {
+      circleCount++
+      const lastSnap = snaps[circleStart]
+      for (const pp of lastSnap.players) {
+        const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-' }
+        const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
+        const discardStr = d.discarded !== '-' ? `｜ → 打${d.discarded}` : ''
+        lines.push(`  - ${pp.name}：${formatGroupedHand(pp.hand, lastSnap.wildTile)}｜副露:${formatExposed(pp.exposed)}｜${pp.handCount}张${drawStr}${discardStr}`)
+      }
+      lines.push('')
     }
-    lines.push('')
   }
 
   return lines.join('\n')
@@ -421,6 +441,7 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
   let gameCount = 0
   let prevTurn = -1
   let prevExposed: string[] = []
+  let lastFlushedCircleStartIdx = -1  // 防止最后一圈重复flush
 
   // 记录每个玩家本圈摸打的 {drawn, discarded}
   const circleActions: Record<string, {drawn: string, discarded: string}> = {}
@@ -487,15 +508,27 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
 
     // 统一圈切分逻辑（与 formatRoundReport 一致）：
     // hadMeld=有人吃/碰/杠，圈提前结束；backToStart=currentPlayer 回到起始位
-    // 重要：turn=0 的第一回合不能结束圈（否则初始快照的 currentPlayer 会导致首圈立即结束）
+    // turn=0 的第一回合：如果 circleStartIdx 指向 sentinel（NEW_GAME），说明第一圈正式开始
     const currExposed = players.map((p: any) => (p.exposed || []).join('|'))
-    const hadMeld = prevExposed.length > 0 && currExposed.some((ex: string, idx: number) => ex !== prevExposed[idx])
+    const circleStartIsSentinel = snaps[circleStartIdx]?.drawnTile === 'NEW_GAME'
+    const hadMeld = !circleStartIsSentinel && prevExposed.length > 0 &&
+      currExposed.some((ex: string, idx: number) => ex !== prevExposed[idx])
     const backToStart = i > 0 && snap.currentPlayer === snaps[circleStartIdx].currentPlayer && snap.turn > 0
+    // firstRealSnapshot：circleStartIdx 指向 sentinel，且当前是下一个快照（第一张真实游戏快照）
+    const firstRealSnapshot = circleStartIsSentinel && i === circleStartIdx + 1
 
     // 新圈开始：打印上一圈结果
-    if ((i === 0 || hadMeld || backToStart) && i > 0) {
-      circleCount++
-      flushCircle(circleStartIdx, `第${circleCount - 1}圈`)
+    if ((i === 0 || hadMeld || backToStart || firstRealSnapshot) && i > 0) {
+      // 跳过 circleStartIdx 指向 sentinel 的 flush（sentinel 无玩家数据，打印出来是空圈）
+      const isCircleStartEmpty = snaps[circleStartIdx]?.drawnTile === 'NEW_GAME'
+      if (!isCircleStartEmpty) {
+        circleCount++
+        flushCircle(circleStartIdx, `第${circleCount}圈`)
+        lastFlushedCircleStartIdx = circleStartIdx
+      } else {
+        // 第一圈正式开始，重置 circleCount=0（下一圈才是真正的第1圈）
+        circleCount = 0
+      }
       circleStartIdx = i
       resetActions()
     }
@@ -513,8 +546,10 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
     prevExposed = currExposed
   }
 
-  // 打印最后一圈（游戏结束时最后一圈未必已flush，需要兜底）
-  if (snaps.length > 0) {
+  // 打印最后一圈（仅当最后一圈尚未flush，防止与循环内hadMeld/backToStart重复）
+  const lastCircleIsEmpty = snaps[circleStartIdx]?.drawnTile === 'NEW_GAME'
+  if (snaps.length > 0 && lastFlushedCircleStartIdx !== circleStartIdx && !lastCircleIsEmpty) {
+    circleCount++
     flushCircle(circleStartIdx, `第${circleCount}圈`)
   }
   lines.push('---')

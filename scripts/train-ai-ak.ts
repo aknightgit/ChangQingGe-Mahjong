@@ -2498,39 +2498,40 @@ function main() {
   logLines.push(`\n[性能] isTing缓存: 命中${tingStats.hits} 未命中${tingStats.misses} 命中率${tingStats.hitRate}`)
   logLines.push(`[性能] canWin缓存: 命中${canWinStats.hits} 未命中${canWinStats.misses} 命中率${canWinStats.hitRate}`)
 
+let finalEvalLines: string[] = []
   // Final evaluation: 仅多轮或多局时有意义（1×1 时跳过，避免冗余）
   if (ROUNDS > 1 || GAMES_PER_ROUND > 1) {
     console.log('\n--- 最终评估 (' + GAMES_PER_ROUND + '局) ---')
-    logLines.push('\n--- 最终评估 (' + GAMES_PER_ROUND + '局) ---')
+    finalEvalLines.push('\n--- 最终评估 (' + GAMES_PER_ROUND + '局) ---')
 
     const finalEval = evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
 
     const finalReport = buildRoundReport(ROUNDS + 1, finalEval, bestPolicy, AI_NAMES, 'train-ai-ak.ts')
-    const finalReportFormatted = formatRoundReport(finalReport, false)
+    const finalReportFormatted = formatRoundReport(finalReport, false, '最终评估')
     console.log(finalReportFormatted)
-    logLines.push(finalReportFormatted)
+    finalEvalLines.push(finalReportFormatted)
 
     // 最具参考价值的逐局明细保留到 logLines（三口/四口关系 + 结算逐笔）
     if (finalEval.worstSingleLoss) {
       const gl = finalEval.worstSingleLoss
-      logLines.push('')
-      logLines.push('## 全局最大单人亏损局（跨所有轮次）')
-      logLines.push(`- 最大亏损: ${gl.loser} ${gl.score} 点（绝对值 ${Math.abs(gl.score)}）`)
-      logLines.push(`- 局号: ${gl.gameIdx}`)
-      logLines.push(`- 倍数: ×${gl.result.multiplier}`)
+      finalEvalLines.push('')
+      finalEvalLines.push('## 全局最大单人亏损局（跨所有轮次）')
+      finalEvalLines.push(`- 最大亏损: ${gl.loser} ${gl.score} 点（绝对值 ${Math.abs(gl.score)}）`)
+      finalEvalLines.push(`- 局号: ${gl.gameIdx}`)
+      finalEvalLines.push(`- 倍数: ×${gl.result.multiplier}`)
 
       // 胡牌玩家明细
-      logLines.push('')
-      logLines.push('- 输出该局所有胡牌玩家明细')
+      finalEvalLines.push('')
+      finalEvalLines.push('- 输出该局所有胡牌玩家明细')
       const gWinnerSnap = gl.result.snapshots?.[gl.result.winner]
       if (gWinnerSnap) {
         const gWinEvent = gl.result.events.find(e => e.action.includes('自摸') || e.action.includes('放炮胡') || e.action.includes('胡'))
         const gWinType = gWinEvent?.action?.includes('自摸') ? '自摸' : gWinEvent?.action?.includes('放冲') ? '放冲' : '胡牌'
-        logLines.push(`  - 玩家: ${gWinnerSnap.name}`)
-        logLines.push(`    - 胡牌方式: ${gWinType}`)
-        logLines.push(`    - 手牌牌面: ${gWinnerSnap.hand || '(空)'}`)
-        logLines.push(`    - 门口牌（吃/碰/杠）: ${gWinnerSnap.melds.length > 0 ? gWinnerSnap.melds.join(' ; ') : '(无)'}`)
-        logLines.push(`    - 花牌: ${gWinnerSnap.flowers.length > 0 ? gWinnerSnap.flowers.join(' ') : '(无)'}`)
+        finalEvalLines.push(`  - 玩家: ${gWinnerSnap.name}`)
+        finalEvalLines.push(`    - 胡牌方式: ${gWinType}`)
+        finalEvalLines.push(`    - 手牌牌面: ${gWinnerSnap.hand || '(空)'}`)
+        finalEvalLines.push(`    - 门口牌（吃/碰/杠）: ${gWinnerSnap.melds.length > 0 ? gWinnerSnap.melds.join(' ; ') : '(无)'}`)
+        finalEvalLines.push(`    - 花牌: ${gWinnerSnap.flowers.length > 0 ? gWinnerSnap.flowers.join(' ') : '(无)'}`)
       }
 
       // 三口/四口
@@ -2547,21 +2548,21 @@ function main() {
         }
       }
       if (gBao.length > 0) {
-        logLines.push('')
-        logLines.push('- 三口/四口关系')
-        logLines.push(...gBao)
+        finalEvalLines.push('')
+        finalEvalLines.push('- 三口/四口关系')
+        finalEvalLines.push(...gBao)
       }
 
       // 结算明细
-      logLines.push('')
-      logLines.push('- 结算逐笔明细（谁付给谁、倍率和金额）')
+      finalEvalLines.push('')
+      finalEvalLines.push('- 结算逐笔明细（谁付给谁、倍率和金额）')
       if (gl.result.settlementLog && gl.result.settlementLog.length > 0) {
         for (const s of gl.result.settlementLog) {
           const multStr = s.mult ? ` (${s.amount / s.mult}x${s.mult})` : ''
-          logLines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
+          finalEvalLines.push(`  - [${s.reason}] ${s.from} -> ${s.to} : ${s.amount}${multStr}`)
         }
       } else {
-        logLines.push('  - (无)')
+        finalEvalLines.push('  - (无)')
       }
     }
   }
@@ -2585,12 +2586,21 @@ function main() {
     saveCharacter('AI-AK', bestPolicy, metrics)
   }
 
-  // 主日志：Header + Round0 + 每轮训练指标（无每圈明细）
+  // 主日志：Header + 每轮中文名称 + 训练指标（无每圈明细）
   // round 文件（DETAIL_MODE 时）才记录每圈明细
   const mainOut: string[] = [...logLines]
   for (const report of roundReports) {
-    mainOut.push(formatRoundReport(report, false))
+    let label: string
+    if (report.round === 0) {
+      label = '初始评估'
+    } else if (report.round === ROUNDS + 1) {
+      label = '最终评估'
+    } else {
+      label = `第${report.round}轮`
+    }
+    mainOut.push(formatRoundReport(report, false, label))
   }
+  mainOut.push(...finalEvalLines)
   fs.writeFileSync(mdFile, mainOut.join('\n'), 'utf-8')
   fs.writeFileSync(policyFile, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
   fs.writeFileSync(policyLatest, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
