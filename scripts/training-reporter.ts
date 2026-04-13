@@ -298,6 +298,14 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
     const multiplier = w.multiplier || 1
     const wonFan = w.wonFan || 0
     const gameIdx = w.gameIdx
+    const meta = result?.gameMeta || {}
+
+    const dicePoints = meta.dicePoints ? `${meta.dicePoints[0]}+${meta.dicePoints[1]}` : '?'
+    const diceMult = meta.diceMultiplier ?? '?'
+    const flowMult = meta.flowMultiplier ?? '?'
+    const inheritMult = meta.inheritanceMultiplier ?? '?'
+    const prevDraw = meta.prevRoundWasDraw ? '是' : '否'
+    const prevRebel = meta.prevRoundWasRebel ? '是' : '否'
 
     lines.push(`**${label}局号: ${gameIdx}**`)
     lines.push(`**结果: ${topWins.filter((t: any) => t.gameIdx === gameIdx).length}人胡牌**`)
@@ -306,7 +314,13 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
     if (w.wildTile) lines.push(`**百搭: ${w.wildTile}**`)
     lines.push('')
     lines.push(`**全局倍数 = min(8, 骰子倍数 × 流局倍数 × 继承倍数)**`)
-    lines.push(`- 全局倍数: ×${multiplier} *(各因子待追踪)*`)
+    lines.push(`- 骰子点数: ${dicePoints}`)
+    lines.push(`- 骰子倍数: ×${diceMult}`)
+    lines.push(`- 流局倍数: ×${flowMult}`)
+    lines.push(`- 继承倍数: ×${inheritMult}`)
+    lines.push(`- 上一局是否流局: ${prevDraw}`)
+    lines.push(`- 上一局是否造反: ${prevRebel}`)
+    lines.push(`- 全局倍数: ×${multiplier}`)
     lines.push('')
 
     // 从 turnSnapshots 重建手牌
@@ -362,8 +376,8 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
       lines.push('**结算逐笔明细:**')
       for (const s of settlementLog) {
         const amt = Math.abs(s.amount || 0)
-        const multStr = s.mult ? `${s.mult}×` : ''
-        lines.push(`  [${s.reason || '结算'}] ${s.from} -> ${s.to}: ${amt} (${multStr}${amt})`)
+        const baseFan = s.fan || '?'
+        lines.push(`  [${s.reason || '结算'}] ${s.from} -> ${s.to}: ${amt} (${baseFan}x${amt})`)
       }
       lines.push('')
     }
