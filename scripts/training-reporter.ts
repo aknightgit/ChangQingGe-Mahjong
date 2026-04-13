@@ -146,7 +146,8 @@ function formatTiles(tileStr: string, wildTile: string): string {
     const { suit, value } = parseTileName(tile)
     const key = `${suit}-${value}`
     if (!groups[key]) groups[key] = []
-    groups[key].push((key === wKey) ? tile + '*' : tile)
+    // 【修复】tile 可能已含 *（来自 recordTurnSnapshot），避免重复标记为 **
+    groups[key].push((key === wKey) ? (tile.endsWith('*') ? tile : tile + '*') : tile)
   }
   const suitOrder = ['wan', 'bam', 'str', 'wind', 'drg', 'flw']
   const sortedKeys = Object.keys(groups).sort((a, b) => {
@@ -434,8 +435,9 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
     if (!snap) return
     lines.push(`**【${label}】百搭${snap.wildTile}｜×${snap.gameMultiplier}**`)
     for (const pp of snap.players) {
-      // 每回合摸打显示：摸=lastDiscard(捡的别人打的牌)，打=discardedTile(自己打出的)
-      // 每回合摸打：摸=本回合从牌墙摸的牌，打=本回合打出的牌
+      // 每回合摸打显示：摸=本回合从牌墙摸的牌（drawnTile），打=本回合打出的牌（discardedTile）
+      // drawnTile=本回合开始时摸的牌（非 lastDiscard，后者是别人刚打出的捡牌）
+      // 注意：副露（碰/吃/杠）后无摸牌，drawn='-'；只捡牌不摸牌时 drawn='-'
       const act = circleActions[pp.name] || { drawn: '-', discarded: '-' }
       const drawStr = act.drawn !== '-' ? `｜摸${act.drawn}` : ''
       const discardStr = act.discarded !== '-' ? `｜ → 打${act.discarded}` : ''
@@ -457,23 +459,38 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
     const snap = snaps[i]
     const players = snap.players || []
 
-    // 检测新一局（turn 重置：当前 turn < 上一 turn，说明进入新游戏）
-    if (snap.turn !== undefined && prevTurn !== -1 && snap.turn < prevTurn) {
+    // 检测新一局（两种方式：1) NEW_GAME sentinel  2) turn 重置兜底）
+    const isNewGameSentinel = snap.drawnTile === 'NEW_GAME'
+    const isTurnReset = snap.turn !== undefined && prevTurn !== -1 && snap.turn < prevTurn
+    if (isNewGameSentinel || isTurnReset) {
+      if (isNewGameSentinel) {
+        // NEW_GAME sentinel：discardedTile 携带 gameIdx（0-indexed）
+        gameCount = parseInt(snap.discardedTile || '0', 10) + 1  // 显示用 1-indexed
+      } else {
+        gameCount++
+      }
       // 上一局最后一圈也要 flush
-      flushCircle(circleStartIdx, `第${gameCount}圈`)
-      gameCount++
+      if (circleStartIdx < i) flushCircle(circleStartIdx, `第${circleCount}圈`)
       circleCount = 0
       circleStartIdx = i
       resetActions()
       lines.push(`=== 第${gameCount}局 ===`)
       lines.push('')
+      if (isNewGameSentinel) {
+        prevTurn = -1  // 重置，为下一局检测做准备
+        prevExposed = []
+        // 跳过 sentinel 本身（它没有玩家数据）
+        if (snap.turn !== undefined) prevTurn = snap.turn
+        continue
+      }
     }
 
     // 统一圈切分逻辑（与 formatRoundReport 一致）：
     // hadMeld=有人吃/碰/杠，圈提前结束；backToStart=currentPlayer 回到起始位
+    // 重要：turn=0 的第一回合不能结束圈（否则初始快照的 currentPlayer 会导致首圈立即结束）
     const currExposed = players.map((p: any) => (p.exposed || []).join('|'))
     const hadMeld = prevExposed.length > 0 && currExposed.some((ex: string, idx: number) => ex !== prevExposed[idx])
-    const backToStart = i > 0 && snap.currentPlayer === snaps[circleStartIdx].currentPlayer
+    const backToStart = i > 0 && snap.currentPlayer === snaps[circleStartIdx].currentPlayer && snap.turn > 0
 
     // 新圈开始：打印上一圈结果
     if ((i === 0 || hadMeld || backToStart) && i > 0) {

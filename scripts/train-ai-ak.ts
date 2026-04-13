@@ -1411,6 +1411,7 @@ interface TurnSnapshot {
   }>
   wildTile: string
   gameMultiplier: number
+  gameIdx: number  // 游戏索引（用于 reporter 分隔多局）
 }
 interface WinningGameRecord {
   gameIdx: number; winnerName: string; hand: string; melds: string[]; handTypes: string[];
@@ -1490,7 +1491,7 @@ function runGameWithFightToLast(akPolicy: BotPolicy, otherPolicies: BotPolicy[])
 // ========== Game Loop ==========
 // 血战到底模式：有人胡牌后继续打，直到流局或只剩1人
 // 所有赢家都记录到 winnersThisGame，最后一起 return
-export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | null {
+export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: number = 0): GameResult | null {
   const runGameStart = performance.now()
   // 每局开始时清空 isTing 缓存（不同局wild牌不同）
   clearIsTingCache()
@@ -1639,13 +1640,27 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
         exposed: p.exposedMelds.map(m =>
           `${m.type === MeldType.TRIPLET ? '碰' : m.type === MeldType.SEQUENCE ? '吃' : m.type === MeldType.KONG ? '明杠' : m.type === MeldType.CONCEALED_KONG ? '暗杠' : '?'}:${sortTiles([...m.tiles]).map(t => tileStr(t)).join(' ')}`
         ),
+        // NOTE: hand 已经是 reporter 格式化后的字符串（formatGroupedHand 已在百搭后加 *）
+        // 这里直接 join 不要重复加 *，否则百搭变成 **
         meldSources: [...p.meldSources],
         handCount: p.hand.length
       })),
       wildTile: g.wildSuit && g.wildValue ? tileStr({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭',
-      gameMultiplier: g.gameMultiplier
+      gameMultiplier: g.gameMultiplier,
+      gameIdx
     })
   }
+
+  // 注入 NEW_GAME sentinel（reporter 用此检测游戏边界，比 turn<prevTurn 更可靠）
+  // discardedTile 携带 gameIdx（字符串），turn=-1 保证不会误判为正常snapshot
+  turnSnapshots.push({
+    turn: -1, currentPlayer: -1, drawnTile: 'NEW_GAME', discardedTile: String(gameIdx),
+    lastDiscardBy: -1, lastDiscard: '-',
+    players: [],
+    wildTile: g.wildSuit && g.wildValue ? tileStr({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭',
+    gameMultiplier: g.gameMultiplier,
+    gameIdx
+  })
 
   for (let i = 0; i < 13; i++) { for (let p = 0; p < 4; p++) drawTile(g, g.players[p]) }
   // 初始13张明细也记录（每人发牌后13张，无摸打）
@@ -1667,7 +1682,14 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
     const player = g.players[curr]
     turn = round
     const drawn = drawTile(g, player)
-    if (!drawn) { console.error(`⚠️ 流局: 牌墙耗尽 round=${round} wallIdx=${g.wallIdx}/${g.deck.length}`); return null }
+    if (!drawn) {
+      console.error(`⚠️ 流局: 牌墙耗尽 round=${round} wallIdx=${g.wallIdx}/${g.deck.length}`)
+      // 关键修复：流局也返回snapshot（之前 return null 导致 turnSnapshots 丢失，games 2-5 全部丢snapshot）
+      return {
+        winner: -1, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier,
+        settlementLog, snapshots: [], roundNum: turn, winnersThisGame: [], turnSnapshots
+      } as GameResult
+    }
     if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); recordTurnSnapshot(curr, tileStr(drawn), '-'); continue }
     log(player.name, '摸牌', tileStr(drawn))
     checkHandInvariant(player, 'draw')  // 摸牌后铁律：14/11/8/5/2张
@@ -1827,7 +1849,10 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
         if (Math.random() < opp.policy.kongChance) {
           applyMingKong(opp, discard, curr)
           const extra = drawTile(g, opp)
-          if (!extra) return null
+          if (!extra) {
+            console.error(`⚠️ 明杠后补摸失败(牌墙耗尽) turn=${turn}`)
+            return { winner: -1, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: [], roundNum: turn, winnersThisGame: [], turnSnapshots } as GameResult
+          }
           checkHandInvariant(opp, 'draw')  // 杠后摸牌
           if (extra && !isFlower(extra)) {
             if (canWin(normalizeHand(opp.hand), opp.exposedMelds, makeWT(opp)).canWin) {
@@ -1854,17 +1879,22 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
           const kongDiscard = aiDiscard(opp, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, otherIdx, round * 4 + otherIdx)
           opp.hand = opp.hand.filter(t => t.id !== kongDiscard.id)
           g.discardPile.push(kongDiscard)
+          // 【修复】明杠后出牌写入 snapshot（drawnTile=补摸牌，discardedTile=明杠后打出的牌）
+          recordTurnSnapshot(otherIdx, extra && !isFlower(extra) ? tileStr(extra) : '-', tileStr(kongDiscard))
           g.current = (otherIdx + 1) % 4
           meldTaken = true
           break
         }
       }
-      if (canPeng(opp, discard)) {
+      const canP = canPeng(opp, discard)
+      if (canP) {
+        const pengRoll = Math.random()
+        console.error(`[PENG_CHECK] ${opp.name} CAN_PENG ${tileStr(discard)} hand=${opp.hand.map(t=>tileStr(t)).join(' ')} roll=${pengRoll.toFixed(3)}`)
         if (!checkChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)) continue;  // K哥铁律：吃碰排斥
         let pengChance = opp.policy.pengChance
         if (opp.wildSuit && opp.wildValue && discard.suit === opp.wildSuit && discard.value === opp.wildValue)
           pengChance += opp.policy.pengWildBoost
-        if (Math.random() < pengChance) {
+        if (pengRoll < pengChance) {
           const meldCountBefore = opp.exposedMelds.length
           applyPeng(opp, discard, curr)  // 内部已normalize，失败则不push meld
           if (opp.exposedMelds.length === meldCountBefore) continue  // apply失败，跳过pong（不设置meldTaken）
@@ -1875,7 +1905,10 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
           for (const ak of canAnKong(opp)) {
             applyAnKong(opp, ak)
             const extra = drawTile(g, opp)
-            if (!extra) return null
+            if (!extra) {
+              console.error(`⚠️ 碰后自摸补摸失败(牌墙耗尽) turn=${turn}`)
+              return { winner: -1, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: [], roundNum: turn, winnersThisGame: [], turnSnapshots } as GameResult
+            }
             checkHandInvariant(opp, 'draw')  // 杠后摸牌（正常摸牌规则）
             if (extra && !isFlower(extra)) {
               if (canWin(normalizeHand(opp.hand), opp.exposedMelds, makeWT(opp)).canWin) {
@@ -1913,6 +1946,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
           const pengDiscard = aiDiscard(opp, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, otherIdx, round * 4 + otherIdx)
           opp.hand = opp.hand.filter(t => t.id !== pengDiscard.id)
           g.discardPile.push(pengDiscard)
+          // 【修复】碰后出牌写入 snapshot（碰家无摸牌，drawnTile='-'）
+          recordTurnSnapshot(otherIdx, '-', tileStr(pengDiscard))
           console.error(`[PENG_SUCCESS] ${opp.name} now hand=${opp.hand.length} melds=${opp.exposedMelds.length}`)
           g.current = (otherIdx + 1) % 4  // K哥铁律：碰后下家摸牌，不是碰家继续
           meldTaken = true
@@ -1960,7 +1995,10 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
       for (const ak of canAnKong(nextP)) {
         applyAnKong(nextP, ak)
         const extra = drawTile(g, nextP)
-        if (!extra) return null
+        if (!extra) {
+          console.error(`⚠️ 吃后自摸补摸失败(牌墙耗尽) turn=${turn}`)
+          return { winner: -1, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: [], roundNum: turn, winnersThisGame: [], turnSnapshots } as GameResult
+        }
         checkHandInvariant(nextP, 'draw')  // 吃后加杠仍可摸牌（杠不在禁止范围内）
         if (extra && !isFlower(extra)) {
           if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds, makeWT(nextP)).canWin) {
@@ -1987,6 +2025,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameRe
       const chowDiscard = aiDiscard(nextP, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, nextPlayer, round * 4 + nextPlayer)
       nextP.hand = nextP.hand.filter(t => t.id !== chowDiscard.id)
       g.discardPile.push(chowDiscard)
+      // 【修复】吃后出牌写入 snapshot（吃家无摸牌，drawnTile='-'）
+      recordTurnSnapshot(nextPlayer, '-', tileStr(chowDiscard))
       meldTaken = true
       g.current = (nextPlayer + 1) % 4  // K哥铁律：吃后下家摸牌，不是吃家继续
       break  // 吃后退出循环，防止其他家继续碰/杠
@@ -2190,7 +2230,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   prevRoundWasDraw = false
 
   for (let g = 0; g < games; g++) {
-    const result = runGame(akPolicy, otherPolicies)
+    const result = runGame(akPolicy, otherPolicies, g)  // 传入 gameIdx 供 snapshot 使用
     if (result) {
       // 收集每局每圈快照
       if (result.turnSnapshots) allTurnSnapshots.push(...result.turnSnapshots)
@@ -2447,6 +2487,7 @@ function main() {
     if (DETAIL_MODE) logLines.push(...roundLines)
 
     // 每轮单独输出文件（使用标准化reporter）
+    // 无论是否 improved，每局结束后都写 round 文件（--detail 时）
     if (DETAIL_MODE && bestEvalResult) {
       const report = buildRoundReport(round, bestEvalResult, roundBestPolicy as any, AI_NAMES, 'train-ai-ak.ts')
       roundReports.push(report)
