@@ -723,7 +723,8 @@ function nextGameMultiplier(meta: GameMeta): number {
   meta.diceMultiplier = isBigPair ? 4 : isPair ? 2 : 1
   const flowMult = prevRoundWasDraw ? 2 : 1
   meta.flowMultiplier = flowMult
-  meta.inheritanceMultiplier = 1  // 暂未实现
+  // 继承倍数 = 流局(×2/×1) × 聚义(未实现×1) × 造反(未实现×1) × 上一把超帽(未实现×1)
+  meta.inheritanceMultiplier = flowMult  // 目前只含流局倍数
   meta.prevRoundWasDraw = prevRoundWasDraw
   meta.prevRoundWasRebel = false  // 暂未实现
   // 全局倍数 = min(8, 骰子 × 流局)
