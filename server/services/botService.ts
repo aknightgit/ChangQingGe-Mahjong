@@ -1150,12 +1150,7 @@ export async function shouldClaimPendingAction(
       //    - nearWeight             → 最短门惩罚（吃后门数变化）
       // ==========================================================
       {
-        // 门清时额外惩罚：比 evaluateChowValue 的基础惩罚更强
-        if (meldCount === 0 && (policy.menqingKeepBonus || 0) > 0) {
-          bestChow.tune -= Math.min(0.3, (policy.menqingKeepBonus || 0) * 0.25)
-        }
-
-        // allPungsPursuit：碰碰胡追求 → 抑制吃顺
+        // allPungsPursuit：碰碰胡追求 → 抑制吃顺（menqingKeepBonus 惩罚已在 evaluateChowValue 中处理）
         if ((policy.allPungsPursuit || 0) > 0) {
           bestChow.tune -= (policy.allPungsPursuit || 0) * 0.5
         }
