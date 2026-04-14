@@ -711,12 +711,14 @@ export function canWin(
     : concealedFlowers.length;
 
   // 四百搭（只能靠concealed自摸，exposed不可能有百搭）
+  let isFourWild = false;
   if (wildTileId) {
     const wildTileFn = buildWildTileChecker(wildTileId);
     const wildCount = concealed.filter(t => wildTileFn(t)).length;
-    if (wildCount >= 4) {
-      return { canWin: true, types: [HandType.FOUR_WILD] };
-    }
+    isFourWild = wildCount >= 4;
+  }
+  if (isFourWild) {
+    return { canWin: true, types: [HandType.FOUR_WILD] };
   }
 
   // 手牌数校验

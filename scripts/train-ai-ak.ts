@@ -554,7 +554,9 @@ function checkHandInvariant(p: BotPlayer, phase: 'draw' | 'discard' | 'claim' | 
   if (len !== expected) {
     const prevPhase = p._lastPhase || '?'
     const prevHand = p._lastHand || '?'
+    const actualHand = p.hand.map(t => `${tileStr(t)}(${t.id.slice(-4)})`).join(',')
     console.error(`[铁律违规] ${p.name} phase=${phase} hand=${len} melds=${meldCount} expected=${expected} prevPhase=${prevPhase} prevHand=${prevHand}`)
+    if (phase === 'draw' || phase === 'discard') console.error(`[铁律详情] ${p.name} ${phase} rawHandLen=${p.hand.length} handTiles=[${actualHand}]`)
     p._lastPhase = phase
     p._lastHand = len
     return false
@@ -571,35 +573,26 @@ function applyPeng(p: BotPlayer, tile: Tile, sourcePos?: number): void {
   p.hand = normalizeHand(p.hand)  // 铁律：apply前先normalize
   const before = p.hand.length
   const meldCount = p.exposedMelds.length
+  const handBeforeIds = p.hand.map(t => t.id.slice(-6)).join(',')
   const validBefore = before === 13 - 3 * meldCount  // K哥铁律：只看口数
   const matches = p.hand.filter(t => tileEq(t, tile)).slice(0, 2)
-  // 入口诊断：打印关键状态
-  console.error(`[PENG_ENTER] ${p.name} raw=(hand=${rawHand},melds=${rawMelds}) norm_before=(hand=${before},melds=${meldCount}) tile=${tileStr(tile)}`)
-  console.error(`[PENG_ENTER] ${p.name} matches=${matches.length} matchStrs=${matches.map(t=>tileStr(t)).join(',')} handStrs=${p.hand.map(t=>tileStr(t)).join(',')}`)
-  // validBefore检查已被其他bug破坏的手牌守恒，移除此防御性拒绝，只检查匹配数
-  if (matches.length < 2) {
-    console.error(`BUG applyPeng: ${p.name} before=${before} melds=${meldCount} matches=${matches.length} tile=${tileStr(tile)} handIDs=${p.hand.map(t=>t.id).join(',')}`)
-    return
-  }
-  // 诊断：追踪移除过程
-  const matchIds = matches.map(m => m.id)
-  const handIds_before = p.hand.map(h => h.id)
-  let removedCount = 0
-  for (const u of matches) {
-    const idx = p.hand.findIndex(rt => rt.id === u.id)
-    if (idx >= 0) { p.hand.splice(idx, 1); removedCount++ }
-    else console.error(`[PENG_ID_FAIL] ${p.name} match=${u.id} NOT_IN_HAND matchIds=${matchIds.join(',')} handIds=${handIds_before.join(',')}`)
+  const matchIds = matches.map(m => m.id.slice(-6))
+  console.error(`[PENG] ${p.name} before=${before} matches=${matches.length} matchIds=${matchIds.join(',')} tile=${tileStr(tile)} hand=[${handBeforeIds}]`)
+  if (matches.length < 2) return
+  // 精确移除：记录每一步
+  const removedIds: string[] = []
+  for (const m of matches) {
+    const idx = p.hand.findIndex(rt => tileEq(rt, m))
+    if (idx >= 0) { removedIds.push(p.hand[idx].id.slice(-6)); p.hand.splice(idx, 1) }
+    else { console.error(`[PENG_BUG] ${p.name} match tile not found in hand! id=${m.id.slice(-6)}`) }
   }
   const after = p.hand.length
-  if (removedCount !== 2 || after !== before - 2) {
-    console.error(`[PENG_REMOVAL] ${p.name} removed=${removedCount}/2 before=${before} after=${after} matchIds=${matchIds.join(',')} handIds_after=${p.hand.map(h=>h.id).join(',')}`)
+  const expected = before - 2
+  if (process.env.DEBUG || after !== expected) {
+    const handAfterIds = p.hand.map(t => t.id.slice(-6)).join(',')
+    console.error(`[PENG] ${p.name} removed=[${removedIds.join(',')}] before=${before} after=${after} expected=${expected} handAfter=[${handAfterIds}]`)
   }
-  if (p.name === 'AI-小胖' && before === 4 && meldCount === 3) {
-    console.error(`[小胖_PONG] before=${before} melds=${meldCount} matches=${matches.map(t=>tileStr(t)).join(',')} tile=${tileStr(tile)}`)
-  }
-  if (p.name === 'AI-小胖' && after === 3 && meldCount === 3) {
-    console.error(`[小胖_PONG_AFTER] before=${before} after=${after} melds=${meldCount} newMeld=${tileStr(tile)}`)
-  }
+
   p.exposedMelds.push({ type: MeldType.TRIPLET, tiles: [tile, tile, tile], isConcealed: false })
   if (sourcePos !== undefined && sourcePos !== p.pos) p.meldSources[sourcePos]++
 }
@@ -610,7 +603,8 @@ function applyChow(p: BotPlayer, tile: Tile, sourcePos?: number): void {
   const validBefore = before === 13 - 3 * meldCount  // K哥铁律：只看口数
   const v = tile.value
   const findTile = (suit: TileSuit, val: number) => p.hand.find(t => t.suit === suit && t.value === val)
-  const removeTile = (t: Tile) => { const idx = p.hand.findIndex(h => h.id === t.id); if (idx >= 0) p.hand.splice(idx, 1) }
+  // 用 tileEq（suit+value）移除，绕过 ID 重复 bug
+  const removeTile = (t: Tile) => { const idx = p.hand.findIndex(h => tileEq(h, t)); if (idx >= 0) p.hand.splice(idx, 1) }
 
   // 三种吃牌模式，与canChow一致
   let t1: Tile | undefined, t2: Tile | undefined
@@ -1694,9 +1688,22 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     if (p.name === 'AI-小胖' && p.hand.length !== 13) {
       console.error(`初始手牌错误: ${p.name} hand=${p.hand.length} expected=13`)
     }
+    // 检测手牌内重复tile ID（发牌阶段bug）
+    const idCounts: Record<string, number> = {}
+    for (const t of p.hand) { idCounts[t.id] = (idCounts[t.id] || 0) + 1 }
+    const dupIds = Object.entries(idCounts).filter(([, c]) => c > 1)
+    if (dupIds.length > 0) {
+      console.error(`[INV_TRACE] DEAL_DUP ${p.name}: ${dupIds.map(([id, c]) => `${id}x${c}`).join(', ')}`)
+    }
   }
   // 发牌完成日志
-  for (const p of g.players) log(p.name, '发牌', p.hand.map(t => tileStr(t)).join(' '))
+  for (const p of g.players) {
+    log(p.name, '发牌', p.hand.map(t => tileStr(t)).join(' '))
+    if (p.name === 'AI-AK' || p.name === 'AI-阿水') {
+      const ids = p.hand.map(t => t.id.slice(-4)).join(',')
+      console.error(`[INV_TRACE] DEAL ${p.name} h=${p.hand.length} m=0 exp=14 diff=${p.hand.length-14} wall=${g.wallIdx} flowerTiles=${p.flowerTiles.length} ids=[${ids}]`)
+    }
+  }
 
   const MAX_ROUNDS = 200
   let consecutiveDraws = 0
@@ -1716,6 +1723,10 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     }
     if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); recordTurnSnapshot(curr, tileStr(drawn), '-'); continue }
     log(player.name, '摸牌', tileStr(drawn))
+    if (player.name === 'AI-AK' || player.name === 'AI-阿水') {
+      const h = player.hand.length, m = player.exposedMelds.length
+      console.error(`[INV_TRACE] DRAW ${player.name} h=${h} m=${m} exp=${14-3*m} diff=${h-(14-3*m)} drawn=${tileStr(drawn)} wall=${g.wallIdx} flowers=${player.flowerTiles.length}`)
+    }
     checkHandInvariant(player, 'draw')  // 摸牌后铁律：14/11/8/5/2张
 
     // Self-draw win check
@@ -1823,6 +1834,11 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     g.playerDiscards[curr].push(discard)
     log(player.name, '出牌', `${tileStr(discard)} [手牌: ${player.hand.map(t => tileStr(t)).join(' ')}]`)
     recordTurnSnapshot(curr, tileStr(drawn), tileStr(discard))  // 每回合快照：显示本回合摸打
+    if (player.name === 'AI-AK' || player.name === 'AI-阿水') {
+      const h = player.hand.length, m = player.exposedMelds.length
+      const ids = player.hand.map(t => t.id.slice(-4)).join(',')
+      console.error(`[INV_TRACE] DISC ${player.name} h=${h} m=${m} exp=${14-3*m} diff=${h-(14-3*m)} discarded=${tileStr(discard)} wall=${g.wallIdx} ids=[${ids}]`)
+    }
     checkHandInvariant(player, 'discard')  // 出牌后铁律：13/10/7/4/1张
     if (player.exposedMelds.length >= 2) {
       const cw = canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player))
@@ -1923,11 +1939,21 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           pengChance += opp.policy.pengWildBoost
         if (pengRoll < pengChance) {
           const meldCountBefore = opp.exposedMelds.length
+          const handBeforePeng = opp.hand.length
           applyPeng(opp, discard, curr)  // 内部已normalize，失败则不push meld
           if (opp.exposedMelds.length === meldCountBefore) continue  // apply失败，跳过pong（不设置meldTaken）
           meldTaken = true
+          if (opp.name === 'AI-AK' || opp.name === 'AI-阿水') {
+            const h = opp.hand.length, m = opp.exposedMelds.length
+            console.error(`[INV_TRACE] PENG_APPLY ${opp.name} h=${h} m=${m} exp=${14-3*m} diff=${h-(14-3*m)} removed=${handBeforePeng - h} tile=${tileStr(discard)} wall=${g.wallIdx}`)
+          }
           opp.chowPongExclusion = updateChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)  // K哥铁律：记录碰行动
           checkHandInvariant(opp, 'claim')  // claim后（11/8/5/2张）
+          if (opp.name === 'AI-AK' || opp.name === 'AI-阿水') {
+            const h = opp.hand.length, m = opp.exposedMelds.length
+            const ids = opp.hand.map(t => t.id.slice(-4)).join(',')
+            console.error(`[INV_TRACE] CLAIM ${opp.name} h=${h} m=${m} exp=${14-3*m} diff=${h-(14-3*m)} tile=${tileStr(discard)} wall=${g.wallIdx} ids=[${ids}]`)
+          }
           // 碰后自摸：必须先摸牌，删掉这里的错误判断
           for (const ak of canAnKong(opp)) {
             applyAnKong(opp, ak)
@@ -2274,14 +2300,16 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
       const winnerCount = gameWinners.length
       if (winnerCount > 0) {
         if (winnerCount >= 2) fightToLastGames++
-        if (winnerCount >= 1 && winnerCount <= 4) multiWinDist[winnerCount - 1]++
+        if (winnerCount >= 1) multiWinDist[Math.min(winnerCount, 4) - 1]++
         winnerInstances += gameWinners.length
         for (const w of gameWinners) {
-          const typeNums = w.winHandType ? w.winHandType.split(',').map(Number).filter(n => !isNaN(n)) : []
-          const typeNamesRaw = typeNums.filter(n => n !== HandType.STANDARD).map(n => HAND_TYPE_NAMES[n] || String(n))
-          const typeNames = typeNamesRaw.length > 0 ? typeNamesRaw : ['普通']
+          if (w.isSelfDraw) selfDrawGames++; else discardWinGames++;
+          // winHandType 是逗号分隔的字符串枚举名（如 'all_triplets'、'half_flush'），不是数字
+          const typeStrs = w.winHandType ? w.winHandType.split(',').filter(t => t.length > 0) : []
+          const typeNamesRaw = typeStrs.filter(t => t !== HandType.STANDARD).map(t => HAND_TYPE_NAMES[t as HandType] || t)
+          const typeNames = typeNamesRaw.length > 0 ? typeNamesRaw : ['普通']  // '普通' 仅作 display fallback
           const bigTypes = [HandType.FENG_PENG, HandType.ALL_WIND, HandType.QING_PENG]
-          if (typeNums.some(n => bigTypes.includes(n))) bigWinGames++
+          if (typeStrs.some(t => bigTypes.includes(t as HandType))) bigWinGames++
           if (w.melds.length === 0) menqingWinGames++
           for (const t of typeNames) handTypeDist[t] = (handTypeDist[t] || 0) + 1
           const winnerScore = result.scores[w.playerIndex] || 0
