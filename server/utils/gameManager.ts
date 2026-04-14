@@ -786,6 +786,10 @@ class GameManager {
       this.freezeTimers.delete(gameId);
       console.log(`[WallDebug] Cleared stale freeze timer for game ${gameId}`);
     }
+    // 每局重置百搭冷冻状态
+    game.freezePlayerId = null;
+    game.freezeComplete = false;
+    game.freezeRound = undefined;
 
     // 🔄 换位置请求:每局都可以生效
     this.applySwapRequests(game);
@@ -1077,8 +1081,14 @@ class GameManager {
     if (pendingAction) {
       // 冷冻期间不响应其他玩家的弃牌(吃/碰/杠/胡),但自摸胡不受影响
       // 自摸胡在玩家自己的回合通过 turn actions 处理
-      if (game.freezeRound && game.roundNumber <= game.freezeRound) {
-        return [];
+      // 冷冻规则：打出百搭后，一圈内其他玩家不能吃/碰/捉冲
+      // 一圈 = 4个玩家各出一次牌（从打出百搭的玩家开始数）
+      if (game.freezePlayerId && game.freezePlayerId !== playerId) {
+        // 当前玩家不是打出百搭的人，检查是否过了一圈
+        if (!game.freezeComplete) {
+          return [];  // 冷冻中，不能响应其他玩家的弃牌
+        }
+        // freezeComplete = true 时表示已过完整一圈，解除冷冻
       }
       // 等我想一想:有胡/碰/杠选项时可用,每局限定次数
       const pendingHasPriority = pendingAction.availableActions.some(a =>
@@ -1376,8 +1386,10 @@ class GameManager {
     player.isTing = isTing(player.hand.concealedTiles, player.hand.exposedMelds.length, wildForTing);
 
     // 百搭打出 → 触发冷冻(一圈内不能吃/碰/捉冲)
+    // 冷冻规则：打出百搭的玩家，下家/对家/上家各出一张牌后（即该玩家再次轮到）解除冷冻
     if (this.isWildTile(game, tile)) {
-      game.freezeRound = game.roundNumber;
+      game.freezePlayerId = player.id;
+      game.freezeComplete = false;
       game.pendingActions = [];
       // 广播百搭打出
       if (this.wsManager) {
@@ -2986,6 +2998,27 @@ class GameManager {
 
     // 【状态机修复】新回合:重置摸牌状态
     game.drawnThisTurn = false;
+
+    // 百搭冷冻一圈完成检查：当再次轮到打出百搭的玩家时，解除冷冻
+    // 冷冻从打出百搭开始，经过上家、对家、下家各一出牌后（即该玩家再次轮到）解除
+    if (game.freezePlayerId) {
+      const freezePlayer = game.players.find(p => p.id === game.freezePlayerId);
+      if (freezePlayer && nextPlayer.id === game.freezePlayerId) {
+        // 打出百搭的玩家再次轮到，一圈完成，解除冷冻
+        console.log(`[Freeze] 一圈完成，解除冷冻 for ${freezePlayer.name}`);
+        game.freezePlayerId = null;
+        game.freezeComplete = false;
+        if (this.wsManager) {
+          this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+            id: Date.now(),
+            text: `🃏 冷冻解除，${freezePlayer.name}可以正常吃碰捉冲了！`,
+            type: 'info',
+            timestamp: Date.now(),
+            timeLabel: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+          });
+        }
+      }
+    }
 
     this.replaceFlowers(game, nextPlayer);
 

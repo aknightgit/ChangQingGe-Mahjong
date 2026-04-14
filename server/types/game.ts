@@ -191,6 +191,10 @@ export interface GameState {
   customScoringMode?: string;
   wildTileGroup?: string[];
   freezeRound?: number;
+  /** 百搭冷冻：打出百搭的玩家ID，一圈后解除 */
+  freezePlayerId?: string | null;
+  /** 百搭冷冻一圈完成标记（用于跨回合追踪） */
+  freezeComplete?: boolean;
   // 倍数/继承状态
   dice?: [number, number];
   roundMultiplier?: number;

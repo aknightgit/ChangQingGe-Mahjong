@@ -20,18 +20,25 @@ export enum HandType {
 }
 
 // 优先级（越高越好）
+// RULES.md 优先级: 风碰(40点) > 风一色(20点) > 清碰(20点) > 混碰(10点) > 八花 > 四百搭 > 清一色 > 混一色 > 碰碰胡 > 普通胡
+// 大吊固定10点，优先级仅高于普通胡
+// 注意：数值越大优先级越高，用于降序排序
+// RULES.md说明：大吊优先级低于风碰/风一色/清碰，与混碰/八花/四百搭/清一色/混一色/碰碰胡按实际番数比较
+// 由于大吊是"固定10点"，它只在无其他特殊牌型时才作为主要牌型
+// 实际排序时：handTypes[0] 是最优牌型，大吊只在 handTypes 中只有 DA_DIAO + STANDARD 时才作为最优
+
 export const HAND_TYPE_PRIORITY: Record<HandType, number> = {
-  [HandType.FENG_PENG]:     100,
-  [HandType.ALL_WIND]:       90,
-  [HandType.QING_PENG]:      80,
-  [HandType.HUN_PENG]:       75,
-  [HandType.EIGHT_FLOWERS]:  70,
-  [HandType.FULL_FLUSH]:     60,
-  [HandType.HALF_FLUSH]:     40,
-  [HandType.FOUR_WILD]:      50,
-  [HandType.ALL_TRIPLETS]:    30,
-  [HandType.DA_DIAO]:        85,
-  [HandType.STANDARD]:        10,
+  [HandType.FENG_PENG]:     100,  // 风碰(40点)
+  [HandType.ALL_WIND]:       90,  // 风一色(20点)
+  [HandType.QING_PENG]:      80,  // 清碰(20点)
+  [HandType.HUN_PENG]:       70,  // 混碰(10点)
+  [HandType.EIGHT_FLOWERS]:  60,  // 八花自摸(10点)
+  [HandType.FOUR_WILD]:      55,  // 四百搭(10点)
+  [HandType.FULL_FLUSH]:     50,  // 清一色(10点)
+  [HandType.HALF_FLUSH]:     40,  // 混一色(公式)
+  [HandType.ALL_TRIPLETS]:   30,  // 碰碰胡(公式)
+  [HandType.DA_DIAO]:        20,  // 大吊(10点固定，低于其他特殊牌型)
+  [HandType.STANDARD]:        10, // 普通胡
 };
 
 export type WildTileChecker = (tile: Tile) => boolean;

@@ -11,6 +11,10 @@ import { isFlower, isWind, isDragon, groupTiles, tilesEqual, getTileDisplayName 
 import { HandType, HAND_TYPE_PRIORITY, canWin } from './handValidator';
 
 // ===== 固定番数牌型 =====
+// RULES.md 固定番数规则:
+// 风碰=40, 风一色=20, 清碰=20, 混碰=10, 清一色=10
+// 无花自摸=10, 杠开=10, 八花自摸=10, 四百搭=10, 大吊=10
+// 大吊组合: 碰碰胡/混一色/清一色/清碰/风一色/风碰 各有对应固定番数
 const FIXED_FAN: Record<string, number> = {
   '风碰': 40,         // 风一色 + 碰碰胡
   '风一色': 20,       // 全部风牌
@@ -22,6 +26,7 @@ const FIXED_FAN: Record<string, number> = {
   '大吊清碰': 20,      // 清碰 + 大吊
   '大吊风一色': 20,    // 风一色 + 大吊
   '大吊风碰': 40,      // 风碰 + 大吊
+  '大吊': 10,         // 独立大吊（无其他特殊牌型时）固定10点
   '清一色': 10,       // 全部一门花色
   '无花自摸': 10,     // 碰碰胡/混一色，门口无花，自摸
   '杠开': 10,         // 杠牌/杠花后补牌自摸
@@ -614,7 +619,8 @@ function getHandTypeDisplayName(type: HandType): string {
     [HandType.FOUR_WILD]: '四百搭',
     [HandType.DA_DIAO]: '大吊',
     [HandType.HALF_FLUSH]: '混一色',
-    [HandType.ALL_TRIPLETS]: '碰碰胡'
+    [HandType.ALL_TRIPLETS]: '碰碰胡',
+    [HandType.STANDARD]: '普通胡'
   };
   if (!(type in names)) return `未知牌型[${type}]`;
   return names[type];
@@ -631,6 +637,8 @@ function getFixedFanName(type: HandType, isSelfDrawn: boolean, isKongFlower: boo
       if (handTypes.includes(HandType.HALF_FLUSH)) return '大吊混一色';
       if (handTypes.includes(HandType.FULL_FLUSH)) return '大吊清一色';
     }
+    // Standalone大吊 (no other special types, 手牌剩1张) = 固定10点
+    return '大吊';
   }
   switch (type) {
     case HandType.FENG_PENG: return '风碰';
@@ -640,6 +648,7 @@ function getFixedFanName(type: HandType, isSelfDrawn: boolean, isKongFlower: boo
     case HandType.FULL_FLUSH: return '清一色';
     case HandType.EIGHT_FLOWERS: return isSelfDrawn ? '八花自摸' : null;
     case HandType.FOUR_WILD: return '四百搭';
+    case HandType.DA_DIAO: return '大吊';
     default: return null;
   }
 }
