@@ -43,7 +43,7 @@ export interface ScoreResult {
   baseFan: number;           // 基础番数
   extraMultipliers: number;  // 额外翻倍（无百搭×2 + 门清×2）
   roundMultiplier: number;   // 回合倍数（骰子决定）
-  inheritMultiplier: number;  // 全局倍数（流局/造反叠加）
+  globalMultiplier: number;  // 综合全局倍数（继承倍数×回合倍数，封顶8）
   finalPoints: number;       // 最终点数
   handTypeName: string;      // 牌型名称
   details: string[];         // 计算明细
@@ -232,7 +232,7 @@ export function calculateScore(params: {
     baseFan,
     extraMultipliers,
     roundMultiplier: effectiveRoundMultiplier,
-    inheritMultiplier: effectiveGlobalMultiplier,
+    globalMultiplier: effectiveGlobalMultiplier,
     finalPoints,
     handTypeName,
     details
@@ -784,7 +784,6 @@ function checkAllTripletsWithoutWild(
  * @param discarderId 放冲者ID（捉冲时传入，自摸时忽略）
  */
 export function calculateSettlement(
-  baseFan: number,
   winnerFinalPoints: number,
   isSelfDrawn: boolean,
   winnerIndex: number,
@@ -810,9 +809,9 @@ export function calculateSettlement(
       let pay: number;
       
       if (bailout && bailout.partnerIndex === winnerIndex) {
-        // 互包自摸：输家支付 baseFan × 互包倍数（三口×3，四口×5）
+        // 互包自摸：输家支付 finalPoints × 互包倍数（三口×3，四口×5）
         const multiplier = bailout.type === '四口' ? 5 : 3;
-        pay = baseFan * multiplier;
+        pay = winnerFinalPoints * multiplier;
       } else {
         // 正常自摸：输家支付 finalPoints（已含 extraMultipliers × globalMultiplier）
         pay = winnerFinalPoints;
@@ -829,8 +828,8 @@ export function calculateSettlement(
       let pay: number;
       
       if (bailout && bailout.partnerIndex === winnerIndex) {
-        // 互包捉冲：统一按 baseFan × 2 赔付
-        pay = baseFan * 2;
+        // 互包捉冲：输家支付 finalPoints × 2
+        pay = winnerFinalPoints * 2;
       } else {
         // 正常捉冲：放冲者支付 finalPoints
         pay = winnerFinalPoints;
@@ -848,7 +847,7 @@ export function calculateSettlement(
         
         if (bailout && bailout.partnerIndex === winnerIndex) {
           // 互包捉冲 ×2
-          pay = baseFan * 2;
+          pay = winnerFinalPoints * 2;
         } else {
           pay = winnerFinalPoints;
         }
