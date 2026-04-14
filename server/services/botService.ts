@@ -8,6 +8,65 @@ import { canWin, findBestDiscardForTing, checkChowPongExclusion, updateChowPongE
 import fs from 'fs'
 import path from 'path'
 
+// ===== Soft scoring helpers (P1: sigmoid-based probabilistic decision) =====
+
+/**
+ * Sigmoid function: maps raw score to probability [0, 1]
+ * temperature < 1: more deterministic; temperature > 1: more random
+ */
+function sigmoid(x: number, temperature = 1): number {
+  return 1 / (1 + Math.exp(-x / temperature))
+}
+
+/**
+ * Convert baseChance (prior probability) to logit space for sigmoid combination
+ * logit = log(p / (1-p)) — higher p means higher prior bias toward this action
+ */
+function chanceToLogit(chance: number): number {
+  const c = Math.min(0.95, Math.max(0.05, chance))
+  return Math.log(c / (1 - c))
+}
+
+/**
+ * P1 软评分决策：比较两个候选，分数差 + 先验概率 → sigmoid 概率采样
+ *
+ * 公式：P(action > best) = sigmoid( (score_diff + prior_diff) / temperature )
+ * - score_diff = s.score - best.score（shanten/effective/tune 的综合分差）
+ * - prior_diff  = logit(baseChance) - 0（PASS 的 baseChance 隐式为 0.5，即 logit=0）
+ *
+ * 当 score_diff=0 时：
+ *   - baseChance=0.5 → logit=0 → P=0.5（随机）
+ *   - baseChance=0.8 → logit=1.39 → P=sigmoid(1.39)≈0.80（高概率选此动作）
+ *   - baseChance=0.2 → logit=-1.39 → P=sigmoid(-1.39)≈0.20（低概率选此动作）
+ *
+ * 当 baseChance=0.5 时：
+ *   - score_diff=0 → P=0.5（随机）
+ *   - score_diff>0 → P>0.5（倾向选）
+ *   - score_diff<0 → P<0.5（倾向不选）
+ */
+function softScoreWins(
+  s: { shanten: number; effective: number; tune: number },
+  best: { shanten: number; effective: number; tune: number },
+  baseChance: number,
+  temperature = 1
+): boolean {
+  const currentShanten = 0 // PASS基准线
+  const currentEffective = 0 // PASS没有进张增益
+
+  // 分数差（对所有候选统一标准化）
+  const scoreDiff =
+    (-s.shanten - 0) * 1 +           // shanten越低越好
+    (s.effective - best.effective) * 0.1 + // effective进张
+    (s.tune - best.tune) * 0.1        // tune策略分
+
+  // 先验差（PASS的logit=0）
+  const priorDiff = chanceToLogit(baseChance)
+
+  // sigmoid概率
+  const p = sigmoid(scoreDiff + priorDiff, temperature)
+  return Math.random() < p
+}
+
 // ===== Policy loading (per-character) =====
 let _policies: Record<string, any> = {}
 
@@ -1034,29 +1093,26 @@ export function shouldClaimPendingAction(
     }
   }
 
-  // 比较：向听 > 有效进张 > 策略参数（tune）
-  // 关键：tune 乘以 10 纳入主要比较，而非只在 tie-break 时用
-  // tune 乘 10：确保相同 shanten/effective 时，策略参数能扭转结果
-  // 修复：PASS 的 effective 不参与比较（摸牌不改变手牌）；
-  //       KONG/PENG/CHOW 用"进张收益"(action后effective - current effective)参与比较
+  // P1 软评分决策：sigmoid 概率采样
+  // 替代硬比较：score差 + baseChance先验 → sigmoid概率 → 随机采样
+  // baseChance 映射：chowChance/pengChance/kongChance → 先验偏置
+  // 当分数差=0时，baseChance 直接决定动作概率
+  const baseChances: Record<ActionType, number> = {
+    [ActionType.PASS]: 0.5,  // PASS无先验（50/50）
+    [ActionType.PENG]: policy.pengChance ?? 0.6,
+    [ActionType.KONG]: policy.kongChance ?? 0.7,
+    [ActionType.CHOW]: policy.chowChance ?? 0.3,
+    [ActionType.HU]: 1.0,    // 胡牌100%（已在HU分支处理）
+  }
+
   let bestAction = ActionType.PASS
   let best = actionScores.get(ActionType.PASS)!
-  const currentShanten = best.shanten // PASS 的 shanten = 当前手牌向听
-  const currentEffective = best.effective // PASS 的 effective = 当前手牌进张
 
   for (const [action, s] of actionScores.entries()) {
     if (action === ActionType.PASS) continue
-    // 进张收益：行动后 effective 相比当前增加多少
-    const effectiveGain = s.effective - currentEffective
-    // 综合分 = shanten优先 + 进张增益 + tune权重放大10倍
-    const actionScore = -s.shanten * 1000 + effectiveGain * 10 + s.tune * 10
-    // bestScoreVal 必须是完整的评分公式（包含best自己的shanten和effectiveGain）
-    const bestEffectiveGain = best.effective - currentEffective
-    const bestScoreVal = -best.shanten * 1000 + bestEffectiveGain * 10 + best.tune * 10
-    if (actionScore > bestScoreVal) {
-      bestAction = action
-      best = s
-    }
+    if (!softScoreWins(s, best, baseChances[action] ?? 0.5, 1.0)) continue
+    bestAction = action
+    best = s
   }
 
   return bestAction
