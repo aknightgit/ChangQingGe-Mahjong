@@ -1,11 +1,5 @@
 {
-  "metrics": {
-    "fitness": 0,
-    "huRate": 0,
-    "drawRate": 0.98,
-    "totalGames": 50,
-    "note": "AI-AK iterative training - 1x50"
-  },
+  "metrics": null,
   "policy": {
     "id": "AI-AK",
     "selfWinChance": 0.7665253481186775,

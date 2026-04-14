@@ -2497,6 +2497,7 @@ function main() {
   // Track history for adaptive mutation
   const scoreHistory: number[] = [baseline.akScore]
   let plateauCount = 0
+  let lastRoundEval: EvalResult | null = null
   const roundReports: ReturnType<typeof buildRoundReport>[] = []
 
   // Round 0 baseline: 仅 ROUNDS>1 或 GAMES_PER_ROUND>1 时才记录（避免 1×1 时多余）
@@ -2508,7 +2509,6 @@ function main() {
   // 共享状态：崩溃时用于保存部分报告
   _mainMdFile = mdFile
   _mainBestPolicy = bestPolicy
-  _mainMetrics = metrics
   _mainRoundReports = roundReports
 
   // Training rounds
@@ -2718,6 +2718,7 @@ let finalEvalLines: string[] = []
     totalGames: ROUNDS * GAMES_PER_ROUND,
     note: `AI-AK iterative training - ${ROUNDS}x${GAMES_PER_ROUND}`
   }
+  _mainMetrics = metrics  // 崩溃时用最新 metrics
 
   if (BASELINE_MODE) {
     // 基线模式：四家同步保存
