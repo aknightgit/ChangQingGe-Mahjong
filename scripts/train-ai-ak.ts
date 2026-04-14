@@ -1443,7 +1443,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
 interface GameEvent { turn: number; player: string; action: string; detail: string }
 interface SettlementEntry { from: string; to: string; amount: number; reason: string; mult?: number }
 interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers: string[]; meldSources: number[]; wildCount: number; wildTile: string; wonFan?: number; winHandType?: string; status: string }
-interface WinnerInfo { playerIndex: number; name: string; hand: string; melds: string[]; flowers: string[]; isSelfDraw: boolean; wonFan: number; winHandType: string; roundNum: number; wildTile: string; wildTileValue?: number; isMenQing: boolean }
+interface WinnerInfo { playerIndex: number; name: string; hand: string; melds: string[]; flowers: string[]; isSelfDraw: boolean; wonFan: number; baseFan: number; winHandType: string; roundNum: number; wildTile: string; wildTileValue?: number; isMenQing: boolean; winningTile?: string }
 
 interface TurnSnapshot {
   turn: number
@@ -2390,9 +2390,9 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
             isSelfDraw: w.isSelfDraw, score: winnerScore,
             multiplier: result.multiplier, roundNum: w.roundNum,
             akDelta: winnerScore * SETTLEMENT_MULT, result,
-            wonFan: w.wonFan, winHandType: w.winHandType,
+            wonFan: w.wonFan, baseFan: w.baseFan, winHandType: w.winHandType,
             wildTile: w.wildTile, wildTileValue: w.wildTileValue,
-            isMenQing: w.isMenQing,
+            isMenQing: w.isMenQing, winningTile: w.winningTile,
           })
         }
       }
