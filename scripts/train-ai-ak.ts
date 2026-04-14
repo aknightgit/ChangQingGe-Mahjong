@@ -37,6 +37,41 @@ const SETTLEMENT_MULT = 10
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
 const OUT_DIR = path.resolve(__dirname, '..', 'training-output')
 
+// ========== 全局错误处理（防止训练崩溃无日志） ==========
+let _mainRoundReports: any[] = []
+let _mainBestPolicy: any = null
+let _mainMetrics: any = null
+let _mainMdFile = ''
+
+function _savePartialReport() {
+  try {
+    if (_mainMdFile && (_mainRoundReports.length > 0 || _mainBestPolicy)) {
+      const mainOut: string[] = []
+      for (const report of _mainRoundReports) {
+        if (report.round === 0 || report.round === ROUNDS + 1) continue
+        mainOut.push(formatRoundReport(report, false, `第${report.round}轮`))
+      }
+      fs.writeFileSync(_mainMdFile + '.partial.md', mainOut.join('\n'), 'utf-8')
+      if (_mainBestPolicy) {
+        fs.writeFileSync(_mainMdFile.replace('.md', '.policy.partial.json'), JSON.stringify({ metrics: _mainMetrics, policy: _mainBestPolicy }, null, 2), 'utf-8')
+      }
+      console.error('\n[TRAIN_CRASH] 已保存部分报告: ' + _mainMdFile + '.partial.md')
+    }
+  } catch (e) { console.error('[TRAIN_CRASH] 保存部分报告失败:', e) }
+}
+
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT_EXCEPTION]', err)
+  _savePartialReport()
+  process.exit(1)
+})
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[UNHANDLED_REJECTION]', reason)
+  _savePartialReport()
+  process.exit(1)
+})
+
 // ========== Bot Policy (长清阁规则) ==========
 const HAND_TYPE_NAMES: Record<string, string> = {
   [HandType.FENG_PENG]: '风碰', [HandType.ALL_WIND]: '风一色', [HandType.QING_PENG]: '清碰',
@@ -2408,6 +2443,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
 
 // ========== Main Training Loop ==========
 function main() {
+  try {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
   const mdFile = path.join(OUT_DIR, `ai-ak-training-${timestamp}.md`)
   const policyFile = path.join(OUT_DIR, `best-policy-ai-ak-${timestamp}.json`)
@@ -2443,7 +2479,14 @@ function main() {
   logLines.push(...header)
 
   // Round 0: baseline evaluation（仅多轮或多局时有意义）
-  const baseline = evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
+  let baseline: EvalResult
+  try {
+    baseline = evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
+  } catch (e) {
+    console.error('[BASELINE_ERROR] 基线评估崩溃:', e)
+    _savePartialReport()
+    process.exit(1)
+  }
   bestScore = BASELINE_MODE ? baseline.metricsFitness : baseline.akScore
   const baseLine = BASELINE_MODE
     ? `| Bot | 总分 | 胜率 | 排名 |\n|-----|------|------|------|\n` + AI_NAMES.map(n => `| ${n} | ${baseline.scores[n]} | ${(baseline.winRates[n]*100).toFixed(1)}% | - |`).join('\n') + `\n| 流局率 | ${(baseline.draws/GAMES_PER_ROUND*100).toFixed(1)}% | | |`
@@ -2462,8 +2505,13 @@ function main() {
     roundReports.push(baselineReport)
   }
 
+  // 共享状态：崩溃时用于保存部分报告
+  _mainMdFile = mdFile
+  _mainBestPolicy = bestPolicy
+  _mainMetrics = metrics
+  _mainRoundReports = roundReports
+
   // Training rounds
-  let lastRoundEval: EvalResult | null = null
   for (let round = 1; round <= ROUNDS; round++) {
     // Adaptive mutation intensity
     let intensity = 1.0
@@ -2500,12 +2548,18 @@ function main() {
     let bestEvalResult: EvalResult | null = null
 
     for (let c = 0; c < candidates.length; c++) {
-      const result = evaluatePolicy(candidates[c], fixedPolicies, GAMES_PER_ROUND)
-      const score = BASELINE_MODE ? result.metricsFitness : result.akScore
+      let result: EvalResult | null = null
+      try {
+        result = evaluatePolicy(candidates[c], fixedPolicies, GAMES_PER_ROUND)
+      } catch (e) {
+        console.error(`[CANDIDATE_ERROR] candidate ${c}:`, e)
+        continue
+      }
+      const score = BASELINE_MODE ? result!.metricsFitness : result!.akScore
       const selfDR = result.winGames > 0 ? (result.selfDrawGames/result.winGames*100).toFixed(0) : '0'
 
 
-      if (score >= roundBestScore) {
+      if (result && score >= roundBestScore) {
         roundBestScore = score
         roundBestPolicy = candidates[c]
         roundBigWin = result.bigWin
@@ -2532,13 +2586,18 @@ function main() {
 
 
 
-    // Print opponent summary
-    const evalResult = evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
-    lastRoundEval = evalResult
-    const summaryLine = `  Current standings: ` + AI_NAMES.map(n =>
-      `${n}:${evalResult.scores[n]}(${(evalResult.winRates[n]*100).toFixed(0)}%)`
-    ).join('  ')
-    roundLines.push(summaryLine)
+    // Print opponent summary（已有bestEvalResult=roundBestPolicy评估，复用它避免重复计算崩溃风险）
+    if (bestEvalResult) {
+      lastRoundEval = bestEvalResult
+      const summaryLine = `  Current standings: ` + AI_NAMES.map(n =>
+        `${n}:${bestEvalResult!.scores[n]}(${(bestEvalResult!.winRates[n]*100).toFixed(0)}%)`
+      ).join('  ')
+      roundLines.push(summaryLine)
+      console.log(roundLines.join('\n'))
+    } else {
+      // 没有候选成功（全部崩溃），跳过本轮输出
+      console.error(`[ROUND_ERROR] 第${round}轮所有候选全部崩溃，跳过`)
+    }
 
 
 
@@ -2574,7 +2633,21 @@ let finalEvalLines: string[] = []
     console.log('\n--- 最终评估 (' + GAMES_PER_ROUND + '局) ---')
     finalEvalLines.push('\n--- 最终评估 (' + GAMES_PER_ROUND + '局) ---')
 
-    const finalEval = evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
+    let finalEval: EvalResult
+    try {
+      finalEval = evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
+    } catch (e) {
+      console.error('[FINAL_EVAL_ERROR] 最终评估崩溃:', e)
+      finalEval = {
+        akScore: bestScore, akWins: 0,
+        winRates: Object.fromEntries(AI_NAMES.map(n => [n, 0])),
+        scores: Object.fromEntries(AI_NAMES.map(n => [n, 0])),
+        draws: 0, totalGames: 0, winGames: 0, selfDrawGames: 0,
+        fightToLastGames: 0, bigWinGames: 0, menqingWinGames: 0,
+        metricsFitness: bestScore, bigWin: null, bigLoss: null, worstSingleLoss: null,
+        winningGames: [], multiWinDist: [0,0,0,0], handTypeDist: {}, turnSnapshots: [], playerStats: [],
+      }
+    }
 
     const finalReport = buildRoundReport(ROUNDS + 1, finalEval, bestPolicy, AI_NAMES, 'train-ai-ak.ts')
     const finalReportFormatted = formatRoundReport(finalReport, false, '最终评估')
@@ -2671,6 +2744,11 @@ let finalEvalLines: string[] = []
   console.log(`Policy saved: ${policyFile}`)
   console.log(`Policy latest: ${policyLatest}`)
   console.log(`Index saved: ${indexFile}`)
+  } catch (err) {
+    console.error('[MAIN_ERROR]', err)
+    _savePartialReport()
+    process.exit(1)
+  }
 }
 
 // Only run when executed directly (not imported)
