@@ -182,13 +182,40 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
   }
 
   // === 2. Honor tiles (winds/dragons): keep pairs, discard singles ===
+  // 使用参数：windEastKeep / windSouthKeep / windWestKeep / windNorthKeep / windGeneralKeep
+  //           dragonRedKeep / dragonGreenKeep / dragonWhiteKeep / dragonGeneralKeep
+  //           windDragonPairKeepBonus / honorTripletKeepBonus / honorPairBonus / allHonorsPungsPursuit
   if (isHonor(tile)) {
     if (sameTypeCount >= 2) {
       // Honor pair: keep (low score)
-      score -= policy.pairWeight * pairWeightFactor * policy.honorPairBonus
+      let pairBase = policy.pairWeight * pairWeightFactor * policy.honorPairBonus
+      if (isWind(tile)) {
+        if (tile.value === 1) pairBase *= (policy.windEastKeep || 1.0)
+        else if (tile.value === 2) pairBase *= (policy.windSouthKeep || 1.0)
+        else if (tile.value === 3) pairBase *= (policy.windWestKeep || 1.0)
+        else if (tile.value === 4) pairBase *= (policy.windNorthKeep || 1.0)
+        pairBase *= (policy.windGeneralKeep || 1.0)
+        // 风对子额外奖励
+        pairBase += (policy.windDragonPairKeepBonus || 0)
+      }
+      if (isDragon(tile)) {
+        if (tile.value === 1) pairBase *= (policy.dragonRedKeep || 1.0)
+        else if (tile.value === 2) pairBase *= (policy.dragonGreenKeep || 1.0)
+        else if (tile.value === 3) pairBase *= (policy.dragonWhiteKeep || 1.0)
+        pairBase *= (policy.dragonGeneralKeep || 1.0)
+      }
+      // 刻子额外奖励（honorTripletKeepBonus）
+      if (sameTypeCount >= 3) {
+        pairBase += (policy.honorTripletKeepBonus || 0)
+      }
+      score -= pairBase
     } else {
       // Single honor: high to discard (good candidate to throw away)
       score += 5
+      // allHonorsPungsPursuit：风一色/碰碰胡路线时，单张风箭也要保留
+      if (honorFocus && (policy.allHonorsPungsPursuit || 0) > 0) {
+        score -= (policy.allHonorsPungsPursuit || 0) * 2.0
+      }
     }
     return score
   }
@@ -252,10 +279,66 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
     score += dangerPenalty
   }
 
-  // === 5. Edge tiles (1, 9): slightly less valuable than middle ===
+  // === 5. Edge tiles (1, 9): penalise with terminalPenalty ===
+  // 使用参数：terminalPenalty
   if (tile.suit !== TileSuit.FLOWER && tile.suit !== TileSuit.WIND && tile.suit !== TileSuit.DRAGON) {
     if (tile.value === 1 || tile.value === 9) {
-      score += 0.5
+      score += (policy.terminalPenalty || 0.638)
+    }
+  }
+
+  // === 6. Phase-based strategy: early/mid/late ===
+  // 使用参数：wallEarlySpeedPush / wallMidBalance / wallLateDefense / safeTilePriority / defenseRiskAversion
+  if (isEarlyPhase) {
+    score += (policy.wallEarlySpeedPush || 0) * 0.5
+  }
+  if (isMidPhase) {
+    score += (policy.wallMidBalance || 0) * 0.5
+  }
+  if (isLatePhase) {
+    // 安全牌优先 + 防守风险厌恶 + 后期防守
+    score += (policy.safeTilePriority || 0) * 0.5
+    score += (policy.defenseRiskAversion || 0) * 0.3
+    score += (policy.wallLateDefense || 0) * 0.4
+  }
+
+  // === 7. Score-based strategic modifiers ===
+  // 使用参数：scoreBehindRiskBoost / scoreLeadDefenseBoost
+  const playerScore = player.score ?? 0
+  const dealerScore = (game as any).dealerScore ?? playerScore
+  const scoreDiff = playerScore - dealerScore
+  if (scoreDiff < -1000 && (policy.scoreBehindRiskBoost ?? 0) > 0) {
+    const riskFactor = Math.min(1.0, Math.abs(scoreDiff) / 5000)
+    // scoreBehindRiskBoost > 1 时越落后越激进
+    score += ((policy.scoreBehindRiskBoost ?? 1.0) - 1.0) * riskFactor * 1.5
+  }
+  if (scoreDiff > 1000 && (policy.scoreLeadDefenseBoost ?? 0) > 0) {
+    const leadFactor = Math.min(1.0, scoreDiff / 5000)
+    score += ((policy.scoreLeadDefenseBoost ?? 1.0) - 1.0) * leadFactor * 0.5
+  }
+
+  // === 8. Wild defense keep ===
+  // 使用参数：wildDefenseKeep
+  if (isWildTile(tile, game) && (policy.wildDefenseKeep || 0) > 0) {
+    // 防守阶段额外保留百搭
+    score -= (policy.wildDefenseKeep || 0) * 0.5
+  }
+
+  // === 9. Discard observation: flush/sequence pursuit boost ===
+  // 使用参数：discardObsFlushBoost / discardObsWeight
+  if ((game as any).discardPile && (policy.discardObsFlushBoost || 0) > 0) {
+    const discardPile = (game as any).discardPile as Tile[]
+    const discardCounts: Record<string, number> = {}
+    for (const d of discardPile) {
+      if (d.suit !== TileSuit.FLOWER && d.suit !== TileSuit.WIND && d.suit !== TileSuit.DRAGON) {
+        discardCounts[d.suit] = (discardCounts[d.suit] || 0) + 1
+      }
+    }
+    const dominantDiscardSuit = Object.entries(discardCounts).sort((a, b) => b[1] - a[1])[0]?.[0]
+    const dominantDiscardCount = dominantDiscardSuit ? (discardCounts[dominantDiscardSuit] || 0) : 0
+    if (dominantDiscardCount >= 5 && dominantDiscardSuit && tile.suit === dominantDiscardSuit) {
+      // 弃牌池显示某门大量出现 → 保留该门（清一色路线）
+      score -= (policy.discardObsFlushBoost || 0) * (policy.discardObsWeight || 0) * routeBiasFactor
     }
   }
 
