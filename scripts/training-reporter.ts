@@ -312,10 +312,13 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
     lines.push(`**总筹码: ${totalChips}**`)
     if (w.wildTile) lines.push(`**百搭: ${w.wildTile}**`)
     lines.push('')
-    lines.push(`**全局倍数 = min(8, 骰子倍数 × 继承倍数)**`)
+    lines.push(`**全局倍数 = min(8, 骰子倍数 × 流局倍数 × 继承倍数)**`)
     lines.push(`- 骰子点数: ${dicePoints}`)
     lines.push(`- 骰子倍数: ×${diceMult}`)
+    lines.push(`- 流局倍数: ×${flowMult}`)
     lines.push(`- 继承倍数: ×${inheritMult}`)
+    lines.push(`- 上一局是否流局: ${prevDraw}`)
+    lines.push(`- 上一局是否造反: ${prevRebel}`)
     lines.push(`- 全局倍数: ×${multiplier}`)
     lines.push('')
 
@@ -497,6 +500,7 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
   let gameCount = 0
   let prevTurn = -1
   let prevExposed: string[] = []
+  let lastFlushedCircleStartIdx = -1  // 防止最后一圈重复flush
 
   // 记录每个玩家本圈摸打的 {drawn, discarded}
   const circleActions: Record<string, {drawn: string, discarded: string, newFlowers: string[]}> = {}
@@ -511,29 +515,23 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
     return exposed.join('|')
   }
 
-  // flushCircle: 输出本圈所有玩家行，每行显示"动作后"的牌墙剩余数
-  // range = [startIdx, endIdx]（inclusive）= 本圈包含的 snapshot 索引范围
-  // wallAfterPrev: snaps[endIdx].wallIdx = 圈最后一行动作后的 wallIdx
-  const flushCircle = (startIdx: number, endIdx: number, wallAfterPrev: number) => {
-    if (!snaps[startIdx]) return
-    for (let j = startIdx; j <= endIdx; j++) {
-      const snapJ = snaps[j]
-      if (!snapJ) continue
-      // 每行 wallRemaining = deckLen - snaps[j-1].wallIdx（j-1 行动作后的 wallIdx）
-      // 第一行（j=startIdx）：j-1 属于上一圈，用 wallAfterPrev
-      const prevWallIdx = j === startIdx ? wallAfterPrev : (snaps[j - 1]?.wallIdx ?? 0)
-      const wallRemaining = deckLen - prevWallIdx
-      for (const pp of snapJ.players) {
-        const act = circleActions[pp.name] || { drawn: '-', discarded: '-', newFlowers: [] }
-        const flowerStr = act.newFlowers.length > 0 ? `补${act.newFlowers.length}花 ` : ''
-        const drawStr = act.drawn !== '-' ? `摸${act.drawn} ` : ''
-        const discardStr = act.discarded !== '-' ? `打${act.discarded}` : ''
-        const actionSeq = flowerStr + drawStr + discardStr
-        const exposedStr = formatExposed(pp.exposed || [])
-        const handStr = pp.hand || ''
-        const handNum = pp.handCount ?? 0
-        lines.push(`**${wallRemaining}** ${pp.name}：${actionSeq}→ 手牌:${handStr}｜副露:${exposedStr}｜${handNum}张`)
-      }
+  // flushCircle: 输出上一圈结果，heading使用"牌墙剩N张"
+  const flushCircle = (startIdx: number, wallRemaining: number) => {
+    const snap = snaps[startIdx]
+    if (!snap) return
+    lines.push(`**牌墙剩${wallRemaining}张 百搭${snap.wildTile}｜×${snap.gameMultiplier}**`)
+    for (const pp of snap.players) {
+      const act = circleActions[pp.name] || { drawn: '-', discarded: '-', newFlowers: [] }
+      // 动作序列（按K哥格式）
+      const flowerStr = act.newFlowers.length > 0 ? `补${len(act.newFlowers)}花 ` : ''
+      const drawStr = act.drawn !== '-' ? `摸${act.drawn} ` : ''
+      const discardStr = act.discarded !== '-' ? `打${act.discarded}` : ''
+      const actionSeq = flowerStr + drawStr + discardStr
+      // 最终手牌
+      const exposedStr = formatExposed(pp.exposed || [])
+      const handStr = pp.hand || ''
+      const handNum = pp.handCount ?? 0
+      lines.push(`  ${pp.name}：${actionSeq}→ 手牌:${handStr}｜副露:${exposedStr}｜${handNum}张`)
     }
     lines.push('')
   }
@@ -559,8 +557,8 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
       }
       // 上一局最后一圈也要 flush
       if (circleStartIdx < i) {
-        const wallAfterPrev = circleStartIdx > 0 ? (snaps[circleStartIdx - 1]?.wallIdx ?? 0) : 0
-        flushCircle(circleStartIdx, i - 1, wallAfterPrev)
+        const wallRem = deckLen - (snaps[circleStartIdx]?.wallIdx || 0)
+        flushCircle(circleStartIdx, wallRem)
       }
       circleCount = 0
       circleStartIdx = i
@@ -588,10 +586,9 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
       const isCircleStartEmpty = snaps[circleStartIdx]?.drawnTile === 'NEW_GAME'
       if (!isCircleStartEmpty) {
         circleCount++
-        // flush 前先保存 oldStartIdx（i 更新前 circleStartIdx 的值）
-        const oldStart = circleStartIdx
-        const wallAfterPrev = oldStart > 0 ? (snaps[oldStart - 1]?.wallIdx ?? 0) : 0
-        flushCircle(oldStart, i - 1, wallAfterPrev)
+        const wallRem = deckLen - (snaps[circleStartIdx]?.wallIdx || 0)
+        flushCircle(circleStartIdx, wallRem)
+        lastFlushedCircleStartIdx = circleStartIdx
       } else {
         circleCount = 0
       }
@@ -615,13 +612,12 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
     prevExposed = currExposed
   }
 
-  // 打印最后一圈（确保不截断）
+  // 打印最后一圈
   const lastCircleIsEmpty = snaps[circleStartIdx]?.drawnTile === 'NEW_GAME'
-  const lastRealSnapshotIdx = snaps.length - 1
-  if (snaps.length > 0 && !lastCircleIsEmpty) {
+  if (snaps.length > 0 && lastFlushedCircleStartIdx !== circleStartIdx && !lastCircleIsEmpty) {
     circleCount++
-    const wallAfterPrev = circleStartIdx > 0 ? (snaps[circleStartIdx - 1]?.wallIdx ?? 0) : 0
-    flushCircle(circleStartIdx, lastRealSnapshotIdx, wallAfterPrev)
+    const wallRem = deckLen - (snaps[circleStartIdx]?.wallIdx || 0)
+    flushCircle(circleStartIdx, wallRem)
   }
   lines.push('---')
   return lines.join('\n')

@@ -683,8 +683,10 @@ export function canWin(
   // 有 wildTile 时：花=百搭，计入手牌数 → 用 concealed.length
   // 无 wildTile 时：花=普通牌，不参与组牌 → 用 concealedNonFlower.length
   if (wildTileId) {
-    // 花做百搭：花参与手牌数计算
-    if (!isValidHandSize(concealed.length)) {
+    // 花做百搭：花参与手牌数计算，但普通花牌（不是万能花）不占手牌位
+    // 过滤掉普通花牌，只保留万能花牌+非花牌参与手牌数校验
+    const concealedNonFlower = concealed.filter(t => !isFlower(t));
+    if (!isValidHandSize(concealedNonFlower.length)) {
       return { canWin: false, types: [] };
     }
   } else {
@@ -839,8 +841,10 @@ export function isTing(
   isWildTile: WildTileChecker = () => false
 ): boolean {
   // 摸牌后手牌数 = 14 - 3*existingMelds（每有一个面子，手牌少3张；起手13+摸牌1=14）
+  // 非万能花牌不占手牌位，过滤后再校验
+  const nonFlower = tiles.filter(t => !isFlower(t) || isWildTile(t));
   const expected = 14 - 3 * existingMelds;
-  if (tiles.length !== expected) {
+  if (nonFlower.length !== expected) {
     return false;
   }
 
