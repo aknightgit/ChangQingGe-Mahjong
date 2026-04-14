@@ -1986,17 +1986,6 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
               }
             }
           }
-          // 碰后立即检查自摸（4副露成立时手牌=2张，还没出牌）
-          const pengWin = canWin(normalizeHand(opp.hand), opp.exposedMelds, makeWT(opp))
-          if (pengWin.canWin) {
-            const { finalPoints: score, baseFan } = calcScore(opp, true, false, g.gameMultiplier)
-            opp.score += score; player.score -= score
-            applyBaoSettlement(g, otherIdx, true, curr, score, 1)
-            recordPayment(player.name, opp.name, score * g.gameMultiplier, '碰后自摸', baseFan, g.gameMultiplier)
-            log(opp.name, '碰后自摸', `${player.name}碰${tileStr(draw)} → ${opp.hand.map(t => tileStr(t)).join(' ')} [${score}]`)
-            addWinEvent(opp.name, true, score, g.gameMultiplier, opp.exposedMelds.length, opp, round)
-            return { winner: otherIdx, selfDraw: true, score, roundNum: round }
-          }
           const pengDiscard = aiDiscard(opp, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, otherIdx, round * 4 + otherIdx)
           opp.hand = opp.hand.filter(t => t.id !== pengDiscard.id)
           g.discardPile.push(pengDiscard)

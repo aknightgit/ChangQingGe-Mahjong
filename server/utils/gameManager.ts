@@ -36,6 +36,9 @@ class GameManager {
   // Pending action超时处理(自动推进)
   private pendingActionTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
+  // 原子锁：防止同一游戏并发重复消费 pending actions
+  private actionResolutionLocks: Set<string> = new Set();
+
   // Freeze/dealer auto-draw timers(需要在新局开始时清除)
   private freezeTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
@@ -121,6 +124,9 @@ class GameManager {
     // 等freeze延迟(1000ms)结束后才开始pending计时
     // 这样human玩家在freeze期间看清UI后,还有完整的1s反应时间
     const timer = setTimeout(async () => {
+      // 原子保护：若已在消费中则忽略本次触发
+      if (this.actionResolutionLocks.has(gameId)) return;
+      this.actionResolutionLocks.add(gameId);
       try {
         const game = await this.getGame(gameId);
         if (!game || game.phase !== GamePhase.PLAYING) return;
@@ -187,6 +193,7 @@ class GameManager {
       } catch (err) {
         console.error('Failed to auto-resolve pending actions:', err);
       } finally {
+        this.actionResolutionLocks.delete(gameId);
         this.pendingActionTimers.delete(gameId);
       }
     }, this.getHesitationWaitMs(gameId)); // 决策犹豫期(训练模式可加速)
@@ -247,6 +254,8 @@ class GameManager {
    * 4. 人类的胡按钮必须在 hesitationWindow 内保持可用，等人类自己响应或超时
    */
   private handleBotPendingActions(gameId: string): void {
+    // 原子保护：若 timer 已在消费则跳过
+    if (this.actionResolutionLocks.has(gameId)) return;
     const game = this.games.get(gameId);
     if (!game) return;
 

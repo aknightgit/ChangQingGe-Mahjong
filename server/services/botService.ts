@@ -1041,15 +1041,18 @@ export function shouldClaimPendingAction(
   //       KONG/PENG/CHOW 用"进张收益"(action后effective - current effective)参与比较
   let bestAction = ActionType.PASS
   let best = actionScores.get(ActionType.PASS)!
+  const currentShanten = best.shanten // PASS 的 shanten = 当前手牌向听
   const currentEffective = best.effective // PASS 的 effective = 当前手牌进张
 
   for (const [action, s] of actionScores.entries()) {
-    if (action === ActionType.PASS) continue // PASS 已经初始化为 best，跳过
+    if (action === ActionType.PASS) continue
     // 进张收益：行动后 effective 相比当前增加多少
     const effectiveGain = s.effective - currentEffective
     // 综合分 = shanten优先 + 进张增益 + tune权重放大10倍
     const actionScore = -s.shanten * 1000 + effectiveGain * 10 + s.tune * 10
-    const bestScoreVal = 0 + 0 + best.tune * 10 // PASS 的 effectiveGain=0, shanten=current
+    // bestScoreVal 必须是完整的评分公式（包含best自己的shanten和effectiveGain）
+    const bestEffectiveGain = best.effective - currentEffective
+    const bestScoreVal = -best.shanten * 1000 + bestEffectiveGain * 10 + best.tune * 10
     if (actionScore > bestScoreVal) {
       bestAction = action
       best = s
