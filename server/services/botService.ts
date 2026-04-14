@@ -671,8 +671,63 @@ export function shouldClaimPendingAction(
   const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id)
   const claimTile = pendingAction?.tile
 
-  // HU 仍然最高优先级（可胡直接胡）
+  // HU 决策：用策略参数控制是否胡牌
+  // 使用参数：
+  //   - selfWinChance         → 自摸意愿
+  //   - discardHuWildPenalty → 放冲胡百搭惩罚
+  //   - discardHuMenQingPenalty → 放冲胡门清惩罚
+  //   - robKongAwareness     → 抢杠意识
+  //   - bao2ClaimPenalty     → 二宝捉冲惩罚
+  //   - bao3AvoidThreshold   → 三宝避免阈值
   if (availableActions.includes(ActionType.HU)) {
+    const isSelfDraw = !(game.pendingActions.some(
+      pa => pa.playerId === player.id && pa.type === 'discard'
+    ))
+
+    // 自摸：有 selfWinChance 控制意愿
+    if (isSelfDraw) {
+      const selfWinProb = policy.selfWinChance ?? 0.95
+      if (Math.random() < selfWinProb) {
+        return ActionType.HU
+      }
+    }
+
+    // 放冲（捉冲）
+    const pendingDiscard = game.pendingActions.find(
+      pa => pa.type === 'discard' && pa.playerId !== player.id
+    )
+    if (pendingDiscard) {
+      const discardTile = (pendingDiscard as any).tile as Tile | undefined
+      const isWildDiscard = discardTile ? isWildTile(discardTile, game) : false
+      const isMenQing = exposedCount === 0
+
+      // 百搭惩罚：放冲胡百搭降低概率
+      if (isWildDiscard && (policy.discardHuWildPenalty ?? 0) > 0) {
+        const wildProb = Math.max(0, 1.0 - (policy.discardHuWildPenalty ?? 0))
+        if (Math.random() >= wildProb) return ActionType.PASS
+      }
+
+      // 门清惩罚：门清时放冲胡也降低概率
+      if (isMenQing && (policy.discardHuMenQingPenalty ?? 0) > 0) {
+        const menqingProb = Math.max(0, 1.0 - (policy.discardHuMenQingPenalty ?? 0))
+        if (Math.random() >= menqingProb) return ActionType.PASS
+      }
+
+      // 宝牌惩罚：二宝捉冲降低意愿
+      const wildCount = hand.filter(t => isWildTile(t, game)).length
+      if (wildCount >= 2 && (policy.bao2ClaimPenalty ?? 0) > 0) {
+        const penalty = Math.max(0, 1.0 - (policy.bao2ClaimPenalty ?? 0))
+        if (Math.random() >= penalty) return ActionType.PASS
+      }
+
+      // 三宝避免：wildCount >= 3 时超过阈值则不冲
+      if (wildCount >= 3 && (policy.bao3AvoidThreshold ?? 0) > 0) {
+        return ActionType.PASS
+      }
+
+      return ActionType.HU
+    }
+
     return ActionType.HU
   }
 
@@ -771,7 +826,47 @@ export function shouldClaimPendingAction(
       }
       if (removed === 3 && candidateHand.length > 0) {
         const { shanten, effective } = evaluateResultingHand(candidateHand)
-        actionScores.set(ActionType.KONG, { shanten, effective, tune: policy.kongChance || 0 })
+        let kongTune = policy.kongChance || 0
+
+        // === 百搭杠奖励（kongWildBoost > 0 时更积极杠百搭）===
+        if (isWildTile(claimTile, game) && (policy.kongWildBoost || 0) > 0) {
+          kongTune += (policy.kongWildBoost || 0)
+        }
+
+        // === 加杠激进（kakanAggression > 0 → 鼓励从碰升级为杠）===
+        // 检查该牌是否已有一个碰（暗杠/加杠才有碰可升）
+        const existingPong = player.hand.exposedMelds.some(
+          m => m.type === 'pong' && m.tile.suit === claimTile.suit && m.tile.value === claimTile.value
+        )
+        if (existingPong && (policy.kakanAggression || 0) > 0) {
+          kongTune += (policy.kakanAggression || 0) * 0.5
+        }
+
+        // === 暗杠激进（anKongAggression > 0 → 鼓励暗杠）===
+        if ((policy.anKongAggression || 0) > 0 && !pendingAction) {
+          // 无待响应动作时可以暗杠，这里只是标记（明杠用 kongWildBoost）
+          kongTune += (policy.anKongAggression || 0) * 0.3
+        }
+
+        // === 自摸百搭奖励（selfWinWildBoost > 0 → 有百搭时更积极杠）===
+        const wildCount = hand.filter(t => isWildTile(t, game)).length
+        if (wildCount > 0 && (policy.selfWinWildBoost || 0) > 0) {
+          kongTune += (policy.selfWinWildBoost || 0) * Math.min(wildCount, 3) * 0.2
+        }
+
+        // === 宝牌风险厌恶（baoRiskAversion > 0 → 减少杠）===
+        // baoRiskAversion 越高，杠后损失越多番数的风险越大
+        if ((policy.baoRiskAversion || 0) > 0 && wildCount >= (policy.baoThreshold || 4)) {
+          kongTune *= Math.max(0, 1.0 - (policy.baoRiskAversion || 0) * 0.5)
+        }
+
+        // === 宝自摸谨慎（baoSelfClaimCaution > 0 → 少杠避免被抢）===
+        if ((policy.baoSelfClaimCaution || 0) > 0) {
+          kongTune *= Math.max(0, 1.0 - (policy.baoSelfClaimCaution || 0) * 0.4)
+        }
+
+        kongTune = Math.max(0.05, kongTune)
+        actionScores.set(ActionType.KONG, { shanten, effective, tune: kongTune })
       }
     }
   }
@@ -855,16 +950,16 @@ export function shouldClaimPendingAction(
     }
   }
 
-  // 比较：先看向听，再看有效进张，最后用策略概率微调（tie-break）
+  // 比较：向听 > 有效进张 > 策略参数（tune）
+  // 关键：tune 乘以 10 纳入主要比较，而非只在 tie-break 时用
+  // 这样 menqingKeepBonus/allPungsPursuit 等参数才能真正影响决策
   let bestAction = ActionType.PASS
   let best = actionScores.get(ActionType.PASS)!
+  const bestScore = (s: { shanten: number; effective: number; tune: number }) =>
+    -s.shanten * 1000 + s.effective * 10 + s.tune
 
   for (const [action, s] of actionScores.entries()) {
-    if (
-      s.shanten < best.shanten ||
-      (s.shanten === best.shanten && s.effective > best.effective) ||
-      (s.shanten === best.shanten && s.effective === best.effective && s.tune > best.tune)
-    ) {
+    if (bestScore(s) > bestScore(best)) {
       bestAction = action
       best = s
     }
