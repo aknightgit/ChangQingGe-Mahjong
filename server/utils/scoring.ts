@@ -65,15 +65,15 @@ export function calculateScore(params: {
   wildTileSuit?: TileSuit;     // 百搭牌的花色
   wildTileValue?: number;      // 百搭牌的数值
   wildTileGroup?: string[];    // 花牌百搭组
-  roundMultiplier?: number;     // 回合倍数（骰子）
-  inheritMultiplier?: number;    // 全局倍数（流局/造反继承）
+  rawRoundMultiplier?: number;     // 回合倍数（骰子）
+  rawInheritMultiplier?: number;    // 全局倍数（流局/造反继承）
   globalIncludesRound?: boolean; // 是否把回合倍数并入全局倍数（默认true）
 }): ScoreResult {
   const {
     handTiles, exposedMelds, flowerTiles, handTypes,
     isSelfDrawn, isKongFlower, isRobbingKong, isMenQing,
     isDaDiao = false,
-    wildTileSuit, wildTileValue, wildTileGroup, roundMultiplier, inheritMultiplier,
+    wildTileSuit, wildTileValue, wildTileGroup, rawRoundMultiplier, rawInheritMultiplier,
     globalIncludesRound = true
   } = params;
 
@@ -89,7 +89,7 @@ export function calculateScore(params: {
       handTypeName: '无效牌型',
       details: ['无有效牌型'],
       roundMultiplier: 0,
-      inheritMultiplier: 0,
+      globalMultiplier: 0,
       extraMultipliers: 0
     }
   }
@@ -208,31 +208,31 @@ export function calculateScore(params: {
   }
 
   // 9. 最终点数
-  const effectiveRoundMultiplier = Math.max(1, roundMultiplier ?? 1);
-  const baseGlobal = Math.max(1, inheritMultiplier ?? 1);
+  const roundMultiplier = Math.max(1, rawRoundMultiplier ?? 1);
+  const baseGlobal = Math.max(1, rawInheritMultiplier ?? 1);
 
-  // 新口径：若全局已包含回合倍数，则综合倍数= min(8, 回合 × 全局)
+  // 新口径：若全局已包含回合倍数，则全局倍数 = min(8, 回合 × 全局)
   // 否则沿用旧口径（回合倍数与全局倍数分乘）
-  const effectiveGlobalMultiplier = globalIncludesRound
-    ? Math.max(1, Math.min(baseGlobal * effectiveRoundMultiplier, 8))
+  const globalMultiplier = globalIncludesRound
+    ? Math.max(1, Math.min(baseGlobal * roundMultiplier, 8))
     : Math.max(1, Math.min(baseGlobal, 8));
 
   const finalPoints = globalIncludesRound
-    ? baseFan * extraMultipliers * effectiveGlobalMultiplier
-    : baseFan * extraMultipliers * effectiveRoundMultiplier * effectiveGlobalMultiplier;
+    ? baseFan * extraMultipliers * globalMultiplier
+    : baseFan * extraMultipliers * roundMultiplier * globalMultiplier;
 
   if (globalIncludesRound) {
-    details.push(`综合倍数 = min(8, 回合${effectiveRoundMultiplier} × 全局${baseGlobal}) = ${effectiveGlobalMultiplier}`);
-    details.push(`最终 = ${baseFan} × ${extraMultipliers} × ${effectiveGlobalMultiplier} = ${finalPoints}`);
+    details.push(`全局倍数 = min(8, 回合${roundMultiplier} × 全局${baseGlobal}) = ${globalMultiplier}`);
+    details.push(`最终 = ${baseFan} × ${extraMultipliers} × ${globalMultiplier} = ${finalPoints}`);
   } else {
-    details.push(`最终 = ${baseFan} × ${extraMultipliers} × ${effectiveRoundMultiplier} × ${effectiveGlobalMultiplier} = ${finalPoints}`);
+    details.push(`最终 = ${baseFan} × ${extraMultipliers} × ${roundMultiplier} × ${globalMultiplier} = ${finalPoints}`);
   }
 
   return {
     baseFan,
     extraMultipliers,
-    roundMultiplier: effectiveRoundMultiplier,
-    globalMultiplier: effectiveGlobalMultiplier,
+    roundMultiplier,
+    globalMultiplier,
     finalPoints,
     handTypeName,
     details

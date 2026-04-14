@@ -2310,8 +2310,8 @@ class GameManager {
       wildTileSuit: wildSuit,
       wildTileValue: wildValue,
       wildTileGroup: game.wildTileGroup,
-      roundMultiplier: game.roundMultiplier ?? 1,
-      inheritMultiplier: game.inheritMultiplier ?? 1,
+      rawRoundMultiplier: game.roundMultiplier ?? 1,
+      rawInheritMultiplier: game.inheritMultiplier ?? 1,
       globalIncludesRound: true
     });
 

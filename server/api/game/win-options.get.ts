@@ -29,8 +29,8 @@ export default defineEventHandler(async (event) => {
       isKongFlower: false,
       isRobbingKong: false,
       isMenQing: melds.length === 0,
-      roundMultiplier: game.roundMultiplier || 1,
-      inheritMultiplier: game.inheritMultiplier || 1,
+      rawRoundMultiplier: game.roundMultiplier || 1,
+      rawInheritMultiplier: game.inheritMultiplier || 1,
     });
 
     // 按分数降序排列
