@@ -1568,6 +1568,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     handType: string, fanScore: number, discarder: number | undefined
   ): GameResult => {
     const winnerPlayer = g.players[primaryWinner]
+    const discarderName = discarder !== undefined ? g.players[discarder].name : '-'
+    console.error(`[INV_TRACE] WIN winner=${winnerPlayer.name} mode=${winMode} fan=${fanScore} handType=${handType} discarder=${discarderName} round=${turn} wall=${g.wallIdx}`)
     return {
       winner: primaryWinner,
       scores: g.players.map(p => p.score),
