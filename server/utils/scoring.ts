@@ -68,15 +68,13 @@ export function calculateScore(params: {
   rawRoundMultiplier?: number;     // 回合倍数（骰子）
   rawInheritMultiplier?: number;    // 全局倍数（流局/造反继承）
   globalIncludesRound?: boolean; // 是否把回合倍数并入全局倍数（默认true）
-  settlementMultiplier?: number; // 结算膨胀倍数（默认1，即不膨胀）
 }): ScoreResult {
   const {
     handTiles, exposedMelds, flowerTiles, handTypes,
     isSelfDrawn, isKongFlower, isRobbingKong, isMenQing,
     isDaDiao = false,
     wildTileSuit, wildTileValue, wildTileGroup, rawRoundMultiplier, rawInheritMultiplier,
-    globalIncludesRound = true,
-    settlementMultiplier = 1
+    globalIncludesRound = true
   } = params;
 
   const details: string[] = [];
@@ -219,16 +217,15 @@ export function calculateScore(params: {
     ? Math.max(1, Math.min(baseGlobal * roundMultiplier, 8))
     : Math.max(1, Math.min(baseGlobal, 8));
 
-  const finalPoints = (globalIncludesRound
+  const finalPoints = globalIncludesRound
     ? baseFan * extraMultipliers * globalMultiplier
-    : baseFan * extraMultipliers * roundMultiplier * globalMultiplier) * settlementMultiplier;
+    : baseFan * extraMultipliers * roundMultiplier * globalMultiplier;
 
-  const sm = settlementMultiplier > 1 ? ` × ${settlementMultiplier}` : '';
   if (globalIncludesRound) {
     details.push(`全局倍数 = min(8, 回合${roundMultiplier} × 全局${baseGlobal}) = ${globalMultiplier}`);
-    details.push(`最终 = ${baseFan} × ${extraMultipliers} × ${globalMultiplier}${sm} = ${finalPoints}`);
+    details.push(`最终 = ${baseFan} × ${extraMultipliers} × ${globalMultiplier} = ${finalPoints}`);
   } else {
-    details.push(`最终 = ${baseFan} × ${extraMultipliers} × ${roundMultiplier} × ${globalMultiplier}${sm} = ${finalPoints}`);
+    details.push(`最终 = ${baseFan} × ${extraMultipliers} × ${roundMultiplier} × ${globalMultiplier} = ${finalPoints}`);
   }
 
   return {
