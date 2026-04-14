@@ -46,8 +46,10 @@ export interface WinningGameRecord {
   multiplier: number
   roundNum: number
   wonFan?: number
+  baseFan?: number  // 真实基础番（不含任何倍数）
   winHandType?: string
   isMenQing?: boolean
+  winningTile?: string  // 捉冲时对方放冲的牌
   result: any
 }
 
@@ -347,16 +349,19 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
     const sameGameWins = topWins.filter((t: any) => t.gameIdx === gameIdx)
     for (const win of sameGameWins) {
       const snapHand = snapPlayers[win.winnerName]?.hand || ''
-      const handStr = (win.hand && win.hand.length > 0) ? win.hand : (snapHand || '—')
+      let handStr = (win.hand && win.hand.length > 0) ? win.hand : (snapHand || '—')
+      // 捉冲时：显示对方放冲的那张牌
+      if (!win.isSelfDraw) {
+        const snapDiscard = (win as any).winningTile || ''  // 捉冲时对方放冲的牌（直接从WinnerInfo获取）
+        if (snapDiscard && !handStr.includes(snapDiscard)) handStr += ' + ' + snapDiscard + '（捉冲）'
+      }
       const meldsStr = Array.isArray(win.melds) ? win.melds.join(' / ') : (win.melds || '无')
       const handTypesStr = win.handTypes?.join(', ') || '—'
       const flowersArr: string[] = (win as any).flowers || []
       const flowersStr = flowersArr.length > 0 ? flowersArr.join(', ') : '无'
       const menqingStr = win.isMenQing ? '是' : '否'
-      const baseFan = wonFan > 0 && multiplier > 0 ? Math.round(wonFan / multiplier) : '?'
-      lines.push(`**玩家: ${win.winnerName}**`)
-      lines.push(`  - 胡牌方式: ${win.isSelfDraw ? '自摸' : '放冲'}`)
-      lines.push(`  - 牌型/基础番/最终点: ${handTypesStr} / ${baseFan} / ${wonFan}`)
+      const displayBaseFan = win.baseFan ?? (wonFan > 0 && multiplier > 0 ? Math.round(wonFan / multiplier) : '?')
+      lines.push(`  - 牌型/基础番/最终点: ${handTypesStr} / ${displayBaseFan} / ${wonFan || '?'}`)
       lines.push(`  - 手牌牌面: ${handStr}`)
       lines.push(`  - 门口牌(吃/碰/杠): ${meldsStr !== '无' ? meldsStr : '无'}`)
       lines.push(`  - 花牌: ${flowersStr}`)

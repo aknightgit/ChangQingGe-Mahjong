@@ -1470,9 +1470,11 @@ interface WinningGameRecord {
   isSelfDraw: boolean; score: number; multiplier: number; roundNum: number;
   akDelta: number;  // AK的分数变化（正=赢，负=输）
   wonFan?: number;   // 最终点数（baseFan × all multipliers）
+  baseFan?: number;  // 真实基础番（不含倍数）
   winHandType?: string;  // 牌型名称
   wildTile?: string;     // 百搭牌描述
   wildTileValue?: number; // 百搭数值（百搭所在位置）
+  winningTile?: string; // 捉冲时对方放冲的牌（用于报告中显示完整手牌）
   result?: any  // GameResult，用于settlementLog
 }
 interface GameResult {
@@ -1619,7 +1621,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     }
     return groups
   }
-  const recordWinner = (p: BotPlayer, idx: number, isSelfDraw: boolean, wonFan: number, roundNum: number) => {
+  const recordWinner = (p: BotPlayer, idx: number, isSelfDraw: boolean, wonFan: number, baseFan: number, roundNum: number, winningTile?: string) => {
     // 手牌分组：按花色分组，普通牌在前，百搭在后并加(*)
     const wildSuit = p.wildSuit, wildVal = p.wildValue
     const isWT2 = (t: Tile) => wildSuit && wildVal ? t.suit === wildSuit && t.value === wildVal : false
@@ -1640,9 +1642,10 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       hand: handStr,
       melds: meldStrs,
       flowers: p.flowerTiles.map(t => tileStr(t)),
-      isSelfDraw, wonFan, winHandType: p.winHandType || '', roundNum,
+      isSelfDraw, wonFan, baseFan, winHandType: p.winHandType || '', roundNum,
       wildTile: wildTiles.length > 0 ? tileStr({suit: wildSuit, value: wildVal, id: '' }) : '(无百搭)', wildTileValue: wildVal ?? 0,
       isMenQing: p.exposedMelds.length === 0,
+      winningTile,
     })
   }
   // 快照：只记录字符串化数据，避免引用悬浮
@@ -1785,14 +1788,14 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
         // 互包结算
         applyBaoSettlement(g, curr, true, null, baseScore, 1)
-        for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore * g.gameMultiplier, '自摸', baseFan, g.gameMultiplier) }
+        for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore, '自摸', baseFan, g.gameMultiplier) }
         log(player.name, '自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3×${g.gameMultiplier}=${baseScore*3*g.gameMultiplier}] [手牌${normalizedHand.length}张+副露${player.exposedMelds.length}]`)
         // 【修复】直接用 calcScore 返回的 handTypeName，绝不再调 detectHandTypes（避免参数状态不同导致误判）
         player.wonFan = baseScore
         player.winHandType = handTypeName || '普通自摸'
         player.status = 'won'
         finishedPlayers.add(curr)
-        recordWinner(player, curr, true, baseScore, turn)
+        recordWinner(player, curr, true, baseScore, baseFan, turn)
         log(player.name, '胡牌(血战)', `自摸 ${player.winHandType || '自摸'} [${baseScore}×3]`)
         if (finishedPlayers.size >= 3) {
           return buildResult(curr, '自摸', baseScore, player.winHandType || '自摸', baseScore, undefined)
@@ -1820,7 +1823,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
             player.winHandType = handTypeName || '普通杠开'
             player.status = 'won'
             finishedPlayers.add(curr)
-            recordWinner(player, curr, true, baseScore, turn)
+            recordWinner(player, curr, true, baseScore, baseFan, turn)
             log(player.name, '胡牌(血战)', `暗杠自摸 [${baseScore}×3]`)
             if (finishedPlayers.size >= 3) {
               return buildResult(curr, '杠上自摸', baseScore, player.winHandType || '杠上自摸', baseScore, undefined)
@@ -1847,7 +1850,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
             player.winHandType = handTypeName || '普通杠开'
             player.status = 'won'
             finishedPlayers.add(curr)
-            recordWinner(player, curr, true, baseScore, turn)
+            recordWinner(player, curr, true, baseScore, baseFan, turn)
             log(player.name, '胡牌(血战)', `加杠自摸 [${baseScore}×3]`)
             if (finishedPlayers.size >= 3) {
               return buildResult(curr, '杠上自摸', baseScore, player.winHandType || '杠上自摸', baseScore, undefined)
@@ -1895,7 +1898,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           opp.score += score; player.score -= score
           // 互包结算：如果有人对opp有包三，且放炮者不是包家
           applyBaoSettlement(g, other, false, curr, score, 1)
-          recordPayment(player.name, opp.name, score * g.gameMultiplier, '放炮', baseFan, g.gameMultiplier)
+          // score = finalPoints = baseFan × extraMultipliers × globalMultiplier，已包含全局倍数，recordPayment直接用score
+          recordPayment(player.name, opp.name, score, '放炮', baseFan, g.gameMultiplier)
           log(opp.name, '放炮胡', `${player.name}出${tileStr(discard)}→${opp.hand.map(t => tileStr(t)).join(' ')} [${score}]`)
           // 【修复】直接用 calcScore 返回的 handTypeName，绝不依赖 reporter 里的二次 detectHandTypes 调用
           // 根因：canWin 已在游戏循环中以 normalizedHand（player.hand 的 shallow copy）调用过，
@@ -1904,7 +1908,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           opp.winHandType = handTypeName || '普通放冲'
           opp.status = 'won'
           finishedPlayers.add(other)
-          recordWinner(opp, other, false, score, turn)
+          recordWinner(opp, other, false, score, baseFan, turn, tileStr(discard))
           log(opp.name, '胡牌(血战)', `放冲 [${score}]`)
           if (finishedPlayers.size >= 3) {
             return buildResult(other, '放冲', score, opp.winHandType || '放冲', score, curr)
@@ -1940,13 +1944,13 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
               opp.score += kongBaseScore * 3
               for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
               applyBaoSettlement(g, otherIdx, true, null, kongBaseScore, 1)
-              for (let i = 0; i < 4; i++) { if (i !== otherIdx) recordPayment(g.players[i].name, opp.name, kongBaseScore * g.gameMultiplier, '明杠自摸', baseFan, g.gameMultiplier) }
+              for (let i = 0; i < 4; i++) { if (i !== otherIdx) recordPayment(g.players[i].name, opp.name, kongBaseScore, '明杠自摸', baseFan, g.gameMultiplier) }
               log(opp.name, '明杠自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3]（杠开）`)
               opp.wonFan = kongBaseScore
               opp.winHandType = htn1 || '普通杠开'
               opp.status = 'won'
               finishedPlayers.add(otherIdx)
-              recordWinner(opp, otherIdx, true, kongBaseScore, turn)
+              recordWinner(opp, otherIdx, true, kongBaseScore, baseFan, turn)
               log(opp.name, '胡牌(血战)', `明杠自摸 [${kongBaseScore}×3]`)
               if (finishedPlayers.size >= 3) {
                 return buildResult(otherIdx, '杠上自摸', kongBaseScore, opp.winHandType || '明杠自摸', kongBaseScore, undefined)
@@ -2025,13 +2029,13 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
                 opp.score += kongBaseScore * 3
                 for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
                 applyBaoSettlement(g, otherIdx, true, null, kongBaseScore, 1)
-                for (let i = 0; i < 4; i++) { if (i !== otherIdx) recordPayment(g.players[i].name, opp.name, kongBaseScore * g.gameMultiplier, '碰杠后自摸', baseFan, g.gameMultiplier) }
+                for (let i = 0; i < 4; i++) { if (i !== otherIdx) recordPayment(g.players[i].name, opp.name, kongBaseScore, '碰杠后自摸', baseFan, g.gameMultiplier) }
                 log(opp.name, '碰杠后自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3=${kongBaseScore*3}]`)
                 opp.wonFan = kongBaseScore
                 opp.winHandType = htn2 || '普通碰杠'
                 opp.status = 'won'
                 finishedPlayers.add(otherIdx)
-                recordWinner(opp, otherIdx, true, kongBaseScore, turn)
+                recordWinner(opp, otherIdx, true, kongBaseScore, baseFan, turn)
                 log(opp.name, '胡牌(血战)', `碰杠后自摸 [${kongBaseScore}×3]`)
                 if (finishedPlayers.size >= 3) {
                   return buildResult(otherIdx, '杠上自摸', kongBaseScore, opp.winHandType || '杠上自摸', kongBaseScore, undefined)
@@ -2097,13 +2101,14 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           const { finalPoints: score, baseFan, handTypeName: htn3 } = calcScore(nextP, false, false, g.gameMultiplier)
           nextP.score += score; g.players[curr].score -= score
           applyBaoSettlement(g, nextPlayer, false, curr, score, 1)
-          recordPayment(g.players[curr].name, nextP.name, score * g.gameMultiplier, '吃后放炮', baseFan, g.gameMultiplier)
+          // score = finalPoints，已包含全局倍数，直接用
+          recordPayment(g.players[curr].name, nextP.name, score, '吃后放炮', baseFan, g.gameMultiplier)
           log(nextP.name, '吃后放炮胡', `${tileStr(discard)} [${score}]`)
           nextP.wonFan = score
           nextP.winHandType = htn3 || '普通吃炮'
           nextP.status = 'won'
           finishedPlayers.add(nextPlayer)
-          recordWinner(nextP, nextPlayer, false, score, turn)
+          recordWinner(nextP, nextPlayer, false, score, baseFan, turn, tileStr(discard))
           log(nextP.name, '胡牌(血战)', `吃后放冲 [${score}]`)
           if (finishedPlayers.size >= 3) {
             return buildResult(nextPlayer, '放冲', score, nextP.winHandType || '放冲', score, curr)
@@ -2127,13 +2132,13 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
             nextP.score += kongBaseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= kongBaseScore }
             applyBaoSettlement(g, nextPlayer, true, null, kongBaseScore, 1)
-            for (let i = 0; i < 4; i++) { if (i !== nextPlayer) recordPayment(g.players[i].name, nextP.name, kongBaseScore * g.gameMultiplier, '吃杠后自摸', baseFan, g.gameMultiplier) }
+            for (let i = 0; i < 4; i++) { if (i !== nextPlayer) recordPayment(g.players[i].name, nextP.name, kongBaseScore, '吃杠后自摸', baseFan, g.gameMultiplier) }
             log(nextP.name, '吃杠后自摸', `${nextP.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3=${kongBaseScore*3}]`)
             nextP.wonFan = kongBaseScore
             nextP.winHandType = htn4 || '普通吃杠'
             nextP.status = 'won'
             finishedPlayers.add(nextPlayer)
-            recordWinner(nextP, nextPlayer, true, kongBaseScore, turn)
+            recordWinner(nextP, nextPlayer, true, kongBaseScore, baseFan, turn)
             log(nextP.name, '胡牌(血战)', `吃杠后自摸 [${kongBaseScore}×3]`)
             if (finishedPlayers.size >= 3) {
               return buildResult(nextPlayer, '杠上自摸', kongBaseScore, nextP.winHandType || '杠上自摸', kongBaseScore, undefined)
