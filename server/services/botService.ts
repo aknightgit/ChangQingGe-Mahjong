@@ -774,9 +774,13 @@ function evaluateChowValue(
     suitCounts[t.suit] = (suitCounts[t.suit] || 0) + 1
     total++
   }
-  const dominantSuit = total > 0
-    ? Object.entries(suitCounts).sort((a, b) => b[1] - a[1])[0]?.[0] : null
-  : null
+  const dominantSuit = (() => {
+    if (total > 0) {
+      const sorted = Object.entries(suitCounts).sort((a, b) => b[1] - a[1]);
+      return sorted[0]?.[0] ?? null;
+    }
+    return null;
+  })();
   const dominantCount = dominantSuit ? (suitCounts[dominantSuit] || 0) : 0
 
   if (dominantCount >= 6 && (policy.pureFlushPursuit || 0) > 0) {
