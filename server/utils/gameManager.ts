@@ -2312,7 +2312,8 @@ class GameManager {
       wildTileGroup: game.wildTileGroup,
       rawRoundMultiplier: game.roundMultiplier ?? 1,
       rawInheritMultiplier: game.inheritMultiplier ?? 1,
-      globalIncludesRound: true
+      globalIncludesRound: true,
+      settlementMultiplier: game.settlementMultiplier ?? 1
     });
 
     // wonFan 存最终点数（baseFan × extraMultipliers × globalMultiplier）
@@ -2463,17 +2464,15 @@ class GameManager {
     for (const ap of activePlayers) {
       // 已经手动投票的跳过
       if (game.liangShanVotes.includes(ap.id)) continue;
-      // 检查累积有效输赢是否超过被QJ线(已乘膨胀倍数)
+      // 检查累积有效输赢是否超过被QJ线
       const cumulativeScore = this.getPlayerCumulativeScore(game.gameId, ap.id);
-      const sm = game.settlementMultiplier ?? 1;
-      const effectiveScore = cumulativeScore * sm;
-      if (effectiveScore > threshold) {
+      if (cumulativeScore > threshold) {
         // 超过被QJ线 → 自动视为同意,无否决权
         effectiveVoteCount++;
         if (!game.liangShanVotes.includes(ap.id)) {
           game.liangShanVotes.push(ap.id); // 标记为已投票
         }
-        console.log(`[LiangShan] ${ap.name} 累积赢分${cumulativeScore}×${sm}=${effectiveScore}超过QJ线${threshold},自动同意`);
+        console.log(`[LiangShan] ${ap.name} 累积赢分${cumulativeScore}超过QJ线${threshold},自动同意`);
       }
     }
 
@@ -2593,15 +2592,13 @@ class GameManager {
    */
   private checkQJThresholdAlerts(game: GameState): void {
     const threshold = game.liangShanThreshold ?? 4000;
-    const sm = game.settlementMultiplier ?? 1;
     const alerts: { playerId: string; playerName: string; score: number }[] = [];
 
     for (const player of game.players) {
       if (this.isPlayerBotControlled(player)) continue; // 跳过AI
       const cumulativeScore = this.getPlayerCumulativeScore(game.gameId, player.id);
-      const effectiveScore = cumulativeScore * sm;
-      if (effectiveScore > threshold) {
-        alerts.push({ playerId: player.id, playerName: player.name, score: effectiveScore });
+      if (cumulativeScore > threshold) {
+        alerts.push({ playerId: player.id, playerName: player.name, score: cumulativeScore });
       }
     }
 
@@ -2618,11 +2615,9 @@ class GameManager {
    */
   private computeSwapChances(game: GameState, playerId: string): number {
     const threshold = game.liangShanThreshold ?? 4000;
-    const sm = game.settlementMultiplier ?? 1;
     const cumulativeScore = this.getPlayerCumulativeScore(game.gameId, playerId);
-    const effectiveScore = cumulativeScore * sm;
-    if (effectiveScore >= 0) return 0;
-    const absScore = Math.abs(effectiveScore);
+    if (cumulativeScore >= 0) return 0;
+    const absScore = Math.abs(cumulativeScore);
     return Math.min(Math.floor(absScore / threshold), 10);
   }
 
@@ -3442,21 +3437,6 @@ class GameManager {
         const minP = game.players.reduce((a, b) => a.score < b.score ? a : b);
         minP.score -= finalTotal;
       }
-    }
-
-    // 结算膨胀倍数:所有分数乘以倍数
-    const sm = game.settlementMultiplier ?? 1;
-    if (sm > 1) {
-      for (const p of game.players) {
-        p.score = p.score * sm;
-      }
-      // 重新平衡(乘法不会破坏平衡,但以防万一)
-      const smTotal = game.players.reduce((s, p) => s + p.score, 0);
-      if (smTotal !== 0) {
-        const minP = game.players.reduce((a, b) => a.score < b.score ? a : b);
-        minP.score -= smTotal;
-      }
-      console.log(`[Settlement] 结算膨胀倍数 ×${sm}`);
     }
 
     // 清除本局AI接管记录

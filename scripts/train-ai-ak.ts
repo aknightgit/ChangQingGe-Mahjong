@@ -772,9 +772,10 @@ function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean, gameMu
     isSelfDrawn: isSelfDraw, isKongFlower: isKongWin,
     isRobbingKong: false, isMenQing: p.exposedMelds.filter(m => !m.isConcealed).length === 0,
     wildTileSuit: p.wildSuit, wildTileValue: p.wildValue,
-    roundMultiplier: 1, globalMultiplier: gameMultiplier
+    roundMultiplier: 1, globalMultiplier: gameMultiplier,
+    settlementMultiplier: SETTLEMENT_MULT
   })
-  return { finalPoints: result.finalPoints * SETTLEMENT_MULT, baseFan: result.baseFan, handTypeName: result.handTypeName }
+  return { finalPoints: result.finalPoints, baseFan: result.baseFan, handTypeName: result.handTypeName }
 }
 
 // ========== 互包结算 ==========
@@ -2365,9 +2366,9 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
       winGames++
       prevRoundWasDraw = false
 
-      const akDelta = result.scores[0] * SETTLEMENT_MULT
+      const akDelta = result.scores[0]
       for (let i = 0; i < AI_NAMES.length; i++) {
-        scores[AI_NAMES[i]] += result.scores[i] * SETTLEMENT_MULT
+        scores[AI_NAMES[i]] += result.scores[i]
       }
       if (akDelta > 0 && (!bigWin || akDelta > bigWin.score)) bigWin = { gameIdx: g, result, score: akDelta }
       if (akDelta < 0 && (!bigLoss || akDelta < bigLoss.score)) bigLoss = { gameIdx: g, result, score: akDelta }
@@ -2394,7 +2395,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
             melds: w.melds, handTypes: typeNames,
             isSelfDraw: w.isSelfDraw, score: winnerScore,
             multiplier: result.multiplier, roundNum: w.roundNum,
-            akDelta: winnerScore * SETTLEMENT_MULT, result,
+            akDelta: winnerScore, result,
             wonFan: w.wonFan, baseFan: w.baseFan, winHandType: w.winHandType,
             wildTile: w.wildTile, wildTileValue: w.wildTileValue,
             isMenQing: w.isMenQing, winningTile: w.winningTile,
@@ -2404,7 +2405,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
 
       // 找全局最大单人亏损
       for (let i = 0; i < 4; i++) {
-        const delta = result.scores[i] * SETTLEMENT_MULT
+        const delta = result.scores[i]
         if (!worstSingleLoss || delta < worstSingleLoss.score) {
           worstSingleLoss = { loser: AI_NAMES[i], score: delta, gameIdx: g, result }
         }
