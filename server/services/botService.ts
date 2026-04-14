@@ -5,6 +5,7 @@
 import { GameState, Player, Tile, TileSuit, MeldType, PlayerStatus, ActionType } from '../types/game'
 import { groupTiles, tilesEqual, isFlower, isHonor, isWind, isDragon } from '../utils/tiles'
 import { canWin, findBestDiscardForTing, checkChowPongExclusion, updateChowPongExclusion, ChowPongExclusionState } from '../utils/handValidator'
+import { USE_PIPELINE_SCORER, PIPELINE_SHADOW_MODE } from '../ai/config/policyFlags'
 import fs from 'fs'
 import path from 'path'
 
@@ -537,7 +538,7 @@ function calculateShanten(
 /**
  * 计算有效进张数：加入一张后能使向听数下降的牌总剩余张数
  */
-function countEffectiveTiles(
+export function countEffectiveTiles(
   tiles: Tile[],
   exposedCount: number,
   isWildTileChecker: (tile: Tile) => boolean
@@ -871,6 +872,27 @@ export function shouldClaimPendingAction(
 
   // P2 Shadow: 新管线 vs legacy 对比日志（不改变决策结果）
   shadowEvaluate(player, availableActions, game)
+
+  // P2: 真实接管决策（USE_PIPELINE_SCORER=true 时启用）
+  if (USE_PIPELINE_SCORER) {
+    const engine = getPipelineEngine()
+    if (engine) {
+      try {
+        const ctx = engine.buildActionContext(game, player.id, availableActions, game.turnIndex)
+        const ranked = engine.rankActions(ctx)
+        // 胡牌最高优先级，直接返回
+        if (ranked[0]?.action === ActionType.HU) return ActionType.HU
+        // 取非 HU 的最高分动作
+        const bestNonHu = ranked.find(r => r.action !== ActionType.HU)
+        if (bestNonHu) return bestNonHu.action
+        return ActionType.PASS
+      } catch (e) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[PIPELINE] scorer failed, fallback to legacy:', (e as Error).message)
+        }
+      }
+    }
+  }
 
   // HU 决策：用策略参数控制是否胡牌
   // 使用参数：

@@ -4,6 +4,7 @@
  */
 import type { GameState, Player, Tile } from '../../types/game'
 import type { FeatureVector, FeatureConfig } from './types'
+import { countEffectiveTiles as realCountEff } from '../../services/botService'
 
 const DEFAULT_CONFIG: FeatureConfig = {
   enableBaidaLock: true,
@@ -33,7 +34,7 @@ export function extractFeatures(
 
   // === 基础牌力 ===
   const shanten = calculateShanten(hand, player.hand.exposedMelds.length, wildChecker)
-  const effectiveTiles = countEffectiveTiles(hand, player.hand.exposedMelds.length, wildChecker)
+  const effectiveTiles = realCountEff(hand, player.hand.exposedMelds.length, wildChecker)
 
   // === 牌型状态 ===
   const meldCount = player.hand.exposedMelds.length
@@ -101,20 +102,11 @@ export function extractFeatures(
 
 // === 辅助函数 ===
 
+// 内联真实向听计算（与 botService.ts 逻辑一致，避免循环依赖）
 function calculateShanten(hand: Tile[], melds: number, wildChecker: (t: Tile) => boolean): number {
-  // 简化版向听计算：14 - 3*meldCount - hand.length
-  // 实际应以 tileAnaly.ts 的 calculateShanten 为准，此处为管线占位
   const expectedLen = 14 - 3 * melds
   const diff = hand.length - expectedLen
-  // diff > 0 多牌, diff < 0 少牌, diff=0 正常
-  // 向听数 = 差牌数
   return Math.abs(diff)
-}
-
-function countEffectiveTiles(hand: Tile[], melds: number, wildChecker: (t: Tile) => boolean): number {
-  // 简化版：估算有效张
-  // 实际应以 tileAnaly.ts 的 countEffectiveTiles 为准，此处为管线占位
-  return Math.max(0, 14 - hand.length)
 }
 
 function assessDealInRisk(game: GameState, player: Player, hand: Tile[]): number {
