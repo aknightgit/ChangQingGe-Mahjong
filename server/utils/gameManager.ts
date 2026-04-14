@@ -253,7 +253,7 @@ class GameManager {
    * 3. 人类玩家的吃按钮可以被清除（因为碰/杠/胡优先级更高）
    * 4. 人类的胡按钮必须在 hesitationWindow 内保持可用，等人类自己响应或超时
    */
-  private handleBotPendingActions(gameId: string): void {
+  private async handleBotPendingActions(gameId: string): Promise<void> {
     // 原子保护：若 timer 已在消费则跳过
     if (this.actionResolutionLocks.has(gameId)) return;
     const game = this.games.get(gameId);

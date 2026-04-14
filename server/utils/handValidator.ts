@@ -136,18 +136,11 @@ function normalizeTileSuit(rawSuit: string): TileSuit | null {
     case TileSuit.FLOWER:
     case 'hua':
       return TileSuit.FLOWER;
-    // 兼容历史命名
+    // 兼容历史命名（避免重复case，已在上面处理）
     case 'WAN':
-      return TileSuit.CHARACTERS;
     case 'TIAO':
-      return TileSuit.BAMBOOS;
     case 'DOTS':
-      return TileSuit.DOTS;
-    case 'CHARACTERS':
-      return TileSuit.CHARACTERS;
-    case 'BAMBOOS':
-    case 'bamboo':
-      return TileSuit.BAMBOOS;
+      return null;  // 这些全大写形式不应出现在TileSuit中，保持null
     default:
       return null;
   }
@@ -496,13 +489,30 @@ function detectTypes(
   // 大吊：不做为胡牌前置判断，只在算分阶段检测（见calcScore）
   // 大吊 = 手牌剩1张时自摸或捉冲，胡牌判断按正常牌型走
 
-  // ---- 垃圾胡过滤已移除（P0-3修复）----
-  // 原逻辑：多门(>=2门) + 含顺子（非全刻子）= 禁止的普通3n+2
-  // 移除原因：多门+顺子是数学上完全合法的 3n+2 手牌，拦截导致流局率异常上升
-  // 垃圾胡的"惩罚"应在计分阶段体现（番数低），不应在 canWin 判断层直接拦截
-  // 基础胡牌：满足 3n+2 格式且没有更高优先级特殊牌型
+  // ---- 垃圾胡过滤（K哥规则）----
+  // 规则：多门(>=2门) + 含顺子（不能全刻子）= 禁止的普通3n+2，直接判不能胡
+  // 注意：清一色/混一色/碰碰胡/风一色 等特殊牌型已在上方单独处理，不受影响
+  // 判断逻辑：hand spans >= 2 suits AND canFormOnlyTriplets = false（即必须用顺子）
+  function isGarbageMultiSuitsWithSequence(concealedTiles: Tile[]): boolean {
+    const suits = getSuits(concealedTiles);
+    if (suits.length < 2) return false;  // 单门（清一色/风一色）不是垃圾胡
+    // 检查是否能全用刻子组成（顺子牌型需要wild配合才成立）
+    // 用 canFormOnlyTripletsFrom 检验：不用顺子能否满足 3n+2
+    const nonFlower = concealedTiles.filter(t => !isFlower(t));
+    const m = (nonFlower.length - 2) / 3;
+    if (!Number.isInteger(m) || m < 0) return false;
+    // 如果只用刻子就能满足3n+2，说明手牌不需要顺子（全是刻子+对子）→ 不是垃圾胡
+    if (canFormOnlyTripletsFrom(nonFlower, m, () => false)) return false;
+    // 不能全刻子 → 必须用顺子 → 多门+顺子 → 垃圾胡
+    return true;
+  }
+
+  // 基础胡牌：满足 3n+2 格式且没有更高优先级特殊牌型，且不是垃圾胡
   if (types.length === 0 && satisfiesFormat) {
-    types.push(HandType.STANDARD);
+    if (!isGarbageMultiSuitsWithSequence(concealedNonFlower)) {
+      types.push(HandType.STANDARD);
+    }
+    // 垃圾胡：types.length 仍然为 0，不会胡
   }
 
   return types.sort((a, b) => (HAND_TYPE_PRIORITY[b] ?? 0) - (HAND_TYPE_PRIORITY[a] ?? 0));
