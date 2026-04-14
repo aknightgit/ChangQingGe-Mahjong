@@ -19,6 +19,8 @@ import {
   calculateScore
 } from '../server/utils/scoring'
 import { TileSuit, MeldType, WinType, type Tile, type Meld } from '../server/types/game'
+import { evaluateStageReward } from '../server/ai/reward/stageReward'
+import { buildActionContext, rankActions } from '../server/ai/pipeline/policyEngine'
 import * as fs from 'fs'
 import * as path from 'path'
 import { fileURLToPath } from 'url'
@@ -31,6 +33,7 @@ const ROUNDS = parseInt(process.argv[2] || '10') || 10
 const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000') || 1000
 const BASELINE_MODE = process.argv[4] === '--baseline'  // 基线训练：优化指标而非得分
 const DETAIL_MODE = process.argv.includes('--detail')  // 每圈明细开关，默认关闭
+const REWARD_MODE = process.argv[5] === '--reward-mode'  // 阶段奖励模式
 const SETTLEMENT_MULT = 10
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
 const OUT_DIR = path.resolve(__dirname, '..', 'training-output')
@@ -1824,7 +1827,32 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
 
     player.isTing = isTing(player.hand, player.exposedMelds.length, makeWT(player))
 
-    const discard = aiDiscard(player, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, curr, round * 4 + curr)
+    // AI-AK 使用 pipeline scorer 评估出牌（如果启用阶段奖励模式）
+    let discard: Tile
+    if (player.name === 'AI-AK' && REWARD_MODE) {
+      // 候选出牌列表
+      const candidates = player.hand.map(t => t.id)
+      
+      // 构建上下文并评分
+      try {
+        const ctx = buildActionContext(g, player.id, candidates as any, round * 4 + curr)
+        const ranked = rankActions(ctx)
+        
+        // 选择最高分
+        const best = ranked[0]
+        if (best) {
+          discard = player.hand.find(t => t.id === best.action) || player.hand[0]
+          console.error(`[PIPELINE_DISCARD] AI-AK selected ${tileStr(discard)} score=${best.score.toFixed(3)}`)
+        } else {
+          discard = aiDiscard(player, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, curr, round * 4 + curr)
+        }
+      } catch (error) {
+        console.error(`[PIPELINE_ERROR] AI-AK discard failed:`, error)
+        discard = aiDiscard(player, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, curr, round * 4 + curr)
+      }
+    } else {
+      discard = aiDiscard(player, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, curr, round * 4 + curr)
+    }
     player.hand = player.hand.filter(t => t && t.id !== discard.id)
     player.discardedTiles.push(discard)
     g.discardPile.push(discard)
@@ -1929,13 +1957,28 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       }
       const canP = canPeng(opp, discard)
       if (canP) {
-        const pengRoll = Math.random()
-        console.error(`[PENG_CHECK] ${opp.name} CAN_PENG ${tileStr(discard)} hand=${opp.hand.map(t=>tileStr(t)).join(' ')} roll=${pengRoll.toFixed(3)}`)
-        if (!checkChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)) continue;  // K哥铁律：吃碰排斥
-        let pengChance = opp.policy.pengChance
-        if (opp.wildSuit && opp.wildValue && discard.suit === opp.wildSuit && discard.value === opp.wildValue)
-          pengChance += opp.policy.pengWildBoost
-        if (pengRoll < pengChance) {
+        let shouldPeng = false
+        if (opp.name === 'AI-AK' && REWARD_MODE) {
+          // AI-AK: 用 pipeline scorer 决定是否碰
+          try {
+            const ctx = buildActionContext(g, opp.id, ['PENG'] as any, round * 4 + otherIdx)
+            const ranked = rankActions(ctx)
+            shouldPeng = ranked[0]?.score > 0.5
+            console.error(`[PIPELINE_PENG] AI-AK PENG score=${ranked[0]?.score.toFixed(3) ?? 'N/A'}, decision=${shouldPeng ? 'YES' : 'NO'}`)
+          } catch (e) {
+            console.error(`[PIPELINE_ERROR] AI-AK peng:`, e)
+            shouldPeng = Math.random() < opp.policy.pengChance
+          }
+        } else {
+          const pengRoll = Math.random()
+          console.error(`[PENG_CHECK] ${opp.name} CAN_PENG ${tileStr(discard)} hand=${opp.hand.map(t=>tileStr(t)).join(' ')} roll=${pengRoll.toFixed(3)}`)
+          if (!checkChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)) continue;
+          let pengChance = opp.policy.pengChance
+          if (opp.wildSuit && opp.wildValue && discard.suit === opp.wildSuit && discard.value === opp.wildValue)
+            pengChance += opp.policy.pengWildBoost
+          shouldPeng = pengRoll < pengChance
+        }
+        if (shouldPeng) {
           const meldCountBefore = opp.exposedMelds.length
           const handBeforePeng = opp.hand.length
           applyPeng(opp, discard, curr)  // 内部已normalize，失败则不push meld
@@ -1999,7 +2042,22 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
 
     // Check chow (only next player)
     const nextP = g.players[nextPlayer]
-    if (canChow(nextP, discard) && Math.random() < nextP.policy.chowChance) {
+    // AI-AK 使用 pipeline scorer 决定是否吃
+    let shouldChow = false
+    if (nextP.name === 'AI-AK' && REWARD_MODE && canChow(nextP, discard)) {
+      try {
+        const ctx = buildActionContext(g, nextP.id, ['CHOW'] as any, round * 4 + nextPlayer)
+        const ranked = rankActions(ctx)
+        shouldChow = ranked[0]?.score > 0.5
+        console.error(`[PIPELINE_CHOW] AI-AK CHOW score=${ranked[0]?.score.toFixed(3) ?? 'N/A'}, decision=${shouldChow ? 'YES' : 'NO'}`)
+      } catch (e) {
+        console.error(`[PIPELINE_ERROR] AI-AK chow:`, e)
+        shouldChow = Math.random() < nextP.policy.chowChance
+      }
+    } else {
+      shouldChow = canChow(nextP, discard) && Math.random() < nextP.policy.chowChance
+    }
+    if (shouldChow) {
       if (!checkChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)) continue;  // K哥铁律：吃碰排斥
       const beforeChowMelds = nextP.exposedMelds.length
       applyChow(nextP, discard, curr)  // 内部已normalize，失败则不push meld
