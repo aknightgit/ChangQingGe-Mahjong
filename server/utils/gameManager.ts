@@ -2280,9 +2280,10 @@ class GameManager {
       globalIncludesRound: true
     });
 
-    // wonFan 存最终点数（baseFan × extraMultipliers × inheritMultiplier）
-    // calculateScore.finalPoints 已经包含了门清/无百搭翻倍和全局倍数
+    // wonFan 存最终点数（baseFan × extraMultipliers × globalMultiplier）
+    // baseFan 用于互包赔付计算（RULES.md: settlementLog.fan = baseFan）
     player.wonFan = scoreResult.finalPoints;
+    player.baseFan = scoreResult.baseFan;  // 用于互包赔付
     player.winHandType = scoreResult.handTypeName;
     player.isSelfDrawn = isSelfDrawn;
     if (!isSelfDrawn) {
@@ -3329,9 +3330,12 @@ class GameManager {
           discarderIdx = game.players.findIndex(p => p.id === winner.discarderId);
         }
 
-        const winnerScore = winner.wonFan;
+        // RULES.md: 互包赔付使用 baseFan，不是 finalPoints
+        // winner.wonFan = finalPoints (已含 baseFan × extraMultipliers × globalMultiplier)
+        // winner.baseFan = 基础番数（用于互包赔付）
         const deltas = calculateSettlement(
-          winnerScore,
+          winner.baseFan,        // 基础番数（互包赔付用）
+          winner.wonFan,        // 最终点数（已含全局倍数，用于正常结算）
           winner.isSelfDrawn ?? false,
           winnerIdx,
           activePlayerIndices,

@@ -776,7 +776,8 @@ function checkAllTripletsWithoutWild(
 
 /**
  * 计算最终结算
- * @param winnerScore 赢家得分
+ * @param baseFan 基础番数（用于互包赔付计算）
+ * @param winnerFinalPoints 赢家最终点数（已含 baseFan × extraMultipliers × globalMultiplier）
  * @param isSelfDrawn 是否自摸
  * @param winnerIndex 赢家位置
  * @param allPlayerIndices 所有存活玩家位置
@@ -784,7 +785,8 @@ function checkAllTripletsWithoutWild(
  * @param discarderId 放冲者ID（捉冲时传入，自摸时忽略）
  */
 export function calculateSettlement(
-  winnerScore: number,
+  baseFan: number,
+  winnerFinalPoints: number,
   isSelfDrawn: boolean,
   winnerIndex: number,
   allPlayerIndices: number[],
@@ -803,15 +805,20 @@ export function calculateSettlement(
     for (const idx of allPlayerIndices) {
       if (idx === winnerIndex) continue;
       
-      let multiplier = 1;
-      
-      // 检查互包
+      // 检查互包：互包赔付使用 baseFan × 互包倍数
+      // RULES.md: 赔付结算（settlementLog.fan = baseFan，不是finalPoints）
       const bailout = mutualBailout?.get(idx);
+      let pay: number;
+      
       if (bailout && bailout.partnerIndex === winnerIndex) {
-        multiplier = bailout.type === '四口' ? 5 : 3;
+        // 互包自摸：输家支付 baseFan × 互包倍数（三口×3，四口×5）
+        const multiplier = bailout.type === '四口' ? 5 : 3;
+        pay = baseFan * multiplier;
+      } else {
+        // 正常自摸：输家支付 finalPoints（已含 extraMultipliers × globalMultiplier）
+        pay = winnerFinalPoints;
       }
       
-      const pay = winnerScore * multiplier;
       deltas.set(idx, (deltas.get(idx) || 0) - pay);
       deltas.set(winnerIndex, (deltas.get(winnerIndex) || 0) + pay);
     }
@@ -819,14 +826,17 @@ export function calculateSettlement(
     // 捉冲（放冲）：只有放冲者全额赔付
     if (discarderId !== undefined && allPlayerIndices.includes(discarderId)) {
       // 有指定放冲者：仅放冲者赔付
-      let multiplier = 1;
-      
       const bailout = mutualBailout?.get(discarderId);
+      let pay: number;
+      
       if (bailout && bailout.partnerIndex === winnerIndex) {
-        multiplier = bailout.type === '四口' ? 5 : 3;
+        // 互包捉冲：统一按 baseFan × 2 赔付
+        pay = baseFan * 2;
+      } else {
+        // 正常捉冲：放冲者支付 finalPoints
+        pay = winnerFinalPoints;
       }
       
-      const pay = winnerScore * multiplier;
       deltas.set(discarderId, (deltas.get(discarderId) || 0) - pay);
       deltas.set(winnerIndex, (deltas.get(winnerIndex) || 0) + pay);
     } else {
@@ -834,14 +844,16 @@ export function calculateSettlement(
       for (const idx of allPlayerIndices) {
         if (idx === winnerIndex) continue;
         
-        let multiplier = 1;
-        
         const bailout = mutualBailout?.get(idx);
+        let pay: number;
+        
         if (bailout && bailout.partnerIndex === winnerIndex) {
-          multiplier = 2;
+          // 互包捉冲 ×2
+          pay = baseFan * 2;
+        } else {
+          pay = winnerFinalPoints;
         }
         
-        const pay = winnerScore * multiplier;
         deltas.set(idx, (deltas.get(idx) || 0) - pay);
         deltas.set(winnerIndex, (deltas.get(winnerIndex) || 0) + pay);
       }
