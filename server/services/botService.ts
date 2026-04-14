@@ -803,9 +803,10 @@ export function shouldClaimPendingAction(
         if (Math.random() >= penalty) return ActionType.PASS
       }
 
-      // 三宝避免：wildCount >= 3 时超过阈值则不冲
+      // 三宝避免：wildCount >= 3 时按概率减少冲
       if (wildCount >= 3 && (policy.bao3AvoidThreshold ?? 0) > 0) {
-        return ActionType.PASS
+        const avoidProb = Math.min(0.9, (policy.bao3AvoidThreshold ?? 0) * 0.9)
+        if (Math.random() < avoidProb) return ActionType.PASS
       }
 
       return ActionType.HU
@@ -948,7 +949,7 @@ export function shouldClaimPendingAction(
           kongTune *= Math.max(0, 1.0 - (policy.baoSelfClaimCaution || 0) * 0.4)
         }
 
-        kongTune = Math.max(0.05, kongTune)
+        kongTune = Math.max(0.05, Math.min(2.0, kongTune)) // 上限 2.0，防止 kongWildBoost 过大导致过度杠牌
         actionScores.set(ActionType.KONG, { shanten, effective, tune: kongTune })
       }
     }
@@ -1035,14 +1036,21 @@ export function shouldClaimPendingAction(
 
   // 比较：向听 > 有效进张 > 策略参数（tune）
   // 关键：tune 乘以 10 纳入主要比较，而非只在 tie-break 时用
-  // 这样 menqingKeepBonus/allPungsPursuit 等参数才能真正影响决策
+  // tune 乘 10：确保相同 shanten/effective 时，策略参数能扭转结果
+  // 修复：PASS 的 effective 不参与比较（摸牌不改变手牌）；
+  //       KONG/PENG/CHOW 用"进张收益"(action后effective - current effective)参与比较
   let bestAction = ActionType.PASS
   let best = actionScores.get(ActionType.PASS)!
-  const bestScore = (s: { shanten: number; effective: number; tune: number }) =>
-    -s.shanten * 1000 + s.effective * 10 + s.tune
+  const currentEffective = best.effective // PASS 的 effective = 当前手牌进张
 
   for (const [action, s] of actionScores.entries()) {
-    if (bestScore(s) > bestScore(best)) {
+    if (action === ActionType.PASS) continue // PASS 已经初始化为 best，跳过
+    // 进张收益：行动后 effective 相比当前增加多少
+    const effectiveGain = s.effective - currentEffective
+    // 综合分 = shanten优先 + 进张增益 + tune权重放大10倍
+    const actionScore = -s.shanten * 1000 + effectiveGain * 10 + s.tune * 10
+    const bestScoreVal = 0 + 0 + best.tune * 10 // PASS 的 effectiveGain=0, shanten=current
+    if (actionScore > bestScoreVal) {
       bestAction = action
       best = s
     }
