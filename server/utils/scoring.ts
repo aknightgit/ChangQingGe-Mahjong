@@ -619,8 +619,7 @@ function getHandTypeDisplayName(type: HandType): string {
     [HandType.FOUR_WILD]: '四百搭',
     [HandType.DA_DIAO]: '大吊',
     [HandType.HALF_FLUSH]: '混一色',
-    [HandType.ALL_TRIPLETS]: '碰碰胡',
-    [HandType.STANDARD]: '普通胡'
+    [HandType.ALL_TRIPLETS]: '碰碰胡'
   };
   if (!(type in names)) return `未知牌型[${type}]`;
   return names[type];
