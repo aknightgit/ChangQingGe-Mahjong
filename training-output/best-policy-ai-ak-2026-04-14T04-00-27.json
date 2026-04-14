@@ -1,12 +1,10 @@
 {
-  "savedAt": "2026-04-14T10:24:52.778Z",
-  "round": 0,
   "metrics": {
-    "fitness": 0,
+    "fitness": -3500,
     "huRate": 0,
-    "drawRate": 1,
-    "totalGames": 10,
-    "note": "AI-AK iterative training - 10x1"
+    "drawRate": 0.98,
+    "totalGames": 600,
+    "note": "AI-AK iterative training - 3x200"
   },
   "policy": {
     "id": "AI-AK",
