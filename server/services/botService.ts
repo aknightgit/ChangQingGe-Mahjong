@@ -478,6 +478,22 @@ function isChowBeneficial(player: Player, game: GameState, chowTile: Tile): bool
  * Evaluate whether chowing is beneficial based on hand composition.
  * Returns a score 0~1 indicating how desirable the chow is.
  */
+/**
+ * 评估吃牌价值 — 整合全部策略参数
+ *
+ * 使用参数：
+ *   - chowChance          → 基础吃牌概率
+ *   - menqingKeepBonus    → 门清执念（替代硬编码0.85）
+ *   - chowWildPenalty     → 吃百搭惩罚（替代硬编码0.5）
+ *   - allPungsPursuit    → 碰碰胡追求 → 吃顺子惩罚
+ *   - pureFlushPursuit   → 清一色追求 → 异花吃惩罚
+ *   - halfFlushWeight    → 混一色权重 → 异花吃容忍
+ *   - nearWeight         → 相邻搭子保留价值（加分）
+ *   - flushChaseBonus    → 追花奖励
+ *   - tripletComboBonus   → 刻子组合奖励
+ *
+ * 注意：所有惩罚/奖励用加法叠加，设 floor=0.05 防止彻底不吃牌
+ */
 function evaluateChowValue(
   player: Player,
   game: GameState,
@@ -487,31 +503,32 @@ function evaluateChowValue(
   const policy = getPolicyForPlayer(player)
   const meldCount = player.hand.exposedMelds.length
 
-  // 已经听牌不再吃
   if (player.isTing) return 0
 
-  // === 基础分：使用 policy 原始值 ===
+  // === 基础分 ===
   let score = policy.chowChance
 
-  // === 门清意愿 ===
+  // === A. 门清执念 menqingKeepBonus（替代硬编码0.85）===
+  //    menqingKeepBonus 越大 → 门清时吃牌惩罚越重
+  //    公式：惩罚 = menqingKeepBonus × 0.25，上限 0.7（留 0.3 最低分）
   if (meldCount === 0) {
-    score *= 0.85
+    const menqingPenalty = Math.min(0.7, (policy.menqingKeepBonus || 0) * 0.25)
+    score -= menqingPenalty
   }
 
-  // === 面子数管理：限制瞎吃 ===
+  // === B. 面子数硬限制（已有面子数惩罚）===
   if (meldCount >= 3) {
-    score *= 0.3 // 已有3+面子，强烈不建议再吃（容易死牌）
+    score -= 0.7 // 已有3+面子，大幅降低吃牌意愿
   } else if (meldCount >= 2) {
-    score *= 0.7
+    score -= 0.3
   }
-  // meldCount 0-1: 不惩罚，鼓励吃
 
-  // === 死牌检测：如果吃后手里只剩孤张，不吃 ===
+  // === C. 死牌检测 ===
   if (!isChowBeneficial(player, game, chowTile)) {
-    score *= 0.2 // 吃了也是死牌，大幅降低
+    score -= 0.8 // 吃了也是死牌，大幅惩罚
   }
 
-  // === 吃牌类型价值排序 ===
+  // === D. 吃牌类型价值（加法叠加）===
   const v = chowTile.value
   const suit = chowTile.suit
   const groups = groupTiles(hand)
@@ -522,45 +539,88 @@ function evaluateChowValue(
   const hasRightRight = groups.has(`${suit}-${v + 2}`)
 
   if (hasLeft && hasRight) {
-    // 夹张：手里有1+3，吃2 → 最有价值，直接完成面子
-    score *= 2.0
+    score += 1.0 // 夹张：最有价值
   } else if (hasLeft && hasRightRight) {
-    // 延伸搭子：手里有3+5，吃4 → 完成一个面子+保留延伸
-    score *= 1.6
+    score += 0.6 // 延伸搭子
   } else if (hasRight && hasLeftLeft) {
-    // 延伸搭子：手里有4+6，吃5
-    score *= 1.6
+    score += 0.6
   } else if ((hasLeft && v - 1 === 1) || (hasRight && v + 1 === 9)) {
-    // 单边搭子：1+2吃3或7+8吃9
-    score *= 1.3
+    score += 0.3 // 单边搭子
   } else if (hasLeft || hasRight) {
-    // 两面：手里有2+3吃1或4 → 保留灵活搭子
-    score *= 1.0
+    score += 0.0 // 两面：中性
   } else if (hasLeftLeft || hasRightRight) {
-    // 间隔搭子：价值较低
-    score *= 0.7
+    score -= 0.3 // 间隔搭子
   }
 
-  // === 百搭牌被吃了可惜 ===
-  if (isWildTile(chowTile, game)) {
-    score *= 0.5
+  // === E. allPungsPursuit — 碰碰胡追求 → 吃顺子惩罚 ===
+  if ((policy.allPungsPursuit || 0) > 0) {
+    score -= (policy.allPungsPursuit || 0) * 0.8
   }
 
-  // === 接近胡牌阶段：更积极吃 ===
-  const tilesNeeded = 14 - hand.length - meldCount * 3 // 还差几张到14张
-  if (tilesNeeded <= 2) {
-    score *= 1.3 // 接近胡牌，积极吃牌加速
-  }
+  // === F. nearWeight — 相邻搭子保留加分 ===
+  //    吃后保留的相邻牌越多 → 加分
+  let adjacentKept = 0
+  if (hasLeft) adjacentKept++
+  if (hasRight) adjacentKept++
+  if (hasLeftLeft && !hasLeft) adjacentKept += 0.5
+  if (hasRightRight && !hasRight) adjacentKept += 0.5
+  score += adjacentKept * (policy.nearWeight || 0) * 0.05
 
-  // === 听牌总张数不多 → 更积极吃牌冲胡 ===
-  if (hand.length <= 6) {
-    const winningCount = countWinningTiles(player, game)
-    if (winningCount <= 8) {
-      score *= 1.4 // 听牌张数少，吃牌搏一把
+  // === G. 花色惩罚（纯色严惩，混色轻惩）===
+  //    统计主花色
+  const suitCounts: Record<string, number> = {}
+  let total = 0
+  for (const t of hand) {
+    if (isWildTile(t, game) || isHonor(t) || t.suit === TileSuit.FLOWER) continue
+    suitCounts[t.suit] = (suitCounts[t.suit] || 0) + 1
+    total++
+  }
+  const dominantSuit = total > 0
+    ? Object.entries(suitCounts).sort((a, b) => b[1] - a[1])[0]?.[0] : null
+  : null
+  const dominantCount = dominantSuit ? (suitCounts[dominantSuit] || 0) : 0
+
+  if (dominantCount >= 6 && (policy.pureFlushPursuit || 0) > 0) {
+    const isSameSuit = dominantSuit === suit
+    if (!isSameSuit) {
+      // 异花吃：清一色严惩（pureFlushPursuit），混一色轻惩（halfFlushWeight）
+      const purePenalty = (policy.pureFlushPursuit || 0) * 0.6
+      const halfPenalty = (policy.halfFlushWeight || 0) * 0.3
+      score -= Math.max(purePenalty, halfPenalty)
     }
   }
 
-  return Math.max(0, Math.min(1, score))
+  // === H. flushChaseBonus — 追花奖励 ===
+  if (dominantSuit === suit && (policy.flushChaseBonus || 0) > 0) {
+    if (dominantCount >= 7) {
+      score += (policy.flushChaseBonus || 0) * 0.5
+    }
+  }
+
+  // === I. tripletComboBonus — 刻子组合奖励 ===
+  const chowSuitCount = hand.filter(t => t.suit === suit && !isWildTile(t, game)).length
+  if (chowSuitCount >= 2 && (policy.tripletComboBonus || 0) > 0) {
+    score += (policy.tripletComboBonus || 0) * 0.1
+  }
+
+  // === J. 阶段调整（听牌接近时加分）===
+  const tilesNeeded = 14 - hand.length - meldCount * 3
+  if (tilesNeeded <= 2) {
+    score += 0.3 // 接近听牌，积极吃
+  }
+  if (hand.length <= 6) {
+    const winningCount = countWinningTiles(player, game)
+    if (winningCount <= 8) {
+      score += 0.4 // 听牌张少，吃牌搏一把
+    }
+  }
+
+  // === K. chowWildPenalty — 替代硬编码0.5 ===
+  if (isWildTile(chowTile, game)) {
+    score -= (policy.chowWildPenalty || 0.5)
+  }
+
+  return Math.max(0.05, Math.min(1, score))
 }
 
 /**
@@ -667,7 +727,30 @@ export function shouldClaimPendingAction(
       }
       if (removed === 2 && candidateHand.length > 0) {
         const { shanten, effective } = evaluateResultingHand(candidateHand)
-        actionScores.set(ActionType.PENG, { shanten, effective, tune: policy.pengChance || 0 })
+        let pengTune = policy.pengChance || 0
+
+        // === 百搭碰牌奖励（pengWildBoost > 0 时更积极碰百搭）===
+        if (isWildTile(claimTile, game) && (policy.pengWildBoost || 0) > 0) {
+          pengTune += (policy.pengWildBoost || 0)
+        }
+
+        // === 碰碰胡路线（allPungsPursuit > 0 → 碰牌加分）===
+        if ((policy.allPungsPursuit || 0) > 0) {
+          pengTune += (policy.allPungsPursuit || 0) * 0.3
+        }
+
+        // === 门清碰牌惩罚（比吃牌损失更大）===
+        if (meldCount === 0 && (policy.menqingKeepBonus || 0) > 0) {
+          pengTune -= (policy.menqingKeepBonus || 0) * 0.4
+        }
+
+        // === 对手听牌检测（oppTingDetection > 0 → 减少碰牌）===
+        if ((policy.oppTingDetection || 0) > 0 && (game as any).opponentTingIndicator) {
+          pengTune *= Math.max(0, 1.0 - (policy.oppTingDetection || 0) * 0.8)
+        }
+
+        pengTune = Math.max(0.05, pengTune)
+        actionScores.set(ActionType.PENG, { shanten, effective, tune: pengTune })
       }
     }
   }
@@ -735,6 +818,39 @@ export function shouldClaimPendingAction(
     }
 
     if (bestChow) {
+      // ==========================================================
+      //  策略参数接入：用这些因子调整 CHOW 最终评分
+      //  使用参数：
+      //    - menqingKeepBonus       → 门清时吃牌惩罚（已由 evaluateChowValue 处理，此处强化）
+      //    - allPungsPursuit        → 碰碰胡追求 → 吃 CHOW 惩罚
+      //    - pureFlushPursuit       → 清一色追求 → 异花 CHOW 严惩
+      //    - halfFlushWeight        → 混一色权重
+      //    - nearWeight             → 最短门惩罚（吃后门数变化）
+      // ==========================================================
+      {
+        // 门清时额外惩罚：比 evaluateChowValue 的基础惩罚更强
+        if (meldCount === 0 && (policy.menqingKeepBonus || 0) > 0) {
+          bestChow.tune -= Math.min(0.3, (policy.menqingKeepBonus || 0) * 0.25)
+        }
+
+        // allPungsPursuit：碰碰胡追求 → 抑制吃顺
+        if ((policy.allPungsPursuit || 0) > 0) {
+          bestChow.tune -= (policy.allPungsPursuit || 0) * 0.5
+        }
+
+        // nearWeight：拆门惩罚 — 吃异花导致门数增加则惩罚
+        if (claimTile) {
+          const chowSuit = claimTile.suit
+          const currentSuits = Object.keys(suitCounts).filter(s => (suitCounts[s] || 0) > 0)
+          if (!currentSuits.includes(chowSuit) && currentSuits.length >= 2) {
+            // 吃异花：门数增加 × nearWeight
+            const doorBreakPenalty = (policy.nearWeight || 0) * 0.02
+            bestChow.tune -= Math.min(0.5, doorBreakPenalty)
+          }
+        }
+      }
+
+      bestChow.tune = Math.max(0.05, bestChow.tune)
       actionScores.set(ActionType.CHOW, bestChow)
     }
   }
