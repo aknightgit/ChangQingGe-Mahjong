@@ -12,13 +12,13 @@ import path from 'path'
 // ===== P2: Pipeline Shadow Bridge =====
 // 导入新管线（条件导入，避免破坏现有逻辑）
 let _pipelineEngine: typeof import('../ai/pipeline/policyEngine') | null = null
-function getPipelineEngine() {
-  if (!_pipelineEngine) {
-    try {
-      _pipelineEngine = require('../ai/pipeline/policyEngine') as typeof import('../ai/pipeline/policyEngine')
-    } catch {
-      _pipelineEngine = null
-    }
+// 动态 ESM import（替代 require，实现 CJS/ESM 统一）
+async function getPipelineEngine() {
+  if (_pipelineEngine !== undefined) return _pipelineEngine
+  try {
+    _pipelineEngine = await import('../ai/pipeline/policyEngine')
+  } catch {
+    _pipelineEngine = null
   }
   return _pipelineEngine
 }
@@ -27,12 +27,12 @@ function getPipelineEngine() {
  * P2 Shadow 评估（新管线 vs legacy 对比日志）
  * 条件：PIPELINE_SHADOW_MODE=true 时启用
  */
-function shadowEvaluate(
+async function shadowEvaluate(
   player: Player,
   availableActions: ActionType[],
   game: GameState
-): void {
-  const engine = getPipelineEngine()
+): Promise<void> {
+  const engine = await getPipelineEngine()
   if (!engine) return
 
   const PIPELINE_SHADOW_MODE = process.env.PIPELINE_SHADOW_MODE !== 'false'
@@ -481,7 +481,8 @@ function tileKey(tiles: Tile[], exposedCount: number): string {
  * 轻量 shanten 估算：基于搭子/对子计数，不调 canWin
  * 用于模拟器快速决策，精度够用
  */
-function calculateShanten(
+// 对外暴露的计算向听数（供 pipeline/featureExtractor 调用）
+export function computeShanten(
   tiles: Tile[],
   exposedCount: number,
   isWildTileChecker: (tile: Tile) => boolean
@@ -534,6 +535,9 @@ function calculateShanten(
   _shantenCache.set(key, shanten);
   return shanten;
 }
+
+// 内部别名，保持 botService.ts 内部调用兼容（必须在 computeShanten 定义之后）
+const calculateShanten = computeShanten
 
 /**
  * 计算有效进张数：加入一张后能使向听数下降的牌总剩余张数
@@ -864,29 +868,28 @@ function evaluateChowOption(
  * Determine if bot should claim a pending action (PENG/KONG/HU/PASS).
  * Returns the ActionType to execute.
  */
-export function shouldClaimPendingAction(
+// P2 Pipeline scorer 是否接管决策
+export async function shouldClaimPendingAction(
   player: Player,
   availableActions: ActionType[],
   game: GameState
-): ActionType {
+): Promise<ActionType> {
   const policy = getPolicyForPlayer(player)
   const hand = player.hand.concealedTiles
   const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id)
   const claimTile = pendingAction?.tile
 
   // P2 Shadow: 新管线 vs legacy 对比日志（不改变决策结果）
-  shadowEvaluate(player, availableActions, game)
+  shadowEvaluate(player, availableActions, game).catch(() => {}) // fire-and-forget
 
   // P2: 真实接管决策（USE_PIPELINE_SCORER=true 时启用）
   if (USE_PIPELINE_SCORER) {
-    const engine = getPipelineEngine()
+    const engine = await getPipelineEngine()
     if (engine) {
       try {
         const ctx = engine.buildActionContext(game, player.id, availableActions, game.turnIndex)
         const ranked = engine.rankActions(ctx)
-        // 胡牌最高优先级，直接返回
         if (ranked[0]?.action === ActionType.HU) return ActionType.HU
-        // 取非 HU 的最高分动作
         const bestNonHu = ranked.find(r => r.action !== ActionType.HU)
         if (bestNonHu) return bestNonHu.action
         return ActionType.PASS

@@ -130,7 +130,7 @@ class ExtremeSimulator {
         // Draw a tile for the bot
         // Process pending actions if any
         if (game.pendingActions.length > 0) {
-          const action = shouldClaimPendingAction(currentPlayer, [/* actionTypes */], game);
+          const action = await shouldClaimPendingAction(currentPlayer, [/* actionTypes */], game);
           // This needs more work to properly extract action types
         }
         

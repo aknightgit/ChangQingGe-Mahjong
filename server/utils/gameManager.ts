@@ -160,7 +160,7 @@ class GameManager {
           for (const pa of pending) {
             const player = game.players.find(p => p.id === pa.playerId);
             if (!player || !this.isPlayerBotControlled(player)) continue;
-            this.resolvePendingAction(game, player, pa);
+            await this.resolvePendingAction(game, player, pa);
           }
         } else {
           // 实战模式: bot AI决策, 人类超时=PASS
@@ -169,7 +169,7 @@ class GameManager {
             if (!player || player.status !== PlayerStatus.PLAYING) continue;
             if (this.isPlayerBotControlled(player)) {
               // Bot 超时到期后自动决策
-              this.resolvePendingAction(game, player, pa);
+              await this.resolvePendingAction(game, player, pa);
             } else {
               // 人类玩家超时没响应 = PASS
               this.handlePass(game, player);
@@ -208,8 +208,8 @@ class GameManager {
 
 
   /** 统一处理 pendingAction 决策(吃/碰/杠/胡/PASS) */
-  private resolvePendingAction(game: GameState, player: Player, pa: PendingAction): void {
-    const action = shouldClaimPendingAction(player, pa.availableActions, game);
+  private async resolvePendingAction(game: GameState, player: Player, pa: PendingAction): Promise<void> {
+    const action = await shouldClaimPendingAction(player, pa.availableActions, game);
     console.log(`[PendingResolve] ${player.name} → ${action}`);
     if (action === ActionType.PASS) {
       this.handlePass(game, player);
@@ -283,7 +283,7 @@ class GameManager {
         );
         if (higherActions.length === 0) continue;
 
-        const action = shouldClaimPendingAction(player, higherActions, game);
+        const action = await shouldClaimPendingAction(player, higherActions, game);
         console.log(`[BotService] ${player.name} priority action: ${action} (from ${higherActions})`);
 
         if (action === ActionType.PENG) {
