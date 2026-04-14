@@ -1175,9 +1175,10 @@ class GameManager {
         }
 
         // Check if can win (必须有有效牌型)
-        const winCheck = canWin(player.hand.concealedTiles, player.hand.exposedMelds.length, isWildTile);
+        // 【P0-7修复】第二参数为number时，第三参数必须是wildTileId字符串而非函数
+        const winCheck = canWin(player.hand.concealedTiles, player.hand.exposedMelds.length, game.customScoringMode || null);
         if (winCheck.canWin) {
-          const handTypes = detectHandTypes(player.hand.concealedTiles, player.hand.exposedMelds, isWildTile, false, null, game.wildTileGroup);
+          const handTypes = detectHandTypes(player.hand.concealedTiles, player.hand.exposedMelds, null, false, null, game.wildTileGroup);
           if (handTypes.length > 0) {
             actions.push(ActionType.HU);
           }
@@ -1607,7 +1608,7 @@ class GameManager {
       // 检查能否胡(必须有有效牌型)
       const testHand = [...p.hand.concealedTiles, discardedTile];
       const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
-      const winCheck = canWin(testHand, p.hand.exposedMelds.length, isWildTile);
+      const winCheck = canWin(testHand, p.hand.exposedMelds.length, game.customScoringMode || null);
       if (winCheck.canWin) {
         const handTypes = detectHandTypes(testHand, p.hand.exposedMelds, false, p.hand.flowerTiles.length, null, game.wildTileGroup);
         if (handTypes.length > 0) {
@@ -2055,7 +2056,7 @@ class GameManager {
       if (candidate.status !== PlayerStatus.PLAYING) continue;
 
       const testHand = [...candidate.hand.concealedTiles, tile];
-      const winCheck = canWin(testHand, candidate.hand.exposedMelds.length, isWildTile);
+      const winCheck = canWin(testHand, candidate.hand.exposedMelds.length, game.customScoringMode || null);
       if (!winCheck.canWin) continue;
       // 牌型校验:必须有有效牌型
       const robHandTypes = detectHandTypes(testHand, candidate.hand.exposedMelds, false, candidate.hand.flowerTiles.length, null, game.wildTileGroup);
@@ -2194,13 +2195,13 @@ class GameManager {
     }
 
     const existingMelds = player.hand.exposedMelds.length;
-    const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
-    const winCheck = canWin(player.hand.concealedTiles, existingMelds, isWildTile);
+    // 【P0-7修复】canWin当exposedOrCount为number时，第三个参数必须是wildTileId字符串而非函数
+    const winCheck = canWin(player.hand.concealedTiles, existingMelds, game.customScoringMode || null);
     if (!winCheck.canWin) {
       throw new Error('Invalid Hu declaration');
     }
-    // 牌型校验:必须有有效牌型
-    const huHandTypes = detectHandTypes(player.hand.concealedTiles, player.hand.exposedMelds, !pendingAction, player.hand.flowerTiles.length, null, game.wildTileGroup);
+    // 牌型校验:必须有效牌型；传null触发fallback到game.wildTileGroup（不再被!pendingAction绕过）
+    const huHandTypes = detectHandTypes(player.hand.concealedTiles, player.hand.exposedMelds, null, player.hand.flowerTiles.length, null, game.wildTileGroup);
     if (huHandTypes.length === 0) {
       throw new Error('No valid hand type for Hu');
     }
@@ -2729,7 +2730,7 @@ class GameManager {
 
       // Check for hu
       const testHand = [...player.hand.concealedTiles, discardedTile];
-      const winCheck = canWin(testHand, player.hand.exposedMelds.length, isWildTile);
+      const winCheck = canWin(testHand, player.hand.exposedMelds.length, game.customScoringMode || null);
       if (winCheck.canWin) {
         // 规则:碰碰胡/混一色捉冲需要门口有花牌或风箭刻或任意杠牌;但"大吊"例外,可随时捉冲
         const flowerCount = player.hand.exposedMelds

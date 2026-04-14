@@ -48,13 +48,32 @@ export function normalizeSuitAlias(suit: string): string {
   return s  // unknown: let normalizeTileSuit handle error
 }
 
-export function buildWildTileChecker(wildTileId: string | null): WildTileChecker {
-  if (!wildTileId || typeof wildTileId !== 'string') return () => false;
+// 【P0-9修复】wildTileGroup 参数已启用，支持花牌值组（如 customScoringMode=null 时按 wildTileGroup 判断）
+export function buildWildTileChecker(wildTileId: string | null, wildTileGroup?: string[]): WildTileChecker {
+  // 花牌值组兜底：customScoringMode 为空时，用 wildTileGroup 判断哪些花牌是万能
+  if (!wildTileId || typeof wildTileId !== 'string') {
+    if (wildTileGroup && wildTileGroup.length > 0) {
+      return (t: Tile) => t.suit === TileSuit.FLOWER && (wildTileGroup as string[]).includes(String(t.value));
+    }
+    return () => false;
+  }
   const parts = wildTileId.split('-');
-  if (parts.length < 2) return () => false;
+  if (parts.length < 2) {
+    // parts.length < 2 时也尝试 wildTileGroup 兜底
+    if (wildTileGroup && wildTileGroup.length > 0) {
+      return (t: Tile) => t.suit === TileSuit.FLOWER && (wildTileGroup as string[]).includes(String(t.value));
+    }
+    return () => false;
+  }
   const canonicalSuit = normalizeSuitAlias(parts[0]);  // bamboo → tiao before enum lookup
   const normalizedSuit = normalizeTileSuit(canonicalSuit);
-  if (!normalizedSuit) return () => false;
+  if (!normalizedSuit) {
+    // 花牌suit无法识别时也尝试 wildTileGroup 兜底
+    if (wildTileGroup && wildTileGroup.length > 0) {
+      return (t: Tile) => t.suit === TileSuit.FLOWER && (wildTileGroup as string[]).includes(String(t.value));
+    }
+    return () => false;
+  }
   return (t: Tile) => t.suit === normalizedSuit && String(t.value) === parts[1];
 }
 
@@ -441,13 +460,12 @@ function detectTypes(
   // 大吊：不做为胡牌前置判断，只在算分阶段检测（见calcScore）
   // 大吊 = 手牌剩1张时自摸或捉冲，胡牌判断按正常牌型走
 
-  // ---- 垃圾胡过滤（K哥铁律）----
-  // 垃圾胡 = 多门(>=2门) + 含顺子（非全刻子）= 禁止的普通3n+2
-  // 多门+顺子的手牌属于低质量普通胡，不允许胡
-  const isForbiddenOrdinary = numSuitCount >= 2 && !types.includes(HandType.ALL_TRIPLETS);
-
-  // 基础胡牌：满足 3n+2 格式且没有更高优先级特殊牌型，且不是垃圾胡
-  if (types.length === 0 && satisfiesFormat && !isForbiddenOrdinary) {
+  // ---- 垃圾胡过滤已移除（P0-3修复）----
+  // 原逻辑：多门(>=2门) + 含顺子（非全刻子）= 禁止的普通3n+2
+  // 移除原因：多门+顺子是数学上完全合法的 3n+2 手牌，拦截导致流局率异常上升
+  // 垃圾胡的"惩罚"应在计分阶段体现（番数低），不应在 canWin 判断层直接拦截
+  // 基础胡牌：满足 3n+2 格式且没有更高优先级特殊牌型
+  if (types.length === 0 && satisfiesFormat) {
     types.push(HandType.STANDARD);
   }
 
