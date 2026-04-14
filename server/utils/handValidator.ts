@@ -37,7 +37,7 @@ export const HAND_TYPE_PRIORITY: Record<HandType, number> = {
   [HandType.FULL_FLUSH]:     50,  // 清一色(10点)
   [HandType.HALF_FLUSH]:     40,  // 混一色(公式)
   [HandType.ALL_TRIPLETS]:   30,  // 碰碰胡(公式)
-  [HandType.DA_DIAO]:        20,  // 大吊(10点固定，低于其他特殊牌型)
+  [HandType.DA_DIAO]:        45,  // 大吊(10点固定，高于混一色/碰碰胡，确保独立大吊被识别)
   [HandType.STANDARD]:        10, // 普通胡
 };
 
