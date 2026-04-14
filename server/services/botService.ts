@@ -34,8 +34,6 @@ async function shadowEvaluate(
 ): Promise<void> {
   const engine = await getPipelineEngine()
   if (!engine) return
-
-  const PIPELINE_SHADOW_MODE = process.env.PIPELINE_SHADOW_MODE !== 'false'
   if (!PIPELINE_SHADOW_MODE) return
 
   const PIPELINE_LOG_BREAKDOWN = process.env.PIPELINE_LOG_BREAKDOWN === 'true'
@@ -879,11 +877,9 @@ export async function shouldClaimPendingAction(
   const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id)
   const claimTile = pendingAction?.tile
 
-  // P2 Shadow: 新管线 vs legacy 对比日志（不改变决策结果）
-  shadowEvaluate(player, availableActions, game).catch(() => {}) // fire-and-forget
-
-  // P2: 真实接管决策（USE_PIPELINE_SCORER=true 时启用）
+  // P2 Shadow: 新管线 vs legacy 对比日志（仅在启用管线时运行，避免无用计算）
   if (USE_PIPELINE_SCORER) {
+    shadowEvaluate(player, availableActions, game).catch(() => {}) // fire-and-forget
     const engine = await getPipelineEngine()
     if (engine) {
       try {

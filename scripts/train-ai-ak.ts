@@ -1940,10 +1940,12 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         if (opp.name === 'AI-AK' && REWARD_MODE) {
           // AI-AK: 用 pipeline scorer 决定是否碰
           try {
-            const ctx = buildActionContext(g, opp.id, ['PENG'] as any, round * 4 + otherIdx)
+            const ctx = buildActionContext(g, opp.id, ['PENG', 'PASS'], round * 4 + otherIdx)
             const ranked = rankActions(ctx)
-            shouldPeng = ranked[0]?.score > 0.5
-            console.error(`[PIPELINE_PENG] AI-AK PENG score=${ranked[0]?.score.toFixed(3) ?? 'N/A'}, decision=${shouldPeng ? 'YES' : 'NO'}`)
+            const pengScore = ranked.find(r => r.action === 'PENG')?.score ?? 0
+            const passScore = ranked.find(r => r.action === 'PASS')?.score ?? 0
+            shouldPeng = pengScore > passScore
+            console.error(`[PIPELINE_PENG] AI-AK PENG pengScore=${pengScore.toFixed(3)} passScore=${passScore.toFixed(3)} → ${shouldPeng ? 'YES' : 'NO'}`)
           } catch (e) {
             console.error(`[PIPELINE_ERROR] AI-AK peng:`, e)
             shouldPeng = Math.random() < opp.policy.pengChance
@@ -2030,10 +2032,12 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         shouldChow = false
       } else {
         try {
-          const ctx = buildActionContext(g, nextP.id, ['CHOW'] as any, round * 4 + nextPlayer)
+          const ctx = buildActionContext(g, nextP.id, ['CHOW', 'PASS'], round * 4 + nextPlayer)
           const ranked = rankActions(ctx)
-          shouldChow = ranked[0]?.score > 0.5
-          console.error(`[PIPELINE_CHOW] AI-AK CHOW score=${ranked[0]?.score.toFixed(3) ?? 'N/A'}, decision=${shouldChow ? 'YES' : 'NO'}`)
+          const chowScore = ranked.find(r => r.action === 'CHOW')?.score ?? 0
+          const passScore = ranked.find(r => r.action === 'PASS')?.score ?? 0
+          shouldChow = chowScore > passScore
+          console.error(`[PIPELINE_CHOW] AI-AK CHOW chowScore=${chowScore.toFixed(3)} passScore=${passScore.toFixed(3)} → ${shouldChow ? 'YES' : 'NO'}`)
         } catch (e) {
           console.error(`[PIPELINE_ERROR] AI-AK chow:`, e)
           shouldChow = Math.random() < nextP.policy.chowChance
