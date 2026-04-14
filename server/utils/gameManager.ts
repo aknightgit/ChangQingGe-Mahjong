@@ -2083,11 +2083,9 @@ class GameManager {
       const robHandTypes = detectHandTypes(testHand, candidate.hand.exposedMelds, false, candidate.hand.flowerTiles.length, null, game.wildTileGroup);
       if (robHandTypes.length === 0) continue;
 
-      // 规则:若抢杠牌型为碰碰胡/混一色,门口必须有花牌或风箭刻或任意杠牌
-      const flowerCount = candidate.hand.exposedMelds
-        .flatMap(m => m.tiles)
-        .filter(t => isFlower(t)).length;
-      const handTypes = detectHandTypes(
+      // 规则: 碰碰胡/混一色抢杠需要检查门口有花 or 风向刻 or 杠牌
+      // 其他更大牌型(风碰/清碰/风一色等)不需要检查，直接允许抢
+      const robHandTypes = detectHandTypes(
         testHand,
         candidate.hand.exposedMelds,
         false,
@@ -2095,18 +2093,36 @@ class GameManager {
         game.customScoringMode || null,
         game.wildTileGroup
       );
+      if (robHandTypes.length === 0) continue;
 
-      const hasDaDiao = false; // 大吊已移除独立牌型
-      const requiresFlowerGate = (handTypes.includes(HandType.ALL_TRIPLETS) || handTypes.includes(HandType.HALF_FLUSH)) && !hasDaDiao;
-      // 新规则：花牌 或 风箭刻 或 任意杠牌 满足其一即可
-      const hasFlowerAtDoor = flowerCount > 0;
-      const hasWindDragonTriplet = candidate.hand.exposedMelds.some(m =>
-        (m.type === MeldType.TRIPLET || m.type === MeldType.KONG) &&
-        m.tiles[0] && (isWind(m.tiles[0]) || isDragon(m.tiles[0]))
-      );
-      const hasAnyKong = candidate.hand.exposedMelds.some(m => m.type === MeldType.KONG);
-      const hasGatePass = hasFlowerAtDoor || hasWindDragonTriplet || hasAnyKong;
-      if (requiresFlowerGate && !hasGatePass) continue;
+      // 获取最高优先级牌型
+      const topType = robHandTypes[0];
+      
+      // 需要检查门口条件的牌型：碰碰胡(ALL_TRIPLETS) 或 混一色(HALF_FLUSH)
+      // 其他更大牌型(风碰/清碰/风一色等)不需要检查，直接允许抢
+      const isPengPengOrHun = robHandTypes.includes(HandType.ALL_TRIPLETS) || robHandTypes.includes(HandType.HALF_FLUSH);
+      
+      if (isPengPengOrHun) {
+        // 需要检查门口条件：花牌 OR 风向刻 OR 杠牌
+        const hasFlowerAtDoor = candidate.hand.exposedMelds.some(m => 
+          m.tiles.some(t => t.suit === TileSuit.FLOWER)
+        );
+        // 风向刻子
+        const hasWindDragonTriplet = candidate.hand.exposedMelds.some(m => 
+          m.type === MeldType.TRIPLET &&
+          m.tiles[0] && (m.tiles[0].suit === TileSuit.WIND || m.tiles[0].suit === TileSuit.DRAGON)
+        );
+        // 任意杠牌
+        const hasAnyKong = candidate.hand.exposedMelds.some(m => 
+          m.type === MeldType.KONG || m.type === MeldType.CONCEALED_KONG
+        );
+        
+        // 三者满足其一即可，不满足则不能抢
+        if (!hasFlowerAtDoor && !hasWindDragonTriplet && !hasAnyKong) {
+          continue;  // 不能抢杠
+        }
+      }
+      // 其他牌型（风碰/清碰/风一色等）不需要检查，直接允许
 
       robbers.push({
         playerId: candidate.id,
