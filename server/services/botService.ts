@@ -8,6 +8,62 @@ import { canWin, findBestDiscardForTing, checkChowPongExclusion, updateChowPongE
 import fs from 'fs'
 import path from 'path'
 
+// ===== P2: Pipeline Shadow Bridge =====
+// 导入新管线（条件导入，避免破坏现有逻辑）
+let _pipelineEngine: typeof import('../ai/pipeline/policyEngine') | null = null
+function getPipelineEngine() {
+  if (!_pipelineEngine) {
+    try {
+      _pipelineEngine = require('../ai/pipeline/policyEngine') as typeof import('../ai/pipeline/policyEngine')
+    } catch {
+      _pipelineEngine = null
+    }
+  }
+  return _pipelineEngine
+}
+
+/**
+ * P2 Shadow 评估（新管线 vs legacy 对比日志）
+ * 条件：PIPELINE_SHADOW_MODE=true 时启用
+ */
+function shadowEvaluate(
+  player: Player,
+  availableActions: ActionType[],
+  game: GameState
+): void {
+  const engine = getPipelineEngine()
+  if (!engine) return
+
+  const PIPELINE_SHADOW_MODE = process.env.PIPELINE_SHADOW_MODE !== 'false'
+  if (!PIPELINE_SHADOW_MODE) return
+
+  const PIPELINE_LOG_BREAKDOWN = process.env.PIPELINE_LOG_BREAKDOWN === 'true'
+
+  try {
+    const ctx = engine.buildActionContext(game, player.id, availableActions, game.turnIndex)
+    const ranked = engine.evaluateAllActions(ctx)
+
+    const bestAction = ranked[0]?.action ?? 'PASS'
+    const bestScore = ranked[0]?.score ?? 0
+
+    if (PIPELINE_LOG_BREAKDOWN) {
+      console.log(
+        `[PIPELINE_SHADOW] ${player.name} actions=`,
+        ranked.map(r => `${r.action}:${r.score.toFixed(2)}`).join(' | '),
+        ` | best=${bestAction}(${bestScore.toFixed(2)})`,
+        ` | fv=shanten=${ctx.fv.shanten} eff=${ctx.fv.effectiveTiles} menqing=${ctx.fv.isMenqing} baidaLock=${ctx.fv.baidaLockTurns}`
+      )
+    } else {
+      console.log(`[PIPELINE_SHADOW] ${player.name} best=${bestAction}(${bestScore.toFixed(2)})`)
+    }
+  } catch (e) {
+    // 新管线出错不影响主流程
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[PIPELINE_SHADOW] failed:', (e as Error).message)
+    }
+  }
+}
+
 // ===== Soft scoring helpers (P1: sigmoid-based probabilistic decision) =====
 
 /**
@@ -812,6 +868,9 @@ export function shouldClaimPendingAction(
   const hand = player.hand.concealedTiles
   const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id)
   const claimTile = pendingAction?.tile
+
+  // P2 Shadow: 新管线 vs legacy 对比日志（不改变决策结果）
+  shadowEvaluate(player, availableActions, game)
 
   // HU 决策：用策略参数控制是否胡牌
   // 使用参数：

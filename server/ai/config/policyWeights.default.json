@@ -1,0 +1,23 @@
+{
+  "_comment": "P2 特征管线默认权重 - 基于现有 botService.ts 参数校准",
+  "_update": "修改此文件可调整AI策略，无需改代码",
+  "_location": "用于 pipelineScorer.ts；botService.ts 仍用原有参数",
+
+  "shantenWeight": 1.0,
+  "effectiveWeight": 0.35,
+  "tuneWeight": 0.55,
+  "riskWeight": 0.25,
+
+  "menqingBonus": 0.15,
+  "baidaBonus": 0.1,
+  "baidaLockPenalty": -0.5,
+
+  "dealInRiskPenalty": -0.3,
+  "dangerToOthersBonus": 0.15,
+
+  "earlyRoundBonus": 0.1,
+  "lateRoundBonus": 0.2,
+
+  "isFirstRoundBonus": 0.05,
+  "scoreGapBonus": 0.05
+}
