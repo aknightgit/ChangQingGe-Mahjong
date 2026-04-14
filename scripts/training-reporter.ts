@@ -306,16 +306,16 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
     const prevDraw = meta.prevRoundWasDraw ? '是' : '否'
     const prevRebel = meta.prevRoundWasRebel ? '是' : '否'
 
+    const winnerCount = (allWinningGames || []).filter((g: any) => g.gameIdx === gameIdx).length
     lines.push(`**${label}局号: ${gameIdx}**`)
-    lines.push(`**结果: ${topWins.filter((t: any) => t.gameIdx === gameIdx).length}人胡牌**`)
+    lines.push(`**结果: ${winnerCount}人胡牌**`)
     lines.push(`**回合: ${w.roundNum || 0}**`)
     lines.push(`**总筹码: ${totalChips}**`)
     if (w.wildTile) lines.push(`**百搭: ${w.wildTile}**`)
     lines.push('')
-    lines.push(`**全局倍数 = min(8, 骰子倍数 × 流局倍数 × 继承倍数)**`)
+    lines.push(`**全局倍数 = min(8, 骰子倍数 × 继承倍数)**`)
     lines.push(`- 骰子点数: ${dicePoints}`)
     lines.push(`- 骰子倍数: ×${diceMult}`)
-    lines.push(`- 流局倍数: ×${flowMult}`)
     lines.push(`- 继承倍数: ×${inheritMult}`)
     lines.push(`- 上一局是否流局: ${prevDraw}`)
     lines.push(`- 上一局是否造反: ${prevRebel}`)
@@ -335,7 +335,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
     for (const name of Object.keys(snapPlayers)) {
       const ms: number[] = snapPlayers[name].meldSources || []
       for (let ci = 0; ci < ms.length; ci++) {
-        if (ci !== lastSnap.currentPlayer && ms[ci] > 0) {
+        if (ms[ci] > 0) {
           const fromName = lastSnap.players[ci]?.name || `玩家${ci}`
           const level = ms[ci] >= 4 ? '四口' : '三口'
           relLines.push(`  ${fromName} <-> ${name}: ${level} (${fromName}->${name}:${ms[ci]}, ${name}->${fromName}:?)`)
@@ -375,17 +375,21 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
       lines.push('**结算逐笔明细:**')
       for (const s of settlementLog) {
         const amt = Math.abs(s.amount || 0)
-        const baseFan = s.fan || '?'
-        lines.push(`  [${s.reason || '结算'}] ${s.from} -> ${s.to}: ${amt} (${baseFan}x${amt})`)
+        const fan = s.fan ?? '?'
+        const basePoints = (fan !== '?' && fan > 0) ? Math.round(amt / fan) : '?'
+        lines.push(`  [${s.reason || '结算'}] ${s.from} -> ${s.to}: ${amt} (${fan}×${basePoints}=${amt})`)
       }
       lines.push('')
     }
   }
 
+  lines.push('### 💰 最大赢局明细')
   if (maxWin) {
-    lines.push('### 💰 最大赢局明细')
     lines.push('')
     renderGame(maxWin, '赢')
+  } else {
+    lines.push('')
+    lines.push('*本轮无胡牌局，无最大赢局明细*')
   }
   // （最大输局明细已删除，K哥 2026-04-13 确认）
 
