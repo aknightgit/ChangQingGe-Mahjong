@@ -479,6 +479,45 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
     }
   }
 
+  // === 10. Speed vs Value balance (P1: was dead code, now active) ===
+  // speedVsValueBalance > 0.5 = AI prefers speed over hand quality
+  // 激进时：孤立张加分（更愿意打），好搭子少扣分（保留）
+  if ((policy.speedVsValueBalance ?? 0.5) > 0.5) {
+    const speedFactor = (policy.speedVsValueBalance - 0.5) * 2
+    const sameSuitTiles = hand.filter(t =>
+      t !== tile && t.suit === tile.suit && !isWildTile(t, game) && !isFlower(t)
+    )
+    const neighbors = sameSuitTiles.filter(t => Math.abs(t.value - tile.value) <= 2)
+    if (neighbors.length === 0) score += speedFactor * 3
+    else if (neighbors.length >= 2) score += speedFactor * 1
+  }
+
+  // === 11. High/Low multiplier speed bias (P1: multHighSpeedBias / multLowSpeedBias were dead code) ===
+  // 高倍数场（4+对子）：AI更追求速度，减少做大牌的时间浪费
+  // 低倍数场：可以有更多余裕做大牌
+  const roundMult = (game as any).roundMultiplier ?? 1
+  const inheritMult = (game as any).inheritedGlobalMultiplier ?? 1
+  const globalMult = Math.max(roundMult, inheritMult)
+  const multHighSpeedBias = policy.multHighSpeedBias ?? 0
+  const multLowSpeedBias = policy.multLowSpeedBias ?? 0
+  if (globalMult >= 4 && multHighSpeedBias !== 0) {
+    // 高倍数：激进加速
+    // 孤立张更愿意打（速度优先）
+    const sameSuitTiles2 = hand.filter(t =>
+      t !== tile && t.suit === tile.suit && !isWildTile(t, game) && !isFlower(t)
+    )
+    const neighbors2 = sameSuitTiles2.filter(t => Math.abs(t.value - tile.value) <= 2)
+    if (neighbors2.length === 0) score += multHighSpeedBias * 2
+    else if (neighbors2.length >= 2) score += multHighSpeedBias * 0.5
+  } else if (globalMult < 4 && multLowSpeedBias !== 0) {
+    // 低倍数：允许一定做大牌的空间，但 speedBias 仍然起作用
+    const sameSuitTiles3 = hand.filter(t =>
+      t !== tile && t.suit === tile.suit && !isWildTile(t, game) && !isFlower(t)
+    )
+    const neighbors3 = sameSuitTiles3.filter(t => Math.abs(t.value - tile.value) <= 2)
+    if (neighbors3.length === 0) score += multLowSpeedBias * 1
+  }
+
   return score
 }
 
