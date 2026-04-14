@@ -25,21 +25,50 @@ export enum HandType {
 // 注意：数值越大优先级越高，用于降序排序
 // RULES.md说明：大吊优先级低于风碰/风一色/清碰，与混碰/八花/四百搭/清一色/混一色/碰碰胡按实际番数比较
 // 由于大吊是"固定10点"，它只在无其他特殊牌型时才作为主要牌型
-// 实际排序时：handTypes[0] 是最优牌型，大吊只在 handTypes 中只有 DA_DIAO + STANDARD 时才作为最优
+// ===== 牌型优先级声明式配置 =====
+// 清晰展示牌型层级，便于理解和维护
+// 优先级: 数值越大越优先被选中为最优牌型
 
-export const HAND_TYPE_PRIORITY: Record<HandType, number> = {
-  [HandType.FENG_PENG]:     100,  // 风碰(40点)
-  [HandType.ALL_WIND]:       90,  // 风一色(20点)
-  [HandType.QING_PENG]:      80,  // 清碰(20点)
-  [HandType.HUN_PENG]:       70,  // 混碰(10点)
-  [HandType.EIGHT_FLOWERS]:  60,  // 八花自摸(10点)
-  [HandType.FOUR_WILD]:      55,  // 四百搭(10点)
-  [HandType.FULL_FLUSH]:     50,  // 清一色(10点)
-  [HandType.HALF_FLUSH]:     40,  // 混一色(公式)
-  [HandType.ALL_TRIPLETS]:   30,  // 碰碰胡(公式)
-  [HandType.DA_DIAO]:        45,  // 大吊(10点固定，高于混一色/碰碰胡，确保独立大吊被识别)
-  [HandType.STANDARD]:        10, // 普通胡
-};
+export const HAND_TYPE_TIER = {
+  // TIER_1: 顶级固定番数牌型
+  TIER_1: {
+    [HandType.FENG_PENG]:     100,  // 风碰 = 40点
+    [HandType.ALL_WIND]:       90,  // 风一色 = 20点
+    [HandType.QING_PENG]:      80,  // 清碰 = 20点
+  },
+  // TIER_2: 次级固定番数牌型
+  TIER_2: {
+    [HandType.HUN_PENG]:       70,  // 混碰 = 10点
+    [HandType.EIGHT_FLOWERS]:  60,  // 八花自摸 = 10点
+    [HandType.FOUR_WILD]:      55,  // 四百搭 = 10点
+    [HandType.FULL_FLUSH]:     50,  // 清一色 = 10点
+  },
+  // TIER_3: 公式计算牌型（需根据花牌/组合计算番数）
+  TIER_3: {
+    [HandType.HALF_FLUSH]:     40,  // 混一色（公式计算）
+    [HandType.ALL_TRIPLETS]:   30,  // 碰碰胡（公式计算）
+  },
+  // TIER_4: 特殊独立牌型
+  TIER_4: {
+    [HandType.DA_DIAO]:       45,  // 大吊 = 10点固定（高于混一色/碰碰胡，确保独立大吊被识别）
+    [HandType.STANDARD]:        10,  // 普通胡（最低优先级兜底）
+  },
+} as const;
+
+// 扁平化为 Record<HandType, number>，供排序使用
+type HandTypeTuple = {
+  [K in keyof typeof HAND_TYPE_TIER]: keyof (typeof HAND_TYPE_TIER)[K]
+}[keyof typeof HAND_TYPE_TIER];
+
+export const HAND_TYPE_PRIORITY: Record<HandType, number> = (() => {
+  const priority: Partial<Record<HandType, number>> = {};
+  for (const tier of Object.values(HAND_TYPE_TIER)) {
+    for (const [type, value] of Object.entries(tier)) {
+      priority[type as HandType] = value as number;
+    }
+  }
+  return priority as Record<HandType, number>;
+})();
 
 export type WildTileChecker = (tile: Tile) => boolean;
 
