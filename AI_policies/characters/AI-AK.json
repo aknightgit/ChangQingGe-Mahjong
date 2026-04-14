@@ -44,7 +44,7 @@
     "nearWeight": 9.0,
     "tripletKeepBonus": 4.157096354944348,
     "terminalPenalty": 0.638020032329071,
-    "wildKeepPenalty": 1200,
+    "wildKeepPenalty": 8.0,
     "wildBailoutThreshold": 3,
     "wild0Aggression": 0.3360843092809285,
     "wild1Aggression": 0.4205580543024541,
