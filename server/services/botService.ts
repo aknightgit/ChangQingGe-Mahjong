@@ -289,9 +289,21 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
   const dominantNumberSuitCount = dominantNumberSuit ? (suitCounts[dominantNumberSuit] || 0) : 0
   const honorFocus = honorCount >= 6
 
-  // === 1. Wild tile: very bad to discard (low score) ===
+  // === 1. Wild tile: penalize discarding, scaled by wild count (wild0~3Aggression) ===
   if (isWildTile(tile, game)) {
-    score -= policy.wildKeepPenalty
+    // Count remaining wilds after discarding this tile
+    let remainingWilds = 0
+    for (const t of hand) { if (t !== tile && isWildTile(t, game)) remainingWilds++ }
+    // remainingWilds: 0=手里无百搭了, 1=剩1张, 2=剩2张, 3+=剩3+张
+    // wild0Aggression=0.3 → 手牌已无百搭，拆此百搭几乎无损 → penalty×0.3
+    // wild3PlusAggression=0.9 → 手牌多百搭仍拆 → penalty几乎全量
+    const wildAggression = remainingWilds === 0 ? (policy.wild0Aggression || 0.3)
+      : remainingWilds === 1 ? (policy.wild1Aggression || 0.5)
+      : remainingWilds === 2 ? (policy.wild2Aggression || 0.7)
+      : (policy.wild3PlusAggression || 0.9)
+    // aggress=0.3 → penalty×0.3（无百搭时几乎不心疼）；aggress=0.9 → penalty×1.0（多百搭时全量惩罚）
+    const penalty = policy.wildKeepPenalty * (1.3 - wildAggression * 0.5)
+    score -= penalty
     return score
   }
 
