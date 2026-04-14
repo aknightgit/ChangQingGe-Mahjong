@@ -525,7 +525,8 @@ function findBestAssignment(
   let bestTypes: HandType[] = [];
   let bestScore = -1;
   let iterations = 0;
-  const ITERATION_LIMIT = 8000;
+  // 【P0-1修复】放宽限制+增加fallback，防止启发式截断导致漏胡
+  const ITERATION_LIMIT = 30000;
 
   // 先用已有牌型做基准
   const baselineTypes = detectTypes(concealed, exposed);
@@ -582,15 +583,18 @@ function findBestAssignment(
       return { ...tt, score };
     });
     scoredCandidates.sort((a, b) => b.score - a.score);
-    const topCandidates = scoredCandidates.slice(0, 15); // 取top15
+    // 【P0-1修复】放宽topK + 增加fallback，防止"启发式截断=漏胡"
+    const TOP_K = Math.max(48, scoredCandidates.length); // wildCount>2时至少取48
+    const topCandidates = scoredCandidates.slice(0, TOP_K);
 
+    let hitLimit = false;
     function enumerateTop(
       wildIdx: number,
       currentAlloc: Array<{suit: string; value: number}>
     ) {
       if (wildIdx === wildCount) {
         iterations++;
-        if (iterations > ITERATION_LIMIT) return;
+        if (iterations > ITERATION_LIMIT) { hitLimit = true; return; }
         const virtualHand = [...naturals];
         for (const a of currentAlloc) {
           virtualHand.push({ suit: a.suit as TileSuit, value: a.value, id: `v-${Math.random()}`, isFlower: false });
@@ -606,13 +610,31 @@ function findBestAssignment(
         return;
       }
       for (const tt of topCandidates) {
-        if (iterations >= ITERATION_LIMIT) break;
+        if (iterations >= ITERATION_LIMIT) { hitLimit = true; break; }
         currentAlloc.push(tt);
         enumerateTop(wildIdx + 1, currentAlloc);
         currentAlloc.pop();
       }
     }
     enumerateTop(0, []);
+
+    // 【P0-1 fallback】命中迭代上限后，对剩余候选做低成本可行性扫描，避免截断漏解
+    if (hitLimit && scoredCandidates.length > TOP_K) {
+      const remaining = scoredCandidates.slice(TOP_K);
+      for (const tt of remaining) {
+        const testAlloc = [tt];
+        const virtualHand = [...naturals];
+        virtualHand.push({ suit: tt.suit as TileSuit, value: tt.value, id: `v-${Math.random()}`, isFlower: false });
+        const types = detectTypes(virtualHand, exposed);
+        if (types.length > 0) {
+          const primaryScore = HAND_TYPE_PRIORITY[types[0]] ?? 0;
+          if (primaryScore > bestScore) {
+            bestScore = primaryScore;
+            bestTypes = [...types];
+          }
+        }
+      }
+    }
   }
 
   return bestTypes;
