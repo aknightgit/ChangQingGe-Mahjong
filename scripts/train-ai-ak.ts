@@ -1862,8 +1862,31 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           recordPayment(player.name, opp.name, score * g.gameMultiplier, '放炮', baseFan, g.gameMultiplier)
           log(opp.name, '放炮胡', `${player.name}出${tileStr(discard)}→${opp.hand.map(t => tileStr(t)).join(' ')} [${score}]`)
           opp.wonFan = score
+          // 【修复】直接用 scoring.ts 的 calculateScore 反查真实牌型名称
+          // calcScore 已确认 baseFan=20（清碰），但 detectHandTypes 可能误返 STANDARD
+          // 用 calculateScore 手牌类型兜底，确保显示正确的 QING_PENG 而非"普通"
           const wt_d = detectHandTypes(opp.hand, opp.exposedMelds, opp.wildSuit && opp.wildValue ? `${opp.wildSuit}-${opp.wildValue}` : null, false, opp.flowerTiles.length)
           opp.winHandType = wt_d.map(t => String(t)).join(',')
+          // 如果显示为"普通"但 baseFan>=10，用 calculateScore 重新查真实牌型
+          if (opp.winHandType === 'STANDARD' && baseFan >= 10) {
+            const wildId = opp.wildSuit && opp.wildValue ? `${opp.wildSuit}-${opp.wildValue}` : null
+            const altTypes = detectHandTypes(opp.hand, opp.exposedMelds, wildId, false, opp.flowerTiles.length)
+            if (altTypes.length > 0) {
+              // 直接复用 calcScore 的 result 对象获取牌型名
+              const wildTileId2 = opp.wildSuit && opp.wildValue ? `${opp.wildSuit}-${opp.wildValue}` : null
+              const altResult = calculateScore({
+                handTiles: opp.hand, exposedMelds: opp.exposedMelds,
+                flowerTiles: opp.flowerTiles, handTypes: altTypes,
+                isSelfDrawn: false, isKongFlower: false,
+                isRobbingKong: false, isMenQing: opp.exposedMelds.filter(m => !m.isConcealed).length === 0,
+                wildTileSuit: opp.wildSuit, wildTileValue: opp.wildValue,
+                roundMultiplier: 1, globalMultiplier: g.gameMultiplier
+              })
+              if (altResult.handTypeName && altResult.handTypeName !== '无效牌型' && altResult.handTypeName !== '普通胡') {
+                opp.winHandType = altResult.handTypeName
+              }
+            }
+          }
           opp.status = 'won'
           finishedPlayers.add(other)
           recordWinner(opp, other, false, score, turn)
@@ -2210,11 +2233,13 @@ function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy
   const baoRelations: string[] = []
   for (const snap of r.snapshots || []) {
     for (let ci = 0; ci < 4; ci++) {
-      if (snap.meldSources[ci] >= 3) {
-        const partner = r.snapshots?.[ci]
+      const partner = r.snapshots?.[ci]
+      // 【修复】显示条件：双方都 >= 3 口才算真正的三口/四口
+      const bToA = partner?.meldSources?.[r.snapshots.indexOf(snap)] ?? -1
+      if (snap.meldSources[ci] >= 3 && bToA >= 3) {
         if (partner) {
           const level = snap.meldSources[ci] >= 4 ? '四口' : '三口'
-          baoRelations.push(`  - ${snap.name} <-> ${partner.name}: ${level} (A->B:${snap.meldSources[ci]}, B->A:${partner.meldSources?.[r.snapshots.indexOf(snap)] || 0})`)
+          baoRelations.push(`  - ${snap.name} <-> ${partner.name}: ${level} (A->B:${snap.meldSources[ci]}, B->A:${bToA})`)
         }
       }
     }
@@ -2566,11 +2591,12 @@ let finalEvalLines: string[] = []
       const gBao: string[] = []
       for (const snap of gl.result.snapshots || []) {
         for (let ci = 0; ci < 4; ci++) {
-          if (snap.meldSources[ci] >= 3) {
-            const partner = gl.result.snapshots?.[ci]
+          const partner = gl.result.snapshots?.[ci]
+          const bToA = partner?.meldSources?.[gl.result.snapshots.indexOf(snap)] ?? -1
+          if (snap.meldSources[ci] >= 3 && bToA >= 3) {
             if (partner) {
               const level = snap.meldSources[ci] >= 4 ? '四口' : '三口'
-              gBao.push(`  - ${snap.name} <-> ${partner.name}: ${level} (A->B:${snap.meldSources[ci]}, B->A:${partner.meldSources?.[gl.result.snapshots.indexOf(snap)] || 0})`)
+              gBao.push(`  - ${snap.name} <-> ${partner.name}: ${level} (A->B:${snap.meldSources[ci]}, B->A:${bToA})`)
             }
           }
         }
