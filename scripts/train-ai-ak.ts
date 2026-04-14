@@ -1623,10 +1623,12 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
   }
   const recordWinner = (p: BotPlayer, idx: number, isSelfDraw: boolean, wonFan: number, baseFan: number, roundNum: number, winningTile?: string) => {
     // 手牌分组：按花色分组，普通牌在前，百搭在后并加(*)
+    // 重要：完整手牌 = 当前手牌 + 所有副露面子里的牌（与 recordSnapshots 一致）
     const wildSuit = p.wildSuit, wildVal = p.wildValue
     const isWT2 = (t: Tile) => wildSuit && wildVal ? t.suit === wildSuit && t.value === wildVal : false
-    const normalTiles = p.hand.filter(t => !isFlower(t) && !isWT2(t))
-    const wildTiles = p.hand.filter(t => !isFlower(t) && isWT2(t))
+    const allTiles = [...p.hand, ...p.exposedMelds.flatMap(m => m.tiles)]
+    const normalTiles = allTiles.filter(t => !isFlower(t) && !isWT2(t))
+    const wildTiles = allTiles.filter(t => !isFlower(t) && isWT2(t))
     const suitGroups: string[] = []
     for (const suit of ['Wan','Tong','Tiao'] as TileSuit[]) {
       const normal = normalTiles.filter(t => t.suit === suit)

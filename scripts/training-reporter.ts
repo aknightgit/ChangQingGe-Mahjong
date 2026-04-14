@@ -348,6 +348,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
     // 同一局所有赢家
     const sameGameWins = topWins.filter((t: any) => t.gameIdx === gameIdx)
     for (const win of sameGameWins) {
+      lines.push(`**玩家: ${win.winnerName}**`)
       const snapHand = snapPlayers[win.winnerName]?.hand || ''
       let handStr = (win.hand && win.hand.length > 0) ? win.hand : (snapHand || '—')
       // 捉冲时：显示对方放冲的那张牌
@@ -360,9 +361,16 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
       const flowersArr: string[] = (win as any).flowers || []
       const flowersStr = flowersArr.length > 0 ? flowersArr.join(', ') : '无'
       const menqingStr = win.isMenQing ? '是' : '否'
-      const displayBaseFan = win.baseFan ?? (wonFan > 0 && multiplier > 0 ? Math.round(wonFan / multiplier) : '?')
-      lines.push(`  - 牌型/基础番/最终点: ${handTypesStr} / ${displayBaseFan} / ${wonFan || '?'}`)
-      lines.push(`  - 手牌牌面: ${handStr}`)
+      // 显示完整公式：baseFan × SETTLEMENT_MULT × BaoMult = 实际结算额
+      // wonFan (来自recordWinner.wonFan) = baseScore = baseFan × SETTLEMENT_MULT × globalMultiplier
+      // 但最终赔付额 = baseScore × BaoMult（互包时）；所以用 settleAmount / BaoMult 反推
+      // 为清晰起见，直接显示: baseFan / SETTLEMENT_MULT(10) / globalMultiplier(来自header) / 最终点
+      const displayBaseFan = win.baseFan ?? '?'
+      const globalMultStr = multiplier != null ? multiplier.toString() : '?'
+      const wonFanDisplay = (wonFan != null) ? wonFan.toString() : '?'
+      lines.push(`  - 胡牌方式: ${win.isSelfDraw ? '自摸' : '放冲'}`)
+      lines.push(`  - 公式分解: 基础番${displayBaseFan} × 结算倍数10 × 全局倍数${globalMultStr} = 最终点${wonFanDisplay}`)
+      lines.push(`  - 手牌: ${handStr || '—'}（${win.isSelfDraw ? '自摸' : '捉冲'}时含进牌）`)
       lines.push(`  - 门口牌(吃/碰/杠): ${meldsStr !== '无' ? meldsStr : '无'}`)
       lines.push(`  - 花牌: ${flowersStr}`)
       lines.push(`  - 是否门清: ${menqingStr}`)
@@ -380,12 +388,16 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
 
 
     if (settlementLog.length > 0) {
+      const SETTLEMENT_MULT = 10  // 建房参数，结算时固定乘数
       lines.push('**结算逐笔明细:**')
       for (const s of settlementLog) {
         const amt = Math.abs(s.amount || 0)
-        const fan = s.fan ?? '?'
-        const basePoints = (fan !== '?' && fan > 0) ? Math.round(amt / fan) : '?'
-        lines.push(`  [${s.reason || '结算'}] ${s.from} -> ${s.to}: ${amt} (${fan}×${basePoints}=${amt})`)
+        const fan = s.fan ?? '?'  // baseFan
+        const gm = s.mult ?? multiplier ?? '?'  // BaoMult（来自settlement log）
+        const fanStr = fan !== '?' ? fan : '?'
+        const gmStr = gm !== '?' ? gm : '?'
+        // 公式: baseFan × SETTLEMENT_MULT(=10) × BaoMult = settleAmount
+        lines.push(`  [${s.reason || '结算'}] ${s.from} -> ${s.to}: ${amt} (${fanStr}×${SETTLEMENT_MULT}×${gmStr}=${amt})`)
       }
       lines.push('')
     }
