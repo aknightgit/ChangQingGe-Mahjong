@@ -1643,7 +1643,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       melds: meldStrs,
       flowers: p.flowerTiles.map(t => tileStr(t)),
       isSelfDraw, wonFan, baseFan, winHandType: p.winHandType || '', roundNum,
-      wildTile: wildTiles.length > 0 ? tileStr({suit: wildSuit, value: wildVal, id: '' }) : '(无百搭)', wildTileValue: wildVal ?? 0,
+      wildTile: (wildSuit && wildVal) ? tileStr({suit: wildSuit, value: wildVal, id: '' }) : '(无百搭)', wildTileValue: wildVal ?? 0,
       isMenQing: p.exposedMelds.length === 0,
       winningTile,
     })
