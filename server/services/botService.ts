@@ -268,7 +268,18 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
   const nearWeightFactor = isEarlyPhase ? 1.25 : (isMidPhase ? 0.9 : 0.75)
   const pairWeightFactor = isEarlyPhase ? 0.9 : (isMidPhase ? 1.25 : 1.1)
   const tripletWeightFactor = isEarlyPhase ? 0.85 : (isMidPhase ? 1.2 : 1.25)
-  const routeBiasFactor = isEarlyPhase ? 0.35 : (isMidPhase ? 0.75 : 1.0)
+  // hand route bias: prefer specific routes when dominant suit count is high
+  // hand5~7RouteBias params trained but unused in game server (P0 dead-code fix)
+  const handQuality = dominantNumberSuitCount >= 7 ? 7
+    : dominantNumberSuitCount >= 6 ? 6
+    : dominantNumberSuitCount >= 5 ? 5 : 0
+  const handRouteBias = handQuality >= 7 ? (policy.hand7RouteBias || 0.9)
+    : handQuality >= 6 ? (policy.hand6RouteBias || 0.6)
+    : handQuality >= 5 ? (policy.hand5RouteBias || 0.3)
+    : 0
+  // Blend phase-based factor with hand-size-based route bias
+  const phaseFactor = isEarlyPhase ? 0.35 : (isMidPhase ? 0.75 : 1.0)
+  const routeBiasFactor = Math.max(phaseFactor, handRouteBias)
 
   const groups = groupTiles(hand)
   const tileKey = `${tile.suit}-${tile.value}`
