@@ -1737,16 +1737,35 @@ class GameManager {
 
     if (otherPlayersPending.length > 0) {
       // 决策犹豫期内 → 检查高优先级玩家,触发审批
+      // 优先级: HU > KONG > PENG > CHOW
       const { huCandidates, pengCandidates, kongCandidates } = this.checkHighPriorityCandidates(game, player.id, discardedTile);
-      if (huCandidates.length > 0 || pengCandidates.length > 0) {
+      
+      // 只要有任何高优先级玩家(HU/KONG/PENG)能响应,就需要审批
+      if (huCandidates.length > 0 || pengCandidates.length > 0 || kongCandidates.length > 0) {
         const candidates: Array<{ playerId: string; availableActions: string[] }> = [];
-        for (const pid of huCandidates) candidates.push({ playerId: pid, availableActions: ['hu'] });
+        // HU 最高优先级
+        for (const pid of huCandidates) {
+          candidates.push({ playerId: pid, availableActions: ['hu'] });
+        }
+        // KONG 次高优先级
+        for (const pid of kongCandidates) {
+          const existing = candidates.find(c => c.playerId === pid);
+          if (existing) {
+            if (!existing.availableActions.includes('hu')) existing.availableActions.push('kong');
+          } else {
+            candidates.push({ playerId: pid, availableActions: ['kong'] });
+          }
+        }
+        // PENG 最低优先级
         for (const pid of pengCandidates) {
           const existing = candidates.find(c => c.playerId === pid);
-          const actions = ['peng'];
-          if (kongCandidates.includes(pid)) actions.push('kong');
-          if (existing) { existing.availableActions.push(...actions); }
-          else { candidates.push({ playerId: pid, availableActions: actions }); }
+          if (existing) {
+            if (!existing.availableActions.includes('hu') && !existing.availableActions.includes('kong')) {
+              existing.availableActions.push('peng');
+            }
+          } else {
+            candidates.push({ playerId: pid, availableActions: ['peng'] });
+          }
         }
         this.startApproval(game, player.id, 'chow', candidates, discardedTile);
         return;
