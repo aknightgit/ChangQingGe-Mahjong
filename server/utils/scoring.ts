@@ -640,6 +640,7 @@ function getFixedFanName(type: HandType, isSelfDrawn: boolean, isKongFlower: boo
     return '大吊';
   }
   switch (type) {
+    case HandType.ALL_TRIPLETS: return '碰碰胡';
     case HandType.FENG_PENG: return '风碰';
     case HandType.ALL_WIND: return '风一色';
     case HandType.QING_PENG: return '清碰';

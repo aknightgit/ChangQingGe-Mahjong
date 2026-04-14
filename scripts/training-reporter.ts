@@ -370,11 +370,14 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
       lines.push('')
     }
 
+    lines.push('**三口/四口关系:**')
     if (relLines.length > 0) {
-      lines.push('**三口/四口关系:**')
       for (const r of relLines) lines.push(r)
-      lines.push('')
+    } else {
+      lines.push('  无')
     }
+    lines.push('')
+
 
     if (settlementLog.length > 0) {
       lines.push('**结算逐笔明细:**')

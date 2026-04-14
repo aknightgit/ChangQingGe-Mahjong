@@ -2301,11 +2301,14 @@ function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy
       }
     }
   }
+  lines.push('')
+  lines.push('- 三口/四口关系')
   if (baoRelations.length > 0) {
-    lines.push('')
-    lines.push('- 三口/四口关系')
     lines.push(...baoRelations)
+  } else {
+    lines.push('  无')
   }
+
 
   // 结算逐笔明细
   lines.push('')
@@ -2695,11 +2698,14 @@ let finalEvalLines: string[] = []
           }
         }
       }
+      finalEvalLines.push('')
+      finalEvalLines.push('- 三口/四口关系')
       if (gBao.length > 0) {
-        finalEvalLines.push('')
-        finalEvalLines.push('- 三口/四口关系')
         finalEvalLines.push(...gBao)
+      } else {
+        finalEvalLines.push('  无')
       }
+
 
       // 结算明细
       finalEvalLines.push('')
