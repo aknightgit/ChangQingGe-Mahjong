@@ -2088,7 +2088,6 @@ class GameManager {
     if (tripletIndex === -1) return;
 
     // 抢杠检查:仅补杠可被抢
-    const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
     const robbers: PendingAction[] = [];
 
     for (const candidate of game.players) {
@@ -2098,10 +2097,7 @@ class GameManager {
       const testHand = [...candidate.hand.concealedTiles, tile];
       const winCheck = canWin(testHand, candidate.hand.exposedMelds.length, game.customScoringMode || null);
       if (!winCheck.canWin) continue;
-      // 牌型校验:必须有有效牌型
-      const robHandTypes = detectHandTypes(testHand, candidate.hand.exposedMelds, false, candidate.hand.flowerTiles.length, null, game.wildTileGroup);
-      if (robHandTypes.length === 0) continue;
-
+      const flowerCount = candidate.hand.flowerTiles.length;
       // 规则: 碰碰胡/混一色抢杠需要检查门口有花 or 风向刻 or 杠牌
       // 其他更大牌型(风碰/清碰/风一色等)不需要检查，直接允许抢
       const robHandTypes = detectHandTypes(
