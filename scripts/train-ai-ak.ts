@@ -2160,7 +2160,6 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         turnSnapshots,
       }
     }
-  }
   // 牌墙耗尽：循环正常结束后（consecutiveDraws 未超限但 wall 已空）
   if (winnersThisGame.length > 0) {
     return buildResult(winnersThisGame[0].playerIndex, '流局', 0, '流局', 0, undefined)
