@@ -257,19 +257,22 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
   lines.push('| 牌型 | 局数 | 占比 | K哥目标 |')
   lines.push('|------|------|------|---------|')
   const dist: Record<string, number> = {}
-  // 计算按 gameIdx 去重后的真实胡牌局数（多人胡同一局只算1局）
-  const winningGameIndices = new Set<number>()
+  // 按 gameIdx 分组，同一局多个赢家的同一牌型只算1次（避免多人胡导致比例>100%）
+  const gameTypeMap = new Map<number, Set<string>>()
   if (allWinningGames && allWinningGames.length > 0) {
     for (const w of allWinningGames) {
-      winningGameIndices.add(w.gameIdx)
+      if (!gameTypeMap.has(w.gameIdx)) gameTypeMap.set(w.gameIdx, new Set())
       const types = w.handTypes && w.handTypes.length > 0 ? w.handTypes : []
-      for (const t of types) dist[t] = (dist[t] || 0) + 1
+      for (const t of types) gameTypeMap.get(w.gameIdx)!.add(t)
     }
   } else if (metrics.handTypeDist) {
     for (const [k, v] of Object.entries(metrics.handTypeDist)) dist[k] = (dist[k] || 0) + (v || 0)
   }
-  // winnerInstances = 真实胡牌局数（按gameIdx去重）
-  const realWinnerInstances = winningGameIndices.size
+  // 同一局的每个牌型只出现1次，然后汇总
+  for (const typeSet of gameTypeMap.values()) {
+    for (const t of typeSet) dist[t] = (dist[t] || 0) + 1
+  }
+  const realWinnerInstances = gameTypeMap.size
   const TYPES: [string, string][] = [
     ['混一色', '≥40%'],
     ['碰碰胡', '>25%'],
@@ -337,7 +340,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
     for (const name of Object.keys(snapPlayers)) {
       const ms: number[] = snapPlayers[name].meldSources || []
       for (let ci = 0; ci < ms.length; ci++) {
-        if (ms[ci] > 0) {
+        if (ms[ci] >= 3) {  // 【修复】单向≥3口才算三口，≥4口算四口（之前误判为>0）
           const fromName = lastSnap.players[ci]?.name || `玩家${ci}`
           const level = ms[ci] >= 4 ? '四口' : '三口'
           relLines.push(`  ${fromName} <-> ${name}: ${level} (${fromName}->${name}:${ms[ci]}, ${name}->${fromName}:?)`)
@@ -357,7 +360,8 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
         if (snapDiscard && !handStr.includes(snapDiscard)) handStr += ' + ' + snapDiscard + '（捉冲）'
       }
       const meldsStr = Array.isArray(win.melds) ? win.melds.join(' / ') : (win.melds || '无')
-      const handTypesStr = win.handTypes?.join(', ') || '—'
+      const handTypesStr = win.handTypes?.length ? win.handTypes.join(', ') : '—'
+      lines.push(`  - 胡牌牌型: ${handTypesStr}`)
       const flowersArr: string[] = (win as any).flowers || []
       const flowersStr = flowersArr.length > 0 ? flowersArr.join(', ') : '无'
       const menqingStr = win.isMenQing ? '是' : '否'

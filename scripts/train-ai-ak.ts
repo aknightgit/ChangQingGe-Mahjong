@@ -1443,7 +1443,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
 interface GameEvent { turn: number; player: string; action: string; detail: string }
 interface SettlementEntry { from: string; to: string; amount: number; reason: string; mult?: number }
 interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers: string[]; meldSources: number[]; wildCount: number; wildTile: string; wonFan?: number; winHandType?: string; status: string }
-interface WinnerInfo { playerIndex: number; name: string; hand: string; melds: string[]; flowers: string[]; isSelfDraw: boolean; wonFan: number; baseFan: number; winHandType: string; roundNum: number; wildTile: string; wildTileValue?: number; isMenQing: boolean; winningTile?: string }
+interface WinnerInfo { playerIndex: number; name: string; hand: string; melds: string[]; flowers: string[]; isSelfDraw: boolean; wonFan: number; baseFan: number; winHandType: string; roundNum: number; wildTile: string; wildTileValue?: number; isMenQing: boolean; winningTile?: string; handTypes: string[] }
 
 interface TurnSnapshot {
   turn: number
@@ -1579,9 +1579,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       snapshots: recordSnapshots(),
       winnerPlayer,
       roundNum: turn,
-      winnersThisGame,
-      turnSnapshots,
-      gameMeta
+      winnersThisGame: [...winnersThisGame],  // 传出快照，防止 return 后游戏循环继续执行导致数组污染
+      turnSnapshots
     }
   }
 
@@ -1629,8 +1628,12 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     const wildSuit = p.wildSuit, wildVal = p.wildValue
     const isWT2 = (t: Tile) => wildSuit && wildVal ? t.suit === wildSuit && t.value === wildVal : false
     const allTiles = [...p.hand, ...p.exposedMelds.flatMap(m => m.tiles)]
-    const normalTiles = allTiles.filter(t => !isFlower(t) && !isWT2(t))
-    const wildTiles = allTiles.filter(t => !isFlower(t) && isWT2(t))
+    // 【修复】排除 winningTile（已胡的那张牌），避免手牌显示 14+ 张
+    const filteredTiles = winningTile
+      ? allTiles.filter(t => tileStr(t) !== winningTile)
+      : allTiles
+    const normalTiles = filteredTiles.filter(t => !isFlower(t) && !isWT2(t))
+    const wildTiles = filteredTiles.filter(t => !isFlower(t) && isWT2(t))
     const suitGroups: string[] = []
     for (const suit of ['Wan','Tong','Tiao'] as TileSuit[]) {
       const normal = normalTiles.filter(t => t.suit === suit)
@@ -1641,6 +1644,9 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     const handStr = suitGroups.join(' ; ')
     // 门口牌分组（百搭不在这里重复显示，手牌里已标(*)）
     const meldStrs = formatMelds(p.exposedMelds, wildTiles.length)
+    // 【新增】计算牌型中文名（用于玩家明细显示）
+    const typeStrs = p.winHandType ? p.winHandType.split(',').filter(t => t.length > 0 && t !== HandType.STANDARD) : []
+    const typeNames = typeStrs.map(t => HAND_TYPE_NAMES[t as HandType] || t).filter(t => t)
     winnersThisGame.push({
       playerIndex: idx, name: p.name,
       hand: handStr,
@@ -1650,6 +1656,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       wildTile: (wildSuit && wildVal) ? tileStr({suit: wildSuit, value: wildVal, id: '' }) : '(无百搭)', wildTileValue: wildVal ?? 0,
       isMenQing: p.exposedMelds.length === 0,
       winningTile,
+      handTypes: typeNames,  // 【新增】用于报告玩家明细
     })
   }
   // 快照：只记录字符串化数据，避免引用悬浮
