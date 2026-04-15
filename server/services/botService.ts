@@ -935,6 +935,7 @@ export async function shouldClaimPendingAction(
 ): Promise<ActionType> {
   const policy = getPolicyForPlayer(player)
   const hand = player.hand.concealedTiles
+  const exposedCount = player.hand.exposedMelds.length
   const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id)
   const claimTile = pendingAction?.tile
 
@@ -1083,6 +1084,7 @@ export async function shouldClaimPendingAction(
         }
 
         // === 门清碰牌惩罚（比吃牌损失更大）===
+        const meldCount = exposedCount
         if (meldCount === 0 && (policy.menqingKeepBonus || 0) > 0) {
           pengTune -= (policy.menqingKeepBonus || 0) * 0.4
         }
