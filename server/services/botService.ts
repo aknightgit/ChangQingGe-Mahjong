@@ -1240,12 +1240,30 @@ export async function shouldClaimPendingAction(
   // 当分数差=0时，baseChance 直接决定动作概率
   const baseChances: Record<ActionType, number> = {
     [ActionType.PASS]: 0.5,  // PASS无先验（50/50）
-    [ActionType.PENG]: policy.pengChance ?? 0.6,
+    [ActionType.PENG]: policy.pengChance ?? 0.4,  // P1: 降低碰牌概率
     [ActionType.KONG]: policy.kongChance ?? 0.7,
-    [ActionType.CHOW]: policy.chowChance ?? 0.3,
+    [ActionType.CHOW]: policy.chowChance ?? 0.6,  // P1: 提高吃牌概率
     [ActionType.HU]: 1.0,    // 胡牌100%（已在HU分支处理）
   }
 
+  // P0: 强制胡牌训练 —— 手牌只剩 1 张且能胡时，优先自摸胡牌
+  const singleTileHand = player.hand.concealedTiles.length === 1
+  const claimTile = game.drawTile(player.id) || game.claimedTiles.find((t, i) => game.claimedTiles.slice(0, i).reduce((acc, t) => acc + (isWildTile(t, game) ? 4 : 1), 0) >= player.id)
+
+  // 单张手牌能胡时，优先自摸胡牌（不做 canWin 检查，直接胡牌）
+  if (singleTileHand && claimTile) {
+    const isWild = isWildTile(claimTile, game)
+    const wildCount = player.hand.exposedMelds.reduce((acc, meld) => acc + meld.tiles.filter(t => isWildTile(t, game)).length, 0)
+    const totalWildCount = wildCount + (isWild ? 1 : 0)
+    
+    // 即使只有 1 张百搭，也要胡牌（胡牌优先于摸牌）
+    if (totalWildCount <= 1) {
+      bestAction = ActionType.HU
+      return bestAction
+    }
+  }
+
+  // 标准评分流程
   let bestAction = ActionType.PASS
   let best = actionScores.get(ActionType.PASS)!
 
