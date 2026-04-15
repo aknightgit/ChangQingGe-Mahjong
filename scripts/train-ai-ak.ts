@@ -1628,8 +1628,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     const wildSuit = p.wildSuit, wildVal = p.wildValue
     const isWT2 = (t: Tile) => wildSuit && wildVal ? t.suit === wildSuit && t.value === wildVal : false
     const allTiles = [...p.hand, ...p.exposedMelds.flatMap(m => m.tiles)]
-    // 【修复】排除 winningTile（已胡的那张牌），避免手牌显示 14+ 张
-    const filteredTiles = winningTile
+    // 【修复】自摸时 winningTile 已在 p.hand 里（摸牌阶段），排除它避免显示14+张；捉冲时 winningTile 不在手牌里，不过滤
+    const filteredTiles = (isSelfDraw && winningTile)
       ? allTiles.filter(t => tileStr(t) !== winningTile)
       : allTiles
     const normalTiles = filteredTiles.filter(t => !isFlower(t) && !isWT2(t))
