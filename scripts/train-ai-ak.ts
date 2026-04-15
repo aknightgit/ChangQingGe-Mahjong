@@ -147,7 +147,7 @@ const DEFAULT_POLICY: BotPolicy = {
   selfWinWildBoost: 0.1, discardHuWildPenalty: 0.4, discardHuMenQingPenalty: 0.14,
   pengChance: 0.7, kongChance: 0.47, chowChance: 0.5, anKongChance: 0.95,  // K哥: 碰率0.7/吃率0.5可训练，吃率上限0.8防无脑吃
   pengWildBoost: 0.06, kongWildBoost: 0.14, chowWildPenalty: 0.18,
-  menqingKeepBonus: 0.0, meldPenalty: 0.05,  // K哥基线训练：门清bonus最低
+  menqingKeepBonus: 0, meldPenalty: 0.05,  // K哥基线训练：门清bonus最低
   allPungsPursuit: 1.5, pureFlushPursuit: 1.5, halfFlushWeight: 1.0,
   allHonorsPursuit: 1.0, allHonorsPungsPursuit: 1.0,
   qingPengPursuit: 1.5, hunPengPursuit: 1.5,
@@ -2106,35 +2106,6 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       // 放炮胡检查（claim后draw前，手牌=expectedLen）
       const handAfterChow = normalizeHand(nextP.hand)
       if (canWin(handAfterChow, nextP.exposedMelds, makeWT(nextP), false).canWin) {
-        // [DEBUG FORCE HU] 强制100%捉冲
-        const huChance = 1.0
-        if (Math.random() < huChance) {
-          const { finalPoints: score, baseFan, handTypeName: htn3 } = calcScore(nextP, false, false, g.gameMultiplier)
-          nextP.score += score; g.players[curr].score -= score
-          applyBaoSettlement(g, nextPlayer, false, curr, score, 1)
-          // score = finalPoints，已包含全局倍数，直接用
-          recordPayment(g.players[curr].name, nextP.name, score, '吃后放炮', baseFan, g.gameMultiplier)
-          log(nextP.name, '吃后放炮胡', `${tileStr(discard)} [${score}]`)
-          nextP.wonFan = score
-          nextP.winHandType = htn3 || '普通吃炮'
-          nextP.status = 'won'
-          finishedPlayers.add(nextPlayer)
-          recordWinner(nextP, nextPlayer, false, score, baseFan, turn, tileStr(discard))
-          log(nextP.name, '胡牌(血战)', `吃后放冲 [${score}]`)
-          if (finishedPlayers.size >= 3) {
-            return buildResult(nextPlayer, '放冲', score, nextP.winHandType || '放冲', score, curr)
-          }
-          g.current = (nextPlayer + 1) % 4
-          continue
-        }
-      }
-      // 吃后自摸：必须先摸牌，删掉这里的错误判断
-      for (const ak of canAnKong(nextP)) {
-        applyAnKong(nextP, ak)
-        const extra = drawTile(g, nextP)
-        if (!extra) {
-          console.error(`⚠️ 吃后自摸补摸失败(牌墙耗尽) turn=${turn}`)
-          return { winner: -1, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: [], roundNum: turn, winnersThisGame: [], turnSnapshots } as GameResult
         }
         checkHandInvariant(nextP, 'draw')  // 吃后加杠仍可摸牌（杠不在禁止范围内）
         if (extra && !isFlower(extra)) {
