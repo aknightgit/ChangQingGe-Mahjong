@@ -2407,6 +2407,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
             wonFan: w.wonFan, baseFan: w.baseFan, winHandType: w.winHandType,
             wildTile: w.wildTile, wildTileValue: w.wildTileValue,
             isMenQing: w.isMenQing, winningTile: w.winningTile,
+            flowers: w.flowers,
           })
         }
       }
