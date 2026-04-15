@@ -2408,8 +2408,8 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   const menqingWinRate = winnerInstances > 0 ? menqingWinGames / winnerInstances : 0
 
   let mf = 0
-  mf -= Math.max(0, drawRate - 0.10) * 1000  // 流局率惩罚（目标<10%）
-  mf += Math.max(0, (1 - drawRate) - 0.90) * 500  // 胡牌率奖励（目标>=90%）
+  mf -= Math.max(0, drawRate - 0.10) * 5000  // 流局率惩罚（目标<10%）
+  mf += Math.max(0, (1 - drawRate) - 0.90) * 2500  // 胡牌率奖励（目标>=90%）
   mf -= Math.abs(selfDrawRate - 0.50) * 200    // 自摸率偏差（目标50%）
   mf -= Math.abs(discardWinRate - 0.50) * 200  // 捉冲率偏差（目标50%）
   // 血战率（目标>80%）
