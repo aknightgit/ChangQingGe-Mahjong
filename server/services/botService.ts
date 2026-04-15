@@ -268,6 +268,20 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
   const nearWeightFactor = isEarlyPhase ? 1.25 : (isMidPhase ? 0.9 : 0.75)
   const pairWeightFactor = isEarlyPhase ? 0.9 : (isMidPhase ? 1.25 : 1.1)
   const tripletWeightFactor = isEarlyPhase ? 0.85 : (isMidPhase ? 1.2 : 1.25)
+  // 目标牌型导向：清一色/混一色/风一色 + 碰碰胡路线
+  const suitCounts: Record<string, number> = {}
+  let honorCount = 0
+  for (const t of hand) {
+    if (t.suit === TileSuit.FLOWER) continue
+    suitCounts[t.suit] = (suitCounts[t.suit] || 0) + 1
+    if (isWind(t) || isDragon(t)) honorCount++
+  }
+  const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
+  const dominantNumberSuit = numberSuits
+    .filter(s => (suitCounts[s] || 0) > 0)
+    .sort((a, b) => (suitCounts[b] || 0) - (suitCounts[a] || 0))[0] || null
+  const dominantNumberSuitCount = dominantNumberSuit ? (suitCounts[dominantNumberSuit] || 0) : 0
+  const honorFocus = honorCount >= 6
   // hand route bias: prefer specific routes when dominant suit count is high
   // hand5~7RouteBias params trained but unused in game server (P0 dead-code fix)
   const handQuality = dominantNumberSuitCount >= 7 ? 7
@@ -284,21 +298,6 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
   const groups = groupTiles(hand)
   const tileKey = `${tile.suit}-${tile.value}`
   const sameTypeCount = groups.get(tileKey)?.length || 0
-
-  // 目标牌型导向：清一色/混一色/风一色 + 碰碰胡路线
-  const suitCounts: Record<string, number> = {}
-  let honorCount = 0
-  for (const t of hand) {
-    if (t.suit === TileSuit.FLOWER) continue
-    suitCounts[t.suit] = (suitCounts[t.suit] || 0) + 1
-    if (isWind(t) || isDragon(t)) honorCount++
-  }
-  const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
-  const dominantNumberSuit = numberSuits
-    .filter(s => (suitCounts[s] || 0) > 0)
-    .sort((a, b) => (suitCounts[b] || 0) - (suitCounts[a] || 0))[0] || null
-  const dominantNumberSuitCount = dominantNumberSuit ? (suitCounts[dominantNumberSuit] || 0) : 0
-  const honorFocus = honorCount >= 6
 
   // === 1. Wild tile: penalize discarding, scaled by wild count (wild0~3Aggression) ===
   if (isWildTile(tile, game)) {
