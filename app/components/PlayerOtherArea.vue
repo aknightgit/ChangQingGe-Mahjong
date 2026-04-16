@@ -223,8 +223,6 @@ const isConcealedMeld = (meld: Meld): boolean => {
   flex-direction: row;
   gap: v-bind('meldGap + "px"');
   flex-shrink: 0;
-  flex-wrap: wrap;
-  max-width: 100%;
 }
 
 /* ============================================================
@@ -242,8 +240,6 @@ const isConcealedMeld = (meld: Meld): boolean => {
   flex-direction: column;
   gap: v-bind('meldGap + "px"');
   flex-shrink: 0;
-  flex-wrap: wrap;
-  max-height: 80px;
 }
 
 /* ============================================================
