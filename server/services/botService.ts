@@ -187,7 +187,7 @@ function loadCharacterPolicy(botName: string): any {
         kongChance: 0.5,
         chowChance: 0.65,
         chowWildPenalty: 0.05,
-        menqingKeepBonus: 0.8,  // 门清执念：越高越不愿吃牌
+        menqingKeepBonus: 0.3,  // 门清执念：降低意愿，AI更愿意吃牌做牌
         allPungsPursuit: 0,     // 碰碰胡追求：越高越不愿吃顺
         pureFlushPursuit: 0,
         halfFlushWeight: 0,
@@ -776,11 +776,11 @@ function evaluateChowValue(
   // === 基础分 ===
   let score = policy.chowChance
 
-  // === A. 门清执念 menqingKeepBonus（替代硬编码0.85）===
-  //    menqingKeepBonus 越大 → 门清时吃牌惩罚越重
-  //    公式：惩罚 = menqingKeepBonus × 0.25，上限 0.7（留 0.3 最低分）
+  // === A. 门清执念 menqingKeepBonus ===
+  //    menqingKeepBonus 越大 → 门清时吃牌惩罚越重 → 越不愿吃
+  //    公式：惩罚 = menqingKeepBonus × 0.5，上限 0.6（留 0.4 最低分）
   if (meldCount === 0) {
-    const menqingPenalty = Math.min(0.7, (policy.menqingKeepBonus || 0) * 0.25)
+    const menqingPenalty = Math.min(0.6, (policy.menqingKeepBonus || 0) * 0.5)
     score -= menqingPenalty
   }
 
