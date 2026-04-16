@@ -2543,22 +2543,26 @@ const forceDiscard = async (p: Player) => {
 :deep(.discard-zone--top) {
   top: 31%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) rotate(180deg);
+  height: 200%;
 }
 :deep(.discard-zone--bottom) {
   bottom: 31%;
   left: 50%;
   transform: translateX(-50%);
+  height: 200%;
 }
 :deep(.discard-zone--left) {
   top: 50%;
-  left: calc(21.6% + 20px);
+  left: 20%;
   transform: translateY(-50%) rotate(90deg);
+  height: 200%;
 }
 :deep(.discard-zone--right) {
   top: 50%;
-  right: calc(21.6% + 20px);
+  right: 20%;
   transform: translateY(-50%) rotate(-90deg);
+  height: 200%;
 }
 
 /* ===== 扩展信息区 ===== */
