@@ -185,7 +185,7 @@ function loadCharacterPolicy(botName: string): any {
         kongChance: 0.5,
         chowChance: 0.65,
         chowWildPenalty: 0.05,
-        wildKeepPenalty: 1000,
+        wildKeepPenalty: 0,
         dominantSuitBonus: 3.0,
         tripletKeepBonus: 1.0,
         pairWeight: 8.0,
