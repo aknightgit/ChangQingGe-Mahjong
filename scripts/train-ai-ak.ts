@@ -346,7 +346,7 @@ const PARAM_RANGES: Record<string, { min: number; max: number; step: number }> =
   sequenceVsTripletBias:      { min: -2.0, max: 2.0,  step: 0.1 },
 }
 
-function loadCharacter(name: string): BotPolicy {
+export function loadCharacter(name: string): BotPolicy {
   const filePath = path.join(CHAR_DIR, `${name}.json`)
   try {
     const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
@@ -357,7 +357,7 @@ function loadCharacter(name: string): BotPolicy {
   }
 }
 
-function saveCharacter(name: string, policy: BotPolicy, metrics: any): void {
+export function saveCharacter(name: string, policy: BotPolicy, metrics: any): void {
   const filePath = path.join(CHAR_DIR, `${name}.json`)
   const data = { savedAt: new Date().toISOString(), round: 0, metrics, policy }
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')

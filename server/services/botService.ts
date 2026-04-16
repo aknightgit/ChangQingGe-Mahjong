@@ -1248,7 +1248,10 @@ export async function shouldClaimPendingAction(
 
   // P0: 强制胡牌训练 —— 手牌只剩 1 张且能胡时，优先自摸胡牌
   const singleTileHand = player.hand.concealedTiles.length === 1
-  const drawnOrClaimedTile = game.drawTile(player.id) || game.claimedTiles.find((t, i) => game.claimedTiles.slice(0, i).reduce((acc, t) => acc + (isWildTile(t, game) ? 4 : 1), 0) >= player.id)
+  // 获取刚摸的牌（手牌最后一张）或吃碰杠得到的牌
+  const drawnOrClaimedTile = player.hand.concealedTiles.length > 0
+    ? player.hand.concealedTiles[player.hand.concealedTiles.length - 1]
+    : null
 
   // 单张手牌能胡时，优先自摸胡牌（不做 canWin 检查，直接胡牌）
   if (singleTileHand && drawnOrClaimedTile) {
