@@ -1023,7 +1023,6 @@ export async function shouldClaimPendingAction(
   if (!claimTile) return ActionType.PASS
 
   const wildChecker = (t: Tile) => isWildTile(t, game)
-  const exposedCount = player.hand.exposedMelds.length
   const exclusionState = game.chowPongExclusion?.[player.id] || { firstActionSuit: null, firstActionType: null }
 
   const actionScores = new Map<ActionType, { shanten: number; effective: number; tune: number }>()

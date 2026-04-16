@@ -2751,3 +2751,5 @@ let finalEvalLines: string[] = []
 
 // Only run when executed directly (not imported)
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1])) main()
+
+}
