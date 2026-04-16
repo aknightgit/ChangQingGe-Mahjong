@@ -3224,6 +3224,12 @@ class GameManager {
           return;
         }
 
+        // 【Bug修复】机器人托管后，若未摸牌则先摸牌再出牌
+        if (!game.drawnThisTurn) {
+          console.log(`[bot-discard] ${currentP.name} has not drawn yet, drawing first...`);
+          await this.executeAction(gameId, playerId, ActionType.DRAW, undefined);
+        }
+
         const tileId = selectDiscardTile(currentP, game);
         if (tileId) {
           console.log(`[bot-discard] ${currentP.name} discarding tile: ${tileId}`);
