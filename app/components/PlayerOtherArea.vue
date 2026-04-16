@@ -170,14 +170,7 @@ const containerStyle = computed(() => {
     overflow: 'hidden',
     width: containerWidth.value,
   }
-  // 左家整体旋转90°，右家整体旋转-90°
-  if (props.position === 'left') {
-    base['transform'] = 'rotate(90deg)'
-    base['transformOrigin'] = 'center center'
-  } else if (props.position === 'right') {
-    base['transform'] = 'rotate(-90deg)'
-    base['transformOrigin'] = 'center center'
-  }
+  // 左右家不再整体旋转，与座位容器方向一致（column）
   return base
 })
 
