@@ -2789,7 +2789,7 @@ const forceDiscard = async (p: Player) => {
   left: 50%;
   transform: translateX(-50%) scale(1.2) translateY(-5%);
   transform-origin: bottom center;
-  width: 62%;
+  width: 56%;
   height: auto;
 }
 
