@@ -109,10 +109,12 @@ function softScoreWins(
   const currentEffective = 0 // PASS没有进张增益
 
   // 分数差（对所有候选统一标准化）
+  // 重要：shanten通常吃碰前后相同（都是0），tune是实际区分因素
+  // tune权重从0.1提升到1.0，让evaluateChowValue的策略评估真正生效
   const scoreDiff =
     (-s.shanten - 0) * 1 +           // shanten越低越好
-    (s.effective - best.effective) * 0.1 + // effective进张
-    (s.tune - best.tune) * 0.1        // tune策略分
+    (s.effective - best.effective) * 1 + // effective进张（与tune同等权重）
+    (s.tune - best.tune) * 1         // tune策略分（提升权重，真正影响决策）
 
   // 先验差（PASS的logit=0）
   const priorDiff = chanceToLogit(baseChance)
@@ -185,6 +187,10 @@ function loadCharacterPolicy(botName: string): any {
         kongChance: 0.5,
         chowChance: 0.65,
         chowWildPenalty: 0.05,
+        menqingKeepBonus: 0.8,  // 门清执念：越高越不愿吃牌
+        allPungsPursuit: 0,     // 碰碰胡追求：越高越不愿吃顺
+        pureFlushPursuit: 0,
+        halfFlushWeight: 0,
         wildKeepPenalty: 10,
         dominantSuitBonus: 3.0,
         tripletKeepBonus: 1.0,
