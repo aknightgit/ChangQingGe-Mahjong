@@ -216,6 +216,7 @@ const isConcealedMeld = (meld: Meld): boolean => {
   flex-direction: row;
   gap: v-bind('handGap + "px"');
   flex-shrink: 0;
+  padding: 5px 0;
 }
 
 .meld-row--top {
@@ -223,6 +224,7 @@ const isConcealedMeld = (meld: Meld): boolean => {
   flex-direction: row;
   gap: v-bind('meldGap + "px"');
   flex-shrink: 0;
+  padding: 5px 0;
 }
 
 /* ============================================================

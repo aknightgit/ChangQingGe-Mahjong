@@ -2773,7 +2773,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .seat-top {
-  top: 10%;
+  top: 18%;
   left: 50%;
   transform: translateX(-50%) rotate(180deg);
   width: 75%;
