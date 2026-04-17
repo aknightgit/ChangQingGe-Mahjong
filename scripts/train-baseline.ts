@@ -2043,7 +2043,7 @@ async function main() {
       await saveRoundToMariaDB(round, bestEvalResult, roundBestPolicy)
       const report = buildRoundReport(round, bestEvalResult, roundBestPolicy, AI_NAMES, 'train-baseline.ts')
       roundReports.push(report)
-      const filename = writeRoundFile(OUT_DIR, report, true)
+      const filename = writeRoundFile(OUT_DIR, report, false)  // 主日志不显示血战明细
       console.log(`  → 轮次详情已保存: ${filename}`)
     }
   }
@@ -2139,7 +2139,7 @@ async function main() {
   const mainOut: string[] = [...mainHeader, '## 基线成绩(第0轮)']
   const baseEval = evaluatePolicy(bestPolicy, GAMES_PER_ROUND)
   mainOut.push(`胡牌率=${((1-baseEval.draws/GAMES_PER_ROUND)*100).toFixed(1)}%  流局率=${(baseEval.draws/GAMES_PER_ROUND*100).toFixed(1)}%  Fitness=${baseEval.metricsFitness.toFixed(2)}`)
-  for (const r of roundReports) mainOut.push(formatRoundReport(r, true))
+  for (const r of roundReports) mainOut.push(formatRoundReport(r, false))  // 主日志不显示血战明细
   fs.writeFileSync(mdFile, mainOut.join('\n'), 'utf-8')
   fs.writeFileSync(policyFile, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
   fs.writeFileSync(policyLatest, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
