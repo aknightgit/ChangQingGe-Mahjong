@@ -1037,6 +1037,11 @@ interface GameResult {
   totalPot: number
   turnSnapshots: TurnSnapshot[]  // 每回合快照(用于单局详细分析)
   isDraw?: boolean
+  // 游戏全局上下文（用于报告渲染）
+  gameMeta: {
+    dicePoints: number[]; diceMultiplier: number; inheritanceMultiplier: number
+    flowMultiplier: number; prevRoundWasDraw: boolean; prevRoundWasRebel: boolean
+  }
   // 每个赢家的详细信息
   winnerDetails: Array<{
     name: string; winMode: string; handType: string; baseFan: number; finalPoints: number
@@ -1048,13 +1053,25 @@ interface GameResult {
 // 每局有人胡牌后,记录赢家,剩余玩家继续开新局,直到最后1人
 // 注意:每局都是完整4人局(runGame不改),通过记录哪些玩家已赢来模拟"退出"
 function runGameWithFightToLast(policy: BotPolicy): {
-  winners: { idx: number; selfDraw: boolean; score: number; snapshot: PlayerSnapshot; handType: string; wonFan: number; winHandType: string }[]
+  winners: Array<{
+    idx: number; selfDraw: boolean; score: number; snapshot: PlayerSnapshot
+    handType: string; wonFan: number; winHandType: string
+    dicePoints: number[]; diceMultiplier: number; wildTile: string; roundNum: number
+    gameMeta: { dicePoints: number[]; diceMultiplier: number; inheritanceMultiplier: number; flowMultiplier: number; prevRoundWasDraw: boolean; prevRoundWasRebel: boolean }
+    winnerDetails: Array<{ name: string; winMode: string; handType: string; baseFan: number; finalPoints: number; handTiles: string; melds: string[]; flowers: string[]; isMenQing: boolean; from?: string }>
+  }>
   totalSubGames: number
   allEvents: GameEvent[]
   drawCount: number
   turnSnapshots: any[]
 } {
-  const winners: { idx: number; selfDraw: boolean; score: number; snapshot: PlayerSnapshot; handType: string; wonFan: number; winHandType: string }[] = []
+  const winners: Array<{
+    idx: number; selfDraw: boolean; score: number; snapshot: PlayerSnapshot
+    handType: string; wonFan: number; winHandType: string
+    dicePoints: number[]; diceMultiplier: number; wildTile: string; roundNum: number
+    gameMeta: { dicePoints: number[]; diceMultiplier: number; inheritanceMultiplier: number; flowMultiplier: number; prevRoundWasDraw: boolean; prevRoundWasRebel: boolean }
+    winnerDetails: Array<{ name: string; winMode: string; handType: string; baseFan: number; finalPoints: number; handTiles: string; melds: string[]; flowers: string[]; isMenQing: boolean; from?: string }>
+  }> = []
   const allEvents: GameEvent[] = []
   const turnSnapshots: any[] = []
   let drawCount = 0
@@ -1075,11 +1092,28 @@ function runGameWithFightToLast(policy: BotPolicy): {
     const winnerIdx = result.winner
     const winEvents = result.events.filter(e => e.action.includes('自摸'))
     const isSelfDraw = winEvents.length > 0
-    const snapshot = result.snapshots?.[winnerIdx] || { name: AI_NAMES[winnerIdx], hand: '', melds: [], flowers: [], meldSources: [0,0,0,0] }
+    const snapshot = result.snapshots?.[winnerIdx] || { name: AI_NAMES[winnerIdx], hand: '', melds: [], flowers: [], meldSources: [0,0,0,0], wildTile: '' }
     // winnerDetails[0].handType 已有 getWinInfo 计算好的正确值
     const winHandType = result.winnerDetails?.[0]?.handType || '未知'
     const wonFan = result.winnerDetails?.[0]?.finalPoints || 0
-    winners.push({ idx: winnerIdx, selfDraw: isSelfDraw, score: result.scores[winnerIdx], snapshot, handType: winHandType, wonFan, winHandType })
+    // 把 result.gameMeta (骰子/继承信息) 和 winnerDetails (花牌/门清等) 都合并进 winners
+    winners.push({
+      idx: winnerIdx,
+      selfDraw: isSelfDraw,
+      score: result.scores[winnerIdx],
+      snapshot,
+      handType: winHandType,
+      wonFan,
+      winHandType,
+      // 新增字段
+      dicePoints: [result.dice1, result.dice2],
+      diceMultiplier: result.diceMultiplier,
+      wildTile: result.wildTile || '无百搭',
+      roundNum: result.roundNum,
+      gameMeta: result.gameMeta,
+      // winnerDetails 里已有 flowers / isMenQing / baseFan / from
+      winnerDetails: result.winnerDetails || [],
+    })
     allEvents.push(...result.events)
     // 如果已经产生3个赢家(血战到最后一人),结束
     if (winners.length >= 3) break
@@ -1142,7 +1176,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     return {
       winner: winnerIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier,
       settlementLog, snapshots, roundNum: turn, wildTile: wildTileStr, wildSuit: g.wildSuit, wildValue: g.wildValue,
-      dice1, dice2, diceMultiplier, totalPot, winnerDetails, turnSnapshots
+      dice1, dice2, diceMultiplier, totalPot, winnerDetails, turnSnapshots,
+      gameMeta: { dicePoints: [dice1, dice2], diceMultiplier, inheritanceMultiplier: 1, flowMultiplier: prevRoundWasDraw ? 2 : 1, prevRoundWasDraw, prevRoundWasRebel: false }
     }
   }
 
@@ -1152,7 +1187,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     return {
       winner: -1, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier,
       settlementLog, snapshots, roundNum: turn, wildTile: wildTileStr, wildSuit: g.wildSuit, wildValue: g.wildValue,
-      dice1, dice2, diceMultiplier, totalPot, winnerDetails: [], turnSnapshots, isDraw: true
+      dice1, dice2, diceMultiplier, totalPot, winnerDetails: [], turnSnapshots, isDraw: true,
+      gameMeta: { dicePoints: [dice1, dice2], diceMultiplier, inheritanceMultiplier: 1, flowMultiplier: prevRoundWasDraw ? 2 : 1, prevRoundWasDraw, prevRoundWasRebel: false }
     }
   }
 
@@ -1777,12 +1813,34 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
         handTypes: ht && ht !== '未知' ? [ht] : ['普通'],
         hand: w.snapshot?.hand || '',
         melds: w.snapshot?.melds || [],
-        multiplier: 1,
-        roundNum: bloodResult.totalSubGames,
-        wonFan: w.wonFan,
-        winHandType: w.winHandType,
-        isMenQing: (w.snapshot?.melds || []).length === 0,
-        result: { winner: w.idx, snapshots: [w.snapshot], multiplier: 1, scores: [0,0,0,0] }
+        flowers: w.winnerDetails?.[0]?.flowers || [],
+        baseFan: w.winnerDetails?.[0]?.baseFan ?? '?',
+        isMenQing: w.winnerDetails?.[0]?.isMenQing ?? ((w.snapshot?.melds || []).length === 0),
+        // 全局倍数 = min(8, 骰子倍数 × 继承倍数 × 流局翻倍)
+        multiplier: w.gameMeta ? Math.min(8, w.gameMeta.diceMultiplier * w.gameMeta.inheritanceMultiplier * w.gameMeta.flowMultiplier) : (w.diceMultiplier || 1),
+        roundNum: w.roundNum || 1,
+        wildTile: w.wildTile || '无百搭',
+        gameMeta: w.gameMeta || {
+          dicePoints: w.dicePoints ? `${w.dicePoints[0]}+${w.dicePoints[1]}` : '?',
+          diceMultiplier: w.diceMultiplier ?? '?',
+          inheritanceMultiplier: 1,
+          prevRoundWasDraw: false,
+          prevRoundWasRebel: false,
+          flowMultiplier: 1,
+        },
+        // winnerDetails 里每个赢家的详细信息
+        winnerDetails: w.winnerDetails || [],
+        // 捉冲时的进牌（from 字段）
+        winningTile: w.winnerDetails?.[0]?.from || '',
+        result: {
+          winner: w.idx,
+          snapshots: [w.snapshot],
+          multiplier: w.diceMultiplier || 1,
+          scores: [0,0,0,0],
+          wildTile: w.wildTile || '无百搭',
+          gameMeta: w.gameMeta || { dicePoints: w.dicePoints || [0,0], diceMultiplier: w.diceMultiplier || 1, inheritanceMultiplier: 1, prevRoundWasDraw: false, prevRoundWasRebel: false, flowMultiplier: 1 },
+          winnerDetails: w.winnerDetails || [],
+        }
       })
     }
 

@@ -299,17 +299,19 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
     const result = w.result as any
     const settlementLog: any[] = result?.settlementLog || []
     const totalChips = settlementLog.reduce((sum: number, s: any) => sum + Math.abs(s.amount || 0), 0)
-    const multiplier = w.multiplier || 1
+    // 全局倍数：优先用 w.multiplier（已计算好），fallback 到 gameMeta 反算
+    const multiplier = w.multiplier || (result?.gameMeta ? Math.min(8, (result.gameMeta.diceMultiplier || 1) * (result.gameMeta.inheritanceMultiplier || 1) * (result.gameMeta.flowMultiplier || 1)) : 1)
     const wonFan = w.wonFan || 0
     const gameIdx = w.gameIdx
-    const meta = result?.gameMeta || {}
+    // 骰子/继承/流局信息：优先从 w.gameMeta（直接来自 runGame），fallback 到 result.gameMeta
+    const gm = w.gameMeta || result?.gameMeta || {}
 
-    const dicePoints = meta.dicePoints ? `${meta.dicePoints[0]}+${meta.dicePoints[1]}` : '?'
-    const diceMult = meta.diceMultiplier ?? '?'
-    const flowMult = meta.flowMultiplier ?? '?'
-    const inheritMult = meta.inheritanceMultiplier ?? '?'
-    const prevDraw = meta.prevRoundWasDraw ? '是' : '否'
-    const prevRebel = meta.prevRoundWasRebel ? '是' : '否'
+    const dicePoints = gm.dicePoints ? `${gm.dicePoints[0]}+${gm.dicePoints[1]}` : '?'
+    const diceMult = gm.diceMultiplier ?? '?'
+    const flowMult = gm.flowMultiplier ?? '?'
+    const inheritMult = gm.inheritanceMultiplier ?? '?'
+    const prevDraw = gm.prevRoundWasDraw ? '是' : '否'
+    const prevRebel = gm.prevRoundWasRebel ? '是' : '否'
 
     const winnerCount = (allWinningGames || []).filter((g: any) => g.gameIdx === gameIdx).length
     lines.push(`**${label}局号: ${gameIdx}**`)
@@ -558,7 +560,7 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
     for (const pp of snap.players) {
       const act = circleActions[pp.name] || { drawn: '-', discarded: '-', newFlowers: [] }
       // 动作序列（按K哥格式）
-      const flowerStr = act.newFlowers.length > 0 ? `补${len(act.newFlowers)}花 ` : ''
+      const flowerStr = act.newFlowers.length > 0 ? `补${act.newFlowers.length}花 ` : ''
       const drawStr = act.drawn !== '-' ? `摸${act.drawn} ` : ''
       const discardStr = act.discarded !== '-' ? `打${act.discarded}` : ''
       const actionSeq = flowerStr + drawStr + discardStr
