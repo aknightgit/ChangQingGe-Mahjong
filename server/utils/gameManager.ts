@@ -2278,9 +2278,11 @@ class GameManager {
       game.wildTileGroup
     );
 
-    // 门清检测
-    const isMenQing = player.hand.exposedMelds.every(m =>
-      m.type !== MeldType.TRIPLET && m.type !== MeldType.SEQUENCE
+    // 门清检测：没有吃/碰/明杠。暗杠不破门清
+    const isMenQing = !player.hand.exposedMelds.some(m =>
+      m.type === MeldType.TRIPLET ||
+      m.type === MeldType.SEQUENCE ||
+      (m.type === MeldType.KONG && !m.isConcealed)
     );
 
     // 百搭参数
