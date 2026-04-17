@@ -31,7 +31,8 @@ const __dirname = path.dirname(__filename)
 const ROUNDS = parseInt(process.argv[2] || '10') || 10
 const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000') || 1000
 const BASELINE_MODE = process.argv[4] === '--baseline'  // 基线训练：优化指标而非得分
-const DETAIL_MODE = process.argv.includes('--detail')  // 每圈明细开关，默认关闭
+const DETAIL_MODE = process.argv.includes('--detail')
+const SKIP_WILD = process.argv.includes('--skip-wild')  // 跳过百搭分配进行胜负判断
 const REWARD_MODE = process.argv[5] === '--reward-mode'  // 阶段奖励模式
 const SETTLEMENT_MULT = 10
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
@@ -1784,7 +1785,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     const normalizedHand = normalizeHand(player.hand)
     // [DEBUG] 追踪canWin诊断
     const numPungs = player.exposedMelds.filter(m => m.type === MeldType.TRIPLET || m.type === MeldType.SEQUENCE).length
-    const winCheck = canWin(normalizedHand, player.exposedMelds, makeWT(player))
+    const winCheck = canWin(normalizedHand, player.exposedMelds, makeWT(player), SKIP_WILD)
     if (round < 3 || winCheck.canWin) {
       console.error(`[DEBUG round=${round} curr=${curr} ${player.name}] drawn=${tileStr(drawn)} hand=${normalizedHand.length} exposed=${player.exposedMelds.length} wild=${makeWT(player)} canWin=${winCheck.canWin} types=${winCheck.types.join(',')}`)
     }
@@ -1823,7 +1824,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         applyAnKong(player, ak)
         const extra = drawTile(g, player)
         if (extra && !isFlower(extra)) {
-          if (canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player)).canWin) {
+          if (canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player), SKIP_WILD).canWin) {
             const { finalPoints: baseScore, baseFan, handTypeName } = calcScore(player, true, true, g.gameMultiplier)
             player.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
@@ -1850,7 +1851,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         applyJiaGang(player, jg)
         const extra = drawTile(g, player)
         if (extra && !isFlower(extra)) {
-          if (canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player)).canWin) {
+          if (canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player), SKIP_WILD).canWin) {
             const { finalPoints: baseScore, baseFan, handTypeName } = calcScore(player, true, true, g.gameMultiplier)
             player.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
@@ -1891,7 +1892,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     }
     checkHandInvariant(player, 'discard')  // 出牌后铁律：13/10/7/4/1张
     if (player.exposedMelds.length >= 2) {
-      const cw = canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player))
+      const cw = canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player), SKIP_WILD)
       console.error(`[DISCARD_WIN] ${player.name} hand=${player.hand.length} melds=${player.exposedMelds.length} canWin=${cw.canWin} types=${cw.types.join(',')}`)
     }
 
@@ -1900,7 +1901,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       if (other === curr) continue
       const opp = g.players[other]
       const testHand = [...opp.hand.filter(t => t !== undefined), discard]
-      if (canWin(testHand, opp.exposedMelds, makeWT(opp), false).canWin) {
+      if (canWin(testHand, opp.exposedMelds, makeWT(opp), SKIP_WILD).canWin) {
         // [DEBUG FORCE HU] 强制100%捉冲，只要能胡就必胡
         const huChance = 1.0
         if (Math.random() < huChance) {
@@ -1950,7 +1951,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           }
           checkHandInvariant(opp, 'draw')  // 杠后摸牌
           if (extra && !isFlower(extra)) {
-            if (canWin(normalizeHand(opp.hand), opp.exposedMelds, makeWT(opp)).canWin) {
+            if (canWin(normalizeHand(opp.hand), opp.exposedMelds, makeWT(opp), SKIP_WILD).canWin) {
               const { finalPoints: kongBaseScore, baseFan, handTypeName: htn1 } = calcScore(opp, true, true, g.gameMultiplier)
               opp.score += kongBaseScore * 3
               for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
@@ -2035,7 +2036,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
             }
             checkHandInvariant(opp, 'draw')  // 杠后摸牌（正常摸牌规则）
             if (extra && !isFlower(extra)) {
-              if (canWin(normalizeHand(opp.hand), opp.exposedMelds, makeWT(opp)).canWin) {
+              if (canWin(normalizeHand(opp.hand), opp.exposedMelds, makeWT(opp), SKIP_WILD).canWin) {
                 const { finalPoints: kongBaseScore, baseFan, handTypeName: htn2 } = calcScore(opp, true, true, g.gameMultiplier)
                 opp.score += kongBaseScore * 3
                 for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
@@ -2113,7 +2114,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         }
         checkHandInvariant(nextP, 'draw')  // 吃后加杠仍可摸牌
         if (extra && !isFlower(extra)) {
-          if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds, makeWT(nextP)).canWin) {
+          if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds, makeWT(nextP), SKIP_WILD).canWin) {
             const { finalPoints: kongBaseScore, baseFan, handTypeName: htn4 } = calcScore(nextP, true, true, g.gameMultiplier)
             nextP.score += kongBaseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= kongBaseScore }
