@@ -82,6 +82,7 @@ export function calculateScore(params: {
   const details: string[] = [];
   let handTypeName = '普通胡';
   let baseFan = 0;
+  let extraMultipliers = 1;
 
   // 牌型校验：必须有有效牌型（不允许"普通胡"）
   if (handTypes.length === 0) {
@@ -167,8 +168,7 @@ export function calculateScore(params: {
   // 7. 番数上限（仅公式计算受上限，固定番数不受限）
   // baseFan 可能 > 10（如风碰=40），这是允许的
 
-  // 8. 额外翻倍
-  let extraMultipliers = 1;
+  // 8. 额外翻倍（上面第 85 行已声明 extraMultipliers = 1）
   
   // 无百搭翻倍
   if (wildTileSuit !== undefined && wildTileValue !== undefined) {

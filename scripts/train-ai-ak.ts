@@ -1,4 +1,3 @@
-/**
  * AI-AK 策略迭代训练器
  * 4个bot: AI-AK(优化目标), AI-小胖, AI-阿水, AI-老赵(固定)
  * 运行 10 rounds × 500 games
@@ -1654,7 +1653,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       melds: meldStrs,
       flowers: p.flowerTiles.map(t => tileStr(t)),
       isSelfDraw, wonFan, baseFan, winHandType: p.winHandType || '', roundNum,
-      wildTile: (wildSuit && wildVal) ? tileStr({suit: wildSuit, value: wildVal, id: '' }) : '(无百搭)', wildTileValue: wildVal ?? 0,
+      wildTile: (wildSuit && wildVal) ? getTileDisplayName({ suit: wildSuit, value: wildVal, id: '' }) : '(无百搭)', wildTileValue: wildVal ?? 0,
       isMenQing: p.exposedMelds.length === 0,
       winningTile,
       handTypes: typeNames,  // 【新增】用于报告玩家明细
@@ -1665,7 +1664,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     return g.players.map(p => {
       const wildSuit = p.wildSuit, wildVal = p.wildValue
       const wildTileStr = (wildSuit && wildVal) ? `${wildSuit}-${wildVal}` : null
-      const wildTileName = wildTileStr ? tileStr({suit: wildSuit as TileSuit, value: wildVal, id: '' }) : '(无百搭)'
+      const wildTileName = wildTileStr ? getTileDisplayName({ suit: wildSuit as TileSuit, value: wildVal, id: '' }) : '(无百搭)'
       // 完整手牌 = 手牌 + 所有面子里的牌（都算作手牌），百搭加*
       const fullHandTiles = [...p.hand, ...p.exposedMelds.flatMap(m => m.tiles)]
       const handWithWildMark = fullHandTiles.map(t => {
@@ -1713,7 +1712,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         handCount: p.hand.length,
         flowers: p.flowerTiles.map(t => tileStr(t))
       })),
-      wildTile: g.wildSuit && g.wildValue ? tileStr({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭',
+      wildTile: g.wildSuit && g.wildValue ? getTileDisplayName({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭',
       gameMultiplier: g.gameMultiplier,
       gameIdx,
       wallIdx: g.wallIdx
@@ -1726,7 +1725,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     turn: -1, currentPlayer: -1, drawnTile: 'NEW_GAME', discardedTile: String(gameIdx),
     lastDiscardBy: -1, lastDiscard: '-',
     players: [],
-    wildTile: g.wildSuit && g.wildValue ? tileStr({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭',
+    wildTile: g.wildSuit && g.wildValue ? getTileDisplayName({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭',
     gameMultiplier: g.gameMultiplier,
     gameIdx,
     wallIdx: g.wallIdx
