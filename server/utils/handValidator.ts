@@ -705,7 +705,8 @@ export function findBestHandTypes(
 export function canWin(
   handTiles: Tile[],
   exposedOrCount: Meld[] | number,
-  wildTileIdOrChecker: string | null | WildTileChecker
+  wildTileIdOrChecker: string | null | WildTileChecker,
+  _skipWildAssignment?: boolean  // 跳过 findBestAssignment DFS（用于 baseline 训练提速）
 ): { canWin: boolean; types: HandType[] } {
   const isOldSig = typeof exposedOrCount === 'number';
   const exposed: Meld[] = isOldSig ? [] : exposedOrCount;
@@ -804,7 +805,8 @@ export function canWin(
   }
 
   // 第二层：标准 3n+2 / 特殊牌型检测
-  const types = wildTileId
+  // _skipWildAssignment 时跳过 findBestAssignment DFS，直接用 detectTypes（用于 baseline 提速）
+  const types = (wildTileId && !_skipWildAssignment)
     ? findBestAssignment(concealed, exposed, wildTileId)
     : detectTypes(concealed, exposed);
 

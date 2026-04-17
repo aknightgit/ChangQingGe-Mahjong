@@ -427,7 +427,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
     let circleStart = 0
     let lastFlushedCircleStart = -1
     // 追踪当前圈每人是否已摸打
-    const drawnThisCircle: Record<string, {drawn: string, discarded: string}> = {}
+    const drawnThisCircle: Record<string, {drawn: string, discarded: string, flower: string | null}> = {}
 
     for (let i = 0; i < snaps.length; i++) {
       const snap = snaps[i]
@@ -453,16 +453,17 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
         circleCount++
         // 打印上一圈所有人摸打（合并到同行）
         for (const pp of snaps[circleStart].players) {
-          const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-' }
+          const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-', flower: null }
+          const flowerStr2 = d.flower ? `｜摸花${d.flower}` : ''
           const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
           const discardStr = d.discarded !== '-' ? `｜ → 打${d.discarded}` : ''
-          lines.push(`  - ${pp.name}：${formatGroupedHand(pp.hand, snap.wildTile)}｜副露:${formatExposed(pp.exposed)}｜${pp.handCount}张${drawStr}${discardStr}`)
+          lines.push(`  - ${pp.name}：${formatGroupedHand(pp.hand, snap.wildTile)}｜副露:${formatExposed(pp.exposed)}｜${pp.handCount}张${drawStr}${flowerStr2}${discardStr}`)
         }
         lines.push('')
         circleStart = i
         lastFlushedCircleStart = circleStart
         // 重置
-        for (const pp of players) drawnThisCircle[pp.name] = { drawn: '-', discarded: '-' }
+        for (const pp of players) drawnThisCircle[pp.name] = { drawn: '-', discarded: '-', flower: null as string | null }
       }
 
       // 初始化当前圈（第一张快照）
@@ -475,7 +476,8 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
       if (currP) {
         drawnThisCircle[currP.name] = {
           drawn: snap.drawnTile || '-',
-          discarded: snap.discardedTile || '-'
+          discarded: snap.discardedTile || '-',
+          flower: snap.flowerDrawn || null
         }
       }
 
@@ -491,10 +493,11 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
       circleCount++
       const lastSnap = snaps[circleStart]
       for (const pp of lastSnap.players) {
-        const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-' }
+        const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-', flower: null }
         const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
+        const flowerStr = d.flower ? `｜摸花${d.flower}` : ''
         const discardStr = d.discarded !== '-' ? `｜ → 打${d.discarded}` : ''
-        lines.push(`  - ${pp.name}：${formatGroupedHand(pp.hand, lastSnap.wildTile)}｜副露:${formatExposed(pp.exposed)}｜${pp.handCount}张${drawStr}${discardStr}`)
+        lines.push(`  - ${pp.name}：${formatGroupedHand(pp.hand, lastSnap.wildTile)}｜副露:${formatExposed(pp.exposed)}｜${pp.handCount}张${drawStr}${flowerStr}${discardStr}`)
       }
       lines.push('')
     }
@@ -522,6 +525,8 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
 
   const snaps = report.turnSnapshots
   const deckLen = 144  // 牌墙总张数固定144
+  // wallRemaining 计算：使用 snapshot 中的 wallIdx
+  const calcWallRem = (wallIdx: number) => deckLen - wallIdx
 
   let circleCount = 0
   let circleStartIdx = 0
@@ -532,10 +537,12 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
 
   // 记录每个玩家本圈摸打的 {drawn, discarded}
   const circleActions: Record<string, {drawn: string, discarded: string, newFlowers: string[]}> = {}
+  let prevFlowerDrawn: Record<string, string[]> = {}  // 记录每个玩家本圈新摸的花
 
   // 初始化时重置所有玩家动作为空
   for (const p of snaps[0]?.players || []) {
     circleActions[p.name] = { drawn: '-', discarded: '-', newFlowers: [] }
+    prevFlowerDrawn[p.name] = []
   }
 
   const formatExposed = (exposed: string[]): string => {
@@ -567,6 +574,7 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
   const resetActions = () => {
     for (const p of snaps[0]?.players || []) {
       circleActions[p.name] = { drawn: '-', discarded: '-', newFlowers: [] }
+      prevFlowerDrawn[p.name] = []
     }
   }
 
@@ -585,7 +593,7 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
       }
       // 上一局最后一圈也要 flush
       if (circleStartIdx < i) {
-        const wallRem = deckLen - (snaps[circleStartIdx]?.wallIdx || 0)
+        const wallRem = calcWallRem(snaps[circleStartIdx]?.wallIdx || 0)
         flushCircle(circleStartIdx, wallRem)
       }
       circleCount = 0
@@ -614,7 +622,7 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
       const isCircleStartEmpty = snaps[circleStartIdx]?.drawnTile === 'NEW_GAME'
       if (!isCircleStartEmpty) {
         circleCount++
-        const wallRem = deckLen - (snaps[circleStartIdx]?.wallIdx || 0)
+        const wallRem = calcWallRem(snaps[circleStartIdx]?.wallIdx || 0)
         flushCircle(circleStartIdx, wallRem)
         lastFlushedCircleStartIdx = circleStartIdx
       } else {
@@ -627,12 +635,17 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
     // 记录当前玩家本回合的摸打
     const currP = players[snap.currentPlayer]
     if (currP && snap.drawnTile && snap.drawnTile !== 'NEW_GAME') {
-      const existing = circleActions[currP.name]
-      const newFlowers = (snap.players[snap.currentPlayer] as any)?.flowers || []
+      // 用 flowerDrawn 字段追踪本回合新摸的花
+      const thisFlower = snap.flowerDrawn ? [snap.flowerDrawn] : []
+      const prev = prevFlowerDrawn[currP.name] || []
+      // 累计本圈新摸的花（去重）
+      const allNew = [...prev]
+      for (const f of thisFlower) { if (!allNew.includes(f)) allNew.push(f) }
+      prevFlowerDrawn[currP.name] = allNew
       circleActions[currP.name] = {
         drawn: snap.drawnTile,
         discarded: snap.discardedTile || '-',
-        newFlowers: newFlowers
+        newFlowers: allNew
       }
     }
 
@@ -644,7 +657,7 @@ export function formatCircleDetailsOnly(report: RoundReport): string {
   const lastCircleIsEmpty = snaps[circleStartIdx]?.drawnTile === 'NEW_GAME'
   if (snaps.length > 0 && lastFlushedCircleStartIdx !== circleStartIdx && !lastCircleIsEmpty) {
     circleCount++
-    const wallRem = deckLen - (snaps[circleStartIdx]?.wallIdx || 0)
+    const wallRem = calcWallRem(snaps[circleStartIdx]?.wallIdx || 0)
     flushCircle(circleStartIdx, wallRem)
   }
   lines.push('---')

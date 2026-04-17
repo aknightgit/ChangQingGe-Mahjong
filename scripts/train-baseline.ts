@@ -2,7 +2,7 @@
  * AI-AK 策略迭代训练器
  * 4个bot: AI-AK(优化目标), AI-小胖, AI-阿水, AI-老赵(固定)
  * 运行 10 rounds × 500 games
- * 每轮只调AI-AK参数，目标: 最高盈利总分
+ * 每轮只调AI-AK参数,目标: 最高盈利总分
  * 输出到 training-output/
  */
 import {
@@ -29,8 +29,8 @@ const __dirname = path.dirname(__filename)
 
 const ROUNDS = parseInt(process.argv[2] || '10')
 const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000')
-const BASELINE_MODE = process.argv[4] === '--baseline'  // 基线训练：优化指标而非得分
-const DETAIL_MODE = process.argv.includes('--detail')  // 每圈明细开关，默认关闭
+const BASELINE_MODE = process.argv[4] === '--baseline'  // 基线训练:优化指标而非得分
+const DETAIL_MODE = process.argv.includes('--detail')  // 每圈明细开关,默认关闭
 const SETTLEMENT_MULT = 10
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
 const OUT_DIR = path.resolve(__dirname, '..', 'training-output')
@@ -109,24 +109,24 @@ interface BotPolicy {
   discardObsFlushBoost: number; discardObsWeight: number
 
   // ====== 互包追踪 ======
-  bao2ClaimPenalty: number        // 同家2口后的吃碰惩罚（即将触发包三）
+  bao2ClaimPenalty: number        // 同家2口后的吃碰惩罚(即将触发包三)
   bao3AvoidThreshold: number      // 同家3口后的吃碰完全规避阈值
   baoSelfClaimCaution: number     // 自己被别人吃的口数对策略的影响
 
   // ====== 牌墙剩余 ======
-  wallEarlySpeedPush: number      // 牌墙早期（>80张）：可以慢做牌
-  wallMidBalance: number          // 牌墙中期（40-80张）：平衡
-  wallLateDefense: number         // 牌墙晚期（<40张）：防守优先
+  wallEarlySpeedPush: number      // 牌墙早期(>80张):可以慢做牌
+  wallMidBalance: number          // 牌墙中期(40-80张):平衡
+  wallLateDefense: number         // 牌墙晚期(<40张):防守优先
 
   // ====== 对手听牌/出牌分析 ======
   oppTingDetection: number        // 对手听牌检测敏感度
-  safeTilePriority: number        // 安全牌优先级（对手听牌时打安全牌）
+  safeTilePriority: number        // 安全牌优先级(对手听牌时打安全牌)
   terminalDiscardTingSignal: number // 对手打出幺九→可能已听牌的信号权重
-  wildDiaoKeepBonus: number         // 百搭大吊保留奖励（留百搭做最后1张→听所有牌）
+  wildDiaoKeepBonus: number         // 百搭大吊保留奖励(留百搭做最后1张→听所有牌)
   wildDiaoFlushBoost: number        // 百搭大吊+混一色路线加成
   wildDiaoPungBoost: number         // 百搭大吊+碰碰胡路线加成
   // ====== 积分榜动态策略 ======
-  scoreBehindRiskBoost: number      // 积分落后时的冒险意愿增强（越落后越激进）
+  scoreBehindRiskBoost: number      // 积分落后时的冒险意愿增强(越落后越激进)
   scoreLeadDefenseBoost: number     // 积分领先时的防守意识增强
   hand5RouteBias: number; hand6RouteBias: number; hand7RouteBias: number
   multLowHand5AllPungs: number; multLowHand5HalfFlush: number
@@ -428,7 +428,7 @@ function t(suit: TileSuit, v: number, id?: string): Tile {
 function tileEq(a: Tile, b: Tile): boolean { if (!a || !b) return false; return a.suit === b.suit && a.value === b.value }
 // 数字→中文
 const NUM_CN = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九']
-// suit枚举值→中文（注意TileSuit枚举值是 'wan' 不是 'characters'，'tiao' 不是 'bamboos'）
+// suit枚举值→中文(注意TileSuit枚举值是 'wan' 不是 'characters','tiao' 不是 'bamboos')
 const SUIT_CN: Record<string, string> = { dots: '筒', wan: '万', tiao: '条', feng: '风', jian: '箭', hua: '花' }
 const WIND_CN: Record<number, string> = { 1: '东', 2: '南', 3: '西', 4: '北' }
 const DRAGON_CN: Record<number, string> = { 1: '中', 2: '发', 3: '白' }
@@ -464,11 +464,11 @@ interface BotPlayer {
   kongCount: number; id: string; status: 'playing' | 'won'
   winMode?: 'self_draw' | 'discard' | 'kong_draw'
   policy: BotPolicy
-  // 互包追踪：每个对手被我吃了几口（index=对手pos）
+  // 互包追踪:每个对手被我吃了几口(index=对手pos)
   meldSources: number[]
-  // 我打过的牌（用于安全牌分析）
+  // 我打过的牌(用于安全牌分析)
   discardedTiles: Tile[]
-  // 吃碰排斥状态（K哥铁律）
+  // 吃碰排斥状态(K哥铁律)
   chowPongExclusion: ChowPongExclusionState
 }
 
@@ -478,7 +478,7 @@ interface GameState {
   wildSuit?: TileSuit; wildValue?: number
   discardPile: Tile[]
   gameMultiplier: number
-  // 每个玩家的出牌记录（用于对手分析）
+  // 每个玩家的出牌记录(用于对手分析)
   playerDiscards: Tile[][]
 }
 
@@ -521,7 +521,7 @@ function drawTile(g: GameState, p: BotPlayer): Tile | null {
   if (!tile) return drawTile(g, p)
   if (isFlower(tile)) { p.flowerTiles.push(tile); return drawTile(g, p) }
   p.hand.push(tile)
-  // 诊断：追踪手牌，摸牌后手牌长度
+  // 诊断:追踪手牌,摸牌后手牌长度
   // const kongC = p.exposedMelds.filter(m => m.type === MeldType.KONG).length
   // const exp = 14 - (p.exposedMelds.length - kongC) * 3 - kongC * 4
   // if (p.hand.length !== exp) // console.error(`DRAW: ${p.name} hand=${p.hand.length} expected=${exp} melds=${p.exposedMelds.length} kongs=${kongC}`)
@@ -534,34 +534,34 @@ function makeWT(p: BotPlayer) { return buildWildTileChecker(p.wildSuit && p.wild
 // ========== Meld detection ==========
 function canPeng(p: BotPlayer, tile: Tile): boolean {
   if (!tile) return false
-  p.hand = normalizeHand(p.hand)  // K哥铁律：过滤undefined+花牌
+  p.hand = normalizeHand(p.hand)  // K哥铁律:过滤undefined+花牌
   return p.hand.filter(t => tileEq(t, tile)).length >= 2
 }
 function canChow(p: BotPlayer, tile: Tile): boolean {
   if (!tile || isHonor(tile) || tile.suit === TileSuit.FLOWER) return false
-  p.hand = normalizeHand(p.hand)  // K哥铁律：过滤undefined+花牌
+  p.hand = normalizeHand(p.hand)  // K哥铁律:过滤undefined+花牌
   const v = tile.value
-  // 三种吃牌方式：
-  // 1) 中间牌：需要 v-1 和 v+1（如 3+5 吃 4），v范围2-8
-  // 2) 最低牌（tile是最大的）：需要 v-1 和 v-2（如 3+4 吃 5），v范围3-9
-  // 3) 最高牌（tile是最小的）：需要 v+1 和 v+2（如 4+5 吃 3），v范围1-7
+  // 三种吃牌方式:
+  // 1) 中间牌:需要 v-1 和 v+1(如 3+5 吃 4),v范围2-8
+  // 2) 最低牌(tile是最大的):需要 v-1 和 v-2(如 3+4 吃 5),v范围3-9
+  // 3) 最高牌(tile是最小的):需要 v+1 和 v+2(如 4+5 吃 3),v范围1-7
   const has = (val: number) => p.hand.some(t => t.suit === tile.suit && t.value === val)
   // 中间牌
   if (v >= 2 && v <= 8 && has(v - 1) && has(v + 1)) return true
-  // 最低牌：tile是被吃序列中最大的
+  // 最低牌:tile是被吃序列中最大的
   if (v >= 3 && has(v - 1) && has(v - 2)) return true
-  // 最高牌：tile是被吃序列中最小的
+  // 最高牌:tile是被吃序列中最小的
   if (v <= 7 && has(v + 1) && has(v + 2)) return true
   return false
 }
 
-// ========== 防死牌：第一次吃决定方向 ==========
-// 核心规则：
-// - 吃：第一次吃决定方向（此门=目标门），之后只能继续吃同一门
-// - 碰：任何门都可以碰（但不是零散门碰）
+// ========== 防死牌:第一次吃决定方向 ==========
+// 核心规则:
+// - 吃:第一次吃决定方向(此门=目标门),之后只能继续吃同一门
+// - 碰:任何门都可以碰(但不是零散门碰)
 // - 风箭碰永远允许
-// - 防止死牌：如果吃过一门，其他门绝对不让吃不让碰
-//   （除非其他门已吃过碰过同门——则自动转碰碰胡路线）
+// - 防止死牌:如果吃过一门,其他门绝对不让吃不让碰
+//   (除非其他门已吃过碰过同门--则自动转碰碰胡路线)
 function isClaimSuitAllowed(p: BotPlayer, tile: Tile, action: 'chow' | 'peng' = 'chow'): boolean {
   if (!tile) return false
   // 风箭碰 → 永远允许
@@ -599,10 +599,10 @@ function isClaimSuitAllowed(p: BotPlayer, tile: Tile, action: 'chow' | 'peng' = 
 
 function canMingKong(p: BotPlayer, tile: Tile): boolean {
   if (!tile) return false
-  return normalizeHand(p.hand).filter(t => tileEq(t, tile)).length >= 3  // K哥铁律：统一normalize
+  return normalizeHand(p.hand).filter(t => tileEq(t, tile)).length >= 3  // K哥铁律:统一normalize
 }
 function canAnKong(p: BotPlayer): Tile[] {
-  const hand = normalizeHand(p.hand)  // K哥铁律：统一normalize过滤花牌+undefined
+  const hand = normalizeHand(p.hand)  // K哥铁律:统一normalize过滤花牌+undefined
   const groups = groupTiles(hand)
   const result: Tile[] = []
   for (const [k, tiles] of groups) { if (tiles.length === 4 && tiles[0]) result.push(tiles[0]) }
@@ -621,10 +621,10 @@ function canJiaGang(p: BotPlayer): Tile[] {
 
 // ========== Apply melds ==========
 function applyPeng(p: BotPlayer, tile: Tile, sourcePos?: number): boolean {
-  p.hand = normalizeHand(p.hand)  // K哥铁律：apply前先normalize
+  p.hand = normalizeHand(p.hand)  // K哥铁律:apply前先normalize
   const before = p.hand.length
   const meldCount = p.exposedMelds.length
-  const expected = before === 13 - 3 * meldCount  // K哥铁律：吃碰前手牌=13-3*melds
+  const expected = before === 13 - 3 * meldCount  // K哥铁律:吃碰前手牌=13-3*melds
   const matches = p.hand.filter(t => tileEq(t, tile)).slice(0, 2)
   if (!expected || matches.length < 2) {
     console.error(`BUG applyPeng: ${p.name} before=${before} melds=${meldCount} valid=${expected} matches=${matches.length}`)
@@ -638,10 +638,10 @@ function applyPeng(p: BotPlayer, tile: Tile, sourcePos?: number): boolean {
   return true
 }
 function applyChow(p: BotPlayer, tile: Tile, sourcePos?: number): boolean {
-  p.hand = normalizeHand(p.hand)  // K哥铁律：apply前先normalize
+  p.hand = normalizeHand(p.hand)  // K哥铁律:apply前先normalize
   const before = p.hand.length
   const meldCount = p.exposedMelds.length
-  const validBefore = before === 13 - 3 * meldCount  // K哥铁律：吃碰前手牌=13-3*melds
+  const validBefore = before === 13 - 3 * meldCount  // K哥铁律:吃碰前手牌=13-3*melds
   const v = tile.value
   const findTile = (suit: TileSuit, val: number) => p.hand.find(t => t.suit === suit && t.value === val)
   const removeTile = (t: Tile) => { const idx = p.hand.findIndex(h => h.id === t.id); if (idx >= 0) p.hand.splice(idx, 1) }
@@ -696,7 +696,7 @@ function applyJiaGang(p: BotPlayer, tile: Tile): void {
 }
 
 // ========== Scoring (with multiplier simulation) ==========
-// 长清阁倍数：骰子对子(1+1/4+4=×4, 其他对子=×2, 其他=×1)
+// 长清阁倍数:骰子对子(1+1/4+4=×4, 其他对子=×2, 其他=×1)
 // 加上流局/造反继承倍数
 function rollMultiplier(): number {
   const d1 = Math.floor(Math.random() * 6) + 1
@@ -708,7 +708,7 @@ function rollMultiplier(): number {
   return 1
 }
 
-// 模拟全局倍数（流局/造反继承）
+// 模拟全局倍数(流局/造反继承)
 let prevRoundWasDraw = false
 function nextGameMultiplier(): number {
   const diceMult = rollMultiplier()
@@ -734,13 +734,13 @@ function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean, gameMu
 
 // ========== 互包结算 ==========
 // ========== 互包结算 ==========
-// 包三：同一家吃了/碰了/杠了≥3口 → 当"目标玩家"胡牌时，包家替所有人赔付
-// 包四：同一家≥4口 → 包家赔付加倍（×2）
+// 包三:同一家吃了/碰了/杠了≥3口 → 当"目标玩家"胡牌时,包家替所有人赔付
+// 包四:同一家≥4口 → 包家赔付加倍(×2)
 //
-// 真实规则：
-//   自摸：包家赔全部（3倍base），其他2家不赔不赚
-//   放炮：包家赔全部（3倍base），放炮者不赔不赚
-//   放炮者就是包家：正常赔付（已经赔了）
+// 真实规则:
+//   自摸:包家赔全部(3倍base),其他2家不赔不赚
+//   放炮:包家赔全部(3倍base),放炮者不赔不赚
+//   放炮者就是包家:正常赔付(已经赔了)
 function applyBaoSettlement(
   g: GameState, winnerIdx: number, isSelfDraw: boolean,
   discarderIdx: number | null, baseScore: number
@@ -754,17 +754,17 @@ function applyBaoSettlement(
 
     const isBao4 = meldCount >= 4
     const mult = isBao4 ? 2 : 1
-    const baoPay = baseScore * 3 * mult  // 包家赔付总额（覆盖所有输家）
+    const baoPay = baseScore * 3 * mult  // 包家赔付总额(覆盖所有输家)
 
     if (isSelfDraw) {
-      // 自摸：包家赔全部3倍base，其他2家退回
+      // 自摸:包家赔全部3倍base,其他2家退回
       for (let i = 0; i < 4; i++) {
         if (i === winnerIdx) continue
         if (i === ci) {
           g.players[i].score += baseScore  // 退回之前的1倍
-          g.players[i].score -= baoPay     // 赔付3倍（包四时6倍）
+          g.players[i].score -= baoPay     // 赔付3倍(包四时6倍)
         } else {
-          g.players[i].score += baseScore  // 退回之前的1倍，不赔了
+          g.players[i].score += baseScore  // 退回之前的1倍,不赔了
         }
       }
     } else {
@@ -774,7 +774,7 @@ function applyBaoSettlement(
         g.players[discarderIdx].score += baseScore  // 退回放炮者已扣的
         g.players[ci].score -= baoPay               // 包家赔付全部3倍
       }
-      // 放炮者就是包家 → 不变（已经赔了，但赔的是1倍 → 修正为3倍）
+      // 放炮者就是包家 → 不变(已经赔了,但赔的是1倍 → 修正为3倍)
       if (discarderIdx === ci) {
         g.players[ci].score += baseScore  // 退回1倍
         g.players[ci].score -= baoPay     // 赔付3倍
@@ -783,9 +783,9 @@ function applyBaoSettlement(
   }
 }
 
-// ========== 百搭最优利用：全局评分 ==========
-// 根据手牌评估不同百搭使用方式的得分，选择最高分
-// 长清阁牌型固定/公式得分：
+// ========== 百搭最优利用:全局评分 ==========
+// 根据手牌评估不同百搭使用方式的得分,选择最高分
+// 长清阁牌型固定/公式得分:
 //   清一色=10, 风一色=20, 风碰=40, 清碰=20, 混碰=公式, 碰碰胡=公式(max10), 混一色=公式
 //   无百搭×2, 门清×2
 function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
@@ -807,12 +807,12 @@ function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
 
   const nonWild = hand.filter(t => !isWild(t, undefined, undefined))
 
-  // 评估1：保留百搭不使用（无百搭翻倍×2）
+  // 评估1:保留百搭不使用(无百搭翻倍×2)
   const typesNoWild = detectHandTypes(nonWild, [], null, false, flowerCount)
   const baseNoWild = typesNoWild.length > 0 ? (typeScore[typesNoWild[0]] || 0) : 0
   const keepWildScore = baseNoWild * 2
 
-  // 评估2：百搭做清一色（最长花色+百搭>=13张）
+  // 评估2:百搭做清一色(最长花色+百搭>=13张)
   let flushScore = 0
   if (meldCount === 0) {
     for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
@@ -822,12 +822,12 @@ function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
     }
   }
 
-  // 评估3：百搭做风碰/箭碰（固定高分40）
+  // 评估3:百搭做风碰/箭碰(固定高分40)
   const honorCount = nonWild.filter(t => isHonor(t)).length
   let fengPengScore = 0
   if (honorCount + wildCount >= 13) fengPengScore = 40  // 风碰=40
 
-  // 评估4：百搭做碰碰胡
+  // 评估4:百搭做碰碰胡
   const groups = groupTiles(nonWild)
   let pairPotential = 0
   for (const [, tiles] of groups) { if (tiles.length >= 2) pairPotential++ }
@@ -846,10 +846,10 @@ function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
 }
 
 // ========== AI Discard (长清阁规则) ==========
-// 新出牌策略：K哥机械规则（弃最短门单张→风箭→对子）
+// 新出牌策略:K哥机械规则(弃最短门单张→风箭→对子)
 
-// ========== 听牌优化器（支持任意张数） ==========
-// 摸牌后手牌N张时，找到让"待胡池"最大的弃牌
+// ========== 听牌优化器(支持任意张数) ==========
+// 摸牌后手牌N张时,找到让"待胡池"最大的弃牌
 function findTingPaiDiscard(p: BotPlayer, isWT: (t: Tile, p: BotPlayer) => boolean): Tile | null {
   const hand = p.hand
   const nonFlower = hand.filter(t => !isFlower(t))
@@ -858,7 +858,7 @@ function findTingPaiDiscard(p: BotPlayer, isWT: (t: Tile, p: BotPlayer) => boole
   const nonWild = nonFlower.filter(t => !isWT(t, p))
   const wildCount = nonFlower.filter(t => isWT(t, p)).length
 
-  // 27种牌（万/筒/条各1-9）
+  // 27种牌(万/筒/条各1-9)
   const ALL: [TileSuit, number][] = []
   for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
     for (let v = 1; v <= 9; v++) ALL.push([suit, v])
@@ -891,12 +891,12 @@ function findTingPaiDiscard(p: BotPlayer, isWT: (t: Tile, p: BotPlayer) => boole
   return bestCount >= 2 ? bestTile : null
 }
 
-// ====== 课程学习：阶段+听牌距离双门控 ======
-// 策略：选路线→验证→决策→推进，不是一锤子买卖
-// - 前 N 回合：机械规则（最短门→风箭→对子），纯快速搭牌
-// - N+ 回合：无论远近都跑 route evaluator，持续选路线+验证+推进
-// - 听牌阶段（distance ≤ 2）：精收口，选最优弃牌最大化待胡池
-const EARLY_ROUNDS = process.env.EARLY_ROUNDS ? parseInt(process.env.EARLY_ROUNDS) : 3
+// ====== 课程学习:阶段+听牌距离双门控 ======
+// 策略:选路线→验证→决策→推进,不是一锤子买卖
+// - 前 N 回合:机械规则(最短门→风箭→对子),纯快速搭牌
+// - N+ 回合:无论远近都跑 route evaluator,持续选路线+验证+推进
+// - 听牌阶段(distance ≤ 2):精收口,选最优弃牌最大化待胡池
+const EARLY_ROUNDS = process.env.EARLY_ROUNDS ? parseInt(process.env.EARLY_ROUNDS) : 999  // baseline全称机械规则,训练时设EARLY_ROUNDS=3
 const TENPAI_THRESHOLD = process.env.TENPAI_THRESHOLD ? parseInt(process.env.TENPAI_THRESHOLD) : 2
 
 function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[] = [],
@@ -908,16 +908,16 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   // 百搭永远不打
   if (nonWild.length === 0 && wilds.length > 0) return wilds[0]
 
-  // 当前回合：从发牌后(52)开始计数，每4张=1回合
+  // 当前回合:从发牌后(52)开始计数,每4张=1回合
   const myRound = Math.floor((wallIdx - 52) / 4)
   const isEarly = myRound < EARLY_ROUNDS
 
-  // 前N回合：机械规则（更稳，不乱拆对子）
+  // 前N回合:机械规则(更稳,不乱拆对子)
   if (isEarly) {
     return mechanicalDiscard(p, discardPile)
   }
 
-  // N+回合：听牌距离优先 + 路线评分 tie-break
+  // N+回合:听牌距离优先 + 路线评分 tie-break
   let bestTile = nonWild[0]
   let bestShanten = Infinity
   let bestRouteScore = -Infinity
@@ -939,9 +939,9 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
 }
 
 /**
- * 机械弃牌规则 v2（K哥铁律）
- * 默认方向：混一色/清一色（保最长门）
- * 例外：对子多→碰碰胡，风向多→风一色
+ * 机械弃牌规则 v2(K哥铁律)
+ * 默认方向:混一色/清一色(保最长门)
+ * 例外:对子多→碰碰胡,风向多→风一色
  */
 function mechanicalDiscard(p: BotPlayer, discardPile: Tile[] = []): Tile {
   const mHand = p.hand
@@ -963,7 +963,7 @@ function mechanicalDiscard(p: BotPlayer, discardPile: Tile[] = []): Tile {
     discardCount[`${t.suit}-${t.value}`] = (discardCount[`${t.suit}-${t.value}`] || 0) + 1
   }
 
-  // 评分：弃牌价值（越低越应该打）
+  // 评分:弃牌价值(越低越应该打)
   type DiscardCandidate = { tile: Tile, score: number }
   const candidates: DiscardCandidate[] = []
   const suitNames = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
@@ -971,13 +971,13 @@ function mechanicalDiscard(p: BotPlayer, discardPile: Tile[] = []): Tile {
   for (const t of mNonWild) {
     let score = 50 // 基础分
 
-    // 风向箭牌：已出现 >2 → 优先打
+    // 风向箭牌:已出现 >2 → 优先打
     if (isHonor(t)) {
       const appeared = discardCount[`${t.suit}-${t.value}`] || 0
       score -= appeared >= 3 ? 30 : appeared >= 2 ? 20 : appeared >= 1 ? 10 : -5
     }
 
-    // 单张（同花色无相邻）
+    // 单张(同花色无相邻)
     const suitGroup = suitTiles[t.suit] || []
     const isSingle = !suitGroup.some(o => o.id !== t.id && (o.value === t.value - 1 || o.value === t.value + 1))
     if (isSingle && !isHonor(t)) score -= 15
@@ -999,7 +999,7 @@ function mechanicalDiscard(p: BotPlayer, discardPile: Tile[] = []): Tile {
     candidates.push({ tile: t, score })
   }
 
-  // 按评分排序，选最低分的打
+  // 按评分排序,选最低分的打
   candidates.sort((a, b) => a.score - b.score)
   return candidates[0].tile
 }
@@ -1008,23 +1008,25 @@ interface GameEvent { turn: number; player: string; action: string; detail: stri
 interface SettlementEntry { from: string; to: string; amount: number; reason: string; mult?: number }
 interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers: string[]; meldSources: number[]; wildTile: string }
 
-// 每回合快照：记录一回合内所有4个玩家的完整状态
+// 每回合快照:记录一回合内所有4个玩家的完整状态
 interface TurnSnapshot {
   turn: number
   currentPlayer: number        // 当前行动的玩家索引
-  drawnTile: string            // 当前玩家摸的牌（若无摸牌则为-）
-  discardedTile: string        // 当前玩家本回合打出的牌（若无则为-）
-  lastDiscardBy: number         // 最近一次出牌者索引（供捉冲用）
+  drawnTile: string            // 当前玩家摸的牌(花牌填-,另用 flowerDrawn)
+  flowerDrawn: string | null  // 本回合摸到的花牌(若无则null)
+  discardedTile: string        // 当前玩家本回合打出的牌(若无则为-)
+  lastDiscardBy: number         // 最近一次出牌者索引(供捉冲用)
   lastDiscard: string          // 最近打出的牌
   players: Array<{
     name: string
-    hand: string               // 手牌（concealed tiles）
-    exposed: string[]           // 门口副露（面子）描述
+    hand: string               // 手牌(concealed tiles)
+    exposed: string[]           // 门口副露(面子)描述
     meldSources: number[]       // 互包关系
     handCount: number           // 手牌数
   }>
   wildTile: string             // 百搭信息
   gameMultiplier: number        // 本局倍数
+  wallIdx: number               // 牌墙当前位置
 }
 
 interface GameResult {
@@ -1033,7 +1035,7 @@ interface GameResult {
   wildTile: string; wildSuit?: TileSuit; wildValue?: number
   dice1: number; dice2: number; diceMultiplier: number
   totalPot: number
-  turnSnapshots: TurnSnapshot[]  // 每回合快照（用于单局详细分析）
+  turnSnapshots: TurnSnapshot[]  // 每回合快照(用于单局详细分析)
   isDraw?: boolean
   // 每个赢家的详细信息
   winnerDetails: Array<{
@@ -1043,8 +1045,8 @@ interface GameResult {
 }
 
 // ========== 血战到最后一人 ==========
-// 每局有人胡牌后，记录赢家，剩余玩家继续开新局，直到最后1人
-// 注意：每局都是完整4人局（runGame不改），通过记录哪些玩家已赢来模拟"退出"
+// 每局有人胡牌后,记录赢家,剩余玩家继续开新局,直到最后1人
+// 注意:每局都是完整4人局(runGame不改),通过记录哪些玩家已赢来模拟"退出"
 function runGameWithFightToLast(policy: BotPolicy): {
   winners: { idx: number; selfDraw: boolean; score: number; snapshot: PlayerSnapshot; handType: string; wonFan: number; winHandType: string }[]
   totalSubGames: number
@@ -1056,10 +1058,13 @@ function runGameWithFightToLast(policy: BotPolicy): {
   const allEvents: GameEvent[] = []
   const turnSnapshots: any[] = []
   let drawCount = 0
-  // 已赢的玩家：在后续局中"不积极"（但仍参与，因为runGame固定4人）
-  // 简化：4人同策略，每局赢的人都记录，最多3局（3个赢家+1个输家）
+  const _sg0 = Date.now()
+  // 已赢的玩家:在后续局中"不积极"(但仍参与,因为runGame固定4人)
+  // 简化:4人同策略,每局赢的人都记录,最多3局(3个赢家+1个输家)
   for (let subGame = 0; subGame < 3; subGame++) {
+    const _g0 = Date.now()
     const result = runGame(policy, [policy, policy, policy])
+    const _g1 = Date.now()
     if (!result || result.winner == null || result.winner < 0) {
       drawCount++
       continue
@@ -1076,9 +1081,11 @@ function runGameWithFightToLast(policy: BotPolicy): {
     const wonFan = result.winnerDetails?.[0]?.finalPoints || 0
     winners.push({ idx: winnerIdx, selfDraw: isSelfDraw, score: result.scores[winnerIdx], snapshot, handType: winHandType, wonFan, winHandType })
     allEvents.push(...result.events)
-    // 如果已经产生3个赢家（血战到最后一人），结束
+    // 如果已经产生3个赢家(血战到最后一人),结束
     if (winners.length >= 3) break
   }
+  const _sg1 = Date.now()
+  if (_sg1 - _sg0 > 50) console.error(`[PROFILE] runGameWithFightToLast ${winners.length + drawCount}子局耗时${_sg1 - _sg0}ms`)
   return { winners, totalSubGames: winners.length + drawCount, allEvents, drawCount, turnSnapshots }
 }
 
@@ -1153,7 +1160,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
   const getWinInfo = (player: BotPlayer, isSelfDraw: boolean, isKongWin: boolean): { handType: string; baseFan: number; finalPoints: number } => {
     try {
       // reconstruct hand: concealed tiles ARE the current hand, exposed melds are separate
-      // tiles from exposed melds were ALREADY consumed from the hand (副露出去) — do NOT add back
+      // tiles from exposed melds were ALREADY consumed from the hand (副露出去) - do NOT add back
       const wsVal = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : null
       const tilesWithWild = player.hand  // use concealed tiles as-is
       const types = detectHandTypes(tilesWithWild, player.exposedMelds, wsVal)
@@ -1179,13 +1186,13 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     }
   }
 
-  // 垃圾胡检测：3n+2 + 数牌≥2门 + 至少一个顺子（不是碰碰胡）
+  // 垃圾胡检测:3n+2 + 数牌≥2门 + 至少一个顺子(不是碰碰胡)
   const isGarbageHand = (tiles: Tile[], isWildTile: WildTileChecker): boolean => {
     const nonFlower = tiles.filter(t => !isFlower(t))
     const nonHonor = nonFlower.filter(t => t.suit === TileSuit.DOTS || t.suit === TileSuit.CHARACTERS || t.suit === TileSuit.BAMBOOS)
     const suitCount = new Set(nonHonor.map(t => t.suit)).size
     if (suitCount < 2) return false
-    // 检查是否存在顺子（3张连续同花色）
+    // 检查是否存在顺子(3张连续同花色)
     for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
       const vals = nonHonor.filter(t => t.suit === suit).map(t => t.value).sort((a, b) => a - b)
       const uniqueVals = [...new Set(vals)]
@@ -1201,17 +1208,14 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     return false
   }
 
-  // 胡牌检测：先按 canWin 判真，再做可选过滤
+  // 胡牌检测：baseline 用简化版本，跳过 findBestAssignment 的昂贵 DFS
+  // 只用 detectTypes 快速判断，避免 34^wildCount 的搜索爆炸
   const canWinWithType = (tiles: Tile[], p: BotPlayer, makeWT: (p: BotPlayer) => WildTileChecker, kongCount = 0): boolean => {
     const isWildTile = makeWT(p)
     const wildTileId = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : null
-    const win = canWin(tiles, p.exposedMelds, wildTileId)
+    // 快速路径：只用 detectTypes，跳过 findBestAssignment 的 DFS
+    const win = canWin(tiles, p.exposedMelds, wildTileId, true)  // skipWildAssignment=true
     if (!win.canWin) return false
-
-    // 调试阶段：禁用垃圾胡过滤，先验证“能胡”底盘
-    // const specialTypes = win.types.filter(t => t !== HandType.STANDARD)
-    // if (specialTypes.length > 0) return true
-    // if (isGarbageHand(tiles, isWildTile)) return false
     return true
   }
 
@@ -1224,7 +1228,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
 
   // 每回合快照追踪
   const turnSnapshots: TurnSnapshot[] = []
-  let prevDrawn: Tile | null = null    // 上回合本玩家摸的牌
+  let prevDrawn: Tile | null = null    // 上回合本玩家摸的牌(不含花)
+  let prevFlower: Tile | null = null   // 上回合本玩家摸的花牌
   let prevDiscard: Tile | null = null  // 上回合本玩家打的牌
 
   const recordTurnSnapshot = (curr: number) => {
@@ -1233,6 +1238,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       turn,
       currentPlayer: curr,
       drawnTile: prevDrawn ? tileStr(prevDrawn) : '-',
+      flowerDrawn: prevFlower ? tileStr(prevFlower) : null,
       discardedTile: prevDiscard ? tileStr(prevDiscard) : '-',
       lastDiscardBy: lastDiscard ? (g.playerDiscards[0].findIndex(d => d.id === lastDiscard.id) >= 0 ? 0 :
         g.playerDiscards[1].findIndex(d => d.id === lastDiscard.id) >= 0 ? 1 :
@@ -1251,7 +1257,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         handCount: p.hand.length
       })),
       wildTile: g.wildSuit && g.wildValue ? tileStr({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭',
-      gameMultiplier: g.gameMultiplier
+      gameMultiplier: g.gameMultiplier,
+      wallIdx: g.wallIdx
     })
   }
   // 初始13张明细也记录
@@ -1263,25 +1270,26 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     turn = round
     const drawn = drawTile(g, player)
     if (!drawn) return buildDrawResult()
-    if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); prevDrawn = drawn; prevDiscard = null as Tile | null; recordTurnSnapshot(curr); continue }
+    if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); prevFlower = drawn; prevDrawn = null; prevDiscard = null as Tile | null; recordTurnSnapshot(curr); continue }
     log(player.name, '摸牌', tileStr(drawn))
     prevDrawn = drawn
+    prevFlower = null
 
     // Self-draw win check
-    // 注意：用player.hand（原始，含花牌）而不是normalizeHand——canWin内部会处理花牌
+    // 注意:用player.hand(原始,含花牌)而不是normalizeHand--canWin内部会处理花牌
     const kongCount = player.exposedMelds.filter(m => m.type === MeldType.KONG).length
     const winCheck = canWinWithType(player.hand, player, makeWT, kongCount)
     // [DEBUG] 临时记录每次winCheck的结果
-    if (round % 4 === 0) { const sh = tenpaiDist(player.hand, player.exposedMelds, g.wildSuit, g.wildValue); console.error(`[DEBUG] round=${round} player=${player.name} hand=${player.hand.length} wild=${g.wildSuit}-${g.wildValue} shanten=${sh} winCheck=${winCheck}`) }
+    // if (round % 4 === 0) { const sh = tenpaiDist(player.hand, player.exposedMelds, g.wildSuit, g.wildValue); console.error(`[DEBUG] round=${round} player=${player.name} hand=${player.hand.length} wild=${g.wildSuit}-${g.wildValue} shanten=${sh} winCheck=${winCheck}`) }
     if (winCheck) {
-      // 普通胡也可以自摸（不需要特殊牌型）
+      // 普通胡也可以自摸(不需要特殊牌型)
       let winChance = player.policy.selfWinChance
       const wildCount = player.hand.filter(t => isWT(t, player)).length
       winChance += wildCount * player.policy.selfWinWildBoost
       winChance -= player.exposedMelds.length * player.policy.meldPenalty
       if (Math.random() < winChance) {
         const baseScore = calcScore(player, true, false, g.gameMultiplier)
-        // 自摸：每人赔baseScore，赢家得3倍
+        // 自摸:每人赔baseScore,赢家得3倍
         player.score += baseScore * 3
         for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
         // 互包结算
@@ -1354,7 +1362,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           opp.hand = normalizeHand(testHand)
           const score = calcScore(opp, false, false, g.gameMultiplier)
           opp.score += score; player.score -= score
-          // 互包结算：如果有人对opp有包三，且放炮者不是包家
+          // 互包结算:如果有人对opp有包三,且放炮者不是包家
           applyBaoSettlement(g, other, false, curr, score)
           recordPayment(player.name, opp.name, score, '放炮')
           const winInfo2 = getWinInfo(opp, false, false)
@@ -1426,9 +1434,9 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
 
     // Check chow (only next player)
     const nextP = g.players[nextPlayer]
-    // 路线评分计算吃概率（返回 0-1）
-    // 课程学习：前N回合不压制吃牌，让AI自由搭牌
-    // 吃牌=方向锁定，必须全程 route evaluator 评分（参考防死牌四大准则）
+    // 路线评分计算吃概率(返回 0-1)
+    // 课程学习:前N回合不压制吃牌,让AI自由搭牌
+    // 吃牌=方向锁定,必须全程 route evaluator 评分(参考防死牌四大准则)
     const chowRouteProb = routeShouldClaim('chow', nextP.hand, nextP.exposedMelds, nextP.hand.filter(t=>isWT(t,nextP)).length, determinePhase(nextP.hand.length, nextP.exposedMelds.length, g.deck.length - g.wallIdx), g.deck.length - g.wallIdx, g.gameMultiplier >= 4 ? 'trailing' : 'mid', nextP.exposedMelds.length === 0, nextP.wildSuit, nextP.wildValue)
     if (canChow(nextP, discard) && !checkChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit) && Math.random() < nextP.policy.chowChance * chowRouteProb) {
       if (!applyChow(nextP, discard, curr)) continue
@@ -1489,10 +1497,10 @@ interface EvalResult {
   bigLoss: { gameIdx: number; result: GameResult; score: number } | null
   // 模板输出用
   totalGames: number; winGames: number; selfDrawGames: number; discardWinGames: number
-  fightToLastGames: number  // 血战到最后一人（多赢家局）
-  bigWinGames: number       // 大牌局数（清碰/风一色/风碰/门清清一色）
+  fightToLastGames: number  // 血战到最后一人(多赢家局)
+  bigWinGames: number       // 大牌局数(清碰/风一色/风碰/门清清一色)
   menqingWinGames: number  // 门清胡牌局数
-  metricsFitness: number    // 指标导向fitness（用于基线训练）
+  metricsFitness: number    // 指标导向fitness(用于基线训练)
   worstSingleLoss: { loser: string; score: number; gameIdx: number; result: GameResult } | null
   biggestSingleWin: { winner: string; score: number; gameIdx: number; result: GameResult } | null
   avgRounds: number; avgPot: number; avgWinnerPoints: number
@@ -1532,7 +1540,7 @@ function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy
   lines.push(`| 血战率 | ${fighR}% | >80% | ${parseFloat(fighR) > 80 ? '✅' : '❌'} |`)
   lines.push(`| 大牌率 | ${bigR}% | 3-8% | ${parseFloat(bigR) >= 3 && parseFloat(bigR) <= 8 ? '✅' : '❌'} |`)
   lines.push(`| 门清率 | ${menR}% | 7-12% | ${parseFloat(menR) >= 7 && parseFloat(menR) <= 12 ? '✅' : '❌'} |`)
-  lines.push(`| Fitness | ${evalResult.metricsFitness.toFixed(1)} | ↑ | — |`)
+  lines.push(`| Fitness | ${evalResult.metricsFitness.toFixed(1)} | ↑ | - |`)
   lines.push('')
 
   // === 胡牌牌型分布表格 ===
@@ -1547,9 +1555,9 @@ function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy
     { name: '清碰', count: tc['清碰'] || 0, target: '~5%' },
     { name: '风一色', count: tc['风一色'] || 0, target: '~5%' },
     { name: '风碰', count: tc['风碰'] || 0, target: '~1%' },
-    { name: '混碰', count: tc['混碰'] || 0, target: '—' },
-    { name: '八花', count: tc['八花'] || 0, target: '—' },
-    { name: '四百搭', count: tc['四百搭'] || 0, target: '—' },
+    { name: '混碰', count: tc['混碰'] || 0, target: '-' },
+    { name: '八花', count: tc['八花'] || 0, target: '-' },
+    { name: '四百搭', count: tc['四百搭'] || 0, target: '-' },
   ]
   for (const ht of handTypes) {
     lines.push(`| ${ht.name} | ${ht.count} | ${(ht.count / tw * 100).toFixed(1)}% | ${ht.target} |`)
@@ -1584,14 +1592,14 @@ function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy
     const gm = r.multiplier
     const totalPot = r.totalPot || r.scores.reduce((s, sc) => s + Math.abs(sc), 0)
     gLines.push(`#### ${label}`)
-    gLines.push(`- ${label.includes('赢') ? '最大赢利' : '最大亏损'}: ${playerName} ${score} 点（绝对值 ${Math.abs(score)}）`)
+    gLines.push(`- ${label.includes('赢') ? '最大赢利' : '最大亏损'}: ${playerName} ${score} 点(绝对值 ${Math.abs(score)})`)
     gLines.push(`- 局号: ${gameIdx}`)
     gLines.push(`- 回合: ${r.roundNum}`)
     gLines.push(`- 总筹码: ${totalPot}`)
     gLines.push(`- 百搭: ${wildTileStrToName(r.wildTile || 'unknown')}`)
     gLines.push(`- 回合/全局倍数信息:`)
     gLines.push(`  - 骰子点数: ${r.dice1 || '?'} + ${r.dice2 || '?'}`)
-    gLines.push(`  - 骰子倍数（清晰明了）: x${r.diceMultiplier || '?'}`)
+    gLines.push(`  - 骰子倍数(清晰明了): x${r.diceMultiplier || '?'}`)
     gLines.push(`  - 全局倍数: x${gm}`)
 
     // 胡牌玩家明细
@@ -1603,7 +1611,7 @@ function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy
         gLines.push(`    - 胡牌方式: ${w.winMode}${w.from ? ` (来自 ${w.from})` : ''}`)
         gLines.push(`    - 牌型/基础番/最终点: ${w.handType} / ${w.baseFan} / ${w.finalPoints}`)
         gLines.push(`    - 手牌牌面: ${w.handTiles || '(空)'}`)
-        gLines.push(`    - 门口牌（吃/碰/杠）: ${w.melds.length > 0 ? w.melds.join(' ; ') : '(无)'}`)
+        gLines.push(`    - 门口牌(吃/碰/杠): ${w.melds.length > 0 ? w.melds.join(' ; ') : '(无)'}`)
         gLines.push(`    - 花牌: ${w.flowers.length > 0 ? w.flowers.join(' ') : '(无)'}`)
       }
     } else {
@@ -1631,7 +1639,7 @@ function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy
 
     // 结算逐笔明细
     gLines.push('')
-    gLines.push('- 结算逐笔明细（谁付给谁、倍率和金额）')
+    gLines.push('- 结算逐笔明细(谁付给谁、倍率和金额)')
     if (r.settlementLog && r.settlementLog.length > 0) {
       for (const s of r.settlementLog) {
         const multStr = s.mult ? ` (${s.amount / s.mult}x${s.mult})` : ''
@@ -1644,7 +1652,7 @@ function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy
   }
 
   lines.push('')
-  lines.push('### 最大输赢局明细（本轮）')
+  lines.push('### 最大输赢局明细(本轮)')
   if (!loss && !evalResult.biggestSingleWin) {
     lines.push('- 本轮无有效对局数据')
     return lines.join('\n')
@@ -1671,18 +1679,18 @@ function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy
   return lines.join('\n')
 }
 
-// 检测大牌类型（清碰/风一色/风碰/混碰）
+// 检测大牌类型(清碰/风一色/风碰/混碰)
 function isBigHand(result: GameResult, winnerIdx: number): boolean {
   try {
     const snap = result.snapshots?.[winnerIdx]
     if (!snap) return false
     const ws = `${g_wildSuit}-${g_wildValue}`
     const types = detectHandTypes(
-      // 从snapshot重建手牌有困难，改用events判断
+      // 从snapshot重建手牌有困难,改用events判断
       [], [], false, 0, null
     )
-    // 备选方案：从结算倍数判断（大牌倍数通常很高）
-    return result.multiplier >= 4  // 简化判断：高倍局视为大牌
+    // 备选方案:从结算倍数判断(大牌倍数通常很高)
+    return result.multiplier >= 4  // 简化判断:高倍局视为大牌
   } catch { return false }
 }
 
@@ -1712,9 +1720,14 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
   let highMultGameCount = 0
   const allTurnSnapshots: any[] = []
   prevRoundWasDraw = false
+  const _t0 = Date.now()
+  let _gameTimes: number[] = []
 
   for (let g = 0; g < games; g++) {
+    const _g0 = Date.now()
     const bloodResult = runGameWithFightToLast(policy)
+    const _g1 = Date.now()
+    if (games <= 10 || g % 10 === 9) _gameTimes.push(_g1 - _g0)
     if (bloodResult.turnSnapshots && bloodResult.turnSnapshots.length > 0) {
       allTurnSnapshots.push(...bloodResult.turnSnapshots)
     }
@@ -1727,7 +1740,7 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
     }
     prevRoundWasDraw = false
 
-    // 血战到最后一人（≥2个赢家）
+    // 血战到最后一人(≥2个赢家)
     if (bloodResult.winners.length >= 2) {
       fightToLastGames++
     }
@@ -1814,7 +1827,7 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
   const winRates: Record<string, number> = {}
   for (const n of AI_NAMES) winRates[n] = (wins[n] || 0) / games
 
-  // 计算指标导向fitness（核心目标：压低流局率，提升进攻与胡牌）
+  // 计算指标导向fitness(核心目标:压低流局率,提升进攻与胡牌)
   const drawRate = draws / games
   const huRate = 1 - drawRate
   const readyRate = games > 0 ? fightToLastGames / games : 0
@@ -1827,41 +1840,41 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
 
   let mf = 0
 
-  // 1) 流局率重罚：>10% 后每+1% 扣 500；>50% 额外加倍
+  // 1) 流局率重罚:>10% 后每+1% 扣 500;>50% 额外加倍
   const drawExcess = Math.max(0, drawRate - 0.10)
   let drawPenalty = drawExcess * 100000
   if (drawRate > 0.50) drawPenalty *= 2
   mf -= drawPenalty
 
-  // 2) 胡牌率重奖：每+1% 奖 500（以 50% 为基线）
+  // 2) 胡牌率重奖:每+1% 奖 500(以 50% 为基线)
   mf += Math.max(0, huRate - 0.50) * 50000
 
-  // 3) 听牌率（readyRate）激励：<50% 惩罚，>80% 奖励
+  // 3) 听牌率(readyRate)激励:<50% 惩罚,>80% 奖励
   if (readyRate < 0.50) mf -= (0.50 - readyRate) * 20000
   if (readyRate > 0.80) mf += (readyRate - 0.80) * 15000
 
-  // 4) 速度奖励：<30 回合奖励，>80 回合惩罚
+  // 4) 速度奖励:<30 回合奖励,>80 回合惩罚
   if (avgRounds < 30) mf += (30 - avgRounds) * 400
   if (avgRounds > 80) mf -= (avgRounds - 80) * 500
 
-  // 5) 自摸/捉冲平衡（低优先级，维持 40%-60%）
+  // 5) 自摸/捉冲平衡(低优先级,维持 40%-60%)
   mf -= Math.max(0, Math.abs(selfDrawRate - 0.50) - 0.10) * 250
   mf -= Math.max(0, Math.abs(discardWinRate - 0.50) - 0.10) * 250
 
-  // 血战率（保留轻量约束）
+  // 血战率(保留轻量约束)
   mf -= Math.max(0, 0.80 - fightToLastRate) * 300
 
-  // 6) 大牌率（目标 3%-8%）：当胡牌率<50% 时不奖励大牌，避免为大牌牺牲胡牌
+  // 6) 大牌率(目标 3%-8%):当胡牌率<50% 时不奖励大牌,避免为大牌牺牲胡牌
   if (huRate >= 0.50) {
     if (bigHandRate < 0.03) mf -= (0.03 - bigHandRate) * 300
     if (bigHandRate > 0.08) mf -= (bigHandRate - 0.08) * 300
   }
 
-  // 门清胡牌率（保留但弱化）
+  // 门清胡牌率(保留但弱化)
   if (menqingWinRate < 0.07) mf -= (0.07 - menqingWinRate) * 200
   if (menqingWinRate > 0.12) mf -= (menqingWinRate - 0.12) * 200
 
-  // 手牌类型分布（K哥目标：混一色40% 碰碰胡25% 清一色20% 清碰/风一色5% 风碰1%）
+  // 手牌类型分布(K哥目标:混一色40% 碰碰胡25% 清一色20% 清碰/风一色5% 风碰1%)
   if (winnerInstances > 10) {
     const total = winnerInstances
     const dist = {
@@ -1878,6 +1891,10 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
     if (dist.fengPeng < 0.005) mf -= 50
   }
 
+  const _t1 = Date.now()
+  const _elapsed = _t1 - _t0
+  const _avgGame = _gameTimes.length > 0 ? (_gameTimes.reduce((a, b) => a + b, 0) / _gameTimes.length) : (_elapsed / games)
+  if (games > 1) console.error(`[PROFILE] ${games}局耗时${_elapsed}ms,平均${_avgGame.toFixed(0)}ms/局`)
   return {
     akScore: scores['AI-AK'] || 0, akWins: wins['AI-AK'] || 0, winRates, scores, draws,
     bigWin, bigLoss, totalGames: games, winGames, winnerInstances, selfDrawGames, discardWinGames,
@@ -1914,7 +1931,7 @@ async function main() {
     `- 创建时间: ${new Date().toISOString()}`,
     `- 训练脚本: train-baseline.ts`,
     `- Config: ${ROUNDS} rounds × ${GAMES_PER_ROUND} games = ${ROUNDS * GAMES_PER_ROUND} total`,
-    `- 模式: 4人共用同一策略，血战到最后一人`,
+    `- 模式: 4人共用同一策略,血战到最后一人`,
     `- 目标指标:`,
     `  - 胡牌率 ≥90% (流局 <10%)`,
     `  - 血战率 >80%`,
@@ -1929,9 +1946,11 @@ async function main() {
   logLines.push(...header)
 
   // Round 0: baseline evaluation
-  console.log('\n## 基线成绩（第0轮）')
-  logLines.push('\n## 基线成绩（第0轮）')
+  console.log('\n## 基线成绩(第0轮)')
+  logLines.push('\n## 基线成绩(第0轮)')
+  process.stdout.write(`  [${new Date().toISOString()}] 开始评估基准线 (${GAMES_PER_ROUND}局)...\n`)
   const baseline = evaluatePolicy(bestPolicy, GAMES_PER_ROUND)
+  process.stdout.write(`  [${new Date().toISOString()}] 基准线完成\n`)
   bestScore = baseline.metricsFitness
   const baseLine = [
     `| 指标 | 值 | 目标 |`,
@@ -1974,7 +1993,9 @@ async function main() {
     roundLines.push(`\n### 第${round}轮 (强度=${intensity.toFixed(1)}, 停滞=${plateauCount})`)
 
     for (let c = 0; c < candidates.length; c++) {
+      process.stdout.write(`  [${new Date().toISOString()}] C${c+1}/${candidates.length} 评估中 (${GAMES_PER_ROUND}局)...\n`)
       const result = evaluatePolicy(candidates[c], GAMES_PER_ROUND)
+      process.stdout.write(`  [${new Date().toISOString()}] C${c+1}/${candidates.length} 完成\n`)
       const score = result.metricsFitness
       const huRate = ((1 - result.draws / GAMES_PER_ROUND) * 100).toFixed(0)
       const selfDR = result.winGames > 0 ? (result.selfDrawGames/result.winGames*100).toFixed(0) : '0'
@@ -2017,7 +2038,7 @@ async function main() {
     console.log(roundLines.join('\n'))
     logLines.push(...roundLines)
 
-    // 收集轮次报告（用于主日志 formatRoundReport）
+    // 收集轮次报告(用于主日志 formatRoundReport)
     if (bestEvalResult) {
       await saveRoundToMariaDB(round, bestEvalResult, roundBestPolicy)
       const report = buildRoundReport(round, bestEvalResult, roundBestPolicy, AI_NAMES, 'train-baseline.ts')
@@ -2027,22 +2048,24 @@ async function main() {
     }
   }
 
-  // Final evaluation: 1×1 模式跳过（只跑 1 局不需要额外评估）
-  const finalEvalGames = (ROUNDS === 1 && GAMES_PER_ROUND === 1) ? 0 : 1000
+  // Final evaluation: 1×1 模式跳过;否则跑 GAMES_PER_ROUND 局(无需跑1000局,够快)
+  const finalEvalGames = (ROUNDS === 1 && GAMES_PER_ROUND === 1) ? 0 : Math.max(GAMES_PER_ROUND, 100)
   let finalEval: any = null
   let metrics: any = null
   if (finalEvalGames > 0) {
     console.log('\n--- 最终评估 ---')
     logLines.push('\n--- 最终评估 ---')
+    process.stdout.write(`[${new Date().toISOString()}] 最终评估开始 (${finalEvalGames}局)...\n`)
     finalEval = evaluatePolicy(bestPolicy, finalEvalGames)
+    process.stdout.write(`[${new Date().toISOString()}] 最终评估完成\n`)
     const finalLines = [
       `| 指标 | 值 | 目标 | 达标 |`,
       `|------|-----|------|------|`,
-      `| 胡牌率 | ${((1-finalEval.draws/1000)*100).toFixed(1)}% | ≥90% | ${((1-finalEval.draws/1000)>=0.9?'✅':'❌')} |`,
-      `| 流局率 | ${(finalEval.draws/1000*100).toFixed(1)}% | <10% | ${(finalEval.draws/1000<0.1?'✅':'❌')} |`,
+      `| 胡牌率 | ${((1-finalEval.draws/finalEvalGames)*100).toFixed(1)}% | ≥90% | ${((1-finalEval.draws/finalEvalGames)>=0.9?'✅':'❌')} |`,
+      `| 流局率 | ${(finalEval.draws/finalEvalGames*100).toFixed(1)}% | <10% | ${(finalEval.draws/finalEvalGames<0.1?'✅':'❌')} |`,
       `| 自摸率 | ${(finalEval.selfDrawGames/Math.max(1,finalEval.winGames)*100).toFixed(1)}% | 40-60% | ${(finalEval.selfDrawGames/Math.max(1,finalEval.winGames)>=0.4&&finalEval.selfDrawGames/Math.max(1,finalEval.winGames)<=0.6?'✅':'❌')} |`,
       `| 捉冲率 | ${(finalEval.discardWinGames/Math.max(1,finalEval.winGames)*100).toFixed(1)}% | 40-60% | ${(finalEval.discardWinGames/Math.max(1,finalEval.winGames)>=0.4&&finalEval.discardWinGames/Math.max(1,finalEval.winGames)<=0.6?'✅':'❌')} |`,
-      `| 血战率 | ${(finalEval.fightToLastGames/Math.max(1,1000-finalEval.draws)*100).toFixed(1)}% | >80% | ${(finalEval.fightToLastGames/Math.max(1,1000-finalEval.draws)>0.8?'✅':'❌')} |`,
+      `| 血战率 | ${(finalEval.fightToLastGames/Math.max(1,finalEvalGames-finalEval.draws)*100).toFixed(1)}% | >80% | ${(finalEval.fightToLastGames/Math.max(1,finalEvalGames-finalEval.draws)>0.8?'✅':'❌')} |`,
       `| 大牌率 | ${(finalEval.bigWinGames/Math.max(1,finalEval.winGames)*100).toFixed(1)}% | 3-8% | ${((finalEval.bigWinGames/Math.max(1,finalEval.winGames))>=0.03&&(finalEval.bigWinGames/Math.max(1,finalEval.winGames))<=0.08?'✅':'❌')} |`,
       `| 门清率 | ${(finalEval.menqingWinGames/Math.max(1,finalEval.winGames)*100).toFixed(1)}% | 7-12% | ${((finalEval.menqingWinGames/Math.max(1,finalEval.winGames))>=0.07&&(finalEval.menqingWinGames/Math.max(1,finalEval.winGames))<=0.12?'✅':'❌')} |`,
       ``,
@@ -2066,18 +2089,18 @@ async function main() {
     await saveRoundToMariaDB(ROUNDS + 1, finalEval, bestPolicy)
     metrics = {
       fitness: finalEval.metricsFitness,
-      huRate: 1 - finalEval.draws / 1000,
-      drawRate: finalEval.draws / 1000,
+      huRate: 1 - finalEval.draws / finalEvalGames,
+      drawRate: finalEval.draws / finalEvalGames,
       selfDrawRate: finalEval.selfDrawGames / Math.max(1, finalEval.winGames),
       discardWinRate: finalEval.discardWinGames / Math.max(1, finalEval.winGames),
-      fightToLastRate: finalEval.fightToLastGames / Math.max(1, 1000 - finalEval.draws),
+      fightToLastRate: finalEval.fightToLastGames / Math.max(1, finalEvalGames - finalEval.draws),
       bigHandRate: finalEval.bigWinGames / Math.max(1, finalEval.winGames),
       menqingWinRate: finalEval.menqingWinGames / Math.max(1, finalEval.winGames),
       totalGames: ROUNDS * GAMES_PER_ROUND,
       note: `Baseline convergence - ${ROUNDS}x${GAMES_PER_ROUND}`
     }
   } else {
-    // 1×1 模式：用最后一轮的评估结果作为 metrics
+    // 1×1 模式:用最后一轮的评估结果作为 metrics
     if (roundReports.length > 0) {
       const last = roundReports[roundReports.length - 1]
       metrics = {
@@ -2103,17 +2126,17 @@ async function main() {
     console.log(`\nAll 4 AIs saved: ${AI_NAMES.join(', ')}`)
   }
 
-  // 主日志：用 formatRoundReport 统一格式（Summary + 每圈明细 when DETAIL_MODE）
+  // 主日志:用 formatRoundReport 统一格式(Summary + 每圈明细 when DETAIL_MODE)
   const mainHeader = [
     '# 长清阁麻将 全员基线收敛训练日志',
     '',
     `- 创建时间: ${new Date().toISOString()}`,
     `- 训练脚本: train-baseline.ts`,
     `- Config: ${ROUNDS} rounds × ${GAMES_PER_ROUND} games = ${ROUNDS * GAMES_PER_ROUND} total`,
-    `- 模式: 4人共用同一策略，血战到最后一人`,
+    `- 模式: 4人共用同一策略,血战到最后一人`,
     `- 目标: 胡牌率≥90% 流局率<10% 血战率>80%`,
   ]
-  const mainOut: string[] = [...mainHeader, '## 基线成绩（第0轮）']
+  const mainOut: string[] = [...mainHeader, '## 基线成绩(第0轮)']
   const baseEval = evaluatePolicy(bestPolicy, GAMES_PER_ROUND)
   mainOut.push(`胡牌率=${((1-baseEval.draws/GAMES_PER_ROUND)*100).toFixed(1)}%  流局率=${(baseEval.draws/GAMES_PER_ROUND*100).toFixed(1)}%  Fitness=${baseEval.metricsFitness.toFixed(2)}`)
   for (const r of roundReports) mainOut.push(formatRoundReport(r, true))
@@ -2126,9 +2149,9 @@ async function main() {
   process.exit(0)
 }
 
-// ========== 单局测试：强制进攻，打印每回合完整明细 ==========
+// ========== 单局测试:强制进攻,打印每回合完整明细 ==========
 function testOneGame() {
-  // 优先用 GA 优化过的 policy（best-policy.json），fallback 到默认参数
+  // 优先用 GA 优化过的 policy(best-policy.json),fallback 到默认参数
   let policy: BotPolicy | null = null
   try {
     const policyPath = path.join(__dirname, '..', 'training-output', 'best-policy.json')
@@ -2150,12 +2173,12 @@ function testOneGame() {
     }
   }
 
-  console.error('[TEST] 启动单局测试，强制胡牌模式...')
+  console.error('[TEST] 启动单局测试,强制胡牌模式...')
   const result = runGame(policy, [policy, policy, policy])
 
   const winnerDetail = result.winnerDetails?.[0]
   if (result.isDraw) {
-    console.error(`[TEST] 结果: 流局（${result.roundNum}回合）`)
+    console.error(`[TEST] 结果: 流局(${result.roundNum}回合)`)
   } else {
     console.error(`[TEST] 结果: ${winnerDetail?.name || result.winner} 通过 ${winnerDetail?.winMode || '?'} 获胜`)
     console.error(`[TEST] 牌型: ${winnerDetail?.handType || '?'} 番数: ${winnerDetail?.baseFan || 0} 最终得分: ${winnerDetail?.finalPoints || 0}`)
@@ -2167,44 +2190,44 @@ function testOneGame() {
   console.error(`[TEST] 总回合数: ${result.roundNum}`)
   console.error(`[TEST] 百搭: ${result.wildTile || '无'}`)
 
-  // 打印每回合快照（合并格式：一圈=4人各摸打一次，有吃碰/杠则断开重开）
-  // --detail 开关：控制是否输出每圈明细到控制台
+  // 打印每回合快照(合并格式:一圈=4人各摸打一次,有吃碰/杠则断开重开)
+  // --detail 开关:控制是否输出每圈明细到控制台
   if (DETAIL_MODE && result.turnSnapshots && result.turnSnapshots.length > 0) {
     console.error('\n========== 每回合明细 ==========')
     let circleCount = 0
-    let prevExposed: string[] = []   // 4家上次的副露字符串（检测吃碰）
+    let prevExposed: string[] = []   // 4家上次的副露字符串(检测吃碰)
     let circleStart = 0               // 当前圈的第一个快照索引
     let snapIdx = 0
     while (snapIdx < result.turnSnapshots.length) {
       const snap = result.turnSnapshots[snapIdx]
       const currExposed = snap.players.map(p => p.exposed.join('|'))
-      // 检测吃碰/杠：4家任一副露变化 → 开新圈
+      // 检测吃碰/杠:4家任一副露变化 → 开新圈
       const hadMeld = prevExposed.length > 0 && currExposed.some((ex, i) => ex !== prevExposed[i])
-      // 新圈条件：(1)首快照 (2)有吃碰 (3)回到起始玩家（完整4人了一圈）
+      // 新圈条件:(1)首快照 (2)有吃碰 (3)回到起始玩家(完整4人了一圈)
       const backToStart = snapIdx > 0 && snap.currentPlayer === result.turnSnapshots[circleStart].currentPlayer
       if (snapIdx === 0 || hadMeld || backToStart) {
         if (snapIdx > 0 && !backToStart && !hadMeld) {
-          // 正常一圈结束但不足4人（游戏结束），跳过
+          // 正常一圈结束但不足4人(游戏结束),跳过
         }
         if (snapIdx > 0) circleCount++
         circleStart = snapIdx
-        console.error(`\n【第${circleCount}圈】百搭${snap.wildTile}｜×${snap.gameMultiplier}`)
-        // 打印4家手牌（整理后）
+        console.error(`\n【第${circleCount}圈】百搭${snap.wildTile}|×${snap.gameMultiplier}`)
+        // 打印4家手牌(整理后)
         for (const pp of snap.players) {
-          console.error(`  ${pp.name}：${pp.hand || '(无)'}｜副露:${pp.exposed.join('|') || '无'}｜${pp.handCount}张`)
+          console.error(`  ${pp.name}:${pp.hand || '(无)'}|副露:${pp.exposed.join('|') || '无'}|${pp.handCount}张`)
         }
       }
       // 打印当前人摸打
       const p = snap.players[snap.currentPlayer]
-      console.error(`  ▶ ${p?.name || 'P' + snap.currentPlayer}：摸${snap.drawnTile} → 打${snap.discardedTile}`)
+      console.error(`  ▶ ${p?.name || 'P' + snap.currentPlayer}:摸${snap.drawnTile} → 打${snap.discardedTile}`)
       prevExposed = currExposed
       snapIdx++
     }
   } else if (DETAIL_MODE) {
-    console.error('[TEST] 无回合快照（游戏未正常结束）')
+    console.error('[TEST] 无回合快照(游戏未正常结束)')
   }
 
-  // --detail 开关：控制是否输出每圈明细和 round 文件
+  // --detail 开关:控制是否输出每圈明细和 round 文件
   if (DETAIL_MODE) {
     const outDir = path.join(__dirname, '..', 'training-output', 'test')
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
@@ -2226,7 +2249,7 @@ function testOneGame() {
   }
 }
 
-// 入口：根据参数决定运行模式
+// 入口:根据参数决定运行模式
 if (process.argv.length > 2) {
   main().catch(e => { console.error('[MAIN ERROR]', e); process.exit(1) })
 } else {
