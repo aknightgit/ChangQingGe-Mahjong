@@ -33,7 +33,7 @@ const BASELINE_MODE = process.argv[4] === '--baseline'  // 基线训练:优化�
 const DETAIL_MODE = process.argv.includes('--detail')  // 每圈明细开关,默认关闭
 const SETTLEMENT_MULT = 10
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
-const OUT_DIR = path.resolve(__dirname, '..', 'training-output')
+const OUT_DIR = '/data/mahjong-training/training-output'
 
 // ========== MariaDB 备份 ==========
 const DB_CONFIG = { host: '192.168.3.241', port: 33061, user: 'openclaw', password: '0penC1aw', database: 'changqingge' }
