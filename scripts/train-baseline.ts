@@ -1811,6 +1811,7 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
         isSelfDraw: w.selfDraw,
         akDelta: w.score * SETTLEMENT_MULT,
         handTypes: ht && ht !== '未知' ? [ht] : ['普通'],
+        wonFan: w.wonFan || 0,  // 用于 globalMaxWin 排序
         hand: w.snapshot?.hand || '',
         melds: w.snapshot?.melds || [],
         flowers: w.winnerDetails?.[0]?.flowers || [],
