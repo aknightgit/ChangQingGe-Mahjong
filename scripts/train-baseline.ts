@@ -145,8 +145,8 @@ interface BotPolicy {
 
 const DEFAULT_POLICY: BotPolicy = {
   id: 'default',
-  selfWinChance: 1.0, discardHuChance: 1.0,
-  selfWinWildBoost: 0.1, discardHuWildPenalty: 0.2, discardHuMenQingPenalty: 0.05,
+  selfWinChance: 0.4, discardHuChance: 0.9,
+  selfWinWildBoost: 0.05, discardHuWildPenalty: 0.10, discardHuMenQingPenalty: 0.05,
   pengChance: 1.0, kongChance: 0.9, chowChance: 0.8, anKongChance: 0.95,
   pengWildBoost: 0.06, kongWildBoost: 0.14, chowWildPenalty: 0.18,
   menqingKeepBonus: 2.8, meldPenalty: 0.00,
@@ -233,10 +233,10 @@ const MUTATE_KEYS: (keyof BotPolicy)[] = [
 ]
 
 const PARAM_RANGES: Record<string, { min: number; max: number; step: number }> = {
-  selfWinChance:              { min: 0.8,  max: 1.0,  step: 0.02 },
-  discardHuChance:            { min: 0.8,  max: 1.0,  step: 0.02 },
-  selfWinWildBoost:           { min: 0.0,  max: 0.3,  step: 0.02 },
-  discardHuWildPenalty:       { min: 0.0,  max: 0.8,  step: 0.03 },
+  selfWinChance:              { min: 0.3,  max: 0.5,  step: 0.02 },
+  discardHuChance:            { min: 0.85, max: 1.0,  step: 0.02 },
+  selfWinWildBoost:           { min: 0.02, max: 0.08, step: 0.01 },
+  discardHuWildPenalty:       { min: 0.05, max: 0.15, step: 0.01 },
   discardHuMenQingPenalty:    { min: 0.0,  max: 0.4,  step: 0.02 },
   pengChance:                 { min: 0.7,  max: 1.0,  step: 0.03 },
   kongChance:                 { min: 0.5,  max: 1.0,  step: 0.05 },
@@ -247,9 +247,9 @@ const PARAM_RANGES: Record<string, { min: number; max: number; step: number }> =
   chowWildPenalty:            { min: 0.0,  max: 0.5,  step: 0.02 },
   menqingKeepBonus:           { min: 0.0,  max: 3.0,  step: 0.5 },
   meldPenalty:                { min: 0.0,  max: 0.3,  step: 0.02 },
-  allPungsPursuit:            { min: 0.0,  max: 2.0,  step: 0.1 },
-  pureFlushPursuit:           { min: 0.0,  max: 2.0,  step: 0.1 },
-  halfFlushWeight:            { min: 0.0,  max: 2.0,  step: 0.1 },
+  allPungsPursuit:            { min: 0.3,  max: 1.5,  step: 0.1 },
+  pureFlushPursuit:           { min: 0.2,  max: 1.0,  step: 0.1 },
+  halfFlushWeight:            { min: 0.4,  max: 1.2,  step: 0.1 },
   sevenPairsPursuit:          { min: 0.0,  max: 2.0,  step: 0.1 },
   allHonorsPursuit:           { min: 0.0,  max: 2.0,  step: 0.1 },
   allHonorsPungsPursuit:      { min: 0.0,  max: 2.0,  step: 0.1 },
