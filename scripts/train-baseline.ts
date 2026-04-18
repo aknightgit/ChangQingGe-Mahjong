@@ -1175,7 +1175,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     const totalPot = g.players.reduce((s, p) => s + Math.abs(p.score), 0)
     return {
       winner: winnerIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier,
-      settlementLog, snapshots, roundNum: turn, wildTile: wildTileStr, wildSuit: g.wildSuit, wildValue: g.wildValue,
+      settlementLog, snapshots, roundNum: turn, wildTile: tileStr({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }), wildSuit: g.wildSuit, wildValue: g.wildValue,
       dice1, dice2, diceMultiplier, totalPot, winnerDetails, turnSnapshots,
       gameMeta: { dicePoints: [dice1, dice2], diceMultiplier, inheritanceMultiplier: 1, flowMultiplier: prevRoundWasDraw ? 2 : 1, prevRoundWasDraw, prevRoundWasRebel: false }
     }
@@ -1186,7 +1186,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     const totalPot = g.players.reduce((s, p) => s + Math.abs(p.score), 0)
     return {
       winner: -1, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier,
-      settlementLog, snapshots, roundNum: turn, wildTile: wildTileStr, wildSuit: g.wildSuit, wildValue: g.wildValue,
+      settlementLog, snapshots, roundNum: turn, wildTile: tileStr({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }), wildSuit: g.wildSuit, wildValue: g.wildValue,
       dice1, dice2, diceMultiplier, totalPot, winnerDetails: [], turnSnapshots, isDraw: true,
       gameMeta: { dicePoints: [dice1, dice2], diceMultiplier, inheritanceMultiplier: 1, flowMultiplier: prevRoundWasDraw ? 2 : 1, prevRoundWasDraw, prevRoundWasRebel: false }
     }
@@ -1632,7 +1632,7 @@ function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy
     gLines.push(`- 局号: ${gameIdx}`)
     gLines.push(`- 回合: ${r.roundNum}`)
     gLines.push(`- 总筹码: ${totalPot}`)
-    gLines.push(`- 百搭: ${wildTileStrToName(r.wildTile || 'unknown')}`)
+    gLines.push(`- 百搭: ${r.wildTile || '无百搭'}`)
     gLines.push(`- 回合/全局倍数信息:`)
     gLines.push(`  - 骰子点数: ${r.dice1 || '?'} + ${r.dice2 || '?'}`)
     gLines.push(`  - 骰子倍数(清晰明了): x${r.diceMultiplier || '?'}`)
