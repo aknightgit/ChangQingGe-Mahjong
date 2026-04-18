@@ -2309,9 +2309,9 @@ function testOneGame() {
 }
 
 // 入口:根据参数决定运行模式
-if (process.argv.length > 2) {
-  main().catch(e => { console.error('[MAIN ERROR]', e); process.exit(1) })
-} else {
+if (DETAIL_MODE) {
   testOneGame()
   process.exit(0)
+} else {
+  main().catch(e => { console.error('[MAIN ERROR]', e); process.exit(1) })
 }
