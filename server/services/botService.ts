@@ -974,9 +974,7 @@ export async function shouldClaimPendingAction(
   //   - bao2ClaimPenalty     → 二宝捉冲惩罚
   //   - bao3AvoidThreshold   → 三宝避免阈值
   if (availableActions.includes(ActionType.HU)) {
-    const isSelfDraw = !(game.pendingActions.some(
-      pa => pa.playerId === player.id && pa.type === 'discard'
-    ))
+    const isSelfDraw = !claimTile
 
     // 自摸：有 selfWinChance 控制意愿
     if (isSelfDraw) {

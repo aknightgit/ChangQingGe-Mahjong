@@ -166,6 +166,7 @@ export enum GameEndReason {
 export interface PendingKongClaim {
   playerId: string;
   tile: Tile;
+  cancelledByHu?: boolean;
 }
 
 export interface RebelEvent {

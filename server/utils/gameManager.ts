@@ -2590,9 +2590,11 @@ class GameManager {
     // 仍有玩家等待响应,先不继续
     if (game.pendingActions.length > 0) return true;
 
-    const kongPlayer = game.players.find(p => p.id === pendingClaim.playerId);
-    if (kongPlayer && kongPlayer.status === PlayerStatus.PLAYING) {
-      this.completeExtendedKong(game, kongPlayer, pendingClaim.tile);
+    if (!pendingClaim.cancelledByHu) {
+      const kongPlayer = game.players.find(p => p.id === pendingClaim.playerId);
+      if (kongPlayer && kongPlayer.status === PlayerStatus.PLAYING) {
+        this.completeExtendedKong(game, kongPlayer, pendingClaim.tile);
+      }
     }
 
     game.pendingKongClaim = undefined;
@@ -2767,6 +2769,9 @@ class GameManager {
     if (hadPendingForMultiHu) {
       if (game.multiHuStarterIndex === undefined) {
         game.multiHuStarterIndex = game.players.findIndex(p => p.id === player.id);
+      }
+      if (isRobbingKong && game.pendingKongClaim) {
+        game.pendingKongClaim.cancelledByHu = true;
       }
       return;  // 等待其他可胡玩家响应
     }
@@ -3164,7 +3169,7 @@ class GameManager {
     }
 
     // 抢杠场景:所有候选都过了,补杠继续
-    if (game.pendingActions.length === 0 && game.pendingKongClaim) {
+    if (game.pendingActions.length === 0 && game.pendingKongClaim && game.multiHuStarterIndex === undefined) {
       this.resolveRobKongIfNeeded(game);
       return;
     }
@@ -3173,6 +3178,9 @@ class GameManager {
     if (game.pendingActions.length === 0 && game.multiHuStarterIndex !== undefined) {
       const starter = game.multiHuStarterIndex;
       game.multiHuStarterIndex = undefined;
+      if (game.pendingKongClaim?.cancelledByHu) {
+        game.pendingKongClaim = undefined;
+      }
       const next = this.getNextActivePlayer(game, starter);
       if (next) {
         game.currentPlayerIndex = game.players.findIndex(p => p.id === next.id);

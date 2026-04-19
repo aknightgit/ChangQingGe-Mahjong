@@ -106,6 +106,33 @@ function baseGame(players: any[], discardTile?: any) {
 
 console.log('\n=== 回归测试: 极端流程 ===\n')
 
+// 用例0: AI 抢先胡时，不应吞掉真人的胡牌窗口
+{
+  const winningTile = tile('discard-ai-hu', TileSuit.DOTS, 5)
+  const discarder = player('discarder-ai', 0, [])
+  const human = player('human', 1, waitingPengPengTiles('hm'))
+  const bot = player('bot', 2, waitingPengPengTiles('bt'))
+  bot.name = 'AI-Bot'
+  const idle = player('idle-ai', 3, waitingPengPengTiles('id'))
+  const game = baseGame([discarder, human, bot, idle], winningTile)
+  ;(gameManager as any).games.set(game.gameId, game)
+  game.pendingActions = [
+    { playerId: human.id, availableActions: [ActionType.HU, ActionType.PASS], tile: winningTile, expiresAt: Date.now() + 5000 },
+    { playerId: bot.id, availableActions: [ActionType.HU, ActionType.PASS], tile: winningTile, expiresAt: Date.now() + 5000 }
+  ]
+
+  const randomBefore = Math.random
+  Math.random = () => 0
+  try {
+    await (gameManager as any).handleBotPendingActions(game.gameId)
+  } finally {
+    Math.random = randomBefore
+  }
+
+  test('AI 胡牌后自己进入 WON', bot.status === PlayerStatus.WON)
+  test('AI 胡牌后真人的 HU pending 仍保留', game.pendingActions.some((pa: any) => pa.playerId === human.id && pa.availableActions.includes(ActionType.HU)))
+}
+
 // 用例1: 一炮多响时，首胡后必须记录“从谁右手继续”
 {
   const winningTile = tile('discard-win', TileSuit.DOTS, 5)
@@ -203,9 +230,45 @@ console.log('\n=== 回归测试: 极端流程 ===\n')
   test('补杠后补牌保持手牌张数平衡', kongPlayer.hand.concealedTiles.length === concealedBefore, `before=${concealedBefore}, after=${kongPlayer.hand.concealedTiles.length}`)
 }
 
+// 用例5: 抢杠多响首胡后，剩余候选人 pass 不得恢复原补杠
+{
+  const concealedKongTile = tile('concealed-6', TileSuit.DOTS, 6)
+  const kongPlayer = player(
+    'konger2',
+    0,
+    [concealedKongTile],
+    [{
+      type: MeldType.TRIPLET,
+      tiles: [
+        tile('meld-6a', TileSuit.DOTS, 6),
+        tile('meld-6b', TileSuit.DOTS, 6),
+        tile('meld-6c', TileSuit.DOTS, 6)
+      ],
+      isConcealed: false
+    }]
+  )
+  const robber1 = player('robber1', 1, waitingPengPengTiles('r1'))
+  const robber2 = player('robber2', 2, waitingPengPengTiles('r2'))
+  const idle = player('idle-rk', 3, waitingPengPengTiles('rk'))
+  const game = baseGame([kongPlayer, robber1, robber2, idle])
+  game.pendingKongClaim = { playerId: kongPlayer.id, tile: concealedKongTile }
+  game.pendingActions = [
+    { playerId: robber1.id, availableActions: [ActionType.HU, ActionType.PASS], tile: concealedKongTile, expiresAt: Date.now() + 5000 },
+    { playerId: robber2.id, availableActions: [ActionType.HU, ActionType.PASS], tile: concealedKongTile, expiresAt: Date.now() + 5000 }
+  ]
+
+  await (gameManager as any).handleHu(game, robber1)
+  ;(gameManager as any).handlePass(game, robber2)
+
+  test('抢杠首胡后 pendingKongClaim 被清理', !game.pendingKongClaim)
+  test('抢杠首胡后原补杠不会恢复成 KONG', !kongPlayer.hand.exposedMelds.some((meld: any) => meld.type === MeldType.KONG))
+  test('抢杠首胡后原门口仍保持 TRIPLET', kongPlayer.hand.exposedMelds.some((meld: any) => meld.type === MeldType.TRIPLET && meld.tiles.length === 3))
+}
+
 console.log('\n==================================================')
 console.log(`测试结果: ${passed} 通过, ${failed} 失败`)
 if (failed > 0) {
   process.exit(1)
 }
+process.exit(0)
 console.log('极端流程专项回归通过')
