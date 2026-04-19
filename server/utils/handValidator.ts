@@ -694,7 +694,7 @@ export function findBestHandTypes(
   exposed: Meld[],
   wildTileId: string | null
 ): HandType[] {
-  const result = findBestAssignment(tiles, exposed, wildTileId ?? '');
+  const result = findBestAssignmentHeuristic(tiles, exposed, wildTileId ?? '');
   // 结果已按优先级排序
   return result;
 }
@@ -702,6 +702,202 @@ export function findBestHandTypes(
 // ============================================================
 // 主入口：canWin
 // ============================================================
+function findBestAssignmentHeuristic(
+  concealed: Tile[],
+  exposed: Meld[],
+  wildTileId: string
+): HandType[] {
+  if (!wildTileId || typeof wildTileId !== 'string') return detectTypes(concealed, exposed);
+  const parts = wildTileId.split('-');
+  if (parts.length < 2) return detectTypes(concealed, exposed);
+  const [wildSuitRaw, wildVal] = parts;
+  const wildSuit = normalizeTileSuit(wildSuitRaw);
+  if (!wildSuit) return detectTypes(concealed, exposed);
+  const isWild = (t: Tile) => t.suit === wildSuit && String(t.value) === wildVal;
+
+  const wildCount = concealed.filter(t => isWild(t)).length;
+  if (wildCount === 0) return detectTypes(concealed, exposed);
+
+  const naturals = concealed.filter(t => !isWild(t));
+  const allCandidates: Array<{ suit: string; value: number }> = [];
+  const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+  for (const suit of numSuits) {
+    for (let value = 1; value <= 9; value++) {
+      allCandidates.push({ suit, value });
+    }
+  }
+  for (let value = 1; value <= 4; value++) {
+    allCandidates.push({ suit: TileSuit.WIND, value });
+  }
+  for (let value = 1; value <= 3; value++) {
+    allCandidates.push({ suit: TileSuit.DRAGON, value });
+  }
+
+  if (naturals.length === 0) {
+    const virtualHand: Tile[] = [];
+    for (let i = 0; i < wildCount; i++) {
+      virtualHand.push({ suit: wildSuit as TileSuit, value: parseInt(wildVal, 10), id: `vh-${i}`, isFlower: false });
+    }
+    return detectTypes(virtualHand, exposed);
+  }
+
+  let bestTypes: HandType[] = [];
+  let bestScore = -1;
+  let iterations = 0;
+  const ITERATION_LIMIT = 30000;
+
+  const baselineTypes = detectTypes(concealed, exposed);
+  if (baselineTypes.length > 0) {
+    bestScore = HAND_TYPE_PRIORITY[baselineTypes[0]] ?? 0;
+    bestTypes = [...baselineTypes];
+  }
+
+  const naturalCountByKey = new Map<string, number>();
+  const suitLoad = new Map<string, number>();
+  for (const tile of naturals) {
+    const key = `${tile.suit}-${tile.value}`;
+    naturalCountByKey.set(key, (naturalCountByKey.get(key) || 0) + 1);
+    suitLoad.set(tile.suit, (suitLoad.get(tile.suit) || 0) + 1);
+  }
+
+  const materializeTypes = (alloc: Array<{ suit: string; value: number }>) => {
+    const virtualHand = [...naturals];
+    for (let i = 0; i < alloc.length; i++) {
+      const tile = alloc[i];
+      virtualHand.push({ suit: tile.suit as TileSuit, value: tile.value, id: `vh-${i}`, isFlower: false });
+    }
+    return detectTypes(virtualHand, exposed);
+  };
+
+  if (wildCount <= 2) {
+    const enumerateAll = (wildIdx: number, alloc: Array<{ suit: string; value: number }>) => {
+      if (wildIdx === wildCount) {
+        iterations++;
+        if (iterations > ITERATION_LIMIT) return;
+        const types = materializeTypes(alloc);
+        if (types.length > 0) {
+          const primaryScore = HAND_TYPE_PRIORITY[types[0]] ?? 0;
+          if (primaryScore > bestScore) {
+            bestScore = primaryScore;
+            bestTypes = [...types];
+          }
+        }
+        return;
+      }
+
+      for (const candidate of allCandidates) {
+        if (iterations >= ITERATION_LIMIT) break;
+        alloc.push(candidate);
+        enumerateAll(wildIdx + 1, alloc);
+        alloc.pop();
+      }
+    };
+
+    enumerateAll(0, []);
+    return bestTypes;
+  }
+
+  const scoreCandidate = (candidate: { suit: string; value: number }): number => {
+    const key = `${candidate.suit}-${candidate.value}`;
+    const sameCount = naturalCountByKey.get(key) || 0;
+    let score = sameCount * 42;
+
+    if (candidate.suit === TileSuit.DRAGON) score += 96;
+    else if (candidate.suit === TileSuit.WIND) score += 76;
+    else score += 36 + (suitLoad.get(candidate.suit) || 0) * 4;
+
+    if (sameCount >= 2) score += 36;
+
+    if (candidate.suit === TileSuit.DOTS || candidate.suit === TileSuit.CHARACTERS || candidate.suit === TileSuit.BAMBOOS) {
+      const left1 = naturalCountByKey.get(`${candidate.suit}-${candidate.value - 1}`) || 0;
+      const right1 = naturalCountByKey.get(`${candidate.suit}-${candidate.value + 1}`) || 0;
+      const left2 = naturalCountByKey.get(`${candidate.suit}-${candidate.value - 2}`) || 0;
+      const right2 = naturalCountByKey.get(`${candidate.suit}-${candidate.value + 2}`) || 0;
+      score += (left1 + right1) * 12;
+      score += (left2 + right2) * 6;
+      if (left1 > 0 && right1 > 0) score += 18;
+    }
+
+    return score;
+  };
+
+  const scoreState = (alloc: Array<{ suit: string; value: number }>): number => {
+    const allocCounts = new Map<string, number>();
+    for (const tile of alloc) {
+      const key = `${tile.suit}-${tile.value}`;
+      allocCounts.set(key, (allocCounts.get(key) || 0) + 1);
+    }
+
+    let total = 0;
+    for (const [key, count] of allocCounts) {
+      const naturalCount = naturalCountByKey.get(key) || 0;
+      total += naturalCount * count * 24;
+      if (naturalCount + count >= 3) total += 32;
+      else if (naturalCount + count === 2) total += 14;
+    }
+
+    const suitSet = new Set(
+      [...naturals.map(tile => tile.suit), ...alloc.map(tile => tile.suit)]
+        .filter(suit => suit === TileSuit.DOTS || suit === TileSuit.CHARACTERS || suit === TileSuit.BAMBOOS)
+    );
+    if (suitSet.size === 1) total += 20;
+
+    return total;
+  };
+
+  const topCandidates = allCandidates
+    .map(candidate => ({ ...candidate, score: scoreCandidate(candidate) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, Math.min(18, allCandidates.length));
+
+  const beamWidth = wildCount >= 5 ? 10 : 14;
+  let states: Array<{ alloc: Array<{ suit: string; value: number }>; heuristic: number }> = [
+    { alloc: [], heuristic: 0 }
+  ];
+
+  for (let depth = 0; depth < wildCount && iterations < ITERATION_LIMIT; depth++) {
+    const expanded: Array<{ alloc: Array<{ suit: string; value: number }>; heuristic: number }> = [];
+    for (const state of states) {
+      for (const candidate of topCandidates) {
+        const nextAlloc = [...state.alloc, { suit: candidate.suit, value: candidate.value }];
+        expanded.push({
+          alloc: nextAlloc,
+          heuristic: state.heuristic + candidate.score + scoreState(nextAlloc)
+        });
+      }
+    }
+
+    const deduped = new Map<string, { alloc: Array<{ suit: string; value: number }>; heuristic: number }>();
+    for (const state of expanded.sort((a, b) => b.heuristic - a.heuristic)) {
+      const signature = state.alloc
+        .map(tile => `${tile.suit}-${tile.value}`)
+        .sort()
+        .join(',');
+      if (!deduped.has(signature)) {
+        deduped.set(signature, state);
+      }
+      if (deduped.size >= beamWidth) break;
+    }
+
+    states = Array.from(deduped.values());
+  }
+
+  for (const state of states) {
+    iterations++;
+    if (iterations > ITERATION_LIMIT) break;
+    const types = materializeTypes(state.alloc);
+    if (types.length > 0) {
+      const primaryScore = HAND_TYPE_PRIORITY[types[0]] ?? 0;
+      if (primaryScore > bestScore) {
+        bestScore = primaryScore;
+        bestTypes = [...types];
+      }
+    }
+  }
+
+  return bestTypes;
+}
+
 export function canWin(
   handTiles: Tile[],
   exposedOrCount: Meld[] | number,
@@ -807,7 +1003,7 @@ export function canWin(
   // 第二层：标准 3n+2 / 特殊牌型检测
   // _skipWildAssignment 时跳过 findBestAssignment DFS，直接用 detectTypes（用于 baseline 提速）
   const types = (wildTileId && !_skipWildAssignment)
-    ? findBestAssignment(concealed, exposed, wildTileId)
+    ? findBestAssignmentHeuristic(concealed, exposed, wildTileId)
     : detectTypes(concealed, exposed);
 
   const validTypes = types;

@@ -1,5 +1,6 @@
 import { gameManager } from '../../utils/gameManager';
 import { emitToRoom } from '../../utils/socket';
+import { requireGamePlayerAccess } from '../../utils/session';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -14,15 +15,20 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    // 将前端的具体动作映射到 'confirm' 或 'pass'
+    const game = await gameManager.getGame(gameId);
+    if (!game) {
+      throw createError({ statusCode: 404, message: 'Game not found' });
+    }
+
+    await requireGamePlayerAccess(event, game, playerId);
+
     const mappedChoice = choice === 'pass' ? 'pass' : 'confirm';
     await gameManager.handleApprovalChoice(gameId, playerId, mappedChoice);
 
-    const game = await gameManager.getGame(gameId);
     emitToRoom(gameId, 'game:state-changed', {
       gameId,
-      currentPlayerIndex: game?.currentPlayerIndex,
-      phase: game?.phase
+      currentPlayerIndex: game.currentPlayerIndex,
+      phase: game.phase
     });
 
     return { success: true };

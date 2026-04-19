@@ -1,6 +1,5 @@
 import { gameManager } from '../../utils/gameManager';
-import { generateWinOptions } from '../../utils/scoring';
-import { TileSuit } from '../../types/game';
+import { requireGamePlayerAccess } from '../../utils/session';
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -14,29 +13,11 @@ export default defineEventHandler(async (event) => {
     const game = await gameManager.getGame(gameId);
     if (!game) throw createError({ statusCode: 404, message: 'Game not found' });
 
-    const player = game.players.find(p => p.id === playerId);
-    if (!player) throw createError({ statusCode: 404, message: 'Player not found' });
+    await requireGamePlayerAccess(event, game, playerId);
 
-    const handTiles = player.hand.concealedTiles;
-    const melds = player.hand.exposedMelds;
-    const flowerTiles = handTiles.filter(t => t.suit === TileSuit.FLOWER);
+    const filteredWinOptions = await gameManager.getWinOptionsForPlayer(gameId, playerId);
 
-    const winOptions = generateWinOptions({
-      handTiles,
-      exposedMelds: melds,
-      flowerTiles,
-      handTypes: [],
-      isKongFlower: false,
-      isRobbingKong: false,
-      isMenQing: melds.length === 0,
-      rawRoundMultiplier: game.roundMultiplier || 1,
-      rawInheritMultiplier: game.inheritMultiplier || 1,
-    });
-
-    // 按分数降序排列
-    winOptions.sort((a, b) => b.score - a.score);
-
-    return { success: true, winOptions };
+    return { success: true, winOptions: filteredWinOptions };
   } catch (error: any) {
     throw createError({ statusCode: 400, message: error.message || 'Failed to get win options' });
   }

@@ -1,4 +1,5 @@
 import { gameManager } from '../../utils/gameManager';
+import { requireGamePlayerAccess } from '../../utils/session';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -11,10 +12,14 @@ export default defineEventHandler(async (event) => {
   const game = await gameManager.getGame(gameId);
   if (!game) throw createError({ statusCode: 404, message: 'Game not found' });
 
+  const { player } = await requireGamePlayerAccess(event, game, playerId);
+  if (!player.isDealer) {
+    throw createError({ statusCode: 403, message: 'Only the dealer can kick players' });
+  }
+
   const target = game.players.find(p => p.id === targetPlayerId);
   if (!target) throw createError({ statusCode: 404, message: 'Target player not found' });
 
-  // 标记 AI 玩家下局移除
   if (!game.pendingRemovals) game.pendingRemovals = [];
   if (!game.pendingRemovals.includes(targetPlayerId)) {
     game.pendingRemovals.push(targetPlayerId);

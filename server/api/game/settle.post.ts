@@ -2,10 +2,11 @@ import { gameManager } from '../../utils/gameManager';
 import { GamePhase, GameEndReason } from '../../types/game';
 import { getCollection } from '../../utils/mongo';
 import type { SettlementHistory } from '../../types/database';
+import { requireGamePlayerAccess } from '../../utils/session';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
-  const { gameId, playerId, action } = body;
+  const { gameId, playerId, action, debugAccessToken } = body;
 
   if (!gameId || !playerId) {
     throw createError({ statusCode: 400, message: 'Missing required fields' });
@@ -13,6 +14,14 @@ export default defineEventHandler(async (event) => {
 
   const game = await gameManager.getGame(gameId);
   if (!game) throw createError({ statusCode: 404, message: 'Game not found' });
+  const debugRoutesEnabled = process.env.ENABLE_DEBUG_ROUTES === 'true';
+  const isDebugBypass =
+    debugRoutesEnabled &&
+    typeof debugAccessToken === 'string' &&
+    (game as any).debugAccessToken === debugAccessToken;
+  if (!isDebugBypass) {
+    await requireGamePlayerAccess(event, game, playerId);
+  }
 
   if (action === 'request') {
     // 请求退房结算
@@ -85,7 +94,8 @@ export default defineEventHandler(async (event) => {
         settleRequested: true,
         playerStats: Object.values(playerStats).sort((a: any, b: any) => b.totalScore - a.totalScore),
         totalRounds: (game.roundStats || []).length,
-        roomNumber: game.roomNumber
+        roomNumber: game.roomNumber,
+        roundDetails: game.roundStats || []
       }
     };
   }
@@ -154,6 +164,7 @@ export default defineEventHandler(async (event) => {
       roomNumber: (game as any).roomNumber,
       totalRounds: (game.roundStats || []).length,
       playerStats: Object.values(playerStatsMap),
+      roundDetails: game.roundStats || [],
       savedAt: new Date(),
       savedBy: playerId
     };

@@ -501,7 +501,7 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
   // 高倍数场（4+对子）：AI更追求速度，减少做大牌的时间浪费
   // 低倍数场：可以有更多余裕做大牌
   const roundMult = (game as any).roundMultiplier ?? 1
-  const inheritMult = (game as any).inheritedGlobalMultiplier ?? 1
+  const inheritMult = (game as any).inheritMultiplier ?? 1
   const globalMult = Math.max(roundMult, inheritMult)
   const multHighSpeedBias = policy.multHighSpeedBias ?? 0
   const multLowSpeedBias = policy.multLowSpeedBias ?? 0
@@ -647,7 +647,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   const hand = player.hand.concealedTiles
   if (hand.length === 0) return ''
 
-  const wildChecker = (t: Tile) => isWildTile(t, game)
+  const wildTileId = game.customScoringMode || null
   const exposedCount = player.hand.exposedMelds.length
 
   let bestTile = hand[0]
@@ -687,7 +687,7 @@ function countWinningTiles(player: Player, game: GameState): number {
   const exposed = player.hand.exposedMelds
   if (hand.length === 0) return 0
 
-  const wildChecker = (t: Tile) => isWildTile(t, game)
+  const wildTileId = game.customScoringMode || null
   let count = 0
 
   // Test all 34 standard tile types (万/条/筒 1-9 × 3 + 风 4 + 箭 3)
@@ -696,7 +696,7 @@ function countWinningTiles(player: Player, game: GameState): number {
     for (let v = 1; v <= 9; v++) {
       const testTile: Tile = { suit, value: v, id: `test-${suit}-${v}` }
       const testHand = [...hand, testTile]
-      const result = canWin(testHand, exposed.length, wildChecker)
+      const result = canWin(testHand, exposed.length, wildTileId)
       if (result.canWin) {
         // Estimate remaining count (4 minus what's in hand/visible)
         const inHand = hand.filter(t => t.suit === suit && t.value === v).length
@@ -709,14 +709,14 @@ function countWinningTiles(player: Player, game: GameState): number {
     const testTile: Tile = { suit: TileSuit.WIND, value: 0, id: `test-wind-${w}` }
     // WIND tiles use value to distinguish, but canWin checks suit
     const testHand = [...hand, testTile]
-    const result = canWin(testHand, exposed.length, wildChecker)
+    const result = canWin(testHand, exposed.length, wildTileId)
     if (result.canWin) count += 4
   }
   // Dragon tiles (中发白)
   for (let v = 1; v <= 3; v++) {
     const testTile: Tile = { suit: TileSuit.DRAGON, value: v, id: `test-dragon-${v}` }
     const testHand = [...hand, testTile]
-    const result = canWin(testHand, exposed.length, wildChecker)
+    const result = canWin(testHand, exposed.length, wildTileId)
     if (result.canWin) count += 4
   }
 

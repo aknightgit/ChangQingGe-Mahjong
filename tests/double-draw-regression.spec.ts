@@ -84,6 +84,11 @@ function simulateMoveToNextPlayer(game: MockGameState) {
 }
 
 // 模拟 startGame human dealer timer auto-draw（修复点: 必须设置 drawnThisTurn）
+function simulatePostHuResume(game: MockGameState, winnerIndex: number): void {
+  game.currentPlayerIndex = winnerIndex;
+  simulateMoveToNextPlayer(game);
+}
+
 function simulateStartGameHumanAutoDraw(game: MockGameState, player: MockPlayer): void {
   if (player.hand.concealedTiles.length < 14 && game.wall.length > 0) {
     const drawnTile = game.wall.shift()!;
@@ -348,6 +353,29 @@ console.log('\n【用例7】四玩家完整轮转: drawnThisTurn 重置验证');
 // ============================================================
 // 结果汇总
 // ============================================================
+console.log('\n銆愮敤渚?銆戣鎴樺埌搴曡儭鐗屽悗浠庡彸鎵嬬户缁?');
+{
+  const players: MockPlayer[] = [
+    { id: 'discarder', name: 'Discarder', hand: { concealedTiles: [], exposedMelds: [] }, status: 'PLAYING' },
+    { id: 'winner', name: 'Winner', hand: { concealedTiles: [], exposedMelds: [] }, status: 'WON' },
+    { id: 'next', name: 'Next', hand: { concealedTiles: [], exposedMelds: [] }, status: 'PLAYING' },
+    { id: 'later', name: 'Later', hand: { concealedTiles: [], exposedMelds: [] }, status: 'PLAYING' },
+  ];
+  const game: MockGameState = {
+    phase: 'PLAYING',
+    currentPlayerIndex: 0,
+    players,
+    drawnThisTurn: true,
+    wall: [],
+    pendingActions: [],
+    flowerReplacementDone: false,
+  };
+
+  simulatePostHuResume(game, 1);
+  test('鑳＄墝鍚庡簲浠庤耽瀹跺彸鎵嬬户缁紝涓嶅簲鍐嶅璺充竴鎵?', game.currentPlayerIndex === 2, `got ${game.currentPlayerIndex}`);
+  test('鏂版帴鎵嬪洖鍚堝紑濮嬫椂搴旈噸缃?drawnThisTurn', game.drawnThisTurn === false, `got ${game.drawnThisTurn}`);
+}
+
 console.log(`\n${'='.repeat(50)}`);
 console.log(`测试结果: ${passed} 通过, ${failed} 失败`);
 if (failed > 0) {

@@ -2,6 +2,10 @@ import { UserService } from '../../services/userService'
 import { AuthService } from '../../services/authService'
 
 export default defineEventHandler(async (event) => {
+  if (process.env.NODE_ENV === 'production') {
+    throw createError({ statusCode: 404, message: 'Not found' })
+  }
+
   const body = await readBody(event)
   const { userId } = body
 

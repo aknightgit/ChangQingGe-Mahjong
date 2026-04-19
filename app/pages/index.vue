@@ -359,6 +359,7 @@ const confirmCreateGame = async () => {
       method: 'POST',
       body: {
         playerName: userName.value || 'Player 1',
+        diceRollCount: createParams.maxDiceRolls,
         firstRoundDouble: createParams.firstRoundDouble,
         liangShanThreshold: createParams.liangShanThreshold,
         thinkChances: createParams.thinkChances,

@@ -2,25 +2,20 @@ import type { H3Event } from 'h3'
 import { createError, getCookie, getQuery } from 'h3'
 import { AuthService } from '../services/authService'
 import { UserService } from '../services/userService'
+import type { GameState, Player } from '../types/game'
+
+async function validateSessionToken(token?: string): Promise<string | null> {
+  if (!token) return null
+  return AuthService.validateSession(token)
+}
 
 export async function resolveUserIdFromEvent(event: H3Event): Promise<string> {
-  const sessionToken = getCookie(event, 'mahjong_session')
+  const sessionUserId =
+    await validateSessionToken(getCookie(event, 'mahjong_session')) ||
+    await validateSessionToken(getCookie(event, 'auth_token'))
 
-  if (sessionToken) {
-    const sessionUserId = await AuthService.validateSession(sessionToken)
-    if (sessionUserId) {
-      return sessionUserId
-    }
-  }
-
-  const cookieUserId = getCookie(event, 'user_id')
-  if (cookieUserId) {
-    return cookieUserId
-  }
-
-  const query = getQuery(event)
-  if (typeof query.userId === 'string' && query.userId.length > 0) {
-    return query.userId
+  if (sessionUserId) {
+    return sessionUserId
   }
 
   throw createError({
@@ -63,4 +58,34 @@ export async function isAdminFromEvent(event: H3Event): Promise<boolean> {
   } catch (error) {
     return false
   }
+}
+
+export async function requireGamePlayerAccess(
+  event: H3Event,
+  game: GameState,
+  playerId: string,
+  options?: { allowAdmin?: boolean }
+): Promise<{ user: Awaited<ReturnType<typeof resolveUserFromEvent>>; player: Player; isAdmin: boolean }> {
+  const user = await resolveUserFromEvent(event)
+  const player = game.players.find((entry) => entry.id === playerId)
+
+  if (!player) {
+    throw createError({
+      statusCode: 404,
+      message: 'Player not found'
+    })
+  }
+
+  if (options?.allowAdmin && user.isAdmin) {
+    return { user, player, isAdmin: true }
+  }
+
+  if (!player.userId || player.userId !== user.userId) {
+    throw createError({
+      statusCode: 403,
+      message: 'Forbidden'
+    })
+  }
+
+  return { user, player, isAdmin: false }
 }

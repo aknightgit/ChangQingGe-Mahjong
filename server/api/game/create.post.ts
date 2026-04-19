@@ -1,20 +1,16 @@
 import { gameManager } from '../../utils/gameManager';
+import { resolveUserFromEvent } from '../../utils/session';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
-  const { playerName } = body;
-
-  if (!playerName || typeof playerName !== 'string') {
-    throw createError({
-      statusCode: 400,
-      message: 'Player name is required'
-    });
-  }
+  const user = await resolveUserFromEvent(event);
 
   try {
-    const result = await gameManager.createGame(playerName, {
+    const result = await gameManager.createGame(user.name, {
+      userId: user.userId,
+      diceRollCount: body.diceRollCount ?? 2,
       firstRoundDouble: body.firstRoundDouble ?? true,
-      liangShanThreshold: body.liangShanThreshold ?? 1000,
+      liangShanThreshold: body.liangShanThreshold ?? 4000,
       thinkChances: body.thinkChances ?? 3,
       settlementMultiplier: body.settlementMultiplier ?? 10,
       maxBots: body.maxBots ?? 3,

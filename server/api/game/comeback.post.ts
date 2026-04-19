@@ -1,4 +1,5 @@
 import { gameManager } from '../../utils/gameManager';
+import { requireGamePlayerAccess } from '../../utils/session';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -12,9 +13,14 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
+    const game = await gameManager.getGame(gameId);
+    if (!game) {
+      throw createError({ statusCode: 404, message: 'Game not found' });
+    }
+
+    await requireGamePlayerAccess(event, game, playerId);
     gameManager.disableBotMode(playerId);
 
-    const game = await gameManager.getGame(gameId);
     if (game) {
       await (gameManager as any).persistGame(game);
       (gameManager as any).broadcastGameState(gameId);

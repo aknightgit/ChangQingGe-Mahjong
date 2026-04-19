@@ -14,7 +14,7 @@ import {
 } from '../types/game';
 import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isFivePoison } from './tiles';
 import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
-import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier, calculateSettlement } from './scoring';
+import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier, calculateSettlementBreakdownByRules, generateWinOptions, type WinOption } from './scoring';
 import { randomUUID } from 'crypto';
 import { saveGameState, loadGameState, loadAllGameStates, deleteGameState } from './gamePersistence';
 import { MatchHistoryService } from '../services/matchHistoryService';
@@ -44,6 +44,165 @@ class GameManager {
 
   // AI托管模式:玩家ID集合,被标记的玩家由AI自动出牌
   private botModePlayers: Set<string> = new Set();
+  private winEvaluationCache: Map<string, Map<string, {
+    fast: Map<string, { canWin: boolean; types: HandType[] }>;
+    options: Map<string, WinOption[]>;
+  }>> = new Map();
+
+  private getPlayerWinCache(gameId: string, playerId: string) {
+    if (!this.winEvaluationCache.has(gameId)) {
+      this.winEvaluationCache.set(gameId, new Map());
+    }
+    const gameCache = this.winEvaluationCache.get(gameId)!;
+    if (!gameCache.has(playerId)) {
+      gameCache.set(playerId, {
+        fast: new Map(),
+        options: new Map()
+      });
+    }
+    return gameCache.get(playerId)!;
+  }
+
+  private invalidateWinEvaluationCache(gameId: string, playerIds?: string[]): void {
+    if (!playerIds || playerIds.length === 0) {
+      this.winEvaluationCache.delete(gameId);
+      return;
+    }
+
+    const gameCache = this.winEvaluationCache.get(gameId);
+    if (!gameCache) return;
+    for (const playerId of playerIds) {
+      gameCache.delete(playerId);
+    }
+    if (gameCache.size === 0) {
+      this.winEvaluationCache.delete(gameId);
+    }
+  }
+
+  private buildTileSignature(tiles: Tile[]): string {
+    return tiles
+      .map(tile => `${tile.suit}:${tile.value}`)
+      .sort()
+      .join(',');
+  }
+
+  private buildMeldSignature(melds: Meld[]): string {
+    return melds
+      .map(meld => `${meld.type}:${meld.isConcealed ? '1' : '0'}:${this.buildTileSignature(meld.tiles)}`)
+      .sort()
+      .join('|');
+  }
+
+  private getPlayerFlowerTiles(player: Player): Tile[] {
+    return player.hand.exposedMelds
+      .flatMap(meld => meld.tiles)
+      .filter(tile => isFlower(tile));
+  }
+
+  private isPlayerMenQing(player: Player): boolean {
+    return !player.hand.exposedMelds.some(meld =>
+      meld.type === MeldType.TRIPLET ||
+      meld.type === MeldType.SEQUENCE ||
+      (meld.type === MeldType.KONG && !meld.isConcealed)
+    );
+  }
+
+  private getPlayerWinContextKey(game: GameState, player: Player): string {
+    return [
+      `concealed=${this.buildTileSignature(player.hand.concealedTiles)}`,
+      `melds=${this.buildMeldSignature(player.hand.exposedMelds)}`,
+      `flowers=${this.getPlayerFlowerTiles(player).length}`,
+      `wild=${game.customScoringMode || ''}`,
+      `wildGroup=${(game.wildTileGroup || []).join(',')}`,
+      `round=${game.roundMultiplier ?? 1}`,
+      `inherit=${game.inheritMultiplier ?? 1}`,
+      `settlement=${game.settlementMultiplier ?? 1}`
+    ].join('|');
+  }
+
+  private getCachedWinCheck(game: GameState, player: Player): { canWin: boolean; types: HandType[] } {
+    const playerCache = this.getPlayerWinCache(game.gameId, player.id);
+    const cacheKey = this.getPlayerWinContextKey(game, player);
+    const cached = playerCache.fast.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const result = canWin(player.hand.concealedTiles, player.hand.exposedMelds, game.customScoringMode || null);
+    playerCache.fast.set(cacheKey, result);
+    return result;
+  }
+
+  private getCachedWinOptions(
+    game: GameState,
+    player: Player,
+    context: 'self_draw' | 'discard',
+    flags?: { isKongFlower?: boolean; isRobbingKong?: boolean; extraTile?: Tile }
+  ): WinOption[] {
+    const playerCache = this.getPlayerWinCache(game.gameId, player.id);
+    const cacheKey = [
+      this.getPlayerWinContextKey(game, player),
+      `ctx=${context}`,
+      `kongFlower=${flags?.isKongFlower ? 1 : 0}`,
+      `robKong=${flags?.isRobbingKong ? 1 : 0}`,
+      `extra=${flags?.extraTile ? `${flags.extraTile.suit}-${flags.extraTile.value}` : ''}`
+    ].join('|');
+    const cached = playerCache.options.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const handTiles = flags?.extraTile
+      ? [...player.hand.concealedTiles, flags.extraTile]
+      : player.hand.concealedTiles;
+    const winCheck = flags?.extraTile
+      ? canWin(handTiles, player.hand.exposedMelds, game.customScoringMode || null)
+      : this.getCachedWinCheck(game, player);
+    const wildParts = game.customScoringMode?.split('-');
+    const wildSuit = wildParts?.[0] ? wildParts[0] as TileSuit : undefined;
+    const wildValue = wildParts?.[1] ? parseInt(wildParts[1], 10) : undefined;
+    const allOptions = generateWinOptions({
+      handTiles,
+      exposedMelds: player.hand.exposedMelds,
+      flowerTiles: this.getPlayerFlowerTiles(player),
+      handTypes: winCheck.types,
+      isKongFlower: !!flags?.isKongFlower,
+      isRobbingKong: !!flags?.isRobbingKong,
+      isMenQing: this.isPlayerMenQing(player),
+      wildTileSuit: wildSuit,
+      wildTileValue: wildValue,
+      wildTileGroup: game.wildTileGroup,
+      rawRoundMultiplier: game.roundMultiplier ?? 1,
+      rawInheritMultiplier: game.inheritMultiplier ?? 1,
+      settlementMultiplier: game.settlementMultiplier ?? 1
+    });
+
+    const topOptions = allOptions
+      .filter(option => option.type === context)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+
+    playerCache.options.set(cacheKey, topOptions);
+    return topOptions;
+  }
+
+  private prewarmWinEvaluation(
+    game: GameState,
+    player: Player,
+    context: 'self_draw' | 'discard',
+    extraTile?: Tile
+  ): void {
+    if (player.status !== PlayerStatus.PLAYING) return;
+    const winCheck = extraTile
+      ? canWin([...player.hand.concealedTiles, extraTile], player.hand.exposedMelds, game.customScoringMode || null)
+      : this.getCachedWinCheck(game, player);
+    if (!winCheck.canWin) return;
+    this.getCachedWinOptions(game, player, context, {
+      isKongFlower: context === 'self_draw' && !!player.isSelfDrawn,
+      isRobbingKong: context === 'discard' && !!game.pendingKongClaim,
+      extraTile
+    });
+  }
 
   /** 训练快速模式: TRAINING_FAST_MODE=true 或 allClaimMode */
   private isTrainingFastMode(game: GameState): boolean {
@@ -574,7 +733,7 @@ class GameManager {
     return String(Date.now()).slice(-4);
   }
 
-  async createGame(playerName: string, options?: { diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number; maxBots?: number; hesitationWindow?: number; allClaimMode?: boolean }): Promise<{ gameId: string; playerId: string }> {
+  async createGame(playerName: string, options?: { userId?: string; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number; maxBots?: number; hesitationWindow?: number; allClaimMode?: boolean }): Promise<{ gameId: string; playerId: string }> {
     await this.hydrateFromDatabase();
 
     const gameId = randomUUID();
@@ -582,6 +741,7 @@ class GameManager {
 
     const player: Player = {
       id: playerId,
+      userId: options?.userId,
       name: playerName,
       position: 0,
       hand: {
@@ -629,7 +789,7 @@ class GameManager {
       inheritedGlobalMultiplier: options?.firstRoundDouble ? 2 : 1,
       rebelEvent: undefined,
       diceRollCount: options?.diceRollCount ?? 2,
-      liangShanThreshold: options?.liangShanThreshold ?? 1000,
+      liangShanThreshold: options?.liangShanThreshold ?? 4000,
       thinkChances: options?.thinkChances ?? 3,
       settlementMultiplier: options?.settlementMultiplier ?? 10,
       maxBots: options?.maxBots ?? 3,  // 默认允许最多3个AI
@@ -667,7 +827,7 @@ class GameManager {
     return null;
   }
 
-  async joinGame(gameId: string, playerName: string): Promise<{ playerId: string; position: number }> {
+  async joinGame(gameId: string, playerName: string, options?: { userId?: string }): Promise<{ playerId: string; position: number }> {
     await this.hydrateFromDatabase();
 
     const game = await this.ensureGameLoaded(gameId);
@@ -693,11 +853,19 @@ class GameManager {
       }
     }
 
+    if (options?.userId) {
+      const existingPlayer = game.players.find((player) => player.userId === options.userId);
+      if (existingPlayer) {
+        return { playerId: existingPlayer.id, position: existingPlayer.position };
+      }
+    }
+
     const playerId = randomUUID();
     const position = game.players.length;
 
     const player: Player = {
       id: playerId,
+      userId: options?.userId,
       name: playerName,
       position,
       hand: {
@@ -916,6 +1084,10 @@ class GameManager {
       player.winRound = null;
       player.winTimestamp = null;
       player.wonFan = 0;
+      player.winHandType = undefined;
+      player.isSelfDrawn = undefined;
+      player.discarderId = undefined;
+      player.winningScoreBreakdown = undefined;
       player.score = 0;
     }
 
@@ -1195,12 +1367,9 @@ class GameManager {
 
         // Check if can win (必须有有效牌型)
         // 【P0-7修复】第二参数为number时，第三参数必须是wildTileId字符串而非函数
-        const winCheck = canWin(player.hand.concealedTiles, player.hand.exposedMelds.length, game.customScoringMode || null);
-        if (winCheck.canWin) {
-          const handTypes = detectHandTypes(player.hand.concealedTiles, player.hand.exposedMelds, null, false, null, game.wildTileGroup);
-          if (handTypes.length > 0) {
-            actions.push(ActionType.HU);
-          }
+        const winCheck = this.getCachedWinCheck(game, player);
+        if (winCheck.canWin && winCheck.types.length > 0) {
+          actions.push(ActionType.HU);
         }
       }
     }
@@ -1212,10 +1381,31 @@ class GameManager {
     }
   }
 
+  async getWinOptionsForPlayer(gameId: string, playerId: string): Promise<WinOption[]> {
+    await this.hydrateFromDatabase();
+    const game = this.games.get(gameId) || await this.ensureGameLoaded(gameId);
+    if (!game) {
+      throw new Error('Game not found');
+    }
+
+    const player = game.players.find(p => p.id === playerId);
+    if (!player) {
+      throw new Error('Player not found');
+    }
+
+    const pendingAction = game.pendingActions.find(pa => pa.playerId === playerId);
+    const context: 'self_draw' | 'discard' = pendingAction?.tile ? 'discard' : 'self_draw';
+    return this.getCachedWinOptions(game, player, context, {
+      isKongFlower: false,
+      isRobbingKong: !!pendingAction?.tile && !!game.pendingKongClaim,
+      extraTile: pendingAction?.tile
+    });
+  }
+
   /**
    * Execute a game action
    */
-  async executeAction(gameId: string, playerId: string, action: ActionType, tileId?: string, tileIds?: string[]): Promise<void> {
+  async executeAction(gameId: string, playerId: string, action: ActionType, tileId?: string, tileIds?: string[], winOptionLabel?: string): Promise<void> {
     await this.hydrateFromDatabase();
     const game = await this.ensureGameLoaded(gameId);
     if (!game) throw new Error('Game not found');
@@ -1293,7 +1483,7 @@ class GameManager {
             break;
           }
         }
-        this.handleChow(game, player);
+        this.handleChow(game, player, tileIds);
         break;
 
       case ActionType.KONG:
@@ -1317,7 +1507,7 @@ class GameManager {
         break;
 
       case ActionType.HU:
-        await this.handleHu(game, player);
+        await this.handleHu(game, player, winOptionLabel);
         break;
 
       case ActionType.CHEAT_HU:
@@ -1353,6 +1543,20 @@ class GameManager {
         this.handleDraw(game, currentP);
         game.drawnThisTurn = true; // 【状态机修复】标记已摸牌
         this.scheduleBotDiscard(gameId, currentP.id);
+      }
+    }
+
+    this.invalidateWinEvaluationCache(gameId);
+    if (game.phase === GamePhase.PLAYING) {
+      const currentP = game.players[game.currentPlayerIndex];
+      if (currentP && currentP.status === PlayerStatus.PLAYING && game.drawnThisTurn) {
+        this.prewarmWinEvaluation(game, currentP, 'self_draw');
+      }
+      for (const pending of game.pendingActions) {
+        if (!pending.availableActions.includes(ActionType.HU) || !pending.tile) continue;
+        const targetPlayer = game.players.find(p => p.id === pending.playerId);
+        if (!targetPlayer) continue;
+        this.prewarmWinEvaluation(game, targetPlayer, 'discard', pending.tile);
       }
     }
 
@@ -1440,6 +1644,10 @@ class GameManager {
 
     // 同一牌型继续追加
     const cd = game.consecutiveDiscards;
+    if (cd.playerIds.includes(currentPlayer.id)) {
+      game.consecutiveDiscards = { suit: tile.suit, value: tile.value, playerIds: [currentPlayer.id] };
+      return;
+    }
 
     // 追加当前玩家(允许同一玩家重复出现,统计4个不同玩家即可)
     cd.playerIds.push(currentPlayer.id);
@@ -1454,9 +1662,9 @@ class GameManager {
     );
     // 只统计仍在游戏中(未胡牌)的玩家
     const activeDiscarders = new Set(cd.playerIds.filter(id => activePlayerIds.has(id)));
-    if (activePlayerIds.size >= 4 && activeDiscarders.size >= 4) {
+    if (activePlayerIds.size >= 4 && cd.playerIds.length === 4 && activeDiscarders.size === 4) {
       // 触发!第一个出该牌的玩家是带头大哥
-      const firstPlayerId = cd.playerIds.find(id => activePlayerIds.has(id))!;
+      const firstPlayerId = cd.playerIds[0]!;
       game.leadingBrotherEvent = { firstPlayerId, tileKey };
 
       const firstPlayer = game.players.find(p => p.id === firstPlayerId);
@@ -1473,6 +1681,26 @@ class GameManager {
       // 重置追踪
       game.consecutiveDiscards = null;
     }
+  }
+
+  private hasTenPointClaimExemption(handTypes: HandType[], isDaDiao: boolean): boolean {
+    if (isDaDiao) return true;
+
+    return handTypes.some(type => [
+      HandType.FENG_PENG,
+      HandType.ALL_WIND,
+      HandType.QING_PENG,
+      HandType.HUN_PENG,
+      HandType.EIGHT_FLOWERS,
+      HandType.FOUR_WILD,
+      HandType.FULL_FLUSH
+    ].includes(type));
+  }
+
+  private countFlowerTiles(player: Player): number {
+    return player.hand.exposedMelds
+      .flatMap(m => m.tiles)
+      .filter(t => isFlower(t)).length;
   }
 
   private handleDraw(game: GameState, player: Player): void {
@@ -1631,7 +1859,7 @@ class GameManager {
       const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
       const winCheck = canWin(testHand, p.hand.exposedMelds.length, game.customScoringMode || null);
       if (winCheck.canWin) {
-        const handTypes = detectHandTypes(testHand, p.hand.exposedMelds, false, p.hand.flowerTiles.length, null, game.wildTileGroup);
+        const handTypes = detectHandTypes(testHand, p.hand.exposedMelds, false, this.countFlowerTiles(p), null, game.wildTileGroup);
         if (handTypes.length > 0) {
           huCandidates.push(p.id);
           continue;
@@ -1651,14 +1879,148 @@ class GameManager {
   /**
    * 通用审批:给高优先级玩家广播冲突事件并设置pending
    */
+  private getApprovalActionPriority(action: string): number {
+    switch (action) {
+      case ActionType.HU:
+      case 'hu':
+        return 3;
+      case ActionType.KONG:
+      case 'kong':
+        return 2;
+      case ActionType.PENG:
+      case 'peng':
+        return 1;
+      default:
+        return 0;
+    }
+  }
+
+  private executeRequesterApprovalAction(game: GameState): void {
+    const conflict = game.pengChowConflict;
+    if (!conflict) return;
+
+    const requester = game.players.find(p => p.id === conflict.requesterId);
+    if (!requester) return;
+
+    if (conflict.requesterAction === 'chow') {
+      this.executeChowDirectly(game, requester, conflict.requesterTileIds);
+    } else if (conflict.requesterAction === 'peng') {
+      this.executePengDirectly(game, requester);
+    } else {
+      this.executeKongDirectly(game, requester, conflict.tile.id);
+    }
+  }
+
+  private advanceApprovalConflict(game: GameState): void {
+    const conflict = game.pengChowConflict;
+    if (!conflict) return;
+
+    const activeStageIds = new Set(conflict.currentStagePlayerIds || []);
+    const stagePending = game.pendingActions.filter(pa => activeStageIds.has(pa.playerId));
+    if (stagePending.length > 0) return;
+
+    const queue = conflict.approvalQueue || [];
+    if (queue.length === 0) {
+      game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== conflict.requesterId);
+      this.clearPendingActionTimer(game.gameId);
+      this.executeRequesterApprovalAction(game);
+      game.pengChowConflict = null;
+      return;
+    }
+
+    const highestPriority = Math.max(
+      ...queue.map(candidate => Math.max(...candidate.availableActions.map(action => this.getApprovalActionPriority(action))))
+    );
+    const stage = queue.filter(candidate =>
+      candidate.availableActions.some(action => this.getApprovalActionPriority(action) === highestPriority)
+    );
+
+    conflict.approvalQueue = queue.filter(candidate => !stage.some(current => current.playerId === candidate.playerId));
+    conflict.currentStagePlayerIds = stage.map(candidate => candidate.playerId);
+    conflict.timestamp = Date.now();
+    conflict.expiresAt = Date.now() + this.getHesitationWindow(game);
+
+    this.clearPendingActionTimer(game.gameId);
+
+    const requester = game.players.find(p => p.id === conflict.requesterId);
+    if (!requester || !this.wsManager) return;
+
+    const label = conflict.requesterAction === 'chow' ? '吃' : conflict.requesterAction === 'peng' ? '碰' : '杠';
+    for (const candidate of stage) {
+      const existingPending = game.pendingActions.find(pa => pa.playerId === candidate.playerId);
+      if (existingPending) {
+        existingPending.availableActions = candidate.availableActions as ActionType[];
+        existingPending.tile = conflict.tile;
+        existingPending.expiresAt = conflict.expiresAt;
+      } else {
+        game.pendingActions.push({
+          playerId: candidate.playerId,
+          availableActions: candidate.availableActions as ActionType[],
+          tile: conflict.tile,
+          expiresAt: conflict.expiresAt
+        });
+      }
+
+      this.wsManager.broadcast(game.gameId, 'actionApproval', {
+        requesterName: requester.name,
+        requesterAction: label,
+        candidatePlayerId: candidate.playerId,
+        availableActions: candidate.availableActions,
+        tileKey: `${conflict.tile.suit}-${conflict.tile.value}`,
+        expiresAt: conflict.expiresAt
+      });
+    }
+
+    const expectedTimestamp = conflict.timestamp;
+    const gid = game.gameId;
+    setTimeout(async () => {
+      try {
+        const freshGame = await this.getGame(gid);
+        const freshConflict = freshGame?.pengChowConflict;
+        if (!freshGame || !freshConflict || freshConflict.timestamp !== expectedTimestamp) return;
+
+        const currentStageIds = new Set(freshConflict.currentStagePlayerIds || []);
+        freshGame.pendingActions = freshGame.pendingActions.filter(pa => !currentStageIds.has(pa.playerId));
+        freshConflict.currentStagePlayerIds = [];
+        this.advanceApprovalConflict(freshGame);
+
+        await this.persistGame(freshGame);
+        this.broadcastGameState(gid);
+
+        const currentPlayer = freshGame.players[freshGame.currentPlayerIndex];
+        if (currentPlayer && this.isPlayerBotControlled(currentPlayer)) {
+          this.scheduleBotDiscard(gid, currentPlayer.id);
+        }
+      } catch (e) {
+        console.error('[Approval] timeout err:', e);
+      }
+    }, this.getHesitationWaitMs(game.gameId));
+  }
+
   private startApproval(
     game: GameState,
     requesterPlayerId: string,
     requesterAction: 'chow' | 'peng' | 'kong',
     candidates: Array<{ playerId: string; availableActions: string[] }>,
-    tile: Tile
+    tile: Tile,
+    requesterTileIds?: string[]
   ): void {
-    game.pengChowConflict = { requesterId: requesterPlayerId, requesterAction, tile, timestamp: Date.now() };
+    game.pengChowConflict = {
+      requesterId: requesterPlayerId,
+      requesterAction,
+      tile,
+      requesterTileIds,
+      timestamp: Date.now(),
+      approvalQueue: candidates.map(candidate => ({
+        playerId: candidate.playerId,
+        availableActions: candidate.availableActions as ActionType[]
+      })),
+      currentStagePlayerIds: []
+    };
+    this.advanceApprovalConflict(game);
+    return;
+
+    game.pengChowConflict = { requesterId: requesterPlayerId, requesterAction, tile, requesterTileIds, timestamp: Date.now() };
 
     // 审批开始时清理旧的pending超时,避免2秒自动PASS抢跑破坏5秒审批
     this.clearPendingActionTimer(game.gameId);
@@ -1704,7 +2066,7 @@ class GameManager {
         fg.pendingActions = fg.pendingActions.filter(pa => pa.playerId !== requesterPlayerId);
         const rp = fg.players.find(p => p.id === requesterPlayerId);
         if (!rp) return;
-        if (requesterAction === 'chow') this.executeChowDirectly(fg, rp);
+        if (requesterAction === 'chow') this.executeChowDirectly(fg, rp, requesterTileIds);
         else if (requesterAction === 'peng') this.executePengDirectly(fg, rp);
         else if (requesterAction === 'kong') this.executeKongDirectly(fg, rp, tile.id);
         await this.persistGame(fg);
@@ -1718,7 +2080,7 @@ class GameManager {
     }, this.getHesitationWaitMs(game.gameId));
   }
 
-  private handleChow(game: GameState, player: Player): void {
+  private handleChow(game: GameState, player: Player, tileIds?: string[]): void {
     let pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
     // Bug修复: pending被timeout清空后,从discardPile重建
     if (!pendingAction || !pendingAction.tile) {
@@ -1767,19 +2129,19 @@ class GameManager {
             candidates.push({ playerId: pid, availableActions: ['peng'] });
           }
         }
-        this.startApproval(game, player.id, 'chow', candidates, discardedTile);
+        this.startApproval(game, player.id, 'chow', candidates, discardedTile, tileIds);
         return;
       }
     }
 
     // 决策犹豫期已过 → 碰/杠/胡家已丧失机会,直接吃
-    this.executeChowDirectly(game, player);
+    this.executeChowDirectly(game, player, tileIds);
   }
 
   /**
    * 直接执行吃牌(不检查碰优先级)
    */
-  private executeChowDirectly(game: GameState, player: Player): void {
+  private executeChowDirectly(game: GameState, player: Player, tileIds?: string[]): void {
     // ---- 吃碰排斥检查 ----
     const discardTile = game.discardPile[game.discardPile.length - 1];
     if (!discardTile) return;
@@ -1811,7 +2173,7 @@ class GameManager {
     const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile, game);
     if (sequences.length === 0) { console.warn('[CHOW] No sequence'); return; }
 
-    const sequence = this.selectBestChowSequence(sequences, discardedTile);
+    const sequence = this.selectChowSequence(sequences, discardedTile, tileIds);
     const handTiles = sequence.filter(t => t.id !== discardedTile.id);
 
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
@@ -1948,12 +2310,12 @@ class GameManager {
     if (matchingTiles.length < 3) return;
 
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
-    this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.QUAD);
+    this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.KONG);
     for (const t of matchingTiles) player.hand.concealedTiles = removeTile(player.hand.concealedTiles, t.id);
 
     const sourcePos = this.getLastDiscardPosition(game);
     player.hand.exposedMelds.push({
-      type: MeldType.QUAD,
+      type: MeldType.KONG,
       tiles: [lastDiscard, ...matchingTiles],
       isConcealed: false,
       ...(sourcePos !== undefined && { sourcePosition: sourcePos })
@@ -1977,6 +2339,45 @@ class GameManager {
   async handleApprovalChoice(gameId: string, playerId: string, choice: 'confirm' | 'pass'): Promise<void> {
     const game = this.games.get(gameId);
     if (!game || !game.pengChowConflict) return;
+
+    const approvalConflict = game.pengChowConflict;
+    const pending = game.pendingActions.find(pa => pa.playerId === playerId);
+
+    if (choice === 'confirm') {
+      const candPlayer = game.players.find(p => p.id === playerId);
+      if (!candPlayer || !pending) return;
+
+      this.clearPendingActionTimer(gameId);
+      game.pendingActions = game.pendingActions.filter(pa =>
+        pa.playerId === playerId ||
+        (
+          pa.playerId !== approvalConflict.requesterId &&
+          !(approvalConflict.currentStagePlayerIds || []).includes(pa.playerId)
+        )
+      );
+      game.pengChowConflict = null;
+
+      if (pending.availableActions.includes(ActionType.HU)) {
+        await this.executeWinDirectly(game, candPlayer, approvalConflict.tile);
+      } else if (pending.availableActions.includes(ActionType.KONG)) {
+        this.executeKongDirectly(game, candPlayer, approvalConflict.tile.id);
+      } else if (pending.availableActions.includes(ActionType.PENG)) {
+        this.executePengDirectly(game, candPlayer);
+      }
+
+      await this.persistGame(game);
+      this.broadcastGameState(gameId);
+      return;
+    }
+
+    game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== playerId);
+    if (approvalConflict.currentStagePlayerIds?.includes(playerId)) {
+      approvalConflict.currentStagePlayerIds = approvalConflict.currentStagePlayerIds.filter(id => id !== playerId);
+    }
+    this.advanceApprovalConflict(game);
+    await this.persistGame(game);
+    this.broadcastGameState(gameId);
+    return;
 
     const conflict = game.pengChowConflict;
     const requesterId = conflict.requesterId;
@@ -2006,7 +2407,7 @@ class GameManager {
     } else {
       // 放弃 → 允许低优先级动作
       if (requester) {
-        if (requesterAction === 'chow') this.executeChowDirectly(game, requester);
+        if (requesterAction === 'chow') this.executeChowDirectly(game, requester, conflict.requesterTileIds);
         else if (requesterAction === 'peng') this.executePengDirectly(game, requester);
         else if (requesterAction === 'kong') this.executeKongDirectly(game, requester, tile.id);
       }
@@ -2097,7 +2498,7 @@ class GameManager {
       const testHand = [...candidate.hand.concealedTiles, tile];
       const winCheck = canWin(testHand, candidate.hand.exposedMelds.length, game.customScoringMode || null);
       if (!winCheck.canWin) continue;
-      const flowerCount = candidate.hand.flowerTiles.length;
+      const flowerCount = this.countFlowerTiles(candidate);
       // 规则: 碰碰胡/混一色抢杠需要检查门口有花 or 风向刻 or 杠牌
       // 其他更大牌型(风碰/清碰/风一色等)不需要检查，直接允许抢
       const robHandTypes = detectHandTypes(
@@ -2111,13 +2512,15 @@ class GameManager {
       if (robHandTypes.length === 0) continue;
 
       // 获取最高优先级牌型
-      const topType = robHandTypes[0];
+      const concealedNonFlower = candidate.hand.concealedTiles.filter(t => !isFlower(t));
+      const isDaDiao = concealedNonFlower.length === 1;
+      const hasTenPointExemption = this.hasTenPointClaimExemption(robHandTypes, isDaDiao);
       
       // 需要检查门口条件的牌型：碰碰胡(ALL_TRIPLETS) 或 混一色(HALF_FLUSH)
       // 其他更大牌型(风碰/清碰/风一色等)不需要检查，直接允许抢
       const isPengPengOrHun = robHandTypes.includes(HandType.ALL_TRIPLETS) || robHandTypes.includes(HandType.HALF_FLUSH);
       
-      if (isPengPengOrHun) {
+      if (isPengPengOrHun && !hasTenPointExemption) {
         // 需要检查门口条件：花牌 OR 风向刻 OR 杠牌
         const hasFlowerAtDoor = candidate.hand.exposedMelds.some(m => 
           m.tiles.some(t => t.suit === TileSuit.FLOWER)
@@ -2196,7 +2599,7 @@ class GameManager {
     return true;
   }
 
-  private async handleHu(game: GameState, player: Player): Promise<void> {
+  private async handleHu(game: GameState, player: Player, selectedWinOptionLabel?: string): Promise<void> {
     const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
     const winningTile = pendingAction?.tile;
 
@@ -2226,6 +2629,7 @@ class GameManager {
     player.winRound = game.roundNumber;
     player.winTimestamp = Date.now();
     game.winnersCount++;
+    const isSelfDrawn = !pendingAction;
 
     // 设置下局庄家
     if (!game.nextDealerId) {
@@ -2246,19 +2650,17 @@ class GameManager {
       }
     }
 
-    const existingMelds = player.hand.exposedMelds.length;
     // 【P0-7修复】canWin当exposedOrCount为number时，第三个参数必须是wildTileId字符串而非函数
-    const winCheck = canWin(player.hand.concealedTiles, existingMelds, game.customScoringMode || null);
+    const winCheck = this.getCachedWinCheck(game, player);
     if (!winCheck.canWin) {
       throw new Error('Invalid Hu declaration');
     }
     // 牌型校验:必须有效牌型；传null触发fallback到game.wildTileGroup（不再被!pendingAction绕过）
-    const huHandTypes = detectHandTypes(player.hand.concealedTiles, player.hand.exposedMelds, null, player.hand.flowerTiles.length, null, game.wildTileGroup);
+    const huHandTypes = detectHandTypes(player.hand.concealedTiles, player.hand.exposedMelds, null, this.countFlowerTiles(player), null, game.wildTileGroup);
     if (huHandTypes.length === 0) {
       throw new Error('No valid hand type for Hu');
     }
 
-    const isSelfDrawn = !pendingAction;
     const isKongFlower = this.isWinAfterKong(game, player.id);
     const isRobbingKong = !!pendingAction?.tile && !!game.pendingKongClaim;
 
@@ -2293,13 +2695,21 @@ class GameManager {
     // 大吊检测：手牌（非花牌）剩1张
     const concealedNonFlower = player.hand.concealedTiles.filter(t => !isFlower(t));
     const isDaDiao = concealedNonFlower.length === 1;
+    const preferredWinType = isSelfDrawn ? 'self_draw' : 'discard';
+    const filteredWinOptions = this.getCachedWinOptions(game, player, preferredWinType, {
+      isKongFlower,
+      isRobbingKong
+    });
+    const selectedWinOption = selectedWinOptionLabel
+      ? filteredWinOptions.find(option => option.label === selectedWinOptionLabel)
+      : filteredWinOptions[0];
 
     // 计算番数
     const scoreResult = calculateScore({
       handTiles: player.hand.concealedTiles,
       exposedMelds: player.hand.exposedMelds,
       flowerTiles,
-      handTypes,
+      handTypes: selectedWinOption?.handTypes?.length ? selectedWinOption.handTypes : handTypes,
       isSelfDrawn,
       isKongFlower,
       isRobbingKong,
@@ -2316,9 +2726,19 @@ class GameManager {
 
     // wonFan 存最终点数（baseFan × extraMultipliers × globalMultiplier）
     // 用于所有结算：正常赔付 + 互包赔付 × 3/5/2
-    player.wonFan = scoreResult.finalPoints;
-    player.winHandType = scoreResult.handTypeName;
+    player.wonFan = selectedWinOption?.score ?? scoreResult.finalPoints;
+    player.winHandType = selectedWinOption?.handTypeName ?? scoreResult.handTypeName;
     player.isSelfDrawn = isSelfDrawn;
+    player.winningScoreBreakdown = {
+      baseFan: scoreResult.baseFan,
+      extraMultipliers: scoreResult.extraMultipliers,
+      diceMultiplier: scoreResult.roundMultiplier,
+      inheritMultiplier: scoreResult.inheritMultiplier,
+      effectiveMultiplier: scoreResult.globalMultiplier,
+      settlementMultiplier: scoreResult.settlementMultiplier,
+      finalPoints: player.wonFan,
+      details: [...scoreResult.details]
+    };
     if (!isSelfDrawn) {
       player.discarderId = this.getLastDiscardPlayerId(game) ?? undefined;
     }
@@ -2345,6 +2765,9 @@ class GameManager {
     }
 
     if (hadPendingForMultiHu) {
+      if (game.multiHuStarterIndex === undefined) {
+        game.multiHuStarterIndex = game.players.findIndex(p => p.id === player.id);
+      }
       return;  // 等待其他可胡玩家响应
     }
 
@@ -2372,7 +2795,7 @@ class GameManager {
     const winnerIndex = game.players.findIndex(p => p.id === player.id);
     const nextPlayer = this.getNextActivePlayer(game, winnerIndex);
     if (nextPlayer) {
-      game.currentPlayerIndex = nextPlayer.position;
+      game.currentPlayerIndex = winnerIndex;
       console.log(`[handleHu] ${player.name}胡牌,从${nextPlayer.name}继续牌局`);
     }
     await this.moveToNextPlayer(game);
@@ -2732,6 +3155,14 @@ class GameManager {
     // Remove player's pending action
     game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
 
+    if (game.pengChowConflict?.currentStagePlayerIds?.includes(player.id)) {
+      game.pengChowConflict.currentStagePlayerIds = game.pengChowConflict.currentStagePlayerIds.filter(id => id !== player.id);
+      this.advanceApprovalConflict(game);
+      if (game.pengChowConflict) {
+        return;
+      }
+    }
+
     // 抢杠场景:所有候选都过了,补杠继续
     if (game.pendingActions.length === 0 && game.pendingKongClaim) {
       this.resolveRobKongIfNeeded(game);
@@ -2795,8 +3226,12 @@ class GameManager {
           game.wildTileGroup
         );
 
-        const hasDaDiao = false; // 大吊已移除独立牌型
-        const requiresFlowerGate = (handTypes.includes(HandType.ALL_TRIPLETS) || handTypes.includes(HandType.HALF_FLUSH)) && !hasDaDiao;
+        const concealedNonFlower = player.hand.concealedTiles.filter(t => !isFlower(t));
+        const isDaDiao = concealedNonFlower.length === 1;
+        const hasTenPointExemption = this.hasTenPointClaimExemption(handTypes, isDaDiao);
+        const requiresFlowerGate =
+          (handTypes.includes(HandType.ALL_TRIPLETS) || handTypes.includes(HandType.HALF_FLUSH)) &&
+          !hasTenPointExemption;
         // 新规则：花牌 或 风箭刻 或 任意杠牌 满足其一即可
         const hasFlowerAtDoor = flowerCount > 0;
         const hasWindDragonTriplet = player.hand.exposedMelds.some(m =>
@@ -2824,21 +3259,32 @@ class GameManager {
 
     // Check for CHOW (吃) - only the next active player (下家) can chow
     // 吃和碰同时进入pending池,碰优先级高于吃
+    for (const pending of game.pendingActions) {
+      if (!pending.availableActions.includes(ActionType.HU) || !pending.tile) continue;
+      const targetPlayer = game.players.find(player => player.id === pending.playerId);
+      if (!targetPlayer) continue;
+      this.invalidateWinEvaluationCache(game.gameId, [targetPlayer.id]);
+      this.prewarmWinEvaluation(game, targetPlayer, 'discard', pending.tile);
+    }
+
     const chowPlayer = this.getNextActivePlayer(game, game.currentPlayerIndex);
     if (chowPlayer) {
       const sequences = this.findChowSequences(chowPlayer.hand.concealedTiles, discardedTile, game);
       if (sequences.length > 0) {
+        const chowOptions = this.buildChowOptionIds(sequences, discardedTile);
         // 检查该玩家是否已有碰/杠/胡的pending(如果有,追加吃选项)
         const existing = game.pendingActions.find(pa => pa.playerId === chowPlayer.id);
         if (existing) {
           if (!existing.availableActions.includes(ActionType.CHOW)) {
             existing.availableActions.push(ActionType.CHOW);
           }
+          existing.chowOptions = chowOptions;
         } else {
           game.pendingActions.push({
             playerId: chowPlayer.id,
             availableActions: [ActionType.CHOW, ActionType.PASS],
             tile: discardedTile,
+            chowOptions,
             expiresAt: Date.now() + this.getHesitationWindow(game) // 决策犹豫期
           });
         }
@@ -2929,6 +3375,22 @@ class GameManager {
     return sequences;
   }
 
+  private buildChowOptionIds(sequences: Tile[][], discardedTile: Tile): string[][] {
+    const seen = new Set<string>();
+    const options: string[][] = [];
+    for (const sequence of sequences) {
+      const ids = sequence
+        .filter(tile => tile.id !== discardedTile.id)
+        .map(tile => tile.id)
+        .sort();
+      const key = ids.join('|');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      options.push(ids);
+    }
+    return options;
+  }
+
   /**
    * 对吃牌组合评分,选择最优吃法
    * 评分规则:
@@ -2993,6 +3455,25 @@ class GameManager {
     }
 
     return best;
+  }
+
+  private selectChowSequence(sequences: Tile[][], discardedTile: Tile, tileIds?: string[]): Tile[] {
+    if (tileIds?.length) {
+      const requested = [...tileIds].sort().join('|');
+      const matched = sequences.find(sequence => {
+        const ids = sequence
+          .filter(tile => tile.id !== discardedTile.id)
+          .map(tile => tile.id)
+          .sort()
+          .join('|');
+        return ids === requested;
+      });
+      if (!matched) {
+        throw new Error('Invalid chow selection');
+      }
+      return matched;
+    }
+    return this.selectBestChowSequence(sequences, discardedTile);
   }
 
   private async moveToNextPlayer(game: GameState): Promise<void> {
@@ -3324,6 +3805,22 @@ class GameManager {
         }
       }
     let finalScores: Record<string, number>;
+    const roundTransfers: Array<{
+      fromPlayerId: string;
+      fromPlayerName: string;
+      toPlayerId: string;
+      toPlayerName: string;
+      amount: number;
+      reason: string;
+      bailoutType?: '三口' | '四口';
+    }> = [];
+    const specialEvents: Array<{
+      type: 'leading_brother';
+      fromPlayerId: string;
+      fromPlayerName: string;
+      totalAmount: number;
+      amountPerPlayer: number;
+    }> = [];
 
     if (game.customScoringMode === 'cheat') {
       finalScores = {};
@@ -3365,7 +3862,7 @@ class GameManager {
 
         // 互包赔付: finalPoints × 3/5 (自摸) 或 × 2 (捉冲)
         // winner.wonFan = finalPoints (已含 baseFan × extraMultipliers × globalMultiplier)
-        const deltas = calculateSettlement(
+        const breakdown = calculateSettlementBreakdownByRules(
           winner.wonFan,        // 最终点数（已含全局倍数，用于正常结算和互包赔付）
           winner.isSelfDrawn ?? false,
           winnerIdx,
@@ -3374,7 +3871,19 @@ class GameManager {
           discarderIdx
         );
 
-        for (const [idx, delta] of deltas) {
+        for (const transfer of breakdown.transfers) {
+          roundTransfers.push({
+            fromPlayerId: game.players[transfer.fromIndex].id,
+            fromPlayerName: game.players[transfer.fromIndex].name,
+            toPlayerId: game.players[transfer.toIndex].id,
+            toPlayerName: game.players[transfer.toIndex].name,
+            amount: transfer.amount,
+            reason: transfer.reason,
+            bailoutType: transfer.bailoutType
+          });
+        }
+
+        for (const [idx, delta] of breakdown.deltas) {
           const pid = game.players[idx].id;
           finalScores[pid] = (finalScores[pid] ?? 0) + delta;
         }
@@ -3382,6 +3891,9 @@ class GameManager {
     }
 
     game.finalScores = finalScores;
+    for (const player of game.players) {
+      player.score = finalScores[player.id] ?? 0;
+    }
 
     // 谢谢带头大哥:第一个出该牌的玩家赔付其余三家每家10分(在平衡之前)
     if (game.leadingBrotherEvent) {
@@ -3391,10 +3903,25 @@ class GameManager {
         const penalty = 30; // 赔付3家 × 10分
         firstPlayer.score -= penalty;
         finalScores[firstPlayerId] = (finalScores[firstPlayerId] || 0) - penalty;
+        specialEvents.push({
+          type: 'leading_brother',
+          fromPlayerId: firstPlayer.id,
+          fromPlayerName: firstPlayer.name,
+          totalAmount: penalty,
+          amountPerPlayer: 10
+        });
         for (const p of game.players) {
           if (p.id !== firstPlayerId) {
             p.score += 10;
             finalScores[p.id] = (finalScores[p.id] || 0) + 10;
+            roundTransfers.push({
+              fromPlayerId: firstPlayer.id,
+              fromPlayerName: firstPlayer.name,
+              toPlayerId: p.id,
+              toPlayerName: p.name,
+              amount: 10,
+              reason: '谢谢带头大哥赔付'
+            });
           }
         }
         game.finalScores = finalScores; // 同步更新
@@ -3443,23 +3970,17 @@ class GameManager {
       }
     }
 
+    for (const player of game.players) {
+      finalScores[player.id] = player.score;
+    }
+    game.finalScores = finalScores;
+
     // 清除本局AI接管记录
     game.botTakeoverPlayers = [];
 
     // 记录本局统计
     if (!game.roundStats) game.roundStats = [];
     const roundWinners = game.players.filter(p => p.status === PlayerStatus.WON);
-    game.roundStats.push({
-      roundNumber: game.roundNumber,
-      scores: { ...finalScores },
-      winners: roundWinners.map(w => w.id),
-      selfDraws: roundWinners
-        .filter(w => {
-          // 自摸:winTimestamp 附近没有 pendingAction(即自己摸的牌)
-          return w.id !== undefined; // 简化标记,详细逻辑可后续完善
-        })
-        .map(w => w.id)
-    });
 
     // 检查被聚义QJ线(每局刷新)
     this.checkQJThresholdAlerts(game);
@@ -3485,6 +4006,46 @@ class GameManager {
       game.inheritedGlobalMultiplier = Math.min(effective > 8 ? Math.floor(effective / 8) : 1, 8);
     }
     // else: inheritedGlobalMultiplier 已被聚义/造反设置,不覆盖
+
+    game.roundStats.push({
+      roundNumber: game.roundNumber,
+      scores: { ...finalScores },
+      winners: roundWinners.map(w => w.id),
+      selfDraws: roundWinners.filter(w => w.isSelfDrawn).map(w => w.id),
+      diceMultiplier: game.roundMultiplier ?? 1,
+      inheritMultiplier: game.inheritMultiplier ?? 1,
+      effectiveMultiplier: Math.min((game.inheritMultiplier ?? 1) * (game.roundMultiplier ?? 1), 8),
+      settlementMultiplier: game.settlementMultiplier ?? 1,
+      overflowCarryMultiplierNextRound: game.inheritedGlobalMultiplier ?? 1,
+      bailoutRelations: this.getMutualBailoutRelations(game.gameId).map(rel => ({
+        ...rel,
+        player1Name: game.players.find(player => player.id === rel.player1)?.name,
+        player2Name: game.players.find(player => player.id === rel.player2)?.name
+      })),
+      winnerDetails: roundWinners.map(winner => {
+        const discarder = winner.discarderId
+          ? game.players.find(player => player.id === winner.discarderId)
+          : undefined;
+        return {
+          playerId: winner.id,
+          playerName: winner.name,
+          handTypeName: winner.winHandType,
+          isSelfDrawn: winner.isSelfDrawn ?? false,
+          discarderId: winner.discarderId,
+          discarderName: discarder?.name,
+          baseFan: winner.winningScoreBreakdown?.baseFan ?? 0,
+          extraMultipliers: winner.winningScoreBreakdown?.extraMultipliers ?? 1,
+          diceMultiplier: winner.winningScoreBreakdown?.diceMultiplier ?? (game.roundMultiplier ?? 1),
+          inheritMultiplier: winner.winningScoreBreakdown?.inheritMultiplier ?? (game.inheritMultiplier ?? 1),
+          effectiveMultiplier: winner.winningScoreBreakdown?.effectiveMultiplier ?? Math.min((game.inheritMultiplier ?? 1) * (game.roundMultiplier ?? 1), 8),
+          settlementMultiplier: winner.winningScoreBreakdown?.settlementMultiplier ?? (game.settlementMultiplier ?? 1),
+          finalPoints: winner.winningScoreBreakdown?.finalPoints ?? winner.wonFan,
+          details: winner.winningScoreBreakdown?.details ?? []
+        };
+      }),
+      transfers: roundTransfers,
+      specialEvents: specialEvents.length ? specialEvents : undefined
+    });
 
     const endedAt = Date.now();
     game.phase = GamePhase.ENDED;
@@ -3553,9 +4114,13 @@ class GameManager {
           p.windScore = 0;
           p.rainScore = 0;
           p.wonFan = 0;
+          p.winHandType = undefined;
           p.winOrder = null;
           p.winRound = null;
           p.winTimestamp = null;
+          p.isSelfDrawn = undefined;
+          p.discarderId = undefined;
+          p.winningScoreBreakdown = undefined;
           p.score = 0;
         }
         console.log(`[ApplyChanges] 玩家不足4人(${game.players.length}),回到等待状态`);

@@ -43,10 +43,25 @@ export interface ScoreResult {
   baseFan: number;           // 基础番数
   extraMultipliers: number;  // 额外翻倍（无百搭×2 + 门清×2）
   roundMultiplier: number;   // 回合倍数（骰子决定）
+  inheritMultiplier: number; // 继承倍数（包含上局溢出继承）
   globalMultiplier: number;  // 综合全局倍数（继承倍数×回合倍数，封顶8）
+  settlementMultiplier: number; // 结算膨胀倍数
   finalPoints: number;       // 最终点数
   handTypeName: string;      // 牌型名称
   details: string[];         // 计算明细
+}
+
+export interface SettlementTransfer {
+  fromIndex: number;
+  toIndex: number;
+  amount: number;
+  reason: string;
+  bailoutType?: '三口' | '四口';
+}
+
+export interface SettlementBreakdown {
+  deltas: Map<number, number>;
+  transfers: SettlementTransfer[];
 }
 
 /**
@@ -92,7 +107,9 @@ export function calculateScore(params: {
       handTypeName: '无效牌型',
       details: ['无有效牌型'],
       roundMultiplier: 0,
+      inheritMultiplier: 0,
       globalMultiplier: 0,
+      settlementMultiplier,
       extraMultipliers: 0
     }
   }
@@ -225,7 +242,7 @@ export function calculateScore(params: {
 
   const sm = settlementMultiplier > 1 ? ` × ${settlementMultiplier}` : '';
   if (globalIncludesRound) {
-    details.push(`全局倍数 = min(8, 回合${roundMultiplier} × 全局${baseGlobal}) = ${globalMultiplier}`);
+    details.push(`有效倍率 = min(8, 骰子倍数${roundMultiplier} × 继承倍数${baseGlobal}) = ${globalMultiplier}`);
     details.push(`最终 = ${baseFan} × ${extraMultipliers} × ${globalMultiplier}${sm} = ${finalPoints}`);
   } else {
     details.push(`最终 = ${baseFan} × ${extraMultipliers} × ${roundMultiplier} × ${globalMultiplier}${sm} = ${finalPoints}`);
@@ -235,7 +252,9 @@ export function calculateScore(params: {
     baseFan,
     extraMultipliers,
     roundMultiplier,
+    inheritMultiplier: baseGlobal,
     globalMultiplier,
+    settlementMultiplier,
     finalPoints,
     handTypeName,
     details
@@ -249,6 +268,8 @@ export interface WinOption {
   score: number;
   details: string[];
   type: 'self_draw' | 'discard';
+  handTypeName?: string;
+  handTypes?: HandType[];
   _decompKey?: string; // 内部字段，标记该选项来自哪个牌型分解
 }
 
@@ -268,8 +289,9 @@ export function generateWinOptions(params: {
   wildTileSuit?: TileSuit;
   wildTileValue?: number;
   wildTileGroup?: string[];
-  roundMultiplier?: number;
-  inheritMultiplier?: number;
+  rawRoundMultiplier?: number;
+  rawInheritMultiplier?: number;
+  settlementMultiplier?: number;
 }): WinOption[] {
   const options: WinOption[] = [];
   const baseParams = { ...params };
@@ -304,11 +326,15 @@ export function generateWinOptions(params: {
           score: selfDrawResult.finalPoints,
           details: [...selfDrawResult.details],
           type: 'self_draw',
+          handTypeName: selfDrawResult.handTypeName,
+          handTypes: [...decomp.types],
           _decompKey: decompKey
         });
       } else if (selfDrawResult.finalPoints > existing.score) {
         existing.score = selfDrawResult.finalPoints;
         existing.details = [...selfDrawResult.details];
+        existing.handTypeName = selfDrawResult.handTypeName;
+        existing.handTypes = [...decomp.types];
         existing._decompKey = decompKey;
       }
     }
@@ -330,11 +356,15 @@ export function generateWinOptions(params: {
           score: discardResult.finalPoints,
           details: [...discardResult.details],
           type: 'discard',
+          handTypeName: discardResult.handTypeName,
+          handTypes: [...decomp.types],
           _decompKey: decompKey
         });
       } else if (discardResult.finalPoints > existing.score) {
         existing.score = discardResult.finalPoints;
         existing.details = [...discardResult.details];
+        existing.handTypeName = discardResult.handTypeName;
+        existing.handTypes = [...decomp.types];
         existing._decompKey = decompKey;
       }
     }
@@ -364,10 +394,14 @@ export function generateWinOptions(params: {
             label: noWildLabel,
             score: doubledPoints,
             details: [...noWildResult.details, `无百搭翻倍 ×2 = ${doubledPoints}点`],
-            type: 'self_draw'
+            type: 'self_draw',
+            handTypeName: noWildResult.handTypeName,
+            handTypes: [...noWildTypes]
           });
         } else if (doubledPoints > existingNoWild.score) {
           existingNoWild.score = doubledPoints;
+          existingNoWild.handTypeName = noWildResult.handTypeName;
+          existingNoWild.handTypes = [...noWildTypes];
           existingNoWild.details = [...noWildResult.details, `无百搭翻倍 ×2 = ${doubledPoints}点`];
         }
 
@@ -388,10 +422,14 @@ export function generateWinOptions(params: {
             label: noWildDiscardLabel,
             score: doubledDiscard,
             details: [...noWildDiscard.details, `无百搭翻倍 ×2 = ${doubledDiscard}点`],
-            type: 'discard'
+            type: 'discard',
+            handTypeName: noWildDiscard.handTypeName,
+            handTypes: [...noWildTypes]
           });
         } else if (doubledDiscard > existingNoWildDiscard.score) {
           existingNoWildDiscard.score = doubledDiscard;
+          existingNoWildDiscard.handTypeName = noWildDiscard.handTypeName;
+          existingNoWildDiscard.handTypes = [...noWildTypes];
           existingNoWildDiscard.details = [...noWildDiscard.details, `无百搭翻倍 ×2 = ${doubledDiscard}点`];
         }
       }
@@ -431,10 +469,28 @@ function enumerateHandDecompositions(
   // 这里直接获取最优牌型即可
   const result = canWin(handTiles, exposedMelds, wildTileId);
   if (result.canWin && result.types.length > 0) {
-    const key = result.types.sort().join(',');
-    if (!seen.has(key)) {
+    const candidates: HandType[][] = [];
+    candidates.push([...result.types]);
+
+    for (const type of result.types) {
+      if (type === HandType.STANDARD && result.types.length > 1) continue;
+      if (type === HandType.DA_DIAO) continue;
+      candidates.push([type]);
+      if (result.types.includes(HandType.DA_DIAO)) {
+        candidates.push([HandType.DA_DIAO, type]);
+      }
+    }
+
+    if (result.types.includes(HandType.DA_DIAO)) {
+      candidates.push([HandType.DA_DIAO]);
+    }
+
+    for (const candidate of candidates) {
+      const normalized = [...candidate].sort((a, b) => (HAND_TYPE_PRIORITY[b] ?? 0) - (HAND_TYPE_PRIORITY[a] ?? 0));
+      const key = normalized.join(',');
+      if (seen.has(key)) continue;
       seen.add(key);
-      results.push({ types: result.types });
+      results.push({ types: normalized });
     }
   }
 
@@ -801,6 +857,10 @@ export function calculateSettlement(
     deltas.set(idx, 0);
   }
 
+  const addDelta = (idx: number, delta: number) => {
+    deltas.set(idx, (deltas.get(idx) || 0) + delta);
+  };
+
   if (isSelfDrawn) {
     // 自摸：每个未胡玩家向赢家赔付
     for (const idx of allPlayerIndices) {
@@ -862,6 +922,133 @@ export function calculateSettlement(
   }
 
   return deltas;
+}
+
+export function calculateSettlementBreakdownByRules(
+  winnerFinalPoints: number,
+  isSelfDrawn: boolean,
+  winnerIndex: number,
+  allPlayerIndices: number[],
+  mutualBailout?: Map<number, { partnerIndex: number; type: '三口' | '四口' }>,
+  discarderId?: number
+): SettlementBreakdown {
+  const deltas = new Map<number, number>();
+  const transfers: SettlementTransfer[] = [];
+  for (const idx of allPlayerIndices) {
+    deltas.set(idx, 0);
+  }
+
+  const addDelta = (idx: number, delta: number) => {
+    deltas.set(idx, (deltas.get(idx) || 0) + delta);
+  };
+  const addTransfer = (
+    fromIndex: number,
+    toIndex: number,
+    amount: number,
+    reason: string,
+    bailoutType?: '三口' | '四口'
+  ) => {
+    if (amount <= 0) return;
+    transfers.push({ fromIndex, toIndex, amount, reason, bailoutType });
+    addDelta(fromIndex, -amount);
+    addDelta(toIndex, amount);
+  };
+
+  if (isSelfDrawn) {
+    const bailoutLoser = allPlayerIndices.find(idx => {
+      if (idx === winnerIndex) return false;
+      const bailout = mutualBailout?.get(idx);
+      return bailout?.partnerIndex === winnerIndex;
+    });
+
+    if (bailoutLoser !== undefined) {
+      const bailout = mutualBailout!.get(bailoutLoser)!;
+      const bailoutMultiplier = bailout.type === '四口' ? 5 : 3;
+      const otherMultiplier = bailout.type === '四口' ? 0 : 1;
+
+      for (const idx of allPlayerIndices) {
+        if (idx === winnerIndex) continue;
+        const pay = idx === bailoutLoser
+          ? winnerFinalPoints * bailoutMultiplier
+          : winnerFinalPoints * otherMultiplier;
+        if (pay === 0) continue;
+        addTransfer(
+          idx,
+          winnerIndex,
+          pay,
+          idx === bailoutLoser ? `自摸互包赔付×${bailoutMultiplier}` : '自摸赔付',
+          idx === bailoutLoser ? bailout.type : undefined
+        );
+      }
+
+      return { deltas, transfers };
+    }
+
+    for (const idx of allPlayerIndices) {
+      if (idx === winnerIndex) continue;
+      addTransfer(idx, winnerIndex, winnerFinalPoints, '自摸赔付');
+    }
+    return { deltas, transfers };
+  }
+
+  if (discarderId !== undefined && allPlayerIndices.includes(discarderId)) {
+    const bailoutLoser = allPlayerIndices.find(idx => {
+      if (idx === winnerIndex || idx === discarderId) return false;
+      const bailout = mutualBailout?.get(idx);
+      return bailout?.partnerIndex === winnerIndex;
+    });
+
+    if (bailoutLoser !== undefined) {
+      if (discarderId === bailoutLoser) {
+        const pay = winnerFinalPoints * 2;
+        const bailoutType = mutualBailout?.get(discarderId)?.type;
+        addTransfer(discarderId, winnerIndex, pay, '放冲且互包赔付×2', bailoutType);
+      } else {
+        const bailoutType = mutualBailout?.get(bailoutLoser)?.type;
+        addTransfer(discarderId, winnerIndex, winnerFinalPoints, '放冲赔付');
+        addTransfer(bailoutLoser, winnerIndex, winnerFinalPoints, '第三方放冲触发互包补赔', bailoutType);
+      }
+      return { deltas, transfers };
+    }
+
+    addTransfer(discarderId, winnerIndex, winnerFinalPoints, '放冲赔付');
+    return { deltas, transfers };
+  }
+
+  for (const idx of allPlayerIndices) {
+    if (idx === winnerIndex) continue;
+    const bailout = mutualBailout?.get(idx);
+    const pay = bailout && bailout.partnerIndex === winnerIndex
+      ? winnerFinalPoints * 2
+      : winnerFinalPoints;
+    addTransfer(
+      idx,
+      winnerIndex,
+      pay,
+      bailout && bailout.partnerIndex === winnerIndex ? '互包赔付×2' : '赔付',
+      bailout && bailout.partnerIndex === winnerIndex ? bailout.type : undefined
+    );
+  }
+
+  return { deltas, transfers };
+}
+
+export function calculateSettlementByRules(
+  winnerFinalPoints: number,
+  isSelfDrawn: boolean,
+  winnerIndex: number,
+  allPlayerIndices: number[],
+  mutualBailout?: Map<number, { partnerIndex: number; type: '三口' | '四口' }>,
+  discarderId?: number
+): Map<number, number> {
+  return calculateSettlementBreakdownByRules(
+    winnerFinalPoints,
+    isSelfDrawn,
+    winnerIndex,
+    allPlayerIndices,
+    mutualBailout,
+    discarderId
+  ).deltas;
 }
 
 /**

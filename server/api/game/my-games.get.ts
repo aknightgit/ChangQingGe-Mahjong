@@ -1,22 +1,8 @@
 import { gameManager } from '../../utils/gameManager';
-import { UserService } from '../../services/userService';
-import { AuthService } from '../../services/authService';
+import { resolveUserFromEvent } from '../../utils/session';
 
 export default defineEventHandler(async (event) => {
-  const token = getCookie(event, 'auth_token');
-  if (!token) {
-    return { success: true, data: { games: [] } };
-  }
-
-  const userId = await AuthService.validateSession(token);
-  if (!userId) {
-    return { success: true, data: { games: [] } };
-  }
-
-  const user = await UserService.getUserById(userId);
-  if (!user) {
-    return { success: true, data: { games: [] } };
-  }
+  const user = await resolveUserFromEvent(event);
 
   // 查找该玩家参与的所有活跃牌局
   const allGames = await gameManager.listGames();
@@ -24,7 +10,7 @@ export default defineEventHandler(async (event) => {
 
   for (const game of allGames) {
     if (game.phase === 'ended') continue;
-    const playerInGame = game.players.find(p => p.name === user.name);
+    const playerInGame = game.players.find(p => p.userId === user.userId);
     if (!playerInGame) continue;
 
     const isBotMode = gameManager.isPlayerInBotMode(playerInGame.id);

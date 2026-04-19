@@ -4,6 +4,7 @@
  * Body: { gameId, playerId, enabled: boolean }
  */
 import { gameManager } from '../../utils/gameManager';
+import { requireGamePlayerAccess } from '../../utils/session';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -15,6 +16,13 @@ export default defineEventHandler(async (event) => {
       message: 'gameId, playerId, enabled are required'
     });
   }
+
+  const game = await gameManager.getGame(gameId);
+  if (!game) {
+    throw createError({ statusCode: 404, message: 'Game not found' });
+  }
+
+  await requireGamePlayerAccess(event, game, playerId);
 
   if (enabled) {
     gameManager.enableBotMode(gameId, playerId);

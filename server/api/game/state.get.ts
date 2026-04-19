@@ -1,10 +1,10 @@
 import { gameManager } from '../../utils/gameManager';
 import { TileSuit } from '../../types/game';
-import { isAdminFromEvent } from '../../utils/session';
+import { requireGamePlayerAccess } from '../../utils/session';
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
-  const { gameId, playerId } = query;
+  const { gameId, playerId, debugAccessToken } = query;
 
   if (!gameId || !playerId) {
     throw createError({
@@ -31,14 +31,27 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const player = game.players.find(p => p.id === normalizedPlayerId);
-  
-  if (!player) {
+  const debugRoutesEnabled = process.env.ENABLE_DEBUG_ROUTES === 'true';
+  const isDebugBypass =
+    debugRoutesEnabled &&
+    typeof debugAccessToken === 'string' &&
+    (game as any).debugAccessToken === debugAccessToken;
+
+  const access = isDebugBypass
+    ? {
+        player: game.players.find((entry) => entry.id === normalizedPlayerId),
+        isAdmin: true
+      }
+    : await requireGamePlayerAccess(event, game, normalizedPlayerId, { allowAdmin: true });
+
+  if (!access.player) {
     throw createError({
       statusCode: 404,
       message: 'Player not found'
     });
   }
+
+  const { player, isAdmin } = access;
 
   let availableActions: string[] = [];
   try {
@@ -48,14 +61,12 @@ export default defineEventHandler(async (event) => {
     availableActions = [];
   }
 
-  const isAdminUser = await isAdminFromEvent(event);
-
   // 获取互包关系（三口/四口）
   const bailoutRelations = gameManager.getMutualBailoutRelations(normalizedGameId);
   (game as any).bailoutRelations = bailoutRelations;
 
   const maskedPlayers = game.players.map((p) => {
-    const shouldReveal = isAdminUser || p.id === normalizedPlayerId;
+    const shouldReveal = isAdmin || p.id === normalizedPlayerId;
 
     return {
       ...p,

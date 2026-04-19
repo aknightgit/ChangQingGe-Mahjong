@@ -1,5 +1,6 @@
 import { gameManager } from '../../utils/gameManager';
 import { emitToRoom } from '../../utils/socket';
+import { requireGamePlayerAccess } from '../../utils/session';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -21,13 +22,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Check if player is the dealer (creator)
-  const player = game.players.find(p => p.id === playerId);
-  if (!player) {
-    throw createError({
-      statusCode: 404,
-      message: 'Player not found in this game'
-    });
-  }
+  const { player } = await requireGamePlayerAccess(event, game, playerId);
 
   if (!player.isDealer) {
     throw createError({

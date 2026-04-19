@@ -39,30 +39,55 @@ function parseCookies(header?: string) {
 }
 
 async function socketIsAdmin(socket: Socket): Promise<boolean> {
-  const cookies = parseCookies(socket.handshake.headers.cookie)
+  const user = await resolveSocketUser(socket)
+  return !!user?.isAdmin
+}
 
-  if (cookies.mahjong_session) {
-    const userId = await AuthService.validateSession(cookies.mahjong_session)
-    if (userId) {
-      const user = await UserService.getUserById(userId)
-      if (user) {
-        return !!user.isAdmin
+async function resolveSocketUser(socket: Socket): Promise<{ userId: string; userName: string; isAdmin: boolean } | null> {
+  const handshakeAuth = socket.handshake.auth as {
+    debugAccessToken?: string
+    roomId?: string
+    playerId?: string
+  } | undefined
+  const debugAccessToken =
+    typeof handshakeAuth?.debugAccessToken === 'string' ? handshakeAuth.debugAccessToken : ''
+  const debugRoomId =
+    typeof handshakeAuth?.roomId === 'string' ? handshakeAuth.roomId : ''
+  const debugPlayerId =
+    typeof handshakeAuth?.playerId === 'string' ? handshakeAuth.playerId : ''
+
+  if (
+    process.env.ENABLE_DEBUG_ROUTES === 'true' &&
+    debugAccessToken &&
+    debugRoomId &&
+    debugPlayerId
+  ) {
+    const game = await gameManager.getGame(debugRoomId)
+    const debugPlayer = game?.players.find((player) => player.id === debugPlayerId)
+    if ((game as any)?.debugAccessToken === debugAccessToken && debugPlayer) {
+      return {
+        userId: debugPlayer.id,
+        userName: debugPlayer.name,
+        isAdmin: true
       }
     }
   }
 
-  if (cookies.user_id) {
-    const user = await UserService.getUserById(cookies.user_id)
-    if (user) {
-      return !!user.isAdmin
-    }
-  }
+  const cookies = parseCookies(socket.handshake.headers.cookie)
+  const token = cookies.mahjong_session || cookies.auth_token
+  if (!token) return null
 
-  if (cookies.is_admin) {
-    return cookies.is_admin === 'true'
-  }
+  const userId = await AuthService.validateSession(token)
+  if (!userId) return null
 
-  return false
+  const user = await UserService.getUserById(userId)
+  if (!user) return null
+
+  return {
+    userId: user.userId,
+    userName: user.name,
+    isAdmin: !!user.isAdmin
+  }
 }
 
 // ✅ MongoDB Collections
@@ -131,13 +156,19 @@ export async function initializeSocketIO(server: HTTPServer) {
     // Handle user authentication
     socket.on('auth:login', async (data: { userId: string; userName: string }) => {
       try {
+        const authUser = await resolveSocketUser(socket)
+        if (!authUser) {
+          socket.emit('auth:error', { message: 'Authentication required' })
+          return
+        }
+
         const collection = await getSocketConnectionsCollection()
         
         // Store connection in MongoDB
         await collection.insertOne({
           socketId: socket.id,
-          userId: data.userId,
-          userName: data.userName,
+          userId: authUser.userId,
+          userName: authUser.userName,
           connectedAt: new Date(),
           lastSeenAt: new Date()
         })
@@ -152,16 +183,24 @@ export async function initializeSocketIO(server: HTTPServer) {
 
     // Join a game room
     socket.on('room:join', async (data: { roomId: string; userId: string; userName: string }) => {
-      const { roomId, userId, userName } = data
+      const { roomId } = data
       console.log(
         '[room:join]',
         'PID:', process.pid,
         'roomId:', roomId,
-        'user:', userName,
+        'user:', data.userName,
         'socket:', socket.id
       )
       
       try {
+        const authUser = await resolveSocketUser(socket)
+        if (!authUser) {
+          socket.emit('room:error', { message: 'Authentication required' })
+          return
+        }
+
+        const userId = authUser.userId
+        const userName = authUser.userName
         const roomStates = await getRoomStatesCollection()
         const connections = await getSocketConnectionsCollection()
         

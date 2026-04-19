@@ -1,8 +1,10 @@
 import { gameManager } from '../../utils/gameManager';
+import { requireGamePlayerAccess, resolveUserFromEvent } from '../../utils/session';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
   let { gameId, playerName } = body;
+  const user = await resolveUserFromEvent(event);
 
   if (!gameId || !playerName) {
     throw createError({
@@ -25,7 +27,29 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const result = await gameManager.joinGame(gameId, playerName);
+    const isBotJoin = typeof playerName === 'string' && (playerName.startsWith('AI-') || playerName.startsWith('电脑'));
+
+    if (isBotJoin) {
+      const game = await gameManager.getGame(gameId);
+      if (!game) {
+        throw createError({ statusCode: 404, message: 'Game not found' });
+      }
+
+      const ownerPlayerId = body.ownerPlayerId || game.players.find((entry) => entry.userId === user.userId)?.id;
+      if (!ownerPlayerId) {
+        throw createError({ statusCode: 403, message: 'Only game participants can add bots' });
+      }
+
+      await requireGamePlayerAccess(event, game, ownerPlayerId);
+      const result = await gameManager.joinGame(gameId, playerName);
+
+      return {
+        success: true,
+        data: result
+      };
+    }
+
+    const result = await gameManager.joinGame(gameId, user.name, { userId: user.userId });
     
     return {
       success: true,

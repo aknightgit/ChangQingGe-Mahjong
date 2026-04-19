@@ -49,6 +49,7 @@ export enum PlayerStatus {
 
 export interface Player {
   id: string;
+  userId?: string;
   name: string;
   position: number; // 0-3
   hand: PlayerHand;
@@ -147,5 +148,6 @@ export interface PendingAction {
   playerId: string;
   availableActions: ActionType[];
   tile?: Tile;
+  chowOptions?: string[][];
   expiresAt: number;
 }

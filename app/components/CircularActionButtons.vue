@@ -15,7 +15,7 @@
           'action-btn--highlight': hasChow && !isDelaying,
           'action-btn--highlight-pulse': hasChow && shouldPulseHighlight
         }"
-        :disabled="!hasChow || isDelaying || isInteractionLocked || !isConnected"
+        :disabled="!hasChow || isInteractionLocked || !isConnected"
         @click="$emit('action', 'chow')"
       >吃</button>
 
@@ -26,21 +26,21 @@
           'action-btn--highlight': hasPeng && !isDelaying,
           'action-btn--highlight-pulse': hasPeng && shouldPulseHighlight
         }"
-        :disabled="!hasPeng || isDelaying || isInteractionLocked || !isConnected"
+        :disabled="!hasPeng || isInteractionLocked || !isConnected"
         @click="$emit('action', 'peng')"
       >碰</button>
 
       <button
         class="action-btn action-btn--small"
         :class="{ 'action-btn--active': hasHu, 'action-btn--highlight': hasHu && !isDelaying }"
-        :disabled="!hasHu || isDelaying || isInteractionLocked || !isConnected"
+        :disabled="!hasHu || isInteractionLocked || !isConnected"
         @click="$emit('action', 'hu')"
       >胡</button>
 
       <button
         class="action-btn action-btn--small"
         :class="{ 'action-btn--active': hasKong, 'action-btn--highlight': hasKong && !isDelaying }"
-        :disabled="!hasKong || isDelaying || isInteractionLocked || !isConnected"
+        :disabled="!hasKong || isInteractionLocked || !isConnected"
         @click="$emit('action', 'kong')"
       >杠</button>
     </div>
@@ -54,7 +54,7 @@
         'action-btn--freezing': isFreezing
       }"
       :style="isFreezing ? { '--freeze-progress': freezeProgress, '--freeze-duration-ms': `${safeFreezeDurationMs}ms` } : {}"
-      :disabled="!canDraw || isDelaying || isInteractionLocked || !isConnected"
+      :disabled="!canDraw || isFreezing || isInteractionLocked || !isConnected"
       @click="$emit('action', 'draw')"
     >
       <span v-if="isFreezing" class="freeze-progress-ring"></span>
@@ -72,7 +72,7 @@
           'action-btn--highlight': hasThink && !isDelaying,
           'action-btn--disabled': !canUseThink
         }"
-        :disabled="!hasThink || !effectiveCanUseThink || isDelaying || isInteractionLocked || !isConnected"
+        :disabled="!hasThink || !effectiveCanUseThink || isInteractionLocked || !isConnected"
         @click="$emit('action', 'think')"
       >慢{{ effectiveThinkRemaining > 0 ? effectiveThinkRemaining : '' }}</button>
 
@@ -84,7 +84,7 @@
           'action-btn--active': hasRebel,
           'action-btn--highlight': hasRebel && !isDelaying
         }"
-        :disabled="!hasRebel || isDelaying || isInteractionLocked || !isConnected"
+        :disabled="!hasRebel || isInteractionLocked || !isConnected"
         @click="$emit('action', 'rebel')"
       >🚨</button>
 
@@ -97,7 +97,7 @@
           'action-btn--highlight': hasLiangShan && !isDelaying,
           'action-btn--voted': hasVotedLiangShan
         }"
-        :disabled="!hasLiangShan || isDelaying || isInteractionLocked || !isConnected || effectiveHasVotedLiangShan"
+        :disabled="!hasLiangShan || isInteractionLocked || !isConnected || effectiveHasVotedLiangShan"
         @click="$emit('action', 'liangshan')"
       >🔥</button>
 

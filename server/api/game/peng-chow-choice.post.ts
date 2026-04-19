@@ -1,5 +1,6 @@
 import { gameManager } from '../../utils/gameManager';
 import { emitToRoom } from '../../utils/socket';
+import { requireGamePlayerAccess } from '../../utils/session';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -20,13 +21,18 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
+    const game = await gameManager.getGame(gameId);
+    if (!game) {
+      throw createError({ statusCode: 404, message: 'Game not found' });
+    }
+
+    await requireGamePlayerAccess(event, game, playerId);
     gameManager.handlePengChowChoice(gameId, playerId, choice);
 
-    const game = await gameManager.getGame(gameId);
     emitToRoom(gameId, 'game:state-changed', {
       gameId,
-      currentPlayerIndex: game?.currentPlayerIndex,
-      phase: game?.phase
+      currentPlayerIndex: game.currentPlayerIndex,
+      phase: game.phase
     });
 
     return { success: true };

@@ -1,11 +1,11 @@
 import { gameManager } from '../../utils/gameManager';
 import { ActionType } from '../../types/game';
 import { emitToRoom } from '../../utils/socket';
-import { requireAdminUser } from '../../utils/session';
+import { requireGamePlayerAccess } from '../../utils/session';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
-  const { gameId, playerId, action: rawAction, type, tileId, tileIds } = body;
+  const { gameId, playerId, action: rawAction, type, tileId, tileIds, winOptionLabel } = body;
   const action = rawAction || type;
 
   if (!gameId || !playerId || !action) {
@@ -23,12 +23,14 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  if (action === ActionType.CHEAT_HU) {
-    await requireAdminUser(event);
-  }
-
   try {
-    await gameManager.executeAction(gameId, playerId, action, tileId, tileIds);
+    const currentGame = await gameManager.getGame(gameId);
+    if (!currentGame) {
+      throw createError({ statusCode: 404, message: 'Game not found' });
+    }
+
+    await requireGamePlayerAccess(event, currentGame, playerId, { allowAdmin: action === ActionType.CHEAT_HU });
+    await gameManager.executeAction(gameId, playerId, action, tileId, tileIds, winOptionLabel);
     
     const game = await gameManager.getGame(gameId);
     const player = game?.players.find(p => p.id === playerId);

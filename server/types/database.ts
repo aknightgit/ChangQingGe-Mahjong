@@ -1,5 +1,5 @@
 import { ObjectId } from 'mongodb';
-import type { PendingAction } from './game';
+import type { PendingAction, RoundStat } from './game';
 
 /**
  * User Collection - Account + Profile + Login Info
@@ -238,6 +238,7 @@ export interface SettlementHistory {
   roomNumber?: string;
   totalRounds: number;
   playerStats: SettlementPlayerStat[];
+  roundDetails?: RoundStat[];
   savedAt: Date;
   savedBy: string; // playerId who clicked save
 }

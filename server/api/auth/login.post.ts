@@ -16,6 +16,13 @@ export default defineEventHandler(async (event) => {
     const user = await UserService.loginByPhone(phone, password);
     const session = await AuthService.createSession(user.userId);
 
+    setCookie(event, 'mahjong_session', session.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 60 * 60 * 24 * 7,
+      path: '/'
+    });
+
     return {
       success: true,
       data: {

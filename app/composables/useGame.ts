@@ -5,6 +5,9 @@ import { io, type Socket } from 'socket.io-client'
 
 
 export const useGame = () => {
+  const route = useRoute()
+  const debugAccessToken =
+    typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
   const gameState = ref<GameState | null>(null)
   const playerView = ref<any>(null) // Player's hand view
   const availableActions = ref<ActionType[]>([])
@@ -12,24 +15,28 @@ export const useGame = () => {
   const isConnected = ref(false)
   const error = ref<string | null>(null)
   const leadingBrotherEvent = ref<{ firstPlayerName: string; tileKey: string } | null>(null)
-  const actionApprovalEvent = ref<{ requesterName: string; requesterAction: string; candidatePlayerId: string; availableActions: string[]; tileKey: string } | null>(null)
+  const actionApprovalEvent = ref<{ requesterName: string; requesterAction: string; candidatePlayerId: string; availableActions: string[]; tileKey: string; expiresAt?: number } | null>(null)
   const isActionPending = ref(false)
   const roomDismissedReason = ref<string | null>(null)
   // 延迟高亮：记录最后一次 state-changed 的时间戳
   const lastStateChangeAt = ref<number>(0)
+
+  const playerId = ref<string | null>(null)
+  const gameId = ref<string | null>(null)
 
   const currentPlayer = computed(() => {
     if (!gameState.value || !playerId.value) return null
     return gameState.value.players.find(p => p.id === playerId.value)
   })
 
-  const playerId = ref<string | null>(null)
-  const gameId = ref<string | null>(null)
-
   const fetchGameState = async (gId: string, pId: string) => {
     try {
       const response = await $fetch('/api/game/state', {
-        query: { gameId: gId, playerId: pId },
+        query: {
+          gameId: gId,
+          playerId: pId,
+          debugAccessToken: typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
+        },
         cache: 'no-cache'
       })
 
@@ -51,10 +58,21 @@ export const useGame = () => {
       // Fetch initial state (optional, but good for immediate render)
       await fetchGameState(gId, pId)
 
+      if (debugAccessToken) {
+        isConnected.value = true
+        error.value = null
+        return
+      }
+
       // Connect Socket.IO
       // Use WebSocket-first transport for faster, more reliable connections
       const wsUrl = window.location.origin
       socket.value = io(wsUrl, {
+        auth: {
+          debugAccessToken,
+          roomId: gId,
+          playerId: pId
+        },
         withCredentials: true,
         transports: ['polling'],
         timeout: 10000,
@@ -72,14 +90,17 @@ export const useGame = () => {
         // Authenticate
         socket.value?.emit('auth:login', {
           userId: pId,
-          userName: userName
+          userName: userName,
+          debugAccessToken,
+          roomId: gId
         })
 
         // Join Room
         socket.value?.emit('room:join', {
           roomId: gId,
           userId: pId,
-          userName: userName
+          userName: userName,
+          debugAccessToken
         })
       })
 
@@ -166,14 +187,9 @@ export const useGame = () => {
       })
 
       // 通用审批流程
-      socket.value.on('actionApproval', (data: { requesterName: string; requesterAction: string; candidatePlayerId: string; availableActions: string[]; tileKey: string }) => {
+      socket.value.on('actionApproval', (data: { requesterName: string; requesterAction: string; candidatePlayerId: string; availableActions: string[]; tileKey: string; expiresAt?: number }) => {
         console.log('⚡ 审批流程:', data)
         actionApprovalEvent.value = data
-        setTimeout(() => {
-          if (actionApprovalEvent.value?.requesterName === data.requesterName) {
-            actionApprovalEvent.value = null
-          }
-        }, 5000)
       })
 
     } catch (e: any) {
@@ -223,7 +239,7 @@ export const useGame = () => {
     }
   }
 
-  const executeAction = async (action: ActionType, tileId?: string, tileIds?: string[]) => {
+  const executeAction = async (action: ActionType, tileId?: string, tileIds?: string[], winOptionLabel?: string) => {
     if (!gameId.value || !playerId.value) return
     if (gameState.value?.phase === GamePhase.ENDED) return
     if (isActionPending.value) return
@@ -235,12 +251,13 @@ export const useGame = () => {
         body: {
           gameId: gameId.value,
           playerId: playerId.value,
-          action,
-          type: action,
-          tileId,
-          tileIds
-        }
-      })
+        action,
+        type: action,
+        tileId,
+        tileIds,
+        winOptionLabel
+      }
+    })
 
       if ((response as any)?.success) {
         updateState((response as any).data)

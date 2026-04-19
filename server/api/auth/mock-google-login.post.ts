@@ -7,6 +7,10 @@ import { randomUUID } from 'crypto'
  * Simulates a Google login
  */
 export default defineEventHandler(async (event) => {
+  if (process.env.NODE_ENV === 'production') {
+    throw createError({ statusCode: 404, message: 'Not found' })
+  }
+
   try {
     const body = await readBody(event)
     const { email, name } = body

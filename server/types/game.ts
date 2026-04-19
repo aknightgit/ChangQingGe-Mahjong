@@ -76,6 +76,7 @@ export enum PlayerStatus {
 
 export interface Player {
   id: string;
+  userId?: string;
   name: string;
   position: number; // 0-3
   hand: PlayerHand;
@@ -92,7 +93,19 @@ export interface Player {
   winTimestamp: number | null;
   isSelfDrawn?: boolean; // 是否自摸
   discarderId?: string; // 捉冲时放冲者ID
+  winningScoreBreakdown?: WinningScoreBreakdown;
   score: number;
+}
+
+export interface WinningScoreBreakdown {
+  baseFan: number;
+  extraMultipliers: number;
+  diceMultiplier: number;
+  inheritMultiplier: number;
+  effectiveMultiplier: number;
+  settlementMultiplier: number;
+  finalPoints: number;
+  details: string[];
 }
 
 // Game actions
@@ -166,6 +179,50 @@ export interface RoundStat {
   scores: Record<string, number>;  // playerId → 本局得分
   winners: string[];  // 胡牌玩家ID
   selfDraws: string[];  // 自摸玩家ID
+  diceMultiplier: number;
+  inheritMultiplier: number;
+  effectiveMultiplier: number;
+  settlementMultiplier: number;
+  overflowCarryMultiplierNextRound: number;
+  bailoutRelations: Array<{
+    player1: string;
+    player1Name?: string;
+    player2: string;
+    player2Name?: string;
+    type: '三口' | '四口';
+  }>;
+  winnerDetails: Array<{
+    playerId: string;
+    playerName: string;
+    handTypeName?: string;
+    isSelfDrawn: boolean;
+    discarderId?: string;
+    discarderName?: string;
+    baseFan: number;
+    extraMultipliers: number;
+    diceMultiplier: number;
+    inheritMultiplier: number;
+    effectiveMultiplier: number;
+    settlementMultiplier: number;
+    finalPoints: number;
+    details: string[];
+  }>;
+  transfers: Array<{
+    fromPlayerId: string;
+    fromPlayerName: string;
+    toPlayerId: string;
+    toPlayerName: string;
+    amount: number;
+    reason: string;
+    bailoutType?: '三口' | '四口';
+  }>;
+  specialEvents?: Array<{
+    type: 'leading_brother';
+    fromPlayerId: string;
+    fromPlayerName: string;
+    totalAmount: number;
+    amountPerPlayer: number;
+  }>;
 }
 
 export interface GameState {
@@ -222,7 +279,16 @@ export interface GameState {
   consecutiveDiscards?: { suit: string; value: number; playerIds: string[] } | null;
   leadingBrotherEvent?: { firstPlayerId: string; tileKey: string } | null;
   /** 通用审批流程：低优先级玩家请求，高优先级玩家确认 */
-  pengChowConflict?: { requesterId: string; requesterAction: 'chow' | 'peng' | 'kong'; tile: Tile; timestamp: number } | null;
+  pengChowConflict?: {
+    requesterId: string;
+    requesterAction: 'chow' | 'peng' | 'kong';
+    tile: Tile;
+    requesterTileIds?: string[];
+    timestamp: number;
+    approvalQueue?: Array<{ playerId: string; availableActions: ActionType[] }>;
+    currentStagePlayerIds?: string[];
+    expiresAt?: number;
+  } | null;
   // 下局庄家（上局首胡者或一炮多响放冲者）
   nextDealerId?: string | null;
   // 被聚义QJ线突破提醒（每局刷新）
@@ -244,6 +310,7 @@ export interface PendingAction {
   playerId: string;
   availableActions: ActionType[];
   tile?: Tile;
+  chowOptions?: string[][];
   expiresAt: number;
 }
 

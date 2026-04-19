@@ -110,6 +110,31 @@
           </div>
         </div>
 
+        <div v-if="showChowPicker" class="chow-picker-overlay" @click.self="onCancelChowPicker">
+          <div class="chow-picker-card">
+            <h3 class="chow-picker-title">选择吃牌组合</h3>
+            <p class="chow-picker-sub">这张牌有多种吃法，请先选择组合。</p>
+            <div class="chow-picker-options">
+              <button
+                v-for="(option, index) in chowOptions"
+                :key="option.tileIds.join('-')"
+                class="chow-picker-option"
+                :class="{ 'chow-picker-option--selected': selectedChowOption === index }"
+                @click="selectedChowOption = index"
+              >
+                <div class="chow-picker-tiles">
+                  <MahjongTile v-for="tile in option.previewTiles" :key="tile.id" :tile="tile" :size="26" />
+                </div>
+                <span class="chow-picker-label">{{ option.label }}</span>
+              </button>
+            </div>
+            <div class="chow-picker-actions">
+              <button class="mahjong-button small secondary" @click="onCancelChowPicker">取消</button>
+              <button class="mahjong-button small" :disabled="selectedChowOption === null" @click="onConfirmChowPicker">确认吃牌</button>
+            </div>
+          </div>
+        </div>
+
         <!-- 胡牌选择面板 -->
         <div v-if="showHuPanel" class="hu-panel-overlay" @click.self="onCancelHu">
           <div class="hu-panel">
@@ -256,6 +281,85 @@
                     <span class="settle-detail-stat settle-detail-stat--loss">{{ p.maxLoss ?? 0 }}</span>
                   </div>
                 </template>
+              </div>
+            </div>
+
+            <div v-if="settlementData?.roundDetails?.length" class="settle-rounds">
+              <h3 class="settle-rounds-title">每局结算明细</h3>
+              <div
+                v-for="round in settlementData.roundDetails"
+                :key="'round-' + round.roundNumber"
+                class="settle-round-card"
+              >
+                <div class="settle-round-header">
+                  <span>第 {{ round.roundNumber }} 局</span>
+                  <span>骰子×{{ round.diceMultiplier }} / 继承×{{ round.inheritMultiplier }} / 有效×{{ round.effectiveMultiplier }} / 结算膨胀×{{ round.settlementMultiplier }}</span>
+                </div>
+                <div v-if="round.overflowCarryMultiplierNextRound > 1" class="settle-round-note">
+                  下局继承倍数：×{{ round.overflowCarryMultiplierNextRound }}
+                </div>
+                <div v-if="round.bailoutRelations?.length" class="settle-round-note">
+                  三四口关系：
+                  {{ round.bailoutRelations.map(rel => `${rel.player1Name || rel.player1} ↔ ${rel.player2Name || rel.player2}（${rel.type}）`).join('，') }}
+                </div>
+
+                <div v-if="round.winnerDetails?.length" class="settle-round-block">
+                  <div
+                    v-for="winner in round.winnerDetails"
+                    :key="winner.playerId + '-winner'"
+                    class="settle-round-winner"
+                  >
+                    <div class="settle-round-winner-line">
+                      <strong>{{ winner.playerName }}</strong>
+                      <span>{{ winner.isSelfDrawn ? '自摸' : `捉冲 ${winner.discarderName || winner.discarderId || ''}` }}</span>
+                      <span>{{ winner.handTypeName || '未命名牌型' }}</span>
+                      <span>单次点数 {{ winner.finalPoints }}</span>
+                    </div>
+                    <div class="settle-round-note">
+                      基础番/固定点 {{ winner.baseFan }}，额外翻倍 ×{{ winner.extraMultipliers }}，骰子 ×{{ winner.diceMultiplier }}，继承 ×{{ winner.inheritMultiplier }}，有效 ×{{ winner.effectiveMultiplier }}，结算膨胀 ×{{ winner.settlementMultiplier }}
+                    </div>
+                    <div v-if="winner.details?.length" class="settle-round-details">
+                      {{ winner.details.join('；') }}
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="round.transfers?.length" class="settle-round-block">
+                  <div class="settle-round-subtitle">赔付流向</div>
+                  <div
+                    v-for="(transfer, idx) in round.transfers"
+                    :key="round.roundNumber + '-transfer-' + idx"
+                    class="settle-round-transfer"
+                  >
+                    <span>{{ transfer.fromPlayerName }} → {{ transfer.toPlayerName }}</span>
+                    <span>{{ transfer.amount }}</span>
+                    <span>{{ transfer.reason }}<template v-if="transfer.bailoutType">（{{ transfer.bailoutType }}）</template></span>
+                  </div>
+                </div>
+
+                <div v-if="round.specialEvents?.length" class="settle-round-block">
+                  <div
+                    v-for="event in round.specialEvents"
+                    :key="round.roundNumber + '-' + event.type + '-' + event.fromPlayerId"
+                    class="settle-round-note"
+                  >
+                    {{ event.fromPlayerName }} 触发谢谢带头大哥，合计赔付 {{ event.totalAmount }}，每家 {{ event.amountPerPlayer }}
+                  </div>
+                </div>
+
+                <div class="settle-round-block">
+                  <div class="settle-round-subtitle">本局总输赢</div>
+                  <div
+                    v-for="player in settlementData.playerStats"
+                    :key="round.roundNumber + '-score-' + player.id"
+                    class="settle-round-transfer"
+                  >
+                    <span>{{ player.name }}</span>
+                    <span :class="{ 'settle-round-positive': (round.scores?.[player.id] ?? 0) > 0, 'settle-round-negative': (round.scores?.[player.id] ?? 0) < 0 }">
+                      {{ (round.scores?.[player.id] ?? 0) > 0 ? '+' : '' }}{{ round.scores?.[player.id] ?? 0 }}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -792,6 +896,7 @@ const nowTs = ref(Date.now())
 let actionWindowTimer: ReturnType<typeof setInterval> | null = null
 
 const actionButtonsVisibleUntil = ref(0)
+const isGameStarting = ref(false)
 const getActionWindowMs = (state: any) => {
   const hw = state?.hesitationWindow
   return typeof hw === 'number' && hw > 0 ? hw : 5000
@@ -895,7 +1000,6 @@ const onPlayerBack = () => {
   }
 }
 
-const isMyTurn = computed(() => currentTurnPlayer.value?.id === currentPlayer.value?.id)
 
 // 骰子动画状态
 const showDiceOverlay = ref(false)
@@ -1358,6 +1462,7 @@ const currentTurnPlayer = computed(() => {
   if (!gameState.value || activePosition.value === null) return null
   return gameState.value.players[activePosition.value] || null
 })
+const isMyTurn = computed(() => currentTurnPlayer.value?.id === currentPlayer.value?.id)
 
 const turnMessage = computed(() => {
   if (!gameState.value) {
@@ -1503,6 +1608,8 @@ watch(thinkFreezeActive, (active) => {
 
 // 胡牌面板状态
 const showHuPanel = ref(false)
+const showChowPicker = ref(false)
+const selectedChowOption = ref<number | null>(null)
 
 // 计算胡牌组合：将手牌排列成 顺子/刻子 + 对子
 const huCombinations = computed(() => {
@@ -1650,7 +1757,7 @@ const onConfirmHu = (index: number) => {
   resetAutoCount()
   playSound('tile-hu')
   showHuPanel.value = false
-  executeAction(ActionType.HU)
+  executeAction(ActionType.HU, undefined, undefined, winOptions.value[index]?.label)
 }
 const onCancelHu = () => {
   showHuPanel.value = false
@@ -1658,6 +1765,31 @@ const onCancelHu = () => {
 }
 
 // ===== 审批流程 =====
+const myPendingAction = computed(() => {
+  if (!gameState.value || !currentPlayer.value) return null
+  return gameState.value.pendingActions.find(pa => pa.playerId === currentPlayer.value!.id) || null
+})
+
+const chowOptions = computed(() => {
+  const pending = myPendingAction.value as { tile?: Tile; chowOptions?: string[][] } | null
+  const discardTile = pending?.tile
+  if (!discardTile || !pending?.chowOptions?.length) return []
+  return pending.chowOptions
+    .map((tileIds) => {
+      const handTiles = tileIds
+        .map(tileId => playerHand.value.find(tile => tile.id === tileId))
+        .filter((tile): tile is Tile => !!tile)
+      if (handTiles.length !== tileIds.length) return null
+      const previewTiles = [...handTiles, discardTile].sort((a, b) => a.value - b.value)
+      return {
+        tileIds,
+        previewTiles,
+        label: previewTiles.map(tile => `${tile.value}`).join('-')
+      }
+    })
+    .filter((option): option is { tileIds: string[]; previewTiles: Tile[]; label: string } => !!option)
+})
+
 const isMyApprovalWaiting = computed(() => {
   if (!actionApprovalEvent.value) return false
   const myPending = myPendingAction.value
@@ -1666,28 +1798,18 @@ const isMyApprovalWaiting = computed(() => {
 })
 
 // 审批弹窗倒计时（3秒）
-const APPROVAL_COUNTDOWN_MS = 3000
-const approvalCountdownStart = ref(0)
 const approvalCountdownRatio = computed(() => {
-  if (!actionApprovalEvent.value || approvalCountdownStart.value === 0) return 1
-  const elapsed = Date.now() - approvalCountdownStart.value
-  return Math.max(0, 1 - elapsed / APPROVAL_COUNTDOWN_MS)
+  const expiresAt = actionApprovalEvent.value?.expiresAt
+  if (!expiresAt) return 1
+  const totalMs = Math.max(getActionWindowMs(gameState.value), 1)
+  const leftMs = Math.max(0, expiresAt - Date.now())
+  return Math.max(0, Math.min(1, leftMs / totalMs))
 })
 const approvalCountdownSec = computed(() => {
-  return Math.ceil(approvalCountdownRatio.value * 3)
+  const expiresAt = actionApprovalEvent.value?.expiresAt
+  if (!expiresAt) return 0
+  return Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000))
 })
-
-// 监听审批事件，重置倒计时
-watch(
-  () => actionApprovalEvent.value?.timestamp,
-  (ts) => {
-    if (ts) {
-      approvalCountdownStart.value = Date.now()
-    } else {
-      approvalCountdownStart.value = 0
-    }
-  }
-)
 watch(
   [
     () => gameState.value?.pendingActions,
@@ -1717,6 +1839,30 @@ watch(
     if (current.length >= previous.length) return
     // 弃牌池减少通常意味着该牌被吃/碰/杠认领，立即隐藏响应按钮，避免残留亮起
     hideActionButtonsNow()
+  },
+  { deep: true }
+)
+
+watch(
+  () => [showChow.value, chowOptions.value.length],
+  ([canChow, optionCount]) => {
+    if (!canChow || optionCount <= 1) {
+      showChowPicker.value = false
+      selectedChowOption.value = null
+    }
+  }
+)
+
+watch(
+  [() => actionApprovalEvent.value?.candidatePlayerId, () => gameState.value?.pendingActions],
+  () => {
+    const event = actionApprovalEvent.value
+    if (!event) return
+    const pending = (gameState.value as any)?.pendingActions || []
+    const stillPending = pending.some((pa: any) => pa.playerId === event.candidatePlayerId)
+    if (!stillPending || (event.expiresAt && event.expiresAt <= Date.now())) {
+      actionApprovalEvent.value = null
+    }
   },
   { deep: true }
 )
@@ -1779,7 +1925,30 @@ const hideActionButtonsNow = () => {
   actionButtonsVisibleUntil.value = 0
 }
 
-const onChow = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-chow'); executeAction(ActionType.CHOW) }
+const submitChow = (tileIds?: string[]) => {
+  hideActionButtonsNow()
+  resetAutoCount()
+  playSound('tile-chow')
+  showChowPicker.value = false
+  selectedChowOption.value = null
+  executeAction(ActionType.CHOW, undefined, tileIds)
+}
+const onChow = () => {
+  if (chowOptions.value.length > 1) {
+    showChowPicker.value = true
+    selectedChowOption.value = 0
+    return
+  }
+  submitChow(chowOptions.value[0]?.tileIds)
+}
+const onConfirmChowPicker = () => {
+  if (selectedChowOption.value === null) return
+  submitChow(chowOptions.value[selectedChowOption.value]?.tileIds)
+}
+const onCancelChowPicker = () => {
+  showChowPicker.value = false
+  selectedChowOption.value = null
+}
 const onPeng = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-pong'); executeAction(ActionType.PENG) }
 const onKong = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-kong'); executeAction(ActionType.KONG) }
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); executeAction(ActionType.REBEL) }
@@ -1796,7 +1965,8 @@ const onRequestSettle = async () => {
       body: {
         gameId: roomId.value,
         playerId: currentPlayer.value?.id,
-        action: 'request'
+        action: 'request',
+        debugAccessToken: typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
       }
     })
     if ((res as any)?.success) {
@@ -1814,7 +1984,8 @@ const onSaveSettle = async () => {
       body: {
         gameId: roomId.value,
         playerId: currentPlayer.value?.id,
-        action: 'save'
+        action: 'save',
+        debugAccessToken: typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
       }
     })
     showSettlement.value = false
@@ -2048,11 +2219,6 @@ watch([isMyTurn, hasPriorityActions], ([myTurn, hasActions]) => {
   }
 })
 
-const myPendingAction = computed(() => {
-  if (!gameState.value || !currentPlayer.value) return null
-  return gameState.value.pendingActions.find(pa => pa.playerId === currentPlayer.value!.id) || null
-})
-
 const actionWindowText = computed(() => {
   if (!hasPriorityActions.value) return ''
   const pending = myPendingAction.value
@@ -2105,8 +2271,6 @@ const onExtendedKong = () => {
 
 // ---- 开局流程：掷骰子 → 发牌 ----
 // 防重复点击标志
-const isGameStarting = ref(false)
-
 const onStartGame = async () => {
   if (isGameStarting.value) return
   isGameStarting.value = true
@@ -3543,6 +3707,50 @@ const forceDiscard = async (p: Player) => {
 .think-opt--cancel { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.6); border-color: rgba(255,255,255,0.2); }
 
 /* ===== 胡牌选择面板 ===== */
+.chow-picker-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 10, 8, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 31;
+}
+.chow-picker-card {
+  background: rgba(10, 25, 18, 0.98);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  border-radius: 20px;
+  padding: 24px 28px;
+  max-width: 420px;
+  width: 88%;
+}
+.chow-picker-title { margin: 0 0 6px; font-size: 1.2rem; font-weight: 700; color: #FFD700; }
+.chow-picker-sub { margin: 0 0 16px; color: rgba(255,255,255,0.75); font-size: 0.9rem; }
+.chow-picker-options { display: grid; gap: 10px; }
+.chow-picker-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.chow-picker-option:hover,
+.chow-picker-option--selected {
+  border-color: rgba(255, 215, 0, 0.5);
+  background: rgba(255, 215, 0, 0.12);
+  transform: translateY(-1px);
+}
+.chow-picker-tiles { display: flex; align-items: center; gap: 6px; }
+.chow-picker-label { font-weight: 700; color: #fff; }
+.chow-picker-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+
 .hu-panel-overlay {
   position: absolute;
   inset: 0;
@@ -3974,6 +4182,83 @@ const forceDiscard = async (p: Player) => {
   margin-bottom: 20px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding-top: 16px;
+}
+
+.settle-rounds {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.settle-rounds-title {
+  margin: 0;
+  color: #ffd700;
+  font-size: 1rem;
+}
+
+.settle-round-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settle-round-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: #f7e6a8;
+  font-weight: 600;
+  font-size: 0.86rem;
+}
+
+.settle-round-block {
+  display: grid;
+  gap: 6px;
+}
+
+.settle-round-subtitle {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.78rem;
+}
+
+.settle-round-winner {
+  display: grid;
+  gap: 4px;
+}
+
+.settle-round-winner-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: #fff;
+  font-size: 0.84rem;
+}
+
+.settle-round-details,
+.settle-round-note {
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.settle-round-transfer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #f3f3f3;
+  font-size: 0.8rem;
+}
+
+.settle-round-positive {
+  color: #66bb6a;
+}
+
+.settle-round-negative {
+  color: #ef5350;
 }
 
 .settle-detail-header {
