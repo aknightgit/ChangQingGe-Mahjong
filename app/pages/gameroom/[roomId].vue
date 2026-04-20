@@ -1,5 +1,5 @@
 <template>
-  <div class="mahjong-page" :class="['layout-debug', { 'mobile-portrait': shouldRotateView }]">
+  <div class="mahjong-page" :class="[{ 'layout-debug': showDebugPanel, 'mobile-portrait': shouldRotateView }]">
     <div class="room-viewport" :class="{ 'room-viewport--rotated': shouldRotateView }">
       <div class="room-container" :class="{ 'room-container--rotated': shouldRotateView }">
       <header class="room-header">
@@ -912,7 +912,7 @@ let lastWarnAt = 0
 let consecutiveAutoCount = 0   // 连续自动操作次数
 const isAIControlled = ref(false) // 是否被AI接管
 const showSettings = ref(false) // 显示设置面板
-const showDebugPanel = ref(true) // 布局热调面板
+const showDebugPanel = ref(false) // 布局热调面板
 
 // 游戏设置
 const showHintEnabled = ref(true)       // 出牌提示
@@ -1463,6 +1463,17 @@ const currentTurnPlayer = computed(() => {
   return gameState.value.players[activePosition.value] || null
 })
 const isMyTurn = computed(() => currentTurnPlayer.value?.id === currentPlayer.value?.id)
+let myTurnRefreshTimer: ReturnType<typeof setTimeout> | null = null
+watch([isMyTurn, currentFreezeUntil], ([myTurn, freezeUntil]) => {
+  if (myTurnRefreshTimer) { clearTimeout(myTurnRefreshTimer); myTurnRefreshTimer = null }
+  if (!myTurn) return
+  const delay = freezeUntil > Date.now() ? (freezeUntil - Date.now() + 120) : 120
+  myTurnRefreshTimer = setTimeout(() => {
+    if (!availableActions.value.includes(ActionType.DRAW) && !availableActions.value.includes(ActionType.DISCARD)) {
+      refreshState()
+    }
+  }, Math.max(delay, 0))
+})
 
 const turnMessage = computed(() => {
   if (!gameState.value) {
@@ -2679,6 +2690,16 @@ const forceDiscard = async (p: Player) => {
     0 12px 30px rgba(0, 0, 0, 0.8);
   padding: 0;
   overflow: hidden;
+  --seat-side-inset: 6.8%;
+  --seat-top-inset: 3.8%;
+  --seat-bottom-inset: 1.4%;
+  --seat-top-width: 58%;
+  --seat-bottom-width: 72%;
+  --seat-side-width: 132px;
+  --seat-side-height: 70%;
+  --discard-top-inset: 22.8%;
+  --discard-bottom-inset: 21.5%;
+  --discard-side-inset: 21.5%;
 }
 
 /* 绿色麻将桌布内层 */
@@ -2705,24 +2726,24 @@ const forceDiscard = async (p: Player) => {
 /* 上家：靠近牌桌中心，旋转180° */
 /* 四个弃牌区居中对齐牌桌十字 */
 :deep(.discard-zone--top) {
-  top: 31%;
+  top: var(--discard-top-inset);
   left: 50%;
-  transform: translateX(-50%) rotate(180deg);
+  transform: translateX(-50%);
 }
 :deep(.discard-zone--bottom) {
-  bottom: 31%;
+  bottom: var(--discard-bottom-inset);
   left: 50%;
   transform: translateX(-50%);
 }
 :deep(.discard-zone--left) {
   top: 50%;
-  left: 20%;
-  transform: translateY(-50%) rotate(90deg);
+  left: var(--discard-side-inset);
+  transform: translateY(-50%);
 }
 :deep(.discard-zone--right) {
   top: 50%;
-  right: 20%;
-  transform: translateY(-50%) rotate(-90deg);
+  right: var(--discard-side-inset);
+  transform: translateY(-50%);
 }
 
 /* ===== 扩展信息区 ===== */
@@ -2926,6 +2947,11 @@ const forceDiscard = async (p: Player) => {
   overflow: hidden;
 }
 
+.seat,
+.seat-active {
+  overflow: visible;
+}
+
 .seat-active {
   filter: drop-shadow(0 0 16px rgba(255, 220, 60, 0.9));
   animation: seat-glow 1.5s ease-in-out infinite;
@@ -2937,46 +2963,45 @@ const forceDiscard = async (p: Player) => {
 }
 
 .seat-top {
-  top: 18%;
+  top: var(--seat-top-inset);
   left: 50%;
-  transform: translateX(-50%) rotate(180deg);
-  width: 75%;
+  transform: translateX(-50%);
+  width: var(--seat-top-width);
+  min-height: 88px;
   height: auto;
 }
 
 .seat-bottom {
-  bottom: 0;
+  bottom: var(--seat-bottom-inset);
   left: 50%;
-  transform: translateX(-50%) scale(1.2) translateY(-5%);
+  transform: translateX(-50%);
   transform-origin: bottom center;
-  width: 56%;
+  width: var(--seat-bottom-width);
+  min-height: 138px;
   height: auto;
 }
 
 /* 对家名字反向旋转，保持正向可读 */
-.seat-top :deep(.player-other-name) {
-  display: inline-block;
-  transform: rotate(180deg);
-}
-
 .seat-left {
-  left: 7%;
-  top: 0;
-  height: 100%;
-  width: 85px;
+  left: var(--seat-side-inset);
+  top: 50%;
+  transform: translateY(-50%);
+  height: var(--seat-side-height);
+  width: var(--seat-side-width);
   flex-direction: column;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: center;
   overflow: visible;
 }
 
 .seat-right {
-  right: 7%;
-  top: 0;
-  height: 100%;
-  width: 85px;
+  right: var(--seat-side-inset);
+  top: 50%;
+  transform: translateY(-50%);
+  height: var(--seat-side-height);
+  width: var(--seat-side-width);
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: center;
   overflow: visible;
 }
@@ -2986,7 +3011,7 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  gap: 8px;
+  gap: 14px;
   width: 100%;
   position: relative;
 }
@@ -4892,10 +4917,6 @@ const forceDiscard = async (p: Player) => {
 .layout-debug .action-buttons,
 .layout-debug .inline-action-buttons {
   outline: 2px solid #ff0000 !important;
-}
-
-.self-area-with-actions {
-  outline: 2px solid rgba(255, 255, 0, 0.3);
 }
 
 </style>

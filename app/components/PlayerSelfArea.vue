@@ -195,11 +195,11 @@ const onPointerCancel = () => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 10px 12px 12px;
+  padding: 0 10px 6px;
   border-radius: 14px;
   background: transparent;
-  position: relative;
-  bottom: 5%;
+  width: 100%;
+  bottom: 0;
 }
 
 .player-area--winner {
@@ -236,9 +236,10 @@ const onPointerCancel = () => {
 .player-main-row {
   display: flex;
   align-items: flex-end;
+  justify-content: center;
   gap: 8px;
   /* P0 FIX: 统一裁剪 — 手牌区和门口牌区共同受该容器约束 */
-  overflow: hidden;
+  overflow: visible;
   max-width: 100%;
 }
 
@@ -250,7 +251,7 @@ const onPointerCancel = () => {
   min-height: 50px;
   /* P0 FIX: 门口牌受容器裁剪 */
   flex-shrink: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .meld {
@@ -286,20 +287,21 @@ const onPointerCancel = () => {
   align-items: center;
   width: 100%;
   /* P0 FIX: 手牌区也受裁剪约束 */
-  overflow: hidden;
+  overflow: visible;
 }
 
 .player-hand {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: flex-end;
   justify-content: center;
-  min-height: 72px;
-  padding: 4px;
+  min-height: 82px;
+  padding: 4px 2px 6px;
   border-radius: 10px;
   background: transparent;
   /* 限制最大宽度为14张牌，多余才换行 */
-  max-width: 440px;
+  max-width: none;
+  width: fit-content;
   margin: 0 auto;
   gap: 2px;
 }
@@ -307,6 +309,8 @@ const onPointerCancel = () => {
 .player-hand :deep(.tile) {
   cursor: pointer;
   margin: 0 0 2px 0;
+  width: 31px;
+  height: 45px;
 }
 
 /* 玩家颜色圆点 */
