@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AI-AK 策略迭代训练器
  * 4个bot: AI-AK(优化目标), AI-小胖, AI-阿水, AI-老赵(固定)
  * 运行 10 rounds × 500 games
@@ -206,13 +206,12 @@ const MUTATE_KEYS: (keyof BotPolicy)[] = [
   'wild1RouteFlushBoost', 'wild2RouteFlushBoost', 'wild3RouteFlushBoost',
   'wild1RouteHonorsBoost', 'wild2RouteHonorsBoost', 'wild3RouteHonorsBoost',
   'wild1RouteAllPungsBoost', 'wild2RouteAllPungsBoost', 'wild3RouteAllPungsBoost',
-  'wildMultLowAggression', 'wildMultMidAggression', 'wildMultHighAggression',
   'wild0MenqingKeep', 'wild1MenqingKeep', 'wild2MenqingKeep',
   'wild1BaoPush', 'wild2BaoPush', 'wild3BaoPush',
-  'multLowSpeedBias', 'multHighValueBias',
+  'multHighValueBias',
   'discardObsFlushBoost', 'discardObsWeight',
-  'bao2ClaimPenalty', 'bao3AvoidThreshold', 'baoSelfClaimCaution',
-  'wallEarlySpeedPush', 'wallMidBalance', 'wallLateDefense',
+  'bao2ClaimPenalty', 'bao3AvoidThreshold',
+  'wallEarlySpeedPush', 'wallLateDefense',
   'oppTingDetection', 'safeTilePriority', 'terminalDiscardTingSignal',
   'wildDiaoKeepBonus', 'wildDiaoFlushBoost', 'wildDiaoPungBoost',
   'scoreBehindRiskBoost', 'scoreLeadDefenseBoost',
@@ -228,7 +227,7 @@ const MUTATE_KEYS: (keyof BotPolicy)[] = [
   'baoRiskAversion', 'baoThreshold',
   'anKongAggression', 'minkanAggression', 'kakanAggression', 'robKongAwareness',
   'noWildDoubleAwareness', 'menqingDoubleAwareness',
-  'flushVsPungsBalance', 'honorVsSuitedBalance', 'sequenceVsTripletBias',
+  'sequenceVsTripletBias',
 ]
 
 const PARAM_RANGES: Record<string, { min: number; max: number; step: number }> = {
@@ -1790,8 +1789,11 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       console.error(`[DEBUG round=${round} curr=${curr} ${player.name}] drawn=${tileStr(drawn)} hand=${normalizedHand.length} exposed=${player.exposedMelds.length} wild=${makeWT(player)} canWin=${winCheck.canWin} types=${winCheck.types.join(',')}`)
     }
     if (winCheck.canWin) {
-      // [DEBUG FORCE SELF-DRAW] 强制100%自摸，验证AI能否正常做成特殊牌型
-      const winChance = 1.0
+      let winChance = player.policy.selfWinChance
+      const wildCount = player.hand.filter(t => isWT(t, player)).length
+      winChance += wildCount * player.policy.selfWinWildBoost
+      winChance -= player.exposedMelds.length * player.policy.meldPenalty
+      winChance = Math.max(0, Math.min(1, winChance))
       if (Math.random() < winChance) {
         console.error(`[SELF-WIN! round=${round} curr=${curr} ${player.name}] hand=${normalizedHand.length} exposed=${player.exposedMelds.length} canWin=${winCheck.canWin}`)
         const { finalPoints: baseScore, baseFan, handTypeName } = calcScore(player, true, false, g.gameMultiplier)
@@ -1902,8 +1904,11 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       const opp = g.players[other]
       const testHand = [...opp.hand.filter(t => t !== undefined), discard]
       if (canWin(testHand, opp.exposedMelds, makeWT(opp), SKIP_WILD).canWin) {
-        // [DEBUG FORCE HU] 强制100%捉冲，只要能胡就必胡
-        const huChance = 1.0
+        let huChance = opp.policy.discardHuChance
+        const wildCount = opp.hand.filter(t => isWT(t, opp)).length
+        huChance -= wildCount * opp.policy.discardHuWildPenalty
+        if (opp.exposedMelds.length === 0) huChance -= opp.policy.discardHuMenQingPenalty
+        huChance = Math.max(0, Math.min(1, huChance))
         if (Math.random() < huChance) {
           opp.hand = normalizeHand(testHand)
           const { finalPoints: score, baseFan, handTypeName } = calcScore(opp, false, false, g.gameMultiplier)
@@ -1942,7 +1947,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       if (opp.exposedMelds.length >= 4) continue  // 最多4组牌
       // 碰之前先检查明杠：已有3张碰了，打出的第4张可以直接明杠（优先级高于碰）
       if (canMingKong(opp, discard)) {
-        if (Math.random() < opp.policy.kongChance) {
+        if (Math.random() < (opp.policy.minkanAggression ?? opp.policy.kongChance)) {
           applyMingKong(opp, discard, curr)
           const extra = drawTile(g, opp)
           if (!extra) {
@@ -2026,37 +2031,6 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
             const ids = opp.hand.map(t => t.id.slice(-4)).join(',')
             console.error(`[INV_TRACE] CLAIM ${opp.name} h=${h} m=${m} exp=${14-3*m} diff=${h-(14-3*m)} tile=${tileStr(discard)} wall=${g.wallIdx} ids=[${ids}]`)
           }
-          // 碰后自摸：必须先摸牌，删掉这里的错误判断
-          for (const ak of canAnKong(opp)) {
-            applyAnKong(opp, ak)
-            const extra = drawTile(g, opp)
-            if (!extra) {
-              console.error(`⚠️ 碰后自摸补摸失败(牌墙耗尽) turn=${turn}`)
-              return { winner: -1, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: [], roundNum: turn, winnersThisGame: [], turnSnapshots } as GameResult
-            }
-            checkHandInvariant(opp, 'draw')  // 杠后摸牌（正常摸牌规则）
-            if (extra && !isFlower(extra)) {
-              if (canWin(normalizeHand(opp.hand), opp.exposedMelds, makeWT(opp), SKIP_WILD).canWin) {
-                const { finalPoints: kongBaseScore, baseFan, handTypeName: htn2 } = calcScore(opp, true, true, g.gameMultiplier)
-                opp.score += kongBaseScore * 3
-                for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
-                applyBaoSettlement(g, otherIdx, true, null, kongBaseScore, 1)
-                for (let i = 0; i < 4; i++) { if (i !== otherIdx) recordPayment(g.players[i].name, opp.name, kongBaseScore, '碰杠后自摸', baseFan, g.gameMultiplier) }
-                log(opp.name, '碰杠后自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3=${kongBaseScore*3}]`)
-                opp.wonFan = kongBaseScore
-                opp.winHandType = htn2 || '普通碰杠'
-                opp.status = 'won'
-                finishedPlayers.add(otherIdx)
-                recordWinner(opp, otherIdx, true, kongBaseScore, baseFan, turn)
-                log(opp.name, '胡牌(血战)', `碰杠后自摸 [${kongBaseScore}×3]`)
-                if (finishedPlayers.size >= 3) {
-                  return buildResult(otherIdx, '杠上自摸', kongBaseScore, opp.winHandType || '杠上自摸', kongBaseScore, undefined)
-                }
-                g.current = (otherIdx + 1) % 4
-                continue
-              }
-            }
-          }
           const pengDiscard = aiDiscard(opp, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, otherIdx, round * 4 + otherIdx)
           opp.hand = opp.hand.filter(t => t.id !== pengDiscard.id)
           g.discardPile.push(pengDiscard)
@@ -2104,37 +2078,6 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       if (nextP.exposedMelds.length === beforeChowMelds) continue  // apply失败，跳过chow
       nextP.chowPongExclusion = updateChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)  // K哥铁律：记录吃行动
       checkHandInvariant(nextP, 'claim')  // 吃后（未出牌）铁律
-      // 吃后自摸：必须先摸牌
-      for (const ak of canAnKong(nextP)) {
-        applyAnKong(nextP, ak)
-        const extra = drawTile(g, nextP)
-        if (!extra) {
-          console.error(`⚠️ 吃后自摸补摸失败(牌墙耗尽) turn=${turn}`)
-          return { winner: -1, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier, settlementLog, snapshots: [], roundNum: turn, winnersThisGame: [], turnSnapshots } as GameResult
-        }
-        checkHandInvariant(nextP, 'draw')  // 吃后加杠仍可摸牌
-        if (extra && !isFlower(extra)) {
-          if (canWin(normalizeHand(nextP.hand), nextP.exposedMelds, makeWT(nextP), SKIP_WILD).canWin) {
-            const { finalPoints: kongBaseScore, baseFan, handTypeName: htn4 } = calcScore(nextP, true, true, g.gameMultiplier)
-            nextP.score += kongBaseScore * 3
-            for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= kongBaseScore }
-            applyBaoSettlement(g, nextPlayer, true, null, kongBaseScore, 1)
-            for (let i = 0; i < 4; i++) { if (i !== nextPlayer) recordPayment(g.players[i].name, nextP.name, kongBaseScore, '吃杠后自摸', baseFan, g.gameMultiplier) }
-            log(nextP.name, '吃杠后自摸', `${nextP.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3=${kongBaseScore*3}]`)
-            nextP.wonFan = kongBaseScore
-            nextP.winHandType = htn4 || '普通吃杠'
-            nextP.status = 'won'
-            finishedPlayers.add(nextPlayer)
-            recordWinner(nextP, nextPlayer, true, kongBaseScore, baseFan, turn)
-            log(nextP.name, '胡牌(血战)', `吃杠后自摸 [${kongBaseScore}×3]`)
-            if (finishedPlayers.size >= 3) {
-              return buildResult(nextPlayer, '杠上自摸', kongBaseScore, nextP.winHandType || '杠上自摸', kongBaseScore, undefined)
-            }
-            g.current = (nextPlayer + 1) % 4
-            continue
-          }
-        }
-      }
       const chowDiscard = aiDiscard(nextP, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, nextPlayer, round * 4 + nextPlayer)
       nextP.hand = nextP.hand.filter(t => t.id !== chowDiscard.id)
       g.discardPile.push(chowDiscard)

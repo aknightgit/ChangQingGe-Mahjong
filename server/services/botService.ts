@@ -647,8 +647,8 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   const hand = player.hand.concealedTiles
   if (hand.length === 0) return ''
 
-  const wildTileId = game.customScoringMode || null
   const exposedCount = player.hand.exposedMelds.length
+  const wildChecker = (tile: Tile) => isWildTile(tile, game)
 
   let bestTile = hand[0]
   let bestShanten = Infinity
@@ -1018,7 +1018,8 @@ export async function shouldClaimPendingAction(
         if (Math.random() < avoidProb) return ActionType.PASS
       }
 
-      return ActionType.HU
+      const discardHuProb = Math.max(0, Math.min(1, policy.discardHuChance ?? 1))
+      return Math.random() < discardHuProb ? ActionType.HU : ActionType.PASS
     }
 
     return ActionType.HU
@@ -1119,7 +1120,7 @@ export async function shouldClaimPendingAction(
       }
       if (removed === 3 && candidateHand.length > 0) {
         const { shanten, effective } = evaluateResultingHand(candidateHand)
-        let kongTune = policy.kongChance || 0
+        let kongTune = policy.minkanAggression ?? policy.kongChance ?? 0
 
         // === 百搭杠奖励（kongWildBoost > 0 时更积极杠百搭）===
         if (isWildTile(claimTile, game) && (policy.kongWildBoost || 0) > 0) {

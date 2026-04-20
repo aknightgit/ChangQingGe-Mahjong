@@ -258,6 +258,7 @@ export interface GameState {
   roundMultiplier?: number;
   inheritMultiplier?: number;
   inheritedGlobalMultiplier?: number;
+  globalMultiplier?: number;
   rebelEvent?: RebelEvent;
   liangShanVotes?: string[];  // 梁山聚义投票者ID列表
   pendingRemovals?: string[];  // 下局要移除的AI玩家ID

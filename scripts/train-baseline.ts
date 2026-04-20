@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AI-AK 策略迭代训练器
  * 4个bot: AI-AK(优化目标), AI-小胖, AI-阿水, AI-老赵(固定)
  * 运行 10 rounds × 500 games
@@ -22,7 +22,7 @@ import * as path from 'path'
 import { fileURLToPath } from 'url'
 import mysql from 'mysql2/promise'
 import { evaluateAllRoutes, selectDiscard as routeSelectDiscard, shouldClaim as routeShouldClaim, determinePhase, Phase, Route, PARAMS, calcTenpaiDistance as tenpaiDist } from './route-evaluator'
-import { writeRoundFile, buildRoundReport, formatRoundReport } from './training-reporter'
+import { writeRoundFile, buildRoundReport, formatRoundReport, writeIndexFile } from './training-reporter'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -40,6 +40,7 @@ const DB_CONFIG = { host: '192.168.3.241', port: 33061, user: 'openclaw', passwo
 const RUN_TAG = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
 
 async function saveRoundToMariaDB(roundNo: number, evalResult: EvalResult, policy: BotPolicy): Promise<void> {
+  if (process.env.TRAINING_MARIADB_ENABLED !== 'true') return
   try {
     const conn = await mysql.createConnection(DB_CONFIG)
     const worstGame = evalResult.worstSingleLoss
@@ -207,13 +208,12 @@ const MUTATE_KEYS: (keyof BotPolicy)[] = [
   'wild1RouteFlushBoost', 'wild2RouteFlushBoost', 'wild3RouteFlushBoost',
   'wild1RouteHonorsBoost', 'wild2RouteHonorsBoost', 'wild3RouteHonorsBoost',
   'wild1RouteAllPungsBoost', 'wild2RouteAllPungsBoost', 'wild3RouteAllPungsBoost',
-  'wildMultLowAggression', 'wildMultMidAggression', 'wildMultHighAggression',
   'wild0MenqingKeep', 'wild1MenqingKeep', 'wild2MenqingKeep',
   'wild1BaoPush', 'wild2BaoPush', 'wild3BaoPush',
-  'multLowSpeedBias', 'multHighValueBias',
+  'multHighValueBias',
   'discardObsFlushBoost', 'discardObsWeight',
-  'bao2ClaimPenalty', 'bao3AvoidThreshold', 'baoSelfClaimCaution',
-  'wallEarlySpeedPush', 'wallMidBalance', 'wallLateDefense',
+  'bao2ClaimPenalty', 'bao3AvoidThreshold',
+  'wallEarlySpeedPush', 'wallLateDefense',
   'oppTingDetection', 'safeTilePriority', 'terminalDiscardTingSignal',
   'wildDiaoKeepBonus', 'wildDiaoFlushBoost', 'wildDiaoPungBoost',
   'scoreBehindRiskBoost', 'scoreLeadDefenseBoost',
@@ -229,7 +229,7 @@ const MUTATE_KEYS: (keyof BotPolicy)[] = [
   'baoRiskAversion', 'baoThreshold',
   'anKongAggression', 'minkanAggression', 'kakanAggression', 'robKongAwareness',
   'noWildDoubleAwareness', 'menqingDoubleAwareness',
-  'flushVsPungsBalance', 'honorVsSuitedBalance', 'sequenceVsTripletBias',
+  'sequenceVsTripletBias',
 ]
 
 const PARAM_RANGES: Record<string, { min: number; max: number; step: number }> = {
@@ -1417,7 +1417,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     for (const otherIdx of [nextPlayer, prevPlayer, oppositePlayer]) {
       const opp = g.players[otherIdx]
       if (opp.exposedMelds.length >= 4) continue  // 最多4组牌
-      if (canPeng(opp, discard) && !checkChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)) {
+      if (canPeng(opp, discard) && checkChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)) {
         const pengRouteProb = routeShouldClaim('peng', opp.hand, opp.exposedMelds, opp.hand.filter(t=>isWT(t,opp)).length, determinePhase(opp.hand.length, opp.exposedMelds.length, g.deck.length - g.wallIdx), g.deck.length - g.wallIdx, g.gameMultiplier >= 4 ? 'trailing' : 'mid', opp.exposedMelds.length === 0, opp.wildSuit, opp.wildValue)
         let pengChance = opp.policy.pengChance * pengRouteProb
         if (opp.wildSuit && opp.wildValue && discard.suit === opp.wildSuit && discard.value === opp.wildValue)
@@ -1425,42 +1425,12 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         if (Math.random() < pengChance) {
           if (!applyPeng(opp, discard, curr)) continue
           opp.chowPongExclusion = updateChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)
-          const handAfterPeng = normalizeHand(opp.hand)
-          if (canWinWithType(handAfterPeng, opp, makeWT, opp.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
-            const huChance = opp.policy.discardHuChance
-            if (Math.random() < huChance) {
-              const score = calcScore(opp, false, false, g.gameMultiplier)
-              opp.score += score; g.players[curr].score -= score
-              applyBaoSettlement(g, otherIdx, false, curr, score)
-              recordPayment(g.players[curr].name, opp.name, score, '碰后放炮')
-              const winInfo3 = getWinInfo(opp, false, false)
-              recordTurnSnapshot(curr)
-              return buildResult(otherIdx, '放冲', winInfo3.finalPoints, winInfo3.handType, winInfo3.baseFan, g.players[curr].name)
-            }
-          }
-          const d = drawTile(g, opp)
-          if (!d) return buildDrawResult()
-          for (const ak of canAnKong(opp)) {
-            applyAnKong(opp, ak)
-            const extra = drawTile(g, opp)
-            if (extra && !isFlower(extra)) {
-              if (canWinWithType(normalizeHand(opp.hand), opp, makeWT, opp.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
-                const kongBaseScore = calcScore(opp, true, true, g.gameMultiplier)
-                opp.score += kongBaseScore * 3
-                for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= kongBaseScore }
-                applyBaoSettlement(g, otherIdx, true, null, kongBaseScore)
-                const winInfo5 = getWinInfo(opp, true, true)
-                recordTurnSnapshot(curr)
-                return buildResult(otherIdx, '杠上自摸', winInfo5.finalPoints, winInfo5.handType, winInfo5.baseFan)
-              }
-            }
-          }
           const pengDiscard = aiDiscard(opp, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, otherIdx)
           opp.hand = opp.hand.filter(t => t.id !== pengDiscard.id)
           g.discardPile.push(pengDiscard)
           prevDiscard = pengDiscard
           recordTurnSnapshot(otherIdx)
-          g.current = otherIdx
+          g.current = (otherIdx + 1) % 4
           meldTaken = true
           break
         }
@@ -1474,45 +1444,15 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     // 课程学习:前N回合不压制吃牌,让AI自由搭牌
     // 吃牌=方向锁定,必须全程 route evaluator 评分(参考防死牌四大准则)
     const chowRouteProb = routeShouldClaim('chow', nextP.hand, nextP.exposedMelds, nextP.hand.filter(t=>isWT(t,nextP)).length, determinePhase(nextP.hand.length, nextP.exposedMelds.length, g.deck.length - g.wallIdx), g.deck.length - g.wallIdx, g.gameMultiplier >= 4 ? 'trailing' : 'mid', nextP.exposedMelds.length === 0, nextP.wildSuit, nextP.wildValue)
-    if (canChow(nextP, discard) && !checkChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit) && Math.random() < nextP.policy.chowChance * chowRouteProb) {
+    if (canChow(nextP, discard) && checkChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit) && Math.random() < nextP.policy.chowChance * chowRouteProb) {
       if (!applyChow(nextP, discard, curr)) continue
       nextP.chowPongExclusion = updateChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)
-      const handAfterChow = normalizeHand(nextP.hand)
-      if (canWinWithType(handAfterChow, nextP, makeWT, nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
-        const huChance = nextP.policy.discardHuChance
-        if (Math.random() < huChance) {
-          const score = calcScore(nextP, false, false, g.gameMultiplier)
-          nextP.score += score; g.players[curr].score -= score
-          applyBaoSettlement(g, nextPlayer, false, curr, score)
-          recordPayment(g.players[curr].name, nextP.name, score, '吃后放炮')
-          const winInfo6 = getWinInfo(nextP, false, false)
-          recordTurnSnapshot(curr)
-          return buildResult(nextPlayer, '放冲', winInfo6.finalPoints, winInfo6.handType, winInfo6.baseFan, g.players[curr].name)
-        }
-      }
-      const d = drawTile(g, nextP)
-      if (!d) return buildDrawResult()
-      for (const ak of canAnKong(nextP)) {
-        applyAnKong(nextP, ak)
-        const extra = drawTile(g, nextP)
-        if (extra && !isFlower(extra)) {
-          if (canWinWithType(normalizeHand(nextP.hand), nextP, makeWT, nextP.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
-            const kongBaseScore = calcScore(nextP, true, true, g.gameMultiplier)
-            nextP.score += kongBaseScore * 3
-            for (let i = 0; i < 4; i++) { if (i !== nextPlayer) g.players[i].score -= kongBaseScore }
-            applyBaoSettlement(g, nextPlayer, true, null, kongBaseScore)
-            const winInfo8 = getWinInfo(nextP, true, true)
-            recordTurnSnapshot(curr)
-            return buildResult(nextPlayer, '杠上自摸', winInfo8.finalPoints, winInfo8.handType, winInfo8.baseFan)
-          }
-        }
-      }
       const chowDiscard = aiDiscard(nextP, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, nextPlayer)
       nextP.hand = nextP.hand.filter(t => t.id !== chowDiscard.id)
       g.discardPile.push(chowDiscard)
       prevDiscard = chowDiscard
       recordTurnSnapshot(nextPlayer)
-      g.current = nextPlayer
+      g.current = (nextPlayer + 1) % 4
       continue
     }
 
@@ -2025,6 +1965,7 @@ async function main() {
   ].join('\n')
   console.log(baseLine)
   logLines.push(baseLine)
+  roundReports.push(buildRoundReport(0, baseline, bestPolicy, AI_NAMES, 'train-baseline.ts'))
 
   const scoreHistory: number[] = [bestScore]
   let plateauCount = 0
@@ -2102,7 +2043,7 @@ async function main() {
       await saveRoundToMariaDB(round, bestEvalResult, roundBestPolicy)
       const report = buildRoundReport(round, bestEvalResult, roundBestPolicy, AI_NAMES, 'train-baseline.ts')
       roundReports.push(report)
-      const filename = writeRoundFile(OUT_DIR, report, false)  // 主日志不显示血战明细
+      const filename = writeRoundFile(OUT_DIR, report, true)
       console.log(`  → 轮次详情已保存: ${filename}`)
     }
   }
@@ -2186,25 +2127,19 @@ async function main() {
   }
 
   // 主日志:用 formatRoundReport 统一格式(Summary + 每圈明细 when DETAIL_MODE)
-  const mainHeader = [
-    '# 长清阁麻将 全员基线收敛训练日志',
-    '',
-    `- 创建时间: ${new Date().toISOString()}`,
-    `- 训练脚本: train-baseline.ts`,
-    `- Config: ${ROUNDS} rounds × ${GAMES_PER_ROUND} games = ${ROUNDS * GAMES_PER_ROUND} total`,
-    `- 模式: 4人共用同一策略,血战到最后一人`,
-    `- 目标: 胡牌率≥90% 流局率<10% 血战率>80%`,
-  ]
-  const mainOut: string[] = [...mainHeader, '## 基线成绩(第0轮)']
-  const baseEval = evaluatePolicy(bestPolicy, GAMES_PER_ROUND)
-  mainOut.push(`胡牌率=${((1-baseEval.draws/GAMES_PER_ROUND)*100).toFixed(1)}%  流局率=${(baseEval.draws/GAMES_PER_ROUND*100).toFixed(1)}%  Fitness=${baseEval.metricsFitness.toFixed(2)}`)
-  for (const r of roundReports) mainOut.push(formatRoundReport(r, false))  // 主日志不显示血战明细
+  const mainOut: string[] = [...logLines]
+  for (const r of roundReports) {
+    if (r.round === 0) continue
+    mainOut.push(formatRoundReport(r, false))
+  }
   fs.writeFileSync(mdFile, mainOut.join('\n'), 'utf-8')
   fs.writeFileSync(policyFile, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
   fs.writeFileSync(policyLatest, JSON.stringify({ metrics, policy: bestPolicy }, null, 2), 'utf-8')
+  const indexFile = writeIndexFile(OUT_DIR, roundReports)
 
   console.log(`\nLog: ${mdFile}`)
   console.log(`Policy: ${policyFile}`)
+  console.log(`Index: ${indexFile}`)
   process.exit(0)
 }
 
@@ -2309,9 +2244,11 @@ function testOneGame() {
 }
 
 // 入口:根据参数决定运行模式
-if (DETAIL_MODE) {
-  testOneGame()
-  process.exit(0)
-} else {
-  main().catch(e => { console.error('[MAIN ERROR]', e); process.exit(1) })
+if (process.argv[1] && import.meta.url.endsWith(process.argv[1])) {
+  if (DETAIL_MODE) {
+    testOneGame()
+    process.exit(0)
+  } else {
+    main().catch(e => { console.error('[MAIN ERROR]', e); process.exit(1) })
+  }
 }

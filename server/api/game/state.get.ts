@@ -2,6 +2,12 @@ import { gameManager } from '../../utils/gameManager';
 import { TileSuit } from '../../types/game';
 import { requireGamePlayerAccess } from '../../utils/session';
 
+function getEffectiveGlobalMultiplier(game: any): number {
+  const inherit = game.inheritMultiplier ?? game.inheritedGlobalMultiplier ?? 1;
+  const round = game.roundMultiplier ?? 1;
+  return Math.min(inherit * round, 8);
+}
+
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
   const { gameId, playerId, debugAccessToken } = query;
@@ -91,6 +97,7 @@ export default defineEventHandler(async (event) => {
     data: {
       game: {
         ...game,
+        globalMultiplier: getEffectiveGlobalMultiplier(game),
         players: maskedPlayers
       },
       playerView: player.hand,

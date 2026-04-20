@@ -3,6 +3,12 @@ import { ActionType } from '../../types/game';
 import { emitToRoom } from '../../utils/socket';
 import { requireGamePlayerAccess } from '../../utils/session';
 
+function getEffectiveGlobalMultiplier(game: any): number {
+  const inherit = game.inheritMultiplier ?? game.inheritedGlobalMultiplier ?? 1;
+  const round = game.roundMultiplier ?? 1;
+  return Math.min(inherit * round, 8);
+}
+
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
   const { gameId, playerId, action: rawAction, type, tileId, tileIds, winOptionLabel } = body;
@@ -70,6 +76,7 @@ export default defineEventHandler(async (event) => {
       data: {
         game: {
           ...game,
+          globalMultiplier: getEffectiveGlobalMultiplier(game),
           bailoutRelations,
           players: game!.players.map(p => ({
             ...p,

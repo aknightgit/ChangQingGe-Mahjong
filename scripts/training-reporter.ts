@@ -741,9 +741,9 @@ export function writeRoundFile(outDir: string, report: RoundReport, showDetail =
   const ts = report.timestamp.replace(/[:.]/g, '-').slice(0, 19)
   const filename = `round-${String(report.round).padStart(3, '0')}-${ts}.md`
   const filePath = path.join(outDir, filename)
-  // round 文件只输出每圈明细（showDetail 控制是否写文件）
-  const content = showDetail ? formatCircleDetailsOnly(report) : ''
-  if (content) fs.writeFileSync(filePath, content, 'utf-8')
+  // round 文件应包含完整 round 报告；showDetail 控制是否附带每圈明细
+  const content = formatRoundReport(report, showDetail)
+  fs.writeFileSync(filePath, content, 'utf-8')
   return filename
 }
 
@@ -758,7 +758,7 @@ export function writeIndexFile(outDir: string, rounds: RoundReport[]): string {
   for (const r of rounds) {
     const winRate = ((r.metrics.winGames / Math.max(1, r.metrics.totalGames)) * 100).toFixed(1)
     const t = r.timestamp.replace('T', ' ').replace(/\.\d+Z$/, '').slice(0, 19)
-    lines.push(`| Round ${r.round} | ${t} | ${r.metrics.totalGames} | ${winRate}% | ${r.metrics.akScore.toFixed(4)} |`)
+    lines.push(`| Round ${r.round} | ${t} | ${r.metrics.totalGames} | ${winRate}% | ${(r.metrics.fitness ?? r.metrics.akScore).toFixed(4)} |`)
   }
   lines.push('')
   const indexPath = path.join(outDir, 'index.md')
