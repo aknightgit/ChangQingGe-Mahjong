@@ -13,7 +13,7 @@
         :class="{
           'action-btn--active': hasChow,
           'action-btn--highlight': hasChow && !isDelaying,
-          'action-btn--highlight-pulse': hasChow && shouldPulseHighlight
+          'action-btn--highlight-pulse': hasChow
         }"
         :disabled="!hasChow || isInteractionLocked || !isConnected"
         @click="$emit('action', 'chow')"
@@ -24,7 +24,7 @@
         :class="{
           'action-btn--active': hasPeng,
           'action-btn--highlight': hasPeng && !isDelaying,
-          'action-btn--highlight-pulse': hasPeng && shouldPulseHighlight
+          'action-btn--highlight-pulse': hasPeng
         }"
         :disabled="!hasPeng || isInteractionLocked || !isConnected"
         @click="$emit('action', 'peng')"
@@ -32,14 +32,14 @@
 
       <button
         class="action-btn action-btn--small"
-        :class="{ 'action-btn--active': hasHu, 'action-btn--highlight': hasHu && !isDelaying }"
+        :class="{ 'action-btn--active': hasHu, 'action-btn--highlight': hasHu && !isDelaying, 'action-btn--highlight-pulse': hasHu }"
         :disabled="!hasHu || isInteractionLocked || !isConnected"
         @click="$emit('action', 'hu')"
       >胡</button>
 
       <button
         class="action-btn action-btn--small"
-        :class="{ 'action-btn--active': hasKong, 'action-btn--highlight': hasKong && !isDelaying }"
+        :class="{ 'action-btn--active': hasKong, 'action-btn--highlight': hasKong && !isDelaying, 'action-btn--highlight-pulse': hasKong }"
         :disabled="!hasKong || isInteractionLocked || !isConnected"
         @click="$emit('action', 'kong')"
       >杠</button>
@@ -108,7 +108,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import { ActionType } from '~/types/game'
 
 interface Props {
@@ -158,27 +158,8 @@ const effectiveHasVotedLiangShan = computed(() => props.hasVotedLiangshan ?? fal
 const hasAnyPriorityAction = computed(() => hasChow.value || hasPeng.value || hasKong.value || hasHu.value)
 const hasAnyAction = computed(() => hasAnyPriorityAction.value || canDraw.value)
 
-const HIGHLIGHT_MIN_MS = 1000
-const highlightHoldUntil = ref(0)
-
-watch(
-  () => ({ hasChow: hasChow.value, hasPeng: hasPeng.value }),
-  (next, prev) => {
-    const becameActive = (!prev?.hasChow && next.hasChow) || (!prev?.hasPeng && next.hasPeng)
-    if (becameActive) {
-      highlightHoldUntil.value = props.nowTs + HIGHLIGHT_MIN_MS
-    }
-  },
-  { immediate: true }
-)
-
-const shouldPulseHighlight = computed(() => {
-  return props.nowTs < highlightHoldUntil.value
-})
-
 const isDelaying = computed(() => {
   if (props.lastStateChangeAt === 0) return false
-  if (shouldPulseHighlight.value && (hasChow.value || hasPeng.value)) return false
   return props.nowTs - props.lastStateChangeAt < props.highlightDelayMs
 })
 
@@ -326,16 +307,15 @@ onUnmounted(() => {
 
 /* 高亮 */
 .action-btn--highlight {
-  border-color: rgba(70, 197, 116, 0.8);
-  background: rgba(31, 138, 82, 0.9);
+  border-color: rgba(255, 255, 255, 0.88);
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 0 14px rgba(70, 197, 116, 0.3);
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.18);
   animation: pop 0.3s ease;
 }
 .action-btn--highlight:hover {
   transform: scale(1.1);
-  box-shadow: 0 0 20px rgba(70, 197, 116, 0.5);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.26);
 }
 .action-btn--highlight:active {
   transform: scale(0.92);
@@ -346,6 +326,41 @@ onUnmounted(() => {
   background: linear-gradient(135deg, #1f8a52, #46c574);
   border-color: rgba(70, 197, 116, 0.9);
   box-shadow: 0 0 20px rgba(70, 197, 116, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.action-btn--small.action-btn--highlight-pulse {
+  animation: action-breathe 1.35s ease-in-out infinite;
+}
+
+.action-btn--small:nth-child(1).action-btn--highlight {
+  background: linear-gradient(135deg, #1d6ef2, #45a5ff);
+  box-shadow: 0 0 18px rgba(51, 136, 255, 0.38);
+}
+
+.action-btn--small:nth-child(2).action-btn--highlight {
+  background: linear-gradient(135deg, #e38b16, #ffc54d);
+  box-shadow: 0 0 18px rgba(255, 180, 48, 0.34);
+}
+
+.action-btn--small:nth-child(3).action-btn--highlight {
+  background: linear-gradient(135deg, #c62828, #ff6b6b);
+  box-shadow: 0 0 18px rgba(255, 90, 90, 0.38);
+}
+
+.action-btn--small:nth-child(4).action-btn--highlight {
+  background: linear-gradient(135deg, #7b3fe4, #b47cff);
+  box-shadow: 0 0 18px rgba(164, 109, 255, 0.38);
+}
+
+@keyframes action-breathe {
+  0%, 100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.08);
+    filter: brightness(1.14);
+  }
 }
 
 /* 冻结进度动画 */

@@ -1,24 +1,20 @@
 <template>
   <Transition name="dice-fade">
     <div v-if="visible" class="dice-overlay">
-      <!-- 粒子背景 -->
       <div class="particles">
         <span v-for="n in 30" :key="n" class="particle" :style="particleStyle(n)" />
       </div>
 
       <div class="dice-container">
-        <!-- 四倍爆灯特效（不遮挡发牌按钮） -->
         <Transition name="quad-pop">
-          <div v-if="showQuadBurst" class="quad-burst">
-            <span class="quad-text">四倍！</span>
-            <span class="quad-sub">🔥🔥🔥</span>
+          <div v-if="showResultBurst" class="quad-burst">
+            <span class="quad-text">{{ resultBurstText }}</span>
           </div>
         </Transition>
 
-        <!-- 阶段0: 等待庄家点击掷骰 -->
         <template v-if="phase === 'idle'">
           <div class="dice-idle-phase">
-            <p class="dice-hint" style="font-size: 1.1rem; margin-bottom: 16px;">
+            <p class="dice-hint dice-hint--lead">
               {{ dealerName ? `${dealerName} 掷骰子` : '等待掷骰子...' }}
             </p>
             <div
@@ -29,28 +25,34 @@
               <Dice3D :value="1" :state="'idle'" />
               <Dice3D :value="1" :state="'idle'" />
             </div>
-            <p class="dice-hint" v-if="maxRollsLimit > 1" style="margin-top: 8px;">{{ currentRoll }}/{{ maxRollsLimit }}</p>
-            <button v-if="isDealer && maxRollsLimit <= 1" class="deal-button" style="margin-top: 16px;" @click="onRollAndDeal">
-              <span class="deal-icon">🎲🃏</span> 掷骰+发牌
+            <p v-if="maxRollsLimit > 1" class="dice-hint dice-hint--sub">{{ currentRoll }}/{{ maxRollsLimit }}</p>
+            <button
+              v-if="isDealer && maxRollsLimit <= 1"
+              class="deal-button"
+              @click="onRollAndDeal"
+            >
+              <span class="deal-icon">🎲🀫</span> 掷骰子+发牌
             </button>
-            <button v-if="isDealer && maxRollsLimit > 1" class="deal-button" style="margin-top: 16px;" @click="onRoll">
+            <button
+              v-if="isDealer && maxRollsLimit > 1"
+              class="deal-button"
+              @click="onRoll"
+            >
               <span class="deal-icon">🎲</span> 掷骰子 ({{ currentRoll }}/{{ maxRollsLimit }})
             </button>
-            <p v-if="!isDealer" class="dice-hint" style="margin-top: 16px;">等待庄家掷骰子...</p>
+            <p v-if="!isDealer" class="dice-hint dice-hint--sub">等待庄家掷骰子...</p>
           </div>
         </template>
 
-        <!-- 阶段1: 掷骰子动画中 -->
-        <template v-if="phase === 'rolling'">
+        <template v-else-if="phase === 'rolling'">
           <div class="dice-row">
-            <Dice3D :value="1" :state="'rolling'" :delay="0" :roll-seed="rollingSeed" />
-            <Dice3D :value="1" :state="'rolling'" :delay="0.1" :roll-seed="rollingSeed + 97" />
+            <Dice3D :value="dice1" :state="'rolling'" :delay="0" :roll-seed="rollingSeed" />
+            <Dice3D :value="dice2" :state="'rolling'" :delay="0.1" :roll-seed="rollingSeed + 97" />
           </div>
           <p class="dice-rolling-label">🎲 掷骰子...</p>
         </template>
 
-        <!-- 阶段2: 掷骰结果 → 自动进入发牌 -->
-        <template v-if="phase === 'result'">
+        <template v-else>
           <div class="dice-result-phase">
             <div
               class="dice-row"
@@ -61,14 +63,18 @@
               <Dice3D :value="dice2" :state="'landed'" />
             </div>
             <p class="dice-total">
-              <span class="dice-total-num">{{ dice1 + dice2 }}</span> 点
+              <span class="dice-total-num">{{ dice1 }}</span>
+              <span class="dice-total-sep">&amp;</span>
+              <span class="dice-total-num">{{ dice2 }}</span>
             </p>
             <p class="dice-hint">{{ dealerName ? `庄家: ${dealerName}` : '' }}</p>
-            <p class="dice-hint" v-if="canReroll && isDealer" style="font-size: 0.75rem; opacity: 0.5;">点击骰子可重掷（{{ currentRoll }}/{{ maxRollsLimit }}）</p>
-            <button v-if="isDealer" class="deal-button" style="margin-top: 12px;" @click="onDeal">
-              <span class="deal-icon">🃏</span> 发牌
+            <p v-if="canReroll && isDealer" class="dice-hint dice-hint--sub">
+              点击骰子可重掷（{{ currentRoll }}/{{ maxRollsLimit }}）
+            </p>
+            <button v-if="isDealer" class="deal-button deal-button--result" @click="onDeal">
+              <span class="deal-icon">🀫</span> 发牌
             </button>
-            <p v-if="!isDealer" class="dice-hint" style="margin-top: 12px;">等待庄家发牌...</p>
+            <p v-if="!isDealer" class="dice-hint dice-hint--sub">等待庄家发牌...</p>
           </div>
         </template>
       </div>
@@ -92,23 +98,26 @@ const emit = defineEmits<{
   (e: 'roll'): void
 }>()
 
-const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
-
 const visible = ref(true)
 const phase = ref<'idle' | 'rolling' | 'result'>('idle')
 const rollingSeed = ref(Date.now() % 997)
 const currentRoll = ref(0)
+const showResultBurst = ref(false)
 const maxRollsLimit = computed(() => props.maxRolls || 1)
 const canReroll = computed(() => currentRoll.value < maxRollsLimit.value && phase.value === 'result')
-const showQuadBurst = ref(false)
-
-// 是否是四倍组合（1+1 或 4+4）
 const isQuadCombo = computed(() => {
   return (props.dice1 === 1 && props.dice2 === 1) || (props.dice1 === 4 && props.dice2 === 4)
 })
+const isDoubleCombo = computed(() => props.dice1 === props.dice2)
+const resultBurstText = computed(() => {
+  if (isQuadCombo.value) return '四倍！'
+  if (isDoubleCombo.value) return '双倍！'
+  return ''
+})
 
-// 粒子样式
-const particleStyle = (n: number) => {
+let burstTimer: ReturnType<typeof setTimeout> | null = null
+
+const particleStyle = (_n: number) => {
   const hue = 120 + Math.random() * 60
   return {
     left: `${Math.random() * 100}%`,
@@ -121,44 +130,50 @@ const particleStyle = (n: number) => {
   }
 }
 
+const clearBurstTimer = () => {
+  if (burstTimer) {
+    clearTimeout(burstTimer)
+    burstTimer = null
+  }
+}
+
+const flashResultBurst = () => {
+  clearBurstTimer()
+  if (!resultBurstText.value) return
+  showResultBurst.value = true
+  burstTimer = setTimeout(() => {
+    showResultBurst.value = false
+    burstTimer = null
+  }, 200)
+}
+
 const onRoll = () => {
   currentRoll.value++
   rollingSeed.value = Date.now() % 100000
   emit('roll')
   phase.value = 'rolling'
-  showQuadBurst.value = false
+  showResultBurst.value = false
+  clearBurstTimer()
 
-  // 0.85s 滚动动画后显示结果
   setTimeout(() => {
     phase.value = 'result'
-    // 检查是否四倍组合
-    if (isQuadCombo.value) {
-      showQuadBurst.value = true
-      // 1.5s 后自动隐藏四倍特效
-      setTimeout(() => {
-        showQuadBurst.value = false
-      }, 1500)
-    }
+    flashResultBurst()
   }, 850)
 }
 
 const onReroll = () => onRoll()
 
-// 一键掷骰+发牌（idle阶段点击"掷骰+发牌"按钮）
 const onRollAndDeal = () => {
   currentRoll.value++
   rollingSeed.value = Date.now() % 100000
   emit('roll')
   phase.value = 'rolling'
-  showQuadBurst.value = false
+  showResultBurst.value = false
+  clearBurstTimer()
 
-  // 滚动动画完成后直接发牌
   setTimeout(() => {
     phase.value = 'result'
-    if (isQuadCombo.value) {
-      showQuadBurst.value = true
-    }
-    // 短暂显示结果后自动发牌
+    flashResultBurst()
     setTimeout(() => {
       onDeal()
     }, 800)
@@ -168,6 +183,10 @@ const onRollAndDeal = () => {
 onMounted(() => {
   currentRoll.value = 0
   phase.value = 'idle'
+})
+
+onBeforeUnmount(() => {
+  clearBurstTimer()
 })
 
 const onDeal = () => {
@@ -190,7 +209,6 @@ const onDeal = () => {
   transform-style: preserve-3d;
 }
 
-/* ===== 粒子 ===== */
 .particles {
   position: absolute;
   inset: 0;
@@ -213,14 +231,12 @@ const onDeal = () => {
   100% { opacity: 0; transform: translateY(-80px) scale(0.3); }
 }
 
-/* ===== 容器 ===== */
 .dice-container {
   text-align: center;
   position: relative;
   z-index: 1;
 }
 
-/* ===== 四倍爆灯特效 ===== */
 .quad-burst {
   position: absolute;
   top: -60px;
@@ -240,15 +256,8 @@ const onDeal = () => {
     0 0 20px rgba(255, 68, 68, 0.8),
     0 0 40px rgba(255, 68, 68, 0.4),
     0 2px 0 #cc0000;
-  animation: quad-pulse 0.5s ease-out;
+  animation: quad-pulse 0.2s ease-out;
   letter-spacing: 0.15em;
-}
-
-.quad-sub {
-  display: block;
-  font-size: 1.5rem;
-  margin-top: 4px;
-  animation: quad-pulse 0.5s ease-out 0.1s both;
 }
 
 @keyframes quad-pulse {
@@ -258,18 +267,17 @@ const onDeal = () => {
 }
 
 .quad-pop-enter-active {
-  animation: quad-pulse 0.4s ease-out;
+  animation: quad-pulse 0.2s ease-out;
 }
 
 .quad-pop-leave-active {
-  transition: opacity 0.3s ease;
+  transition: opacity 0.18s ease;
 }
 
 .quad-pop-leave-to {
   opacity: 0;
 }
 
-/* ===== 骰子行 ===== */
 .dice-row {
   display: flex;
   gap: 48px;
@@ -289,7 +297,6 @@ const onDeal = () => {
   transform: scale(1.05);
 }
 
-/* ===== 结果文字 ===== */
 .dice-rolling-label {
   color: #ffd36a;
   font-size: 1.2rem;
@@ -316,13 +323,27 @@ const onDeal = () => {
   text-shadow: 0 0 12px rgba(255, 215, 0, 0.5);
 }
 
+.dice-total-sep {
+  margin: 0 10px;
+  font-size: 1.4rem;
+  color: rgba(255, 255, 255, 0.82);
+}
+
 .dice-hint {
   color: rgba(255, 255, 255, 0.75);
   font-size: 0.95rem;
   margin: 0;
 }
 
-/* ===== 结果阶段 ===== */
+.dice-hint--lead {
+  font-size: 1.1rem;
+  margin-bottom: 16px;
+}
+
+.dice-hint--sub {
+  margin-top: 8px;
+}
+
 .dice-result-phase {
   animation: result-in 0.5s ease-out;
   text-align: center;
@@ -334,50 +355,34 @@ const onDeal = () => {
 }
 
 .deal-button {
+  margin-top: 16px;
   padding: 16px 48px;
   border-radius: 16px;
   border: 2px solid rgba(70, 197, 116, 0.6);
   background: linear-gradient(135deg, #1f8a52, #2eaa6a);
   color: #fff;
-  font-size: 1.4rem;
+  font-size: 1.05rem;
   font-weight: 800;
-  cursor: pointer;
-  letter-spacing: 0.1em;
-  box-shadow:
-    0 0 30px rgba(70, 197, 116, 0.35),
-    0 8px 24px rgba(0, 0, 0, 0.4);
-  transition: all 0.2s ease;
-  animation: deal-btn-pulse 2s infinite;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.deal-icon {
-  font-size: 1.6rem;
-}
-
-@keyframes deal-btn-pulse {
-  0%, 100% { box-shadow: 0 0 30px rgba(70, 197, 116, 0.35), 0 8px 24px rgba(0, 0, 0, 0.4); }
-  50% { box-shadow: 0 0 50px rgba(70, 197, 116, 0.55), 0 8px 32px rgba(0, 0, 0, 0.5); }
+  box-shadow: 0 16px 32px rgba(18, 68, 41, 0.35);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .deal-button:hover {
-  transform: translateY(-2px) scale(1.05);
-  background: linear-gradient(135deg, #2eaa6a, #46c574);
+  transform: translateY(-2px);
+  box-shadow: 0 20px 36px rgba(18, 68, 41, 0.42);
 }
 
-.deal-button:active {
-  transform: translateY(0) scale(0.98);
+.deal-button--result {
+  margin-top: 12px;
 }
 
-/* ===== 过渡动画 ===== */
-.dice-fade-enter-active {
-  transition: opacity 0.3s ease;
+.deal-icon {
+  margin-right: 8px;
 }
 
+.dice-fade-enter-active,
 .dice-fade-leave-active {
-  transition: opacity 0.5s ease;
+  transition: opacity 0.28s ease;
 }
 
 .dice-fade-enter-from,

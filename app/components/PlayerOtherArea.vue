@@ -1,4 +1,7 @@
 <template>
+  <!-- SOFT GUARD: all opponent hand/meld lane geometry here is currently stable.
+       Any future edits to seat hand direction/spacing/rotation should be treated as high risk
+       and require explicit user approval before changing. -->
   <div
     class="player-other"
     :class="`player-other--${position}`"
@@ -31,6 +34,7 @@
               :small="true"
               :back="isConcealedMeld(m)"
               :back-scheme="isConcealedMeld(m) ? 0 : -1"
+              :class="{ 'top-exposed-tile': !isConcealedMeld(m) }"
               :dimmed="isWinner"
             />
           </div>
@@ -165,7 +169,7 @@ const isConcealedMeld = (meld: Meld): boolean => {
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 18px;
+  gap: 12px;
   width: 100%;
 }
 
@@ -190,17 +194,17 @@ const isConcealedMeld = (meld: Meld): boolean => {
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 1px;
 }
 
 .hand-lane--left,
 .hand-lane--right,
 .meld-lane--left,
 .meld-lane--right {
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .meld-group {
@@ -217,6 +221,11 @@ const isConcealedMeld = (meld: Meld): boolean => {
   flex-direction: column;
 }
 
+.meld-lane--left .meld-group--vertical,
+.meld-lane--right .meld-group--vertical {
+  flex-direction: row;
+}
+
 .meld-group--kong {
   box-shadow: 0 0 8px rgba(255, 214, 0, 0.35);
 }
@@ -230,16 +239,29 @@ const isConcealedMeld = (meld: Meld): boolean => {
   box-shadow: none;
 }
 
+.player-other :deep(.tile--small) {
+  width: 28px;
+  height: 40px;
+}
+
 .player-other :deep(.tile-img) {
   border-radius: 3px;
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4)) brightness(1.08);
 }
 
-.hand-lane--left :deep(.tile),
-.hand-lane--right :deep(.tile),
-.meld-lane--left :deep(.tile),
-.meld-lane--right :deep(.tile) {
+.meld-lane--top :deep(.top-exposed-tile) {
+  transform: rotate(180deg);
+}
+
+.hand-lane--left,
+.meld-lane--left {
   transform: rotate(90deg);
+  transform-origin: center;
+}
+
+.hand-lane--right,
+.meld-lane--right {
+  transform: rotate(-90deg);
   transform-origin: center;
 }
 </style>

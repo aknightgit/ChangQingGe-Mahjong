@@ -35,10 +35,10 @@ const props = defineProps<{
 
 const layout = computed(() => {
   if (props.position === 'left' || props.position === 'right') {
-    return { cols: 3, rows: 8, width: 90, height: 226, cellW: 30, cellH: 28 }
+    return { cols: 3, rows: 8, width: 102, height: 258, cellW: 34, cellH: 32 }
   }
 
-  return { cols: 8, rows: 3, width: 252, height: 96, cellW: 31, cellH: 32 }
+  return { cols: 8, rows: 3, width: 248, height: 104, cellW: 31, cellH: 34 }
 })
 
 const maxTiles = computed(() => layout.value.cols * layout.value.rows)

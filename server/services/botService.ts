@@ -319,7 +319,9 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
       : (policy.wild3PlusAggression || 0.9)
     // aggress=0.3 → penalty×0.3（无百搭时几乎不心疼）；aggress=0.9 → penalty×1.0（多百搭时全量惩罚）
     const penalty = policy.wildKeepPenalty * (1.3 - wildAggression * 0.5)
-    score -= penalty
+    // 百搭默认强保留：除非已非常接近终局，否则不应开局就随手打掉百搭
+    const hardKeepFloor = remainingWilds === 0 ? 140 : 220 + remainingWilds * 40
+    score -= Math.max(penalty, hardKeepFloor)
     return score
   }
 

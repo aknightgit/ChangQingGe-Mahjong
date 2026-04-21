@@ -336,8 +336,9 @@ class GameManager {
           }
         }
 
-        // 清除所有 pending(兜底)
-        game.pendingActions = [];
+        // 只清理本轮已消费的 pending，避免把 claim 过程中产生的新 pending 一起抹掉
+        const resolvedPlayerIds = new Set(pending.map(pa => pa.playerId));
+        game.pendingActions = game.pendingActions.filter(pa => !resolvedPlayerIds.has(pa.playerId));
         await this.persistGame(game);
         this.broadcastGameState(gameId);
         // 如果所有pending清除后还有当前玩家需要出牌,调度bot出牌
@@ -388,7 +389,7 @@ class GameManager {
         this.handlePass(game, player);
       }
     } else if (action === ActionType.HU) {
-      this.handleHu(game, player);
+      await this.handleHu(game, player);
     } else {
       this.handlePass(game, player);
     }
@@ -466,7 +467,7 @@ class GameManager {
             this.handlePass(game, player);
           }
         } else if (action === ActionType.HU) {
-          this.handleHu(game, player);
+          await this.handleHu(game, player);
           claimedHigherPriority = true;
         }
       }
@@ -1043,8 +1044,9 @@ class GameManager {
           player.hand.exposedMelds.push({
             type: MeldType.TRIPLET,
             tiles: [tile],
-            isConcealed: false
-          });
+            isConcealed: false,
+            replacementDone: false as any
+          } as any);
         } else if (isFlower(tile) && this.isWildTile(game, tile)) {
           // 花牌百搭 → 进手牌,不放门口
           player.hand.concealedTiles.push(tile);
@@ -1064,8 +1066,9 @@ class GameManager {
         game.players[game.dealerIndex].hand.exposedMelds.push({
           type: MeldType.TRIPLET,
           tiles: [tile],
-          isConcealed: false
-        });
+          isConcealed: false,
+          replacementDone: false as any
+        } as any);
       } else if (isFlower(tile) && this.isWildTile(game, tile)) {
         // 花牌百搭 → 进手牌
         game.players[game.dealerIndex].hand.concealedTiles.push(tile);
@@ -1106,19 +1109,9 @@ class GameManager {
     }
     game.inheritedGlobalMultiplier = undefined;
 
-    // 所有玩家开局自动补花(门口花牌自动替换)
+    // 所有玩家开局自动补花(门口花牌常驻显示,仅对未补过的花执行一次补牌)
     for (const p of game.players) {
       this.replaceInitialFlowers(game, p);
-      // 循环补花直到没有普通花牌或牌墙空
-      let flowers = p.hand.exposedMelds.filter(
-        m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
-      );
-      while (flowers.length > 0 && game.wall.length > 0) {
-        this.replaceInitialFlowers(game, p);
-        flowers = p.hand.exposedMelds.filter(
-          m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
-        );
-      }
     }
 
     game.currentPlayerIndex = game.dealerIndex;
@@ -1314,7 +1307,7 @@ class GameManager {
 
       // 自动补花:如果门口有未替换的花牌,先补花
       const unreplacedFlowers = player.hand.exposedMelds.filter(
-        m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
+        m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]) && !(m as any).replacementDone
       )
       if (unreplacedFlowers.length > 0 && game.wall.length > 0) {
         // 仅在手牌未满14张时允许"摸"(执行 replaceFlowers+handleDraw)
@@ -1434,8 +1427,8 @@ class GameManager {
           console.warn(`[DISCARD] Blocked: ${player.name} has not drawn yet this turn`);
           throw new Error('Must draw before discarding');
         }
-        this.handleDiscard(game, player, tileId!).catch(console.error);
         gameAction.tile = findTileById(player.hand.concealedTiles, tileId!);
+        await this.handleDiscard(game, player, tileId!);
         break;
 
       case ActionType.DRAW:
@@ -1448,7 +1441,7 @@ class GameManager {
         this.replaceInitialFlowers(game, player);
         // 替换后检查手牌+门口是否已满14张
         {
-          const exposedCount = player.hand.exposedMelds.reduce((sum, m) => sum + m.tiles.length, 0);
+          const exposedCount = this.countExposedTilesExcludingFlowerMelds(player);
           if (player.hand.concealedTiles.length + exposedCount >= 14) {
             console.warn(`[DRAW] Blocked after flower replace: player ${player.id} has ${player.hand.concealedTiles.length + exposedCount} tiles`);
             game.drawnThisTurn = true; // 标记已处理过摸牌阶段，防止连续摸牌
@@ -1534,15 +1527,20 @@ class GameManager {
     game.actionHistory.push(gameAction);
     game.lastActionTime = Date.now();
 
-    // Claim 动作(PENG/KONG/HU/CHOW)执行后,claiming player 接管回合
-    // Bot需要自动摸牌+出牌;人类手动点击"摸"按钮
-    if (action !== ActionType.DISCARD && game.pendingActions.length === 0) {
+    // Claim/杠动作执行后,当前玩家接管回合。
+    // 吃/碰后应直接出牌,不能补摸；各类杠完成补牌后再出牌。
+    if (game.pendingActions.length === 0) {
       const currentP = game.players[game.currentPlayerIndex];
       if (currentP && this.isPlayerBotControlled(currentP) && currentP.status === PlayerStatus.PLAYING) {
-        this.replaceFlowers(game, currentP);
-        this.handleDraw(game, currentP);
-        game.drawnThisTurn = true; // 【状态机修复】标记已摸牌
-        this.scheduleBotDiscard(gameId, currentP.id);
+        if (
+          action === ActionType.PENG ||
+          action === ActionType.CHOW ||
+          action === ActionType.KONG ||
+          action === ActionType.CONCEALED_KONG ||
+          action === ActionType.EXTENDED_KONG
+        ) {
+          this.scheduleBotDiscard(gameId, currentP.id);
+        }
       }
     }
 
@@ -1726,8 +1724,9 @@ class GameManager {
       player.hand.exposedMelds.push({
         type: MeldType.TRIPLET,
         tiles: [tile],
-        isConcealed: false
-      });
+        isConcealed: false,
+        replacementDone: true as any
+      } as any);
       console.log(`[FLOWER] ${player.name} 摸到花牌: ${tile.id}, 门口花牌数: ${player.hand.exposedMelds.filter(m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])).length}`);
       if (game.wall.length === 0) {
         this.endRound(game, GameEndReason.WALL_EXHAUSTED);
@@ -1751,31 +1750,25 @@ class GameManager {
    */
   private replaceInitialFlowers(game: GameState, player: Player): void {
     const flowerMelds = player.hand.exposedMelds.filter(
-      m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
+      m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]) && !(m as any).replacementDone
     );
     if (flowerMelds.length === 0) return;
 
     console.log(`[WallDebug] replaceInitialFlowers: ${player.name} has ${flowerMelds.length} flowers, wall=${game.wall.length}`);
 
-    // 先从exposedMelds中移除这些花牌
-    player.hand.exposedMelds = player.hand.exposedMelds.filter(
-      m => !(m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]))
-    );
-
     for (const meld of flowerMelds) {
       if (game.wall.length === 0) break;
+      (meld as any).replacementDone = true;
       const replacement = game.wall.pop()!;
       console.log(`[WallDebug] flower replace: drew ${replacement.id}, wall now=${game.wall.length}`);
       if (isFlower(replacement) && !this.isWildTile(game, replacement)) {
-        // 补到的又是花牌 → 加到门口,递归补
         player.hand.exposedMelds.push({
           type: MeldType.TRIPLET,
           tiles: [replacement],
-          isConcealed: false
-        });
-        // 递归
-        this.replaceInitialFlowers(game, player);
-        return;
+          isConcealed: false,
+          replacementDone: true as any
+        } as any);
+        continue;
       } else if (isFlower(replacement) && this.isWildTile(game, replacement)) {
         // 百搭花牌 → 进手牌
         player.hand.concealedTiles.push(replacement);
@@ -2223,6 +2216,7 @@ class GameManager {
     game.pendingActions = [];
     game.pengChowConflict = null;
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+    game.drawnThisTurn = true;
     // 吃后手牌排序(百搭置顶)
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
   }
@@ -2274,6 +2268,7 @@ class GameManager {
     game.pendingActions = [];
     game.pengChowConflict = null;
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+    game.drawnThisTurn = true;
     // 碰后手牌排序(百搭置顶)
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
   }
@@ -2331,6 +2326,7 @@ class GameManager {
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
     // 补牌
     this.handleDraw(game, player);
+    game.drawnThisTurn = true;
   }
 
   /**
@@ -2476,6 +2472,7 @@ class GameManager {
 
     // Draw supplement tile
     this.handleDraw(game, player);
+    game.drawnThisTurn = true;
   }
 
   private handleExtendedKong(game: GameState, player: Player, tileId: string): void {
@@ -2581,6 +2578,7 @@ class GameManager {
 
     // Draw supplement tile
     this.handleDraw(game, player);
+    game.drawnThisTurn = true;
   }
 
   private resolveRobKongIfNeeded(game: GameState): boolean {
@@ -3749,18 +3747,16 @@ class GameManager {
   private replaceFlowers(game: GameState, player: Player): void {
     // 找到门口的花牌meld(只有1张牌的meld就是花牌)
     const flowerMelds = player.hand.exposedMelds.filter(
-      m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])
+      m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]) && !(m as any).replacementDone
     );
 
     if (flowerMelds.length === 0) return;
 
     // 从 exposedMelds 中移除这些花牌 meld
-    player.hand.exposedMelds = player.hand.exposedMelds.filter(
-      m => !(m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]))
-    );
 
     for (const meld of flowerMelds) {
       if (game.wall.length === 0) break;
+      (meld as any).replacementDone = true;
 
       let replacement = game.wall.pop()!;
 
@@ -3769,8 +3765,9 @@ class GameManager {
         player.hand.exposedMelds.push({
           type: MeldType.TRIPLET,
           tiles: [replacement],
-          isConcealed: false
-        });
+          isConcealed: false,
+          replacementDone: true as any
+        } as any);
         if (game.wall.length === 0) {
           replacement = null as any;
           break;

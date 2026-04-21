@@ -1,4 +1,7 @@
 <template>
+  <!-- SOFT GUARD: self hand/meld rendering is user-validated.
+       Any future edits to hand size, spacing, ordering, direction, or meld placement
+       should be treated as high risk and require explicit user approval before changing. -->
   <div class="player-area" :class="{ 'player-area--winner': isWinner }">
     <!-- 玩家头像 -->
     <div class="self-player-header">
@@ -42,7 +45,7 @@
             v-if="meld.sourcePosition !== undefined"
             class="meld-arrow"
             :class="[getSourceArrowClass(meld.sourcePosition, playerPosition)]"
-          >{{ getSourceArrow(meld.sourcePosition, playerPosition) }}</span>
+          >{{ getSourceLabel(meld.sourcePosition, playerPosition) }}</span>
           <!-- 兼容旧字段 sourceIndex -->
           <span
             v-else-if="(meld as any).sourceIndex !== undefined"
@@ -115,10 +118,10 @@ function getRelativeSourcePosition(sourcePosition: number, myPosition?: number):
   return (observerPos - sourcePosition + 4) % 4
 }
 
-function getSourceArrow(sourcePosition: number, myPosition?: number): string {
+function getSourceLabel(sourcePosition: number, myPosition?: number): string {
   const relativePos = getRelativeSourcePosition(sourcePosition, myPosition)
-  const arrows = ['自摸', '←下', '↑对', '→上']
-  return arrows[relativePos] || '?'
+  const labels = ['自', '上', '对', '下']
+  return labels[relativePos] || '?'
 }
 
 // 箭头颜色 class：按相对方向区分
@@ -255,9 +258,11 @@ const onPointerCancel = () => {
 }
 
 .meld {
+  position: relative;
   display: inline-flex;
   align-items: center;
   padding: 4px 6px;
+  padding-top: 16px;
   border-radius: 8px;
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -337,16 +342,21 @@ const onPointerCancel = () => {
 
 /* 吃碰来源箭头 */
 .meld-arrow {
-  display: inline-block;
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
   font-size: 0.65rem;
   font-weight: 700;
   line-height: 1;
   padding: 2px 5px;
-  margin-left: 4px;
   border-radius: 4px;
   color: #fff;
   white-space: nowrap;
-  vertical-align: middle;
 }
 
 /* 下家来源 = 蓝色 */

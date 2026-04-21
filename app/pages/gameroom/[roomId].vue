@@ -720,9 +720,6 @@
                 <template v-else-if="showMobileActionNotice">
                   ⚡ 有可用操作
                 </template>
-                <template v-else>
-                  {{ turnMessage }}
-                </template>
                 <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
                   ⏱ {{ turnTimer }}s
                 </span>
@@ -789,6 +786,14 @@
 
       <!-- 玩家操作卡片（AI + 自己） -->
       <Teleport to="body">
+        <Transition name="fade-fast">
+          <div v-if="flowerReplacementNotice" class="flower-replace-overlay">
+            <div class="flower-replace-chip">
+              <span class="flower-replace-text">补花补上</span>
+              <MahjongTile :tile="flowerReplacementNotice" />
+            </div>
+          </div>
+        </Transition>
         <div v-if="showPlayerCard" class="ai-card-overlay" @click.self="showPlayerCard = false">
           <div class="ai-card">
             <div class="ai-card-header">
@@ -844,6 +849,7 @@ import { computed, onMounted, onUnmounted, ref, watch, provide } from 'vue'
 definePageMeta({ ssr: false })
 import PlayerSelfArea from '~/components/PlayerSelfArea.vue'
 import PlayerOtherArea from '~/components/PlayerOtherArea.vue'
+import MahjongTile from '~/components/MahjongTile.vue'
 import CircularActionButtons from '~/components/CircularActionButtons.vue'
 import TableCenter from '~/components/TableCenter.vue'
 import TileWall from '~/components/TileWall.vue'
@@ -874,6 +880,7 @@ const {
   startGame,
   refreshState,
   forceRefreshState,
+  isActionPending,
   roomDismissedReason,
   lastStateChangeAt,
   leadingBrotherEvent,
@@ -1011,9 +1018,12 @@ watch(() => gameState.value?.phase, (newPhase, oldPhase) => {
   if (newPhase === 'starting' && oldPhase === 'waiting') {
     console.log('[phase-watcher] Game starting, showing dice for all clients')
     showDiceOverlay.value = true
+  } else if (newPhase && newPhase !== 'starting') {
+    hasDicePreview.value = false
   }
 })
 const diceValues = ref<[number, number]>([1, 1])
+const hasDicePreview = ref(false)
 const maxDiceRolls = computed(() => {
   if (!gameState.value) return 2
   return Number((gameState.value as any).diceRollCount) || Number((route.query as any).dice) || 2
@@ -1023,8 +1033,10 @@ const isDoubleRound = computed(() => {
   const igm = (gameState.value as any)?.inheritedGlobalMultiplier
   return typeof igm === 'number' && igm >= 2
 })
-const effectiveMaxRolls = computed(() => isDoubleRound.value ? 1 : maxDiceRolls.value)
+const effectiveMaxRolls = computed(() => maxDiceRolls.value)
 const showDoubleReminder = ref(false)
+const flowerReplacementNotice = ref<Tile | null>(null)
+let flowerReplacementNoticeTimer: ReturnType<typeof setTimeout> | null = null
 // 决策犹豫期（毫秒），优先从游戏状态读取，兜底5秒
 const hesitationWindow = computed(() => {
   const hw = (gameState.value as any)?.hesitationWindow
@@ -1051,11 +1063,7 @@ watch(currentFreezeUntil, (until) => {
 
 const onRerollDice = () => {
   // 翻倍局不允许重掷骰子
-  if (isDoubleRound.value) {
-    showDoubleReminder.value = true
-    setTimeout(() => { showDoubleReminder.value = false }, 200)
-    return
-  }
+  hasDicePreview.value = true
   diceValues.value = [
     Math.floor(Math.random() * 6) + 1,
     Math.floor(Math.random() * 6) + 1
@@ -1113,6 +1121,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   disconnect()
+  clearFlowerReplacementNotice()
 
   if (process.client) {
     window.removeEventListener('resize', evaluateViewport)
@@ -1152,6 +1161,48 @@ const playerHand = computed(() => currentPlayer.value?.hand.concealedTiles || []
 const playerMelds = computed(() => currentPlayer.value?.hand.exposedMelds || [])
 const playerDiscards = computed(() => currentPlayer.value?.hand.discardedTiles || [])
 const isWinner = computed(() => currentPlayer.value?.status === 'won')
+
+const clearFlowerReplacementNotice = () => {
+  if (flowerReplacementNoticeTimer) {
+    clearTimeout(flowerReplacementNoticeTimer)
+    flowerReplacementNoticeTimer = null
+  }
+  flowerReplacementNotice.value = null
+}
+
+const showFlowerReplacementNotice = (tile: Tile) => {
+  clearFlowerReplacementNotice()
+  flowerReplacementNotice.value = tile
+  flowerReplacementNoticeTimer = setTimeout(() => {
+    flowerReplacementNotice.value = null
+    flowerReplacementNoticeTimer = null
+  }, 200)
+}
+
+const getResolvedFlowerMeldCount = (player?: Player | null) => {
+  if (!player) return 0
+  return (player.hand.exposedMelds || []).filter((meld: any) => {
+    const tile = meld?.tiles?.[0]
+    return meld?.tiles?.length === 1 && tile?.suit === 'hua' && !!meld?.replacementDone
+  }).length
+}
+
+watch(
+  () => ({
+    playerId: currentPlayer.value?.id || '',
+    concealedIds: playerHand.value.map(tile => tile.id),
+    resolvedFlowerCount: getResolvedFlowerMeldCount(currentPlayer.value),
+  }),
+  (next, prev) => {
+    if (!prev || !next.playerId || next.playerId !== prev.playerId) return
+    if (next.resolvedFlowerCount <= prev.resolvedFlowerCount) return
+    const previousIds = new Set(prev.concealedIds)
+    const addedTile = playerHand.value.find(tile => !previousIds.has(tile.id))
+    if (addedTile) {
+      showFlowerReplacementNotice(addedTile)
+    }
+  }
+)
 
 // 胜者观战模式
 const viewingPlayerId = ref<string | null>(null)
@@ -1195,6 +1246,12 @@ const currentRound = computed(() => gameState.value?.currentRound ?? 1)
 // Provide round number for MahjongTile to auto-select back scheme
 provide('roundNumber', currentRound)
 const roundMultiplier = computed(() => gameState.value?.roundMultiplier ?? 1)
+const getDiceRoundMultiplier = (dice1: number, dice2: number) => {
+  if (dice1 === dice2) {
+    return dice1 === 1 || dice1 === 4 ? 4 : 2
+  }
+  return 1
+}
 
 // 圈方位 & 局数（用于显示"第1圈 东二局"格式）
 const windNames = ['东', '南', '西', '北']
@@ -1205,7 +1262,22 @@ const prevailingWind = computed(() => {
 })
 const roundPosition = computed(() => ((currentRound.value - 1) % 4) + 1)
 const roundDisplay = computed(() => `第${roundCircle.value}圈 ${prevailingWind.value}${roundPosition.value}局`)
-const globalMultiplier = computed(() => gameState.value?.globalMultiplier ?? 1)
+const globalMultiplier = computed(() => {
+  const game = gameState.value
+  if (!game) return 1
+
+  const inherit = (game as any).inheritMultiplier ?? (game as any).inheritedGlobalMultiplier ?? 1
+  const actualRound = game.roundMultiplier
+  if (typeof actualRound === 'number' && actualRound > 0) {
+    return game.globalMultiplier ?? Math.min(inherit * actualRound, 8)
+  }
+
+  if (showDiceOverlay.value && hasDicePreview.value) {
+    return Math.min(inherit * getDiceRoundMultiplier(diceValues.value[0], diceValues.value[1]), 8)
+  }
+
+  return game.globalMultiplier ?? inherit
+})
 const wildTile = computed(() => {
   const raw = gameState.value?.customScoringMode
   if (!raw || raw === 'cheat') return null
@@ -1518,9 +1590,18 @@ const eastIsWinner = computed(() => rightPlayer.value?.status === 'won')
 // ---- Interaction ----
 const selectedTileId = ref<string | null>(null)
 const claimableDiscardTileId = ref<string | null>(null)
+const pendingDiscardTileId = ref<string | null>(null)
 
 // ===== 出牌 =====
+const canSubmitDiscard = (tile: Tile) => {
+  if (isWinner.value || isInteractionLocked.value || isActionPending.value) return false
+  if (pendingDiscardTileId.value === tile.id) return false
+  return availableActions.value.includes(ActionType.DISCARD)
+}
+
 const commitDiscard = (tile: Tile) => {
+  if (!canSubmitDiscard(tile)) return
+  pendingDiscardTileId.value = tile.id
   resetAutoCount()
   playSound('tile-discard')
   executeAction(ActionType.DISCARD, tile.id)
@@ -1529,22 +1610,18 @@ const commitDiscard = (tile: Tile) => {
 
 // 拖拽超出阈值 → 直接出牌
 const handleTileDiscard = (tile: Tile) => {
-  if (isWinner.value || isInteractionLocked.value) return
-  const canDiscard = availableActions.value.includes(ActionType.DISCARD)
-  if (!canDiscard) return
+  if (!canSubmitDiscard(tile)) return
   commitDiscard(tile)
 }
 
 // ===== 双击出牌 =====
 const handleTileDblclick = (tile: Tile) => {
-  if (isWinner.value || isInteractionLocked.value) return
-  const canDiscard = availableActions.value.includes(ActionType.DISCARD)
-  if (!canDiscard) return
+  if (!canSubmitDiscard(tile)) return
   commitDiscard(tile)
 }
 
 const handleTileClick = (tile: Tile) => {
-  if (isWinner.value || isInteractionLocked.value) return
+  if (isWinner.value || isInteractionLocked.value || isActionPending.value) return
   
   // 如果需要摸牌（showDraw为true），禁止点击手牌出牌
   if (showDraw.value) {
@@ -1555,7 +1632,7 @@ const handleTileClick = (tile: Tile) => {
   const canDiscard = availableActions.value.includes(ActionType.DISCARD)
   
   if (selectedTileId.value === tile.id) {
-    if (canDiscard) {
+    if (canDiscard && canSubmitDiscard(tile)) {
       // 二次点击 → 直接出牌
       commitDiscard(tile)
     }
@@ -1840,6 +1917,19 @@ watch(
     }
   },
   { deep: true, immediate: true }
+)
+
+watch(
+  [() => availableActions.value.join(','), () => currentPlayer.value?.id, () => isActionPending.value],
+  () => {
+    if (!availableActions.value.includes(ActionType.DISCARD) || !isMyTurn.value || !isActionPending.value) {
+      pendingDiscardTileId.value = null
+    }
+    if (!availableActions.value.includes(ActionType.DISCARD)) {
+      selectedTileId.value = null
+    }
+  },
+  { immediate: true }
 )
 
 watch(
@@ -2307,6 +2397,7 @@ const onStartGame = async () => {
       Math.floor(Math.random() * 6) + 1,
       Math.floor(Math.random() * 6) + 1
     ]
+    hasDicePreview.value = true
     playSound('dice-roll')
     showDiceOverlay.value = false
     nextTick(() => {
@@ -2323,6 +2414,7 @@ const onDealTiles = async () => {
   // 防止重复调用：只有当 overlay 可见时才处理
   if (!showDiceOverlay.value || isGameStarting.value) return
   isGameStarting.value = true
+  hasDicePreview.value = false
   showDiceOverlay.value = false
   // 等 DiceAnimation 的 Leave 动画完成（约 300ms）再正式开始
   await new Promise(resolve => setTimeout(resolve, 350))
@@ -2697,9 +2789,9 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-width: 72%;
   --seat-side-width: 96px;
   --seat-side-height: 70%;
-  --discard-top-inset: 34.2%;
-  --discard-bottom-inset: 33.4%;
-  --discard-side-inset: 21.5%;
+  --discard-top-inset: 25.8%;
+  --discard-bottom-inset: 24.8%;
+  --discard-side-inset: 27.4%;
 }
 
 /* 绿色麻将桌布内层 */
@@ -4079,6 +4171,31 @@ const forceDiscard = async (p: Player) => {
 @keyframes pulse-in {
   0% { transform: scale(0.8); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
+}
+.flower-replace-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 18vh;
+  z-index: 9998;
+  pointer-events: none;
+}
+.flower-replace-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: rgba(18, 54, 34, 0.92);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+}
+.flower-replace-text {
+  color: #eaffd2;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }
 .fade-fast-enter-active, .fade-fast-leave-active { transition: opacity 0.15s ease; }
 .fade-fast-enter-from, .fade-fast-leave-to { opacity: 0; }

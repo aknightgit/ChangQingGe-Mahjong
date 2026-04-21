@@ -42,6 +42,8 @@ export const useGame = () => {
 
       if ((response as any)?.success) {
         updateState((response as any).data)
+        isConnected.value = true
+        error.value = null
       }
     } catch (e) {
       console.error('Failed to fetch game state:', e)
@@ -108,13 +110,17 @@ export const useGame = () => {
         // Suppress first websocket error (expected fallback to polling)
         if (err.message?.includes('websocket') && !isConnected.value) return
         console.warn('Socket connect_error:', err.message)
-        // 不设置 error.value，避免触发不必要的 re-render
-        isConnected.value = false
+        // 已经拿到状态时，保留页面可交互，不退回“连接中”空壳
+        if (!gameState.value) {
+          isConnected.value = false
+        }
       })
 
       socket.value.on('disconnect', () => {
         console.log('Socket disconnected')
-        isConnected.value = false
+        if (!gameState.value) {
+          isConnected.value = false
+        }
       })
 
       // Room Events
