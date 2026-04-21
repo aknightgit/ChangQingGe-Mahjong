@@ -36,7 +36,7 @@
     "@playwright/test": "^1.58.2",
     "@types/node": "^24.10.1",
     "playwright": "^1.58.2",
-    "tsx": "^4.20.6"
+    "tsx": "^4.21.0"
   },
   "description": "长清阁麻将 - 四川血战到底多人在线"
 }
