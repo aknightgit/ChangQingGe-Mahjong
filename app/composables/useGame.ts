@@ -207,14 +207,27 @@ export const useGame = () => {
 
   // 防止并发 refresh + 防抖
   let isRefreshing = false
+  let refreshQueued = false
   let lastRefreshAt = 0
   const DEBOUNCE_MS = 100
 
   const refreshState = async () => {
     if (!gameId.value || !playerId.value) return
-    if (isRefreshing) return
     const now = Date.now()
-    if (now - lastRefreshAt < DEBOUNCE_MS) return
+    if (isRefreshing) {
+      refreshQueued = true
+      return
+    }
+    if (now - lastRefreshAt < DEBOUNCE_MS) {
+      refreshQueued = true
+      setTimeout(() => {
+        if (refreshQueued) {
+          refreshQueued = false
+          refreshState()
+        }
+      }, DEBOUNCE_MS)
+      return
+    }
     isRefreshing = true
     lastRefreshAt = now
     try {
@@ -224,6 +237,11 @@ export const useGame = () => {
       console.warn('refreshState failed:', e)
     } finally {
       isRefreshing = false
+      if (refreshQueued) {
+        refreshQueued = false
+        lastRefreshAt = 0
+        await refreshState()
+      }
     }
   }
 

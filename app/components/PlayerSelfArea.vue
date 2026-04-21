@@ -112,7 +112,7 @@ const isConcealedMeld = (meld: Meld): boolean => {
 // relativePos: 0=自己(极少), 1=下家(右), 2=对家(上), 3=上家(左)
 function getRelativeSourcePosition(sourcePosition: number, myPosition?: number): number {
   const observerPos = myPosition ?? 0
-  return (sourcePosition - observerPos + 4) % 4
+  return (observerPos - sourcePosition + 4) % 4
 }
 
 function getSourceArrow(sourcePosition: number, myPosition?: number): string {

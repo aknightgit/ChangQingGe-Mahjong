@@ -34,10 +34,23 @@ const DETAIL_MODE = process.argv.includes('--detail')  // 每圈明细开关,默
 const SETTLEMENT_MULT = 10
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
 const OUT_DIR = '/data/mahjong-training/training-output'
+const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000
+
+function toBeijingISOString(date: Date = new Date()): string {
+  return new Date(date.getTime() + BEIJING_OFFSET_MS).toISOString().slice(0, 19)
+}
+
+function toBeijingDisplay(date: Date = new Date()): string {
+  return toBeijingISOString(date).replace('T', ' ')
+}
+
+function toTimestampSlug(date: Date = new Date()): string {
+  return toBeijingISOString(date).replace(/:/g, '-')
+}
 
 // ========== MariaDB 备份 ==========
 const DB_CONFIG = { host: '192.168.3.241', port: 33061, user: 'openclaw', password: '0penC1aw', database: 'changqingge' }
-const RUN_TAG = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+const RUN_TAG = toTimestampSlug()
 
 async function saveRoundToMariaDB(roundNo: number, evalResult: EvalResult, policy: BotPolicy): Promise<void> {
   if (process.env.TRAINING_MARIADB_ENABLED !== 'true') return
@@ -362,7 +375,7 @@ function loadCharacter(name: string): BotPolicy {
 
 function saveCharacter(name: string, policy: BotPolicy, metrics: any): void {
   const filePath = path.join(CHAR_DIR, `${name}.json`)
-  const data = { savedAt: new Date().toISOString(), round: 0, metrics, policy }
+  const data = { savedAt: toBeijingISOString(), round: 0, metrics, policy }
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')
 }
 
@@ -478,6 +491,10 @@ interface GameState {
   wildSuit?: TileSuit; wildValue?: number
   discardPile: Tile[]
   gameMultiplier: number
+  dice1: number
+  dice2: number
+  diceMultiplier: number
+  inheritanceMultiplier: number
   // 每个玩家的出牌记录(用于对手分析)
   playerDiscards: Tile[][]
 }
@@ -509,10 +526,16 @@ function setupGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameState {
     chowPongExclusion: { eatenSuits: [] as string[], pongedSuits: [] as string[] }
   }))
 
-  const gameMultiplier = nextGameMultiplier()
+  const dice1 = Math.floor(Math.random() * 6) + 1
+  const dice2 = Math.floor(Math.random() * 6) + 1
+  const isPair = dice1 === dice2
+  const isBigPair = isPair && (dice1 === 1 || dice1 === 4)
+  const diceMultiplier = isBigPair ? 4 : isPair ? 2 : 1
+  const inheritanceMultiplier = prevRoundWasDraw ? 2 : 1
+  const gameMultiplier = Math.min(8, diceMultiplier * inheritanceMultiplier)
 
   return { deck, wallIdx: 0, players, current: 0, wildSuit: ws, wildValue: wv, discardPile: [],
-    gameMultiplier, playerDiscards: [[], [], [], []] }
+    gameMultiplier, dice1, dice2, diceMultiplier, inheritanceMultiplier, playerDiscards: [[], [], [], []] }
 }
 
 function drawTile(g: GameState, p: BotPlayer): Tile | null {
@@ -695,30 +718,9 @@ function applyJiaGang(p: BotPlayer, tile: Tile): void {
   p.hand = p.hand.filter(t => t && !tileEq(t, tile)); p.kongCount++
 }
 
-// ========== Scoring (with multiplier simulation) ==========
-// 长清阁倍数:骰子对子(1+1/4+4=×4, 其他对子=×2, 其他=×1)
-// 加上流局/造反继承倍数
-function rollMultiplier(): number {
-  const d1 = Math.floor(Math.random() * 6) + 1
-  const d2 = Math.floor(Math.random() * 6) + 1
-  const isPair = d1 === d2
-  const isBigPair = isPair && (d1 === 1 || d1 === 4)
-  if (isBigPair) return 4  // 1+1 or 4+4 = ×4
-  if (isPair) return 2     // other doubles = ×2
-  return 1
-}
-
-// 模拟全局倍数(流局/造反继承)
 let prevRoundWasDraw = false
-function nextGameMultiplier(): number {
-  const diceMult = rollMultiplier()
-  const flowMult = prevRoundWasDraw ? 2 : 1
-  // 全局倍数 = min(8, 骰子 × 流局)
-  const globalMult = Math.min(8, diceMult * flowMult)
-  return globalMult
-}
 
-function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean, gameMultiplier: number): number {
+function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean, roundMultiplier: number, inheritMultiplier: number): number {
   const wildTileId = p.wildSuit && p.wildValue ? `${p.wildSuit}-${p.wildValue}` : null
   const types = detectHandTypes(p.hand, p.exposedMelds, wildTileId, isSelfDraw, p.flowerTiles.length)
   const result = calculateScore({
@@ -727,9 +729,16 @@ function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean, gameMu
     isSelfDrawn: isSelfDraw, isKongFlower: isKongWin,
     isRobbingKong: false, isMenQing: p.exposedMelds.length === 0,
     wildTileSuit: p.wildSuit, wildTileValue: p.wildValue,
-    roundMultiplier: 1, globalMultiplier: gameMultiplier
+    rawRoundMultiplier: roundMultiplier,
+    rawInheritMultiplier: inheritMultiplier,
+    settlementMultiplier: SETTLEMENT_MULT
   })
-  return result.finalPoints * SETTLEMENT_MULT
+  return result.finalPoints
+}
+
+export function combineClaimChance(policyChance: number, routeProb: number): number {
+  if (routeProb >= 0.95) return Math.max(policyChance, routeProb)
+  return Math.max(Math.min(1, policyChance * 0.7 + routeProb * 0.6), policyChance * 0.35)
 }
 
 // ========== 互包结算 ==========
@@ -1039,13 +1048,14 @@ interface GameResult {
   isDraw?: boolean
   // 游戏全局上下文（用于报告渲染）
   gameMeta: {
-    dicePoints: number[]; diceMultiplier: number; inheritanceMultiplier: number
+    dicePoints: number[]; diceMultiplier: number; inheritanceMultiplier: number; globalMultiplier: number
     flowMultiplier: number; prevRoundWasDraw: boolean; prevRoundWasRebel: boolean
   }
   // 每个赢家的详细信息
   winnerDetails: Array<{
     name: string; winMode: string; handType: string; baseFan: number; finalPoints: number
-    handTiles: string; melds: string[]; flowers: string[]; isMenQing: boolean; from?: string
+    handTiles: string; melds: string[]; flowers: string[]; isMenQing: boolean; from?: string; winningTile?: string
+    extraMultipliers: number; settlementMultiplier: number; globalMultiplier: number; scoreDetails: string[]
   }>
 }
 
@@ -1057,8 +1067,8 @@ function runGameWithFightToLast(policy: BotPolicy): {
     idx: number; selfDraw: boolean; score: number; snapshot: PlayerSnapshot
     handType: string; wonFan: number; winHandType: string
     dicePoints: number[]; diceMultiplier: number; wildTile: string; roundNum: number
-    gameMeta: { dicePoints: number[]; diceMultiplier: number; inheritanceMultiplier: number; flowMultiplier: number; prevRoundWasDraw: boolean; prevRoundWasRebel: boolean }
-    winnerDetails: Array<{ name: string; winMode: string; handType: string; baseFan: number; finalPoints: number; handTiles: string; melds: string[]; flowers: string[]; isMenQing: boolean; from?: string }>
+    gameMeta: { dicePoints: number[]; diceMultiplier: number; inheritanceMultiplier: number; globalMultiplier: number; flowMultiplier: number; prevRoundWasDraw: boolean; prevRoundWasRebel: boolean }
+    winnerDetails: Array<{ name: string; winMode: string; handType: string; baseFan: number; finalPoints: number; handTiles: string; melds: string[]; flowers: string[]; isMenQing: boolean; from?: string; winningTile?: string; extraMultipliers: number; settlementMultiplier: number; globalMultiplier: number; scoreDetails: string[] }>
   }>
   totalSubGames: number
   allEvents: GameEvent[]
@@ -1069,8 +1079,8 @@ function runGameWithFightToLast(policy: BotPolicy): {
     idx: number; selfDraw: boolean; score: number; snapshot: PlayerSnapshot
     handType: string; wonFan: number; winHandType: string
     dicePoints: number[]; diceMultiplier: number; wildTile: string; roundNum: number
-    gameMeta: { dicePoints: number[]; diceMultiplier: number; inheritanceMultiplier: number; flowMultiplier: number; prevRoundWasDraw: boolean; prevRoundWasRebel: boolean }
-    winnerDetails: Array<{ name: string; winMode: string; handType: string; baseFan: number; finalPoints: number; handTiles: string; melds: string[]; flowers: string[]; isMenQing: boolean; from?: string }>
+    gameMeta: { dicePoints: number[]; diceMultiplier: number; inheritanceMultiplier: number; globalMultiplier: number; flowMultiplier: number; prevRoundWasDraw: boolean; prevRoundWasRebel: boolean }
+    winnerDetails: Array<{ name: string; winMode: string; handType: string; baseFan: number; finalPoints: number; handTiles: string; melds: string[]; flowers: string[]; isMenQing: boolean; from?: string; winningTile?: string; extraMultipliers: number; settlementMultiplier: number; globalMultiplier: number; scoreDetails: string[] }>
   }> = []
   const allEvents: GameEvent[] = []
   const turnSnapshots: any[] = []
@@ -1130,13 +1140,6 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
   const events: GameEvent[] = []
   const settlementLog: SettlementEntry[] = []
   let turn = 0
-
-  // 骰子
-  const dice1 = Math.floor(Math.random() * 6) + 1
-  const dice2 = Math.floor(Math.random() * 6) + 1
-  const isPair = dice1 === dice2
-  const isBigPair = isPair && (dice1 === 1 || dice1 === 4)
-  const diceMultiplier = isBigPair ? 4 : isPair ? 2 : 1
   const wildTileStr = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : 'unknown'
 
   const recordPayment = (from: string, to: string, amount: number, reason: string, mult?: number) => {
@@ -1144,10 +1147,9 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
   }
   const recordSnapshots = (): PlayerSnapshot[] => {
     return g.players.map(p => {
-      // 完整手牌 = 手牌 + 所有面子里的牌
-      const fullHandTiles = [...p.hand, ...p.exposedMelds.flatMap(m => m.tiles)]
       const wildTileName = (g.wildSuit && g.wildValue) ? tileStr({suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭'
-      const handWithWildMark = fullHandTiles.map(t => {
+      const sortedHand = sortTiles([...normalizeHand(p.hand)])
+      const handWithWildMark = sortedHand.map(t => {
         const base = tileStr(t)
         return (g.wildSuit && g.wildValue && t.suit === g.wildSuit && t.value === g.wildValue) ? base + '*' : base
       }).join(' ')
@@ -1162,22 +1164,23 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
   }
 
   // 构建完整 GameResult 的辅助函数
-  const buildResult = (winnerIdx: number, winMode: string, winPoints: number, winHandType: string, winBaseFan: number, from?: string): GameResult => {
+  const buildResult = (winnerIdx: number, winInfo: ReturnType<typeof getWinInfo>, from?: string, winningTile?: string): GameResult => {
     // console.error(`[BUILD_DEBUG] winner=${AI_NAMES[winnerIdx]} mode=${winMode} handType="${winHandType}"`)
     const snapshots = recordSnapshots()
     const wSnap = snapshots[winnerIdx]
     const wPlayer = g.players[winnerIdx]
     const isMenQing = wPlayer.exposedMelds.length === 0
     const winnerDetails = [{
-      name: wSnap.name, winMode, handType: winHandType, baseFan: winBaseFan, finalPoints: winPoints,
-      handTiles: wSnap.hand, melds: wSnap.melds, flowers: wSnap.flowers, isMenQing, from
+      name: wSnap.name, winMode: winInfo.winMode, handType: winInfo.handType, baseFan: winInfo.baseFan, finalPoints: winInfo.finalPoints,
+      handTiles: winInfo.displayHand, melds: wSnap.melds, flowers: wSnap.flowers, isMenQing, from, winningTile,
+      extraMultipliers: winInfo.extraMultipliers, settlementMultiplier: winInfo.settlementMultiplier, globalMultiplier: winInfo.globalMultiplier, scoreDetails: winInfo.scoreDetails
     }]
     const totalPot = g.players.reduce((s, p) => s + Math.abs(p.score), 0)
     return {
       winner: winnerIdx, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier,
       settlementLog, snapshots, roundNum: turn, wildTile: tileStr({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }), wildSuit: g.wildSuit, wildValue: g.wildValue,
-      dice1, dice2, diceMultiplier, totalPot, winnerDetails, turnSnapshots,
-      gameMeta: { dicePoints: [dice1, dice2], diceMultiplier, inheritanceMultiplier: 1, flowMultiplier: prevRoundWasDraw ? 2 : 1, prevRoundWasDraw, prevRoundWasRebel: false }
+      dice1: g.dice1, dice2: g.dice2, diceMultiplier: g.diceMultiplier, totalPot, winnerDetails, turnSnapshots,
+      gameMeta: { dicePoints: [g.dice1, g.dice2], diceMultiplier: g.diceMultiplier, inheritanceMultiplier: g.inheritanceMultiplier, globalMultiplier: g.gameMultiplier, flowMultiplier: g.inheritanceMultiplier, prevRoundWasDraw, prevRoundWasRebel: false }
     }
   }
 
@@ -1187,13 +1190,13 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     return {
       winner: -1, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier,
       settlementLog, snapshots, roundNum: turn, wildTile: tileStr({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }), wildSuit: g.wildSuit, wildValue: g.wildValue,
-      dice1, dice2, diceMultiplier, totalPot, winnerDetails: [], turnSnapshots, isDraw: true,
-      gameMeta: { dicePoints: [dice1, dice2], diceMultiplier, inheritanceMultiplier: 1, flowMultiplier: prevRoundWasDraw ? 2 : 1, prevRoundWasDraw, prevRoundWasRebel: false }
+      dice1: g.dice1, dice2: g.dice2, diceMultiplier: g.diceMultiplier, totalPot, winnerDetails: [], turnSnapshots, isDraw: true,
+      gameMeta: { dicePoints: [g.dice1, g.dice2], diceMultiplier: g.diceMultiplier, inheritanceMultiplier: g.inheritanceMultiplier, globalMultiplier: g.gameMultiplier, flowMultiplier: g.inheritanceMultiplier, prevRoundWasDraw, prevRoundWasRebel: false }
     }
   }
 
   // 生成赢家牌型信息
-  const getWinInfo = (player: BotPlayer, isSelfDraw: boolean, isKongWin: boolean): { handType: string; baseFan: number; finalPoints: number } => {
+  const getWinInfo = (player: BotPlayer, isSelfDraw: boolean, isKongWin: boolean, winMode: string, winningTile?: Tile): { handType: string; baseFan: number; finalPoints: number; extraMultipliers: number; settlementMultiplier: number; globalMultiplier: number; scoreDetails: string[]; displayHand: string; winMode: string } => {
     try {
       // reconstruct hand: concealed tiles ARE the current hand, exposed melds are separate
       // tiles from exposed melds were ALREADY consumed from the hand (副露出去) - do NOT add back
@@ -1213,12 +1216,31 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         isSelfDrawn: isSelfDraw, isKongFlower: isKongWin,
         isRobbingKong: false, isMenQing: player.exposedMelds.length === 0,
         wildTileSuit: g.wildSuit, wildTileValue: g.wildValue,
-        roundMultiplier: 1, globalMultiplier: g.gameMultiplier
+        rawRoundMultiplier: g.diceMultiplier,
+        rawInheritMultiplier: g.inheritanceMultiplier,
+        settlementMultiplier: SETTLEMENT_MULT
       })
       const finalTypes = validTypes.length > 0 ? validTypes : types
-      return { handType: result.handTypeName || finalTypes[0] || '未知牌型', baseFan: result.baseFan || 0, finalPoints: result.finalPoints || 0 }
+      const displayTiles = !isSelfDraw && winningTile
+        ? normalizeHand(player.hand).filter(t => !(t.id === winningTile.id))
+        : normalizeHand(player.hand)
+      const displayHand = sortTiles([...displayTiles]).map(t => {
+        const base = tileStr(t)
+        return (g.wildSuit && g.wildValue && t.suit === g.wildSuit && t.value === g.wildValue) ? `${base}*` : base
+      }).join(' ')
+      return {
+        handType: result.handTypeName || finalTypes[0] || '未知牌型',
+        baseFan: result.baseFan || 0,
+        finalPoints: result.finalPoints || 0,
+        extraMultipliers: result.extraMultipliers || 1,
+        settlementMultiplier: result.settlementMultiplier || SETTLEMENT_MULT,
+        globalMultiplier: result.globalMultiplier || g.gameMultiplier,
+        scoreDetails: result.details || [],
+        displayHand,
+        winMode
+      }
     } catch (e) {
-      return { handType: '未知牌型', baseFan: 0, finalPoints: 0 }
+      return { handType: '未知牌型', baseFan: 0, finalPoints: 0, extraMultipliers: 1, settlementMultiplier: SETTLEMENT_MULT, globalMultiplier: g.gameMultiplier, scoreDetails: [], displayHand: '', winMode }
     }
   }
 
@@ -1324,7 +1346,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       winChance += wildCount * player.policy.selfWinWildBoost
       winChance -= player.exposedMelds.length * player.policy.meldPenalty
       if (Math.random() < winChance) {
-        const baseScore = calcScore(player, true, false, g.gameMultiplier)
+        const baseScore = calcScore(player, true, false, g.diceMultiplier, g.inheritanceMultiplier)
         // 自摸:每人赔baseScore,赢家得3倍
         player.score += baseScore * 3
         for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
@@ -1332,9 +1354,9 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         applyBaoSettlement(g, curr, true, null, baseScore)
         for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore, '自摸') }
         log(player.name, '自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}] [手牌${player.hand.length}张+副露${player.exposedMelds.length}]`)
-        const winInfo = getWinInfo(player, true, false)
+        const winInfo = getWinInfo(player, true, false, '自摸')
         recordTurnSnapshot(curr)
-        return buildResult(curr, '自摸', winInfo.finalPoints, winInfo.handType, winInfo.baseFan)
+        return buildResult(curr, winInfo)
       }
     }
 
@@ -1345,13 +1367,13 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         const extra = drawTile(g, player)
         if (extra && !isFlower(extra)) {
           if (canWinWithType(normalizeHand(player.hand), player, makeWT, player.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
-            const baseScore = calcScore(player, true, true, g.gameMultiplier)
+            const baseScore = calcScore(player, true, true, g.diceMultiplier, g.inheritanceMultiplier)
             player.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
             applyBaoSettlement(g, curr, true, null, baseScore)
-            const winInfo = getWinInfo(player, true, true)
+            const winInfo = getWinInfo(player, true, true, '杠上自摸')
             recordTurnSnapshot(curr)
-            return buildResult(curr, '杠上自摸', winInfo.finalPoints, winInfo.handType, winInfo.baseFan)
+            return buildResult(curr, winInfo)
           }
         }
       }
@@ -1362,13 +1384,13 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         const extra = drawTile(g, player)
         if (extra && !isFlower(extra)) {
           if (canWinWithType(normalizeHand(player.hand), player, makeWT, player.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
-            const baseScore = calcScore(player, true, true, g.gameMultiplier)
+            const baseScore = calcScore(player, true, true, g.diceMultiplier, g.inheritanceMultiplier)
             player.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
             applyBaoSettlement(g, curr, true, null, baseScore)
-            const winInfo1 = getWinInfo(player, true, true)
+            const winInfo1 = getWinInfo(player, true, true, '杠上自摸')
             recordTurnSnapshot(curr)
-            return buildResult(curr, '杠上自摸', winInfo1.finalPoints, winInfo1.handType, winInfo1.baseFan)
+            return buildResult(curr, winInfo1)
           }
         }
       }
@@ -1396,14 +1418,14 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
         if (opp.exposedMelds.length === 0) huChance -= opp.policy.discardHuMenQingPenalty
         if (Math.random() < huChance) {
           opp.hand = normalizeHand(testHand)
-          const score = calcScore(opp, false, false, g.gameMultiplier)
+          const score = calcScore(opp, false, false, g.diceMultiplier, g.inheritanceMultiplier)
           opp.score += score; player.score -= score
           // 互包结算:如果有人对opp有包三,且放炮者不是包家
           applyBaoSettlement(g, other, false, curr, score)
           recordPayment(player.name, opp.name, score, '放炮')
-          const winInfo2 = getWinInfo(opp, false, false)
+          const winInfo2 = getWinInfo(opp, false, false, '放冲', discard)
           recordTurnSnapshot(curr)
-          return buildResult(other, '放冲', winInfo2.finalPoints, winInfo2.handType, winInfo2.baseFan, player.name)
+          return buildResult(other, winInfo2, player.name, tileStr(discard))
         }
       }
     }
@@ -1419,7 +1441,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
       if (opp.exposedMelds.length >= 4) continue  // 最多4组牌
       if (canPeng(opp, discard) && checkChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)) {
         const pengRouteProb = routeShouldClaim('peng', opp.hand, opp.exposedMelds, opp.hand.filter(t=>isWT(t,opp)).length, determinePhase(opp.hand.length, opp.exposedMelds.length, g.deck.length - g.wallIdx), g.deck.length - g.wallIdx, g.gameMultiplier >= 4 ? 'trailing' : 'mid', opp.exposedMelds.length === 0, opp.wildSuit, opp.wildValue)
-        let pengChance = opp.policy.pengChance * pengRouteProb
+        let pengChance = combineClaimChance(opp.policy.pengChance, pengRouteProb)
         if (opp.wildSuit && opp.wildValue && discard.suit === opp.wildSuit && discard.value === opp.wildValue)
           pengChance += opp.policy.pengWildBoost
         if (Math.random() < pengChance) {
@@ -1444,7 +1466,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
     // 课程学习:前N回合不压制吃牌,让AI自由搭牌
     // 吃牌=方向锁定,必须全程 route evaluator 评分(参考防死牌四大准则)
     const chowRouteProb = routeShouldClaim('chow', nextP.hand, nextP.exposedMelds, nextP.hand.filter(t=>isWT(t,nextP)).length, determinePhase(nextP.hand.length, nextP.exposedMelds.length, g.deck.length - g.wallIdx), g.deck.length - g.wallIdx, g.gameMultiplier >= 4 ? 'trailing' : 'mid', nextP.exposedMelds.length === 0, nextP.wildSuit, nextP.wildValue)
-    if (canChow(nextP, discard) && checkChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit) && Math.random() < nextP.policy.chowChance * chowRouteProb) {
+    if (canChow(nextP, discard) && checkChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit) && Math.random() < combineClaimChance(nextP.policy.chowChance, chowRouteProb)) {
       if (!applyChow(nextP, discard, curr)) continue
       nextP.chowPongExclusion = updateChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)
       const chowDiscard = aiDiscard(nextP, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, nextPlayer)
@@ -1485,7 +1507,7 @@ interface EvalResult {
 }
 
 function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy: BotPolicy): string {
-  const ts = new Date().toISOString()
+  const ts = toBeijingDisplay()
   const drawGames = evalResult.draws
   const nonDrawGames = evalResult.totalGames - drawGames
   const loss = evalResult.worstSingleLoss
@@ -1749,37 +1771,41 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
         gameIdx: g,
         winnerName: AI_NAMES[w.idx],
         isSelfDraw: w.selfDraw,
-        akDelta: w.score * SETTLEMENT_MULT,
+        akDelta: w.score,
         handTypes: ht && ht !== '未知' ? [ht] : ['普通'],
         wonFan: w.wonFan || 0,  // 用于 globalMaxWin 排序
-        hand: w.snapshot?.hand || '',
+        hand: w.winnerDetails?.[0]?.handTiles || w.snapshot?.hand || '',
         melds: w.snapshot?.melds || [],
         flowers: w.winnerDetails?.[0]?.flowers || [],
         baseFan: w.winnerDetails?.[0]?.baseFan ?? '?',
         isMenQing: w.winnerDetails?.[0]?.isMenQing ?? ((w.snapshot?.melds || []).length === 0),
-        // 全局倍数 = min(8, 骰子倍数 × 继承倍数 × 流局翻倍)
-        multiplier: w.gameMeta ? Math.min(8, w.gameMeta.diceMultiplier * w.gameMeta.inheritanceMultiplier * w.gameMeta.flowMultiplier) : (w.diceMultiplier || 1),
+        extraMultipliers: w.winnerDetails?.[0]?.extraMultipliers ?? 1,
+        settlementMultiplier: w.winnerDetails?.[0]?.settlementMultiplier ?? SETTLEMENT_MULT,
+        scoreDetails: w.winnerDetails?.[0]?.scoreDetails || [],
+        multiplier: w.gameMeta?.globalMultiplier ?? (w.gameMeta ? Math.min(8, w.gameMeta.diceMultiplier * w.gameMeta.inheritanceMultiplier) : (w.diceMultiplier || 1)),
         roundNum: w.roundNum || 1,
         wildTile: w.wildTile || '无百搭',
         gameMeta: w.gameMeta || {
           dicePoints: w.dicePoints ? `${w.dicePoints[0]}+${w.dicePoints[1]}` : '?',
           diceMultiplier: w.diceMultiplier ?? '?',
           inheritanceMultiplier: 1,
+          globalMultiplier: w.diceMultiplier ?? 1,
           prevRoundWasDraw: false,
           prevRoundWasRebel: false,
           flowMultiplier: 1,
         },
         // winnerDetails 里每个赢家的详细信息
         winnerDetails: w.winnerDetails || [],
-        // 捉冲时的进牌（from 字段）
-        winningTile: w.winnerDetails?.[0]?.from || '',
+        // 放冲牌与来源
+        winningTile: w.winnerDetails?.[0]?.winningTile || '',
+        winningFrom: w.winnerDetails?.[0]?.from || '',
         result: {
           winner: w.idx,
           snapshots: [w.snapshot],
-          multiplier: w.diceMultiplier || 1,
+          multiplier: w.gameMeta?.globalMultiplier ?? (w.diceMultiplier || 1),
           scores: [0,0,0,0],
           wildTile: w.wildTile || '无百搭',
-          gameMeta: w.gameMeta || { dicePoints: w.dicePoints || [0,0], diceMultiplier: w.diceMultiplier || 1, inheritanceMultiplier: 1, prevRoundWasDraw: false, prevRoundWasRebel: false, flowMultiplier: 1 },
+          gameMeta: w.gameMeta || { dicePoints: w.dicePoints || [0,0], diceMultiplier: w.diceMultiplier || 1, inheritanceMultiplier: 1, globalMultiplier: w.diceMultiplier || 1, prevRoundWasDraw: false, prevRoundWasRebel: false, flowMultiplier: 1 },
           winnerDetails: w.winnerDetails || [],
         }
       })
@@ -1911,7 +1937,7 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
 
 // ========== Main Training Loop (全员收敛) ==========
 async function main() {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  const timestamp = toTimestampSlug()
   const mdFile = path.join(OUT_DIR, `baseline-training-${timestamp}.md`)
   const policyFile = path.join(OUT_DIR, `best-policy-baseline-${timestamp}.json`)
   const policyLatest = path.join(OUT_DIR, 'best-policy.json')
@@ -1927,7 +1953,7 @@ async function main() {
   const header = [
     '# 长清阁麻将 全员基线收敛训练日志',
     '',
-    `- 创建时间: ${new Date().toISOString()}`,
+    `- 创建时间: ${toBeijingDisplay()} (北京时间)`,
     `- 训练脚本: train-baseline.ts`,
     `- Config: ${ROUNDS} rounds × ${GAMES_PER_ROUND} games = ${ROUNDS * GAMES_PER_ROUND} total`,
     `- 模式: 4人共用同一策略,血战到最后一人`,
@@ -1947,9 +1973,9 @@ async function main() {
   // Round 0: baseline evaluation
   console.log('\n## 基线成绩(第0轮)')
   logLines.push('\n## 基线成绩(第0轮)')
-  process.stdout.write(`  [${new Date().toISOString()}] 开始评估基准线 (${GAMES_PER_ROUND}局)...\n`)
+  process.stdout.write(`  [${toBeijingDisplay()}] 开始评估基准线 (${GAMES_PER_ROUND}局)...\n`)
   const baseline = evaluatePolicy(bestPolicy, GAMES_PER_ROUND)
-  process.stdout.write(`  [${new Date().toISOString()}] 基准线完成\n`)
+  process.stdout.write(`  [${toBeijingDisplay()}] 基准线完成\n`)
   bestScore = baseline.metricsFitness
   const baseLine = [
     `| 指标 | 值 | 目标 |`,
@@ -1993,9 +2019,9 @@ async function main() {
     roundLines.push(`\n### 第${round}轮 (强度=${intensity.toFixed(1)}, 停滞=${plateauCount})`)
 
     for (let c = 0; c < candidates.length; c++) {
-      process.stdout.write(`  [${new Date().toISOString()}] C${c+1}/${candidates.length} 评估中 (${GAMES_PER_ROUND}局)...\n`)
+      process.stdout.write(`  [${toBeijingDisplay()}] C${c+1}/${candidates.length} 评估中 (${GAMES_PER_ROUND}局)...\n`)
       const result = evaluatePolicy(candidates[c], GAMES_PER_ROUND)
-      process.stdout.write(`  [${new Date().toISOString()}] C${c+1}/${candidates.length} 完成\n`)
+      process.stdout.write(`  [${toBeijingDisplay()}] C${c+1}/${candidates.length} 完成\n`)
       const score = result.metricsFitness
       const huRate = ((1 - result.draws / GAMES_PER_ROUND) * 100).toFixed(0)
       const selfDR = result.winGames > 0 ? (result.selfDrawGames/result.winGames*100).toFixed(0) : '0'
@@ -2055,9 +2081,9 @@ async function main() {
   if (finalEvalGames > 0) {
     console.log('\n--- 最终评估 ---')
     logLines.push('\n--- 最终评估 ---')
-    process.stdout.write(`[${new Date().toISOString()}] 最终评估开始 (${finalEvalGames}局)...\n`)
+    process.stdout.write(`[${toBeijingDisplay()}] 最终评估开始 (${finalEvalGames}局)...\n`)
     finalEval = evaluatePolicy(bestPolicy, finalEvalGames)
-    process.stdout.write(`[${new Date().toISOString()}] 最终评估完成\n`)
+    process.stdout.write(`[${toBeijingDisplay()}] 最终评估完成\n`)
     const finalLines = [
       `| 指标 | 值 | 目标 | 达标 |`,
       `|------|-----|------|------|`,

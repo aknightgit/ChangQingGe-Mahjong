@@ -5,18 +5,19 @@
     :style="containerStyle"
   >
     <template v-if="position === 'top'">
-      <div class="unified-col unified-col--top">
-        <div v-if="hand.length" class="hand-row hand-row--top">
+      <div class="seat-line seat-line--top">
+        <div v-if="hand.length" class="hand-lane hand-lane--top">
           <MahjongTile
             v-for="tile in hand"
             :key="tile.id"
             :tile="tile"
             :small="true"
             :back="true"
+            :back-scheme="0"
             :dimmed="isWinner"
           />
         </div>
-        <div v-if="melds.length" class="meld-row meld-row--top">
+        <div v-if="melds.length" class="meld-lane meld-lane--top">
           <div
             v-for="(m, i) in melds"
             :key="i"
@@ -29,6 +30,7 @@
               :tile="t"
               :small="true"
               :back="isConcealedMeld(m)"
+              :back-scheme="isConcealedMeld(m) ? 0 : -1"
               :dimmed="isWinner"
             />
           </div>
@@ -37,22 +39,12 @@
     </template>
 
     <template v-else-if="position === 'left'">
-      <div class="unified-col unified-col--left">
-        <div v-if="hand.length" class="hand-zone">
-          <MahjongTile
-            v-for="tile in hand"
-            :key="tile.id"
-            :tile="tile"
-            :small="true"
-            :back="true"
-            :dimmed="isWinner"
-          />
-        </div>
-        <div v-if="melds.length" class="meld-zone">
+      <div class="seat-line seat-line--left">
+        <div v-if="melds.length" class="meld-lane meld-lane--left">
           <div
             v-for="(m, i) in melds"
             :key="i"
-            class="meld-group"
+            class="meld-group meld-group--vertical"
             :class="{ 'meld-group--kong': m.type === 'kong' }"
           >
             <MahjongTile
@@ -61,20 +53,43 @@
               :tile="t"
               :small="true"
               :back="isConcealedMeld(m)"
+              :back-scheme="isConcealedMeld(m) ? 0 : -1"
               :dimmed="isWinner"
             />
           </div>
+        </div>
+        <div v-if="hand.length" class="hand-lane hand-lane--left">
+          <MahjongTile
+            v-for="tile in hand"
+            :key="tile.id"
+            :tile="tile"
+            :small="true"
+            :back="true"
+            :back-scheme="0"
+            :dimmed="isWinner"
+          />
         </div>
       </div>
     </template>
 
     <template v-else>
-      <div class="unified-col unified-col--right">
-        <div v-if="melds.length" class="meld-zone">
+      <div class="seat-line seat-line--right">
+        <div v-if="hand.length" class="hand-lane hand-lane--right">
+          <MahjongTile
+            v-for="tile in hand"
+            :key="tile.id"
+            :tile="tile"
+            :small="true"
+            :back="true"
+            :back-scheme="0"
+            :dimmed="isWinner"
+          />
+        </div>
+        <div v-if="melds.length" class="meld-lane meld-lane--right">
           <div
             v-for="(m, i) in melds"
             :key="i"
-            class="meld-group"
+            class="meld-group meld-group--vertical"
             :class="{ 'meld-group--kong': m.type === 'kong' }"
           >
             <MahjongTile
@@ -83,19 +98,10 @@
               :tile="t"
               :small="true"
               :back="isConcealedMeld(m)"
+              :back-scheme="isConcealedMeld(m) ? 0 : -1"
               :dimmed="isWinner"
             />
           </div>
-        </div>
-        <div v-if="hand.length" class="hand-zone">
-          <MahjongTile
-            v-for="tile in hand"
-            :key="tile.id"
-            :tile="tile"
-            :small="true"
-            :back="true"
-            :dimmed="isWinner"
-          />
         </div>
       </div>
     </template>
@@ -149,72 +155,91 @@ const isConcealedMeld = (meld: Meld): boolean => {
   height: 100%;
 }
 
-.unified-col {
+.seat-line {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
   flex-shrink: 0;
+  overflow: visible;
 }
 
-.unified-col--top {
-  width: 100%;
-  align-items: center;
-}
-
-.unified-col--left,
-.unified-col--right {
-  height: 100%;
-  justify-content: center;
-}
-
-.unified-col--left {
-  align-items: flex-end;
-}
-
-.unified-col--right {
-  align-items: flex-start;
-}
-
-.hand-row--top,
-.meld-row--top {
-  display: flex;
+.seat-line--top {
   flex-direction: row;
+  align-items: center;
   justify-content: center;
-  gap: 1px;
+  gap: 18px;
+  width: 100%;
 }
 
-.hand-zone,
-.meld-zone {
-  display: flex;
+.seat-line--left,
+.seat-line--right {
   flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
 }
 
-.hand-row--top {
-  max-width: 100%;
+.hand-lane,
+.meld-lane {
+  display: flex;
+  flex-shrink: 0;
+  overflow: visible;
 }
 
-.meld-row--top {
-  margin-top: 4px;
+.hand-lane--top,
+.meld-lane--top {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.hand-lane--left,
+.hand-lane--right,
+.meld-lane--left,
+.meld-lane--right {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 
 .meld-group {
   display: inline-flex;
   flex-direction: row;
-  gap: 1px;
+  gap: 2px;
   flex-shrink: 0;
-  padding: 1px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 2px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.03);
 }
 
+.meld-group--vertical {
+  flex-direction: column;
+}
+
 .meld-group--kong {
-  box-shadow: 0 0 8px rgba(255, 214, 0, 0.4);
+  box-shadow: 0 0 8px rgba(255, 214, 0, 0.35);
 }
 
 .player-other :deep(.tile) {
   width: 28px;
   height: 40px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.player-other :deep(.tile-img) {
+  border-radius: 3px;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4)) brightness(1.08);
+}
+
+.hand-lane--left :deep(.tile),
+.hand-lane--right :deep(.tile),
+.meld-lane--left :deep(.tile),
+.meld-lane--right :deep(.tile) {
+  transform: rotate(90deg);
+  transform-origin: center;
 }
 </style>

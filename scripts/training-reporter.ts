@@ -46,6 +46,10 @@ export interface WinningGameRecord {
   multiplier: number
   roundNum: number
   wonFan?: number
+  extraMultipliers?: number
+  settlementMultiplier?: number
+  scoreDetails?: string[]
+  winningFrom?: string
   baseFan?: number  // 真实基础番（不含任何倍数）
   winHandType?: string
   isMenQing?: boolean
@@ -190,6 +194,16 @@ function formatTimestamp(ts: string): string {
   return ts.replace('T', ' ').replace(/\.\d+Z$/, '')
 }
 
+const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000
+
+function beijingISOString(date: Date = new Date()): string {
+  return new Date(date.getTime() + BEIJING_OFFSET_MS).toISOString().slice(0, 19)
+}
+
+function formatBeijingTimestamp(ts: string): string {
+  return ts.replace('T', ' ').slice(0, 19)
+}
+
 function checkTarget(actual: number, target: string, lowBetter = false): string {
   const targetNum = parseFloat(target.replace(/[^.\d]/g, ''))
   if (isNaN(targetNum)) return '—'
@@ -202,7 +216,7 @@ function checkTarget(actual: number, target: string, lowBetter = false): string 
 export function formatRoundReport(report: RoundReport, showDetail = true, roundLabel?: string): string {
   const lines: string[] = []
   const { round, timestamp, metrics, policy, topWins, topLosses, multiWinDist, allWinningGames } = report
-  const ts = formatTimestamp(timestamp)
+  const ts = formatBeijingTimestamp(timestamp)
   const winRate = parseFloat((metrics.winGames / Math.max(1, metrics.totalGames) * 100).toFixed(1))
   const drawRate = parseFloat((metrics.drawGames / Math.max(1, metrics.totalGames) * 100).toFixed(1))
   const winnerInstances = metrics.winnerInstances ?? allWinningGames?.length ?? metrics.winGames
@@ -300,7 +314,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
     const settlementLog: any[] = result?.settlementLog || []
     const totalChips = settlementLog.reduce((sum: number, s: any) => sum + Math.abs(s.amount || 0), 0)
     // 全局倍数：优先用 w.multiplier（已计算好），fallback 到 gameMeta 反算
-    const multiplier = w.multiplier || (result?.gameMeta ? Math.min(8, (result.gameMeta.diceMultiplier || 1) * (result.gameMeta.inheritanceMultiplier || 1) * (result.gameMeta.flowMultiplier || 1)) : 1)
+    const multiplier = w.multiplier || (result?.gameMeta ? (result.gameMeta.globalMultiplier || Math.min(8, (result.gameMeta.diceMultiplier || 1) * (result.gameMeta.inheritanceMultiplier || 1))) : 1)
     const wonFan = w.wonFan || 0
     const gameIdx = w.gameIdx
     // 骰子/继承/流局信息：优先从 w.gameMeta（直接来自 runGame），fallback 到 result.gameMeta
@@ -355,32 +369,31 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
     for (const win of sameGameWins) {
       lines.push(`**玩家: ${win.winnerName}**`)
       const snapHand = snapPlayers[win.winnerName]?.hand || ''
-      let handStr = (win.hand && win.hand.length > 0) ? win.hand : (snapHand || '—')
-      // 捉冲时：显示对方放冲的那张牌
-      if (!win.isSelfDraw) {
-        const snapDiscard = (win as any).winningTile || ''  // 捉冲时对方放冲的牌（直接从WinnerInfo获取）
-        if (snapDiscard && !handStr.includes(snapDiscard)) handStr += ' + ' + snapDiscard + '（捉冲）'
-      }
-      const meldsStr = Array.isArray(win.melds) ? win.melds.join(' / ') : (win.melds || '无')
-      const handTypesStr = win.handTypes?.length ? win.handTypes.join(', ') : '—'
-      lines.push(`  - 胡牌牌型: ${handTypesStr}`)
+      const handStr = (win.hand && win.hand.length > 0) ? win.hand : (snapHand || '(空)')
+      const handTypesStr = win.handTypes?.length ? win.handTypes.join(', ') : '未知'
       const flowersArr: string[] = (win as any).flowers || []
       const flowersStr = flowersArr.length > 0 ? flowersArr.join(', ') : '无'
       const menqingStr = win.isMenQing ? '是' : '否'
-      // 显示完整公式：baseFan × SETTLEMENT_MULT × BaoMult = 实际结算额
-      // wonFan (来自recordWinner.wonFan) = baseScore = baseFan × SETTLEMENT_MULT × globalMultiplier
-      // 但最终赔付额 = baseScore × BaoMult（互包时）；所以用 settleAmount / BaoMult 反推
-      // 为清晰起见，直接显示: baseFan / SETTLEMENT_MULT(10) / globalMultiplier(来自header) / 最终点
       const displayBaseFan = win.baseFan ?? '?'
+      const extraMult = (win as any).extraMultipliers ?? 1
+      const settlementMult = (win as any).settlementMultiplier ?? 10
       const globalMultStr = multiplier != null ? multiplier.toString() : '?'
-      const wonFanDisplay = (wonFan != null) ? wonFan.toString() : '?'
+      const finalPoints = (win.wonFan != null ? win.wonFan : wonFan)
+      const wonFanDisplay = finalPoints != null ? finalPoints.toString() : '?'
+      const winningTile = (win as any).winningTile || ''
+      const winningFrom = (win as any).winningFrom || ''
+      const handSuffix = !win.isSelfDraw && (winningTile || winningFrom)
+        ? ` (${[winningTile ? `放冲牌: ${winningTile}` : '', winningFrom ? `来源: ${winningFrom}` : ''].filter(Boolean).join('，')})`
+        : ''
+      const scoreDetails: string[] = (win as any).scoreDetails || []
+      const noWildDetail = scoreDetails.find((detail: string) => detail.includes('无百搭'))
+      lines.push(`  - 胡牌牌型: ${handTypesStr}`)
       lines.push(`  - 胡牌方式: ${win.isSelfDraw ? '自摸' : '放冲'}`)
-      lines.push(`  - 公式分解: 基础番${displayBaseFan} × 结算倍数10 × 全局倍数${globalMultStr} = 最终点${wonFanDisplay}`)
-      lines.push(`  - 手牌: ${handStr || '—'}（${win.isSelfDraw ? '自摸' : '捉冲'}时含进牌）`)
-      lines.push(`  - 门口牌(吃/碰/杠): ${meldsStr !== '无' ? meldsStr : '无'}`)
+      lines.push(`  - 公式分解: 基础番${displayBaseFan} × 结算倍数${settlementMult} × 额外倍数${extraMult} × 全局倍数${globalMultStr} = 最终点${wonFanDisplay}`)
+      lines.push(`  - 手牌: ${handStr || '(空)'}${handSuffix}`)
       lines.push(`  - 花牌: ${flowersStr}`)
       lines.push(`  - 是否门清: ${menqingStr}`)
-      lines.push(`  - 是否算无百搭: *（待追踪）*`)
+      lines.push(`  - 是否算无百搭: ${noWildDetail ? `是（${noWildDetail}）` : '否'}`)
       lines.push('')
     }
 
@@ -683,8 +696,8 @@ export function buildRoundReport(
     .slice(0, 3)
   // globalMaxWin: 全局最大赢局（跨所有玩家，单局净赢分最高的那一局）
   const sortedByScore = [...winningGames].sort((a: any, b: any) => {
-    const scoreA = (a.wonFan ?? 0) * (a.multiplier ?? 1)
-    const scoreB = (b.wonFan ?? 0) * (b.multiplier ?? 1)
+    const scoreA = (a.wonFan ?? 0)
+    const scoreB = (b.wonFan ?? 0)
     return scoreB - scoreA
   })
   const globalMaxWin = sortedByScore.length > 0 ? sortedByScore[0] : null
@@ -703,7 +716,7 @@ export function buildRoundReport(
 
   return {
     round,
-    timestamp: new Date().toISOString(),
+    timestamp: beijingISOString(),
     scriptName,
     metrics: {
       totalGames: internalResult.totalGames || 0,
@@ -751,13 +764,13 @@ export function writeIndexFile(outDir: string, rounds: RoundReport[]): string {
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
   const lines: string[] = []
   lines.push('# 长清阁训练报告汇总')
-  lines.push(`> 生成时间: ${new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '')}`)
+  lines.push(`> 生成时间: ${formatBeijingTimestamp(beijingISOString())}`)
   lines.push('')
   lines.push('| Round | 时间 | 总局数 | 胡牌率 | Fitness |')
   lines.push('|-------|------|--------|--------|---------|')
   for (const r of rounds) {
     const winRate = ((r.metrics.winGames / Math.max(1, r.metrics.totalGames)) * 100).toFixed(1)
-    const t = r.timestamp.replace('T', ' ').replace(/\.\d+Z$/, '').slice(0, 19)
+    const t = formatBeijingTimestamp(r.timestamp)
     lines.push(`| Round ${r.round} | ${t} | ${r.metrics.totalGames} | ${winRate}% | ${(r.metrics.fitness ?? r.metrics.akScore).toFixed(4)} |`)
   }
   lines.push('')

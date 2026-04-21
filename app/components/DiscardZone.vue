@@ -35,10 +35,10 @@ const props = defineProps<{
 
 const layout = computed(() => {
   if (props.position === 'left' || props.position === 'right') {
-    return { cols: 3, rows: 8, width: 84, height: 214, cellW: 28, cellH: 26 }
+    return { cols: 3, rows: 8, width: 90, height: 226, cellW: 30, cellH: 28 }
   }
 
-  return { cols: 8, rows: 3, width: 214, height: 84, cellW: 26, cellH: 28 }
+  return { cols: 8, rows: 3, width: 252, height: 96, cellW: 31, cellH: 32 }
 })
 
 const maxTiles = computed(() => layout.value.cols * layout.value.rows)
@@ -50,9 +50,24 @@ const zoneStyle = computed(() => ({
 }))
 
 function slotStyle(index: number) {
-  const { cols, cellW, cellH } = layout.value
-  const col = index % cols
-  const row = Math.floor(index / cols)
+  const { cols, rows, cellW, cellH } = layout.value
+  let col = 0
+  let row = 0
+
+  if (props.position === 'bottom') {
+    col = index % cols
+    row = Math.floor(index / cols)
+  } else if (props.position === 'top') {
+    col = cols - 1 - (index % cols)
+    row = rows - 1 - Math.floor(index / cols)
+  } else if (props.position === 'left') {
+    col = cols - 1 - Math.floor(index / rows)
+    row = index % rows
+  } else {
+    col = Math.floor(index / rows)
+    row = rows - 1 - (index % rows)
+  }
+
   return {
     left: `${col * cellW}px`,
     top: `${row * cellH}px`,

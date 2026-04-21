@@ -2690,15 +2690,15 @@ const forceDiscard = async (p: Player) => {
     0 12px 30px rgba(0, 0, 0, 0.8);
   padding: 0;
   overflow: hidden;
-  --seat-side-inset: 6.8%;
+  --seat-side-inset: 4.8%;
   --seat-top-inset: 3.8%;
   --seat-bottom-inset: 1.4%;
   --seat-top-width: 58%;
   --seat-bottom-width: 72%;
-  --seat-side-width: 132px;
+  --seat-side-width: 96px;
   --seat-side-height: 70%;
-  --discard-top-inset: 22.8%;
-  --discard-bottom-inset: 21.5%;
+  --discard-top-inset: 34.2%;
+  --discard-bottom-inset: 33.4%;
   --discard-side-inset: 21.5%;
 }
 
@@ -3324,8 +3324,8 @@ const forceDiscard = async (p: Player) => {
 }
 .player-name-label--top    { top: 0%; left: 50%; transform: translateX(-50%); }
 .player-name-label--bottom { bottom: 0%; left: 50%; transform: translateX(-50%); }
-.player-name-label--left   { left: 2%; top: 50%; transform: translateY(-50%); }
-.player-name-label--right  { right: 2%; top: 50%; transform: translateY(-50%); }
+.player-name-label--left   { left: 0.6%; top: 50%; transform: translateY(-50%); }
+.player-name-label--right  { right: 0.6%; top: 50%; transform: translateY(-50%); }
 
 .winner-tag {
   font-size: 0.65rem;
