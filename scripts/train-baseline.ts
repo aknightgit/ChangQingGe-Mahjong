@@ -2249,7 +2249,7 @@ function testOneGame() {
 
   // --detail 开关:控制是否输出每圈明细和 round 文件
   if (DETAIL_MODE) {
-    const outDir = path.join(__dirname, '..', 'training-output', 'test')
+    const outDir = '/data/mahjong-training/training-output'
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
     const testReport = buildRoundReport(-1, {
       totalGames: 1,
