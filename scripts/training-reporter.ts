@@ -73,6 +73,10 @@ export interface RoundReport {
   turnSnapshots?: any[]
 }
 
+export interface DetailLogOptions {
+  forceSingleGame?: boolean
+}
+
 export interface EvalResult {
   totalGames: number
   winGames: number
@@ -215,7 +219,7 @@ function checkTarget(actual: number, target: string, lowBetter = false): string 
 
 export function formatRoundReport(report: RoundReport, showDetail = true, roundLabel?: string): string {
   const lines: string[] = []
-  const { round, timestamp, metrics, policy, topWins, topLosses, multiWinDist, allWinningGames } = report
+  const { round, timestamp, metrics, policy, topWins, worstLossGames, multiWinDist, allWinningGames } = report
   const ts = formatBeijingTimestamp(timestamp)
   const winRate = parseFloat((metrics.winGames / Math.max(1, metrics.totalGames) * 100).toFixed(1))
   const drawRate = parseFloat((metrics.drawGames / Math.max(1, metrics.totalGames) * 100).toFixed(1))
@@ -226,6 +230,10 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
   const menqingRate = winnerInstances > 0 ? parseFloat((metrics.menqingWinGames / winnerInstances * 100).toFixed(1)) : 0
   const nonDrawGames = Math.max(0, metrics.totalGames - metrics.drawGames)
   const fightToLastRate = nonDrawGames > 0 ? parseFloat(((metrics.fightToLastGames / nonDrawGames) * 100).toFixed(1)) : 0
+  const mw = multiWinDist || [0, 0, 0, 0]
+  const mwTotal = mw.reduce((a: number, b: number) => a + b, 0)
+  const fightToLastCount = mw[2] || 0
+  const fightToLastRateFromDist = mwTotal > 0 ? parseFloat(((fightToLastCount / mwTotal) * 100).toFixed(1)) : 0
 
   const heading = roundLabel ?? `Round ${round}`
   lines.push(`## ${heading} (${ts})`)
@@ -239,7 +247,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
   lines.push(`| Games | ${metrics.totalGames} | — | — |`)
   lines.push(`| 胡牌局 | ${metrics.winGames} (${winRate}%) | ≥90% | ${checkTarget(winRate, '90')} |`)
   lines.push(`| 流局 | ${metrics.drawGames} (${drawRate}%) | <10% | ${checkTarget(drawRate, '10', true)} |`)
-  lines.push(`| 血战到最后一人 | ${metrics.fightToLastGames} (${fightToLastRate}%) | >80% | ${checkTarget(fightToLastRate, '80')} |`)
+  lines.push(`| 血战到最后一人 | ${fightToLastCount} (${fightToLastRateFromDist}%) | >80% | ${checkTarget(fightToLastRateFromDist, '80')} |`)
   lines.push(`| 平均回合 | ${metrics.avgRounds != null ? metrics.avgRounds.toFixed(1) : '—'} | — | — |`)
   lines.push(`| 平均总筹码 | ${metrics.avgPot != null ? metrics.avgPot.toFixed(1) : '—'} | — | — |`)
   lines.push(`| 胡牌实例 | ${winnerInstances} | — | — |`)
@@ -252,8 +260,6 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
   lines.push('')
 
   // 每局获胜人数分布
-  const mw = multiWinDist || [0, 0, 0, 0]
-  const mwTotal = mw.reduce((a: number, b: number) => a + b, 0)
   lines.push('### 👥 每局获胜人数分布')
   lines.push('')
   lines.push('| 类型 | 局数 | 占比 |')
@@ -268,25 +274,18 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
   // 胡牌牌型分布
   lines.push('### 🀄 胡牌牌型分布')
   lines.push('')
-  lines.push('| 牌型 | 局数 | 占比 | K哥目标 |')
-  lines.push('|------|------|------|---------|')
+  lines.push('| 牌型 | 胡牌实例 | 占比 | K哥目标 |')
+  lines.push('|------|----------|------|---------|')
   const dist: Record<string, number> = {}
-  // 按 gameIdx 分组，同一局多个赢家的同一牌型只算1次（避免多人胡导致比例>100%）
-  const gameTypeMap = new Map<number, Set<string>>()
   if (allWinningGames && allWinningGames.length > 0) {
     for (const w of allWinningGames) {
-      if (!gameTypeMap.has(w.gameIdx)) gameTypeMap.set(w.gameIdx, new Set())
       const types = w.handTypes && w.handTypes.length > 0 ? w.handTypes : []
-      for (const t of types) gameTypeMap.get(w.gameIdx)!.add(t)
+      for (const t of types) dist[t] = (dist[t] || 0) + 1
     }
   } else if (metrics.handTypeDist) {
     for (const [k, v] of Object.entries(metrics.handTypeDist)) dist[k] = (dist[k] || 0) + (v || 0)
   }
-  // 同一局的每个牌型只出现1次，然后汇总
-  for (const typeSet of gameTypeMap.values()) {
-    for (const t of typeSet) dist[t] = (dist[t] || 0) + 1
-  }
-  const realWinnerInstances = gameTypeMap.size
+  const realWinnerInstances = winnerInstances
   const TYPES: [string, string][] = [
     ['混一色', '≥40%'],
     ['碰碰胡', '>25%'],
@@ -391,6 +390,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
       lines.push(`  - 胡牌方式: ${win.isSelfDraw ? '自摸' : '放冲'}`)
       lines.push(`  - 公式分解: 基础番${displayBaseFan} × 结算倍数${settlementMult} × 额外倍数${extraMult} × 全局倍数${globalMultStr} = 最终点${wonFanDisplay}`)
       lines.push(`  - 手牌: ${handStr || '(空)'}${handSuffix}`)
+      lines.push(`  - 门口牌: ${formatMelds((win as any).melds)}`)
       lines.push(`  - 花牌: ${flowersStr}`)
       lines.push(`  - 是否门清: ${menqingStr}`)
       lines.push(`  - 是否算无百搭: ${noWildDetail ? `是（${noWildDetail}）` : '否'}`)
@@ -408,15 +408,14 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
 
     if (settlementLog.length > 0) {
       const SETTLEMENT_MULT = 10  // 建房参数，结算时固定乘数
-      lines.push('**结算逐笔明细:**')
+      lines.push('**支付信息（按结算先后顺序）:**')
       for (const s of settlementLog) {
         const amt = Math.abs(s.amount || 0)
         const fan = s.fan ?? '?'  // baseFan
         const gm = s.mult ?? multiplier ?? '?'  // BaoMult（来自settlement log）
         const fanStr = fan !== '?' ? fan : '?'
         const gmStr = gm !== '?' ? gm : '?'
-        // 公式: baseFan × SETTLEMENT_MULT(=10) × BaoMult = settleAmount
-        lines.push(`  [${s.reason || '结算'}] ${s.from} -> ${s.to}: ${amt} (${fanStr}×${SETTLEMENT_MULT}×${gmStr}=${amt})`)
+        lines.push(`  ${s.from} -> ${s.to}: ${amt} [${s.reason || '结算'}] (${fanStr}×${SETTLEMENT_MULT}×${gmStr}=${amt})`)
       }
       lines.push('')
     }
@@ -432,250 +431,83 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
   }
   // （最大输局明细已删除，K哥 2026-04-13 确认）
 
-  // 每圈详细快照（仅 round 文件需要；主文件 showDetail=false 时不输出）
-  if (showDetail && report.turnSnapshots && report.turnSnapshots.length > 0) {
-    lines.push('### 🔍 每圈明细（血战到底）')
-    lines.push('')
-    const snaps = report.turnSnapshots
-    let circleCount = 0
-    let prevExposed: string[] = []
-    let circleStart = 0
-    let lastFlushedCircleStart = -1
-    // 追踪当前圈每人是否已摸打
-    const drawnThisCircle: Record<string, {drawn: string, discarded: string, flower: string | null}> = {}
-
-    for (let i = 0; i < snaps.length; i++) {
-      const snap = snaps[i]
-      const players = snap.players || []
-
-      // 跳过 NEW_GAME sentinel（没有玩家数据）
-      if (snap.drawnTile === 'NEW_GAME') {
-        prevExposed = []
-        circleStart = i
-        circleCount = 0
-        lastFlushedCircleStart = -1
-        continue
-      }
-
-      const currExposed = players.map((p: any) => (p.exposed || []).join('|'))
-      const circleStartIsSentinel = snaps[circleStart]?.drawnTile === 'NEW_GAME'
-      const hadMeld = !circleStartIsSentinel && prevExposed.length > 0 &&
-        currExposed.some((ex: string, idx: number) => ex !== prevExposed[idx])
-      const backToStart = i > 0 && snap.currentPlayer === snaps[circleStart].currentPlayer && snap.turn > 0
-
-      // 新圈开始：打印上一圈结果（如有）
-      if ((i === 0 || hadMeld || backToStart) && i > 0) {
-        circleCount++
-        // 打印上一圈所有人摸打（合并到同行）
-        for (const pp of snaps[circleStart].players) {
-          const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-', flower: null }
-          const flowerStr2 = d.flower ? `｜摸花${d.flower}` : ''
-          const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
-          const discardStr = d.discarded !== '-' ? `｜ → 打${d.discarded}` : ''
-          lines.push(`  - ${pp.name}：${formatGroupedHand(pp.hand, snap.wildTile)}｜副露:${formatExposed(pp.exposed)}｜${pp.handCount}张${drawStr}${flowerStr2}${discardStr}`)
-        }
-        lines.push('')
-        circleStart = i
-        lastFlushedCircleStart = circleStart
-        // 重置
-        for (const pp of players) drawnThisCircle[pp.name] = { drawn: '-', discarded: '-', flower: null as string | null }
-      }
-
-      // 初始化当前圈（第一张快照）
-      if (i === 0 || (i > 0 && (hadMeld || backToStart))) {
-        lines.push(`**【第${circleCount + 1}圈】百搭${snap.wildTile}｜×${snap.gameMultiplier}**`)
-      }
-
-      // 记录当前人摸打
-      const currP = players[snap.currentPlayer]
-      if (currP) {
-        drawnThisCircle[currP.name] = {
-          drawn: snap.drawnTile || '-',
-          discarded: snap.discardedTile || '-',
-          flower: snap.flowerDrawn || null
-        }
-      }
-
-      if (hadMeld) {
-        prevExposed = currExposed
-        continue
-      }
-      prevExposed = currExposed
-    }
-
-    // 打印最后一圈（仅当尚未flush）
-    if (lastFlushedCircleStart !== circleStart && snaps[circleStart]?.players?.length > 0) {
-      circleCount++
-      const lastSnap = snaps[circleStart]
-      for (const pp of lastSnap.players) {
-        const d = drawnThisCircle[pp.name] || { drawn: '-', discarded: '-', flower: null }
-        const drawStr = d.drawn !== '-' ? `｜摸${d.drawn}` : ''
-        const flowerStr = d.flower ? `｜摸花${d.flower}` : ''
-        const discardStr = d.discarded !== '-' ? `｜ → 打${d.discarded}` : ''
-        lines.push(`  - ${pp.name}：${formatGroupedHand(pp.hand, lastSnap.wildTile)}｜副露:${formatExposed(pp.exposed)}｜${pp.handCount}张${drawStr}${flowerStr}${discardStr}`)
-      }
-      lines.push('')
-    }
-  }
-
   return lines.join('\n')
 }
 
-/**
- * 只输出每圈明细（用于 round 文件，--detail 时写入）
- *
- * 格式规则：
- * - 每局从摸牌后开始，以4个玩家的回合为一圈
- * - 回到起始玩家（currentPlayer=0）时结束当前圈，开始新圈
- * - 用 === 第N局 === 分隔不同游戏
- * - 每行格式：玩家名｜摸X｜ → 打Y｜副露:xxx｜剩余手牌
- */
-export function formatCircleDetailsOnly(report: RoundReport): string {
+function buildGameBuckets(turnSnapshots: any[]): any[][] {
+  const buckets: any[][] = []
+  let currentGameIdx: number | null = null
+  let current: any[] = []
+  for (const snap of turnSnapshots || []) {
+    if (snap.drawnTile === 'NEW_GAME') {
+      if (current.length > 0) buckets.push(current)
+      current = []
+      currentGameIdx = typeof snap.gameIdx === 'number' ? snap.gameIdx : Number(snap.discardedTile || 0)
+      continue
+    }
+    const snapGameIdx = typeof snap.gameIdx === 'number' ? snap.gameIdx : currentGameIdx
+    if (currentGameIdx !== null && snapGameIdx !== currentGameIdx) {
+      if (current.length > 0) buckets.push(current)
+      current = []
+      currentGameIdx = snapGameIdx
+    }
+    current.push(snap)
+  }
+  if (current.length > 0) buckets.push(current)
+  return buckets.filter(bucket => bucket.some(s => s.drawnTile !== 'NEW_GAME'))
+}
+
+function formatDetailHand(hand: string = '', handCount?: number): string {
+  const content = hand || '(空)'
+  const count = typeof handCount === 'number' ? handCount : (hand ? hand.split(/\s+/).filter(Boolean).length : 0)
+  return `${content}（${count}张）`
+}
+
+function formatDetailExposed(exposed: string[] = []): string {
+  if (!exposed || exposed.length === 0) return '无'
+  return exposed.join('｜')
+}
+
+function formatDetailAction(snap: any, player: any): string {
+  const parts: string[] = []
+  const actionType = snap.actionType || 'turn'
+  if (actionType === 'flower' && snap.flowerTile && snap.flowerTile !== '-') {
+    parts.push(`补花${snap.flowerTile}`)
+  }
+  if ((actionType === 'peng-discard' || actionType === 'chow-discard' || actionType === 'ming-gang-discard') && snap.claimTile && snap.claimTile !== '-') {
+    parts.push(`吃碰${snap.claimTile}`)
+  }
+  if (snap.drawnTile && snap.drawnTile !== '-') {
+    parts.push(`摸牌${snap.drawnTile}`)
+  }
+  if (snap.discardedTile && snap.discardedTile !== '-') {
+    parts.push(`出牌${snap.discardedTile}`)
+  }
+  if (actionType === 'discard-win' && snap.winTile && snap.winTile !== '-') {
+    parts.push(`（捉${snap.winTile}冲）`)
+  }
+  return parts.join('-') || '无动作'
+}
+
+export function formatSingleGameDetailLog(report: RoundReport, options: DetailLogOptions = {}): string {
   const lines: string[] = []
-  if (!report.turnSnapshots || report.turnSnapshots.length === 0) {
-    lines.push('(无每圈明细)')
-    return lines.join('\n')
-  }
-  lines.push('### 🔍 每圈明细（血战到底）')
-
-  const snaps = report.turnSnapshots
-  const deckLen = 144  // 牌墙总张数固定144
-  // wallRemaining 计算：使用 snapshot 中的 wallIdx
-  const calcWallRem = (wallIdx: number) => deckLen - wallIdx
-
-  let circleCount = 0
-  let circleStartIdx = 0
-  let gameCount = 0
-  let prevTurn = -1
-  let prevExposed: string[] = []
-  let lastFlushedCircleStartIdx = -1  // 防止最后一圈重复flush
-
-  // 记录每个玩家本圈摸打的 {drawn, discarded}
-  const circleActions: Record<string, {drawn: string, discarded: string, newFlowers: string[]}> = {}
-  let prevFlowerDrawn: Record<string, string[]> = {}  // 记录每个玩家本圈新摸的花
-
-  // 初始化时重置所有玩家动作为空
-  for (const p of snaps[0]?.players || []) {
-    circleActions[p.name] = { drawn: '-', discarded: '-', newFlowers: [] }
-    prevFlowerDrawn[p.name] = []
-  }
-
-  const formatExposed = (exposed: string[]): string => {
-    if (!exposed || exposed.length === 0) return '无'
-    return exposed.join('|')
-  }
-
-  // flushCircle: 输出上一圈结果，heading使用"牌墙剩N张"
-  const flushCircle = (startIdx: number, wallRemaining: number) => {
-    const snap = snaps[startIdx]
-    if (!snap) return
-    lines.push(`**牌墙剩${wallRemaining}张 百搭${snap.wildTile}｜×${snap.gameMultiplier}**`)
-    for (const pp of snap.players) {
-      const act = circleActions[pp.name] || { drawn: '-', discarded: '-', newFlowers: [] }
-      // 动作序列（按K哥格式）
-      const flowerStr = act.newFlowers.length > 0 ? `补${act.newFlowers.length}花 ` : ''
-      const drawStr = act.drawn !== '-' ? `摸${act.drawn} ` : ''
-      const discardStr = act.discarded !== '-' ? `打${act.discarded}` : ''
-      const actionSeq = flowerStr + drawStr + discardStr
-      // 最终手牌
-      const exposedStr = formatExposed(pp.exposed || [])
-      const handStr = pp.hand || ''
-      const handNum = pp.handCount ?? 0
-      lines.push(`  ${pp.name}：${actionSeq}→ 手牌:${handStr}｜副露:${exposedStr}｜${handNum}张`)
-    }
-    lines.push('')
-  }
-
-  const resetActions = () => {
-    for (const p of snaps[0]?.players || []) {
-      circleActions[p.name] = { drawn: '-', discarded: '-', newFlowers: [] }
-      prevFlowerDrawn[p.name] = []
+  const gameBuckets = buildGameBuckets(report.turnSnapshots || [])
+  if (gameBuckets.length === 0) return '(无明细日志)'
+  const targetGame = gameBuckets[0].filter((snap: any) => !(snap.drawnTile === '-' && snap.discardedTile === '-' && (snap.actionType === 'turn' || !snap.actionType)))
+  lines.push('# 第1局完整明细')
+  lines.push('')
+  for (const snap of targetGame) {
+    if (snap.drawnTile === 'NEW_GAME') continue
+    const wallBefore = typeof snap.wallBefore === 'number' ? snap.wallBefore : (snap.wallIdx || 0)
+    const wallRemaining = Math.max(0, 144 - wallBefore)
+    const currentPlayer = snap.players?.[snap.currentPlayer]
+    const currentName = currentPlayer?.name
+    for (const player of snap.players || []) {
+      if (player.name !== currentName) continue
+      const action = formatDetailAction(snap, player)
+      lines.push(`[牌墙${wallRemaining}] ${player.name}｜${action}｜手牌:${formatDetailHand(player.hand, player.handCount)}｜门口牌:${formatDetailExposed(player.exposed)}`)
     }
   }
-
-  for (let i = 0; i < snaps.length; i++) {
-    const snap = snaps[i]
-    const players = snap.players || []
-
-    // 检测新一局（两种方式：1) NEW_GAME sentinel  2) turn 重置兜底）
-    const isNewGameSentinel = snap.drawnTile === 'NEW_GAME'
-    const isTurnReset = snap.turn !== undefined && prevTurn !== -1 && snap.turn < prevTurn
-    if (isNewGameSentinel || isTurnReset) {
-      if (isNewGameSentinel) {
-        gameCount = parseInt(snap.discardedTile || '0', 10) + 1
-      } else {
-        gameCount++
-      }
-      // 上一局最后一圈也要 flush
-      if (circleStartIdx < i) {
-        const wallRem = calcWallRem(snaps[circleStartIdx]?.wallIdx || 0)
-        flushCircle(circleStartIdx, wallRem)
-      }
-      circleCount = 0
-      circleStartIdx = i
-      resetActions()
-      lines.push(`=== 第${gameCount}局 ===`)
-      lines.push('')
-      if (isNewGameSentinel) {
-        prevTurn = -1
-        prevExposed = []
-        if (snap.turn !== undefined) prevTurn = snap.turn
-        continue
-      }
-    }
-
-    // 圈切分逻辑
-    const currExposed = players.map((p: any) => (p.exposed || []).join('|'))
-    const circleStartIsSentinel = snaps[circleStartIdx]?.drawnTile === 'NEW_GAME'
-    const hadMeld = !circleStartIsSentinel && prevExposed.length > 0 &&
-      currExposed.some((ex: string, idx: number) => ex !== prevExposed[idx])
-    const backToStart = i > 0 && snap.currentPlayer === snaps[circleStartIdx].currentPlayer && snap.turn > 0
-    const firstRealSnapshot = circleStartIsSentinel && i === circleStartIdx + 1
-
-    // 新圈开始：打印上一圈结果
-    if ((i === 0 || hadMeld || backToStart || firstRealSnapshot) && i > 0) {
-      const isCircleStartEmpty = snaps[circleStartIdx]?.drawnTile === 'NEW_GAME'
-      if (!isCircleStartEmpty) {
-        circleCount++
-        const wallRem = calcWallRem(snaps[circleStartIdx]?.wallIdx || 0)
-        flushCircle(circleStartIdx, wallRem)
-        lastFlushedCircleStartIdx = circleStartIdx
-      } else {
-        circleCount = 0
-      }
-      circleStartIdx = i
-      resetActions()
-    }
-
-    // 记录当前玩家本回合的摸打
-    const currP = players[snap.currentPlayer]
-    if (currP && snap.drawnTile && snap.drawnTile !== 'NEW_GAME') {
-      // 用 flowerDrawn 字段追踪本回合新摸的花
-      const thisFlower = snap.flowerDrawn ? [snap.flowerDrawn] : []
-      const prev = prevFlowerDrawn[currP.name] || []
-      // 累计本圈新摸的花（去重）
-      const allNew = [...prev]
-      for (const f of thisFlower) { if (!allNew.includes(f)) allNew.push(f) }
-      prevFlowerDrawn[currP.name] = allNew
-      circleActions[currP.name] = {
-        drawn: snap.drawnTile,
-        discarded: snap.discardedTile || '-',
-        newFlowers: allNew
-      }
-    }
-
-    if (snap.turn !== undefined) prevTurn = snap.turn
-    prevExposed = currExposed
-  }
-
-  // 打印最后一圈
-  const lastCircleIsEmpty = snaps[circleStartIdx]?.drawnTile === 'NEW_GAME'
-  if (snaps.length > 0 && lastFlushedCircleStartIdx !== circleStartIdx && !lastCircleIsEmpty) {
-    circleCount++
-    const wallRem = calcWallRem(snaps[circleStartIdx]?.wallIdx || 0)
-    flushCircle(circleStartIdx, wallRem)
-  }
-  lines.push('---')
   return lines.join('\n')
 }
 
@@ -754,9 +586,15 @@ export function writeRoundFile(outDir: string, report: RoundReport, showDetail =
   const ts = report.timestamp.replace(/[:.]/g, '-').slice(0, 19)
   const filename = `round-${String(report.round).padStart(3, '0')}-${ts}.md`
   const filePath = path.join(outDir, filename)
-  // round 文件应包含完整 round 报告；showDetail 控制是否附带每圈明细
-  const content = formatRoundReport(report, showDetail)
+  const content = formatRoundReport(report, false)
   fs.writeFileSync(filePath, content, 'utf-8')
+
+  if (showDetail && report.turnSnapshots && report.turnSnapshots.length > 0) {
+    const detailFilename = `detail-round-${String(report.round).padStart(3, '0')}-${ts}.md`
+    const detailPath = path.join(outDir, detailFilename)
+    fs.writeFileSync(detailPath, formatSingleGameDetailLog(report, { forceSingleGame: true }), 'utf-8')
+  }
+
   return filename
 }
 

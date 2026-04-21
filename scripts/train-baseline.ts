@@ -1062,7 +1062,7 @@ interface GameResult {
 // ========== 血战到最后一人 ==========
 // 每局有人胡牌后,记录赢家,剩余玩家继续开新局,直到最后1人
 // 注意:每局都是完整4人局(runGame不改),通过记录哪些玩家已赢来模拟"退出"
-function runGameWithFightToLast(policy: BotPolicy): {
+function runGameWithFightToLast(policy: BotPolicy, gameIdxBase: number = 0): {
   winners: Array<{
     idx: number; selfDraw: boolean; score: number; snapshot: PlayerSnapshot
     handType: string; wonFan: number; winHandType: string
@@ -1090,7 +1090,7 @@ function runGameWithFightToLast(policy: BotPolicy): {
   // 简化:4人同策略,每局赢的人都记录,最多3局(3个赢家+1个输家)
   for (let subGame = 0; subGame < 3; subGame++) {
     const _g0 = Date.now()
-    const result = runGame(policy, [policy, policy, policy])
+    const result = runGame(policy, [policy, policy, policy], gameIdxBase + subGame)
     const _g1 = Date.now()
     if (!result || result.winner == null || result.winner < 0) {
       drawCount++
@@ -1134,7 +1134,7 @@ function runGameWithFightToLast(policy: BotPolicy): {
 }
 
 // ========== Game Loop ==========
-function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | null {
+function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: number = 0): GameResult | null {
   const g = setupGame(akPolicy, otherPolicies)
   if (!g) return null
   const events: GameEvent[] = []
@@ -1286,18 +1286,42 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
 
   // 每回合快照追踪
   const turnSnapshots: TurnSnapshot[] = []
-  let prevDrawn: Tile | null = null    // 上回合本玩家摸的牌(不含花)
-  let prevFlower: Tile | null = null   // 上回合本玩家摸的花牌
-  let prevDiscard: Tile | null = null  // 上回合本玩家打的牌
+  let prevDrawn: Tile | null = null
+  let prevFlower: Tile | null = null
+  let prevDiscard: Tile | null = null
 
-  const recordTurnSnapshot = (curr: number) => {
+  turnSnapshots.push({
+    turn: -1, currentPlayer: -1, drawnTile: 'NEW_GAME', discardedTile: String(gameIdx),
+    lastDiscardBy: -1, lastDiscard: '-',
+    players: [],
+    wildTile: g.wildSuit && g.wildValue ? tileStr({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭',
+    gameMultiplier: g.gameMultiplier,
+    gameIdx,
+    wallIdx: g.wallIdx
+  } as any)
+
+  const recordTurnSnapshot = (curr: number, extras?: {
+    actionType?: string
+    claimTile?: string
+    claimFrom?: string
+    flowerTile?: string
+    winType?: string
+    winTile?: string
+    wallBefore?: number
+  }) => {
     const lastDiscard = g.discardPile[g.discardPile.length - 1] || null
     turnSnapshots.push({
       turn,
       currentPlayer: curr,
       drawnTile: prevDrawn ? tileStr(prevDrawn) : '-',
-      flowerDrawn: prevFlower ? tileStr(prevFlower) : null,
       discardedTile: prevDiscard ? tileStr(prevDiscard) : '-',
+      actionType: extras?.actionType || 'turn',
+      claimTile: extras?.claimTile || '-',
+      claimFrom: extras?.claimFrom || '-',
+      flowerTile: extras?.flowerTile || (prevFlower ? tileStr(prevFlower) : '-'),
+      winType: extras?.winType || '-',
+      winTile: extras?.winTile || '-',
+      wallBefore: typeof extras?.wallBefore === 'number' ? extras.wallBefore : g.wallIdx,
       lastDiscardBy: lastDiscard ? (g.playerDiscards[0].findIndex(d => d.id === lastDiscard.id) >= 0 ? 0 :
         g.playerDiscards[1].findIndex(d => d.id === lastDiscard.id) >= 0 ? 1 :
         g.playerDiscards[2].findIndex(d => d.id === lastDiscard.id) >= 0 ? 2 : 3) : -1,
@@ -1312,14 +1336,15 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameResult | 
           `${m.type === MeldType.TRIPLET ? '碰' : m.type === MeldType.SEQUENCE ? '吃' : m.type === MeldType.KONG ? '明杠' : m.type === MeldType.CONCEALED_KONG ? '暗杠' : '?'}:${sortTiles([...m.tiles]).map(t => tileStr(t)).join(' ')}`
         ),
         meldSources: [...p.meldSources],
-        handCount: p.hand.length
+        handCount: p.hand.length,
+        flowers: p.flowerTiles.map(t => tileStr(t))
       })),
       wildTile: g.wildSuit && g.wildValue ? tileStr({ suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭',
       gameMultiplier: g.gameMultiplier,
+      gameIdx,
       wallIdx: g.wallIdx
-    })
+    } as any)
   }
-  // 初始13张明细也记录
   recordTurnSnapshot(g.current)
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
@@ -1723,7 +1748,7 @@ function evaluatePolicy(policy: BotPolicy, games: number): EvalResult {
 
   for (let g = 0; g < games; g++) {
     const _g0 = Date.now()
-    const bloodResult = runGameWithFightToLast(policy)
+    const bloodResult = runGameWithFightToLast(policy, g * 10)
     const _g1 = Date.now()
     if (games <= 10 || g % 10 === 9) _gameTimes.push(_g1 - _g0)
     if (bloodResult.turnSnapshots && bloodResult.turnSnapshots.length > 0) {
@@ -2069,7 +2094,7 @@ async function main() {
       await saveRoundToMariaDB(round, bestEvalResult, roundBestPolicy)
       const report = buildRoundReport(round, bestEvalResult, roundBestPolicy, AI_NAMES, 'train-baseline.ts')
       roundReports.push(report)
-      const filename = writeRoundFile(OUT_DIR, report, true)
+      const filename = writeRoundFile(OUT_DIR, report, DETAIL_MODE)
       console.log(`  → 轮次详情已保存: ${filename}`)
     }
   }
@@ -2269,12 +2294,7 @@ function testOneGame() {
   }
 }
 
-// 入口:根据参数决定运行模式
+// 入口:统一走主训练流程，detail 只控制是否额外输出单局明细日志
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1])) {
-  if (DETAIL_MODE) {
-    testOneGame()
-    process.exit(0)
-  } else {
-    main().catch(e => { console.error('[MAIN ERROR]', e); process.exit(1) })
-  }
+  main().catch(e => { console.error('[MAIN ERROR]', e); process.exit(1) })
 }

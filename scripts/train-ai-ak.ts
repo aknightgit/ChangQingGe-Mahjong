@@ -30,10 +30,10 @@ const __dirname = path.dirname(__filename)
 
 const ROUNDS = parseInt(process.argv[2] || '10') || 10
 const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000') || 1000
-const BASELINE_MODE = process.argv[4] === '--baseline'  // 基线训练：优化指标而非得分
+const BASELINE_MODE = process.argv.includes('--baseline')  // 基线训练：优化指标而非得分
 const DETAIL_MODE = process.argv.includes('--detail')
 const SKIP_WILD = process.argv.includes('--skip-wild')  // 跳过百搭分配进行胜负判断
-const REWARD_MODE = process.argv[5] === '--reward-mode'  // 阶段奖励模式
+const REWARD_MODE = process.argv.includes('--reward-mode')  // 阶段奖励模式
 const SETTLEMENT_MULT = 10
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
 const OUT_DIR = '/data/mahjong-training/training-output'
@@ -1686,15 +1686,29 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
   }
   const log = (player: string, action: string, detail: string) => { events.push({ turn, player, action, detail }) }
 
-  // 每回合快照：记录当前玩家摸打，供每圈明细使用
-  // drawnTile 和 discardedTile 显式传入：表示当前玩家本回合的摸打
-  const recordTurnSnapshot = (curr: number, drawnTile: string, discardedTile: string) => {
+  // 每回合快照：记录当前玩家动作前的真实牌墙数、动作类型、关联牌
+  const recordTurnSnapshot = (curr: number, drawnTile: string, discardedTile: string, extras?: {
+    actionType?: string
+    claimTile?: string
+    claimFrom?: string
+    flowerTile?: string
+    winType?: string
+    winTile?: string
+    wallBefore?: number
+  }) => {
     const lastDiscard = g.discardPile[g.discardPile.length - 1] || null
     turnSnapshots.push({
       turn,
       currentPlayer: curr,
       drawnTile,
       discardedTile,
+      actionType: extras?.actionType || 'turn',
+      claimTile: extras?.claimTile || '-',
+      claimFrom: extras?.claimFrom || '-',
+      flowerTile: extras?.flowerTile || '-',
+      winType: extras?.winType || '-',
+      winTile: extras?.winTile || '-',
+      wallBefore: typeof extras?.wallBefore === 'number' ? extras!.wallBefore : g.wallIdx,
       lastDiscardBy: lastDiscard ? (g.playerDiscards[0].findIndex(d => d.id === lastDiscard.id) >= 0 ? 0 :
         g.playerDiscards[1].findIndex(d => d.id === lastDiscard.id) >= 0 ? 1 :
         g.playerDiscards[2].findIndex(d => d.id === lastDiscard.id) >= 0 ? 2 : 3) : -1,
@@ -1763,6 +1777,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     const curr = g.current
     const player = g.players[curr]
     turn = round
+    const wallBeforeAction = g.wallIdx
     const drawn = drawTile(g, player)
     if (!drawn) {
       console.error(`⚠️ 流局: 牌墙耗尽 round=${round} wallIdx=${g.wallIdx}/${g.deck.length}`)
@@ -1772,7 +1787,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         settlementLog, snapshots: [], roundNum: turn, winnersThisGame: [], turnSnapshots
       } as GameResult
     }
-    if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); recordTurnSnapshot(curr, tileStr(drawn), '-'); continue }
+    if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); recordTurnSnapshot(curr, tileStr(drawn), '-', { actionType: 'flower', flowerTile: tileStr(drawn), wallBefore: wallBeforeAction }); continue }
     log(player.name, '摸牌', tileStr(drawn))
     if (player.name === 'AI-AK' || player.name === 'AI-阿水') {
       const h = player.hand.length, m = player.exposedMelds.length
@@ -1886,7 +1901,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     g.discardPile.push(discard)
     g.playerDiscards[curr].push(discard)
     log(player.name, '出牌', `${tileStr(discard)} [手牌: ${player.hand.map(t => tileStr(t)).join(' ')}]`)
-    recordTurnSnapshot(curr, tileStr(drawn), tileStr(discard))  // 每回合快照：显示本回合摸打
+    recordTurnSnapshot(curr, tileStr(drawn), tileStr(discard), { actionType: 'draw-discard', wallBefore: wallBeforeAction })
     if (player.name === 'AI-AK' || player.name === 'AI-阿水') {
       const h = player.hand.length, m = player.exposedMelds.length
       const ids = player.hand.map(t => t.id.slice(-4)).join(',')
@@ -1918,6 +1933,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           // score = finalPoints = baseFan × extraMultipliers × globalMultiplier，已包含全局倍数，recordPayment直接用score
           recordPayment(player.name, opp.name, score, '放炮', baseFan, g.gameMultiplier)
           log(opp.name, '放炮胡', `${player.name}出${tileStr(discard)}→${opp.hand.map(t => tileStr(t)).join(' ')} [${score}]`)
+          recordTurnSnapshot(other, '-', '-', { actionType: 'discard-win', claimTile: tileStr(discard), claimFrom: player.name, winType: '放冲', winTile: tileStr(discard), wallBefore: g.wallIdx })
           // 【修复】直接用 calcScore 返回的 handTypeName，绝不依赖 reporter 里的二次 detectHandTypes 调用
           // 根因：canWin 已在游戏循环中以 normalizedHand（player.hand 的 shallow copy）调用过，
           // 导致 opp.hand 被 JS 引用污染，后续 detectHandTypes 参数状态与 calcScore 内部不一致
@@ -1981,7 +1997,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           opp.hand = opp.hand.filter(t => t.id !== kongDiscard.id)
           g.discardPile.push(kongDiscard)
           // 【修复】明杠后出牌写入 snapshot（drawnTile=补摸牌，discardedTile=明杠后打出的牌）
-          recordTurnSnapshot(otherIdx, extra && !isFlower(extra) ? tileStr(extra) : '-', tileStr(kongDiscard))
+          recordTurnSnapshot(otherIdx, extra && !isFlower(extra) ? tileStr(extra) : '-', tileStr(kongDiscard), { actionType: 'ming-gang-discard', claimTile: tileStr(discard), claimFrom: g.players[curr].name, wallBefore: g.wallIdx })
           g.current = (otherIdx + 1) % 4
           meldTaken = true
           break
@@ -2035,7 +2051,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           opp.hand = opp.hand.filter(t => t.id !== pengDiscard.id)
           g.discardPile.push(pengDiscard)
           // 【修复】碰后出牌写入 snapshot（碰家无摸牌，drawnTile='-'）
-          recordTurnSnapshot(otherIdx, '-', tileStr(pengDiscard))
+          recordTurnSnapshot(otherIdx, '-', tileStr(pengDiscard), { actionType: 'peng-discard', claimTile: tileStr(discard), claimFrom: g.players[curr].name, wallBefore: g.wallIdx })
           console.error(`[PENG_SUCCESS] ${opp.name} now hand=${opp.hand.length} melds=${opp.exposedMelds.length}`)
           g.current = (otherIdx + 1) % 4  // K哥铁律：碰后下家摸牌，不是碰家继续
           meldTaken = true
@@ -2082,7 +2098,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       nextP.hand = nextP.hand.filter(t => t.id !== chowDiscard.id)
       g.discardPile.push(chowDiscard)
       // 【修复】吃后出牌写入 snapshot（吃家无摸牌，drawnTile='-'）
-      recordTurnSnapshot(nextPlayer, '-', tileStr(chowDiscard))
+      recordTurnSnapshot(nextPlayer, '-', tileStr(chowDiscard), { actionType: 'chow-discard', claimTile: tileStr(discard), claimFrom: g.players[curr].name, wallBefore: g.wallIdx })
       meldTaken = true
       g.current = (nextPlayer + 1) % 4  // K哥铁律：吃后下家摸牌，不是吃家继续
       break  // 吃后退出循环，防止其他家继续碰/杠
@@ -2302,7 +2318,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
       // === 用 winnersThisGame（runGame 里每个赢家直接 push 的）统计 ===
       const winnerCount = gameWinners.length
       if (winnerCount > 0) {
-        if (winnerCount >= 2) fightToLastGames++
+        if (winnerCount === 3) fightToLastGames++
         if (winnerCount >= 1) multiWinDist[Math.min(winnerCount, 4) - 1]++
         winnerInstances += gameWinners.length
         for (const w of gameWinners) {
@@ -2546,7 +2562,7 @@ function main() {
     if (DETAIL_MODE && bestEvalResult) {
       const report = buildRoundReport(round, bestEvalResult, roundBestPolicy as any, AI_NAMES, 'train-ai-ak.ts')
       roundReports.push(report)
-      const filename = writeRoundFile(OUT_DIR, report, true)  // showDetail=true
+      const filename = writeRoundFile(OUT_DIR, report, DETAIL_MODE)
       console.log(`  → 轮次详情已保存: ${filename}`)
     } else if (!DETAIL_MODE) {
       // 依然构建 report（用于汇总），但不写 round 文件
