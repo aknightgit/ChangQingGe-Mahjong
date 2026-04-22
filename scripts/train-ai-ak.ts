@@ -2123,6 +2123,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         turnSnapshots,
       }
     }
+  }
+
   // 牌墙耗尽：循环正常结束后（consecutiveDraws 未超限但 wall 已空）
   if (winnersThisGame.length > 0) {
     return buildResult(winnersThisGame[0].playerIndex, '流局', 0, '流局', 0, undefined)
@@ -2709,6 +2711,19 @@ let finalEvalLines: string[] = []
 }
 
 // Only run when executed directly (not imported)
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1])) main()
+function isDirectRun(): boolean {
+  const argv1 = process.argv[1]
+  if (!argv1) return false
+  try {
+    const entryPath = fs.realpathSync(path.resolve(argv1))
+    const modulePath = fs.realpathSync(fileURLToPath(import.meta.url))
+    return entryPath === modulePath
+  } catch {
+    return path.resolve(argv1) === fileURLToPath(import.meta.url)
+      || path.basename(argv1) === path.basename(fileURLToPath(import.meta.url))
+  }
+}
 
+if (isDirectRun()) {
+  main()
 }
