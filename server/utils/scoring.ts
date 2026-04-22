@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 长清阁麻将 - 番数计算系统
  * 
  * 两种计算方式:
@@ -1057,12 +1057,15 @@ export function calculateSettlementByRules(
  * 计算回合倍数
  */
 export function calculateRoundMultiplier(dice1: number, dice2: number): number {
-  const sum = dice1 + dice2;
   const isDouble = dice1 === dice2;
+  const isOneFourCombo = (dice1 === 1 && dice2 === 4) || (dice1 === 4 && dice2 === 1);
 
   if (isDouble) {
     if (dice1 === 1 || dice1 === 4) return 4; // 1+1=×4, 4+4=×4
     return 2; // 其他对子=×2
+  }
+  if (isOneFourCombo) {
+    return 2; // 1+4 / 4+1 = ×2
   }
   return 1; // 非对子=×1
 }

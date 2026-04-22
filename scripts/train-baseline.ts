@@ -1148,8 +1148,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: numbe
   const recordSnapshots = (): PlayerSnapshot[] => {
     return g.players.map(p => {
       const wildTileName = (g.wildSuit && g.wildValue) ? tileStr({suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭'
-      const fullHandTiles = [...normalizeHand(p.hand), ...p.exposedMelds.flatMap(m => m.tiles)]
-      const sortedHand = sortTiles(fullHandTiles)
+      const concealedTiles = normalizeHand(p.hand).filter(t => !isFlower(t))
+      const sortedHand = sortTiles(concealedTiles)
       const handWithWildMark = sortedHand.map(t => {
         const base = tileStr(t)
         return (g.wildSuit && g.wildValue && t.suit === g.wildSuit && t.value === g.wildValue) ? base + '*' : base
@@ -1237,8 +1237,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: numbe
       const concealedTiles = !isSelfDraw && winningTile
         ? normalizeHand(player.hand).filter(t => !(t.id === winningTile.id))
         : normalizeHand(player.hand)
-      const displayTiles = [...concealedTiles, ...player.exposedMelds.flatMap(m => m.tiles)]
-      const displayHand = sortTiles([...displayTiles]).map(t => {
+      const displayHand = sortTiles([...concealedTiles]).map(t => {
         const base = tileStr(t)
         return (g.wildSuit && g.wildValue && t.suit === g.wildSuit && t.value === g.wildValue) ? `${base}*` : base
       }).join(' ')

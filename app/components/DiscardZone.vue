@@ -35,10 +35,10 @@ const props = defineProps<{
 
 const layout = computed(() => {
   if (props.position === 'left' || props.position === 'right') {
-    return { cols: 3, rows: 8, width: 102, height: 258, cellW: 34, cellH: 32 }
+    return { cols: 3, rows: 8, width: 126, height: 232, cellW: 42, cellH: 29 }
   }
 
-  return { cols: 8, rows: 3, width: 248, height: 104, cellW: 31, cellH: 34 }
+  return { cols: 8, rows: 3, width: 232, height: 118, cellW: 29, cellH: 38 }
 })
 
 const maxTiles = computed(() => layout.value.cols * layout.value.rows)
@@ -89,7 +89,7 @@ function slotStyle(index: number) {
 .discard-item {
   position: absolute;
   width: 28px;
-  height: 34px;
+  height: 40px;
 }
 
 .discard-item--top {

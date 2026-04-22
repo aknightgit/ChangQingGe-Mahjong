@@ -42,6 +42,8 @@ const LAND_DURATION = 260
 const ROLL_DURATION = 1180
 const IDLE_TILT_X = -0.58
 const IDLE_TILT_Y = 0.72
+const LANDED_TILT_X = 0
+const LANDED_TILT_Y = 0
 
 function clampValue(value: number) {
   return Math.min(6, Math.max(1, Math.round(value || 1)))
@@ -106,8 +108,8 @@ function orientationForFrontFace(value: number) {
   const eulerMap: Record<number, [number, number, number]> = {
     1: [-Math.PI / 2, 0, 0],
     2: [0, 0, 0],
-    3: [0, Math.PI / 2, 0],
-    4: [0, -Math.PI / 2, 0],
+    3: [0, -Math.PI / 2, 0],
+    4: [0, Math.PI / 2, 0],
     5: [0, Math.PI, 0],
     6: [Math.PI / 2, 0, 0],
   }
@@ -246,9 +248,13 @@ function renderFrame(now: number) {
     const t = Math.min(1, elapsed / LAND_DURATION)
     const bounce = Math.sin((1 - t) * Math.PI * 2.4) * 0.06 * (1 - t)
     displayGroup.position.set(0, -Math.abs(bounce), 0)
-    displayGroup.rotation.x = IDLE_TILT_X
-    displayGroup.rotation.y = IDLE_TILT_Y
-    dicePivot.quaternion.slerp(targetQuat, 0.18 + t * 0.22)
+    displayGroup.rotation.x = LANDED_TILT_X
+    displayGroup.rotation.y = LANDED_TILT_Y
+    if (t >= 0.96) {
+      dicePivot.quaternion.copy(targetQuat)
+    } else {
+      dicePivot.quaternion.slerp(targetQuat, 0.28 + t * 0.28)
+    }
     shadowMesh.position.x = 0
     shadowMesh.scale.set(1, 0.72, 1)
     ;(shadowMesh.material as import('three').MeshBasicMaterial).opacity = 0.22

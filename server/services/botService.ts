@@ -191,7 +191,7 @@ function loadCharacterPolicy(botName: string): any {
         allPungsPursuit: 0,     // 碰碰胡追求：越高越不愿吃顺
         pureFlushPursuit: 0,
         halfFlushWeight: 0,
-        wildKeepPenalty: 10,
+        wildKeepPenalty: 0,
         dominantSuitBonus: 3.0,
         tripletKeepBonus: 1.0,
         pairWeight: 8.0,
@@ -648,18 +648,27 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   
   const hand = player.hand.concealedTiles
   if (hand.length === 0) return ''
+  const nonWildHand = hand.filter(tile => !isWildTile(tile, game))
+  const discardCandidates = nonWildHand.length > 0 ? nonWildHand : hand
 
   const exposedCount = player.hand.exposedMelds.length
   const wildChecker = (tile: Tile) => isWildTile(tile, game)
 
-  let bestTile = hand[0]
+  let bestTile = discardCandidates[0]
   let bestShanten = Infinity
   let bestEffective = -1
   let bestScore = -Infinity
 
-  for (let i = 0; i < hand.length; i++) {
-    const tile = hand[i]
-    const remaining = hand.filter((_, idx) => idx !== i)
+  for (let i = 0; i < discardCandidates.length; i++) {
+    const tile = discardCandidates[i]
+    let removed = false
+    const remaining = hand.filter(candidate => {
+      if (!removed && candidate.id === tile.id) {
+        removed = true
+        return false
+      }
+      return true
+    })
 
     const shanten = calculateShanten(remaining, exposedCount, wildChecker)
     const effective = countEffectiveTiles(remaining, exposedCount, wildChecker)

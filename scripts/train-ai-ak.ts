@@ -1623,15 +1623,13 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     return groups
   }
   const recordWinner = (p: BotPlayer, idx: number, isSelfDraw: boolean, wonFan: number, baseFan: number, roundNum: number, winningTile?: string) => {
-    // 手牌分组：按花色分组，普通牌在前，百搭在后并加(*)
-    // 重要：完整手牌 = 当前手牌 + 所有副露面子里的牌（与 recordSnapshots 一致）
+    // 手牌只记录隐藏手；副露永远单独记录，避免日志和 reporter 重复拼装出非法胡牌结构
     const wildSuit = p.wildSuit, wildVal = p.wildValue
     const isWT2 = (t: Tile) => wildSuit && wildVal ? t.suit === wildSuit && t.value === wildVal : false
-    const allTiles = [...p.hand, ...p.exposedMelds.flatMap(m => m.tiles)]
-    // 【修复】自摸时 winningTile 已在 p.hand 里（摸牌阶段），排除它避免显示14+张；捉冲时 winningTile 不在手牌里，不过滤
-    const filteredTiles = (isSelfDraw && winningTile)
-      ? allTiles.filter(t => tileStr(t) !== winningTile)
-      : allTiles
+    const concealedTiles = !isSelfDraw && winningTile
+      ? p.hand.filter(t => tileStr(t) !== winningTile)
+      : p.hand
+    const filteredTiles = concealedTiles.filter(t => !isFlower(t))
     const normalTiles = filteredTiles.filter(t => !isFlower(t) && !isWT2(t))
     const wildTiles = filteredTiles.filter(t => !isFlower(t) && isWT2(t))
     const suitGroups: string[] = []
@@ -1665,9 +1663,10 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       const wildSuit = p.wildSuit, wildVal = p.wildValue
       const wildTileStr = (wildSuit && wildVal) ? `${wildSuit}-${wildVal}` : null
       const wildTileName = wildTileStr ? tileStr({suit: wildSuit as TileSuit, value: wildVal, id: '' }) : '(无百搭)'
-      // 完整手牌 = 手牌 + 所有面子里的牌（都算作手牌），百搭加*
-      const fullHandTiles = [...p.hand, ...p.exposedMelds.flatMap(m => m.tiles)]
-      const handWithWildMark = fullHandTiles.map(t => {
+      // 快照里的 hand 只保留隐藏手；副露在 melds 字段单独展示
+      const concealedTiles = normalizeHand(p.hand).filter(t => !isFlower(t))
+      const sortedHand = sortTiles(concealedTiles)
+      const handWithWildMark = sortedHand.map(t => {
         const base = tileStr(t)
         return isWT(t, p) ? base + '*' : base
       }).join(' ')

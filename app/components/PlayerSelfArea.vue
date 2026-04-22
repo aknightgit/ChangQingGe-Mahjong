@@ -272,6 +272,11 @@ const onPointerCancel = () => {
 .meld--flower {
   border-color: transparent !important;
   background: transparent !important;
+  padding: 0 1px 0 0;
+}
+
+.meld--flower + .meld--flower {
+  margin-left: -4px;
 }
 
 /* 暗杠 meld：紫色边框 + 背景 */

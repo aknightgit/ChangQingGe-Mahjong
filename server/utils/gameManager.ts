@@ -1,4 +1,4 @@
-import {
+﻿import {
   GameState,
   GamePhase,
   Player,
@@ -402,6 +402,10 @@ class GameManager {
       if (m.tiles.length === 1 && isFlower(m.tiles[0])) return sum;
       return sum + m.tiles.length;
     }, 0);
+  }
+
+  private getPlayableTileCount(player: Player): number {
+    return player.hand.concealedTiles.length + this.countExposedTilesExcludingFlowerMelds(player);
   }
 
   /**
@@ -1135,8 +1139,13 @@ class GameManager {
             if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
             if (freshGame.currentPlayerIndex !== game.currentPlayerIndex) return;
             this.replaceFlowers(freshGame, dealer);
-            this.handleDraw(freshGame, dealer);
-            freshGame.drawnThisTurn = true; // 【状态机修复】标记已摸牌
+            if (this.getPlayableTileCount(dealer) >= 14) {
+              freshGame.drawnThisTurn = true;
+              console.log(`[start-bot-freeze] Dealer ${dealer.name} reached discard state after flower replacement`);
+            } else {
+              this.handleDraw(freshGame, dealer);
+              freshGame.drawnThisTurn = true; // 【状态机修复】标记已摸牌
+            }
             this.scheduleBotDiscard(gameId, dealer.id);
             await this.persistGame(freshGame);
             this.broadcastGameState(gameId);
@@ -1163,9 +1172,14 @@ class GameManager {
             const nextPlayer = freshGame.players[freshGame.currentPlayerIndex];
             if (nextPlayer && nextPlayer.status === PlayerStatus.PLAYING) {
               this.replaceFlowers(freshGame, nextPlayer);
-              this.handleDraw(freshGame, nextPlayer);
-              freshGame.drawnThisTurn = true; // 【状态机修复】标记已摸牌，防同回合连续摸牌
-              console.log(`[start-freeze] Auto-draw for dealer ${nextPlayer.name}`);
+              if (this.getPlayableTileCount(nextPlayer) >= 14) {
+                freshGame.drawnThisTurn = true;
+                console.log(`[start-freeze] Dealer ${nextPlayer.name} reached discard state after flower replacement`);
+              } else {
+                this.handleDraw(freshGame, nextPlayer);
+                freshGame.drawnThisTurn = true; // 【状态机修复】标记已摸牌，防同回合连续摸牌
+                console.log(`[start-freeze] Auto-draw for dealer ${nextPlayer.name}`);
+              }
             }
             await this.persistGame(freshGame);
             this.broadcastGameState(gameId);
@@ -1312,12 +1326,13 @@ class GameManager {
       if (unreplacedFlowers.length > 0 && game.wall.length > 0) {
         // 仅在手牌未满14张时允许"摸"(执行 replaceFlowers+handleDraw)
         // 若补花后已到14张,应直接允许出牌,不能继续高亮"摸"
-        const exposedTileCount = this.countExposedTilesExcludingFlowerMelds(player);
-        const totalTileCount = player.hand.concealedTiles.length + exposedTileCount;
+        const totalTileCount = this.getPlayableTileCount(player);
         if (totalTileCount < 14) {
           actions.push(ActionType.DRAW);
           return actions;
         }
+        actions.push(ActionType.DISCARD);
+        return actions;
       }
       // 检查造反(五毒散)- 仅第一圈有效
       const wildParts = game.customScoringMode?.split('-');
@@ -1333,8 +1348,7 @@ class GameManager {
       }
 
       // 摸牌:手牌+门口(不含花牌)< 14张时可以摸;每回合只能摸一次
-      const exposedTileCount = this.countExposedTilesExcludingFlowerMelds(player);
-      const totalTileCount = player.hand.concealedTiles.length + exposedTileCount;
+      const totalTileCount = this.getPlayableTileCount(player);
       if (totalTileCount < 14 && game.wall.length > 0 && !game.drawnThisTurn) {
         actions.push(ActionType.DRAW);
       }
@@ -1441,9 +1455,9 @@ class GameManager {
         this.replaceInitialFlowers(game, player);
         // 替换后检查手牌+门口是否已满14张
         {
-          const exposedCount = this.countExposedTilesExcludingFlowerMelds(player);
-          if (player.hand.concealedTiles.length + exposedCount >= 14) {
-            console.warn(`[DRAW] Blocked after flower replace: player ${player.id} has ${player.hand.concealedTiles.length + exposedCount} tiles`);
+          const totalTileCount = this.getPlayableTileCount(player);
+          if (totalTileCount >= 14) {
+            console.warn(`[DRAW] Flower replacement already filled hand: player ${player.id} has ${totalTileCount} playable tiles`);
             game.drawnThisTurn = true; // 标记已处理过摸牌阶段，防止连续摸牌
             break;
           }
@@ -3558,9 +3572,14 @@ class GameManager {
             return;
           }
           this.replaceFlowers(freshGame, nextPlayer);
-          this.handleDraw(freshGame, nextPlayer);
-          freshGame.drawnThisTurn = true; // 【状态机修复】标记已摸牌
-          console.log(`[bot-freeze] Draw done, hand: ${nextPlayer.hand.concealedTiles.length} tiles, scheduling discard`);
+          if (this.getPlayableTileCount(nextPlayer) >= 14) {
+            freshGame.drawnThisTurn = true;
+            console.log(`[bot-freeze] ${nextPlayer.name} already filled hand via flower replacement, scheduling discard`);
+          } else {
+            this.handleDraw(freshGame, nextPlayer);
+            freshGame.drawnThisTurn = true; // 【状态机修复】标记已摸牌
+            console.log(`[bot-freeze] Draw done, hand: ${nextPlayer.hand.concealedTiles.length} tiles, scheduling discard`);
+          }
           this.scheduleBotDiscard(game.gameId, nextPlayer.id);
           await this.persistGame(freshGame);
           this.broadcastGameState(game.gameId);
@@ -3604,12 +3623,23 @@ class GameManager {
             // AI玩家:自动摸牌
             if (this.isPlayerBotControlled(nextPlayer)) {
               this.replaceFlowers(freshGame, nextPlayer);
-              this.handleDraw(freshGame, nextPlayer);
-              freshGame.drawnThisTurn = true; // 【状态机修复】标记已摸牌
-              console.log(`[freeze] Auto-draw for bot ${nextPlayer.name}`);
+              if (this.getPlayableTileCount(nextPlayer) >= 14) {
+                freshGame.drawnThisTurn = true;
+                console.log(`[freeze] ${nextPlayer.name} reached discard state after flower replacement`);
+              } else {
+                this.handleDraw(freshGame, nextPlayer);
+                freshGame.drawnThisTurn = true; // 【状态机修复】标记已摸牌
+                console.log(`[freeze] Auto-draw for bot ${nextPlayer.name}`);
+              }
+              this.scheduleBotDiscard(game.gameId, nextPlayer.id);
             } else {
-              // 人类玩家:不自动摸,清除冻结,广播状态让前端显示"摸"按钮
-              console.log(`[freeze] Human ${nextPlayer.name} freeze expired, waiting for manual draw`);
+              if (this.getPlayableTileCount(nextPlayer) >= 14) {
+                freshGame.drawnThisTurn = true;
+                console.log(`[freeze] Human ${nextPlayer.name} reached discard state after flower replacement`);
+              } else {
+                // 人类玩家:不自动摸,清除冻结,广播状态让前端显示"摸"按钮
+                console.log(`[freeze] Human ${nextPlayer.name} freeze expired, waiting for manual draw`);
+              }
             }
 
             // 超时自动接管:人类玩家连续2回合未操作 → 自动AI托管

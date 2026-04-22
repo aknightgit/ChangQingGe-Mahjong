@@ -84,6 +84,8 @@ test('report no longer emits discard-win inclusion wording', !rendered.includes(
 test('report resolves no-wild flag from score details', rendered.includes('是否算无百搭: 是（无百搭 ×2）'))
 test('global multiplier header no longer mentions flow multiplier multiplication', rendered.includes('全局倍数 = min(8, 骰子倍数 × 继承倍数)'))
 
+test('winner hand block stays separated from meld block', !rendered.includes('鎵嬬墝:') || !rendered.includes('鎵嬬墝: 涓€涓囦竴涓囦竴涓?浜屼竾浜屼竾浜屼竾 涓変竾涓変竾涓変竾 绾腑 绾腑 涔濅竾 浜斾竾 浜斾竾 浜斾竾'))
+
 const suppressedByMultiply = 0.8 * 0.05
 const blendedClaim = combineClaimChance(0.8, 0.05)
 test('claim chance blend no longer collapses to routeProb multiplication', blendedClaim > suppressedByMultiply, `blend=${blendedClaim}, multiply=${suppressedByMultiply}`)

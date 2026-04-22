@@ -12,6 +12,7 @@
         class="action-btn action-btn--small"
         :class="{
           'action-btn--active': hasChow,
+          'action-btn--chow': hasChow,
           'action-btn--highlight': hasChow && !isDelaying,
           'action-btn--highlight-pulse': hasChow
         }"
@@ -330,6 +331,27 @@ onUnmounted(() => {
 
 .action-btn--small.action-btn--highlight-pulse {
   animation: action-breathe 1.35s ease-in-out infinite;
+}
+
+.action-btn--chow.action-btn--highlight {
+  background: linear-gradient(135deg, #1d6ef2, #45a5ff);
+  border-color: rgba(96, 182, 255, 0.92);
+  box-shadow: 0 0 20px rgba(51, 136, 255, 0.42);
+}
+
+.action-btn--chow.action-btn--highlight-pulse {
+  animation: action-breathe 1.15s ease-in-out infinite, chow-glow 1.15s ease-in-out infinite;
+}
+
+@keyframes chow-glow {
+  0%, 100% {
+    box-shadow: 0 0 18px rgba(51, 136, 255, 0.34);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 0 26px rgba(83, 176, 255, 0.54);
+    filter: brightness(1.12);
+  }
 }
 
 .action-btn--small:nth-child(1).action-btn--highlight {

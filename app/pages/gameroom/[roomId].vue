@@ -1250,6 +1250,9 @@ const getDiceRoundMultiplier = (dice1: number, dice2: number) => {
   if (dice1 === dice2) {
     return dice1 === 1 || dice1 === 4 ? 4 : 2
   }
+  if ((dice1 === 1 && dice2 === 4) || (dice1 === 4 && dice2 === 1)) {
+    return 2
+  }
   return 1
 }
 
@@ -2781,15 +2784,15 @@ const forceDiscard = async (p: Player) => {
   padding: 0;
   overflow: hidden;
   --seat-side-inset: 4.8%;
-  --seat-top-inset: 3.8%;
+  --seat-top-inset: 2.8%;
   --seat-bottom-inset: 1.4%;
   --seat-top-width: 58%;
   --seat-bottom-width: 72%;
   --seat-side-width: 96px;
   --seat-side-height: 70%;
-  --discard-top-inset: 25.8%;
+  --discard-top-inset: 24.8%;
   --discard-bottom-inset: 23.8%;
-  --discard-side-inset: 29.4%;
+  --discard-side-inset: 27.4%;
 }
 
 /* 绿色麻将桌布内层 */
