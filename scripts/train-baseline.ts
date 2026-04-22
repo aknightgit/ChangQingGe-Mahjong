@@ -1148,7 +1148,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: numbe
   const recordSnapshots = (): PlayerSnapshot[] => {
     return g.players.map(p => {
       const wildTileName = (g.wildSuit && g.wildValue) ? tileStr({suit: g.wildSuit as TileSuit, value: g.wildValue, id: '' }) : '无百搭'
-      const sortedHand = sortTiles([...normalizeHand(p.hand)])
+      const fullHandTiles = [...normalizeHand(p.hand), ...p.exposedMelds.flatMap(m => m.tiles)]
+      const sortedHand = sortTiles(fullHandTiles)
       const handWithWildMark = sortedHand.map(t => {
         const base = tileStr(t)
         return (g.wildSuit && g.wildValue && t.suit === g.wildSuit && t.value === g.wildValue) ? base + '*' : base
@@ -1202,7 +1203,19 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: numbe
       // tiles from exposed melds were ALREADY consumed from the hand (副露出去) - do NOT add back
       const wsVal = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : null
       const tilesWithWild = player.hand  // use concealed tiles as-is
-      const types = detectHandTypes(tilesWithWild, player.exposedMelds, wsVal)
+      const scorePreview = calculateScore({
+        handTiles: tilesWithWild, exposedMelds: player.exposedMelds,
+        flowerTiles: player.flowerTiles, handTypes: [],
+        isSelfDrawn: isSelfDraw, isKongFlower: isKongWin,
+        isRobbingKong: false, isMenQing: player.exposedMelds.length === 0,
+        wildTileSuit: g.wildSuit, wildTileValue: g.wildValue,
+        rawRoundMultiplier: g.diceMultiplier,
+        rawInheritMultiplier: g.inheritanceMultiplier,
+        settlementMultiplier: SETTLEMENT_MULT
+      })
+      const scoreTypeName = scorePreview.handTypeName || ''
+      const scoreTypeList = scoreTypeName.split(',').map(t => t.trim()).filter(Boolean)
+      const types = scoreTypeList.length > 0 ? scoreTypeList as HandType[] : detectHandTypes(tilesWithWild, player.exposedMelds, wsVal)
       // canWin also check to compare
       const canWinResult = canWin(tilesWithWild, player.exposedMelds, wsVal)
       const validTypes = types.filter(t => t !== HandType.STANDARD)
@@ -1221,9 +1234,10 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: numbe
         settlementMultiplier: SETTLEMENT_MULT
       })
       const finalTypes = validTypes.length > 0 ? validTypes : types
-      const displayTiles = !isSelfDraw && winningTile
+      const concealedTiles = !isSelfDraw && winningTile
         ? normalizeHand(player.hand).filter(t => !(t.id === winningTile.id))
         : normalizeHand(player.hand)
+      const displayTiles = [...concealedTiles, ...player.exposedMelds.flatMap(m => m.tiles)]
       const displayHand = sortTiles([...displayTiles]).map(t => {
         const base = tileStr(t)
         return (g.wildSuit && g.wildValue && t.suit === g.wildSuit && t.value === g.wildValue) ? `${base}*` : base
@@ -1353,7 +1367,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: numbe
     turn = round
     const drawn = drawTile(g, player)
     if (!drawn) return buildDrawResult()
-    if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); prevFlower = drawn; prevDrawn = null; prevDiscard = null as Tile | null; recordTurnSnapshot(curr); continue }
+    if (isFlower(drawn)) { log(player.name, '补花', tileStr(drawn)); prevFlower = drawn; prevDrawn = null; prevDiscard = null as Tile | null; recordTurnSnapshot(curr, { actionType: 'flower', flowerTile: tileStr(drawn) }); continue }
     log(player.name, '摸牌', tileStr(drawn))
     prevDrawn = drawn
     prevFlower = null

@@ -1602,10 +1602,10 @@ const canSubmitDiscard = (tile: Tile) => {
 const commitDiscard = (tile: Tile) => {
   if (!canSubmitDiscard(tile)) return
   pendingDiscardTileId.value = tile.id
+  selectedTileId.value = null
   resetAutoCount()
   playSound('tile-discard')
   executeAction(ActionType.DISCARD, tile.id)
-  selectedTileId.value = null
 }
 
 // 拖拽超出阈值 → 直接出牌
@@ -1622,20 +1622,18 @@ const handleTileDblclick = (tile: Tile) => {
 
 const handleTileClick = (tile: Tile) => {
   if (isWinner.value || isInteractionLocked.value || isActionPending.value) return
-  
+  if (pendingDiscardTileId.value) return
+
   // 如果需要摸牌（showDraw为true），禁止点击手牌出牌
   if (showDraw.value) {
     return
   }
-  
-  // If it's our turn and we can discard
+
   const canDiscard = availableActions.value.includes(ActionType.DISCARD)
-  
+  if (!canDiscard) return
+
   if (selectedTileId.value === tile.id) {
-    if (canDiscard && canSubmitDiscard(tile)) {
-      // 二次点击 → 直接出牌
-      commitDiscard(tile)
-    }
+    commitDiscard(tile)
   } else {
     selectedTileId.value = tile.id
   }
@@ -1920,12 +1918,12 @@ watch(
 )
 
 watch(
-  [() => availableActions.value.join(','), () => currentPlayer.value?.id, () => isActionPending.value],
+  [() => availableActions.value.join(','), () => currentPlayer.value?.id, () => isActionPending.value, () => activePosition.value],
   () => {
     if (!availableActions.value.includes(ActionType.DISCARD) || !isMyTurn.value || !isActionPending.value) {
       pendingDiscardTileId.value = null
     }
-    if (!availableActions.value.includes(ActionType.DISCARD)) {
+    if (!availableActions.value.includes(ActionType.DISCARD) || pendingDiscardTileId.value) {
       selectedTileId.value = null
     }
   },
@@ -2790,8 +2788,8 @@ const forceDiscard = async (p: Player) => {
   --seat-side-width: 96px;
   --seat-side-height: 70%;
   --discard-top-inset: 25.8%;
-  --discard-bottom-inset: 24.8%;
-  --discard-side-inset: 27.4%;
+  --discard-bottom-inset: 23.8%;
+  --discard-side-inset: 29.4%;
 }
 
 /* 绿色麻将桌布内层 */
@@ -3078,8 +3076,8 @@ const forceDiscard = async (p: Player) => {
   left: var(--seat-side-inset);
   top: 50%;
   transform: translateY(-50%);
-  height: var(--seat-side-height);
-  width: var(--seat-side-width);
+  height: calc(var(--seat-side-height) + 4%);
+  width: calc(var(--seat-side-width) + 22px);
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
@@ -3090,8 +3088,8 @@ const forceDiscard = async (p: Player) => {
   right: var(--seat-side-inset);
   top: 50%;
   transform: translateY(-50%);
-  height: var(--seat-side-height);
-  width: var(--seat-side-width);
+  height: calc(var(--seat-side-height) + 4%);
+  width: calc(var(--seat-side-width) + 22px);
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;

@@ -267,6 +267,7 @@ export const useGame = () => {
     if (!gameId.value || !playerId.value) return
     if (gameState.value?.phase === GamePhase.ENDED) return
     if (isActionPending.value) return
+    if (action === 'discard' && !availableActions.value.includes(action)) return
     isActionPending.value = true
 
     try {

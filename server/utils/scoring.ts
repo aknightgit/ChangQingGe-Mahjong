@@ -436,12 +436,13 @@ export function generateWinOptions(params: {
     }
   }
 
-  // 去重（按 label，保留 score 最大者） + 按分数倒序
+  // 去重（按 label + 实际牌型组合，保留 score 最大者） + 按分数倒序
   const labelBest = new Map<string, WinOption>();
   for (const opt of options) {
-    const existing = labelBest.get(opt.label);
+    const key = `${opt.label}|${(opt.handTypes || []).slice().sort().join(',')}`;
+    const existing = labelBest.get(key);
     if (!existing || opt.score > existing.score) {
-      labelBest.set(opt.label, opt);
+      labelBest.set(key, opt);
     }
   }
   const uniqueOptions = Array.from(labelBest.values()).sort((a, b) => b.score - a.score);
@@ -669,6 +670,7 @@ function calculateFormulaFan(
 
 function getHandTypeDisplayName(type: HandType): string {
   const names: Record<HandType, string> = {
+    [HandType.STANDARD]: '普通胡',
     [HandType.FENG_PENG]: '风碰',
     [HandType.ALL_WIND]: '风一色',
     [HandType.QING_PENG]: '清碰',

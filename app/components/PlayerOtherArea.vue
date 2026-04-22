@@ -44,6 +44,17 @@
 
     <template v-else-if="position === 'left'">
       <div class="seat-line seat-line--left">
+        <div v-if="hand.length" class="hand-lane hand-lane--left">
+          <MahjongTile
+            v-for="tile in hand"
+            :key="tile.id"
+            :tile="tile"
+            :small="true"
+            :back="true"
+            :back-scheme="0"
+            :dimmed="isWinner"
+          />
+        </div>
         <div v-if="melds.length" class="meld-lane meld-lane--left">
           <div
             v-for="(m, i) in melds"
@@ -62,33 +73,11 @@
             />
           </div>
         </div>
-        <div v-if="hand.length" class="hand-lane hand-lane--left">
-          <MahjongTile
-            v-for="tile in hand"
-            :key="tile.id"
-            :tile="tile"
-            :small="true"
-            :back="true"
-            :back-scheme="0"
-            :dimmed="isWinner"
-          />
-        </div>
       </div>
     </template>
 
     <template v-else>
       <div class="seat-line seat-line--right">
-        <div v-if="hand.length" class="hand-lane hand-lane--right">
-          <MahjongTile
-            v-for="tile in hand"
-            :key="tile.id"
-            :tile="tile"
-            :small="true"
-            :back="true"
-            :back-scheme="0"
-            :dimmed="isWinner"
-          />
-        </div>
         <div v-if="melds.length" class="meld-lane meld-lane--right">
           <div
             v-for="(m, i) in melds"
@@ -106,6 +95,17 @@
               :dimmed="isWinner"
             />
           </div>
+        </div>
+        <div v-if="hand.length" class="hand-lane hand-lane--right">
+          <MahjongTile
+            v-for="tile in hand"
+            :key="tile.id"
+            :tile="tile"
+            :small="true"
+            :back="true"
+            :back-scheme="0"
+            :dimmed="isWinner"
+          />
         </div>
       </div>
     </template>
@@ -178,7 +178,7 @@ const isConcealedMeld = (meld: Meld): boolean => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 18px;
   height: 100%;
 }
 
@@ -259,9 +259,25 @@ const isConcealedMeld = (meld: Meld): boolean => {
   transform-origin: center;
 }
 
+.hand-lane--left {
+  margin-bottom: 8px;
+}
+
+.meld-lane--left {
+  margin-top: 8px;
+}
+
 .hand-lane--right,
 .meld-lane--right {
   transform: rotate(-90deg);
   transform-origin: center;
+}
+
+.hand-lane--right {
+  margin-top: 8px;
+}
+
+.meld-lane--right {
+  margin-bottom: 8px;
 }
 </style>

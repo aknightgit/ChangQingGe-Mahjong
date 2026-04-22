@@ -364,7 +364,11 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
     }
 
     // 同一局所有赢家
-    const sameGameWins = topWins.filter((t: any) => t.gameIdx === gameIdx)
+    const sameGameWins = (allWinningGames || []).filter((t: any) => t.gameIdx === gameIdx)
+      .sort((a: any, b: any) => {
+        if ((a.roundNum ?? 0) !== (b.roundNum ?? 0)) return (a.roundNum ?? 0) - (b.roundNum ?? 0)
+        return (a.isSelfDraw === b.isSelfDraw) ? 0 : (a.isSelfDraw ? -1 : 1)
+      })
     for (const win of sameGameWins) {
       lines.push(`**玩家: ${win.winnerName}**`)
       const snapHand = snapPlayers[win.winnerName]?.hand || ''
@@ -388,6 +392,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
       const noWildDetail = scoreDetails.find((detail: string) => detail.includes('无百搭'))
       lines.push(`  - 胡牌牌型: ${handTypesStr}`)
       lines.push(`  - 胡牌方式: ${win.isSelfDraw ? '自摸' : '放冲'}`)
+      lines.push(`  - 总点数: ${wonFanDisplay}`)
       lines.push(`  - 公式分解: 基础番${displayBaseFan} × 结算倍数${settlementMult} × 额外倍数${extraMult} × 全局倍数${globalMultStr} = 最终点${wonFanDisplay}`)
       lines.push(`  - 手牌: ${handStr || '(空)'}${handSuffix}`)
       lines.push(`  - 门口牌: ${formatMelds((win as any).melds)}`)
@@ -411,11 +416,13 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
       lines.push('**支付信息（按结算先后顺序）:**')
       for (const s of settlementLog) {
         const amt = Math.abs(s.amount || 0)
-        const fan = s.fan ?? '?'  // baseFan
-        const gm = s.mult ?? multiplier ?? '?'  // BaoMult（来自settlement log）
+        const fan = s.fan ?? '?'
+        const gm = s.mult ?? multiplier ?? '?'
         const fanStr = fan !== '?' ? fan : '?'
         const gmStr = gm !== '?' ? gm : '?'
-        lines.push(`  ${s.from} -> ${s.to}: ${amt} [${s.reason || '结算'}] (${fanStr}×${SETTLEMENT_MULT}×${gmStr}=${amt})`)
+        const reason = s.reason || '结算'
+        const mode = reason.includes('自摸') ? '自摸' : (reason.includes('放炮') || reason.includes('放冲') ? '捉冲' : '结算')
+        lines.push(`  ${s.from} -> ${s.to}: ${amt} [${mode} / ${reason}] (${fanStr}×${SETTLEMENT_MULT}×${gmStr}=${amt})`)
       }
       lines.push('')
     }
@@ -523,9 +530,12 @@ export function buildRoundReport(
   const winningGames = (internalResult.winningGames || []).sort((a: any, b: any) => a.gameIdx - b.gameIdx)
   // topWins: AK's biggest wins (用于每轮展示)
   const topWins = winningGames
-    .filter((w: any) => (w.akDelta ?? 0) > 0)
-    .sort((a: any, b: any) => (b.akDelta ?? 0) - (a.akDelta ?? 0))
-    .slice(0, 3)
+    .slice()
+    .sort((a: any, b: any) => {
+      if ((a.gameIdx ?? 0) !== (b.gameIdx ?? 0)) return (a.gameIdx ?? 0) - (b.gameIdx ?? 0)
+      if ((a.roundNum ?? 0) !== (b.roundNum ?? 0)) return (a.roundNum ?? 0) - (b.roundNum ?? 0)
+      return (a.isSelfDraw === b.isSelfDraw) ? 0 : (a.isSelfDraw ? -1 : 1)
+    })
   // globalMaxWin: 全局最大赢局（跨所有玩家，单局净赢分最高的那一局）
   const sortedByScore = [...winningGames].sort((a: any, b: any) => {
     const scoreA = (a.wonFan ?? 0)
