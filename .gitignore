@@ -26,8 +26,3 @@ logs
 test-results
 playwright-artifacts
 
-# Training outputs
-training-output/*
-!training-output/save/
-training-output/save/*
-!training-output/save/.gitkeep

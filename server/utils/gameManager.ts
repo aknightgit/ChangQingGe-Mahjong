@@ -2316,8 +2316,9 @@ class GameManager {
     }
     game.pendingActions = [];
     game.pengChowConflict = null;
-    game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
-    game.drawnThisTurn = true;
+    // 不设置 currentPlayerIndex = player，避免在定时器触发时被 moveToNextPlayer 跳过
+    // 当前玩家仍是弃牌者，由定时器末尾的 moveToNextPlayer 检查手牌数后正确推进
+    // drawnThisTurn 由各人自己回合的摸牌阶段设置，不在此时设置
     // 碰后手牌排序(百搭置顶)
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
   }
@@ -2372,10 +2373,8 @@ class GameManager {
     player.windScore += 2;
     game.pendingActions = [];
     game.pengChowConflict = null;
-    game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
-    // 补牌
+    // handleDraw 会自动补牌并设置 drawnThisTurn，不需手动设置 currentPlayerIndex
     this.handleDraw(game, player);
-    game.drawnThisTurn = true;
   }
 
   /**
@@ -3557,6 +3556,8 @@ class GameManager {
     console.log(`[moveToNextPlayer] → ${nextPlayer.name} (${this.isPlayerBotControlled(nextPlayer) ? 'BOT' : 'HUMAN'}), freeze: ${freezeMs}ms`);
 
     // 【状态机修复】新回合:重置摸牌状态
+    // 每次轮到新玩家时重置drawnThisTurn，让该玩家能正常摸牌。
+    // 这修复了"在别人回合中声称PENG/KONG后该玩家无法摸牌"的bug。
     game.drawnThisTurn = false;
 
     // 百搭冷冻一圈完成检查：当再次轮到打出百搭的玩家时，解除冷冻
