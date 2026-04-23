@@ -580,25 +580,25 @@
                   <div v-if="actionWindowText" class="inline-action-timer">{{ actionWindowText }}</div>
                   <button
                     v-if="showChow"
-                    class="inline-action-btn inline-action-btn--chow"
+                    class="inline-action-btn inline-action-btn--chow inline-action-btn--claim-pulse"
                     :disabled="isInteractionLocked"
                     @click="onChow"
                   >吃</button>
                   <button
                     v-if="showPeng"
-                    class="inline-action-btn inline-action-btn--peng"
+                    class="inline-action-btn inline-action-btn--peng inline-action-btn--claim-pulse"
                     :disabled="isInteractionLocked"
                     @click="onPeng"
                   >碰</button>
                   <button
                     v-if="showKong || showConcealedKong || showExtendedKong"
-                    class="inline-action-btn inline-action-btn--kong"
+                    class="inline-action-btn inline-action-btn--kong inline-action-btn--claim-pulse"
                     :disabled="isInteractionLocked"
                     @click="handleCircularAction('kong')"
                   >杠</button>
                   <button
                     v-if="showHu"
-                    class="inline-action-btn inline-action-btn--hu"
+                    class="inline-action-btn inline-action-btn--hu inline-action-btn--claim-pulse"
                     :disabled="isInteractionLocked"
                     @click="onHu"
                   >胡</button>
@@ -1598,7 +1598,10 @@ const pendingDiscardTileId = ref<string | null>(null)
 // ===== 出牌 =====
 const canSubmitDiscard = (tile: Tile) => {
   if (isWinner.value || isInteractionLocked.value || isActionPending.value) return false
+  if (!isMyTurn.value) return false
   if (pendingDiscardTileId.value === tile.id) return false
+  const concealedCount = currentPlayer.value?.hand?.concealedTiles?.length || 0
+  if (concealedCount < 2 || concealedCount % 3 !== 2) return false
   return availableActions.value.includes(ActionType.DISCARD)
 }
 
@@ -2830,12 +2833,12 @@ const forceDiscard = async (p: Player) => {
 }
 :deep(.discard-zone--left) {
   top: 50%;
-  left: var(--discard-side-inset);
+  left: calc(var(--discard-side-inset) - 1%);
   transform: translateY(-50%);
 }
 :deep(.discard-zone--right) {
   top: 50%;
-  right: var(--discard-side-inset);
+  right: calc(var(--discard-side-inset) - 2%);
   transform: translateY(-50%);
 }
 
@@ -3176,12 +3179,56 @@ const forceDiscard = async (p: Player) => {
   color: #fff;
   border-color: rgba(239,83,80,0.5);
   font-size: 0.9rem;
-  animation: hu-glow 1s infinite;
 }
 
 @keyframes hu-glow {
   0%, 100% { box-shadow: 0 0 8px rgba(239,83,80,0.4); }
   50% { box-shadow: 0 0 18px rgba(239,83,80,0.8); }
+}
+
+.inline-action-btn--claim-pulse {
+  animation: inline-claim-breathe 1s ease-in-out infinite;
+}
+
+.inline-action-btn--chow.inline-action-btn--claim-pulse {
+  animation: inline-claim-breathe 1s ease-in-out infinite, inline-chow-glow 1s ease-in-out infinite;
+}
+
+.inline-action-btn--peng.inline-action-btn--claim-pulse {
+  animation: inline-claim-breathe 0.98s ease-in-out infinite, inline-peng-glow 0.98s ease-in-out infinite;
+}
+
+.inline-action-btn--kong.inline-action-btn--claim-pulse {
+  animation: inline-claim-breathe 1.02s ease-in-out infinite, inline-kong-glow 1.02s ease-in-out infinite;
+}
+
+.inline-action-btn--hu.inline-action-btn--claim-pulse {
+  animation: inline-claim-breathe 0.92s ease-in-out infinite, inline-hu-glow 0.92s ease-in-out infinite;
+}
+
+@keyframes inline-claim-breathe {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.09); filter: brightness(1.16); }
+}
+
+@keyframes inline-chow-glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(66,165,245,0.45); }
+  50% { box-shadow: 0 0 18px rgba(66,165,245,0.78); }
+}
+
+@keyframes inline-peng-glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(255,152,0,0.45); }
+  50% { box-shadow: 0 0 18px rgba(255,196,77,0.82); }
+}
+
+@keyframes inline-kong-glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(171,71,188,0.45); }
+  50% { box-shadow: 0 0 18px rgba(180,124,255,0.82); }
+}
+
+@keyframes inline-hu-glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(239,83,80,0.5); }
+  50% { box-shadow: 0 0 20px rgba(255,107,107,0.88); }
 }
 
 

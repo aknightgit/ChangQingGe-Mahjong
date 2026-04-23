@@ -491,7 +491,7 @@ class GameManager {
         game.pendingActions = game.pendingActions.filter(pa => !botIds.has(pa.playerId));
       }
 
-      this.persistGame(game);
+      await this.persistGame(game);
       this.broadcastGameState(gameId);
 
       // 如果 bot 碰/杠成功，调度 bot 出牌
@@ -500,6 +500,10 @@ class GameManager {
         if (claimingPlayer && this.isPlayerBotControlled(claimingPlayer)) {
           this.scheduleBotDiscard(gameId, claimingPlayer.id);
         }
+      } else if (game.pendingActions.length === 0) {
+        // 所有 bot 都 PASS 且没有人类 pending 残留时，必须继续推进回合。
+        // 否则会停在弃牌者身上，出现 "Skipped: pending cleared but turn not advanced" 卡死。
+        await this.moveToNextPlayer(game);
       }
     } catch (err) {
       console.error('[BotService] Pending action error:', err);
@@ -1626,8 +1630,8 @@ class GameManager {
     // 检查其他玩家是否可以碰/杠/胡/吃
     this.checkPendingActions(game, tile);
 
-    // 无论是否有 pending action,都立即进入下家(并行推进)
-    // pending action = 抢牌窗口,freeze timer = 决策窗口,谁先完成谁赢
+    // 有 pending action 时,先等待 claim/超时处理完成,再统一推进到下家。
+    // 否则 currentPlayerIndex 可能停留在弃牌者,前端会误以为仍轮到玩家继续出牌。
     await this.persistGame(game);
     this.broadcastGameState(game.gameId);
 
@@ -1636,6 +1640,7 @@ class GameManager {
       this.handleBotPendingActions(game.gameId);
       // 启动 hesitationWindow 超时计时器，处理剩余 pending（人类超时=PASS）
       this.schedulePendingActionTimeout(game.gameId);
+      return;
     }
 
     await this.moveToNextPlayer(game);

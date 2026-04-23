@@ -9,6 +9,19 @@
 import * as fs from 'fs'
 import * as path from 'path'
 
+export function prepareTrainingOutputDir(outDir: string): void {
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
+
+  const saveDir = path.join(outDir, 'save')
+  if (!fs.existsSync(saveDir)) fs.mkdirSync(saveDir, { recursive: true })
+
+  for (const entry of fs.readdirSync(outDir, { withFileTypes: true })) {
+    if (entry.name === 'save') continue
+    const fullPath = path.join(outDir, entry.name)
+    fs.rmSync(fullPath, { recursive: true, force: true })
+  }
+}
+
 export interface PlayerStats {
   name: string
   score: number

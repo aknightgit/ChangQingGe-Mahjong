@@ -22,7 +22,7 @@ import * as path from 'path'
 import { fileURLToPath } from 'url'
 import mysql from 'mysql2/promise'
 import { evaluateAllRoutes, selectDiscard as routeSelectDiscard, shouldClaim as routeShouldClaim, determinePhase, Phase, Route, PARAMS, calcTenpaiDistance as tenpaiDist } from './route-evaluator'
-import { writeRoundFile, buildRoundReport, formatRoundReport, writeIndexFile } from './training-reporter'
+import { writeRoundFile, buildRoundReport, formatRoundReport, writeIndexFile, prepareTrainingOutputDir } from './training-reporter'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -33,7 +33,7 @@ const BASELINE_MODE = process.argv[4] === '--baseline'  // 基线训练:优化�
 const DETAIL_MODE = process.argv.includes('--detail')  // 每圈明细开关,默认关闭
 const SETTLEMENT_MULT = 10
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
-const OUT_DIR = '/data/mahjong-training/training-output'
+const OUT_DIR = path.resolve(__dirname, '..', 'training-output')
 const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000
 
 function toBeijingISOString(date: Date = new Date()): string {
@@ -1980,7 +1980,7 @@ async function main() {
   const policyFile = path.join(OUT_DIR, `best-policy-baseline-${timestamp}.json`)
   const policyLatest = path.join(OUT_DIR, 'best-policy.json')
 
-  if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true })
+  prepareTrainingOutputDir(OUT_DIR)
 
   // 4人共用同一个策略
   let bestPolicy = loadCharacter('AI-AK')

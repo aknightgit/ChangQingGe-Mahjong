@@ -958,7 +958,7 @@ export function canWin(
   if (wildTileId) {
     const wildTileFn = buildWildTileChecker(wildTileId);
     const wildCount = concealed.filter(t => wildTileFn(t)).length;
-    isFourWild = wildCount >= 4;
+    isFourWild = wildCount >= 4 && exposed.length === 0 && isValidHandSize(concealedNonFlower.length);
   }
   if (isFourWild) {
     return { canWin: true, types: [HandType.FOUR_WILD] };

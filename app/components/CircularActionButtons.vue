@@ -24,6 +24,7 @@
         class="action-btn action-btn--small"
         :class="{
           'action-btn--active': hasPeng,
+          'action-btn--peng': hasPeng,
           'action-btn--highlight': hasPeng && !isDelaying,
           'action-btn--highlight-pulse': hasPeng
         }"
@@ -33,14 +34,14 @@
 
       <button
         class="action-btn action-btn--small"
-        :class="{ 'action-btn--active': hasHu, 'action-btn--highlight': hasHu && !isDelaying, 'action-btn--highlight-pulse': hasHu }"
+        :class="{ 'action-btn--active': hasHu, 'action-btn--hu': hasHu, 'action-btn--highlight': hasHu && !isDelaying, 'action-btn--highlight-pulse': hasHu }"
         :disabled="!hasHu || isInteractionLocked || !isConnected"
         @click="$emit('action', 'hu')"
       >胡</button>
 
       <button
         class="action-btn action-btn--small"
-        :class="{ 'action-btn--active': hasKong, 'action-btn--highlight': hasKong && !isDelaying, 'action-btn--highlight-pulse': hasKong }"
+        :class="{ 'action-btn--active': hasKong, 'action-btn--kong': hasKong, 'action-btn--highlight': hasKong && !isDelaying, 'action-btn--highlight-pulse': hasKong }"
         :disabled="!hasKong || isInteractionLocked || !isConnected"
         @click="$emit('action', 'kong')"
       >杠</button>
@@ -343,6 +344,36 @@ onUnmounted(() => {
   animation: action-breathe 1.15s ease-in-out infinite, chow-glow 1.15s ease-in-out infinite;
 }
 
+.action-btn--peng.action-btn--highlight {
+  background: linear-gradient(135deg, #e38b16, #ffc54d);
+  border-color: rgba(255, 197, 77, 0.92);
+  box-shadow: 0 0 20px rgba(255, 180, 48, 0.42);
+}
+
+.action-btn--peng.action-btn--highlight-pulse {
+  animation: action-breathe-strong 1.05s ease-in-out infinite, peng-glow 1.05s ease-in-out infinite;
+}
+
+.action-btn--hu.action-btn--highlight {
+  background: linear-gradient(135deg, #c62828, #ff6b6b);
+  border-color: rgba(255, 120, 120, 0.96);
+  box-shadow: 0 0 22px rgba(255, 90, 90, 0.48);
+}
+
+.action-btn--hu.action-btn--highlight-pulse {
+  animation: action-breathe-strong 0.95s ease-in-out infinite, hu-glow-strong 0.95s ease-in-out infinite;
+}
+
+.action-btn--kong.action-btn--highlight {
+  background: linear-gradient(135deg, #7b3fe4, #b47cff);
+  border-color: rgba(180, 124, 255, 0.92);
+  box-shadow: 0 0 20px rgba(164, 109, 255, 0.42);
+}
+
+.action-btn--kong.action-btn--highlight-pulse {
+  animation: action-breathe-strong 1.1s ease-in-out infinite, kong-glow 1.1s ease-in-out infinite;
+}
+
 @keyframes chow-glow {
   0%, 100% {
     box-shadow: 0 0 18px rgba(51, 136, 255, 0.34);
@@ -351,6 +382,39 @@ onUnmounted(() => {
   50% {
     box-shadow: 0 0 26px rgba(83, 176, 255, 0.54);
     filter: brightness(1.12);
+  }
+}
+
+@keyframes peng-glow {
+  0%, 100% {
+    box-shadow: 0 0 18px rgba(255, 180, 48, 0.38);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(255, 197, 77, 0.62);
+    filter: brightness(1.15);
+  }
+}
+
+@keyframes hu-glow-strong {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(255, 90, 90, 0.42);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 0 34px rgba(255, 90, 90, 0.72);
+    filter: brightness(1.18);
+  }
+}
+
+@keyframes kong-glow {
+  0%, 100% {
+    box-shadow: 0 0 18px rgba(164, 109, 255, 0.38);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(180, 124, 255, 0.64);
+    filter: brightness(1.16);
   }
 }
 
@@ -382,6 +446,15 @@ onUnmounted(() => {
   50% {
     transform: scale(1.08);
     filter: brightness(1.14);
+  }
+}
+
+@keyframes action-breathe-strong {
+  0%, 100% {
+    transform: scale(1.02);
+  }
+  50% {
+    transform: scale(1.16);
   }
 }
 
@@ -435,18 +508,6 @@ onUnmounted(() => {
 
 .action-btn--highlight-pulse {
   transform: scale(1.08);
-  animation: claim-pulse-glow 1s ease-in-out infinite;
-}
-
-@keyframes claim-pulse-glow {
-  0%, 100% {
-    transform: scale(1.04);
-    box-shadow: 0 0 14px rgba(70, 197, 116, 0.4), 0 0 22px rgba(70, 197, 116, 0.25);
-  }
-  50% {
-    transform: scale(1.14);
-    box-shadow: 0 0 22px rgba(70, 197, 116, 0.65), 0 0 36px rgba(70, 197, 116, 0.45);
-  }
 }
 
 /* 离线 */

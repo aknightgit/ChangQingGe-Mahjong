@@ -2,13 +2,13 @@
 import { runGame, loadCharacter, saveCharacter } from './train-ai-ak';
 import * as fs from 'fs';
 import * as path from 'path';
+import { prepareTrainingOutputDir } from './training-reporter';
 
 const ROUNDS = parseInt(process.argv[2] || '1');
 const GAMES = parseInt(process.argv[3] || '100');
-const OUT_DIR = '/data/mahjong-training/training-output';
+const OUT_DIR = path.resolve(process.cwd(), 'training-output');
 
-// Ensure output dir
-if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
+prepareTrainingOutputDir(OUT_DIR);
 
 console.error(`[TRAIN] Starting ${ROUNDS}x${GAMES} training`);
 

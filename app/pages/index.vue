@@ -12,7 +12,7 @@
         <button
           class="mahjong-button primary"
           :disabled="isCreatingGame"
-          @click="openCreateModal(0)"
+          @click.stop="openCreateModal(0)"
         >
           创建新局
         </button>
@@ -175,7 +175,7 @@
 
     <!-- 创建房间参数配置弹窗 -->
       <div v-if="showCreateModal" class="create-overlay" @click.self="showCreateModal = false">
-        <div class="create-modal">
+        <div class="create-modal" @click.stop>
           <h2 class="create-title">🀄 创建牌局</h2>
 
           <div class="create-modal-body">

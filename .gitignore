@@ -24,4 +24,10 @@ logs
 !.env.example
 
 test-results
-playwright-artifactstraining-output/
+playwright-artifacts
+
+# Training outputs
+training-output/*
+!training-output/save/
+training-output/save/*
+!training-output/save/.gitkeep
