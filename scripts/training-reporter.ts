@@ -154,6 +154,16 @@ function parseTileName(name: string): { suit: string; value: number; isWild: boo
   return { suit, value, isWild }
 }
 
+function parseMultiplierFromScoreDetails(details: string[] | undefined, label: '骰子倍数' | '继承倍数'): number | undefined {
+  if (!Array.isArray(details)) return undefined
+  const pattern = new RegExp(`${label}(\\d+)`)
+  for (const line of details) {
+    const match = line.match(pattern)
+    if (match) return Number(match[1])
+  }
+  return undefined
+}
+
 /**
  * 格式化一组牌（分组排序，百搭自动加*）
  * wildTile: 牌面值如 "八条"，匹配到的牌加 * 后缀
@@ -289,15 +299,7 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
   lines.push('')
   lines.push('| 牌型 | 胡牌实例 | 占比 | K哥目标 |')
   lines.push('|------|----------|------|---------|')
-  const dist: Record<string, number> = {}
-  if (allWinningGames && allWinningGames.length > 0) {
-    for (const w of allWinningGames) {
-      const types = w.handTypes && w.handTypes.length > 0 ? w.handTypes : []
-      for (const t of types) dist[t] = (dist[t] || 0) + 1
-    }
-  } else if (metrics.handTypeDist) {
-    for (const [k, v] of Object.entries(metrics.handTypeDist)) dist[k] = (dist[k] || 0) + (v || 0)
-  }
+  const dist = buildHandTypeDistribution(allWinningGames, metrics.handTypeDist)
   const realWinnerInstances = winnerInstances
   const TYPES: [string, string][] = [
     ['混一色', '≥40%'],
@@ -326,19 +328,32 @@ export function formatRoundReport(report: RoundReport, showDetail = true, roundL
     const settlementLog: any[] = result?.settlementLog || []
     const totalChips = settlementLog.reduce((sum: number, s: any) => sum + Math.abs(s.amount || 0), 0)
     // 全局倍数：优先用 w.multiplier（已计算好），fallback 到 gameMeta 反算
-    const multiplier = w.multiplier || (result?.gameMeta ? (result.gameMeta.globalMultiplier || Math.min(8, (result.gameMeta.diceMultiplier || 1) * (result.gameMeta.inheritanceMultiplier || 1))) : 1)
     const wonFan = w.wonFan || 0
     const gameIdx = w.gameIdx
     // 骰子/继承/流局信息：优先从 w.gameMeta（直接来自 runGame），fallback 到 result.gameMeta
     const gm = w.gameMeta || result?.gameMeta || {}
+    const winnerDetail = Array.isArray(result?.winnerDetails) && result.winnerDetails.length > 0
+      ? result.winnerDetails[0]
+      : null
+    const detailLines = (w.scoreDetails || winnerDetail?.details || []) as string[]
 
     const dicePoints = gm.dicePoints ? `${gm.dicePoints[0]}+${gm.dicePoints[1]}` : '?'
-    const diceMult = gm.diceMultiplier ?? '?'
+    const diceMult = gm.diceMultiplier
+      ?? winnerDetail?.diceMultiplier
+      ?? parseMultiplierFromScoreDetails(detailLines, '骰子倍数')
+      ?? '?'
     const flowMult = gm.flowMultiplier ?? '?'
-    const inheritMult = gm.inheritanceMultiplier ?? '?'
+    const inheritMult = gm.inheritanceMultiplier
+      ?? winnerDetail?.inheritMultiplier
+      ?? parseMultiplierFromScoreDetails(detailLines, '继承倍数')
+      ?? '?'
     const prevDraw = gm.prevRoundWasDraw ? '是' : '否'
     const prevRebel = gm.prevRoundWasRebel ? '是' : '否'
 
+    const multiplier = w.multiplier
+      || winnerDetail?.effectiveMultiplier
+      || gm.globalMultiplier
+      || ((diceMult !== '?' && inheritMult !== '?') ? Math.min(8, Number(diceMult) * Number(inheritMult)) : 1)
     const winnerCount = (allWinningGames || []).filter((g: any) => g.gameIdx === gameIdx).length
     lines.push(`**${label}局号: ${gameIdx}**`)
     lines.push(`**结果: ${winnerCount}人胡牌**`)
@@ -477,6 +492,79 @@ function buildGameBuckets(turnSnapshots: any[]): any[][] {
   return buckets.filter(bucket => bucket.some(s => s.drawnTile !== 'NEW_GAME'))
 }
 
+function computeFallbackAverages(winningGames: WinningGameRecord[]): { avgRounds?: number; avgPot?: number } {
+  const byGame = new Map<number, { roundNum: number; totalChips: number }>()
+
+  for (const game of winningGames || []) {
+    const gameIdx = typeof game.gameIdx === 'number' ? game.gameIdx : NaN
+    if (!Number.isFinite(gameIdx) || byGame.has(gameIdx)) continue
+
+    const settlementLog: any[] = game?.result?.settlementLog || []
+    const totalChips = settlementLog.reduce((sum: number, entry: any) => sum + Math.abs(entry?.amount || 0), 0)
+    byGame.set(gameIdx, {
+      roundNum: typeof game.roundNum === 'number' ? game.roundNum : 0,
+      totalChips
+    })
+  }
+
+  if (byGame.size === 0) return {}
+
+  const games = Array.from(byGame.values())
+  return {
+    avgRounds: games.reduce((sum, entry) => sum + entry.roundNum, 0) / games.length,
+    avgPot: games.reduce((sum, entry) => sum + entry.totalChips, 0) / games.length
+  }
+}
+
+function buildHandTypeDistribution(allWinningGames: WinningGameRecord[] | undefined, fallbackDist?: Record<string, number>): Record<string, number> {
+  const dist: Record<string, number> = {}
+  const seenWinnerDetails = new Set<string>()
+
+  for (const game of allWinningGames || []) {
+    const winnerDetails = Array.isArray(game?.result?.winnerDetails) ? game.result.winnerDetails : []
+    if (winnerDetails.length > 0) {
+      for (const detail of winnerDetails) {
+        const winnerKey = `${game.gameIdx}|${detail?.name || detail?.playerName || 'unknown'}|${detail?.handType || detail?.handTypeName || 'unknown'}`
+        if (seenWinnerDetails.has(winnerKey)) continue
+        seenWinnerDetails.add(winnerKey)
+
+        const handType = detail?.handType || detail?.handTypeName
+        if (handType) dist[handType] = (dist[handType] || 0) + 1
+      }
+      continue
+    }
+
+    const types = Array.isArray(game?.handTypes) ? game.handTypes : []
+    for (const type of types) {
+      dist[type] = (dist[type] || 0) + 1
+    }
+  }
+
+  if (Object.keys(dist).length === 0 && fallbackDist) {
+    for (const [key, value] of Object.entries(fallbackDist)) {
+      dist[key] = (dist[key] || 0) + (value || 0)
+    }
+  }
+
+  return dist
+}
+
+function resolveNetWinAmount(game: WinningGameRecord): number {
+  const settlementLog: any[] = game?.result?.settlementLog || []
+  if (settlementLog.length > 0 && game?.winnerName) {
+    const net = settlementLog.reduce((sum: number, entry: any) => {
+      const amount = Number(entry?.amount || 0)
+      if ((entry?.to || '') === game.winnerName) return sum + amount
+      if ((entry?.from || '') === game.winnerName) return sum - amount
+      return sum
+    }, 0)
+    if (net !== 0) return net
+  }
+
+  if (typeof game.akDelta === 'number' && game.akDelta !== 0) return game.akDelta
+  return Number(game.wonFan || 0)
+}
+
 function formatDetailHand(hand: string = '', handCount?: number): string {
   const content = hand || '(空)'
   const count = typeof handCount === 'number' ? handCount : (hand ? hand.split(/\s+/).filter(Boolean).length : 0)
@@ -541,6 +629,7 @@ export function buildRoundReport(
   scriptName?: string
 ): RoundReport {
   const winningGames = (internalResult.winningGames || []).sort((a: any, b: any) => a.gameIdx - b.gameIdx)
+  const fallbackAverages = computeFallbackAverages(winningGames)
   // topWins: AK's biggest wins (用于每轮展示)
   const topWins = winningGames
     .slice()
@@ -551,8 +640,8 @@ export function buildRoundReport(
     })
   // globalMaxWin: 全局最大赢局（跨所有玩家，单局净赢分最高的那一局）
   const sortedByScore = [...winningGames].sort((a: any, b: any) => {
-    const scoreA = (a.wonFan ?? 0)
-    const scoreB = (b.wonFan ?? 0)
+    const scoreA = resolveNetWinAmount(a)
+    const scoreB = resolveNetWinAmount(b)
     return scoreB - scoreA
   })
   const globalMaxWin = sortedByScore.length > 0 ? sortedByScore[0] : null
@@ -586,8 +675,8 @@ export function buildRoundReport(
       fitness: internalResult.metricsFitness,
       handTypeDist,
       winnerInstances: internalResult.winnerInstances || winningGames.length,
-      avgRounds: internalResult.avgRounds,
-      avgPot: internalResult.avgPot,
+      avgRounds: internalResult.avgRounds ?? fallbackAverages.avgRounds,
+      avgPot: internalResult.avgPot ?? fallbackAverages.avgPot,
       avgWinnerPoints: internalResult.avgWinnerPoints,
       highMultGameCount: internalResult.highMultGameCount,
     },
@@ -615,7 +704,12 @@ export function writeRoundFile(outDir: string, report: RoundReport, showDetail =
   if (showDetail && report.turnSnapshots && report.turnSnapshots.length > 0) {
     const detailFilename = `detail-round-${String(report.round).padStart(3, '0')}-${ts}.md`
     const detailPath = path.join(outDir, detailFilename)
-    fs.writeFileSync(detailPath, formatSingleGameDetailLog(report, { forceSingleGame: true }), 'utf-8')
+    const detailGameIdx = (report.turnSnapshots || []).find((snap: any) => typeof snap.gameIdx === 'number')?.gameIdx
+    let detailContent = formatSingleGameDetailLog(report, { forceSingleGame: true })
+    if (detailGameIdx != null) {
+      detailContent = detailContent.replace(/^# .+$/m, `# 第${detailGameIdx}局完整明细`)
+    }
+    fs.writeFileSync(detailPath, detailContent, 'utf-8')
   }
 
   return filename

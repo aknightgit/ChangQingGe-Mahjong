@@ -264,10 +264,10 @@ export const useGame = () => {
   }
 
   const executeAction = async (action: ActionType, tileId?: string, tileIds?: string[], winOptionLabel?: string) => {
-    if (!gameId.value || !playerId.value) return
-    if (gameState.value?.phase === GamePhase.ENDED) return
-    if (isActionPending.value) return
-    if (action === 'discard' && !availableActions.value.includes(action)) return
+    if (!gameId.value || !playerId.value) return false
+    if (gameState.value?.phase === GamePhase.ENDED) return false
+    if (isActionPending.value) return false
+    if (action === 'discard' && !availableActions.value.includes(action)) return false
     isActionPending.value = true
 
     try {
@@ -287,11 +287,14 @@ export const useGame = () => {
       if ((response as any)?.success) {
         updateState((response as any).data)
         await refreshState()
+        return true
       } else {
         console.error('Action failed:', response)
+        return false
       }
     } catch (e) {
       console.error('Error executing action:', e)
+      return false
     } finally {
       isActionPending.value = false
     }

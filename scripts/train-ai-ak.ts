@@ -626,20 +626,24 @@ function canJiaGang(p: BotPlayer): Tile[] {
 // 核心：每吃/碰/杠一口，净减3张手牌（类型无关）
 // hand = 14 - 3*meldCount（摸牌后）
 // hand = 13 - 3*meldCount（出牌后）
-// hand = 11 - 3*meldCount（吃碰后，不摸牌）
-// hand = 10 - 3*meldCount（吃碰后出牌）
+// hand = 14 - 3*meldCount（吃碰后，未出牌；例如首口碰后为11张）
+// hand = 13 - 3*meldCount（吃碰后再出牌）
 // 注意：杠也是一口，扣3张（暗杠4张-补1=净3；jiaKong/明杠：碰的3张不变，只补1打1=净3）
+export function expectedHandCountForPhase(meldCount: number, phase: 'draw' | 'discard' | 'claim' | 'claim_discard'): number {
+  let base: number
+  switch (phase) {
+    case 'draw':          base = 14; break
+    case 'discard':       base = 13; break
+    case 'claim':         base = 14; break
+    case 'claim_discard': base = 13; break
+  }
+  return base - 3 * meldCount
+}
+
 function checkHandInvariant(p: BotPlayer, phase: 'draw' | 'discard' | 'claim' | 'claim_discard'): boolean {
   const len = normalizeHand(p.hand).length
   const meldCount = p.exposedMelds.length  // 所有面子（顺/刻/杠）都算1口
-  let base: number
-  switch (phase) {
-    case 'draw':          base = 14; break  // 摸牌后（出牌前）
-    case 'discard':       base = 13; break  // 出牌后
-    case 'claim':         base = 14; break  // 吃碰后（未出牌，仍是当前动作后的持牌数）
-    case 'claim_discard': base = 13; break  // 吃碰后再出牌
-  }
-  const expected = base - 3 * meldCount
+  const expected = expectedHandCountForPhase(meldCount, phase)
   if (len !== expected) {
     const prevPhase = p._lastPhase || '?'
     const prevHand = p._lastHand || '?'
@@ -1526,7 +1530,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
 interface GameEvent { turn: number; player: string; action: string; detail: string }
 interface SettlementEntry { from: string; to: string; amount: number; reason: string; mult?: number }
 interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers: string[]; meldSources: number[]; wildCount: number; wildTile: string; wonFan?: number; winHandType?: string; status: string }
-interface WinnerInfo { playerIndex: number; name: string; hand: string; melds: string[]; flowers: string[]; isSelfDraw: boolean; wonFan: number; baseFan: number; winHandType: string; roundNum: number; wildTile: string; wildTileValue?: number; isMenQing: boolean; winningTile?: string; handTypes: string[] }
+interface WinnerInfo { playerIndex: number; name: string; hand: string; melds: string[]; flowers: string[]; isSelfDraw: boolean; wonFan: number; baseFan: number; winHandType: string; roundNum: number; wildTile: string; wildTileValue?: number; isMenQing: boolean; winningTile?: string; winningFrom?: string; handTypes: string[] }
 interface GameDiagnostics {
   selfWinOpportunities: number
   selfWinDeclines: number
@@ -1588,6 +1592,7 @@ interface WinningGameRecord {
   wildTile?: string;     // 百搭牌描述
   wildTileValue?: number; // 百搭数值（百搭所在位置）
   winningTile?: string; // 捉冲时对方放冲的牌（用于报告中显示完整手牌）
+  winningFrom?: string; // 捉冲时放冲玩家名称
   result?: any  // GameResult，用于settlementLog
 }
 interface GameResult {
@@ -1602,6 +1607,20 @@ interface GameResult {
 // ========== 手牌规范化（胡牌前必调） ==========
 function normalizeHand(hand: Tile[]): Tile[] {
   return hand.filter(t => t && !isFlower(t))
+}
+
+export function stripWinningTileFromConcealedHand(hand: Tile[], winningTile?: Tile): Tile[] {
+  if (!winningTile) return [...hand]
+
+  let removed = false
+  return hand.filter(tile => {
+    if (removed) return true
+    if (tile?.id === winningTile.id) {
+      removed = true
+      return false
+    }
+    return true
+  })
 }
 
 // ========== 血战到最后一人 ==========
@@ -1782,12 +1801,21 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     }
     return groups
   }
-  const recordWinner = (p: BotPlayer, idx: number, isSelfDraw: boolean, wonFan: number, baseFan: number, roundNum: number, winningTile?: string) => {
+  const recordWinner = (
+    p: BotPlayer,
+    idx: number,
+    isSelfDraw: boolean,
+    wonFan: number,
+    baseFan: number,
+    roundNum: number,
+    winningTile?: Tile,
+    winningFrom?: string
+  ) => {
     // 手牌只记录隐藏手；副露永远单独记录，避免日志和 reporter 重复拼装出非法胡牌结构
     const wildSuit = p.wildSuit, wildVal = p.wildValue
     const isWT2 = (t: Tile) => wildSuit && wildVal ? t.suit === wildSuit && t.value === wildVal : false
     const concealedTiles = !isSelfDraw && winningTile
-      ? p.hand.filter(t => tileStr(t) !== winningTile)
+      ? stripWinningTileFromConcealedHand(p.hand, winningTile)
       : p.hand
     const filteredTiles = concealedTiles.filter(t => !isFlower(t))
     const normalTiles = filteredTiles.filter(t => !isFlower(t) && !isWT2(t))
@@ -1813,7 +1841,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       isSelfDraw, wonFan, baseFan, winHandType: p.winHandType || '', roundNum,
       wildTile: (wildSuit && wildVal) ? tileStr({suit: wildSuit, value: wildVal, id: '' }) : '(无百搭)', wildTileValue: wildVal ?? 0,
       isMenQing: p.exposedMelds.length === 0,
-      winningTile,
+      winningTile: winningTile ? tileStr(winningTile) : undefined,
+      winningFrom,
       handTypes: typeNames,  // 【新增】用于报告玩家明细
     })
   }
@@ -1925,7 +1954,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     log(p.name, '发牌', p.hand.map(t => tileStr(t)).join(' '))
     if (p.name === 'AI-AK' || p.name === 'AI-阿水') {
       const ids = p.hand.map(t => t.id.slice(-4)).join(',')
-      console.error(`[INV_TRACE] DEAL ${p.name} h=${p.hand.length} m=0 exp=14 diff=${p.hand.length-14} wall=${g.wallIdx} flowerTiles=${p.flowerTiles.length} ids=[${ids}] hand=[${sortTiles([...p.hand]).map(tileStrWithId).join(' ')}]`)
+      const expected = expectedHandCountForPhase(0, 'discard')
+      console.error(`[INV_TRACE] DEAL ${p.name} h=${p.hand.length} m=0 exp=${expected} diff=${p.hand.length-expected} wall=${g.wallIdx} flowerTiles=${p.flowerTiles.length} ids=[${ids}] hand=[${sortTiles([...p.hand]).map(tileStrWithId).join(' ')}]`)
     }
   }
 
@@ -1951,7 +1981,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     log(player.name, '摸牌', tileStr(drawn))
     if (player.name === 'AI-AK' || player.name === 'AI-阿水') {
       const h = player.hand.length, m = player.exposedMelds.length
-      console.error(`[INV_TRACE] DRAW ${player.name} h=${h} m=${m} exp=${14-3*m} diff=${h-(14-3*m)} drawn=${tileStrWithId(drawn)} wall=${g.wallIdx} flowers=${player.flowerTiles.length} hand=[${sortTiles(normalizeHand(player.hand)).map(tileStrWithId).join(' ')}] melds=[${player.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
+      const expected = expectedHandCountForPhase(m, 'draw')
+      console.error(`[INV_TRACE] DRAW ${player.name} h=${h} m=${m} exp=${expected} diff=${h-expected} drawn=${tileStrWithId(drawn)} wall=${g.wallIdx} flowers=${player.flowerTiles.length} hand=[${sortTiles(normalizeHand(player.hand)).map(tileStrWithId).join(' ')}] melds=[${player.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
     }
     checkHandInvariant(player, 'draw')  // 摸牌后铁律：14/11/8/5/2张
 
@@ -2082,7 +2113,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     if (player.name === 'AI-AK' || player.name === 'AI-阿水') {
       const h = player.hand.length, m = player.exposedMelds.length
       const ids = player.hand.map(t => t.id.slice(-4)).join(',')
-      console.error(`[INV_TRACE] DISC ${player.name} h=${h} m=${m} exp=${14-3*m} diff=${h-(14-3*m)} discarded=${tileStrWithId(discard)} wall=${g.wallIdx} ids=[${ids}] hand=[${sortTiles(normalizeHand(player.hand)).map(tileStrWithId).join(' ')}] melds=[${player.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
+      const expected = expectedHandCountForPhase(m, 'discard')
+      console.error(`[INV_TRACE] DISC ${player.name} h=${h} m=${m} exp=${expected} diff=${h-expected} discarded=${tileStrWithId(discard)} wall=${g.wallIdx} ids=[${ids}] hand=[${sortTiles(normalizeHand(player.hand)).map(tileStrWithId).join(' ')}] melds=[${player.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
     }
     checkHandInvariant(player, 'discard')  // 出牌后铁律：13/10/7/4/1张
     if (player.exposedMelds.length >= 2) {
@@ -2120,7 +2152,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           opp.winHandType = handTypeName || '普通放冲'
           opp.status = 'won'
           finishedPlayers.add(other)
-          recordWinner(opp, other, false, score, baseFan, turn, tileStr(discard))
+          recordWinner(opp, other, false, score, baseFan, turn, discard, player.name)
           log(opp.name, '胡牌(血战)', `放冲 [${score}]`)
           if (finishedPlayers.size >= 3) {
             return buildResult(other, '放冲', score, opp.winHandType || '放冲', score, curr)
@@ -2224,14 +2256,16 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           meldTaken = true
           if (opp.name === 'AI-AK' || opp.name === 'AI-阿水') {
             const h = opp.hand.length, m = opp.exposedMelds.length
-            console.error(`[INV_TRACE] PENG_APPLY ${opp.name} h=${h} m=${m} exp=${14-3*m} diff=${h-(14-3*m)} removed=${handBeforePeng - h} tile=${tileStrWithId(discard)} wall=${g.wallIdx} hand=[${sortTiles(normalizeHand(opp.hand)).map(tileStrWithId).join(' ')}] melds=[${opp.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
+            const expected = expectedHandCountForPhase(m, 'claim')
+            console.error(`[INV_TRACE] PENG_APPLY ${opp.name} h=${h} m=${m} exp=${expected} diff=${h-expected} removed=${handBeforePeng - h} tile=${tileStrWithId(discard)} wall=${g.wallIdx} hand=[${sortTiles(normalizeHand(opp.hand)).map(tileStrWithId).join(' ')}] melds=[${opp.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
           }
           opp.chowPongExclusion = updateChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)  // K哥铁律：记录碰行动
           checkHandInvariant(opp, 'claim')  // claim后（11/8/5/2张）
           if (opp.name === 'AI-AK' || opp.name === 'AI-阿水') {
             const h = opp.hand.length, m = opp.exposedMelds.length
             const ids = opp.hand.map(t => t.id.slice(-4)).join(',')
-            console.error(`[INV_TRACE] CLAIM ${opp.name} h=${h} m=${m} exp=${14-3*m} diff=${h-(14-3*m)} tile=${tileStrWithId(discard)} wall=${g.wallIdx} ids=[${ids}] hand=[${sortTiles(normalizeHand(opp.hand)).map(tileStrWithId).join(' ')}] melds=[${opp.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
+            const expected = expectedHandCountForPhase(m, 'claim')
+            console.error(`[INV_TRACE] CLAIM ${opp.name} h=${h} m=${m} exp=${expected} diff=${h-expected} tile=${tileStrWithId(discard)} wall=${g.wallIdx} ids=[${ids}] hand=[${sortTiles(normalizeHand(opp.hand)).map(tileStrWithId).join(' ')}] melds=[${opp.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
           }
           const pengDiscard = aiDiscard(opp, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, otherIdx, round * 4 + otherIdx, gameIdx)
           opp.hand = opp.hand.filter(t => t.id !== pengDiscard.id)
@@ -2337,6 +2371,8 @@ interface EvalResult {
   akScore: number; akWins: number
   winRates: Record<string, number>; scores: Record<string, number>
   draws: number
+  avgRounds?: number
+  avgPot?: number
   bigWin: { gameIdx: number; result: GameResult; score: number } | null
   bigLoss: { gameIdx: number; result: GameResult; score: number } | null
   // 模板输出用
@@ -2355,6 +2391,10 @@ interface EvalResult {
   // 每回合快照（--detail 时收集，用于 round 文件每圈明细）
   turnSnapshots: any[]
   diagnostics: EvalDiagnostics
+}
+
+function getTotalSettlementAmount(result: GameResult): number {
+  return (result.settlementLog || []).reduce((sum, entry) => sum + Math.abs(entry?.amount || 0), 0)
 }
 
 function formatDiagnosticsSummary(diag: EvalDiagnostics, totalGames: number): string[] {
@@ -2515,10 +2555,14 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
     gamesWithAkTingButNoAkWinOpportunity: 0,
   }
   prevRoundWasDraw = false
+  let totalRounds = 0
+  let totalPot = 0
 
   for (let g = 0; g < games; g++) {
     const result = runGame(akPolicy, otherPolicies, g)  // 传入 gameIdx 供 snapshot 使用
     if (result) {
+      totalRounds += result.roundNum || 0
+      totalPot += getTotalSettlementAmount(result)
       diagnostics.selfWinOpportunities += result.diagnostics.selfWinOpportunities
       diagnostics.selfWinDeclines += result.diagnostics.selfWinDeclines
       diagnostics.discardWinOpportunities += result.diagnostics.discardWinOpportunities
@@ -2583,7 +2627,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
             akDelta: winnerScore * SETTLEMENT_MULT, result,
             wonFan: w.wonFan, baseFan: w.baseFan, winHandType: w.winHandType,
             wildTile: w.wildTile, wildTileValue: w.wildTileValue,
-            isMenQing: w.isMenQing, winningTile: w.winningTile,
+            isMenQing: w.isMenQing, winningTile: w.winningTile, winningFrom: w.winningFrom,
             flowers: w.flowers,
           })
         }
@@ -2630,6 +2674,8 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
 
   return {
     akScore: scores['AI-AK'], akWins: wins['AI-AK'], winRates, scores, draws,
+    avgRounds: games > 0 ? totalRounds / games : undefined,
+    avgPot: games > 0 ? totalPot / games : undefined,
     bigWin, bigLoss, totalGames: games, winGames, winnerInstances, selfDrawGames, discardWinGames,
     fightToLastGames, bigWinGames, menqingWinGames, metricsFitness: mf, worstSingleLoss,
     winningGames, handTypeDist, multiWinDist,

@@ -483,7 +483,7 @@
             <!-- 桌面中心: 弃牌池 + 牌墙 + 倍数 -->
             <TableCenter
               :remaining-tiles="remainingTileCount"
-              :status-message="showMobileActionNotice ? '有可用操作 — 请向下滚动查看按钮' : turnMessage"
+              :status-message="showMobileActionNotice ? mobileActionNoticeText : turnMessage"
               hint-message="点击选牌，再次点击出牌。操作按钮将根据规则自动显示。"
               :is-winner="isWinner"
               :round-multiplier="roundMultiplier"
@@ -717,9 +717,7 @@
                 <template v-else-if="isAIControlled">
                   🤖 AI托管中
                 </template>
-                <template v-else-if="showMobileActionNotice">
-                  ⚡ 有可用操作
-                </template>
+                <template v-else-if="showMobileActionNotice">{{ mobileActionNoticeText }}</template>
                 <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
                   ⏱ {{ turnTimer }}s
                 </span>
@@ -861,6 +859,7 @@ import DiscardZone from '~/components/DiscardZone.vue'
 import LayoutDebugPanel from '~/components/LayoutDebugPanel.vue'
 import { useGame } from '~/composables/useGame'
 import { useSound } from '~/composables/useSound'
+import { buildDiscardGuardSnapshot, shouldReleasePendingDiscardGuard, type DiscardGuardSnapshot } from '~/utils/discardGuard'
 import { ActionType, GamePhase, GameEndReason, type Tile, type Meld, type Player } from '~/types/game'
 
 const route = useRoute()
@@ -1594,6 +1593,7 @@ const eastIsWinner = computed(() => rightPlayer.value?.status === 'won')
 const selectedTileId = ref<string | null>(null)
 const claimableDiscardTileId = ref<string | null>(null)
 const pendingDiscardTileId = ref<string | null>(null)
+const pendingDiscardSnapshot = ref<DiscardGuardSnapshot | null>(null)
 
 // ===== 出牌 =====
 const canSubmitDiscard = (tile: Tile) => {
@@ -1608,10 +1608,22 @@ const canSubmitDiscard = (tile: Tile) => {
 const commitDiscard = (tile: Tile) => {
   if (!canSubmitDiscard(tile)) return
   pendingDiscardTileId.value = tile.id
+  pendingDiscardSnapshot.value = buildDiscardGuardSnapshot({
+    activePosition: activePosition.value,
+    currentPlayerId: currentPlayer.value?.id || null,
+    concealedCount: currentPlayer.value?.hand?.concealedTiles?.length || 0,
+    discardPileLength: gameState.value?.discardPile?.length || 0,
+    pendingActionsCount: gameState.value?.pendingActions?.length || 0,
+    availableActions: [...availableActions.value]
+  })
   selectedTileId.value = null
   resetAutoCount()
   playSound('tile-discard')
-  executeAction(ActionType.DISCARD, tile.id)
+  void executeAction(ActionType.DISCARD, tile.id).then((success) => {
+    if (success) return
+    pendingDiscardTileId.value = null
+    pendingDiscardSnapshot.value = null
+  })
 }
 
 // 拖拽超出阈值 → 直接出牌
@@ -1924,10 +1936,27 @@ watch(
 )
 
 watch(
-  [() => availableActions.value.join(','), () => currentPlayer.value?.id, () => isActionPending.value, () => activePosition.value],
+  [
+    () => availableActions.value.join(','),
+    () => currentPlayer.value?.id,
+    () => isActionPending.value,
+    () => activePosition.value,
+    () => currentPlayer.value?.hand?.concealedTiles?.length,
+    () => gameState.value?.discardPile?.length,
+    () => gameState.value?.pendingActions?.length
+  ],
   () => {
-    if (!availableActions.value.includes(ActionType.DISCARD) || !isMyTurn.value || !isActionPending.value) {
+    const nextSnapshot = buildDiscardGuardSnapshot({
+      activePosition: activePosition.value,
+      currentPlayerId: currentPlayer.value?.id || null,
+      concealedCount: currentPlayer.value?.hand?.concealedTiles?.length || 0,
+      discardPileLength: gameState.value?.discardPile?.length || 0,
+      pendingActionsCount: gameState.value?.pendingActions?.length || 0,
+      availableActions: [...availableActions.value]
+    })
+    if (pendingDiscardTileId.value && shouldReleasePendingDiscardGuard(pendingDiscardSnapshot.value, nextSnapshot, isMyTurn.value)) {
       pendingDiscardTileId.value = null
+      pendingDiscardSnapshot.value = null
     }
     if (!availableActions.value.includes(ActionType.DISCARD) || pendingDiscardTileId.value) {
       selectedTileId.value = null
@@ -2333,6 +2362,15 @@ const actionWindowText = computed(() => {
 })
 
 const showMobileActionNotice = computed(() => shouldRotateView.value && hasPriorityActions.value)
+const mobileActionNoticeText = computed(() => {
+  const labels: string[] = []
+  if (showHu.value) labels.push('胡')
+  if (showKong.value || showConcealedKong.value || showExtendedKong.value) labels.push('杠')
+  if (showPeng.value) labels.push('碰')
+  if (showChow.value) labels.push('吃')
+  if (!labels.length) return '有可用操作，请向下查看按钮'
+  return `可操作：${labels.join(' / ')}`
+})
 
 const onConcealedKong = () => {
   // We need to know which tiles to kong. 

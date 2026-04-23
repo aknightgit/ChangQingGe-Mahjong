@@ -638,6 +638,29 @@ export function countEffectiveTiles(
   return total
 }
 
+function countPlayableTilesForBot(player: Player): number {
+  const concealed = player.hand.concealedTiles.length
+  const exposed = player.hand.exposedMelds.reduce((sum, meld) => {
+    if (meld.tiles.length === 1 && isFlower(meld.tiles[0])) return sum
+    return sum + meld.tiles.length
+  }, 0)
+  return concealed + exposed
+}
+
+function validateBotDiscardState(player: Player, context: string): void {
+  const concealed = player.hand.concealedTiles.length
+  const exposedMelds = player.hand.exposedMelds.length
+  const playable = countPlayableTilesForBot(player)
+  const validPlayableCounts = new Set([2, 5, 8, 11, 14])
+  const concealedLooksDiscardable = concealed >= 2 && concealed % 3 === 2
+
+  if (!concealedLooksDiscardable || !validPlayableCounts.has(playable)) {
+    console.warn(
+      `[BotHandInvariant] ${player.name} invalid discard state @${context}: concealed=${concealed} exposedMelds=${exposedMelds} playable=${playable}`
+    )
+  }
+}
+
 /**
  * Select the best tile to discard from the player's hand.
  * Returns the tile ID.
@@ -645,6 +668,7 @@ export function countEffectiveTiles(
 export function selectDiscardTile(player: Player, game: GameState): string {
   // Clear shanten cache per decision
   _shantenCache = new Map<string, number>();
+  validateBotDiscardState(player, 'selectDiscardTile')
   
   const hand = player.hand.concealedTiles
   if (hand.length === 0) return ''

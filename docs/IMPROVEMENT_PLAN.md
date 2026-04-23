@@ -1,146 +1,108 @@
-# 麻将训练 & 报告改进计划
+# 麻将项目改进计划
 
-> 建立时间：2026-04-23
-> 状态说明：[TODO] 待修 ｜ [IN_PROGRESS] 进行中 ｜ [DONE] 已修 ｜ [WONT_FIX] 已知不改
-
----
-
-## 一、训练报告层 Bug（5项）
-
-### [TODO] Bug-001：骰子信息显示 "?"
-**文件**：`server/utils/scoring.ts`
-**现象**：最大赢局明细里骰子点数和骰子倍数永远显示 `?`
-```
-骰子点数: ?
-骰子倍数: ×?
-```
-**根因**：`roundMultiplier` 已在 `scoring.ts` 中计算，但输出模板（`details.push`）没有引用该字段。
-**修复方向**：在 `settlementSseLog.details` 的 `globalMultiplier` 分支中输出 `roundMultiplier` 的实际值。
+> 更新日期：2026-04-23
+> 执行原则：先修明确 bug，再处理训练收敛问题
 
 ---
 
-### [TODO] Bug-002：平均回合/平均总筹码 显示 "—"
-**文件**：`scripts/training-reporter.ts`（或对应报告生成处）
-**现象**：`平均回合` 和 `平均总筹码` 两项直接显示 `"—"` 未计算。
-**修复方向**：在报告生成阶段，对所有非流局计算 `roundCount` 总和和 `totalChips` 总和并取均值。
+## 一、当前待修 Bug
+
+### [TODO] Bug-001：玩家在异常场景下可能连续出两次牌
+**优先级**：P0
+
+**现状**
+- 前后端已经加了硬护栏，常规路径基本被封住。
+- 但还没有完成“真人手动点击 + claim/pass 竞争态 + 弱网轮询”下的深度复现验证。
+
+**下一步**
+1. 针对 `pendingActions`、轮询刷新、玩家本地操作状态做一轮完整链路排查。
+2. 增加一条覆盖“玩家出牌后未切到下家却再次点击出牌”的端到端回归。
+3. 若仍可复现，优先检查 `gameManager` 的回合推进与前端 `canDiscard` 状态同步是否存在竞态。
 
 ---
 
-### [TODO] Bug-003：detail-round 文件标题永远是"第1局"
-**文件**：`scripts/training-reporter.ts` 或 `scripts/train-ai-ak.ts`（写文件处）
-**现象**：`detail-round-003-2026-04-23T16-06-41.md` 内含游戏编号 55，但标题写的是"第1局完整明细"。
-**修复方向**：把 `"第1局完整明细"` 改为实际游戏编号（如 `"第55局完整明细"`）。
+### [TODO] Bug-002：训练/报告中的多人胡牌率长期显示 0%
+**优先级**：P1
+
+**现状**
+- 展示层公式还没有做最终验真。
+- 需要确认是上游结果确实没有多人胡，还是 `multiWinDist/settlementLog` 聚合链路仍有漏记。
+
+**下一步**
+1. 抽取一个真实多人胡样本局。
+2. 对照 `settlementLog`、`winnerDetails`、`multiWinDist` 三处数据。
+3. 若上游正确而展示错误，再修报告层；若上游就没写入，则转修训练/结算链。
 
 ---
 
-### [TODO] Bug-004：胡牌牌型分布只统计 AI-AK，不含其他三个玩家
-**文件**：`scripts/training-reporter.ts`
-**现象**：四个人对战，但 `胡牌牌型分布` 表只输出 AI-AK 的数据，`AI-小胖 / AI-阿水 / AI-老赵` 的统计缺失。
-**修复方向**：在报告聚合阶段，收集所有四个玩家的 `detectHandTypes` 结果，汇总到同一张牌型分布表。
+### [TODO] Bug-003：放冲牌与实际手牌展示仍需做端到端确认
+**优先级**：P1
+
+**现状**
+- `train-ai-ak.ts` 已改成按 `tile.id` 精确剥离放冲牌，避免同牌面误删。
+- 但完整“训练结果 -> 报告渲染”链路还没用真实样本做最终验收。
+
+**下一步**
+1. 从最新训练输出里抽一局放冲样本。
+2. 对照 `winningTile`、`winnerHand`、`settlementLog` 是否完全一致。
+3. 如果仍有错位，再追 `scoring/reporter` 的展示拼装逻辑。
 
 ---
 
-### [TODO] Bug-005：多人胡牌率显示 0%，准确性未知
-**文件**：`scripts/training-reporter.ts`
-**现象**：`多人胡牌率` 始终为 0%，但未验证过计算逻辑是否正确。
-**修复方向**：对照 `settlementLog` 实际数据验证多人胡牌（2人+同时胡）的计数逻辑。
+### [TODO] Bug-004：Bot/训练链路的非法手数状态仍需持续监控
+**优先级**：P1
+
+**现状**
+- `BotHandInvariant` 诊断已加到 `botService.ts`。
+- `train-ai-ak.ts` 的 `INV_TRACE` 期望值口径也已修正，假 `diff=-1` 已清掉。
+- 但还需要继续观察是否会出现新的真实非法状态。
+
+**下一步**
+1. 保留现有诊断日志，不先删除。
+2. 每次做游戏流 smoke 或训练最小验证时，重点检查是否出现新的 invariant 告警。
+3. 若有真实告警，再按 `draw/discard/claim/kong` 分阶段补最小回归。
 
 ---
 
-## 二、游戏逻辑 Bug（3项）
+## 二、训练问题（仅在当前 Bug 清空后继续）
 
-### [TODO] Bug-006：手牌数 + 门口牌数 少于14张
-**文件**：`server/services/botService.ts` 及相关手牌/副露渲染逻辑
-**现象**：训练日志中大量出现"手牌13张 + 门口牌0张 = 13张"的情况，不符合麻将14张标准。
-**修复方向**：在 `aiDiscard()` 和 `botService.ts` 中加入校验，确认每次出牌前后手牌数符合 `3n+2` 规则（14/11/8/5/2 张）。
+### [TODO] Train-001：AI-AK 中盘不收敛，长期无法进入听牌/可胡区间
+**优先级**：P3
 
----
+**现状**
+- 主训练入口、参数传递、输出目录、报告生成已基本理顺。
+- `canWin` 假阳性、放冲牌误删、训练日志手数口径等外围问题已清掉。
+- 目前核心现象仍是：AI-AK 在最小验证中几乎不形成真实听口，胡牌率仍接近 0。
 
-### [TODO] Bug-007：放冲牌与实际手牌不一致
-**文件**：`server/utils/scoring.ts` 的 `discarderId` 传值逻辑
-**现象**：赢局55明细中，标注"放冲牌: 四条"，但实际手牌里根本没有四条。
-```
-放冲牌: 四条
-手牌: 六筒* 六筒* 二条 四条 五条 六条 中 中 （手牌里无四条）
-```
-**修复方向**：验证 `settlementSseLog` 里 `discarderId` 是否正确传入了放冲玩家的索引，以及渲染时 `winnerHand` 和 `discardedTile` 的对应关系。
+**下一步**
+1. 继续盯 `aiDiscard()` 的中盘收敛路径，而不是再花时间在 wrapper 上。
+2. 对“即将形成死手”前 2 到 4 步的候选牌评分做更细日志。
+3. 必要时单独回放 `chow/peng` 后的残手推进，确认是策略问题还是规则推进问题。
 
 ---
 
-### [TODO] Bug-008：maxWinAmount / settlementLog.fan 显示异常
-**文件**：`scripts/training-reporter.ts` 的 `recordWinner()` 函数
-**现象**：赢局50中，maxWinAmount 显示与实际结算不符。
-**修复方向**：检查 `recordWinner` 中 `fullHandTiles` 是否正确使用 `手牌+副露` 而非仅手牌。
+### [TODO] Train-002：AI 自摸触发率异常低
+**优先级**：P3
+
+**现状**
+- 训练输出里自摸率长期接近 0。
+- 但在当前阶段，这条更像是上游“根本没进入可胡态”的派生症状。
+
+**下一步**
+1. 先确认 AI 真正出现过多少次自摸可胡机会。
+2. 若后续策略修复后仍然几乎不自摸，再专门检查自摸判定与执行分支。
 
 ---
 
-## 三、策略层问题（高优先级，影响训练收敛）
+## 三、已完成并从计划中移除的事项
 
-### [TODO] Strategy-001：AI-AK 从不主动做牌，500局全靠捉冲胡
-**文件**：`server/services/botService.ts` 的 `aiDiscard()`
-**现象**：
-- 500局训练中 3次胡牌，全是捉冲，0次自摸
-- 诊断：`AI-AK 从未出现可胡机会的局数: 100/100`
-- Fitness 每轮几乎相同（-5093 到 -5143），遗传算法未在学习
-
-**根因初步判断**：
-- `aiDiscard()` 的拆牌惩罚（`nearWeight` / `tripletKeepBonus` 相关）过重
-- 前期强拆门导致正常成型路径被拆烂
-- `canWin` 检查虽然可用，但 `aiDiscard()` 策略没给做牌留空间
-
-**修复方向**：
-1. 在 `aiDiscard()` 中，当手牌数 ≤ 5 时，大幅降低拆门惩罚，优先保成型
-2. 引入"做牌信号"：若某门牌数 ≥ 9 张，压制该门的单张拆出
-3. 在 `evaluateChowValue` 中门清惩罚目前只有 15%，需提升至 ≥50%
-
----
-
-### [TODO] Strategy-002：98%流局率，AI完全不会自摸
-**文件**：`server/services/botService.ts`
-**现象**：即使 `canWin` 函数已知可用，AI 也从不触发自摸。
-**修复方向**：检查 `botService.ts` 的自摸判定逻辑，确认 `selfDrawCheck()` 在 AI 回合有被触发。
-
----
-
-## 四、报告输出规范
-
-### [TODO] Report-001：训练日志输出目录确认
-**说明**：`train-ai-ak.ts` 的 `OUT_DIR` 指向 workspace 下：
-```
-/home/node/.openclaw/workspace/ChangQingGe-Mahjong/training-output/
-```
-需同步更新文档，避免与 `/data/mahjong-training/training-output/` 混淆。
-
----
-
-### [TODO] Report-002：模型名归一化（MyIsland 用量看板）
-**文件**：`MyIsland/server/api/model-usage.get.ts`
-**状态**：仅 `MiniMax M2.7` 修好，仍有以下待处理：
-```
-lmstudio:qwen/qwen3.5-35b-a3b
-lmstudio:qwen/qwen3.5-9b
-openrouter:z-ai/glm-4.5-air:free
-siliconflow:deepseek-ai/DeepSeek-V3.2
-quan2go:gpt-5.4
-quan2go:gpt-5.3-codex
-wincodex:gpt-5.4
-wincodex:gpt-5.3-codex
-wingpt:gpt-5.4
-```
-**修复方向**：在 `normalizeModel()` 函数中添加以上所有前缀的映射。
-
----
-
-## 五、已知高优先级系统问题
-
-### [WONT_FIX] Cron-Voyage：embedding 监控 cron 持续超时
-**文件**：`/home/node/.openclaw/workspace/scripts/voyage-check.sh`
-**状态**：2026-04-23 已改为纯 shell 脚本，不再走 agent 层，理论上已解决，需观察。
-
----
-
-## 更新记录
-
-| 日期 | 更新内容 |
-|------|---------|
-| 2026-04-23 | 初始化文档，整理 5 项报告 Bug、3 项游戏逻辑 Bug、2 项策略问题、2 项报告规范 |
+以下事项已完成，不再继续占用主计划：
+- 训练输出目录统一到项目内 `training-output/`，并保留 `training-output/save/`
+- 训练报告中的骰子倍率/继承倍率/全局倍率 fallback
+- 平均回合、平均总筹码、detail-round 标题、全局最大赢局统计修正
+- 胡牌牌型分布聚合所有赢家
+- 放冲牌按 `tile.id` 精确剥离
+- 训练脚本 `INV_TRACE` 的 `DEAL/DRAW/DISC/CLAIM` 手数期望值统一
+- `pendingActions` 卡死主链路修复
+- 建房双击、吃碰杠胡按钮提示、弃牌区位置微调
+- `P1-2` 操作提示与桌面反馈收口：抢动作提示条、移动端具体操作提示、按钮呼吸提示统一

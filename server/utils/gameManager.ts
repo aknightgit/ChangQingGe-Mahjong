@@ -39,6 +39,11 @@ class GameManager {
   // 原子锁：防止同一游戏并发重复消费 pending actions
   private actionResolutionLocks: Set<string> = new Set();
 
+  private detachTimer<T extends ReturnType<typeof setTimeout>>(timer: T): T {
+    (timer as any)?.unref?.();
+    return timer;
+  }
+
   // Freeze/dealer auto-draw timers(需要在新局开始时清除)
   private freezeTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
@@ -282,7 +287,7 @@ class GameManager {
 
     // 等freeze延迟(1000ms)结束后才开始pending计时
     // 这样human玩家在freeze期间看清UI后,还有完整的1s反应时间
-    const timer = setTimeout(async () => {
+    const timer = this.detachTimer(setTimeout(async () => {
       // 原子保护：若已在消费中则忽略本次触发
       if (this.actionResolutionLocks.has(gameId)) return;
       this.actionResolutionLocks.add(gameId);
@@ -356,7 +361,7 @@ class GameManager {
         this.actionResolutionLocks.delete(gameId);
         this.pendingActionTimers.delete(gameId);
       }
-    }, this.getHesitationWaitMs(gameId)); // 决策犹豫期(训练模式可加速)
+    }, this.getHesitationWaitMs(gameId))); // 决策犹豫期(训练模式可加速)
 
     this.pendingActionTimers.set(gameId, timer);
   }
@@ -1136,7 +1141,7 @@ class GameManager {
     if (dealer) {
       if (this.isPlayerBotControlled(dealer)) {
         // Bot 庄家:freeze 后自动摸+出牌
-        const botTimer = setTimeout(async () => {
+        const botTimer = this.detachTimer(setTimeout(async () => {
           try {
             this.freezeTimers.delete(gameId);
             const freshGame = await this.getGame(gameId);
@@ -1156,7 +1161,7 @@ class GameManager {
           } catch (err) {
             console.error('[start-bot-freeze] Error:', err);
           }
-        }, freezeMs);
+        }, freezeMs));
         this.freezeTimers.set(gameId, botTimer);
       } else {
         // Human 庄家:设置 freeze 让客户端显示冻结进度,到期自动摸
@@ -1164,7 +1169,7 @@ class GameManager {
         await this.persistGame(game);
         this.broadcastGameState(gameId);
 
-        const humanTimer = setTimeout(async () => {
+        const humanTimer = this.detachTimer(setTimeout(async () => {
           try {
             this.freezeTimers.delete(gameId);
             const freshGame = await this.getGame(gameId);
@@ -1190,7 +1195,7 @@ class GameManager {
           } catch (err) {
             console.error('[start-freeze] Error:', err);
           }
-        }, freezeMs);
+        }, freezeMs));
         this.freezeTimers.set(gameId, humanTimer);
       }
     }
@@ -1440,6 +1445,31 @@ class GameManager {
 
     switch (action) {
       case ActionType.DISCARD:
+        {
+          const currentTurnPlayer = game.players[game.currentPlayerIndex];
+          if (!currentTurnPlayer || currentTurnPlayer.id !== player.id) {
+            console.warn(
+              `[DISCARD] Blocked: ${player.name} is not current player (current=${currentTurnPlayer?.name ?? 'none'} index=${game.currentPlayerIndex})`
+            );
+            throw new Error('Not your turn to discard');
+          }
+
+          if (game.pendingActions.length > 0) {
+            console.warn(
+              `[DISCARD] Blocked: ${player.name} attempted discard with pending actions unresolved (${game.pendingActions.length})`
+            );
+            throw new Error('Pending actions must resolve before discarding');
+          }
+
+          const concealedCount = player.hand.concealedTiles.length;
+          if (concealedCount < 2 || concealedCount % 3 !== 2) {
+            console.warn(
+              `[DISCARD] Blocked: ${player.name} has invalid concealed count for discard (${concealedCount})`
+            );
+            throw new Error('Invalid hand state for discard');
+          }
+        }
+
         // 【状态机修复】未摸牌不可出牌
         if (!game.drawnThisTurn) {
           console.warn(`[DISCARD] Blocked: ${player.name} has not drawn yet this turn`);
@@ -1985,7 +2015,7 @@ class GameManager {
 
     const expectedTimestamp = conflict.timestamp;
     const gid = game.gameId;
-    setTimeout(async () => {
+    this.detachTimer(setTimeout(async () => {
       try {
         const freshGame = await this.getGame(gid);
         const freshConflict = freshGame?.pengChowConflict;
@@ -2006,7 +2036,7 @@ class GameManager {
       } catch (e) {
         console.error('[Approval] timeout err:', e);
       }
-    }, this.getHesitationWaitMs(game.gameId));
+    }, this.getHesitationWaitMs(game.gameId)));
   }
 
   private startApproval(
@@ -2068,7 +2098,7 @@ class GameManager {
     // 5秒超时 → 允许低优先级动作
     const ts = game.pengChowConflict.timestamp;
     const gid = game.gameId;
-    setTimeout(async () => {
+    this.detachTimer(setTimeout(async () => {
       try {
         const fg = await this.getGame(gid);
         if (!fg || !fg.pengChowConflict || fg.pengChowConflict.timestamp !== ts) return;
@@ -2089,7 +2119,7 @@ class GameManager {
           this.scheduleBotDiscard(gid, currentPlayer.id);
         }
       } catch (e) { console.error('[Approval] timeout err:', e); }
-    }, this.getHesitationWaitMs(game.gameId));
+    }, this.getHesitationWaitMs(game.gameId)));
   }
 
   private handleChow(game: GameState, player: Player, tileIds?: string[]): void {
@@ -2983,7 +3013,7 @@ class GameManager {
     // 8秒后自动解冻
     const gameId = game.gameId;
     const expectedPlayerId = player.id;
-    setTimeout(async () => {
+    this.detachTimer(setTimeout(async () => {
       try {
         const freshGame = await this.getGame(gameId);
         if (!freshGame) return;
@@ -2997,7 +3027,7 @@ class GameManager {
       } catch (err) {
         console.error('[Think] Error:', err);
       }
-    }, 8000);
+    }, 8000));
 
     // 广播倒计时
     if (this.wsManager) {
@@ -3558,7 +3588,7 @@ class GameManager {
 
     if (this.isPlayerBotControlled(nextPlayer)) {
       const freezeBotIndex = game.currentPlayerIndex;
-      const botFreezeTimer = setTimeout(async () => {
+      const botFreezeTimer = this.detachTimer(setTimeout(async () => {
         try {
           this.freezeTimers.delete(game.gameId);
           const freshGame = await this.getGame(game.gameId);
@@ -3591,7 +3621,7 @@ class GameManager {
         } catch (err) {
           console.error('[bot-freeze] Error:', err);
         }
-      }, freezeMs);
+      }, freezeMs));
       this.freezeTimers.set(game.gameId, botFreezeTimer);
     } else {
       (game as any)._freezeUntil = Date.now() + freezeMs;
@@ -3599,7 +3629,7 @@ class GameManager {
       this.broadcastGameState(game.gameId);
 
       const freezeCurrentIndex = game.currentPlayerIndex;
-      const humanFreezeTimer = setTimeout(async () => {
+      const humanFreezeTimer = this.detachTimer(setTimeout(async () => {
         try {
           this.freezeTimers.delete(game.gameId);
           const freshGame = await this.getGame(game.gameId);
@@ -3658,7 +3688,7 @@ class GameManager {
         } catch (err) {
           console.error('[freeze] Error clearing freeze:', err);
         }
-      }, freezeMs);
+      }, freezeMs));
       this.freezeTimers.set(game.gameId, humanFreezeTimer);
     }
   }
@@ -3677,7 +3707,7 @@ class GameManager {
     const existing = this.autoTakeoverTimers.get(key);
     if (existing) clearTimeout(existing);
 
-    const timer = setTimeout(async () => {
+    const timer = this.detachTimer(setTimeout(async () => {
       this.autoTakeoverTimers.delete(key);
       try {
         const game = await this.getGame(gameId);
@@ -3706,7 +3736,7 @@ class GameManager {
       } catch (err) {
         console.error('[AutoTakeover] Error:', err);
       }
-    }, 60000); // 60秒超时
+    }, 60000)); // 60秒超时
 
     this.autoTakeoverTimers.set(key, timer);
   }
@@ -3734,7 +3764,7 @@ class GameManager {
     const existing = this.botTimers.get(gameId);
     if (existing) clearTimeout(existing);
 
-    const timer = setTimeout(async () => {
+    const timer = this.detachTimer(setTimeout(async () => {
       this.botTimers.delete(gameId);
       try {
         const game = await this.getGame(gameId);
@@ -3771,7 +3801,7 @@ class GameManager {
         return Math.min(30, Math.max(0, waitMs));
       }
       return waitMs + Math.floor(Math.random() * 500);
-    })());  // 训练模式极速响应,实战保留随机人性化延迟
+    })()));  // 训练模式极速响应,实战保留随机人性化延迟
 
     this.botTimers.set(gameId, timer);
   }

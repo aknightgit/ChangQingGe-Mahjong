@@ -7,44 +7,56 @@
     </div>
 
     <!-- 左侧 2×2 小圆：吃/碰/胡/杠 -->
-    <div class="action-grid">
-      <button
-        class="action-btn action-btn--small"
-        :class="{
-          'action-btn--active': hasChow,
-          'action-btn--chow': hasChow,
-          'action-btn--highlight': hasChow && !isDelaying,
-          'action-btn--highlight-pulse': hasChow
-        }"
-        :disabled="!hasChow || isInteractionLocked || !isConnected"
-        @click="$emit('action', 'chow')"
-      >吃</button>
+    <div class="priority-action-group" :class="{ 'priority-action-group--active': hasAnyPriorityAction }">
+      <div
+        v-if="claimPromptText"
+        class="priority-action-badge"
+        :class="`priority-action-badge--${claimPromptTone}`"
+      >
+        <span class="priority-action-badge__dot"></span>
+        <span class="priority-action-badge__label">立即响应</span>
+        <strong>{{ claimPromptText }}</strong>
+      </div>
 
-      <button
-        class="action-btn action-btn--small"
-        :class="{
-          'action-btn--active': hasPeng,
-          'action-btn--peng': hasPeng,
-          'action-btn--highlight': hasPeng && !isDelaying,
-          'action-btn--highlight-pulse': hasPeng
-        }"
-        :disabled="!hasPeng || isInteractionLocked || !isConnected"
-        @click="$emit('action', 'peng')"
-      >碰</button>
+      <div class="action-grid">
+        <button
+          class="action-btn action-btn--small"
+          :class="{
+            'action-btn--active': hasChow,
+            'action-btn--chow': hasChow,
+            'action-btn--highlight': hasChow && !isDelaying,
+            'action-btn--highlight-pulse': hasChow
+          }"
+          :disabled="!hasChow || isInteractionLocked || !isConnected"
+          @click="$emit('action', 'chow')"
+        >吃</button>
 
-      <button
-        class="action-btn action-btn--small"
-        :class="{ 'action-btn--active': hasHu, 'action-btn--hu': hasHu, 'action-btn--highlight': hasHu && !isDelaying, 'action-btn--highlight-pulse': hasHu }"
-        :disabled="!hasHu || isInteractionLocked || !isConnected"
-        @click="$emit('action', 'hu')"
-      >胡</button>
+        <button
+          class="action-btn action-btn--small"
+          :class="{
+            'action-btn--active': hasPeng,
+            'action-btn--peng': hasPeng,
+            'action-btn--highlight': hasPeng && !isDelaying,
+            'action-btn--highlight-pulse': hasPeng
+          }"
+          :disabled="!hasPeng || isInteractionLocked || !isConnected"
+          @click="$emit('action', 'peng')"
+        >碰</button>
 
-      <button
-        class="action-btn action-btn--small"
-        :class="{ 'action-btn--active': hasKong, 'action-btn--kong': hasKong, 'action-btn--highlight': hasKong && !isDelaying, 'action-btn--highlight-pulse': hasKong }"
-        :disabled="!hasKong || isInteractionLocked || !isConnected"
-        @click="$emit('action', 'kong')"
-      >杠</button>
+        <button
+          class="action-btn action-btn--small"
+          :class="{ 'action-btn--active': hasHu, 'action-btn--hu': hasHu, 'action-btn--highlight': hasHu && !isDelaying, 'action-btn--highlight-pulse': hasHu }"
+          :disabled="!hasHu || isInteractionLocked || !isConnected"
+          @click="$emit('action', 'hu')"
+        >胡</button>
+
+        <button
+          class="action-btn action-btn--small"
+          :class="{ 'action-btn--active': hasKong, 'action-btn--kong': hasKong, 'action-btn--highlight': hasKong && !isDelaying, 'action-btn--highlight-pulse': hasKong }"
+          :disabled="!hasKong || isInteractionLocked || !isConnected"
+          @click="$emit('action', 'kong')"
+        >杠</button>
+      </div>
     </div>
 
     <!-- 右侧 大圆：摸 -->
@@ -159,6 +171,21 @@ const effectiveHasVotedLiangShan = computed(() => props.hasVotedLiangshan ?? fal
 
 const hasAnyPriorityAction = computed(() => hasChow.value || hasPeng.value || hasKong.value || hasHu.value)
 const hasAnyAction = computed(() => hasAnyPriorityAction.value || canDraw.value)
+const claimPromptText = computed(() => {
+  const labels: string[] = []
+  if (hasHu.value) labels.push('胡')
+  if (hasKong.value) labels.push('杠')
+  if (hasPeng.value) labels.push('碰')
+  if (hasChow.value) labels.push('吃')
+  return labels.join(' / ')
+})
+const claimPromptTone = computed(() => {
+  if (hasHu.value) return 'hu'
+  if (hasKong.value) return 'kong'
+  if (hasPeng.value) return 'peng'
+  if (hasChow.value) return 'chow'
+  return 'neutral'
+})
 
 const isDelaying = computed(() => {
   if (props.lastStateChangeAt === 0) return false
@@ -267,6 +294,65 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
+}
+
+.priority-action-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.priority-action-group--active {
+  padding: 8px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.priority-action-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.72rem;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.1);
+  animation: priority-badge-pulse 1s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.priority-action-badge__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.95;
+  animation: pulse-dot 0.9s ease-in-out infinite;
+}
+
+.priority-action-badge__label {
+  opacity: 0.82;
+}
+
+.priority-action-badge--chow {
+  background: linear-gradient(135deg, rgba(29, 110, 242, 0.9), rgba(69, 165, 255, 0.7));
+}
+
+.priority-action-badge--peng {
+  background: linear-gradient(135deg, rgba(227, 139, 22, 0.92), rgba(255, 197, 77, 0.72));
+}
+
+.priority-action-badge--kong {
+  background: linear-gradient(135deg, rgba(123, 63, 228, 0.92), rgba(180, 124, 255, 0.72));
+}
+
+.priority-action-badge--hu {
+  background: linear-gradient(135deg, rgba(198, 40, 40, 0.96), rgba(255, 107, 107, 0.76));
 }
 
 /* 基础按钮 */
@@ -458,6 +544,17 @@ onUnmounted(() => {
   }
 }
 
+@keyframes priority-badge-pulse {
+  0%, 100% {
+    transform: translateY(0);
+    filter: brightness(1);
+  }
+  50% {
+    transform: translateY(-1px);
+    filter: brightness(1.12);
+  }
+}
+
 /* 冻结进度动画 */
 .action-btn--freezing {
   border-color: rgba(33, 150, 243, 0.5);
@@ -520,6 +617,8 @@ onUnmounted(() => {
 .action-panel--compact .action-btn--small { width: 36px; height: 36px; font-size: 0.75rem; }
 .action-panel--compact .action-btn--draw { width: 56px; height: 56px; font-size: 1rem; }
 .action-panel--compact .action-grid { gap: 4px; }
+.action-panel--compact .priority-action-group { gap: 4px; padding: 6px; }
+.action-panel--compact .priority-action-badge { font-size: 0.66rem; padding: 3px 8px; }
 
 /* 第二行：特殊操作按钮 */
 .action-grid-secondary {
