@@ -44,6 +44,11 @@ class GameManager {
     return timer;
   }
 
+  private isConcealedDiscardState(player: Player): boolean {
+    const concealedCount = player.hand.concealedTiles.length;
+    return concealedCount >= 2 && concealedCount % 3 === 2;
+  }
+
   // Freeze/dealer auto-draw timers(需要在新局开始时清除)
   private freezeTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
@@ -1147,15 +1152,17 @@ class GameManager {
             const freshGame = await this.getGame(gameId);
             if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
             if (freshGame.currentPlayerIndex !== game.currentPlayerIndex) return;
-            this.replaceFlowers(freshGame, dealer);
-            if (this.getPlayableTileCount(dealer) >= 14) {
+            const liveDealer = freshGame.players[freshGame.currentPlayerIndex];
+            if (!liveDealer || liveDealer.id !== dealer.id || liveDealer.status !== PlayerStatus.PLAYING) return;
+            this.replaceFlowers(freshGame, liveDealer);
+            if (this.getPlayableTileCount(liveDealer) >= 14) {
               freshGame.drawnThisTurn = true;
-              console.log(`[start-bot-freeze] Dealer ${dealer.name} reached discard state after flower replacement`);
+              console.log(`[start-bot-freeze] Dealer ${liveDealer.name} reached discard state after flower replacement`);
             } else {
-              this.handleDraw(freshGame, dealer);
+              this.handleDraw(freshGame, liveDealer);
               freshGame.drawnThisTurn = true; // 【状态机修复】标记已摸牌
             }
-            this.scheduleBotDiscard(gameId, dealer.id);
+            this.scheduleBotDiscard(gameId, liveDealer.id);
             await this.persistGame(freshGame);
             this.broadcastGameState(gameId);
           } catch (err) {
@@ -1462,7 +1469,7 @@ class GameManager {
           }
 
           const concealedCount = player.hand.concealedTiles.length;
-          if (concealedCount < 2 || concealedCount % 3 !== 2) {
+          if (!this.isConcealedDiscardState(player)) {
             console.warn(
               `[DISCARD] Blocked: ${player.name} has invalid concealed count for discard (${concealedCount})`
             );
@@ -3591,11 +3598,13 @@ class GameManager {
           const freshGame = await this.getGame(game.gameId);
           if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
           if (freshGame.currentPlayerIndex !== freezeBotIndex) return; // 已被 claim 接管
+          const livePlayer = freshGame.players[freshGame.currentPlayerIndex];
+          if (!livePlayer || livePlayer.id !== nextPlayer.id || livePlayer.status !== PlayerStatus.PLAYING) return;
           if (freshGame.pendingActions.length > 0) {
-            console.log(`[bot-freeze] Pending actions exist, skipping auto-draw for bot ${nextPlayer.name}`);
+            console.log(`[bot-freeze] Pending actions exist, skipping auto-draw for bot ${livePlayer.name}`);
             return;
           }
-          console.log(`[bot-freeze] Freeze expired for ${nextPlayer.name}, drawing...`);
+          console.log(`[bot-freeze] Freeze expired for ${livePlayer.name}, drawing...`);
           // 牌墙已空 → 流局
           if (freshGame.wall.length === 0) {
             this.endRound(freshGame, GameEndReason.WALL_EXHAUSTED);
@@ -3603,16 +3612,16 @@ class GameManager {
             this.broadcastGameState(game.gameId);
             return;
           }
-          this.replaceFlowers(freshGame, nextPlayer);
-          if (this.getPlayableTileCount(nextPlayer) >= 14) {
+          this.replaceFlowers(freshGame, livePlayer);
+          if (this.getPlayableTileCount(livePlayer) >= 14) {
             freshGame.drawnThisTurn = true;
-            console.log(`[bot-freeze] ${nextPlayer.name} already filled hand via flower replacement, scheduling discard`);
+            console.log(`[bot-freeze] ${livePlayer.name} already filled hand via flower replacement, scheduling discard`);
           } else {
-            this.handleDraw(freshGame, nextPlayer);
+            this.handleDraw(freshGame, livePlayer);
             freshGame.drawnThisTurn = true; // 【状态机修复】标记已摸牌
-            console.log(`[bot-freeze] Draw done, hand: ${nextPlayer.hand.concealedTiles.length} tiles, scheduling discard`);
+            console.log(`[bot-freeze] Draw done, hand: ${livePlayer.hand.concealedTiles.length} tiles, scheduling discard`);
           }
-          this.scheduleBotDiscard(game.gameId, nextPlayer.id);
+          this.scheduleBotDiscard(game.gameId, livePlayer.id);
           await this.persistGame(freshGame);
           this.broadcastGameState(game.gameId);
         } catch (err) {
@@ -3781,12 +3790,23 @@ class GameManager {
           await this.executeAction(gameId, playerId, ActionType.DRAW, undefined);
         }
 
-        const tileId = selectDiscardTile(currentP, game);
+        const refreshedGame = await this.getGame(gameId);
+        if (!refreshedGame || refreshedGame.phase !== GamePhase.PLAYING) return;
+        const refreshedPlayer = refreshedGame.players[refreshedGame.currentPlayerIndex];
+        if (!refreshedPlayer || refreshedPlayer.id !== playerId) return;
+        if (!this.isConcealedDiscardState(refreshedPlayer)) {
+          console.warn(
+            `[bot-discard] ${refreshedPlayer.name} is not in discard state: concealed=${refreshedPlayer.hand.concealedTiles.length}, drawn=${refreshedGame.drawnThisTurn}`
+          );
+          return;
+        }
+
+        const tileId = selectDiscardTile(refreshedPlayer, refreshedGame);
         if (tileId) {
-          console.log(`[bot-discard] ${currentP.name} discarding tile: ${tileId}`);
+          console.log(`[bot-discard] ${refreshedPlayer.name} discarding tile: ${tileId}`);
           await this.executeAction(gameId, playerId, ActionType.DISCARD, tileId);
         } else {
-          console.warn(`[bot-discard] ${currentP.name} has no tile to discard! hand: ${currentP.hand.concealedTiles.length}`);
+          console.warn(`[bot-discard] ${refreshedPlayer.name} has no tile to discard! hand: ${refreshedPlayer.hand.concealedTiles.length}`);
         }
       } catch (err) {
         console.error('[bot-discard] Error:', err);

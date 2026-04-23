@@ -67,6 +67,14 @@ export interface WinningGameRecord {
   winHandType?: string
   isMenQing?: boolean
   winningTile?: string  // 捉冲时对方放冲的牌
+  gameMeta?: {
+    dicePoints?: [number, number]
+    diceMultiplier?: number
+    flowMultiplier?: number
+    inheritanceMultiplier?: number
+    prevRoundWasDraw?: boolean
+    prevRoundWasRebel?: boolean
+  }
   result: any
 }
 

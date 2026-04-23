@@ -146,16 +146,16 @@ const DEFAULT_POLICY: BotPolicy = {
   id: 'default',
   selfWinChance: 0.8, discardHuChance: 0.8,
   selfWinWildBoost: 0.1, discardHuWildPenalty: 0.4, discardHuMenQingPenalty: 0.14,
-  pengChance: 0.7, kongChance: 0.47, chowChance: 0.5, anKongChance: 0.95,  // K哥: 碰率0.7/吃率0.5可训练，吃率上限0.8防无脑吃
+  pengChance: 0.42, kongChance: 0.47, chowChance: 0.74, anKongChance: 0.95,  // 进一步压早碰，放大顺子收敛路线
   pengWildBoost: 0.06, kongWildBoost: 0.14, chowWildPenalty: 0.18,
   menqingKeepBonus: 0, meldPenalty: 0.05,  // K哥基线训练：门清bonus最低
-  allPungsPursuit: 1.5, pureFlushPursuit: 1.5, halfFlushWeight: 1.0,
+  allPungsPursuit: 0.4, pureFlushPursuit: 0.9, halfFlushWeight: 0.95,
   allHonorsPursuit: 1.0, allHonorsPungsPursuit: 1.0,
-  qingPengPursuit: 1.5, hunPengPursuit: 1.5,
+  qingPengPursuit: 0.6, hunPengPursuit: 0.6,
   windEastKeep: 2.0, windSouthKeep: 1.0, windWestKeep: 1.0, windNorthKeep: 1.0,
   windGeneralKeep: 1.5,
   dragonRedKeep: 3.0, dragonGreenKeep: 3.0, dragonWhiteKeep: 2.5, dragonGeneralKeep: 3.0,
-  pairWeight: 4.0, nearWeight: 3.6, tripletKeepBonus: 4.7, terminalPenalty: 1.0,
+  pairWeight: 4.2, nearWeight: 5.6, tripletKeepBonus: 3.8, terminalPenalty: 1.1,
   wildKeepPenalty: 3000, wildBailoutThreshold: 3,  // K哥: 只有极少情况才打百搭，调到最大惩罚
   wild0Aggression: 0.3, wild1Aggression: 0.5, wild2Aggression: 0.7, wild3PlusAggression: 0.9,
   wild1RouteMeldPush: 0.3, wild2RouteMeldPush: 0.6, wild3RouteMeldPush: 0.9,
@@ -168,7 +168,7 @@ const DEFAULT_POLICY: BotPolicy = {
   multLowSpeedBias: 0.6, multHighValueBias: 0.8,
   discardObsFlushBoost: 0.5, discardObsWeight: 0.3,
   bao2ClaimPenalty: 0.5, bao3AvoidThreshold: 0.8, baoSelfClaimCaution: 0.3,
-  wallEarlySpeedPush: 0.3, wallMidBalance: 0.5, wallLateDefense: 0.8,
+  wallEarlySpeedPush: 0.45, wallMidBalance: 0.5, wallLateDefense: 0.8,
   oppTingDetection: 0.5, safeTilePriority: 0.7, terminalDiscardTingSignal: 0.3,
   wildDiaoKeepBonus: 3.0, wildDiaoFlushBoost: 2.0, wildDiaoPungBoost: 2.0,
   scoreBehindRiskBoost: 1.5, scoreLeadDefenseBoost: 1.0,
@@ -180,11 +180,11 @@ const DEFAULT_POLICY: BotPolicy = {
   multLowHand7AllPungs: 0.2, multLowHand7HalfFlush: 0.4, multLowHand7PureFlush: 0.3,
   multHighHand7AllPungs: 0.1, multHighHand7HalfFlush: 0.4, multHighHand7PureFlush: 0.7,
   multHighHonorStart: 0.5,
-  speedVsValueBalance: 0.5, defenseRiskAversion: 0.3, wallTilesImpact: 0.2,
+  speedVsValueBalance: 0.8, defenseRiskAversion: 0.3, wallTilesImpact: 0.2,
   baoRiskAversion: 0.5, baoThreshold: 2,
   anKongAggression: 0.95, minkanAggression: 0.3, kakanAggression: 0.5, robKongAwareness: 0.6,
   noWildDoubleAwareness: 0.5, menqingDoubleAwareness: 0.5,
-  flushVsPungsBalance: 0.0, honorVsSuitedBalance: 0.0, sequenceVsTripletBias: 0.0,
+  flushVsPungsBalance: -0.45, honorVsSuitedBalance: -0.45, sequenceVsTripletBias: 1.3,
 }
 
 // ========== Mutatable parameters for AI-AK (长清阁规则) ==========
@@ -486,6 +486,594 @@ function listReadyDiscardsForHand(handTiles: Tile[], exposedMelds: Meld[], wildT
     }
   }
   return options
+}
+
+function evaluateDiscardAdvancement(handTiles: Tile[], discardTile: Tile, exposedMelds: Meld[], wildTileId: string): {
+  readyWaits: number
+  structureScore: number
+} {
+  const dropIdx = handTiles.findIndex(t => t.id === discardTile.id)
+  const nextHand = handTiles.filter((_, idx) => idx !== dropIdx)
+  const directWaits = listWinningTilesForReadyHand(nextHand, exposedMelds, wildTileId)
+  const structureScore = computeHandStructureScore(nextHand)
+  return { readyWaits: directWaits.length, structureScore }
+}
+
+function computeHandStructureScore(handTiles: Tile[]): number {
+  const tiles = normalizeHand(handTiles)
+  const suitCounts = new Map<string, number[]>()
+  for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS, TileSuit.WIND, TileSuit.DRAGON]) {
+    suitCounts.set(suit, Array(10).fill(0))
+  }
+  for (const tile of tiles) {
+    const counts = suitCounts.get(tile.suit)
+    if (counts) counts[tile.value]++
+  }
+
+  let melds = 0
+  let taatsu = 0
+  let pairs = 0
+  let isolatedPenalty = 0
+  let honorPairBonus = 0
+
+  for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+    const counts = [...(suitCounts.get(suit) || Array(10).fill(0))]
+
+    for (let value = 1; value <= 9; value++) {
+      while (counts[value] >= 3) {
+        counts[value] -= 3
+        melds++
+      }
+    }
+
+    for (let value = 1; value <= 7; value++) {
+      while (counts[value] > 0 && counts[value + 1] > 0 && counts[value + 2] > 0) {
+        counts[value]--
+        counts[value + 1]--
+        counts[value + 2]--
+        melds++
+      }
+    }
+
+    for (let value = 1; value <= 9; value++) {
+      while (counts[value] >= 2) {
+        counts[value] -= 2
+        pairs++
+      }
+    }
+
+    for (let value = 1; value <= 8; value++) {
+      while (counts[value] > 0 && counts[value + 1] > 0) {
+        counts[value]--
+        counts[value + 1]--
+        taatsu++
+      }
+    }
+    for (let value = 1; value <= 7; value++) {
+      while (counts[value] > 0 && counts[value + 2] > 0) {
+        counts[value]--
+        counts[value + 2]--
+        taatsu++
+      }
+    }
+
+    for (let value = 1; value <= 9; value++) {
+      isolatedPenalty += counts[value]
+    }
+  }
+
+  for (const suit of [TileSuit.WIND, TileSuit.DRAGON]) {
+    const counts = suitCounts.get(suit) || Array(10).fill(0)
+    const maxValue = suit === TileSuit.WIND ? 4 : 3
+    for (let value = 1; value <= maxValue; value++) {
+      while (counts[value] >= 3) {
+        counts[value] -= 3
+        melds++
+      }
+      if (counts[value] >= 2) {
+        counts[value] -= 2
+        pairs++
+        honorPairBonus += 1
+      }
+      isolatedPenalty += counts[value]
+    }
+  }
+
+  return melds * 14 + taatsu * 7 + pairs * 4 + honorPairBonus * 2 - isolatedPenalty * 3
+}
+
+function getBestPostDiscardPotential(handTiles: Tile[], exposedMelds: Meld[], wildTileId: string): number {
+  const seen = new Set<string>()
+  let best = Number.NEGATIVE_INFINITY
+  for (const tile of handTiles) {
+    const key = `${tile.suit}-${tile.value}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const adv = evaluateDiscardAdvancement(handTiles, tile, exposedMelds, wildTileId)
+    const score = adv.readyWaits * 100 + adv.structureScore
+    if (score > best) best = score
+  }
+  return Number.isFinite(best) ? best : computeHandStructureScore(handTiles)
+}
+
+function estimateAkUsefulDraws(handTiles: Tile[]): number {
+  const seen = new Set<string>()
+  for (const tile of normalizeHand(handTiles)) {
+    if (isHonor(tile)) {
+      seen.add(`${tile.suit}-${tile.value}`)
+      continue
+    }
+    for (const delta of [-2, -1, 0, 1, 2]) {
+      const value = tile.value + delta
+      if (value >= 1 && value <= 9) {
+        seen.add(`${tile.suit}-${value}`)
+      }
+    }
+  }
+  return seen.size
+}
+
+function estimateAkShapeProgress(handTiles: Tile[]): { melds: number; taatsu: number; pairs: number; shantenLike: number } {
+  const tiles = normalizeHand(handTiles)
+  const suitCounts = new Map<string, number[]>()
+  for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS, TileSuit.WIND, TileSuit.DRAGON]) {
+    suitCounts.set(suit, Array(10).fill(0))
+  }
+  for (const tile of tiles) {
+    const counts = suitCounts.get(tile.suit)
+    if (counts) counts[tile.value]++
+  }
+
+  let melds = 0
+  let taatsu = 0
+  let pairs = 0
+
+  for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+    const counts = [...(suitCounts.get(suit) || Array(10).fill(0))]
+
+    for (let value = 1; value <= 9; value++) {
+      while (counts[value] >= 3) {
+        counts[value] -= 3
+        melds++
+      }
+    }
+    for (let value = 1; value <= 7; value++) {
+      while (counts[value] > 0 && counts[value + 1] > 0 && counts[value + 2] > 0) {
+        counts[value]--
+        counts[value + 1]--
+        counts[value + 2]--
+        melds++
+      }
+    }
+    for (let value = 1; value <= 9; value++) {
+      while (counts[value] >= 2) {
+        counts[value] -= 2
+        pairs++
+      }
+    }
+    for (let value = 1; value <= 8; value++) {
+      while (counts[value] > 0 && counts[value + 1] > 0) {
+        counts[value]--
+        counts[value + 1]--
+        taatsu++
+      }
+    }
+    for (let value = 1; value <= 7; value++) {
+      while (counts[value] > 0 && counts[value + 2] > 0) {
+        counts[value]--
+        counts[value + 2]--
+        taatsu++
+      }
+    }
+  }
+
+  for (const suit of [TileSuit.WIND, TileSuit.DRAGON]) {
+    const counts = suitCounts.get(suit) || Array(10).fill(0)
+    const maxValue = suit === TileSuit.WIND ? 4 : 3
+    for (let value = 1; value <= maxValue; value++) {
+      while (counts[value] >= 3) {
+        counts[value] -= 3
+        melds++
+      }
+      while (counts[value] >= 2) {
+        counts[value] -= 2
+        pairs++
+      }
+    }
+  }
+
+  const cappedTaatsu = Math.min(4 - melds, taatsu + Math.max(0, pairs - 1))
+  const pairReady = pairs > 0 ? 1 : 0
+  const shantenLike = 8 - melds * 2 - cappedTaatsu - pairReady
+  return { melds, taatsu, pairs, shantenLike }
+}
+
+function estimateAkEffectiveProgress(
+  handTiles: Tile[],
+  exposedMeldCount: number
+): { melds: number; taatsu: number; pairs: number; shantenLike: number } {
+  const shape = estimateAkShapeProgress(handTiles)
+  const melds = Math.min(4, exposedMeldCount + shape.melds)
+  const cappedTaatsu = Math.min(Math.max(0, 4 - melds), shape.taatsu + Math.max(0, shape.pairs - 1))
+  const pairReady = shape.pairs > 0 ? 1 : 0
+  const shantenLike = 8 - melds * 2 - cappedTaatsu - pairReady
+  return { melds, taatsu: shape.taatsu, pairs: shape.pairs, shantenLike }
+}
+
+type AkFutureDrawStats = {
+  winDraws: number
+  readyDraws: number
+  shantenImprovingDraws: number
+  totalImprovingDraws: number
+}
+
+function estimateAkFutureDrawStats(handTiles: Tile[], exposedMelds: Meld[], wildTileId: string): AkFutureDrawStats {
+  const baseline = estimateAkEffectiveProgress(handTiles, exposedMelds.length).shantenLike
+  const candidates: Tile[] = []
+  for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+    for (let value = 1; value <= 9; value++) {
+      candidates.push({ suit, value, id: `sim-${suit}-${value}` })
+    }
+  }
+  for (let value = 1; value <= 4; value++) {
+    candidates.push({ suit: TileSuit.WIND, value, id: `sim-feng-${value}` })
+  }
+  for (let value = 1; value <= 3; value++) {
+    candidates.push({ suit: TileSuit.DRAGON, value, id: `sim-jian-${value}` })
+  }
+
+  let winDraws = 0
+  let readyDraws = 0
+  let shantenImprovingDraws = 0
+  for (const draw of candidates) {
+    const next14 = [...normalizeHand(handTiles), draw]
+    if (canWin(next14, exposedMelds, wildTileId)) {
+      winDraws++
+      continue
+    }
+    if (listReadyDiscardsForHand(next14, exposedMelds, wildTileId).length > 0) {
+      readyDraws++
+      continue
+    }
+    const after = estimateAkEffectiveProgress(next14, exposedMelds.length).shantenLike
+    if (after < baseline) shantenImprovingDraws++
+  }
+  return {
+    winDraws,
+    readyDraws,
+    shantenImprovingDraws,
+    totalImprovingDraws: winDraws * 3 + readyDraws * 2 + shantenImprovingDraws
+  }
+}
+
+function estimateAkImprovingDraws(handTiles: Tile[], exposedMelds: Meld[], wildTileId: string): number {
+  return estimateAkFutureDrawStats(handTiles, exposedMelds, wildTileId).totalImprovingDraws
+}
+
+function evaluateAkDiscardChoice(handTiles: Tile[], discardTile: Tile, exposedMelds: Meld[], wildTileId: string): number {
+  const dropIdx = handTiles.findIndex(t => t.id === discardTile.id)
+  const nextHand = handTiles.filter((_, idx) => idx !== dropIdx)
+  const directWaits = listWinningTilesForReadyHand(nextHand, exposedMelds, wildTileId).length
+  const structureScore = computeHandStructureScore(nextHand)
+  const usefulDraws = estimateAkUsefulDraws(nextHand)
+  const shapeProgress = estimateAkEffectiveProgress(nextHand, exposedMelds.length)
+  const futureDraws = estimateAkFutureDrawStats(nextHand, exposedMelds, wildTileId)
+  const improvingDraws = futureDraws.totalImprovingDraws
+  const tiles = normalizeHand(nextHand)
+  const earlyHand = tiles.length >= 11
+  const suitOnlyTiles = tiles.filter(tile => !isHonor(tile) && tile.suit !== TileSuit.FLOWER)
+  const suitCounts = new Map<TileSuit, number>([
+    [TileSuit.DOTS, 0],
+    [TileSuit.CHARACTERS, 0],
+    [TileSuit.BAMBOOS, 0]
+  ])
+  for (const tile of suitOnlyTiles) {
+    suitCounts.set(tile.suit as TileSuit, (suitCounts.get(tile.suit as TileSuit) || 0) + 1)
+  }
+  const sortedSuitCounts = [...suitCounts.values()].sort((a, b) => b - a)
+  const mainSuitCount = sortedSuitCounts[0] || 0
+  const offSuitCount = (sortedSuitCounts[1] || 0) + (sortedSuitCounts[2] || 0)
+
+  let sequenceRuns = 0
+  let openRuns = 0
+  let gapRuns = 0
+  let pairBlocks = 0
+  let isolatedHonors = 0
+  let isolatedTerminals = 0
+  let isolatedTiles = 0
+  let weakEdgeShapes = 0
+  let disconnectedMiddlePenalty = 0
+
+  for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+    const counts = Array(10).fill(0)
+    for (const tile of tiles) {
+      if (tile.suit === suit) counts[tile.value]++
+    }
+
+    for (let value = 1; value <= 9; value++) {
+      if (counts[value] >= 2) pairBlocks += 1
+      if (counts[value] > 0) {
+        const left1 = value > 1 ? counts[value - 1] : 0
+        const right1 = value < 9 ? counts[value + 1] : 0
+        const left2 = value > 2 ? counts[value - 2] : 0
+        const right2 = value < 8 ? counts[value + 2] : 0
+        if ((value === 1 && left1 === 0 && right1 === 0 && right2 === 0) || (value === 9 && right1 === 0 && left1 === 0 && left2 === 0)) {
+          weakEdgeShapes++
+        }
+        if (value >= 4 && value <= 6 && left1 === 0 && right1 === 0 && left2 === 0 && right2 === 0) {
+          disconnectedMiddlePenalty++
+        }
+        if (counts[value] === 1 && left1 === 0 && right1 === 0 && left2 === 0 && right2 === 0) {
+          isolatedTiles++
+          if (value === 1 || value === 9) isolatedTerminals++
+        }
+      }
+    }
+
+    for (let value = 1; value <= 7; value++) {
+      if (counts[value] > 0 && counts[value + 1] > 0 && counts[value + 2] > 0) sequenceRuns++
+    }
+    for (let value = 1; value <= 8; value++) {
+      if (counts[value] > 0 && counts[value + 1] > 0) openRuns++
+    }
+    for (let value = 1; value <= 7; value++) {
+      if (counts[value] > 0 && counts[value + 2] > 0) gapRuns++
+    }
+  }
+
+  for (const tile of tiles) {
+    if (!isHonor(tile)) continue
+    const count = tiles.filter(t => tileEq(t, tile)).length
+    if (count === 1) {
+      isolatedHonors++
+      isolatedTiles++
+    } else if (count >= 2) {
+      pairBlocks += 1
+    }
+  }
+
+  const visibleMelds = exposedMelds.filter(m => !m.isConcealed).length
+  const menqingBonus = visibleMelds === 0 ? 1 : 0
+
+  return (
+    directWaits * -2200 +
+    futureDraws.winDraws * -520 +
+    futureDraws.readyDraws * -180 +
+    shapeProgress.shantenLike * 165 +
+    shapeProgress.melds * -52 +
+    shapeProgress.taatsu * -24 +
+    shapeProgress.pairs * -12 +
+    structureScore * -18 +
+    improvingDraws * -20 +
+    usefulDraws * -14 +
+    mainSuitCount * -16 +
+    offSuitCount * 9 +
+    sequenceRuns * -26 +
+    openRuns * -11 +
+    gapRuns * -6 +
+    pairBlocks * -18 +
+    weakEdgeShapes * 22 +
+    disconnectedMiddlePenalty * 28 +
+    menqingBonus * -4 +
+    isolatedHonors * (earlyHand ? 58 : 42) +
+    isolatedTerminals * 18 +
+    isolatedTiles * 12
+  )
+}
+
+type AkPostDiscardEvaluation = {
+  score: number
+  discard: Tile | null
+  shantenLike: number
+  improvingDraws: number
+  directWaits: number
+  readyDraws: number
+  winDraws: number
+}
+
+type AkDiscardDecision = {
+  tile: Tile
+  readyWaits: number
+  shantenLike: number
+  improvingDraws: number
+  readyDraws: number
+  winDraws: number
+  score: number
+}
+
+function shouldAkTakeClaim(
+  passEval: AkPostDiscardEvaluation,
+  claimEval: AkPostDiscardEvaluation,
+  mode: 'peng' | 'chow'
+): boolean {
+  const improveSlack = mode === 'peng' ? 5 : 4
+  const strongScoreGain = claimEval.score >= passEval.score + (mode === 'peng' ? 8 : 6)
+  const moreWaits = claimEval.directWaits > passEval.directWaits
+  const moreReadyDraws = claimEval.readyDraws > passEval.readyDraws
+  const moreWinDraws = claimEval.winDraws > passEval.winDraws
+  const moreImproves = claimEval.improvingDraws >= passEval.improvingDraws + improveSlack
+  const lowerShanten = claimEval.shantenLike < passEval.shantenLike
+  const lowerShantenWithStableShape =
+    lowerShanten &&
+    claimEval.score >= passEval.score + (mode === 'peng' ? -6 : 0) &&
+    claimEval.readyDraws >= passEval.readyDraws &&
+    claimEval.improvingDraws >= passEval.improvingDraws &&
+    (mode === 'peng' || claimEval.directWaits >= passEval.directWaits)
+  const lowerShantenWithBigShapeGain =
+    lowerShanten &&
+    claimEval.score >= passEval.score + (mode === 'peng' ? 14 : 18)
+
+  return strongScoreGain || moreWaits || moreReadyDraws || moreWinDraws || moreImproves || lowerShantenWithStableShape || lowerShantenWithBigShapeGain
+}
+
+function compareAkDiscardDecision(a: AkDiscardDecision, b: AkDiscardDecision): number {
+  if (a.readyWaits !== b.readyWaits) return b.readyWaits - a.readyWaits
+  if (a.readyDraws !== b.readyDraws) return b.readyDraws - a.readyDraws
+  if (a.winDraws !== b.winDraws) return b.winDraws - a.winDraws
+  if (a.shantenLike !== b.shantenLike) return a.shantenLike - b.shantenLike
+  if (a.improvingDraws !== b.improvingDraws) return b.improvingDraws - a.improvingDraws
+  if (a.score !== b.score) return a.score - b.score
+  return tileStr(a.tile).localeCompare(tileStr(b.tile))
+}
+
+function evaluateAkDiscardDecision(handTiles: Tile[], discardTile: Tile, exposedMelds: Meld[], wildTileId: string): AkDiscardDecision {
+  const nextHand = handTiles.filter(t => t.id !== discardTile.id)
+  const readyWaits = listWinningTilesForReadyHand(nextHand, exposedMelds, wildTileId).length
+  const progress = estimateAkEffectiveProgress(nextHand, exposedMelds.length)
+  const futureDraws = estimateAkFutureDrawStats(nextHand, exposedMelds, wildTileId)
+  const improvingDraws = futureDraws.totalImprovingDraws
+  const score = evaluateAkDiscardChoice(handTiles, discardTile, exposedMelds, wildTileId)
+  return {
+    tile: discardTile,
+    readyWaits,
+    shantenLike: progress.shantenLike,
+    improvingDraws,
+    readyDraws: futureDraws.readyDraws,
+    winDraws: futureDraws.winDraws,
+    score
+  }
+}
+
+function canAkPengSafely(p: BotPlayer, tile: Tile): boolean {
+  if (!canPeng(p, tile)) return false
+  if (!checkChowPongExclusion(p.chowPongExclusion, 'pong', tile.suit)) return false
+  const passEval = evaluateAkPostDiscardState(p.hand, p.exposedMelds, makeWT(p))
+  const claimEval = evaluateAkPengClaim(p.hand, tile, p.exposedMelds, makeWT(p))
+  return shouldAkTakeClaim(passEval, claimEval, 'peng')
+}
+
+function canAkChowSafely(p: BotPlayer, tile: Tile): boolean {
+  if (!canChow(p, tile)) return false
+  if (!checkChowPongExclusion(p.chowPongExclusion, 'chow', tile.suit)) return false
+  const passEval = evaluateAkPostDiscardState(p.hand, p.exposedMelds, makeWT(p))
+  const claimEval = evaluateAkChowClaim(p.hand, tile, p.exposedMelds, makeWT(p))
+  return shouldAkTakeClaim(passEval, claimEval, 'chow')
+}
+
+function evaluateAkPostDiscardState(handTiles: Tile[], exposedMelds: Meld[], wildTileId: string): AkPostDiscardEvaluation {
+  const seen = new Set<string>()
+  let best: AkPostDiscardEvaluation = {
+    score: Number.NEGATIVE_INFINITY,
+    discard: null,
+    shantenLike: Number.POSITIVE_INFINITY,
+    improvingDraws: 0,
+    directWaits: 0,
+    readyDraws: 0,
+    winDraws: 0
+  }
+
+  for (const tile of normalizeHand(handTiles)) {
+    const key = `${tile.suit}-${tile.value}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const nextHand = handTiles.filter(t => t.id !== tile.id)
+    const score = evaluateAkDiscardChoice(handTiles, tile, exposedMelds, wildTileId)
+    const progress = estimateAkEffectiveProgress(nextHand, exposedMelds.length)
+    const futureDraws = estimateAkFutureDrawStats(nextHand, exposedMelds, wildTileId)
+    const improvingDraws = futureDraws.totalImprovingDraws
+    const directWaits = listWinningTilesForReadyHand(nextHand, exposedMelds, wildTileId).length
+    if (
+      score > best.score ||
+      (score === best.score && progress.shantenLike < best.shantenLike) ||
+      (score === best.score && progress.shantenLike === best.shantenLike && futureDraws.readyDraws > best.readyDraws) ||
+      (score === best.score && progress.shantenLike === best.shantenLike && futureDraws.readyDraws === best.readyDraws && improvingDraws > best.improvingDraws)
+    ) {
+      best = {
+        score,
+        discard: tile,
+        shantenLike: progress.shantenLike,
+        improvingDraws,
+        directWaits,
+        readyDraws: futureDraws.readyDraws,
+        winDraws: futureDraws.winDraws
+      }
+    }
+  }
+
+  return best
+}
+
+function getPengClaimPotential(handTiles: Tile[], discardTile: Tile, exposedMelds: Meld[], wildTileId: string): number {
+  const matches = handTiles.filter(t => tileEq(t, discardTile)).slice(0, 2)
+  if (matches.length < 2) return Number.NEGATIVE_INFINITY
+  const nextHand = [...handTiles]
+  for (const m of matches) {
+    const idx = nextHand.findIndex(t => t.id === m.id)
+    if (idx >= 0) nextHand.splice(idx, 1)
+  }
+  const nextMelds = [...exposedMelds, { type: MeldType.TRIPLET, tiles: [discardTile, discardTile, discardTile], isConcealed: false }]
+  return getBestPostDiscardPotential(nextHand, nextMelds, wildTileId)
+}
+
+function getChowClaimPotential(handTiles: Tile[], discardTile: Tile, exposedMelds: Meld[], wildTileId: string): number {
+  if (isHonor(discardTile) || discardTile.suit === TileSuit.FLOWER) return Number.NEGATIVE_INFINITY
+  const v = discardTile.value
+  const patterns: Array<[number, number]> = []
+  if (v >= 2 && v <= 8) patterns.push([v - 1, v + 1])
+  if (v >= 3) patterns.push([v - 2, v - 1])
+  if (v <= 7) patterns.push([v + 1, v + 2])
+
+  let best = Number.NEGATIVE_INFINITY
+  for (const [a, b] of patterns) {
+    const first = handTiles.find(t => t.suit === discardTile.suit && t.value === a)
+    const second = handTiles.find(t => t.suit === discardTile.suit && t.value === b && t.id !== first?.id)
+    if (!first || !second) continue
+    const nextHand = handTiles.filter(t => t.id !== first.id && t.id !== second.id)
+    const meldTiles = [first, discardTile, second].sort((x, y) => x.value - y.value)
+    const nextMelds = [...exposedMelds, { type: MeldType.SEQUENCE, tiles: meldTiles, isConcealed: false }]
+    best = Math.max(best, getBestPostDiscardPotential(nextHand, nextMelds, wildTileId))
+  }
+  return best
+}
+
+function evaluateAkPengClaim(handTiles: Tile[], discardTile: Tile, exposedMelds: Meld[], wildTileId: string): AkPostDiscardEvaluation {
+  const matches = handTiles.filter(t => tileEq(t, discardTile)).slice(0, 2)
+  if (matches.length < 2) {
+    return { score: Number.NEGATIVE_INFINITY, discard: null, shantenLike: Number.POSITIVE_INFINITY, improvingDraws: 0, directWaits: 0 }
+  }
+  const nextHand = [...handTiles]
+  for (const m of matches) {
+    const idx = nextHand.findIndex(t => t.id === m.id)
+    if (idx >= 0) nextHand.splice(idx, 1)
+  }
+  const nextMelds = [...exposedMelds, { type: MeldType.TRIPLET, tiles: [discardTile, discardTile, discardTile], isConcealed: false }]
+  return evaluateAkPostDiscardState(nextHand, nextMelds, wildTileId)
+}
+
+function evaluateAkChowClaim(handTiles: Tile[], discardTile: Tile, exposedMelds: Meld[], wildTileId: string): AkPostDiscardEvaluation {
+  if (isHonor(discardTile) || discardTile.suit === TileSuit.FLOWER) {
+    return { score: Number.NEGATIVE_INFINITY, discard: null, shantenLike: Number.POSITIVE_INFINITY, improvingDraws: 0, directWaits: 0 }
+  }
+  const v = discardTile.value
+  const patterns: Array<[number, number]> = []
+  if (v >= 2 && v <= 8) patterns.push([v - 1, v + 1])
+  if (v >= 3) patterns.push([v - 2, v - 1])
+  if (v <= 7) patterns.push([v + 1, v + 2])
+
+  let best: AkPostDiscardEvaluation = {
+    score: Number.NEGATIVE_INFINITY,
+    discard: null,
+    shantenLike: Number.POSITIVE_INFINITY,
+    improvingDraws: 0,
+    directWaits: 0
+  }
+  for (const [a, b] of patterns) {
+    const first = handTiles.find(t => t.suit === discardTile.suit && t.value === a)
+    const second = handTiles.find(t => t.suit === discardTile.suit && t.value === b && t.id !== first?.id)
+    if (!first || !second) continue
+    const nextHand = handTiles.filter(t => t.id !== first.id && t.id !== second.id)
+    const meldTiles = [first, discardTile, second].sort((x, y) => x.value - y.value)
+    const nextMelds = [...exposedMelds, { type: MeldType.SEQUENCE, tiles: meldTiles, isConcealed: false }]
+    const evalResult = evaluateAkPostDiscardState(nextHand, nextMelds, wildTileId)
+    if (
+      evalResult.score > best.score ||
+      (evalResult.score === best.score && evalResult.shantenLike < best.shantenLike) ||
+      (evalResult.score === best.score && evalResult.shantenLike === best.shantenLike && evalResult.improvingDraws > best.improvingDraws)
+    ) {
+      best = evalResult
+    }
+  }
+  return best
 }
 
 function formatWaitTiles(tiles: Tile[]): string {
@@ -1105,7 +1693,12 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   const readyOptionsBeforeDiscard = shouldTraceAkDiscard
     ? listReadyDiscardsForHand(hand, p.exposedMelds, makeWT(p))
     : []
+  ;(p as any)._discardTurns = ((p as any)._discardTurns ?? 0) + 1
+  const myTurns = (p as any)._discardTurns
+  const shouldEvaluateProgress = p.name === 'AI-AK'
+  const discardAdvanceCache = new Map<string, ReturnType<typeof evaluateDiscardAdvancement>>()
   const candidates: { tile: Tile; keepScore: number }[] = []
+  const akDecisions: AkDiscardDecision[] = []
   for (const tile of hand) {
     if (isFlower(tile)) continue
     let keepScore = 0
@@ -1186,9 +1779,6 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     // ====== K哥时序决策层（综合方案：出牌轮数 + 牌墙剩余） ======
     // deckLen - wallIdx = 牌墙剩余张数（约144张开始，摸一张少一张）
     const wallRemaining = deckLen - wallIdx
-    // 单玩家出牌轮数（碰/杠后重置，自然反映个人进度）
-    ;(p as any)._discardTurns = ((p as any)._discardTurns ?? 0) + 1
-    const myTurns = (p as any)._discardTurns
 
     // Phase 1（< 3次出牌 OR 牌墙≥75张）：机械式拆散牌，不管路线
     if (myTurns < 3 || wallRemaining >= 75) {
@@ -1253,6 +1843,8 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
       const hasRight = sameSuit.some(t => t.value === tile.value + 1 || t.value === tile.value + 2)
       const hasTightLeft = sameSuit.some(t => t.value === tile.value - 1)
       const hasTightRight = sameSuit.some(t => t.value === tile.value + 1)
+      const hasLeftTwo = sameSuit.some(t => t.value === tile.value - 2)
+      const hasRightTwo = sameSuit.some(t => t.value === tile.value + 2)
       if (hasLeft) keepScore += policy.nearWeight
       if (hasRight) keepScore += policy.nearWeight
       const neighbors = sameSuit.filter(t => Math.abs(t.value - tile.value) <= 2)
@@ -1263,6 +1855,11 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
       if (hasTightLeft && hasTightRight) keepScore += policy.nearWeight * 1.2
       if (!hasTightLeft && hasRight) keepScore += policy.nearWeight * 0.35
       if (!hasTightRight && hasLeft) keepScore += policy.nearWeight * 0.35
+      // 对 3456 / 4567 / 6678 / 1234 这类中盘连续骨架额外加分
+      if (hasTightLeft && hasRightTwo) keepScore += policy.nearWeight * 0.9
+      if (hasLeftTwo && hasTightRight) keepScore += policy.nearWeight * 0.9
+      if (hasLeftTwo && hasTightLeft && hasTightRight) keepScore += policy.nearWeight * 0.8
+      if (hasTightLeft && hasTightRight && hasRightTwo) keepScore += policy.nearWeight * 0.8
       if (policy.sequenceVsTripletBias > 0 && count >= 2)
         keepScore += policy.sequenceVsTripletBias * 2
     }
@@ -1493,15 +2090,42 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
       keepScore -= policy.scoreLeadDefenseBoost  // 整体降低保留度
     }
 
+    if (shouldEvaluateProgress) {
+      const advanceKey = `${tile.suit}-${tile.value}`
+      let advance = discardAdvanceCache.get(advanceKey)
+      if (!advance) {
+        advance = evaluateDiscardAdvancement(hand, tile, p.exposedMelds, makeWT(p))
+        discardAdvanceCache.set(advanceKey, advance)
+      }
+      const akDecision = evaluateAkDiscardDecision(hand, tile, p.exposedMelds, makeWT(p))
+      akDecisions.push(akDecision)
+      const akPriority = akDecision.score
+      if (advance.readyWaits > 0) {
+        // 能直接打入听牌时，优先把这张打出去
+        keepScore -= 180 + advance.readyWaits * 24
+      }
+      // AI-AK 改成结构分主导，旧启发式只保留弱参考，避免互相打架
+      keepScore = keepScore * 0.22 + akPriority
+    }
+
     candidates.push({ tile, keepScore })
   }
   candidates.sort((a, b) => a.keepScore - b.keepScore)
-  const validTile = candidates[0]?.tile || hand.find(t => t) || hand[0]
+  let validTile = candidates[0]?.tile || hand.find(t => t) || hand[0]
+  if (shouldEvaluateProgress && akDecisions.length > 0) {
+    akDecisions.sort(compareAkDiscardDecision)
+    validTile = akDecisions[0].tile
+  }
   if (shouldTraceAkDiscard) {
-    const topCandidates = candidates
-      .slice(0, 5)
-      .map(c => `${tileStr(c.tile)}=${c.keepScore.toFixed(2)}`)
-      .join(' | ')
+    const topCandidates = shouldEvaluateProgress && akDecisions.length > 0
+      ? akDecisions
+          .slice(0, 5)
+          .map(c => `${tileStr(c.tile)}=w${c.readyWaits}/s${c.shantenLike}/i${c.improvingDraws}/v${c.score.toFixed(2)}`)
+          .join(' | ')
+      : candidates
+          .slice(0, 5)
+          .map(c => `${tileStr(c.tile)}=${c.keepScore.toFixed(2)}`)
+          .join(' | ')
     console.error(`[AK_DISCARD_RANK] turn=${turnNumber} chosen=${validTile ? tileStr(validTile) : '??'} top=${topCandidates}`)
 
     const chosenSig = validTile ? `${validTile.suit}-${validTile.value}` : ''
@@ -1593,6 +2217,7 @@ interface WinningGameRecord {
   wildTileValue?: number; // 百搭数值（百搭所在位置）
   winningTile?: string; // 捉冲时对方放冲的牌（用于报告中显示完整手牌）
   winningFrom?: string; // 捉冲时放冲玩家名称
+  gameMeta?: GameMeta
   result?: any  // GameResult，用于settlementLog
 }
 interface GameResult {
@@ -1602,6 +2227,7 @@ interface GameResult {
   winnersThisGame: WinnerInfo[]  // runGame 内所有赢家的追踪
   turnSnapshots: TurnSnapshot[]  // 每回合快照（--detail 时收集）
   diagnostics: GameDiagnostics
+  gameMeta?: GameMeta
 }
 
 // ========== 手牌规范化（胡牌前必调） ==========
@@ -1609,18 +2235,9 @@ function normalizeHand(hand: Tile[]): Tile[] {
   return hand.filter(t => t && !isFlower(t))
 }
 
-export function stripWinningTileFromConcealedHand(hand: Tile[], winningTile?: Tile): Tile[] {
-  if (!winningTile) return [...hand]
-
-  let removed = false
-  return hand.filter(tile => {
-    if (removed) return true
-    if (tile?.id === winningTile.id) {
-      removed = true
-      return false
-    }
-    return true
-  })
+function getWinningHandInvariant(concealedCount: number, meldCount: number): { expected: number; valid: boolean } {
+  const expected = 14 - meldCount * 3
+  return { expected, valid: concealedCount === expected }
 }
 
 // ========== 血战到最后一人 ==========
@@ -1715,6 +2332,15 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     playersWithTing: [...playersWithTing],
   })
 
+  const nextActivePlayer = (from: number): number | null => {
+    for (let offset = 1; offset <= 4; offset++) {
+      const idx = (from + offset) % 4
+      const candidate = g.players[idx]
+      if (!finishedPlayers.has(idx) && candidate.status !== 'won') return idx
+    }
+    return null
+  }
+
   const markCanWinOpportunity = (playerName: string, kind: 'self' | 'discard', declined: boolean) => {
     playersWithCanWin.add(playerName)
     if (kind === 'self') {
@@ -1759,7 +2385,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       roundNum: turn,
       winnersThisGame: [...winnersThisGame],  // 传出快照，防止 return 后游戏循环继续执行导致数组污染
       turnSnapshots,
-      diagnostics: finalizeDiagnostics()
+      diagnostics: finalizeDiagnostics(),
+      gameMeta,
     }
   }
 
@@ -1811,12 +2438,16 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     winningTile?: Tile,
     winningFrom?: string
   ) => {
-    // 手牌只记录隐藏手；副露永远单独记录，避免日志和 reporter 重复拼装出非法胡牌结构
+    // 手牌记录完整胡牌手（含放冲牌）；副露仍单独记录，reporter 不再自行补牌重建
     const wildSuit = p.wildSuit, wildVal = p.wildValue
     const isWT2 = (t: Tile) => wildSuit && wildVal ? t.suit === wildSuit && t.value === wildVal : false
-    const concealedTiles = !isSelfDraw && winningTile
-      ? stripWinningTileFromConcealedHand(p.hand, winningTile)
-      : p.hand
+    const concealedTiles = normalizeHand(p.hand)
+    const invariant = getWinningHandInvariant(concealedTiles.length, p.exposedMelds.length)
+    if (!invariant.valid) {
+      console.error(
+        `[WINNER_HAND_INVALID] name=${p.name} concealed=${concealedTiles.length} melds=${p.exposedMelds.length} expected=${invariant.expected} hand=[${sortTiles(concealedTiles).map(tileStrWithId).join(' ')}] melds=[${p.exposedMelds.map(meldStrWithIds).join(' | ')}] winningTile=${winningTile ? tileStrWithId(winningTile) : '-'} from=${winningFrom || '-'}`
+      )
+    }
     const filteredTiles = concealedTiles.filter(t => !isFlower(t))
     const normalTiles = filteredTiles.filter(t => !isFlower(t) && !isWT2(t))
     const wildTiles = filteredTiles.filter(t => !isFlower(t) && isWT2(t))
@@ -1963,6 +2594,17 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
   let consecutiveDraws = 0
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
+    if (finishedPlayers.has(g.current) || g.players[g.current]?.status === 'won') {
+      const nextIdx = nextActivePlayer(g.current)
+      if (nextIdx == null) {
+        return {
+          winner: -1, scores: g.players.map(p => p.score), events, multiplier: g.gameMultiplier,
+          settlementLog, snapshots: [], roundNum: turn, winnersThisGame: [...winnersThisGame], turnSnapshots,
+          diagnostics: finalizeDiagnostics(), gameMeta
+        } as GameResult
+      }
+      g.current = nextIdx
+    }
     const curr = g.current
     const player = g.players[curr]
     turn = round
@@ -2030,7 +2672,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         if (finishedPlayers.size >= 3) {
           return buildResult(curr, '自摸', baseScore, player.winHandType || '自摸', baseScore, undefined)
         }
-        g.current = (curr + 1) % 4
+        g.current = nextActivePlayer(curr) ?? ((curr + 1) % 4)
         continue
       } else {
         markCanWinOpportunity(player.name, 'self', true)
@@ -2060,7 +2702,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
             if (finishedPlayers.size >= 3) {
               return buildResult(curr, '杠上自摸', baseScore, player.winHandType || '杠上自摸', baseScore, undefined)
             }
-            g.current = (curr + 1) % 4
+            g.current = nextActivePlayer(curr) ?? ((curr + 1) % 4)
             continue
           }
         }
@@ -2087,7 +2729,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
             if (finishedPlayers.size >= 3) {
               return buildResult(curr, '杠上自摸', baseScore, player.winHandType || '杠上自摸', baseScore, undefined)
             }
-            g.current = (curr + 1) % 4
+            g.current = nextActivePlayer(curr) ?? ((curr + 1) % 4)
             continue
           }
         }
@@ -2157,7 +2799,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           if (finishedPlayers.size >= 3) {
             return buildResult(other, '放冲', score, opp.winHandType || '放冲', score, curr)
           }
-          g.current = (other + 1) % 4
+          g.current = nextActivePlayer(other) ?? ((other + 1) % 4)
           continue
         } else {
           markCanWinOpportunity(opp.name, 'discard', true)
@@ -2206,7 +2848,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
               if (finishedPlayers.size >= 3) {
                 return buildResult(otherIdx, '杠上自摸', kongBaseScore, opp.winHandType || '明杠自摸', kongBaseScore, undefined)
               }
-              g.current = (otherIdx + 1) % 4
+              g.current = nextActivePlayer(otherIdx) ?? ((otherIdx + 1) % 4)
               continue
             }
           }
@@ -2224,22 +2866,36 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       const canP = canPeng(opp, discard)
       if (canP) {
         // K哥铁律：吃碰排斥检查必须在 pipeline 决策之前做，不受 REWARD_MODE 影响
-        if (!checkChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)) continue;
+        if (opp.name === 'AI-AK') {
+          if (!canAkPengSafely(opp, discard)) continue
+        } else {
+          if (!checkChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)) continue;
+        }
+
+        let akPassEval: AkPostDiscardEvaluation | null = null
+        let akPengEval: AkPostDiscardEvaluation | null = null
+        if (opp.name === 'AI-AK') {
+          akPassEval = evaluateAkPostDiscardState(opp.hand, opp.exposedMelds, makeWT(opp))
+          akPengEval = evaluateAkPengClaim(opp.hand, discard, opp.exposedMelds, makeWT(opp))
+          const improvesByClaim = shouldAkTakeClaim(akPassEval, akPengEval, 'peng')
+          if (!improvesByClaim) {
+            console.error(
+              `[AK_SKIP_PENG] tile=${tileStr(discard)} pass=${akPassEval.score.toFixed(2)}/${akPassEval.shantenLike}/${akPassEval.improvingDraws} ` +
+              `peng=${akPengEval.score.toFixed(2)}/${akPengEval.shantenLike}/${akPengEval.improvingDraws}`
+            )
+            continue
+          }
+          console.error(
+            `[AK_TAKE_PENG] tile=${tileStr(discard)} pass=${akPassEval.score.toFixed(2)}/${akPassEval.shantenLike}/${akPassEval.improvingDraws} ` +
+            `peng=${akPengEval.score.toFixed(2)}/${akPengEval.shantenLike}/${akPengEval.improvingDraws}`
+          )
+        }
 
         let shouldPeng = false
-        if (opp.name === 'AI-AK' && REWARD_MODE) {
-          // AI-AK: 用 pipeline scorer 决定是否碰
-          try {
-            const ctx = buildActionContext(g, opp.id, ['PENG', 'PASS'], round * 4 + otherIdx)
-            const ranked = rankActions(ctx)
-            const pengScore = ranked.find(r => r.action === 'PENG')?.score ?? 0
-            const passScore = ranked.find(r => r.action === 'PASS')?.score ?? 0
-            shouldPeng = pengScore > passScore
-            console.error(`[PIPELINE_PENG] AI-AK PENG pengScore=${pengScore.toFixed(3)} passScore=${passScore.toFixed(3)} → ${shouldPeng ? 'YES' : 'NO'}`)
-          } catch (e) {
-            console.error(`[PIPELINE_ERROR] AI-AK peng:`, e)
-            shouldPeng = Math.random() < opp.policy.pengChance
-          }
+        if (opp.name === 'AI-AK') {
+          const takeByShape = !!akPassEval && !!akPengEval && shouldAkTakeClaim(akPassEval, akPengEval, 'peng')
+          shouldPeng = takeByShape && Math.random() < opp.policy.pengChance
+          console.error(`[AK_PENG_DECISION] tile=${tileStr(discard)} takeByShape=${takeByShape} final=${shouldPeng}`)
         } else {
           const pengRoll = Math.random()
           console.error(`[PENG_CHECK] ${opp.name} CAN_PENG ${tileStr(discard)} hand=${opp.hand.map(t=>tileStr(t)).join(' ')} roll=${pengRoll.toFixed(3)}`)
@@ -2287,25 +2943,35 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     let shouldChow = false
     // K哥铁律：吃碰排斥检查必须在 pipeline 决策之前做
     const chowExcluded = !checkChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)
-    if (nextP.name === 'AI-AK' && REWARD_MODE && canChow(nextP, discard)) {
-      if (chowExcluded) {
-        // 排斥状态下跳过 pipeline 决策，直接不执行吃
-        shouldChow = false
+    let akPassEval: AkPostDiscardEvaluation | null = null
+    let akChowEval: AkPostDiscardEvaluation | null = null
+    const akCanChowSafely = nextP.name === 'AI-AK' ? canAkChowSafely(nextP, discard) : false
+    if (nextP.name === 'AI-AK' && akCanChowSafely) {
+      akPassEval = evaluateAkPostDiscardState(nextP.hand, nextP.exposedMelds, makeWT(nextP))
+      akChowEval = evaluateAkChowClaim(nextP.hand, discard, nextP.exposedMelds, makeWT(nextP))
+      const improvesByClaim = shouldAkTakeClaim(akPassEval, akChowEval, 'chow')
+      if (!improvesByClaim) {
+        console.error(
+          `[AK_SKIP_CHOW] tile=${tileStr(discard)} pass=${akPassEval.score.toFixed(2)}/${akPassEval.shantenLike}/${akPassEval.improvingDraws} ` +
+          `chow=${akChowEval.score.toFixed(2)}/${akChowEval.shantenLike}/${akChowEval.improvingDraws}`
+        )
       } else {
-        try {
-          const ctx = buildActionContext(g, nextP.id, ['CHOW', 'PASS'], round * 4 + nextPlayer)
-          const ranked = rankActions(ctx)
-          const chowScore = ranked.find(r => r.action === 'CHOW')?.score ?? 0
-          const passScore = ranked.find(r => r.action === 'PASS')?.score ?? 0
-          shouldChow = chowScore > passScore
-          console.error(`[PIPELINE_CHOW] AI-AK CHOW chowScore=${chowScore.toFixed(3)} passScore=${passScore.toFixed(3)} → ${shouldChow ? 'YES' : 'NO'}`)
-        } catch (e) {
-          console.error(`[PIPELINE_ERROR] AI-AK chow:`, e)
-          shouldChow = Math.random() < nextP.policy.chowChance
-        }
+        console.error(
+          `[AK_TAKE_CHOW] tile=${tileStr(discard)} pass=${akPassEval.score.toFixed(2)}/${akPassEval.shantenLike}/${akPassEval.improvingDraws} ` +
+          `chow=${akChowEval.score.toFixed(2)}/${akChowEval.shantenLike}/${akChowEval.improvingDraws}`
+        )
       }
+      if (!improvesByClaim) shouldChow = false
+      else shouldChow = !chowExcluded && !!akPassEval && !!akChowEval && shouldAkTakeClaim(akPassEval, akChowEval, 'chow') && Math.random() < nextP.policy.chowChance
+      console.error(`[AK_CHOW_DECISION] tile=${tileStr(discard)} excluded=${chowExcluded} final=${shouldChow}`)
     } else {
       shouldChow = canChow(nextP, discard) && Math.random() < nextP.policy.chowChance
+    }
+    if (nextP.name === 'AI-AK' && shouldChow) {
+      if (akPassEval && akChowEval) {
+        const stillGood = shouldAkTakeClaim(akPassEval, akChowEval, 'chow')
+        if (!stillGood) shouldChow = false
+      }
     }
     if (shouldChow) {
       if (!checkChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)) continue;  // K哥铁律：吃碰排斥
@@ -2628,6 +3294,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
             wonFan: w.wonFan, baseFan: w.baseFan, winHandType: w.winHandType,
             wildTile: w.wildTile, wildTileValue: w.wildTileValue,
             isMenQing: w.isMenQing, winningTile: w.winningTile, winningFrom: w.winningFrom,
+            gameMeta: result.gameMeta,
             flowers: w.flowers,
           })
         }
