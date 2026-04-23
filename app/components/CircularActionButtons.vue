@@ -24,8 +24,8 @@
           :class="{
             'action-btn--active': hasChow,
             'action-btn--chow': hasChow,
-            'action-btn--highlight': hasChow && !isDelaying,
-            'action-btn--highlight-pulse': hasChow
+            'action-btn--highlight': hasChow,
+            'action-btn--highlight-pulse': hasChow && !isDelaying
           }"
           :disabled="!hasChow || isInteractionLocked || !isConnected"
           @click="$emit('action', 'chow')"
@@ -36,8 +36,8 @@
           :class="{
             'action-btn--active': hasPeng,
             'action-btn--peng': hasPeng,
-            'action-btn--highlight': hasPeng && !isDelaying,
-            'action-btn--highlight-pulse': hasPeng
+            'action-btn--highlight': hasPeng,
+            'action-btn--highlight-pulse': hasPeng && !isDelaying
           }"
           :disabled="!hasPeng || isInteractionLocked || !isConnected"
           @click="$emit('action', 'peng')"
@@ -45,14 +45,24 @@
 
         <button
           class="action-btn action-btn--small"
-          :class="{ 'action-btn--active': hasHu, 'action-btn--hu': hasHu, 'action-btn--highlight': hasHu && !isDelaying, 'action-btn--highlight-pulse': hasHu }"
+          :class="{
+            'action-btn--active': hasHu,
+            'action-btn--hu': hasHu,
+            'action-btn--highlight': hasHu,
+            'action-btn--highlight-pulse': hasHu && !isDelaying
+          }"
           :disabled="!hasHu || isInteractionLocked || !isConnected"
           @click="$emit('action', 'hu')"
         >胡</button>
 
         <button
           class="action-btn action-btn--small"
-          :class="{ 'action-btn--active': hasKong, 'action-btn--kong': hasKong, 'action-btn--highlight': hasKong && !isDelaying, 'action-btn--highlight-pulse': hasKong }"
+          :class="{
+            'action-btn--active': hasKong,
+            'action-btn--kong': hasKong,
+            'action-btn--highlight': hasKong,
+            'action-btn--highlight-pulse': hasKong && !isDelaying
+          }"
           :disabled="!hasKong || isInteractionLocked || !isConnected"
           @click="$emit('action', 'kong')"
         >杠</button>

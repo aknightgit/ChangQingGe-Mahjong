@@ -35,10 +35,11 @@ const props = defineProps<{
 
 const layout = computed(() => {
   if (props.position === 'left' || props.position === 'right') {
-    return { cols: 3, rows: 8, width: 126, height: 232, cellW: 42, cellH: 29 }
+    // 行间距至少 42px，防止 40px 高的牌上下重叠（28px tile + 14px gap 经验值）
+    return { cols: 3, rows: 8, width: 126, height: 336, cellW: 42, cellH: 42 }
   }
 
-  return { cols: 8, rows: 3, width: 232, height: 118, cellW: 29, cellH: 38 }
+  return { cols: 8, rows: 3, width: 232, height: 126, cellW: 29, cellH: 42 }
 })
 
 const maxTiles = computed(() => layout.value.cols * layout.value.rows)

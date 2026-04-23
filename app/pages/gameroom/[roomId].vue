@@ -3160,7 +3160,7 @@ const forceDiscard = async (p: Player) => {
 
 /* 对家名字反向旋转，保持正向可读 */
 .seat-left {
-  left: var(--seat-side-inset);
+  left: calc(var(--seat-side-inset) - 1%);
   top: 50%;
   transform: translateY(-50%);
   height: calc(var(--seat-side-height) + 4%);
@@ -3172,7 +3172,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .seat-right {
-  right: var(--seat-side-inset);
+  right: calc(var(--seat-side-inset) - 2%);
   top: 50%;
   transform: translateY(-50%);
   height: calc(var(--seat-side-height) + 4%);
