@@ -2564,29 +2564,23 @@ class GameManager {
       
       // 需要检查门口条件的牌型：碰碰胡(ALL_TRIPLETS) 或 混一色(HALF_FLUSH)
       // 其他更大牌型(风碰/清碰/风一色等)不需要检查，直接允许抢
-      const isPengPengOrHun = robHandTypes.includes(HandType.ALL_TRIPLETS) || robHandTypes.includes(HandType.HALF_FLUSH);
-      
-      if (isPengPengOrHun && !hasTenPointExemption) {
-        // 需要检查门口条件：花牌 OR 风向刻 OR 杠牌
+      // 规则：门口无花不能抢杠（对所有非豁免牌型生效）
+      // 豁免：风碰/风一色/清碰/混碰/八花/四百搭/清一色/大吊
+      if (!hasTenPointExemption) {
         const hasFlowerAtDoor = candidate.hand.exposedMelds.some(m => 
           m.tiles.some(t => t.suit === TileSuit.FLOWER)
         );
-        // 风向刻子
         const hasWindDragonTriplet = candidate.hand.exposedMelds.some(m => 
-          m.type === MeldType.TRIPLET &&
+          (m.type === MeldType.TRIPLET || m.type === MeldType.KONG) &&
           m.tiles[0] && (m.tiles[0].suit === TileSuit.WIND || m.tiles[0].suit === TileSuit.DRAGON)
         );
-        // 任意杠牌
         const hasAnyKong = candidate.hand.exposedMelds.some(m => 
           m.type === MeldType.KONG || m.type === MeldType.CONCEALED_KONG
         );
-        
-        // 三者满足其一即可，不满足则不能抢
         if (!hasFlowerAtDoor && !hasWindDragonTriplet && !hasAnyKong) {
-          continue;  // 不能抢杠
+          continue;  // 门口无花不能抢杠
         }
       }
-      // 其他牌型（风碰/清碰/风一色等）不需要检查，直接允许
 
       robbers.push({
         playerId: candidate.id,
@@ -3267,7 +3261,7 @@ class GameManager {
       const testHand = [...player.hand.concealedTiles, discardedTile];
       const winCheck = canWin(testHand, player.hand.exposedMelds.length, game.customScoringMode || null);
       if (winCheck.canWin) {
-        // 规则:碰碰胡/混一色捉冲需要门口有花牌或风箭刻或任意杠牌;但"大吊"例外,可随时捉冲
+        // 规则:门口无花不能捉冲(所有非豁免牌型);豁免:风碰/风一色/清碰/混碰/八花/四百搭/清一色/大吊
         const flowerCount = player.hand.exposedMelds
           .flatMap(m => m.tiles)
           .filter(t => isFlower(t)).length;
@@ -3284,10 +3278,10 @@ class GameManager {
         const concealedNonFlower = player.hand.concealedTiles.filter(t => !isFlower(t));
         const isDaDiao = concealedNonFlower.length === 1;
         const hasTenPointExemption = this.hasTenPointClaimExemption(handTypes, isDaDiao);
-        const requiresFlowerGate =
-          (handTypes.includes(HandType.ALL_TRIPLETS) || handTypes.includes(HandType.HALF_FLUSH)) &&
-          !hasTenPointExemption;
-        // 新规则：花牌 或 风箭刻 或 任意杠牌 满足其一即可
+        // 规则：门口无花不能捉冲（对所有非豁免牌型生效）
+        // 豁免牌型：风碰/风一色/清碰/混碰/八花/四百搭/清一色/大吊
+        const requiresFlowerGate = !hasTenPointExemption;
+        // 花牌 或 风箭刻 或 任意杠牌 满足其一即可
         const hasFlowerAtDoor = flowerCount > 0;
         const hasWindDragonTriplet = player.hand.exposedMelds.some(m =>
           (m.type === MeldType.TRIPLET || m.type === MeldType.KONG) &&
