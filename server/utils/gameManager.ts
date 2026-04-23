@@ -2542,11 +2542,11 @@ class GameManager {
       if (candidate.status !== PlayerStatus.PLAYING) continue;
 
       const testHand = [...candidate.hand.concealedTiles, tile];
-      const winCheck = canWin(testHand, candidate.hand.exposedMelds.length, game.customScoringMode || null);
+      const robWildId = typeof game.customScoringMode === 'string' ? game.customScoringMode : null;
+      const winCheck = canWin(testHand, candidate.hand.exposedMelds, robWildId || (game.wildTileGroup ?? null));
       if (!winCheck.canWin) continue;
       const flowerCount = this.countFlowerTiles(candidate);
-      // 规则: 碰碰胡/混一色抢杠需要检查门口有花 or 风向刻 or 杠牌
-      // 其他更大牌型(风碰/清碰/风一色等)不需要检查，直接允许抢
+      // 规则:门口无花不能抢杠(所有非豁免牌型)
       const robHandTypes = detectHandTypes(
         testHand,
         candidate.hand.exposedMelds,
@@ -3259,7 +3259,9 @@ class GameManager {
 
       // Check for hu
       const testHand = [...player.hand.concealedTiles, discardedTile];
-      const winCheck = canWin(testHand, player.hand.exposedMelds.length, game.customScoringMode || null);
+      // 传实际 melds 对象（非 length），确保 canWin 正确识别包含门口牌的完整牌型
+      const wildTileId = typeof game.customScoringMode === 'string' ? game.customScoringMode : null;
+      const winCheck = canWin(testHand, player.hand.exposedMelds, wildTileId || (game.wildTileGroup ?? null));
       if (winCheck.canWin) {
         // 规则:门口无花不能捉冲(所有非豁免牌型);豁免:风碰/风一色/清碰/混碰/八花/四百搭/清一色/大吊
         const flowerCount = player.hand.exposedMelds
