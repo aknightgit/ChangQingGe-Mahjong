@@ -12,7 +12,7 @@
   TileSuit,
   GameEndReason
 } from '../types/game';
-import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isFivePoison } from './tiles';
+import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isFivePoison, isWind, isDragon } from './tiles';
 import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
 import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier, calculateSettlementBreakdownByRules, generateWinOptions, type WinOption } from './scoring';
 import { randomUUID } from 'crypto';
@@ -1730,18 +1730,10 @@ class GameManager {
     }
   }
 
-  private hasTenPointClaimExemption(handTypes: HandType[], isDaDiao: boolean): boolean {
-    if (isDaDiao) return true;
-
-    return handTypes.some(type => [
-      HandType.FENG_PENG,
-      HandType.ALL_WIND,
-      HandType.QING_PENG,
-      HandType.HUN_PENG,
-      HandType.EIGHT_FLOWERS,
-      HandType.FOUR_WILD,
-      HandType.FULL_FLUSH
-    ].includes(type));
+  private hasTenPointClaimExemption(_handTypes: HandType[], isDaDiao: boolean): boolean {
+    // K哥确认：当前规则只保留“大吊可随时捉冲/抢杠”的例外。
+    // 其他 10 分牌型（清碰/清一色/四百搭等）即使基础分达到 10，也仍需满足门口条件。
+    return isDaDiao;
   }
 
   private countFlowerTiles(player: Player): number {
@@ -3293,7 +3285,7 @@ class GameManager {
           (m.type === MeldType.TRIPLET || m.type === MeldType.KONG) &&
           m.tiles[0] && (isWind(m.tiles[0]) || isDragon(m.tiles[0]))
         );
-        const hasAnyKong = player.hand.exposedMelds.some(m => m.type === MeldType.KONG);
+        const hasAnyKong = player.hand.exposedMelds.some(m => m.type === MeldType.KONG || m.type === MeldType.CONCEALED_KONG);
         const hasGatePass = hasFlowerAtDoor || hasWindDragonTriplet || hasAnyKong;
 
         if (!requiresFlowerGate || hasGatePass) {
