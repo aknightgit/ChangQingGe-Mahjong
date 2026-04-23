@@ -529,6 +529,8 @@
                 :hand="northHand"
                 :melds="northMelds"
                 :is-winner="northIsWinner"
+                :just-drawn-tile-id="northJustDrawnTileId"
+                :player-position="currentPlayer?.position"
               />
             </div>
 
@@ -539,6 +541,8 @@
                 :hand="westHand"
                 :melds="westMelds"
                 :is-winner="westIsWinner"
+                :just-drawn-tile-id="westJustDrawnTileId"
+                :player-position="currentPlayer?.position"
               />
             </div>
 
@@ -549,6 +553,8 @@
                 :hand="eastHand"
                 :melds="eastMelds"
                 :is-winner="eastIsWinner"
+                :just-drawn-tile-id="eastJustDrawnTileId"
+                :player-position="currentPlayer?.position"
               />
             </div>
 
@@ -1121,6 +1127,9 @@ onMounted(async () => {
 onUnmounted(() => {
   disconnect()
   clearFlowerReplacementNotice()
+  if (northDrawnTimer) { clearTimeout(northDrawnTimer); northDrawnTimer = null }
+  if (westDrawnTimer) { clearTimeout(westDrawnTimer); westDrawnTimer = null }
+  if (eastDrawnTimer) { clearTimeout(eastDrawnTimer); eastDrawnTimer = null }
 
   if (process.client) {
     window.removeEventListener('resize', evaluateViewport)
@@ -1588,6 +1597,40 @@ const eastHand = computed(() => rightPlayer.value?.hand.concealedTiles || [])
 const eastMelds = computed(() => rightPlayer.value?.hand.exposedMelds || [])
 const eastDiscards = computed(() => rightPlayer.value?.hand.discardedTiles || [])
 const eastIsWinner = computed(() => rightPlayer.value?.status === 'won')
+
+// ---- 各家摸牌标记（手牌数 +1 → 最后一张为新摸的牌，3s 后清除） ----
+const northJustDrawnTileId = ref<string | null>(null)
+const westJustDrawnTileId = ref<string | null>(null)
+const eastJustDrawnTileId = ref<string | null>(null)
+
+let northDrawnTimer: ReturnType<typeof setTimeout> | null = null
+let westDrawnTimer: ReturnType<typeof setTimeout> | null = null
+let eastDrawnTimer: ReturnType<typeof setTimeout> | null = null
+
+function trackDrawnTile(
+  hand: any[],
+  prevLen: { value: number },
+  drawIdRef: { value: string | null },
+  timerRef: { get: () => ReturnType<typeof setTimeout> | null; set: (v: ReturnType<typeof setTimeout> | null) => void }
+) {
+  if (hand.length === prevLen.value + 1) {
+    const newTile = hand[hand.length - 1]
+    if (newTile?.id) {
+      drawIdRef.value = newTile.id
+      if (timerRef.get()) clearTimeout(timerRef.get()!)
+      timerRef.set(setTimeout(() => { drawIdRef.value = null }, 3000))
+    }
+  }
+  prevLen.value = hand.length
+}
+
+const northPrevHandLen = { value: northHand.value.length }
+const westPrevHandLen = { value: westHand.value.length }
+const eastPrevHandLen = { value: eastHand.value.length }
+
+watch(northHand, (h) => trackDrawnTile(h, northPrevHandLen, northJustDrawnTileId, { get: () => northDrawnTimer, set: (v) => { northDrawnTimer = v } }))
+watch(westHand, (h) => trackDrawnTile(h, westPrevHandLen, westJustDrawnTileId, { get: () => westDrawnTimer, set: (v) => { westDrawnTimer = v } }))
+watch(eastHand, (h) => trackDrawnTile(h, eastPrevHandLen, eastJustDrawnTileId, { get: () => eastDrawnTimer, set: (v) => { eastDrawnTimer = v } }))
 
 // ---- Interaction ----
 const selectedTileId = ref<string | null>(null)

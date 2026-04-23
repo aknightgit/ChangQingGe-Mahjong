@@ -1,16 +1,28 @@
 <template>
-  <!-- SOFT GUARD: all opponent hand/meld lane geometry here is currently stable.
-       Any future edits to seat hand direction/spacing/rotation should be treated as high risk
-       and require explicit user approval before changing. -->
   <div
     class="player-other"
     :class="`player-other--${position}`"
     :style="containerStyle"
   >
+    <!-- ==================== 对家（top） ==================== -->
     <template v-if="position === 'top'">
       <div class="player-other-stack player-other-stack--top">
-        <div v-if="flowerMelds.length || mainMelds.length" class="top-aux-lane">
-          <div v-if="flowerMelds.length" class="flower-lane flower-lane--top">
+        <!-- 手牌 + 花牌（同一行，整体 180° 旋转） -->
+        <div class="seat-line seat-line--top">
+          <div v-if="hand.length" class="hand-lane hand-lane--top">
+            <MahjongTile
+              v-for="tile in hand"
+              :key="tile.id"
+              :tile="tile"
+              :small="true"
+              :back="true"
+              :back-scheme="0"
+              :just-drawn="justDrawnTileId === tile.id"
+              :dimmed="isWinner"
+            />
+          </div>
+          <!-- 花牌：紧跟手牌右侧，旋转 180° 让牌头朝牌桌中心 -->
+          <div v-if="flowerMelds.length" class="flower-lane flower-lane--top-inline">
             <div
               v-for="(m, i) in flowerMelds"
               :key="`flower-top-${i}`"
@@ -23,47 +35,41 @@
                 :small="true"
                 :back="false"
                 :back-scheme="-1"
-                class="top-exposed-tile"
-                :dimmed="isWinner"
-              />
-            </div>
-          </div>
-          <div v-if="mainMelds.length" class="meld-lane meld-lane--top">
-            <div
-              v-for="(m, i) in mainMelds"
-              :key="i"
-              class="meld-group"
-              :class="{ 'meld-group--kong': m.type === 'kong' }"
-            >
-              <MahjongTile
-                v-for="t in m.tiles"
-                :key="t.id"
-                :tile="t"
-                :small="true"
-                :back="isConcealedMeld(m)"
-                :back-scheme="isConcealedMeld(m) ? 0 : -1"
-                :class="{ 'top-exposed-tile': !isConcealedMeld(m) }"
                 :dimmed="isWinner"
               />
             </div>
           </div>
         </div>
-        <div class="seat-line seat-line--top">
-          <div v-if="hand.length" class="hand-lane hand-lane--top">
+        <!-- 门口牌（吃碰杠） -->
+        <div v-if="mainMelds.length" class="meld-lane meld-lane--top">
+          <div
+            v-for="(m, i) in mainMelds"
+            :key="i"
+            class="meld-group"
+            :class="{ 'meld-group--kong': m.type === 'kong' }"
+          >
             <MahjongTile
-              v-for="tile in hand"
-              :key="tile.id"
-              :tile="tile"
+              v-for="t in m.tiles"
+              :key="t.id"
+              :tile="t"
               :small="true"
-              :back="true"
-              :back-scheme="0"
+              :back="isConcealedMeld(m)"
+              :back-scheme="isConcealedMeld(m) ? 0 : -1"
+              :class="{ 'top-exposed-tile': !isConcealedMeld(m) }"
               :dimmed="isWinner"
             />
+            <!-- 吃碰来源标签 -->
+            <span
+              v-if="m.sourcePosition !== undefined && !isConcealedMeld(m)"
+              class="meld-source meld-source--top"
+              :class="getSourceArrowClass(m.sourcePosition)"
+            >{{ getSourceLabel(m.sourcePosition) }}</span>
           </div>
         </div>
       </div>
     </template>
 
+    <!-- ==================== 左家（left） ==================== -->
     <template v-else-if="position === 'left'">
       <div class="player-other-stack player-other-stack--left">
         <div v-if="flowerMelds.length" class="flower-lane flower-lane--left">
@@ -84,72 +90,83 @@
           </div>
         </div>
         <div class="seat-line seat-line--left">
-        <div v-if="hand.length" class="hand-lane hand-lane--left">
-          <MahjongTile
-            v-for="tile in hand"
-            :key="tile.id"
-            :tile="tile"
-            :small="true"
-            :back="true"
-            :back-scheme="0"
-            :dimmed="isWinner"
-          />
-        </div>
-        <div v-if="mainMelds.length" class="meld-lane meld-lane--left">
-          <div
-            v-for="(m, i) in mainMelds"
-            :key="i"
-            class="meld-group meld-group--vertical"
-            :class="{ 'meld-group--kong': m.type === 'kong' }"
-          >
+          <div v-if="hand.length" class="hand-lane hand-lane--left">
             <MahjongTile
-              v-for="t in m.tiles"
-              :key="t.id"
-              :tile="t"
+              v-for="tile in hand"
+              :key="tile.id"
+              :tile="tile"
               :small="true"
-              :back="isConcealedMeld(m)"
-              :back-scheme="isConcealedMeld(m) ? 0 : -1"
+              :back="true"
+              :back-scheme="0"
               :dimmed="isWinner"
             />
           </div>
+          <div v-if="mainMelds.length" class="meld-lane meld-lane--left">
+            <div
+              v-for="(m, i) in mainMelds"
+              :key="i"
+              class="meld-group meld-group--vertical"
+              :class="{ 'meld-group--kong': m.type === 'kong' }"
+            >
+              <MahjongTile
+                v-for="t in m.tiles"
+                :key="t.id"
+                :tile="t"
+                :small="true"
+                :back="isConcealedMeld(m)"
+                :back-scheme="isConcealedMeld(m) ? 0 : -1"
+                :dimmed="isWinner"
+              />
+              <span
+                v-if="m.sourcePosition !== undefined && !isConcealedMeld(m)"
+                class="meld-source meld-source--left"
+                :class="getSourceArrowClass(m.sourcePosition)"
+              >{{ getSourceLabel(m.sourcePosition) }}</span>
+            </div>
+          </div>
         </div>
-      </div>
       </div>
     </template>
 
+    <!-- ==================== 右家（right） ==================== -->
     <template v-else>
       <div class="player-other-stack player-other-stack--right">
         <div class="seat-line seat-line--right">
-        <div v-if="mainMelds.length" class="meld-lane meld-lane--right">
-          <div
-            v-for="(m, i) in mainMelds"
-            :key="i"
-            class="meld-group meld-group--vertical"
-            :class="{ 'meld-group--kong': m.type === 'kong' }"
-          >
+          <div v-if="mainMelds.length" class="meld-lane meld-lane--right">
+            <div
+              v-for="(m, i) in mainMelds"
+              :key="i"
+              class="meld-group meld-group--vertical"
+              :class="{ 'meld-group--kong': m.type === 'kong' }"
+            >
+              <MahjongTile
+                v-for="t in m.tiles"
+                :key="t.id"
+                :tile="t"
+                :small="true"
+                :back="isConcealedMeld(m)"
+                :back-scheme="isConcealedMeld(m) ? 0 : -1"
+                :dimmed="isWinner"
+              />
+              <span
+                v-if="m.sourcePosition !== undefined && !isConcealedMeld(m)"
+                class="meld-source meld-source--right"
+                :class="getSourceArrowClass(m.sourcePosition)"
+              >{{ getSourceLabel(m.sourcePosition) }}</span>
+            </div>
+          </div>
+          <div v-if="hand.length" class="hand-lane hand-lane--right">
             <MahjongTile
-              v-for="t in m.tiles"
-              :key="t.id"
-              :tile="t"
+              v-for="tile in hand"
+              :key="tile.id"
+              :tile="tile"
               :small="true"
-              :back="isConcealedMeld(m)"
-              :back-scheme="isConcealedMeld(m) ? 0 : -1"
+              :back="true"
+              :back-scheme="0"
               :dimmed="isWinner"
             />
           </div>
         </div>
-        <div v-if="hand.length" class="hand-lane hand-lane--right">
-          <MahjongTile
-            v-for="tile in hand"
-            :key="tile.id"
-            :tile="tile"
-            :small="true"
-            :back="true"
-            :back-scheme="0"
-            :dimmed="isWinner"
-          />
-        </div>
-      </div>
         <div v-if="flowerMelds.length" class="flower-lane flower-lane--right">
           <div
             v-for="(m, i) in flowerMelds"
@@ -182,6 +199,8 @@ const props = defineProps<{
   hand: any[]
   melds: Meld[]
   isWinner?: boolean
+  justDrawnTileId?: string | null
+  playerPosition?: number
 }>()
 
 const containerStyle = computed(() => ({
@@ -202,6 +221,24 @@ const mainMelds = computed(() => props.melds.filter(meld => !isFlowerMeld(meld))
 
 const isConcealedMeld = (meld: Meld): boolean => {
   return meld.type === 'concealed_kong' || !!(meld as any).isConcealed
+}
+
+// ---- 吃碰来源标签 ----
+// sourcePosition: 0=自家, 1=下家(右), 2=对家(上), 3=上家(左)
+// 换算成"相对观察者"的方向
+function getRelativeSource(sourcePosition: number): number {
+  const observerPos = props.playerPosition ?? 0
+  return (observerPos - sourcePosition + 4) % 4
+}
+
+function getSourceLabel(sourcePosition: number): string {
+  const rel = getRelativeSource(sourcePosition)
+  return ['自', '下', '对', '上'][rel] || ''
+}
+
+function getSourceArrowClass(sourcePosition: number): string {
+  const rel = getRelativeSource(sourcePosition)
+  return ['src--self', 'src--lower', 'src--opposite', 'src--upper'][rel] || ''
 }
 </script>
 
@@ -248,6 +285,7 @@ const isConcealedMeld = (meld: Meld): boolean => {
   height: 100%;
 }
 
+/* ---- seat-line ---- */
 .seat-line {
   display: flex;
   flex-shrink: 0;
@@ -262,15 +300,6 @@ const isConcealedMeld = (meld: Meld): boolean => {
   width: 100%;
 }
 
-.top-aux-lane {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  min-height: 42px;
-}
-
 .seat-line--left,
 .seat-line--right {
   flex-direction: column;
@@ -280,6 +309,7 @@ const isConcealedMeld = (meld: Meld): boolean => {
   height: 100%;
 }
 
+/* ---- hand / meld / flower lanes ---- */
 .hand-lane,
 .meld-lane,
 .flower-lane {
@@ -288,8 +318,7 @@ const isConcealedMeld = (meld: Meld): boolean => {
   overflow: visible;
 }
 
-.hand-lane--top,
-.meld-lane--top {
+.hand-lane--top {
   flex-direction: row;
   align-items: center;
   justify-content: center;
@@ -297,15 +326,20 @@ const isConcealedMeld = (meld: Meld): boolean => {
 }
 
 .meld-lane--top {
-  margin-bottom: 0;
-}
-
-.flower-lane--top {
   flex-direction: row;
   align-items: center;
   justify-content: center;
   gap: 1px;
-  width: max-content;
+}
+
+/* 对家花牌：内联手牌右侧，旋转 180° 让牌头朝牌桌中心 */
+.flower-lane--top-inline {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1px;
+  margin-left: 4px;
+  transform: rotate(180deg);
 }
 
 .hand-lane--left,
@@ -328,6 +362,7 @@ const isConcealedMeld = (meld: Meld): boolean => {
   padding: 2px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.03);
+  position: relative;
 }
 
 .meld-group--vertical {
@@ -348,6 +383,40 @@ const isConcealedMeld = (meld: Meld): boolean => {
   padding: 0;
 }
 
+/* ---- 吃碰来源标签 ---- */
+.meld-source {
+  position: absolute;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 3px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+/* 对家：标签在 meld 上方 */
+.meld-source--top {
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%) rotate(180deg);
+}
+
+/* 左家 / 右家：标签在 meld 旁边 */
+.meld-source--left,
+.meld-source--right {
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.src--self    { background: rgba(229, 57, 53, 0.85); color: #fff; }
+.src--lower   { background: rgba(67, 160, 71, 0.85); color: #fff; }
+.src--opposite{ background: rgba(30, 136, 229, 0.85); color: #fff; }
+.src--upper   { background: rgba(251, 140, 0, 0.85); color: #fff; }
+
+/* ---- tile 尺寸 ---- */
 .player-other :deep(.tile) {
   width: 28px;
   height: 40px;
@@ -367,10 +436,12 @@ const isConcealedMeld = (meld: Meld): boolean => {
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4)) brightness(1.08);
 }
 
+/* 对家门口牌：非暗杠的牌旋转 180° 让牌面朝我方 */
 .meld-lane--top :deep(.top-exposed-tile) {
   transform: rotate(180deg);
 }
 
+/* ---- 左家 / 右家旋转 ---- */
 .hand-lane--left,
 .meld-lane--left,
 .flower-lane--left {
@@ -400,4 +471,7 @@ const isConcealedMeld = (meld: Meld): boolean => {
 .meld-lane--right {
   margin-bottom: 8px;
 }
+
+/* ---- 摸牌高亮（复用 MahjongTile 内置样式） ---- */
+/* tile--just-drawn 已在 MahjongTile.vue 中定义，此处无需额外样式 */
 </style>
