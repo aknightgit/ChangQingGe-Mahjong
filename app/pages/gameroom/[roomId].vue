@@ -19,7 +19,7 @@
           >
             {{ soundEnabled ? '🔊' : '🔇' }}
           </button>
-          <button ref="settingsBtnEl" class="mahjong-button small secondary" @click="showSettings = true">
+          <button ref="settingsBtnEl" class="mahjong-button small secondary" @click="toggleSettingsPanel">
             ⚙️ 设置
           </button>
           <button class="mahjong-button small secondary" @click="navigateTo('/rules')">
@@ -379,6 +379,7 @@
           <Transition name="settings-panel" @after-leave="onSettingsClosed">
             <div
               v-if="showSettings"
+              ref="settingsPanelEl"
               class="glass-settings-panel"
               :style="settingsPanelStyle"
               @click.stop
@@ -421,6 +422,14 @@
                     <div class="glass-toggle-knob"></div>
                   </div>
                 </div>
+                <div class="glass-settings-theme-block">
+                  <div class="glass-settings-theme-title">🎨 桌布方案</div>
+                  <div class="glass-theme-options">
+                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tableTheme === 'classic-green' }" @click="setTableTheme('classic-green')">经典绿</button>
+                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tableTheme === 'jade-green' }" @click="setTableTheme('jade-green')">翡翠青</button>
+                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tableTheme === 'royal-red' }" @click="setTableTheme('royal-red')">赤金红</button>
+                  </div>
+                </div>
                 <div class="glass-settings-footer">
                   <span>长清阁麻将 v2.2</span>
                 </div>
@@ -433,7 +442,7 @@
         <div class="table-wrapper">
           <div class="mahjong-table">
             <!-- 绿色桌布内层 -->
-            <div class="table-felt">
+            <div class="table-felt" :class="`table-felt--${tableTheme}`">
             <!-- 左上角: 轮次信息 -->
             <!-- 十字定位标志 -->
             <div class="cross-marker">
@@ -902,6 +911,7 @@ let consecutiveAutoCount = 0   // 连续自动操作次数
 const isAIControlled = ref(false) // 是否被AI接管
 const showSettings = ref(false) // 显示设置面板
 const settingsBtnEl = ref<HTMLElement | null>(null)
+const settingsPanelEl = ref<HTMLElement | null>(null)
 const settingsPanelTop = ref(0)
 const settingsPanelLeft = ref(0)
 
@@ -932,12 +942,40 @@ const updateSettingsPosition = () => {
   settingsPanelLeft.value = rect.right - 220 // 靠右对齐，panel宽约220px
 }
 
+const toggleSettingsPanel = () => {
+  showSettings.value = !showSettings.value
+}
+
+const handleGlobalPointerDown = (e: MouseEvent) => {
+  if (!showSettings.value) return
+  const target = e.target as Node | null
+  if (settingsPanelEl.value?.contains(target)) return
+  if (settingsBtnEl.value?.contains(target)) return
+  showSettings.value = false
+}
+
 watch(showSettings, (open) => {
   if (open) {
     nextTick(updateSettingsPosition)
   } else {
     playWhoosh()
   }
+})
+
+onMounted(() => {
+  window.addEventListener('resize', updateSettingsPosition)
+  document.addEventListener('pointerdown', handleGlobalPointerDown)
+  try {
+    const savedTheme = localStorage.getItem('mahjong.tableTheme') as 'classic-green' | 'jade-green' | 'royal-red' | null
+    if (savedTheme === 'classic-green' || savedTheme === 'jade-green' || savedTheme === 'royal-red') {
+      tableTheme.value = savedTheme
+    }
+  } catch {}
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateSettingsPosition)
+  document.removeEventListener('pointerdown', handleGlobalPointerDown)
 })
 
 const onSettingsClosed = () => {}
@@ -953,6 +991,12 @@ const showHintEnabled = ref(true)       // 出牌提示
 const tileAnimationEnabled = ref(true)   // 牌面动画
 const actionSoundEnabled = ref(true)    // 操作音效
 const timerWarningEnabled = ref(true)   // 倒计时警告音
+const tableTheme = ref<'classic-green' | 'jade-green' | 'royal-red'>('classic-green')
+
+const setTableTheme = (theme: 'classic-green' | 'jade-green' | 'royal-red') => {
+  tableTheme.value = theme
+  try { localStorage.setItem('mahjong.tableTheme', theme) } catch {}
+}
 
 const startTurnTimer = () => {
   stopTurnTimer()
@@ -2980,11 +3024,58 @@ const forceDiscard = async (p: Player) => {
 .table-felt {
   position: absolute;
   inset: 0;
-  /* 绿色桌布 + 中央聚光 */
-  background:
-    radial-gradient(ellipse at 50% 50%, rgba(40,90,50,0.95) 0%, rgba(28,65,35,0.98) 45%, rgba(18,42,22,1) 100%);
   border-radius: 8px;
   overflow: hidden;
+}
+
+.table-felt--classic-green {
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(40,90,50,0.95) 0%, rgba(28,65,35,0.98) 45%, rgba(18,42,22,1) 100%);
+}
+
+.table-felt--jade-green {
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(54,117,103,0.96) 0%, rgba(33,83,74,0.98) 46%, rgba(18,48,44,1) 100%);
+}
+
+.table-felt--royal-red {
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(130,43,43,0.96) 0%, rgba(96,24,24,0.98) 45%, rgba(54,10,10,1) 100%);
+}
+
+:global(.glass-settings-theme-block) {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+:global(.glass-settings-theme-title) {
+  color: rgba(255,255,255,0.8);
+  font-size: 12px;
+  margin: 0 6px 8px;
+}
+
+:global(.glass-theme-options) {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 0 6px;
+}
+
+:global(.glass-theme-chip) {
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.88);
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+:global(.glass-theme-chip--active) {
+  background: rgba(56, 189, 248, 0.24);
+  border-color: rgba(56, 189, 248, 0.55);
+  color: #fff;
 }
 
 /* 操作按钮：固定在桌面正中央 */
