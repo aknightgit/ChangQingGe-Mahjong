@@ -235,11 +235,7 @@ function getRelativeSource(sourcePosition: number): number {
 
 function getSourceLabel(sourcePosition: number): string {
   const rel = getRelativeSource(sourcePosition)
-  // 箭头方向：从自家视角，指向来源玩家所在方位
-  // rel=0 自家→↑，rel=1 下家→←，rel=2 对家→↓，rel=3 上家→→
-  const arrows = ['↑', '←', '↓', '→']
-  const labels = ['自', '下', '对', '上']
-  return arrows[rel] + labels[rel]
+  return ['自', '下', '对', '上'][rel] || ''
 }
 
 function getSourceArrowClass(sourcePosition: number): string {
@@ -447,9 +443,18 @@ function getClaimMarkerClass(meld: Meld, tile: any): string[] {
 }
 
 .player-other :deep(.claimed-tile--src--self)::after { border-top-color: rgba(229, 57, 53, 0.95); }
-.player-other :deep(.claimed-tile--src--lower)::after { border-top-color: rgba(67, 160, 71, 0.95); }
-.player-other :deep(.claimed-tile--src--opposite)::after { border-top-color: rgba(30, 136, 229, 0.95); }
-.player-other :deep(.claimed-tile--src--upper)::after { border-top-color: rgba(251, 140, 0, 0.95); }
+.player-other :deep(.claimed-tile--src--lower)::after {
+  border-top-color: rgba(67, 160, 71, 0.95);
+  transform: translateX(-50%) rotate(-90deg);
+}
+.player-other :deep(.claimed-tile--src--opposite)::after {
+  border-top-color: rgba(30, 136, 229, 0.95);
+  transform: translateX(-50%) rotate(180deg);
+}
+.player-other :deep(.claimed-tile--src--upper)::after {
+  border-top-color: rgba(251, 140, 0, 0.95);
+  transform: translateX(-50%) rotate(90deg);
+}
 
 .src--self    { background: rgba(229, 57, 53, 0.85); color: #fff; }
 .src--lower   { background: rgba(67, 160, 71, 0.85); color: #fff; }
