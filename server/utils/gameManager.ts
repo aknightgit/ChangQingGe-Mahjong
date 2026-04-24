@@ -49,6 +49,29 @@ class GameManager {
     return concealedCount >= 2 && concealedCount % 3 === 2;
   }
 
+  private tileLabel(tile: Tile | undefined): string {
+    if (!tile) return '未知牌';
+    if (tile.suit === TileSuit.FLOWER) {
+      const names = ['春', '夏', '秋', '冬', '梅', '兰', '竹', '菊'];
+      return names[tile.value - 1] || `花${tile.value}`;
+    }
+    if (tile.suit === TileSuit.WIND) {
+      const names = ['东', '南', '西', '北'];
+      return names[tile.value - 1] || `风${tile.value}`;
+    }
+    if (tile.suit === TileSuit.DRAGON) {
+      const names = ['中', '发', '白'];
+      return names[tile.value - 1] || `箭${tile.value}`;
+    }
+    const suitLabel =
+      tile.suit === TileSuit.CHARACTERS ? '万' :
+      tile.suit === TileSuit.DOTS ? '筒' :
+      tile.suit === TileSuit.BAMBOOS ? '条' :
+      '';
+    const digit = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'][tile.value] || String(tile.value);
+    return `${digit}${suitLabel}`;
+  }
+
   // Freeze/dealer auto-draw timers(需要在新局开始时清除)
   private freezeTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
@@ -324,12 +347,15 @@ class GameManager {
         const allClaimMode = (game as any).allClaimMode;
         const pending = [...game.pendingActions];
 
+        const resolvedPlayerIds = new Set<string>();
+
         if (allClaimMode) {
           // 训练模式: 所有pending都是bot, 统一调用shouldClaimPendingAction
           for (const pa of pending) {
             const player = game.players.find(p => p.id === pa.playerId);
             if (!player || !this.isPlayerBotControlled(player)) continue;
             await this.resolvePendingAction(game, player, pa);
+            resolvedPlayerIds.add(player.id);
           }
         } else {
           // 实战模式: bot AI决策, 人类超时=PASS
@@ -339,15 +365,22 @@ class GameManager {
             if (this.isPlayerBotControlled(player)) {
               // Bot 超时到期后自动决策
               await this.resolvePendingAction(game, player, pa);
+              resolvedPlayerIds.add(player.id);
             } else {
+              const humanChowOnly =
+                pa.availableActions.includes(ActionType.CHOW) &&
+                !pa.availableActions.includes(ActionType.HU) &&
+                !pa.availableActions.includes(ActionType.PENG) &&
+                !pa.availableActions.includes(ActionType.KONG);
+              if (humanChowOnly) continue;
               // 人类玩家超时没响应 = PASS
               this.handlePass(game, player);
+              resolvedPlayerIds.add(player.id);
             }
           }
         }
 
         // 只清理本轮已消费的 pending，避免把 claim 过程中产生的新 pending 一起抹掉
-        const resolvedPlayerIds = new Set(pending.map(pa => pa.playerId));
         game.pendingActions = game.pendingActions.filter(pa => !resolvedPlayerIds.has(pa.playerId));
         await this.persistGame(game);
         this.broadcastGameState(gameId);
@@ -457,8 +490,20 @@ class GameManager {
         );
         if (higherActions.length === 0) continue;
 
-        const action = await shouldClaimPendingAction(player, higherActions, game);
-        console.log(`[BotService] ${player.name} priority action: ${action} (from ${higherActions})`);
+        const filteredHigherActions = higherActions.filter((candidate) => {
+          if (candidate !== ActionType.HU) return true;
+          const winOptions = this.getCachedWinOptions(game, player, 'discard', {
+            isRobbingKong: !!game.pendingKongClaim
+          });
+          return winOptions.length > 0;
+        });
+        if (filteredHigherActions.length === 0) {
+          this.handlePass(game, player);
+          continue;
+        }
+
+        const action = await shouldClaimPendingAction(player, filteredHigherActions, game);
+        console.log(`[BotService] ${player.name} priority action: ${action} (from ${filteredHigherActions})`);
 
         if (action === ActionType.PENG) {
           const pengExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
@@ -481,8 +526,13 @@ class GameManager {
             this.handlePass(game, player);
           }
         } else if (action === ActionType.HU) {
-          await this.handleHu(game, player);
-          claimedHigherPriority = true;
+          try {
+            await this.handleHu(game, player);
+            claimedHigherPriority = true;
+          } catch (err: any) {
+            console.warn(`[BotHu] ${player.name} skipped invalid hu: ${err?.message || err}`);
+            this.handlePass(game, player);
+          }
         }
       }
 
@@ -528,9 +578,9 @@ class GameManager {
     playerId: string,
     sourcePlayerId: string | undefined,
     meldType: MeldType
-  ): void {
-    if (!sourcePlayerId) return;
-    if (meldType !== MeldType.TRIPLET && meldType !== MeldType.SEQUENCE && meldType !== MeldType.KONG) return;
+  ): number {
+    if (!sourcePlayerId) return 0;
+    if (meldType !== MeldType.TRIPLET && meldType !== MeldType.SEQUENCE && meldType !== MeldType.KONG) return 0;
 
     if (!this.mutualBailout.has(gameId)) {
       this.mutualBailout.set(gameId, new Map());
@@ -543,7 +593,9 @@ class GameManager {
     const playerBailout = gameBailout.get(playerId)!;
 
     const currentCount = playerBailout.get(sourcePlayerId) || 0;
-    playerBailout.set(sourcePlayerId, currentCount + 1);
+    const nextCount = currentCount + 1;
+    playerBailout.set(sourcePlayerId, nextCount);
+    return nextCount;
   }
 
   /**
@@ -593,6 +645,17 @@ class GameManager {
     const player = game.players.find(p => p.id === playerId);
     const source = game.players.find(p => p.id === sourcePlayerId);
     if (!player || !source) return;
+
+    const currentCount = this.mutualBailout.get(game.gameId)?.get(playerId)?.get(sourcePlayerId) || 0;
+    if (currentCount === 2 && this.wsManager) {
+      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+        id: Date.now(),
+        text: `📣 ${player.name}已经搞了${source.name}两口了！`,
+        type: 'special',
+        timestamp: Date.now(),
+        timeLabel: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      });
+    }
 
     for (const rel of relations) {
       const pairIds = [rel.player1, rel.player2].sort().join('-');
@@ -939,7 +1002,7 @@ class GameManager {
   /**
    * Start the game
    */
-  public async startGame(gameId: string, options?: { hesitationWindow?: number }): Promise<void> {
+  public async startGame(gameId: string, options?: { hesitationWindow?: number; fixedDice?: [number, number] }): Promise<void> {
     await this.hydrateFromDatabase();
 
     const game = await this.ensureGameLoaded(gameId);
@@ -1113,8 +1176,8 @@ class GameManager {
     }
 
     // 掷骰初始化倍数
-    const d1 = Math.floor(Math.random() * 6) + 1;
-    const d2 = Math.floor(Math.random() * 6) + 1;
+    const d1 = Math.min(6, Math.max(1, Math.round(options?.fixedDice?.[0] ?? (Math.floor(Math.random() * 6) + 1))));
+    const d2 = Math.min(6, Math.max(1, Math.round(options?.fixedDice?.[1] ?? (Math.floor(Math.random() * 6) + 1))));
     game.dice = [d1, d2];
     game.roundMultiplier = calculateRoundMultiplier(d1, d2);
     // 继承上局全局倍数(或从造反事件继承)
@@ -2257,7 +2320,8 @@ class GameManager {
       type: MeldType.SEQUENCE,
       tiles: sequence,
       isConcealed: false,
-      ...(sourcePos !== undefined && { sourcePosition: sourcePos })
+      ...(sourcePos !== undefined && { sourcePosition: sourcePos }),
+      sourceTileId: discardedTile.id
     };
     player.hand.exposedMelds.push(meld);
 
@@ -2297,6 +2361,22 @@ class GameManager {
     if (matchingTiles.length < 2) return;
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
     this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.TRIPLET);
+    if (sourcePlayerId) {
+      const gameBailout = this.mutualBailout.get(game.gameId);
+      const pengCount = gameBailout?.get(player.id)?.get(sourcePlayerId) || 0;
+      if (pengCount === 2 && this.wsManager) {
+        const source = game.players.find(p => p.id === sourcePlayerId);
+        if (source) {
+          this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+            id: Date.now(),
+            text: `📣 ${player.name}已经搞了${source.name}两口了！`,
+            type: 'special',
+            timestamp: Date.now(),
+            timeLabel: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+          });
+        }
+      }
+    }
     this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[0].id);
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[1].id);
@@ -2305,7 +2385,8 @@ class GameManager {
       type: MeldType.TRIPLET,
       tiles: [lastDiscard, matchingTiles[0], matchingTiles[1]],
       isConcealed: false,
-      ...(sourcePos !== undefined && { sourcePosition: sourcePos })
+      ...(sourcePos !== undefined && { sourcePosition: sourcePos }),
+      sourceTileId: lastDiscard.id
     });
 
     // ---- 更新吃碰排斥状态 ----
@@ -2323,9 +2404,8 @@ class GameManager {
     }
     game.pendingActions = [];
     game.pengChowConflict = null;
-    // 不设置 currentPlayerIndex = player，避免在定时器触发时被 moveToNextPlayer 跳过
-    // 当前玩家仍是弃牌者，由定时器末尾的 moveToNextPlayer 检查手牌数后正确推进
-    // drawnThisTurn 由各人自己回合的摸牌阶段设置，不在此时设置
+    game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+    game.drawnThisTurn = true;
     // 碰后手牌排序(百搭置顶)
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
   }
@@ -2370,7 +2450,8 @@ class GameManager {
       type: MeldType.KONG,
       tiles: [lastDiscard, ...matchingTiles],
       isConcealed: false,
-      ...(sourcePos !== undefined && { sourcePosition: sourcePos })
+      ...(sourcePos !== undefined && { sourcePosition: sourcePos }),
+      sourceTileId: lastDiscard.id
     });
 
     // Bug6: 用findIndex找并移除被杠牌
@@ -2380,7 +2461,7 @@ class GameManager {
     player.windScore += 2;
     game.pendingActions = [];
     game.pengChowConflict = null;
-    // handleDraw 会自动补牌并设置 drawnThisTurn，不需手动设置 currentPlayerIndex
+    game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
     this.handleDraw(game, player);
   }
 
@@ -2705,7 +2786,14 @@ class GameManager {
       throw new Error('Invalid Hu declaration');
     }
     // 牌型校验:必须有效牌型；传null触发fallback到game.wildTileGroup（不再被!pendingAction绕过）
-    const huHandTypes = detectHandTypes(player.hand.concealedTiles, player.hand.exposedMelds, null, this.countFlowerTiles(player), null, game.wildTileGroup);
+    const huHandTypes = detectHandTypes(
+      player.hand.concealedTiles,
+      player.hand.exposedMelds,
+      isSelfDrawn,
+      this.countFlowerTiles(player),
+      game.customScoringMode,
+      game.wildTileGroup
+    );
     if (huHandTypes.length === 0) {
       throw new Error('No valid hand type for Hu');
     }
@@ -3579,7 +3667,7 @@ class GameManager {
         if (this.wsManager) {
           this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
             id: Date.now(),
-            text: `🃏 冷冻解除，${freezePlayer.name}可以正常吃碰捉冲了！`,
+            text: `🃏 冷冻解除，现在可以正常吃碰捉冲了！`,
             type: 'info',
             timestamp: Date.now(),
             timeLabel: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
@@ -3839,6 +3927,7 @@ class GameManager {
     for (const meld of flowerMelds) {
       if (game.wall.length === 0) break;
       (meld as any).replacementDone = true;
+      const flowerTile = meld.tiles[0];
 
       let replacement = game.wall.pop()!;
 
@@ -3860,6 +3949,15 @@ class GameManager {
       if (replacement) {
         // 补到普通牌,加入手牌(替换原来花牌的位置)
         player.hand.concealedTiles.push(replacement);
+        if (this.wsManager) {
+          this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+            id: Date.now(),
+            text: `🌸 ${player.name}补花 ${this.tileLabel(flowerTile)}`,
+            type: 'info',
+            timestamp: Date.now(),
+            timeLabel: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+          });
+        }
       }
     }
 
@@ -4083,7 +4181,7 @@ class GameManager {
       const doubled = Math.min(currentGlobal * 2, 8);
       const effective = doubled * roundMul;
       // 全局倍数封顶8,溢出部分继承
-      game.inheritedGlobalMultiplier = Math.min(effective > 8 ? Math.floor(effective / 8) : 1, 8);
+      game.inheritedGlobalMultiplier = Math.min(effective > 8 ? Math.floor(effective / 8) : doubled, 8);
     } else if (game.inheritedGlobalMultiplier === undefined) {
       // 正常结算(有人胡了)且没有被聚义/造反提前设置
       const currentGlobal = game.inheritMultiplier ?? 1;

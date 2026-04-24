@@ -1,11 +1,5 @@
 <template>
   <div class="action-panel" :class="{ 'action-panel--compact': compact, 'action-panel--offline': !isConnected }">
-    <!-- 延迟提示 -->
-    <div v-if="isDelaying && hasAnyAction && isConnected" class="delay-indicator">
-      <span class="delay-dot"></span>
-      等待看清出牌...
-    </div>
-
     <!-- 左侧 2×2 小圆：吃/碰/胡/杠 -->
     <div class="priority-action-group" :class="{ 'priority-action-group--active': hasAnyPriorityAction }">
       <div
@@ -321,7 +315,7 @@ onUnmounted(() => {
 }
 
 .priority-action-badge {
-  display: inline-flex;
+  display: none !important;
   align-items: center;
   gap: 6px;
   min-height: 24px;
@@ -427,7 +421,7 @@ onUnmounted(() => {
 }
 
 .action-btn--small.action-btn--highlight-pulse {
-  animation: action-breathe 1.35s ease-in-out infinite;
+  animation: action-breathe 0.96s ease-in-out infinite;
 }
 
 .action-btn--chow.action-btn--highlight {
@@ -437,7 +431,7 @@ onUnmounted(() => {
 }
 
 .action-btn--chow.action-btn--highlight-pulse {
-  animation: action-breathe 1.15s ease-in-out infinite, chow-glow 1.15s ease-in-out infinite;
+  animation: action-breathe-strong 0.92s ease-in-out infinite, chow-glow 0.92s ease-in-out infinite;
 }
 
 .action-btn--peng.action-btn--highlight {
@@ -447,7 +441,7 @@ onUnmounted(() => {
 }
 
 .action-btn--peng.action-btn--highlight-pulse {
-  animation: action-breathe-strong 1.05s ease-in-out infinite, peng-glow 1.05s ease-in-out infinite;
+  animation: action-breathe-strong 0.86s ease-in-out infinite, peng-glow 0.86s ease-in-out infinite;
 }
 
 .action-btn--hu.action-btn--highlight {
@@ -457,7 +451,7 @@ onUnmounted(() => {
 }
 
 .action-btn--hu.action-btn--highlight-pulse {
-  animation: action-breathe-strong 0.95s ease-in-out infinite, hu-glow-strong 0.95s ease-in-out infinite;
+  animation: action-breathe-strong 0.78s ease-in-out infinite, hu-glow-strong 0.78s ease-in-out infinite;
 }
 
 .action-btn--kong.action-btn--highlight {
@@ -467,7 +461,7 @@ onUnmounted(() => {
 }
 
 .action-btn--kong.action-btn--highlight-pulse {
-  animation: action-breathe-strong 1.1s ease-in-out infinite, kong-glow 1.1s ease-in-out infinite;
+  animation: action-breathe-strong 0.84s ease-in-out infinite, kong-glow 0.84s ease-in-out infinite;
 }
 
 @keyframes chow-glow {
@@ -547,10 +541,12 @@ onUnmounted(() => {
 
 @keyframes action-breathe-strong {
   0%, 100% {
-    transform: scale(1.02);
+    transform: scale(1.06);
+    filter: brightness(1.04);
   }
   50% {
-    transform: scale(1.16);
+    transform: scale(1.38);
+    filter: brightness(1.38);
   }
 }
 
@@ -633,9 +629,10 @@ onUnmounted(() => {
 /* 第二行：特殊操作按钮 */
 .action-grid-secondary {
   display: flex;
+  flex-direction: column;
   gap: 6px;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-wrap: nowrap;
+  align-items: stretch;
 }
 
 

@@ -106,12 +106,12 @@ function faceTexture(value: number) {
 function orientationForFrontFace(value: number) {
   if (!three) return null
   const eulerMap: Record<number, [number, number, number]> = {
-    1: [-Math.PI / 2, 0, 0],
+    1: [Math.PI / 2, 0, 0],
     2: [0, 0, 0],
     3: [0, -Math.PI / 2, 0],
     4: [0, Math.PI / 2, 0],
     5: [0, Math.PI, 0],
-    6: [Math.PI / 2, 0, 0],
+    6: [-Math.PI / 2, 0, 0],
   }
   const [x, y, z] = eulerMap[clampValue(value)] ?? eulerMap[1]
   return new three.Quaternion().setFromEuler(new three.Euler(x, y, z, 'XYZ'))

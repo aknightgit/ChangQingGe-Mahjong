@@ -300,7 +300,7 @@ export const useGame = () => {
     }
   }
 
-  const startGame = async (options?: { hesitationWindow?: number }) => {
+  const startGame = async (options?: { hesitationWindow?: number; fixedDice?: [number, number] }) => {
     if (!gameId.value || !playerId.value) return
 
     console.log('[startGame] Starting game:', gameId.value)
@@ -310,7 +310,8 @@ export const useGame = () => {
         body: {
           gameId: gameId.value,
           playerId: playerId.value,
-          hesitationWindow: Math.max(1000, options?.hesitationWindow ?? 5000)
+          hesitationWindow: Math.max(1000, options?.hesitationWindow ?? 5000),
+          dice: options?.fixedDice
         }
       })
 

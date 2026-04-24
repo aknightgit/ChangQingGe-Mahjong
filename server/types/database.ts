@@ -111,6 +111,8 @@ export interface StoredMeld {
   type: 'sequence' | 'triplet' | 'kong' | 'concealed_kong' | 'pair';
   tiles: StoredTile[];
   isConcealed: boolean;
+  sourcePosition?: number;
+  sourceTileId?: string;
 }
 
 export interface GameAction {

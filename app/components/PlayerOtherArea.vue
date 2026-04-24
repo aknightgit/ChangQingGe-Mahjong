@@ -48,16 +48,16 @@
             class="meld-group"
             :class="{ 'meld-group--kong': m.type === 'kong' }"
           >
-            <MahjongTile
-              v-for="t in m.tiles"
-              :key="t.id"
-              :tile="t"
-              :small="true"
-              :back="isConcealedMeld(m)"
-              :back-scheme="isConcealedMeld(m) ? 0 : -1"
-              :class="{ 'top-exposed-tile': !isConcealedMeld(m) }"
-              :dimmed="isWinner"
-            />
+              <MahjongTile
+                v-for="t in m.tiles"
+                :key="t.id"
+                :tile="t"
+                :small="true"
+                :back="isConcealedMeld(m)"
+                :back-scheme="isConcealedMeld(m) ? 0 : -1"
+                :class="[getClaimMarkerClass(m, t), { 'top-exposed-tile': !isConcealedMeld(m) }]"
+                :dimmed="isWinner"
+              />
             <!-- 吃碰来源标签 -->
             <span
               v-if="m.sourcePosition !== undefined && !isConcealedMeld(m)"
@@ -115,6 +115,7 @@
                 :small="true"
                 :back="isConcealedMeld(m)"
                 :back-scheme="isConcealedMeld(m) ? 0 : -1"
+                :class="getClaimMarkerClass(m, t)"
                 :dimmed="isWinner"
               />
               <span
@@ -132,6 +133,23 @@
     <template v-else>
       <div class="player-other-stack player-other-stack--right">
         <div class="seat-line seat-line--right">
+          <div v-if="flowerMelds.length" class="flower-lane flower-lane--right">
+            <div
+              v-for="(m, i) in flowerMelds"
+              :key="`flower-right-${i}`"
+              class="meld-group meld-group--flower meld-group--vertical"
+            >
+              <MahjongTile
+                v-for="t in m.tiles"
+                :key="t.id"
+                :tile="t"
+                :small="true"
+                :back="false"
+                :back-scheme="-1"
+                :dimmed="isWinner"
+              />
+            </div>
+          </div>
           <div v-if="mainMelds.length" class="meld-lane meld-lane--right">
             <div
               v-for="(m, i) in mainMelds"
@@ -146,6 +164,7 @@
                 :small="true"
                 :back="isConcealedMeld(m)"
                 :back-scheme="isConcealedMeld(m) ? 0 : -1"
+                :class="getClaimMarkerClass(m, t)"
                 :dimmed="isWinner"
               />
               <span
@@ -163,23 +182,6 @@
               :small="true"
               :back="true"
               :back-scheme="0"
-              :dimmed="isWinner"
-            />
-          </div>
-        </div>
-        <div v-if="flowerMelds.length" class="flower-lane flower-lane--right">
-          <div
-            v-for="(m, i) in flowerMelds"
-            :key="`flower-right-${i}`"
-            class="meld-group meld-group--flower meld-group--vertical"
-          >
-            <MahjongTile
-              v-for="t in m.tiles"
-              :key="t.id"
-              :tile="t"
-              :small="true"
-              :back="false"
-              :back-scheme="-1"
               :dimmed="isWinner"
             />
           </div>
@@ -240,6 +242,12 @@ function getSourceArrowClass(sourcePosition: number): string {
   const rel = getRelativeSource(sourcePosition)
   return ['src--self', 'src--lower', 'src--opposite', 'src--upper'][rel] || ''
 }
+
+function getClaimMarkerClass(meld: Meld, tile: any): string[] {
+  if (!meld.sourceTileId || meld.sourceTileId !== tile.id || meld.type === 'concealed_kong') return []
+  const tone = meld.sourcePosition !== undefined ? getSourceArrowClass(meld.sourcePosition) : 'src--self'
+  return ['claimed-tile', `claimed-tile--${tone}`]
+}
 </script>
 
 <style scoped>
@@ -273,9 +281,9 @@ function getSourceArrowClass(sourcePosition: number): string {
 .player-other-stack--top {
   position: relative;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   width: 100%;
-  padding-top: 8px;
+  padding-top: 4px;
 }
 
 .player-other-stack--left,
@@ -309,6 +317,10 @@ function getSourceArrowClass(sourcePosition: number): string {
   height: 100%;
 }
 
+.seat-line--right {
+  gap: 44px;
+}
+
 /* ---- hand / meld / flower lanes ---- */
 .hand-lane,
 .meld-lane,
@@ -330,6 +342,7 @@ function getSourceArrowClass(sourcePosition: number): string {
   align-items: center;
   justify-content: center;
   gap: 1px;
+  margin-top: 2px;
 }
 
 /* 对家花牌：内联手牌右侧，旋转 180° 让牌头朝牌桌中心 */
@@ -411,6 +424,29 @@ function getSourceArrowClass(sourcePosition: number): string {
   transform: translateX(-50%);
 }
 
+.player-other :deep(.claimed-tile) {
+  position: relative;
+}
+
+.player-other :deep(.claimed-tile)::after {
+  content: '';
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 20px solid transparent;
+  border-right: 20px solid transparent;
+  border-top: 32px solid rgba(255, 255, 255, 0.95);
+  filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.45));
+}
+
+.player-other :deep(.claimed-tile--src--self)::after { border-top-color: rgba(229, 57, 53, 0.95); }
+.player-other :deep(.claimed-tile--src--lower)::after { border-top-color: rgba(67, 160, 71, 0.95); }
+.player-other :deep(.claimed-tile--src--opposite)::after { border-top-color: rgba(30, 136, 229, 0.95); }
+.player-other :deep(.claimed-tile--src--upper)::after { border-top-color: rgba(251, 140, 0, 0.95); }
+
 .src--self    { background: rgba(229, 57, 53, 0.85); color: #fff; }
 .src--lower   { background: rgba(67, 160, 71, 0.85); color: #fff; }
 .src--opposite{ background: rgba(30, 136, 229, 0.85); color: #fff; }
@@ -465,11 +501,15 @@ function getSourceArrowClass(sourcePosition: number): string {
 }
 
 .hand-lane--right {
-  margin-top: 8px;
+  margin-top: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .meld-lane--right {
-  margin-bottom: 8px;
+  margin-bottom: 28px;
+  position: relative;
+  z-index: 2;
 }
 
 /* ---- 摸牌高亮（复用 MahjongTile 内置样式） ---- */

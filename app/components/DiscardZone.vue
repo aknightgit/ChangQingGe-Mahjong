@@ -36,10 +36,10 @@ const props = defineProps<{
 const layout = computed(() => {
   if (props.position === 'left' || props.position === 'right') {
     // 行间距至少 42px，防止 40px 高的牌上下重叠（28px tile + 14px gap 经验值）
-    return { cols: 3, rows: 8, width: 126, height: 336, cellW: 42, cellH: 42 }
+    return { cols: 3, rows: 8, width: 102, height: 232, cellW: 34, cellH: 29 }
   }
 
-  return { cols: 8, rows: 3, width: 232, height: 126, cellW: 29, cellH: 42 }
+  return { cols: 8, rows: 3, width: 224, height: 114, cellW: 28, cellH: 38 }
 })
 
 const maxTiles = computed(() => layout.value.cols * layout.value.rows)
@@ -108,20 +108,8 @@ function slotStyle(index: number) {
   transform-origin: center;
 }
 
-.discard-item--bottom :deep(.tile) {
-  box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.3), 0 -3px 0 #8a7a5a, 0 -4px 0 #6a5a3a;
-}
-
-.discard-item--top :deep(.tile) {
-  box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.3), 0 -3px 0 #8a7a5a, 0 -4px 0 #6a5a3a;
-}
-
-.discard-item--left :deep(.tile) {
-  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.3), 3px 0 0 #8a7a5a, 4px 0 0 #6a5a3a;
-}
-
-.discard-item--right :deep(.tile) {
-  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.3), -3px 0 0 #8a7a5a, -4px 0 0 #6a5a3a;
+.discard-item :deep(.tile) {
+  box-shadow: none !important;
 }
 
 .discard-item :deep(.latest-tile) {

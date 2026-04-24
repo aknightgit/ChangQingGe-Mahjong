@@ -44,13 +44,17 @@ const storedToTile = (tile: StoredTile): Tile => ({
 const meldToStored = (meld: Meld): StoredMeld => ({
   type: meld.type,
   tiles: meld.tiles.map(tileToStored),
-  isConcealed: meld.isConcealed
+  isConcealed: meld.isConcealed,
+  sourcePosition: meld.sourcePosition,
+  sourceTileId: meld.sourceTileId
 })
 
 const storedToMeld = (meld: StoredMeld): Meld => ({
   type: meld.type,
   tiles: meld.tiles.map(storedToTile),
-  isConcealed: meld.isConcealed
+  isConcealed: meld.isConcealed,
+  sourcePosition: meld.sourcePosition,
+  sourceTileId: meld.sourceTileId
 })
 
 const playerToStored = (player: Player): GamePlayer => ({

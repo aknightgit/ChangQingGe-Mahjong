@@ -51,7 +51,7 @@
         </div>
 
         <!-- 通用审批流程弹窗（给被审批的高优先级玩家） -->
-        <div v-if="actionApprovalEvent && actionApprovalEvent.candidatePlayerId === currentPlayer?.id" class="approval-overlay">
+        <div v-if="showApprovalOverlay && actionApprovalEvent && actionApprovalEvent.candidatePlayerId === currentPlayer?.id" class="approval-overlay">
           <div class="approval-card">
             <div class="approval-icon">⚡🀄</div>
             <p class="approval-title">{{ actionApprovalEvent.requesterAction === '吃' ? '吃碰/胡冲突' : actionApprovalEvent.requesterAction === '碰' ? '碰胡冲突' : '杠胡冲突' }}！</p>
@@ -84,7 +84,7 @@
         </div>
 
         <!-- 审批等待提示（给低优先级玩家） -->
-        <div v-if="actionApprovalEvent && actionApprovalEvent.candidatePlayerId !== currentPlayer?.id && isMyApprovalWaiting" class="approval-waiting-overlay">
+        <div v-if="showApprovalOverlay && actionApprovalEvent && actionApprovalEvent.candidatePlayerId !== currentPlayer?.id && isMyApprovalWaiting" class="approval-waiting-overlay">
           <div class="approval-waiting-card">
             <div class="approval-waiting-icon">⏳</div>
             <p class="approval-waiting-text">等待其他家做决定...</p>
@@ -565,6 +565,7 @@
                   name="我"
                   :hand="playerHand"
                   :melds="playerMelds"
+                  :just-drawn-tile-id="selfJustDrawnTileId"
                   :player-position="currentPlayer?.position"
                   :selected-tile-id="selectedTileId"
                   :is-winner="isWinner"
@@ -735,7 +736,7 @@
                 :last-state-change-at="lastStateChangeAt"
                 :now-ts="nowTs"
                 :highlight-delay-ms="hesitationWindow"
-                :freeze-until="currentFreezeUntil"
+                :freeze-until="actionVisualFreezeUntil"
                 :hesitation-window="hesitationWindow"
                 :think-remaining="thinkRemaining"
                 :can-use-think="canUseThink"
@@ -745,11 +746,6 @@
               <!-- 更多特殊操作：常驻显示慢/聚义/造反 -->
               <div class="extra-actions-bar">
                 <span class="extra-actions-label">更多操作</span>
-                <button
-                  class="extra-action-btn extra-action-btn--think"
-                  :disabled="!canUseThink || isInteractionLocked || !isConnected || thinkFreezeActive"
-                  @click="onThink"
-                >🧠 慢{{ thinkRemaining > 0 ? thinkRemaining : '' }}</button>
                 <button
                   class="extra-action-btn extra-action-btn--liangshan"
                   :disabled="canLiangShan === false || isInteractionLocked || !isConnected || hasVotedLiangShan || thinkFreezeActive"
@@ -1028,6 +1024,15 @@ watch(() => gameState.value?.phase, (newPhase, oldPhase) => {
   }
 })
 const diceValues = ref<[number, number]>([1, 1])
+watch(
+  () => (gameState.value as any)?.dice,
+  (dice) => {
+    if (Array.isArray(dice) && dice.length === 2) {
+      diceValues.value = [Number(dice[0]) || 1, Number(dice[1]) || 1]
+    }
+  },
+  { immediate: true }
+)
 const hasDicePreview = ref(false)
 const maxDiceRolls = computed(() => {
   if (!gameState.value) return 2
@@ -1130,6 +1135,7 @@ onUnmounted(() => {
   if (northDrawnTimer) { clearTimeout(northDrawnTimer); northDrawnTimer = null }
   if (westDrawnTimer) { clearTimeout(westDrawnTimer); westDrawnTimer = null }
   if (eastDrawnTimer) { clearTimeout(eastDrawnTimer); eastDrawnTimer = null }
+  if (selfDrawnTimer) { clearTimeout(selfDrawnTimer); selfDrawnTimer = null }
 
   if (process.client) {
     window.removeEventListener('resize', evaluateViewport)
@@ -1460,6 +1466,7 @@ const overlayMessage = computed(() => {
 })
 
 const isDrawOverlay = computed(() => overlayReason.value === GameEndReason.WALL_EXHAUSTED)
+const showApprovalOverlay = computed(() => false)
 
 const startNextRound = async () => { 
   showSettlement.value = false;
@@ -1602,35 +1609,46 @@ const eastIsWinner = computed(() => rightPlayer.value?.status === 'won')
 const northJustDrawnTileId = ref<string | null>(null)
 const westJustDrawnTileId = ref<string | null>(null)
 const eastJustDrawnTileId = ref<string | null>(null)
+const selfJustDrawnTileId = ref<string | null>(null)
 
 let northDrawnTimer: ReturnType<typeof setTimeout> | null = null
 let westDrawnTimer: ReturnType<typeof setTimeout> | null = null
 let eastDrawnTimer: ReturnType<typeof setTimeout> | null = null
+let selfDrawnTimer: ReturnType<typeof setTimeout> | null = null
 
 function trackDrawnTile(
   hand: any[],
   prevLen: { value: number },
+  prevIds: { value: string[] },
   drawIdRef: { value: string | null },
   timerRef: { get: () => ReturnType<typeof setTimeout> | null; set: (v: ReturnType<typeof setTimeout> | null) => void }
 ) {
+  const previousIds = new Set(prevIds.value)
   if (hand.length === prevLen.value + 1) {
-    const newTile = hand[hand.length - 1]
-    if (newTile?.id) {
+    const newTile = hand.find(tile => tile?.id && !previousIds.has(tile.id))
+    if (newTile?.id && newTile?.suit !== 'hua' && !newTile?.isFlower) {
       drawIdRef.value = newTile.id
       if (timerRef.get()) clearTimeout(timerRef.get()!)
       timerRef.set(setTimeout(() => { drawIdRef.value = null }, 3000))
     }
   }
   prevLen.value = hand.length
+  prevIds.value = hand.map(tile => tile?.id).filter(Boolean)
 }
 
 const northPrevHandLen = { value: northHand.value.length }
 const westPrevHandLen = { value: westHand.value.length }
 const eastPrevHandLen = { value: eastHand.value.length }
+const selfPrevHandLen = { value: playerHand.value.length }
+const northPrevHandIds = { value: northHand.value.map(tile => tile.id) }
+const westPrevHandIds = { value: westHand.value.map(tile => tile.id) }
+const eastPrevHandIds = { value: eastHand.value.map(tile => tile.id) }
+const selfPrevHandIds = { value: playerHand.value.map(tile => tile.id) }
 
-watch(northHand, (h) => trackDrawnTile(h, northPrevHandLen, northJustDrawnTileId, { get: () => northDrawnTimer, set: (v) => { northDrawnTimer = v } }))
-watch(westHand, (h) => trackDrawnTile(h, westPrevHandLen, westJustDrawnTileId, { get: () => westDrawnTimer, set: (v) => { westDrawnTimer = v } }))
-watch(eastHand, (h) => trackDrawnTile(h, eastPrevHandLen, eastJustDrawnTileId, { get: () => eastDrawnTimer, set: (v) => { eastDrawnTimer = v } }))
+watch(northHand, (h) => trackDrawnTile(h, northPrevHandLen, northPrevHandIds, northJustDrawnTileId, { get: () => northDrawnTimer, set: (v) => { northDrawnTimer = v } }))
+watch(westHand, (h) => trackDrawnTile(h, westPrevHandLen, westPrevHandIds, westJustDrawnTileId, { get: () => westDrawnTimer, set: (v) => { westDrawnTimer = v } }))
+watch(eastHand, (h) => trackDrawnTile(h, eastPrevHandLen, eastPrevHandIds, eastJustDrawnTileId, { get: () => eastDrawnTimer, set: (v) => { eastDrawnTimer = v } }))
+watch(playerHand, (h) => trackDrawnTile(h, selfPrevHandLen, selfPrevHandIds, selfJustDrawnTileId, { get: () => selfDrawnTimer, set: (v) => { selfDrawnTimer = v } }))
 
 // ---- Interaction ----
 const selectedTileId = ref<string | null>(null)
@@ -1915,6 +1933,15 @@ const onCancelHu = () => {
 const myPendingAction = computed(() => {
   if (!gameState.value || !currentPlayer.value) return null
   return gameState.value.pendingActions.find(pa => pa.playerId === currentPlayer.value!.id) || null
+})
+
+const actionVisualFreezeUntil = computed(() => {
+  const serverFreezeUntil = currentFreezeUntil.value
+  const pending = myPendingAction.value as { availableActions?: string[]; expiresAt?: number } | null
+  const hasChowPending = !!pending?.availableActions?.includes(ActionType.CHOW)
+  const pendingExpiresAt = typeof pending?.expiresAt === 'number' ? pending.expiresAt : 0
+  const localVisualUntil = hasChowPending ? actionButtonsVisibleUntil.value : 0
+  return Math.max(serverFreezeUntil, pendingExpiresAt, localVisualUntil)
 })
 
 const chowOptions = computed(() => {
@@ -2507,7 +2534,7 @@ const onDealTiles = async () => {
   await new Promise(resolve => setTimeout(resolve, 350))
   console.log('[onDealTiles] Calling startGame API...')
   try {
-    await startGame({ hesitationWindow: hesitationWindow.value })
+    await startGame({ hesitationWindow: hesitationWindow.value, fixedDice: diceValues.value })
     console.log('[onDealTiles] startGame done, forcing fresh state...')
     // 强制刷新（绕过debounce），确保开局后立刻看到正确的可用操作
     await forceRefreshState()
@@ -2908,7 +2935,7 @@ const forceDiscard = async (p: Player) => {
 /* 上家：靠近牌桌中心，旋转180° */
 /* 四个弃牌区居中对齐牌桌十字 */
 :deep(.discard-zone--top) {
-  top: var(--discard-top-inset);
+  top: calc(var(--discard-top-inset) - 2%);
   left: 50%;
   transform: translateX(-50%);
 }
@@ -3149,7 +3176,7 @@ const forceDiscard = async (p: Player) => {
   left: 50%;
   transform: translateX(-50%);
   width: var(--seat-top-width);
-  min-height: 88px;
+  min-height: 98px;
   height: auto;
 }
 
@@ -3169,7 +3196,7 @@ const forceDiscard = async (p: Player) => {
   top: 50%;
   transform: translateY(-50%);
   height: calc(var(--seat-side-height) + 4%);
-  width: calc(var(--seat-side-width) + 22px);
+  width: calc(var(--seat-side-width) + 30px);
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
@@ -3181,7 +3208,7 @@ const forceDiscard = async (p: Player) => {
   top: 50%;
   transform: translateY(-50%);
   height: calc(var(--seat-side-height) + 4%);
-  width: calc(var(--seat-side-width) + 22px);
+  width: calc(var(--seat-side-width) + 48px);
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
@@ -3273,28 +3300,33 @@ const forceDiscard = async (p: Player) => {
 }
 
 .inline-action-btn--claim-pulse {
-  animation: inline-claim-breathe 1s ease-in-out infinite;
+  animation: inline-claim-breathe 0.86s ease-in-out infinite;
 }
 
 .inline-action-btn--chow.inline-action-btn--claim-pulse {
-  animation: inline-claim-breathe 1s ease-in-out infinite, inline-chow-glow 1s ease-in-out infinite;
+  animation: inline-claim-breathe-strong 0.84s ease-in-out infinite, inline-chow-glow 0.84s ease-in-out infinite;
 }
 
 .inline-action-btn--peng.inline-action-btn--claim-pulse {
-  animation: inline-claim-breathe 0.98s ease-in-out infinite, inline-peng-glow 0.98s ease-in-out infinite;
+  animation: inline-claim-breathe-strong 0.78s ease-in-out infinite, inline-peng-glow 0.78s ease-in-out infinite;
 }
 
 .inline-action-btn--kong.inline-action-btn--claim-pulse {
-  animation: inline-claim-breathe 1.02s ease-in-out infinite, inline-kong-glow 1.02s ease-in-out infinite;
+  animation: inline-claim-breathe-strong 0.8s ease-in-out infinite, inline-kong-glow 0.8s ease-in-out infinite;
 }
 
 .inline-action-btn--hu.inline-action-btn--claim-pulse {
-  animation: inline-claim-breathe 0.92s ease-in-out infinite, inline-hu-glow 0.92s ease-in-out infinite;
+  animation: inline-claim-breathe-strong 0.72s ease-in-out infinite, inline-hu-glow 0.72s ease-in-out infinite;
 }
 
 @keyframes inline-claim-breathe {
   0%, 100% { transform: scale(1); filter: brightness(1); }
   50% { transform: scale(1.09); filter: brightness(1.16); }
+}
+
+@keyframes inline-claim-breathe-strong {
+  0%, 100% { transform: scale(1.02); filter: brightness(1.02); }
+  50% { transform: scale(1.18); filter: brightness(1.24); }
 }
 
 @keyframes inline-chow-glow {

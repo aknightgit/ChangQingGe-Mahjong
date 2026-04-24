@@ -134,5 +134,34 @@ try {
   anyManager.games.delete(game.gameId);
 }
 
+const discarder = makePlayer('discarder', 13);
+const claimer = makePlayer('claimer', 13);
+const spectator = makePlayer('spectator', 13);
+const filler = makePlayer('filler', 13);
+const pengGame = makeGame([discarder, claimer, spectator, filler]);
+const pengTile = tile(TileSuit.DOTS, 5, 'discard-dot-5');
+
+discarder.hand.discardedTiles = [pengTile];
+claimer.hand.concealedTiles = [
+  pengTile,
+  tile(TileSuit.DOTS, 5, 'claim-dot-5-b'),
+  ...makeTiles('claimer-fill', 11),
+].slice(0, 13);
+pengGame.discardPile = [pengTile];
+pengGame.actionHistory = [{ playerId: discarder.id, type: ActionType.DISCARD, tile: pengTile, timestamp: Date.now() }];
+
+anyManager.executePengDirectly(pengGame, claimer);
+
+ok(
+  'executePengDirectly hands turn to claimer',
+  pengGame.currentPlayerIndex === 1,
+  `current=${pengGame.currentPlayerIndex}`
+);
+ok(
+  'executePengDirectly leaves claimer in discard state',
+  discardState(claimer) === true && pengGame.drawnThisTurn === true,
+  `concealed=${claimer.hand.concealedTiles.length}, drawn=${pengGame.drawnThisTurn}`
+);
+
 console.log(`\nResult: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

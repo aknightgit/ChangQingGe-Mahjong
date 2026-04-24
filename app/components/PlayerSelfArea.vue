@@ -38,6 +38,7 @@
             :tile="tile"
             :small="true"
             :back="isConcealedMeld(meld)"
+            :class="getClaimMarkerClass(meld, tile)"
             :dimmed="isWinner"
           />
           <!-- 吃碰杠箭头指示来源 -->
@@ -129,6 +130,12 @@ function getSourceArrowClass(sourcePosition: number, myPosition?: number): strin
   const relativePos = getRelativeSourcePosition(sourcePosition, myPosition)
   const classes = ['meld-arrow--self', 'meld-arrow--lower', 'meld-arrow--opposite', 'meld-arrow--upper']
   return classes[relativePos] || ''
+}
+
+function getClaimMarkerClass(meld: Meld, tile: Tile): string[] {
+  if (!meld.sourceTileId || meld.sourceTileId !== tile.id || meld.type === 'concealed_kong') return []
+  const tone = meld.sourcePosition !== undefined ? getSourceArrowClass(meld.sourcePosition, props.playerPosition) : 'meld-arrow--self'
+  return ['claimed-tile', tone.replace('meld-arrow', 'claimed-tile')]
 }
 
 // 弃牌区每行6张，自动换行（由CSS flex-wrap处理，无需computed）
@@ -378,6 +385,29 @@ const onPointerCancel = () => {
 .meld-arrow--upper {
   background: #e53935;
 }
+
+:deep(.claimed-tile) {
+  position: relative;
+}
+
+:deep(.claimed-tile)::after {
+  content: '';
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 20px solid transparent;
+  border-right: 20px solid transparent;
+  border-top: 32px solid rgba(255,255,255,0.95);
+  filter: drop-shadow(0 0 6px rgba(0,0,0,0.42));
+}
+
+:deep(.claimed-tile--self)::after { border-top-color: #f44336; }
+:deep(.claimed-tile--lower)::after { border-top-color: #1e88e5; }
+:deep(.claimed-tile--opposite)::after { border-top-color: #43a047; }
+:deep(.claimed-tile--upper)::after { border-top-color: #e53935; }
 
 /* 自摸 = 灰色 */
 .meld-arrow--self {

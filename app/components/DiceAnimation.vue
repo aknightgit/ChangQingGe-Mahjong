@@ -8,7 +8,7 @@
       <div class="dice-container">
         <Transition name="quad-pop">
           <div v-if="showResultBurst" class="quad-burst">
-            <span class="quad-text">{{ resultBurstText }}</span>
+            <span class="quad-text">{{ resultBurstLabel }}</span>
           </div>
         </Transition>
 
@@ -108,7 +108,16 @@ const canReroll = computed(() => currentRoll.value < maxRollsLimit.value && phas
 const isQuadCombo = computed(() => {
   return (props.dice1 === 1 && props.dice2 === 1) || (props.dice1 === 4 && props.dice2 === 4)
 })
+const isOneFourCombo = computed(() => {
+  return (props.dice1 === 1 && props.dice2 === 4) || (props.dice1 === 4 && props.dice2 === 1)
+})
 const isDoubleCombo = computed(() => props.dice1 === props.dice2)
+const resultBurstLabel = computed(() => {
+  if (isQuadCombo.value) return '四倍！'
+  if (isOneFourCombo.value) return '两倍！'
+  if (isDoubleCombo.value) return '双倍！'
+  return ''
+})
 const resultBurstText = computed(() => {
   if (isQuadCombo.value) return '四倍！'
   if (isDoubleCombo.value) return '双倍！'
@@ -139,12 +148,12 @@ const clearBurstTimer = () => {
 
 const flashResultBurst = () => {
   clearBurstTimer()
-  if (!resultBurstText.value) return
+  if (!resultBurstLabel.value) return
   showResultBurst.value = true
   burstTimer = setTimeout(() => {
     showResultBurst.value = false
     burstTimer = null
-  }, 200)
+  }, 500)
 }
 
 const onRoll = () => {
