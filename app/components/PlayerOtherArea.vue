@@ -225,9 +225,7 @@ const isConcealedMeld = (meld: Meld): boolean => {
   return meld.type === 'concealed_kong' || !!(meld as any).isConcealed
 }
 
-// ---- 吃碰来源标签 ----
-// sourcePosition: 0=自家, 1=下家(右), 2=对家(上), 3=上家(左)
-// 换算成"相对观察者"的方向
+// sourcePosition: 1=下家, 2=对家, 3=上家（0自家不会出现）
 function getRelativeSource(sourcePosition: number): number {
   const observerPos = props.playerPosition ?? 0
   return (observerPos - sourcePosition + 4) % 4
@@ -240,7 +238,7 @@ function getSourceLabel(sourcePosition: number): string {
 
 function getSourceArrowClass(sourcePosition: number): string {
   const rel = getRelativeSource(sourcePosition)
-  return ['src--self', 'src--lower', 'src--opposite', 'src--upper'][rel] || ''
+  return ['src--lower', 'src--opposite', 'src--upper'][rel - 1] || 'src--opposite'
 }
 
 function getClaimMarkerClass(meld: Meld, tile: any): string[] {
@@ -442,21 +440,21 @@ function getClaimMarkerClass(meld: Meld, tile: any): string[] {
   filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.4));
 }
 
-.player-other :deep(.claimed-tile--src--self)::after { border-top-color: rgba(229, 57, 53, 0.95); }
 .player-other :deep(.claimed-tile--src--lower)::after {
   border-top-color: rgba(67, 160, 71, 0.95);
   transform: translateX(-50%) rotate(-90deg);
 }
+
 .player-other :deep(.claimed-tile--src--opposite)::after {
   border-top-color: rgba(30, 136, 229, 0.95);
   transform: translateX(-50%) rotate(180deg);
 }
+
 .player-other :deep(.claimed-tile--src--upper)::after {
   border-top-color: rgba(251, 140, 0, 0.95);
   transform: translateX(-50%) rotate(90deg);
 }
 
-.src--self    { background: rgba(229, 57, 53, 0.85); color: #fff; }
 .src--lower   { background: rgba(67, 160, 71, 0.85); color: #fff; }
 .src--opposite{ background: rgba(30, 136, 229, 0.85); color: #fff; }
 .src--upper   { background: rgba(251, 140, 0, 0.85); color: #fff; }
