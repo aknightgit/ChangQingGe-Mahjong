@@ -2575,6 +2575,36 @@ const prevLiangShanVoteCount = ref(0)
 const prevQjAlertIds = ref<Set<string>>(new Set())
 const prevSwapRequestIds = ref<Set<string>>(new Set())
 const showLiangShanOverlay = ref(false)
+// ---- 追踪其他玩家动作（用于触发音效）----
+const prevOtherPlayerState = new Map<string, { meldCount: number; discardCount: number }>()
+const getOtherMeldCount = (player: any) => (player?.hand?.exposedMelds?.length ?? 0)
+const getOtherDiscardCount = (player: any) => (player?.hand?.discardedTiles?.length ?? 0)
+const checkOtherPlayerSounds = (newState: any) => {
+  if (!newState?.players) return
+  const myId = currentPlayer.value?.id
+  for (const player of newState.players) {
+    if (player.id === myId) continue
+    const prev = prevOtherPlayerState.get(player.id)
+    const meldCount = getOtherMeldCount(player)
+    const discardCount = getOtherDiscardCount(player)
+    if (prev) {
+      if (meldCount > prev.meldCount) {
+        const newMelds = (player.hand?.exposedMelds || []).slice(prev.meldCount)
+        for (const m of newMelds) {
+          if (m.type === 'kong' || m.tiles?.length === 4) playSound('tile-kong')
+          else if (m.type === 'triplet' || m.tiles?.length === 3) playSound('tile-pong')
+          else playSound('tile-chow')
+        }
+      }
+      if (discardCount > prev.discardCount) playSound('tile-discard')
+    }
+    prevOtherPlayerState.set(player.id, { meldCount, discardCount })
+  }
+  const currentIds = new Set(newState.players.map((p: any) => p.id))
+  for (const id of prevOtherPlayerState.keys()) {
+    if (!currentIds.has(id)) prevOtherPlayerState.delete(id)
+  }
+}
 const activePlayerCount = (state: any) => (state?.players || []).filter((p: any) => p.status === 'playing').length
 
 watch(() => gameState.value, (newState, oldState) => {
@@ -2622,6 +2652,9 @@ watch(() => gameState.value, (newState, oldState) => {
     }
     playSound('round-draw')
   }
+
+  // 检测其他玩家的动作音效
+  checkOtherPlayerSounds(newState)
 
   // 互包检测（通过 discard pile 变化 + pending 推断）
   // 简化：检查 actionHistory 最近的动作（只保留造反）

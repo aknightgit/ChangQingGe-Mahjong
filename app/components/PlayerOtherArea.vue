@@ -235,7 +235,11 @@ function getRelativeSource(sourcePosition: number): number {
 
 function getSourceLabel(sourcePosition: number): string {
   const rel = getRelativeSource(sourcePosition)
-  return ['自', '下', '对', '上'][rel] || ''
+  // 箭头方向：从自家视角，指向来源玩家所在方位
+  // rel=0 自家→↑，rel=1 下家→←，rel=2 对家→↓，rel=3 上家→→
+  const arrows = ['↑', '←', '↓', '→']
+  const labels = ['自', '下', '对', '上']
+  return arrows[rel] + labels[rel]
 }
 
 function getSourceArrowClass(sourcePosition: number): string {
@@ -431,15 +435,15 @@ function getClaimMarkerClass(meld: Meld, tile: any): string[] {
 .player-other :deep(.claimed-tile)::after {
   content: '';
   position: absolute;
-  top: -12px;
+  top: -9px;
   left: 50%;
   transform: translateX(-50%);
   width: 0;
   height: 0;
-  border-left: 20px solid transparent;
-  border-right: 20px solid transparent;
-  border-top: 32px solid rgba(255, 255, 255, 0.95);
-  filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.45));
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 18px solid rgba(255, 255, 255, 0.95);
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.4));
 }
 
 .player-other :deep(.claimed-tile--src--self)::after { border-top-color: rgba(229, 57, 53, 0.95); }
