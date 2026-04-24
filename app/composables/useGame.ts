@@ -162,12 +162,18 @@ export const useGame = () => {
       // Game Events
       socket.value.on('game:state-changed', async (data) => {
         console.log('Game state update:', data)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('mahjong-realtime-state', { detail: data }))
+        }
         await refreshState()
       })
 
       // Listen for server's broadcastGameState events (different name from action-triggered events)
       socket.value.on('gameStateUpdate', async (data) => {
         console.log('GameStateUpdate from server:', data)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('mahjong-realtime-state', { detail: data }))
+        }
         await refreshState()
       })
 

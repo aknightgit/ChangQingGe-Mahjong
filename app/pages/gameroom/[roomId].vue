@@ -965,6 +965,7 @@ watch(showSettings, (open) => {
 onMounted(() => {
   window.addEventListener('resize', updateSettingsPosition)
   document.addEventListener('pointerdown', handleGlobalPointerDown)
+  window.addEventListener('mahjong-realtime-state', handleRealtimeState as EventListener)
   try {
     const savedTheme = localStorage.getItem('mahjong.tableTheme') as 'classic-green' | 'jade-green' | 'royal-red' | null
     if (savedTheme === 'classic-green' || savedTheme === 'jade-green' || savedTheme === 'royal-red') {
@@ -976,6 +977,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateSettingsPosition)
   document.removeEventListener('pointerdown', handleGlobalPointerDown)
+  window.removeEventListener('mahjong-realtime-state', handleRealtimeState as EventListener)
 })
 
 const onSettingsClosed = () => {}
@@ -2645,6 +2647,17 @@ const prevLiangShanVoteCount = ref(0)
 const prevQjAlertIds = ref<Set<string>>(new Set())
 const prevSwapRequestIds = ref<Set<string>>(new Set())
 const prevIsMyTurn = ref(false)
+const lastFastDiscardAt = ref(0)
+const prevRealtimeDiscardCount = ref(0)
+const handleRealtimeState = (e: Event) => {
+  const detail = (e as CustomEvent).detail as any
+  const discardCount = Array.isArray(detail?.discardPile) ? detail.discardPile.length : 0
+  if (discardCount > prevRealtimeDiscardCount.value) {
+    lastFastDiscardAt.value = Date.now()
+    playSound('tile-discard')
+  }
+  prevRealtimeDiscardCount.value = discardCount
+}
 watch(isMyTurn, (isMe) => {
   if (isMe && !prevIsMyTurn.value) {
     playSound('turn-notify')
@@ -2672,7 +2685,7 @@ const checkOtherPlayerSounds = (newState: any) => {
           else playSound('tile-chow')
         }
       }
-      if (discardCount > prev.discardCount) playSound('tile-discard')
+      if (discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) playSound('tile-discard')
     }
     prevOtherPlayerState.set(player.id, { meldCount, discardCount })
   }
