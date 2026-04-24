@@ -1,2 +1,118 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
+
+/* ========================
+   玻璃态设置面板 (Settings)
+   ======================== */
+.glass-settings-panel {
+  position: fixed;
+  z-index: 9999;
+  width: 220px;
+  border-radius: 16px;
+  background: rgba(30, 41, 59, 0.75);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.2);
+  overflow: visible;
+}
+
+/* 三角指示箭头 */
+.glass-settings-arrow {
+  position: absolute;
+  top: -7px;
+  right: 32px;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 8px solid rgba(30, 41, 59, 0.75);
+  filter: drop-shadow(0 -2px 4px rgba(0,0,0,0.2));
+}
+
+.glass-settings-body {
+  padding: 8px 6px 6px;
+}
+
+.glass-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+  user-select: none;
+}
+.glass-settings-row:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.glass-settings-row:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.glass-settings-icon {
+  font-size: 15px;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+.glass-settings-label {
+  flex: 1;
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.88);
+  font-weight: 400;
+}
+
+.glass-settings-footer {
+  text-align: center;
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 2px;
+}
+
+/* 玻璃态 Toggle */
+.glass-toggle {
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.25s, border-color 0.25s;
+}
+.glass-toggle--on {
+  background: rgba(56, 189, 248, 0.65);
+  border-color: rgba(56, 189, 248, 0.5);
+}
+.glass-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.glass-toggle--on .glass-toggle-knob {
+  transform: translateX(16px);
+  background: #fff;
+}
+
+/* 面板滑入/滑出动画 */
+.settings-panel-enter-active {
+  transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.settings-panel-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease-in;
+}
+.settings-panel-enter-from,
+.settings-panel-leave-to {
+  opacity: 0;
+  transform: scale(0.88) translateY(-6px);
+}

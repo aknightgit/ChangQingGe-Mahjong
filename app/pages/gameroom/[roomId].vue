@@ -19,7 +19,7 @@
           >
             {{ soundEnabled ? '🔊' : '🔇' }}
           </button>
-          <button class="mahjong-button small secondary" @click="showSettings = true">
+          <button ref="settingsBtnEl" class="mahjong-button small secondary" @click="showSettings = true">
             ⚙️ 设置
           </button>
           <button class="mahjong-button small secondary" @click="navigateTo('/rules')">
@@ -374,79 +374,60 @@
           </div>
         </div>
 
-        <!-- 设置面板 -->
-        <Transition name="settings-slide">
-          <div v-if="showSettings" class="settings-overlay" @click.self="showSettings = false">
-            <div class="settings-panel">
-              <div class="settings-header">
-                <h2 class="settings-title">⚙️ 游戏设置</h2>
-                <button class="settings-close" @click="showSettings = false">✕</button>
-              </div>
-              <div class="settings-body">
-                <!-- 音效开关 -->
-                <div class="settings-item">
-                  <div class="settings-item-label">
-                    <span class="settings-icon">🔊</span>
-                    <span>音效</span>
+        <!-- 设置面板（悬浮玻璃态，定位在设置按钮下方） -->
+        <Teleport to="body">
+          <Transition name="settings-panel" @after-leave="onSettingsClosed">
+            <div
+              v-if="showSettings"
+              class="glass-settings-panel"
+              :style="settingsPanelStyle"
+              @click.stop
+            >
+              <!-- 三角指示箭头 -->
+              <div class="glass-settings-arrow"></div>
+              <div class="glass-settings-body">
+                <div class="glass-settings-row" @click="toggleSound">
+                  <span class="glass-settings-icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
+                  <span class="glass-settings-label">音效</span>
+                  <div class="glass-toggle" :class="{ 'glass-toggle--on': soundEnabled }">
+                    <div class="glass-toggle-knob"></div>
                   </div>
-                  <label class="toggle-switch">
-                    <input type="checkbox" :checked="soundEnabled" @change="toggleSound" />
-                    <span class="toggle-slider"></span>
-                  </label>
                 </div>
-                <!-- 出牌提示 -->
-                <div class="settings-item">
-                  <div class="settings-item-label">
-                    <span class="settings-icon">💡</span>
-                    <span>出牌提示</span>
+                <div class="glass-settings-row" @click="showHintEnabled = !showHintEnabled">
+                  <span class="glass-settings-icon">💡</span>
+                  <span class="glass-settings-label">出牌提示</span>
+                  <div class="glass-toggle" :class="{ 'glass-toggle--on': showHintEnabled }">
+                    <div class="glass-toggle-knob"></div>
                   </div>
-                  <label class="toggle-switch">
-                    <input type="checkbox" v-model="showHintEnabled" />
-                    <span class="toggle-slider"></span>
-                  </label>
                 </div>
-                <!-- 牌面动画 -->
-                <div class="settings-item">
-                  <div class="settings-item-label">
-                    <span class="settings-icon">✨</span>
-                    <span>牌面动画</span>
+                <div class="glass-settings-row" @click="tileAnimationEnabled = !tileAnimationEnabled">
+                  <span class="glass-settings-icon">✨</span>
+                  <span class="glass-settings-label">牌面动画</span>
+                  <div class="glass-toggle" :class="{ 'glass-toggle--on': tileAnimationEnabled }">
+                    <div class="glass-toggle-knob"></div>
                   </div>
-                  <label class="toggle-switch">
-                    <input type="checkbox" v-model="tileAnimationEnabled" />
-                    <span class="toggle-slider"></span>
-                  </label>
                 </div>
-                <!-- 操作音效 -->
-                <div class="settings-item">
-                  <div class="settings-item-label">
-                    <span class="settings-icon">🎵</span>
-                    <span>操作音效</span>
+                <div class="glass-settings-row" @click="actionSoundEnabled = !actionSoundEnabled">
+                  <span class="glass-settings-icon">🎵</span>
+                  <span class="glass-settings-label">操作音效</span>
+                  <div class="glass-toggle" :class="{ 'glass-toggle--on': actionSoundEnabled }">
+                    <div class="glass-toggle-knob"></div>
                   </div>
-                  <label class="toggle-switch">
-                    <input type="checkbox" v-model="actionSoundEnabled" />
-                    <span class="toggle-slider"></span>
-                  </label>
                 </div>
-                <!-- 倒计时警告 -->
-                <div class="settings-item">
-                  <div class="settings-item-label">
-                    <span class="settings-icon">⏱</span>
-                    <span>倒计时警告</span>
+                <div class="glass-settings-row" @click="timerWarningEnabled = !timerWarningEnabled">
+                  <span class="glass-settings-icon">⏱</span>
+                  <span class="glass-settings-label">倒计时警告</span>
+                  <div class="glass-toggle" :class="{ 'glass-toggle--on': timerWarningEnabled }">
+                    <div class="glass-toggle-knob"></div>
                   </div>
-                  <label class="toggle-switch">
-                    <input type="checkbox" v-model="timerWarningEnabled" />
-                    <span class="toggle-slider"></span>
-                  </label>
                 </div>
-                <div class="settings-divider"></div>
-                <div class="settings-item settings-item--info">
-                  <span class="settings-icon">ℹ️</span>
+                <div class="glass-settings-footer">
                   <span>长清阁麻将 v2.2</span>
                 </div>
               </div>
             </div>
-          </div>
-        </Transition>
+          </Transition>
+        </Teleport>
 
         <!-- Big responsive table -->
         <div class="table-wrapper">
@@ -920,6 +901,51 @@ let lastWarnAt = 0
 let consecutiveAutoCount = 0   // 连续自动操作次数
 const isAIControlled = ref(false) // 是否被AI接管
 const showSettings = ref(false) // 显示设置面板
+const settingsBtnEl = ref<HTMLElement | null>(null)
+const settingsPanelTop = ref(0)
+const settingsPanelLeft = ref(0)
+
+// 播放咻咻收缩音效
+const playWhoosh = () => {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+    const oscillator = ctx.createOscillator()
+    const gainNode = ctx.createGain()
+    oscillator.connect(gainNode)
+    gainNode.connect(ctx.destination)
+    oscillator.type = 'sine'
+    oscillator.frequency.setValueAtTime(880, ctx.currentTime)
+    oscillator.frequency.exponentialRampToValueAtTime(220, ctx.currentTime + 0.18)
+    gainNode.gain.setValueAtTime(0.12, ctx.currentTime)
+    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18)
+    oscillator.start(ctx.currentTime)
+    oscillator.stop(ctx.currentTime + 0.18)
+    setTimeout(() => ctx.close(), 250)
+  } catch (_) {}
+}
+
+// 定位设置面板在按钮下方
+const updateSettingsPosition = () => {
+  if (!settingsBtnEl.value) return
+  const rect = settingsBtnEl.value.getBoundingClientRect()
+  settingsPanelTop.value = rect.bottom + 8
+  settingsPanelLeft.value = rect.right - 220 // 靠右对齐，panel宽约220px
+}
+
+watch(showSettings, (open) => {
+  if (open) {
+    nextTick(updateSettingsPosition)
+  } else {
+    playWhoosh()
+  }
+})
+
+const onSettingsClosed = () => {}
+
+const settingsPanelStyle = computed(() => ({
+  top: `${settingsPanelTop.value}px`,
+  left: `${Math.max(8, settingsPanelLeft.value)}px`,
+}))
 const showDebugPanel = ref(false) // 布局热调面板
 
 // 游戏设置
