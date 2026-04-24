@@ -1,82 +1,74 @@
 /**
  * 音效管理器
- * 
- * 使用 Web Audio API 播放音效
- * 音效文件放在 public/sounds/ 目录
- * 
- * 使用方式:
+ *
+ * 使用 Web Audio API 合成音效（无需外部音频文件）
+ * 音效触发点：
+ *   playSound('tile-draw')    - 摸牌
+ *   playSound('tile-discard')  - 弃牌
+ *   playSound('tile-chow')     - 吃牌
+ *   playSound('tile-pong')     - 碰牌
+ *   playSound('tile-kong')    - 杠牌
+ *   playSound('tile-hu')      - 胡牌
+ *   playSound('tile-rebel')   - 造反
+ *   playSound('dice-roll')    - 掷骰子
+ *   playSound('timer-warn')   - 定时器警告
+ *   playSound('turn-notify')  - 回合通知
+ *
+ * 使用方式：
  *   const { play, isEnabled, setEnabled } = useSound()
  *   play('tile-draw')
  *   setEnabled(false) // 静音
  */
 
-interface SoundConfig {
-  src: string
-  volume?: number
-}
+import {
+  playTileDraw,
+  playTileDiscard,
+  playTileChow,
+  playTilePong,
+  playTileKong,
+  playTileHu,
+  playTileRebel,
+  playDiceRoll,
+  playTimerWarn,
+  playTurnNotify,
+} from './useSoundSynth'
 
-const SOUNDS: Record<string, SoundConfig> = {
-  'tile-draw': { src: '/sounds/tile-draw.mp3', volume: 0.6 },
-  'tile-discard': { src: '/sounds/tile-discard.mp3', volume: 0.5 },
-  'tile-chow': { src: '/sounds/tile-chow.mp3', volume: 0.7 },
-  'tile-pong': { src: '/sounds/tile-pong.mp3', volume: 0.7 },
-  'tile-kong': { src: '/sounds/tile-kong.mp3', volume: 0.8 },
-  'tile-hu': { src: '/sounds/tile-hu.mp3', volume: 1.0 },
-  'tile-rebel': { src: '/sounds/tile-rebel.mp3', volume: 0.9 },
-  'dice-roll': { src: '/sounds/dice-roll.mp3', volume: 0.7 },
-  'timer-warn': { src: '/sounds/timer-warn.mp3', volume: 0.4 },
-  'turn-notify': { src: '/sounds/turn-notify.mp3', volume: 0.5 },
+// 音效名称 → 合成函数映射
+const SOUND_PLAYERS: Record<string, () => void> = {
+  'tile-draw': playTileDraw,
+  'tile-discard': playTileDiscard,
+  'tile-chow': playTileChow,
+  'tile-pong': playTilePong,
+  'tile-kong': playTileKong,
+  'tile-hu': playTileHu,
+  'tile-rebel': playTileRebel,
+  'dice-roll': playDiceRoll,
+  'timer-warn': playTimerWarn,
+  'turn-notify': playTurnNotify,
 }
 
 // 全局状态（单例）
 const _isEnabled = ref(true)
-const _volume = ref(0.7)
-const _audioCache = new Map<string, HTMLAudioElement>()
-
-const _getAudio = (name: string): HTMLAudioElement | null => {
-  if (!process.client) return null
-  const config = SOUNDS[name]
-  if (!config) return null
-  if (_audioCache.has(name)) return _audioCache.get(name)!
-  try {
-    const audio = new Audio(config.src)
-    audio.volume = (config.volume ?? 1.0) * _volume.value
-    audio.preload = 'auto'
-    _audioCache.set(name, audio)
-    return audio
-  } catch {
-    return null
-  }
-}
 
 export const useSound = () => {
   const play = (name: string) => {
     if (!_isEnabled.value || !process.client) return
-    const audio = _getAudio(name)
-    if (!audio) return
-    audio.currentTime = 0
-    audio.play().catch(() => {/* silent fail before user interaction */})
+    const player = SOUND_PLAYERS[name]
+    if (!player) return
+    try {
+      player()
+    } catch {
+      // silent fail
+    }
   }
 
   const setEnabled = (enabled: boolean) => {
     _isEnabled.value = enabled
   }
 
-  const setVolume = (v: number) => {
-    _volume.value = Math.max(0, Math.min(1, v))
-    _audioCache.forEach((audio, name) => {
-      const cfg = SOUNDS[name]
-      if (cfg) audio.volume = (cfg.volume ?? 1.0) * _volume.value
-    })
-  }
-
-  // 导出可直接用的 ref（不是 readonly，保证模板中能读取）
   return {
     play,
     isEnabled: _isEnabled,
     setEnabled,
-    setVolume,
-    volume: _volume,
   }
 }
-
