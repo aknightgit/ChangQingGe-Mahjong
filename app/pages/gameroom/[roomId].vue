@@ -2600,7 +2600,13 @@ const prevRebelEvent = ref<any>(null)
 const prevLiangShanVoteCount = ref(0)
 const prevQjAlertIds = ref<Set<string>>(new Set())
 const prevSwapRequestIds = ref<Set<string>>(new Set())
-const showLiangShanOverlay = ref(false)
+const prevIsMyTurn = ref(false)
+watch(isMyTurn, (isMe) => {
+  if (isMe && !prevIsMyTurn.value) {
+    playSound('turn-notify')
+  }
+  prevIsMyTurn.value = isMe
+})
 // ---- 追踪其他玩家动作（用于触发音效）----
 const prevOtherPlayerState = new Map<string, { meldCount: number; discardCount: number }>()
 const getOtherMeldCount = (player: any) => (player?.hand?.exposedMelds?.length ?? 0)
