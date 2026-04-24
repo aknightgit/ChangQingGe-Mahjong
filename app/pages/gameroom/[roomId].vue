@@ -2432,8 +2432,9 @@ const onConcealedKong = () => {
   for (const key in counts) {
     const group = counts[key]
     if (group && group.length === 4) {
+      playSound('kong-draw')
       executeAction(ActionType.CONCEALED_KONG, undefined, group.map(t => t.id))
-      return // Just do the first one for now
+      return
     }
   }
 }
@@ -2448,6 +2449,7 @@ const onExtendedKong = () => {
         t.suit === baseTile.suit && t.value === baseTile.value
       )
       if (match) {
+        playSound('kong-draw')
         executeAction(ActionType.EXTENDED_KONG, match.id)
         return
       }
@@ -2554,6 +2556,7 @@ watch(() => gameState.value, (newState, oldState) => {
   // 游戏开始
   if (newState.phase === 'playing' && prevPhase.value === 'waiting') {
     addBroadcast('🎉 房间满员，正式开干啦！', 'info')
+    playSound('game-start')
   }
   // 每把开局时重新播报 QJ 线突破提醒，确保所有人看到
   if (newState.phase === 'playing' && prevPhase.value !== 'playing') {
@@ -2581,6 +2584,7 @@ watch(() => gameState.value, (newState, oldState) => {
       const bailInfo = rel && partner ? ` · ${rel.type}包${partner.name}` : ''
       addBroadcast(`🏆 ${w.name} ${method}胡牌${handType}${bailInfo}`, 'win')
     }
+    playSound('round-end')
   }
 
   // 流局
@@ -2589,6 +2593,7 @@ watch(() => gameState.value, (newState, oldState) => {
     if (reason === 'wall_exhausted') {
       addBroadcast('💨 牌墙摸完，流局！倍数翻倍！', 'warn')
     }
+    playSound('round-draw')
   }
 
   // 互包检测（通过 discard pile 变化 + pending 推断）

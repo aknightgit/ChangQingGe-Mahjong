@@ -318,3 +318,123 @@ export const playTurnNotify = (): void => {
   osc.start(t)
   osc.stop(t + 0.25)
 }
+
+// ============================================================
+// 新增：游戏阶段音效
+// ============================================================
+
+/** 开局：洗牌+发牌音效（短促扫频噪音） */
+export const playGameStart = (): void => {
+  const ctx = getCtx()
+  if (!ctx) return
+  const t = ctx.currentTime
+
+  // 洗牌噪音
+  const noise = createNoise(ctx, 0.4)
+  const nGain = ctx.createGain()
+  const nFilter = ctx.createBiquadFilter()
+  nFilter.type = 'bandpass'
+  nFilter.frequency.setValueAtTime(600, t)
+  nFilter.frequency.linearRampToValueAtTime(2000, t + 0.2)
+  nFilter.frequency.linearRampToValueAtTime(800, t + 0.4)
+  nFilter.Q.setValueAtTime(0.8, t)
+  nGain.gain.setValueAtTime(0, t)
+  nGain.gain.linearRampToValueAtTime(0.4, t + 0.05)
+  nGain.gain.exponentialRampToValueAtTime(0.001, t + 0.4)
+  noise.connect(nFilter)
+  nFilter.connect(nGain)
+  nGain.connect(ctx.destination)
+  noise.start(t)
+  noise.stop(t + 0.45)
+
+  // 发牌短促音（四个小节拍）
+  for (let i = 0; i < 4; i++) {
+    createOsc(ctx, 400 + i * 100, 'triangle', 0.25, t + 0.2 + i * 0.1, 0.05)
+  }
+}
+
+/** 流局：低沉下行结束音 */
+export const playRoundDraw = (): void => {
+  const ctx = getCtx()
+  if (!ctx) return
+  const t = ctx.currentTime
+
+  // 低频下行
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = 'sawtooth'
+  osc.frequency.setValueAtTime(300, t)
+  osc.frequency.exponentialRampToValueAtTime(80, t + 0.5)
+  gain.gain.setValueAtTime(0.4, t)
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6)
+  osc.connect(gain)
+  gain.connect(ctx.destination)
+  osc.start(t)
+  osc.stop(t + 0.7)
+
+  // 低音点缀
+  createOsc(ctx, 150, 'sine', 0.3, t + 0.1, 0.3)
+}
+
+/** 胜负揭晓：结果展示音（比胡牌轻，但有仪式感） */
+export const playRoundEnd = (): void => {
+  const ctx = getCtx()
+  if (!ctx) return
+  const t = ctx.currentTime
+
+  // C 和弦渐强
+  const chord = [523, 659, 784]
+  chord.forEach((freq) => {
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(freq, t)
+    gain.gain.setValueAtTime(0, t)
+    gain.gain.linearRampToValueAtTime(0.3, t + 0.05)
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6)
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start(t)
+    osc.stop(t + 0.65)
+  })
+
+  // 高音点缀
+  createOsc(ctx, 880, 'sine', 0.15, t + 0.1, 0.15)
+}
+
+/** 杠后补摸：短促提示音（比摸牌轻，表示有事情发生） */
+export const playKongDraw = (): void => {
+  const ctx = getCtx()
+  if (!ctx) return
+  const t = ctx.currentTime
+
+  createOsc(ctx, 700, 'sine', 0.3, t, 0.05)
+  createOsc(ctx, 700, 'sine', 0.2, t + 0.08, 0.05)
+}
+
+/** 其他人回合：轻柔方位提示（panning 左/右） */
+export const playOtherTurn = (pan: number = 0): void => {
+  // pan: -1 = 左家, 0 = 对家, 1 = 右家
+  const ctx = getCtx()
+  if (!ctx) return
+  const t = ctx.currentTime
+
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  const panner = ctx.createStereoPanner()
+
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(500, t)
+  osc.frequency.exponentialRampToValueAtTime(350, t + 0.1)
+
+  gain.gain.setValueAtTime(0.2, t)
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12)
+
+  panner.pan.setValueAtTime(Math.max(-1, Math.min(1, pan)), t)
+
+  osc.connect(gain)
+  gain.connect(panner)
+  panner.connect(ctx.destination)
+  osc.start(t)
+  osc.stop(t + 0.15)
+}

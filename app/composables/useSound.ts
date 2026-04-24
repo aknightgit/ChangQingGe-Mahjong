@@ -31,6 +31,11 @@ import {
   playDiceRoll,
   playTimerWarn,
   playTurnNotify,
+  playGameStart,
+  playRoundDraw,
+  playRoundEnd,
+  playKongDraw,
+  playOtherTurn,
 } from './useSoundSynth'
 
 // 音效名称 → 合成函数映射
@@ -45,6 +50,10 @@ const SOUND_PLAYERS: Record<string, () => void> = {
   'dice-roll': playDiceRoll,
   'timer-warn': playTimerWarn,
   'turn-notify': playTurnNotify,
+  'game-start': playGameStart,
+  'round-draw': playRoundDraw,
+  'round-end': playRoundEnd,
+  'kong-draw': playKongDraw,
 }
 
 // 全局状态（单例）
