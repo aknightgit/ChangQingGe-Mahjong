@@ -10,6 +10,10 @@ export const useGame = () => {
     typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
   const gameState = ref<GameState | null>(null)
   const playerView = ref<any>(null) // Player's hand view
+  const tingPreview = ref<{ isTing: boolean; winningTiles: Array<{ tile: Tile; remainingCount?: number }> }>({
+    isTing: false,
+    winningTiles: []
+  })
   const availableActions = ref<ActionType[]>([])
   const socket = ref<Socket | null>(null)
   const isConnected = ref(false)
@@ -260,6 +264,7 @@ export const useGame = () => {
   const updateState = (data: any) => {
     gameState.value = data.game
     playerView.value = data.playerView
+    tingPreview.value = data.tingPreview || { isTing: false, winningTiles: [] }
     // 只在availableActions实际变化时才更新lastStateChangeAt
     const oldActions = availableActions.value
     const newActions = data.availableActions || []
@@ -346,6 +351,7 @@ export const useGame = () => {
   return {
     gameState,
     currentPlayer,
+    tingPreview,
     availableActions,
     isConnected,
     error,

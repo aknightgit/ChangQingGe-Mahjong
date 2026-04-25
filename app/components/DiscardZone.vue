@@ -35,11 +35,10 @@ const props = defineProps<{
 
 const layout = computed(() => {
   if (props.position === 'left' || props.position === 'right') {
-    // 行间距至少 42px，防止 40px 高的牌上下重叠（28px tile + 14px gap 经验值）
-    return { cols: 3, rows: 8, width: 102, height: 232, cellW: 34, cellH: 29 }
+    return { cols: 3, rows: 8, width: 110, height: 232, cellW: 41, cellH: 29 }
   }
 
-  return { cols: 8, rows: 3, width: 224, height: 114, cellW: 28, cellH: 38 }
+  return { cols: 8, rows: 3, width: 231, height: 122, cellW: 29, cellH: 41 }
 })
 
 const maxTiles = computed(() => layout.value.cols * layout.value.rows)
@@ -113,30 +112,30 @@ function slotStyle(index: number) {
 }
 
 .discard-item :deep(.latest-tile) {
-  outline: 2px solid rgba(255, 68, 68, 0.5) !important;
+  outline: 3px solid rgba(255, 58, 58, 0.82) !important;
   outline-offset: 3px;
   border-radius: 6px;
   box-shadow:
-    0 0 8px rgba(255, 68, 68, 0.3),
-    0 0 16px rgba(255, 68, 68, 0.15),
-    0 0 32px rgba(255, 68, 68, 0.08);
+    0 0 10px rgba(255, 58, 58, 0.48),
+    0 0 20px rgba(255, 58, 58, 0.28),
+    0 0 36px rgba(255, 58, 58, 0.14);
   animation: latest-pulse 2s ease-in-out infinite;
 }
 
 @keyframes latest-pulse {
   0%, 100% {
     box-shadow:
-      0 0 8px rgba(255, 68, 68, 0.3),
-      0 0 16px rgba(255, 68, 68, 0.15),
-      0 0 32px rgba(255, 68, 68, 0.08);
-    outline-color: rgba(255, 68, 68, 0.5);
+      0 0 10px rgba(255, 58, 58, 0.48),
+      0 0 20px rgba(255, 58, 58, 0.28),
+      0 0 36px rgba(255, 58, 58, 0.14);
+    outline-color: rgba(255, 58, 58, 0.82);
   }
   50% {
     box-shadow:
-      0 0 12px rgba(255, 68, 68, 0.5),
-      0 0 24px rgba(255, 68, 68, 0.25),
-      0 0 48px rgba(255, 68, 68, 0.12);
-    outline-color: rgba(255, 100, 100, 0.7);
+      0 0 14px rgba(255, 72, 72, 0.68),
+      0 0 28px rgba(255, 72, 72, 0.36),
+      0 0 52px rgba(255, 72, 72, 0.18);
+    outline-color: rgba(255, 96, 96, 0.95);
   }
 }
 </style>

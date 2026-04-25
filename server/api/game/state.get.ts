@@ -1,11 +1,17 @@
 import { gameManager } from '../../utils/gameManager';
 import { TileSuit } from '../../types/game';
 import { requireGamePlayerAccess } from '../../utils/session';
+import { canRevealSpectatorTarget } from '../../utils/spectatorView';
 
 function getEffectiveGlobalMultiplier(game: any): number {
   const inherit = game.inheritMultiplier ?? game.inheritedGlobalMultiplier ?? 1;
   const round = game.roundMultiplier ?? 1;
   return Math.min(inherit * round, 8);
+}
+
+function getCurrentRoundNumber(game: any): number {
+  const completedRounds = Array.isArray(game.roundStats) ? game.roundStats.length : 0;
+  return game.phase === 'ended' ? Math.max(1, completedRounds) : completedRounds + 1;
 }
 
 export default defineEventHandler(async (event) => {
@@ -72,7 +78,10 @@ export default defineEventHandler(async (event) => {
   (game as any).bailoutRelations = bailoutRelations;
 
   const maskedPlayers = game.players.map((p) => {
-    const shouldReveal = isAdmin || p.id === normalizedPlayerId;
+    const shouldReveal =
+      isAdmin ||
+      p.id === normalizedPlayerId ||
+      canRevealSpectatorTarget(game, normalizedPlayerId, p);
 
     return {
       ...p,
@@ -89,6 +98,13 @@ export default defineEventHandler(async (event) => {
     };
   });
 
+  let tingPreview = { isTing: false, winningTiles: [] as any[] };
+  try {
+    tingPreview = await gameManager.getTingPreviewForPlayer(normalizedGameId, normalizedPlayerId);
+  } catch (err: any) {
+    console.warn('getTingPreviewForPlayer failed:', err.message);
+  }
+
   // Ensure isDealer is correctly passed
   const isDealer = player.isDealer;
 
@@ -97,11 +113,13 @@ export default defineEventHandler(async (event) => {
     data: {
       game: {
         ...game,
+        currentRound: getCurrentRoundNumber(game),
         globalMultiplier: getEffectiveGlobalMultiplier(game),
         players: maskedPlayers
       },
       playerView: player.hand,
-      availableActions
+      availableActions,
+      tingPreview
     }
   };
 });

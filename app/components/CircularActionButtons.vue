@@ -19,7 +19,7 @@
             'action-btn--active': hasChow,
             'action-btn--chow': hasChow,
             'action-btn--highlight': hasChow,
-            'action-btn--highlight-pulse': hasChow && !isDelaying
+            'action-btn--highlight-pulse': hasChow
           }"
           :disabled="!hasChow || isInteractionLocked || !isConnected"
           @click="$emit('action', 'chow')"
@@ -31,7 +31,7 @@
             'action-btn--active': hasPeng,
             'action-btn--peng': hasPeng,
             'action-btn--highlight': hasPeng,
-            'action-btn--highlight-pulse': hasPeng && !isDelaying
+            'action-btn--highlight-pulse': hasPeng
           }"
           :disabled="!hasPeng || isInteractionLocked || !isConnected"
           @click="$emit('action', 'peng')"
@@ -43,7 +43,7 @@
             'action-btn--active': hasHu,
             'action-btn--hu': hasHu,
             'action-btn--highlight': hasHu,
-            'action-btn--highlight-pulse': hasHu && !isDelaying
+            'action-btn--highlight-pulse': hasHu
           }"
           :disabled="!hasHu || isInteractionLocked || !isConnected"
           @click="$emit('action', 'hu')"
@@ -55,7 +55,7 @@
             'action-btn--active': hasKong,
             'action-btn--kong': hasKong,
             'action-btn--highlight': hasKong,
-            'action-btn--highlight-pulse': hasKong && !isDelaying
+            'action-btn--highlight-pulse': hasKong
           }"
           :disabled="!hasKong || isInteractionLocked || !isConnected"
           @click="$emit('action', 'kong')"
@@ -63,37 +63,38 @@
       </div>
     </div>
 
-    <!-- 右侧 大圆：摸 -->
-    <button
-      class="action-btn action-btn--draw"
-      :class="{
-        'action-btn--active': canDraw,
-        'action-btn--highlight': canDraw && !isDelaying,
-        'action-btn--freezing': isFreezing
-      }"
-      :style="isFreezing ? { '--freeze-progress': freezeProgress, '--freeze-duration-ms': `${safeFreezeDurationMs}ms` } : {}"
-      :disabled="!canDraw || isFreezing || isInteractionLocked || !isConnected"
-      @click="$emit('action', 'draw')"
-    >
-      <span v-if="isFreezing" class="freeze-progress-ring"></span>
-      <span class="draw-label">摸</span>
-    </button>
-
-    <!-- 第二行：特殊操作按钮 -->
-    <div class="action-grid-secondary" v-if="hasAnySecondaryAction">
-      <!-- 慢（容我想一想） -->
+    <div class="draw-action-group">
+      <!-- 右侧大圆：摸 -->
       <button
-        v-if="hasThink"
-        class="action-btn action-btn--small action-btn--think"
+        class="action-btn action-btn--draw"
+        :class="{
+          'action-btn--active': canDraw,
+          'action-btn--highlight': canDraw && !isDelaying,
+          'action-btn--freezing': isFreezing
+        }"
+        :style="isFreezing ? { '--freeze-progress': freezeProgress, '--freeze-duration-ms': `${safeFreezeDurationMs}ms` } : {}"
+        :disabled="!canDraw || isFreezing || isInteractionLocked || !isConnected"
+        @click="$emit('action', 'draw')"
+      >
+        <span v-if="isFreezing" class="freeze-progress-ring"></span>
+        <span class="draw-label">摸</span>
+      </button>
+
+      <button
+        class="action-btn action-btn--small action-btn--think action-btn--think-inline"
         :class="{
           'action-btn--active': hasThink,
-          'action-btn--highlight': hasThink && !isDelaying,
-          'action-btn--disabled': !canUseThink
+          'action-btn--highlight': hasThink && hasAnyPriorityAction,
+          'action-btn--highlight-pulse': hasThink && hasAnyPriorityAction,
+          'action-btn--disabled': !hasThink || !effectiveCanUseThink
         }"
         :disabled="!hasThink || !effectiveCanUseThink || isInteractionLocked || !isConnected"
         @click="$emit('action', 'think')"
       >慢{{ effectiveThinkRemaining > 0 ? effectiveThinkRemaining : '' }}</button>
+    </div>
 
+    <!-- 第二列：特殊操作按钮 -->
+    <div class="action-grid-secondary" v-if="hasSecondaryActionRow">
       <!-- 造反 -->
       <button
         v-if="hasRebel"
@@ -104,7 +105,7 @@
         }"
         :disabled="!hasRebel || isInteractionLocked || !isConnected"
         @click="$emit('action', 'rebel')"
-      >🚨</button>
+      >反</button>
 
       <!-- 梁山聚义 -->
       <button
@@ -117,7 +118,7 @@
         }"
         :disabled="!hasLiangShan || isInteractionLocked || !isConnected || effectiveHasVotedLiangShan"
         @click="$emit('action', 'liangshan')"
-      >🔥</button>
+      >义</button>
 
 
     </div>
@@ -166,9 +167,9 @@ const hasThink = computed(() => props.availableActions.includes(ActionType.THINK
 const hasRebel = computed(() => props.availableActions.includes(ActionType.REBEL))
 const hasLiangShan = computed(() => props.availableActions.includes(ActionType.LIANG_SHAN))
 
-const hasAnySecondaryAction = computed(() => hasThink.value || hasRebel.value || hasLiangShan.value)
+const hasSecondaryActionRow = computed(() => hasRebel.value || hasLiangShan.value)
 
-// 使用 props（父组件传入实际值）
+// 使用父组件传入的实时状态
 const effectiveCanUseThink = computed(() => props.canUseThink ?? true)
 const effectiveThinkRemaining = computed(() => props.thinkRemaining ?? 0)
 const effectiveHasVotedLiangShan = computed(() => props.hasVotedLiangshan ?? false)
@@ -221,9 +222,8 @@ const animateFreeze = () => {
     freezeRafId = null
     return
   }
-  // 扇形和圆环统一用 freezeUntil 作为唯一时间源
-  // progress = elapsed / total，其中 total = freezeUntil - freezeStart
-  // freezeStart = freezeUntil - safeFreezeDurationMs（假设freezeUntil在freeze开始时设置）
+  // 扇形和圆环都以 freezeUntil 为唯一时间源。
+  // progress = elapsed / total，total 由 hesitationWindow 提供。
   const total = safeFreezeDurationMs.value
   const elapsed = total - remaining
   freezeProgress.value = String(Math.min(1, Math.max(0, elapsed / total)))
@@ -267,6 +267,12 @@ onUnmounted(() => {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   width: 100%;
   justify-content: flex-start;
+}
+
+.draw-action-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .action-panel--compact {
@@ -375,14 +381,14 @@ onUnmounted(() => {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* 小圆（吃碰胡杠） */
+/* 小圆：吃碰胡杠 */
 .action-btn--small {
   width: 44px;
   height: 44px;
   font-size: 0.85rem;
 }
 
-/* 大圆（摸） */
+/* 大圆：摸 */
 .action-btn--draw {
   width: 72px;
   height: 72px;
@@ -390,14 +396,14 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-/* 激活 */
+/* 激活态 */
 .action-btn--active {
   border-color: rgba(255, 255, 255, 0.3);
   color: #fff;
   cursor: pointer;
 }
 
-/* 高亮 */
+/* 高亮态 */
 .action-btn--highlight {
   border-color: rgba(255, 255, 255, 0.88);
   color: #fff;
@@ -413,7 +419,7 @@ onUnmounted(() => {
   transform: scale(0.92);
 }
 
-/* 大圆高亮特殊色 */
+/* 摸牌按钮高亮色 */
 .action-btn--draw.action-btn--highlight {
   background: linear-gradient(135deg, #1f8a52, #46c574);
   border-color: rgba(70, 197, 116, 0.9);
@@ -581,7 +587,7 @@ onUnmounted(() => {
   mask: radial-gradient(circle, transparent 55%, black 58%);
   -webkit-mask: radial-gradient(circle, transparent 55%, black 58%);
   pointer-events: none;
-  /* 扇形动画由 JS RAF 驱动，不再依赖 CSS transition */
+  /* 扇形进度由 JS RAF 驱动，不依赖 CSS transition。 */
   transition: none;
   clip-path: circle(50%);
 }
@@ -591,7 +597,7 @@ onUnmounted(() => {
   z-index: 1;
 }
 
-/* 胡牌特殊色 */
+/* 胡牌高亮色 */
 .action-btn:nth-child(3).action-btn--highlight {
   background: linear-gradient(135deg, #c62828, #ef5350);
   border-color: rgba(239, 83, 80, 0.8);
@@ -610,23 +616,24 @@ onUnmounted(() => {
 }
 
 .action-btn--highlight-pulse {
-  transform: scale(1.08);
+  animation: action-breathe-strong 0.82s ease-in-out infinite;
+  will-change: transform, filter, box-shadow;
 }
 
-/* 离线 */
+/* 离线态 */
 .action-panel--offline {
   opacity: 0.4;
   pointer-events: none;
 }
 
-/* 紧凑 */
+/* 紧凑态 */
 .action-panel--compact .action-btn--small { width: 36px; height: 36px; font-size: 0.75rem; }
 .action-panel--compact .action-btn--draw { width: 56px; height: 56px; font-size: 1rem; }
 .action-panel--compact .action-grid { gap: 4px; }
 .action-panel--compact .priority-action-group { gap: 4px; padding: 6px; }
 .action-panel--compact .priority-action-badge { font-size: 0.66rem; padding: 3px 8px; }
 
-/* 第二行：特殊操作按钮 */
+/* 第二列：特殊操作按钮 */
 .action-grid-secondary {
   display: flex;
   flex-direction: column;
@@ -637,7 +644,7 @@ onUnmounted(() => {
 
 
 
-/* 慢按钮（紫色） */
+/* 慢按钮 */
 .action-btn--think {
   background: rgba(124, 58, 237, 0.3);
   color: rgba(255, 255, 255, 0.7);
@@ -659,7 +666,11 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
-/* 造反按钮（红色心跳） */
+.action-btn--think-inline {
+  min-width: 46px;
+}
+
+/* 造反按钮 */
 .action-btn--rebel {
   background: linear-gradient(135deg, #dc2626, #b91c1c);
   color: #fff;
@@ -677,7 +688,7 @@ onUnmounted(() => {
   60% { transform: scale(1); }
 }
 
-/* 梁山聚义按钮（火焰红） */
+/* 梁山聚义按钮 */
 .action-btn--liangshan {
   background: linear-gradient(135deg, rgba(198, 40, 40, 0.5), rgba(239, 83, 80, 0.35));
   color: #ff8a80;
@@ -702,5 +713,7 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .action-btn--small { width: 40px; height: 40px; }
   .action-btn--draw { width: 64px; height: 64px; font-size: 1.1rem; }
+  .draw-action-group { gap: 8px; }
 }
 </style>
+

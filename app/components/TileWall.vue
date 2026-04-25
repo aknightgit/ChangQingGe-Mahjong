@@ -1,17 +1,17 @@
 <template>
-  <div class="tile-wall">
+  <div class="tile-wall" :class="`tile-wall--back-${effectiveBackScheme}`">
     <!-- 上边牌墙：上移20px -->
     <div class="wall-side wall-top">
       <div class="wall-layer wall-layer--inner">
         <div v-for="i in TILES_PER_SIDE" :key="`ti-${i}`" class="tile-slot"
           :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: 'calc(16% - 10px)', zIndex: '1', transform: 'translateX(-50%)' }">
-          <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back" />
+          <BackTile :scheme="effectiveBackScheme" />
         </div>
       </div>
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`to-${i}`" class="tile-slot"
           :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: `calc(16% - 10px + ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
-          <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back wall-back--outer" />
+          <BackTile :scheme="effectiveBackScheme" outer />
           <div class="tile-side tile-side--bottom" />
         </div>
       </div>
@@ -22,13 +22,13 @@
       <div class="wall-layer wall-layer--inner">
         <div v-for="i in TILES_PER_SIDE" :key="`bi-${i}`" class="tile-slot"
           :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px + 10px)`, bottom: 'calc(16%)', zIndex: '1', transform: 'translateX(-50%)' }">
-          <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back" />
+          <BackTile :scheme="effectiveBackScheme" />
         </div>
       </div>
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`bo-${i}`" class="tile-slot"
           :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px + 10px)`, bottom: `calc(16% - ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
-          <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back wall-back--outer" />
+          <BackTile :scheme="effectiveBackScheme" outer />
           <div class="tile-side tile-side--bottom" />
         </div>
       </div>
@@ -39,7 +39,7 @@
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`lo-${i}`" class="tile-slot tile-slot--vertical"
           :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * V_OVERLAP}px + 15px)`, left: 'calc(16%)', zIndex: '2', transform: 'translateY(-50%)' }">
-          <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back wall-back--outer" />
+          <BackTile :scheme="effectiveBackScheme" outer />
           <div v-if="i === 1" class="tile-side tile-side--bottom" />
         </div>
       </div>
@@ -50,7 +50,7 @@
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`ro-${i}`" class="tile-slot tile-slot--vertical"
           :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * V_OVERLAP}px + 15px)`, right: 'calc(16%)', zIndex: '2', transform: 'translateY(-50%)' }">
-          <img src="/assets/tileset/pomax_hq/Back.png" class="wall-back wall-back--outer" />
+          <BackTile :scheme="effectiveBackScheme" outer />
           <div v-if="i === 1" class="tile-side tile-side--bottom" />
         </div>
       </div>
@@ -59,9 +59,45 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { computed, defineComponent, h } from 'vue'
+
+const props = withDefaults(defineProps<{
   remaining: number
-}>()
+  tileBackScheme?: number
+}>(), {
+  tileBackScheme: 0
+})
+
+const effectiveBackScheme = computed(() => {
+  const scheme = Number(props.tileBackScheme)
+  return scheme === 1 || scheme === 2 ? scheme : 0
+})
+
+const BackTile = defineComponent({
+  name: 'WallBackTile',
+  props: {
+    scheme: { type: Number, default: 0 },
+    outer: { type: Boolean, default: false }
+  },
+  setup(tileProps) {
+    return () => {
+      const baseClass = ['wall-back', tileProps.outer ? 'wall-back--outer' : '']
+      if (tileProps.scheme === 0) {
+        return h('img', {
+          src: '/assets/tileset/pomax_hq/Back.png',
+          class: baseClass
+        })
+      }
+      return h('div', {
+        class: [
+          ...baseClass,
+          'wall-back--css',
+          tileProps.scheme === 1 ? 'wall-back--ivory' : 'wall-back--capri'
+        ]
+      })
+    }
+  }
+})
 
 const TILES_PER_SIDE = 18
 const OVERLAP = 30  // 牌宽28 + 间隙2
@@ -102,6 +138,44 @@ const LAYER_OFFSET = 1
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
 }
 
+.wall-back--css {
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.wall-back--css::before,
+.wall-back--css::after {
+  content: '';
+  position: absolute;
+  inset: 18% 24%;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.22;
+}
+
+.wall-back--css::after {
+  inset: 35% 38%;
+  opacity: 0.35;
+}
+
+.wall-back--ivory {
+  color: #8f6c2a;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.55), transparent 36%),
+    linear-gradient(180deg, #f6edd8 0%, #d5b878 100%);
+  border-color: rgba(120, 92, 46, 0.35);
+}
+
+.wall-back--capri {
+  color: #d7fbff;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.34), transparent 34%),
+    linear-gradient(180deg, #20c9df 0%, #0580a8 100%);
+  border-color: rgba(5, 110, 150, 0.42);
+}
+
 .wall-back--outer {
   filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5)) brightness(1.1);
 }
@@ -116,6 +190,14 @@ const LAYER_OFFSET = 1
   border-radius: 0 0 2px 2px;
   background: linear-gradient(180deg, #1a4a28 0%, #1a4a28 33%, #f5efe0 33%, #e8e0d0 100%);
   box-shadow: 0 2px 3px rgba(0,0,0,0.25);
+}
+
+.tile-wall--back-1 .tile-side {
+  background: linear-gradient(180deg, #c7a56a 0%, #c7a56a 33%, #f7efd9 33%, #e6d7b8 100%);
+}
+
+.tile-wall--back-2 .tile-side {
+  background: linear-gradient(180deg, #057fa6 0%, #057fa6 33%, #effcff 33%, #c8eef4 100%);
 }
 
 .tile-side--top {

@@ -123,6 +123,28 @@ export enum GameEndReason {
   EMPTY_ROOM = 'empty_room'
 }
 
+export type SpectatorApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
+
+export interface SpectatorViewState {
+  viewingPlayerId: string | null
+  approvedHumanPlayerId?: string | null
+  pendingHumanPlayerId?: string | null
+  roundNumber: number
+  updatedAt: number
+}
+
+export interface SpectatorApprovalRequest {
+  id: string
+  requesterId: string
+  requesterName: string
+  targetId: string
+  targetName: string
+  roundNumber: number
+  status: SpectatorApprovalStatus
+  requestedAt: number
+  resolvedAt?: number
+}
+
 export interface GameState {
   gameId: string;
   phase: GamePhase;
@@ -135,11 +157,15 @@ export interface GameState {
   actionHistory: GameAction[];
   winnersCount: number;
   roundNumber: number;
+  currentRound?: number;
   createdAt: number;
   lastActionTime: number;
   endedAt?: number;
   finalScores?: Record<string, number>;
   pendingActions: PendingAction[];
+  spectatorMode?: { playerId: string; viewingPlayerId: string } | null;
+  spectatorViews?: Record<string, SpectatorViewState>;
+  spectatorApprovalRequests?: SpectatorApprovalRequest[];
   customScoringMode?: string; // 百搭牌标识
   wildTileGroup?: string[];   // 花牌百搭组
   freezeRound?: number;       // 冷冻回合数

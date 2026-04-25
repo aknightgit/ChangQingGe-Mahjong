@@ -11,14 +11,6 @@
         </div>
 
         <div class="header-actions">
-          <button
-            class="mahjong-button small secondary"
-            :class="{ 'sound-off': !soundEnabled }"
-            @click="toggleSound"
-            :title="soundEnabled ? '🔊 音效开' : '🔇 音效关'"
-          >
-            {{ soundEnabled ? '🔊' : '🔇' }}
-          </button>
           <button ref="settingsBtnEl" class="mahjong-button small secondary" @click="toggleSettingsPanel">
             ⚙️ 设置
           </button>
@@ -93,6 +85,19 @@
         </div>
 
         <!-- 容我想一想弹窗 -->
+        <div v-if="spectatorApprovalRequest" class="approval-overlay">
+          <div class="approval-card">
+            <div class="approval-icon">👁️</div>
+            <p class="approval-title">观赛申请</p>
+            <p class="approval-sub">{{ spectatorApprovalRequest.requesterName }} 想查看你的手牌</p>
+            <p class="approval-question">是否同意本局向 TA 开放你的观赛视角？</p>
+            <div class="approval-buttons">
+              <button class="approval-btn approval-btn--peng" @click="onSpectatorApprovalChoice('approve')">同意</button>
+              <button class="approval-btn approval-btn--pass" @click="onSpectatorApprovalChoice('reject')">拒绝</button>
+            </div>
+          </div>
+        </div>
+
         <div v-if="showThinkOptions" class="think-overlay">
           <div class="think-card">
             <div class="think-icon">🧠</div>
@@ -141,27 +146,37 @@
             <h3 class="hu-panel-title">🀄 选择胡牌牌型</h3>
             <div class="hu-combos">
               <div
-                v-for="(opt, idx) in winOptions"
+                v-for="(opt, idx) in displayWinOptions"
                 :key="idx"
                 class="hu-combo"
                 :class="{ 'hu-combo--selected': selectedHuCombo === idx }"
                 @click="selectedHuCombo = idx"
               >
                 <div class="hu-combo-header">
-                  <span class="hu-combo-label">{{ opt.label.replace(/·自摸|·捉冲/, '') }}</span>
-                  <span class="hu-combo-score">{{ opt.score > 0 ? '+' : '' }}{{ opt.score }}分</span>
+                  <span class="hu-combo-rank">TOP {{ idx + 1 }}</span>
+                  <span class="hu-combo-score">总赢 {{ opt.summary?.finalPoints ?? opt.score }}</span>
                 </div>
-                <div class="hu-combo-tiles" v-if="opt.tileGroups">
-                  <div v-for="(group, gi) in opt.tileGroups" :key="gi" class="hu-tile-group">
-                    <div v-for="(tile, ti) in group.tiles" :key="ti" class="hu-tile-item">
-                      <MahjongTile :tile="tile" :size="22" />
-                      <span v-if="tile.isWild" class="hu-wild-label">百搭</span>
-                    </div>
-                    <span class="hu-group-type">{{ group.type === 'sequence' ? '顺' : group.type === 'triplet' ? '刻' : group.type === 'pair' ? '对' : '' }}</span>
+                <div class="hu-combo-main">
+                  <span class="hu-combo-label">{{ opt.label.replace(/·自摸|·捉冲|\(无百搭×2\)/g, '') }}</span>
+                  <span class="hu-combo-method">{{ opt.type === 'self_draw' ? '自摸' : '捉冲' }}</span>
+                </div>
+                <div class="hu-summary-grid">
+                  <div class="hu-summary-item">
+                    <span class="hu-summary-key">基础番数</span>
+                    <span class="hu-summary-value">{{ opt.summary?.baseFan ?? '--' }}</span>
                   </div>
-                </div>
-                <div class="hu-combo-details" v-if="opt.details && opt.details.length">
-                  <span v-for="(d, di) in opt.details" :key="di" class="hu-detail">{{ d }}</span>
+                  <div class="hu-summary-item">
+                    <span class="hu-summary-key">额外倍数</span>
+                    <span class="hu-summary-value">×{{ opt.summary?.extraMultipliers ?? 1 }}</span>
+                  </div>
+                  <div class="hu-summary-item">
+                    <span class="hu-summary-key">骰子倍数</span>
+                    <span class="hu-summary-value">×{{ opt.summary?.roundMultiplier ?? 1 }}</span>
+                  </div>
+                  <div class="hu-summary-item">
+                    <span class="hu-summary-key">结算倍数</span>
+                    <span class="hu-summary-value">×{{ opt.summary?.settlementMultiplier ?? 1 }}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -194,7 +209,7 @@
             </ul>
             <p v-else-if="!isDrawOverlay" class="overlay-empty">游戏结果将在服务端结算后显示。</p>
             <!-- 流局时：任意点击进入下一局；非流局时：退出大厅 -->
-            <button v-if="isDrawOverlay" class="mahjong-button primary overlay-button" @click="startNextRound">
+            <button v-if="canStartNextRoundOverlay" class="mahjong-button primary overlay-button" @click="startNextRound">
               下一局
             </button>
             <button v-else class="mahjong-button primary overlay-button" @click="backToLobby">
@@ -303,24 +318,41 @@
                   {{ round.bailoutRelations.map(rel => `${rel.player1Name || rel.player1} ↔ ${rel.player2Name || rel.player2}（${rel.type}）`).join('，') }}
                 </div>
 
-                <div v-if="round.winnerDetails?.length" class="settle-round-block">
-                  <div
-                    v-for="winner in round.winnerDetails"
-                    :key="winner.playerId + '-winner'"
-                    class="settle-round-winner"
-                  >
-                    <div class="settle-round-winner-line">
-                      <strong>{{ winner.playerName }}</strong>
-                      <span>{{ winner.isSelfDrawn ? '自摸' : `捉冲 ${winner.discarderName || winner.discarderId || ''}` }}</span>
-                      <span>{{ winner.handTypeName || '未命名牌型' }}</span>
-                      <span>单次点数 {{ winner.finalPoints }}</span>
-                    </div>
-                    <div class="settle-round-note">
-                      基础番/固定点 {{ winner.baseFan }}，额外翻倍 ×{{ winner.extraMultipliers }}，骰子 ×{{ winner.diceMultiplier }}，继承 ×{{ winner.inheritMultiplier }}，有效 ×{{ winner.effectiveMultiplier }}，结算膨胀 ×{{ winner.settlementMultiplier }}
-                    </div>
-                    <div v-if="winner.details?.length" class="settle-round-details">
-                      {{ winner.details.join('；') }}
-                    </div>
+                <div class="settle-round-block">
+                  <div class="settle-round-subtitle">本局结算表</div>
+                  <div class="settle-table-wrap">
+                    <table class="settle-round-table">
+                      <thead>
+                        <tr>
+                          <th>玩家</th>
+                          <th>胡牌牌型</th>
+                          <th>牌面</th>
+                          <th>门清</th>
+                          <th>百搭</th>
+                          <th>基础番</th>
+                          <th>最终点数</th>
+                          <th>总输赢</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr
+                          v-for="row in getRoundSettlementRows(round)"
+                          :key="round.roundNumber + '-settle-row-' + row.playerId"
+                          :class="{ 'settle-round-table-row--winner': row.isWinner }"
+                        >
+                          <td>{{ row.playerName }}</td>
+                          <td>{{ row.handType }}</td>
+                          <td class="settle-round-tiles">{{ row.tiles }}</td>
+                          <td>{{ row.menQing }}</td>
+                          <td>{{ row.wild }}</td>
+                          <td>{{ row.baseFan }}</td>
+                          <td>{{ row.finalPoints }}</td>
+                          <td :class="{ 'settle-round-positive': row.score > 0, 'settle-round-negative': row.score < 0 }">
+                            {{ row.scoreLabel }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
@@ -347,19 +379,6 @@
                   </div>
                 </div>
 
-                <div class="settle-round-block">
-                  <div class="settle-round-subtitle">本局总输赢</div>
-                  <div
-                    v-for="player in settlementData.playerStats"
-                    :key="round.roundNumber + '-score-' + player.id"
-                    class="settle-round-transfer"
-                  >
-                    <span>{{ player.name }}</span>
-                    <span :class="{ 'settle-round-positive': (round.scores?.[player.id] ?? 0) > 0, 'settle-round-negative': (round.scores?.[player.id] ?? 0) < 0 }">
-                      {{ (round.scores?.[player.id] ?? 0) > 0 ? '+' : '' }}{{ round.scores?.[player.id] ?? 0 }}
-                    </span>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -423,11 +442,52 @@
                   </div>
                 </div>
                 <div class="glass-settings-theme-block">
+                  <div class="glass-settings-theme-title">🎵 背景音乐</div>
+                  <div class="glass-settings-row" @click="setBackgroundMusicEnabled(!bgmEnabled)">
+                    <span class="glass-settings-icon">{{ bgmEnabled ? '🎶' : '🔇' }}</span>
+                    <span class="glass-settings-label">背景音乐</span>
+                    <div class="glass-toggle" :class="{ 'glass-toggle--on': bgmEnabled }">
+                      <div class="glass-toggle-knob"></div>
+                    </div>
+                  </div>
+                  <div class="glass-settings-select-wrap">
+                    <div class="glass-settings-select-label">曲目</div>
+                    <select class="glass-settings-select" :value="bgmCurrentTrackId || ''" @change="onChangeBgmTrack">
+                      <option value="" disabled>选择背景音乐</option>
+                      <option v-for="track in bgmTracks" :key="track.id" :value="track.id">{{ track.label }}</option>
+                    </select>
+                  </div>
+                  <div class="glass-settings-select-wrap">
+                    <div class="glass-settings-select-label">循环方式</div>
+                    <select class="glass-settings-select" :value="bgmLoopMode" @change="onChangeBgmLoopMode">
+                      <option value="single">单曲循环</option>
+                      <option value="all">列表循环</option>
+                      <option value="shuffle">随机循环</option>
+                    </select>
+                  </div>
+                  <div class="glass-settings-select-wrap">
+                    <div class="glass-settings-select-label">音量 {{ bgmVolumePercent }}%</div>
+                    <input class="glass-settings-range" type="range" min="0" max="100" step="1" :value="bgmVolumePercent" @input="onChangeBgmVolume" />
+                  </div>
+                  <div class="glass-settings-music-actions">
+                    <button class="glass-theme-chip" type="button" @click="toggleBgmPlayback">{{ bgmIsPlaying ? '暂停' : '播放' }}</button>
+                    <button class="glass-theme-chip" type="button" @click="playNextBackgroundTrack">下一首</button>
+                  </div>
+                </div>
+                <div class="glass-settings-theme-block">
                   <div class="glass-settings-theme-title">🎨 桌布方案</div>
                   <div class="glass-theme-options">
                     <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tableTheme === 'classic-green' }" @click="setTableTheme('classic-green')">经典绿</button>
                     <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tableTheme === 'jade-green' }" @click="setTableTheme('jade-green')">翡翠青</button>
                     <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tableTheme === 'royal-red' }" @click="setTableTheme('royal-red')">赤金红</button>
+                  </div>
+                </div>
+                <div class="glass-settings-theme-block">
+                  <div class="glass-settings-theme-title">🀄 牌背颜色</div>
+                  <div class="glass-theme-options">
+                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tileBackScheme === 0 }" @click="setTileBackScheme(0)">原版绿</button>
+                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tileBackScheme === 1 }" @click="setTileBackScheme(1)">象牙白</button>
+                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tileBackScheme === 2 }" @click="setTileBackScheme(2)">卡布里蓝</button>
                   </div>
                 </div>
                 <div class="glass-settings-footer">
@@ -466,10 +526,6 @@
               {{ rightPlayer.name }}
               <span v-if="eastIsWinner" class="winner-tag">胡</span>
             </div>
-            <div class="player-name-label player-name-label--bottom" v-if="currentPlayer" @click="onPlayerNameClick(currentPlayer)">
-              我
-            </div>
-
             <!-- 桌面中心: 弃牌池 + 牌墙 + 倍数 -->
             <TableCenter
               :remaining-tiles="remainingTileCount"
@@ -482,7 +538,7 @@
             />
 
             <!-- 牌墙（四面）：对家和自家的牌墙需要 TileWall -->
-            <TileWall :remaining="remainingTileCount" />
+            <TileWall :remaining="remainingTileCount" :tile-back-scheme="tileBackScheme" />
 
             <!-- 弃牌区（4个独立位置） -->
             <DiscardZone
@@ -518,6 +574,8 @@
                 position="top"
                 :hand="northHand"
                 :melds="northMelds"
+                :tile-back-scheme="tileBackScheme"
+                :show-hand="isOpponentHandRevealed(topPlayer)"
                 :is-winner="northIsWinner"
                 :just-drawn-tile-id="northJustDrawnTileId"
                 :player-position="currentPlayer?.position"
@@ -530,6 +588,8 @@
                 position="left"
                 :hand="westHand"
                 :melds="westMelds"
+                :tile-back-scheme="tileBackScheme"
+                :show-hand="isOpponentHandRevealed(leftPlayer)"
                 :is-winner="westIsWinner"
                 :just-drawn-tile-id="westJustDrawnTileId"
                 :player-position="currentPlayer?.position"
@@ -542,6 +602,8 @@
                 position="right"
                 :hand="eastHand"
                 :melds="eastMelds"
+                :tile-back-scheme="tileBackScheme"
+                :show-hand="isOpponentHandRevealed(rightPlayer)"
                 :is-winner="eastIsWinner"
                 :just-drawn-tile-id="eastJustDrawnTileId"
                 :player-position="currentPlayer?.position"
@@ -552,9 +614,10 @@
             <div class="seat seat-bottom">
               <div class="self-area-with-actions">
                 <PlayerSelfArea
-                  name="我"
+                  name=""
                   :hand="playerHand"
                   :melds="playerMelds"
+                  :tile-back-scheme="tileBackScheme"
                   :just-drawn-tile-id="selfJustDrawnTileId"
                   :player-position="currentPlayer?.position"
                   :selected-tile-id="selectedTileId"
@@ -607,20 +670,13 @@
                     @click="onRebel"
                   >🚨造反</button>
                   <button
-                    v-if="showThink"
-                    class="inline-action-btn inline-action-btn--think"
-                    :class="{ 'inline-action-btn--think-depleted': !canUseThink, 'inline-action-btn--frozen': thinkFreezeActive }"
-                    :disabled="isInteractionLocked || !canUseThink || thinkFreezeActive"
-                    @click="onThinkPopup"
-                  >慢{{ thinkRemaining > 0 ? thinkRemaining : '' }}</button>
-                  <button
                     v-if="canLiangShan"
                     class="inline-action-btn inline-action-btn--liangshan"
                     :class="{ 'inline-action-btn--liangshan-voted': hasVotedLiangShan, 'inline-action-btn--frozen': thinkFreezeActive }"
                     :disabled="!canLiangShan || isInteractionLocked || hasVotedLiangShan || thinkFreezeActive"
                     @click="onLiangShan"
                   >🔥{{ hasVotedLiangShan ? '已聚义' : '梁山聚义' }}</button>
-                  <div v-if="!showDraw && !showChow && !showPeng && !showKong && !showHu && !showConcealedKong && !showExtendedKong && !showRebel && !showThink && !canLiangShan" class="inline-action-waiting">
+                  <div v-if="!showDraw && !showChow && !showPeng && !showKong && !showHu && !showConcealedKong && !showExtendedKong && !showRebel && !canLiangShan" class="inline-action-waiting">
                     等待中…
                   </div>
                 </div>
@@ -654,6 +710,9 @@
             :players="statsPlayers"
             :current-round="currentRound"
             :spectating-id="spectatingId"
+            :pending-spectate-id="pendingSpectateId"
+            :approved-human-spectate-id="approvedHumanSpectateId"
+            :can-spectate="canUseSpectatorView"
             @spectate="handleSpectate"
             @name-click="onPlayerNameClick"
           />
@@ -714,6 +773,7 @@
                 <template v-else-if="isAIControlled">
                   🤖 AI托管中
                 </template>
+                <template v-else-if="myTingText">{{ myTingText }}</template>
                 <template v-else-if="showMobileActionNotice">{{ mobileActionNoticeText }}</template>
                 <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
                   ⏱ {{ turnTimer }}s
@@ -733,7 +793,7 @@
                 :has-voted-liangshan="hasVotedLiangShan"
                 @action="handleCircularAction"
               />
-              <!-- 更多特殊操作：常驻显示慢/聚义/造反 -->
+              <!-- 更多特殊操作：常驻显示聚义/造反 -->
               <div class="extra-actions-bar">
                 <span class="extra-actions-label">更多操作</span>
                 <button
@@ -769,7 +829,7 @@
       <Teleport to="body">
         <Transition name="fade-fast">
           <div v-if="showDoubleReminder" class="double-reminder-overlay">
-            <div class="double-reminder-msg">本局已经翻倍了！</div>
+            <div class="double-reminder-msg">{{ doubleReminderText }}</div>
           </div>
         </Transition>
       </Teleport>
@@ -851,8 +911,17 @@ import DiscardZone from '~/components/DiscardZone.vue'
 import LayoutDebugPanel from '~/components/LayoutDebugPanel.vue'
 import { useGame } from '~/composables/useGame'
 import { useSound } from '~/composables/useSound'
+import { useBackgroundMusic } from '~/composables/useBackgroundMusic'
 import { buildDiscardGuardSnapshot, shouldReleasePendingDiscardGuard, type DiscardGuardSnapshot } from '~/utils/discardGuard'
 import { ActionType, GamePhase, GameEndReason, type Tile, type Meld, type Player } from '~/types/game'
+
+const PENDING_ROOM_STORAGE_KEY = 'mahjong.pendingRoomTarget'
+const clearPendingRoomTarget = () => {
+  if (!process.client) return
+  try {
+    sessionStorage.removeItem(PENDING_ROOM_STORAGE_KEY)
+  } catch {}
+}
 
 const route = useRoute()
 const userName = useCookie('user_name')
@@ -862,6 +931,7 @@ const playerId = computed(() => String(route.query.playerId || ''))
 const { 
   gameState, 
   currentPlayer, 
+  tingPreview,
   availableActions, 
   isConnected, 
   error, 
@@ -878,11 +948,44 @@ const {
   actionApprovalEvent
 } = useGame()
 
-const backToLobby = () => navigateTo('/')
+const backToLobby = () => {
+  clearPendingRoomTarget()
+  return navigateTo('/')
+}
 const { play: playSound, isEnabled: soundEnabled, setEnabled: setSoundEnabled } = useSound()
+const {
+  tracks: bgmTracks,
+  enabled: bgmEnabled,
+  loopMode: bgmLoopMode,
+  currentTrackId: bgmCurrentTrackId,
+  volume: bgmVolume,
+  isPlaying: bgmIsPlaying,
+  ensureInitialized: ensureBackgroundMusicInitialized,
+  setEnabled: setBackgroundMusicEnabled,
+  setLoopMode: setBackgroundMusicLoopMode,
+  setTrack: setBackgroundMusicTrack,
+  setVolume: setBackgroundMusicVolume,
+  play: playBackgroundMusic,
+  pause: pauseBackgroundMusic,
+  next: playNextBackgroundTrack
+} = useBackgroundMusic()
 
 const toggleSound = () => {
   setSoundEnabled(!soundEnabled.value)
+}
+const bgmVolumePercent = computed(() => Math.round((bgmVolume.value ?? 0.5) * 100))
+const onChangeBgmTrack = (event: Event) => {
+  setBackgroundMusicTrack((event.target as HTMLSelectElement).value)
+}
+const onChangeBgmLoopMode = (event: Event) => {
+  setBackgroundMusicLoopMode((event.target as HTMLSelectElement).value as 'single' | 'all' | 'shuffle')
+}
+const onChangeBgmVolume = (event: Event) => {
+  setBackgroundMusicVolume(Number((event.target as HTMLInputElement).value || 50) / 100)
+}
+const toggleBgmPlayback = () => {
+  if (bgmIsPlaying.value) pauseBackgroundMusic()
+  else playBackgroundMusic()
 }
 // Admin/Debug — 目前禁用 (isAdminUser=false)
 const isAdminUser = computed(() => false)
@@ -939,7 +1042,7 @@ const updateSettingsPosition = () => {
   if (!settingsBtnEl.value) return
   const rect = settingsBtnEl.value.getBoundingClientRect()
   settingsPanelTop.value = rect.bottom + 8
-  settingsPanelLeft.value = rect.right - 220 // 靠右对齐，panel宽约220px
+  settingsPanelLeft.value = rect.right - 300
 }
 
 const toggleSettingsPanel = () => {
@@ -966,10 +1069,16 @@ onMounted(() => {
   window.addEventListener('resize', updateSettingsPosition)
   document.addEventListener('pointerdown', handleGlobalPointerDown)
   window.addEventListener('mahjong-realtime-state', handleRealtimeState as EventListener)
+  ensureBackgroundMusicInitialized()
+  if (bgmEnabled.value) playBackgroundMusic()
   try {
     const savedTheme = localStorage.getItem('mahjong.tableTheme') as 'classic-green' | 'jade-green' | 'royal-red' | null
     if (savedTheme === 'classic-green' || savedTheme === 'jade-green' || savedTheme === 'royal-red') {
       tableTheme.value = savedTheme
+    }
+    const savedBackScheme = Number(localStorage.getItem('mahjong.tileBackScheme'))
+    if (savedBackScheme === 0 || savedBackScheme === 1 || savedBackScheme === 2) {
+      tileBackScheme.value = savedBackScheme
     }
   } catch {}
 })
@@ -978,6 +1087,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', updateSettingsPosition)
   document.removeEventListener('pointerdown', handleGlobalPointerDown)
   window.removeEventListener('mahjong-realtime-state', handleRealtimeState as EventListener)
+  pauseBackgroundMusic()
 })
 
 const onSettingsClosed = () => {}
@@ -994,10 +1104,16 @@ const tileAnimationEnabled = ref(true)   // 牌面动画
 const actionSoundEnabled = ref(true)    // 操作音效
 const timerWarningEnabled = ref(true)   // 倒计时警告音
 const tableTheme = ref<'classic-green' | 'jade-green' | 'royal-red'>('classic-green')
+const tileBackScheme = ref<0 | 1 | 2>(0)
 
 const setTableTheme = (theme: 'classic-green' | 'jade-green' | 'royal-red') => {
   tableTheme.value = theme
   try { localStorage.setItem('mahjong.tableTheme', theme) } catch {}
+}
+
+const setTileBackScheme = (scheme: 0 | 1 | 2) => {
+  tileBackScheme.value = scheme
+  try { localStorage.setItem('mahjong.tileBackScheme', String(scheme)) } catch {}
 }
 
 const startTurnTimer = () => {
@@ -1044,6 +1160,11 @@ const handleAutoAction = () => {
     executeAction(ActionType.DRAW)
   }
   // 2. 有优先操作（吃/碰/杠/胡）→ 自动过
+  else if (hasPriorityActions.value) {
+    showChowPicker.value = false
+    selectedChowOption.value = null
+    executeAction(ActionType.PASS)
+  }
   // 3. 有摸到的牌但没出 → 自动打出摸到的牌
   else if (currentPlayer.value?.hand?.concealedTiles?.length) {
     const lastTile = currentPlayer.value.hand.concealedTiles.at(-1)
@@ -1117,8 +1238,32 @@ const isDoubleRound = computed(() => {
 })
 const effectiveMaxRolls = computed(() => maxDiceRolls.value)
 const showDoubleReminder = ref(false)
+const doubleReminderText = ref('本局骰子倍率 x2')
+let doubleReminderTimer: ReturnType<typeof setTimeout> | null = null
 const flowerReplacementNotice = ref<Tile | null>(null)
 let flowerReplacementNoticeTimer: ReturnType<typeof setTimeout> | null = null
+
+const triggerDoubleReminder = (multiplier: number) => {
+  if (multiplier < 2) return
+  doubleReminderText.value = `本局骰子倍率 x${multiplier}`
+  showDoubleReminder.value = true
+  if (doubleReminderTimer) {
+    clearTimeout(doubleReminderTimer)
+  }
+  doubleReminderTimer = setTimeout(() => {
+    showDoubleReminder.value = false
+    doubleReminderTimer = null
+  }, 500)
+}
+
+watch(
+  () => gameState.value?.roundMultiplier,
+  (next, prev) => {
+    if ((next === 2 || next === 4) && next !== prev) {
+      triggerDoubleReminder(next)
+    }
+  }
+)
 // 决策犹豫期（毫秒），优先从游戏状态读取，兜底5秒
 const hesitationWindow = computed(() => {
   const hw = (gameState.value as any)?.hesitationWindow
@@ -1182,6 +1327,7 @@ const toggleShowAllCards = () => {
 onMounted(async () => {
   if (roomId.value && playerId.value) {
     await connect(roomId.value, playerId.value)
+    clearPendingRoomTarget()
     // 等待房间会自动显示（isWaitingRoom computed），不需要自动弹骰子
     // 庄家在等待房间点击"开始游戏"才会弹出骰子
   }
@@ -1204,6 +1350,7 @@ onMounted(async () => {
 onUnmounted(() => {
   disconnect()
   clearFlowerReplacementNotice()
+  if (doubleReminderTimer) { clearTimeout(doubleReminderTimer); doubleReminderTimer = null }
   if (northDrawnTimer) { clearTimeout(northDrawnTimer); northDrawnTimer = null }
   if (westDrawnTimer) { clearTimeout(westDrawnTimer); westDrawnTimer = null }
   if (eastDrawnTimer) { clearTimeout(eastDrawnTimer); eastDrawnTimer = null }
@@ -1291,29 +1438,31 @@ watch(
 )
 
 // 胜者观战模式
-const viewingPlayerId = ref<string | null>(null)
-const spectatablePlayers = computed(() => {
-  if (!gameState.value || !isWinner.value) return []
-  return gameState.value.players.filter(p =>
-    p.id !== currentPlayer.value?.id &&
-    (p.status === 'playing' || p.status === 'won')
-  )
+const canUseSpectatorView = computed(() => currentPlayer.value?.status === 'won')
+const mySpectatorView = computed(() => {
+  const myId = currentPlayer.value?.id
+  if (!myId) return null
+  return (gameState.value as any)?.spectatorViews?.[myId] || null
 })
-const setSpectateTarget = async (targetId: string) => {
-  if (!gameState.value || !currentPlayer.value) return
-  viewingPlayerId.value = targetId
-  try {
-    await $fetch('/api/game/spectate', {
-      method: 'POST',
-      body: {
-        gameId: gameState.value.gameId,
-        playerId: currentPlayer.value.id,
-        viewingPlayerId: targetId
-      }
-    })
-  } catch (err) {
-    console.error('Spectate failed:', err)
-  }
+const spectatingId = computed(() => mySpectatorView.value?.viewingPlayerId || null)
+const pendingSpectateId = computed(() => mySpectatorView.value?.pendingHumanPlayerId || null)
+const approvedHumanSpectateId = computed(() => mySpectatorView.value?.approvedHumanPlayerId || null)
+const spectatorApprovalRequest = computed(() => {
+  const myId = currentPlayer.value?.id
+  if (!myId) return null
+  const requests = (gameState.value as any)?.spectatorApprovalRequests || []
+  return requests.find((request: any) =>
+    request.status === 'pending' &&
+    request.targetId === myId &&
+    request.roundNumber === gameState.value?.roundNumber
+  ) || null
+})
+
+const isHiddenTile = (tile: any) => String(tile?.id || '').startsWith('hidden-') || tile?.value === 0
+const isOpponentHandRevealed = (player?: Player | null) => {
+  if (!player || player.id === currentPlayer.value?.id) return false
+  const hand = player.hand?.concealedTiles || []
+  return hand.length > 0 && hand.some(tile => !isHiddenTile(tile))
 }
 
 
@@ -1328,7 +1477,13 @@ const remainingTileCount = computed(() => {
   if (Array.isArray(g.wall)) return g.wall.length
   return 0
 })
-const currentRound = computed(() => gameState.value?.currentRound ?? 1)
+const currentRound = computed(() => {
+  const game = gameState.value as any
+  if (!game) return 1
+  if (typeof game.currentRound === 'number' && game.currentRound > 0) return game.currentRound
+  const completedRounds = Array.isArray(game.roundStats) ? game.roundStats.length : 0
+  return game.phase === GamePhase.ENDED ? Math.max(1, completedRounds) : completedRounds + 1
+})
 // Provide round number for MahjongTile to auto-select back scheme
 provide('roundNumber', currentRound)
 const roundMultiplier = computed(() => gameState.value?.roundMultiplier ?? 1)
@@ -1392,7 +1547,6 @@ const wildTile = computed(() => {
 })
 
 // ---- Room Stats ----
-const spectatingId = ref<string | null>(null)
 const positionColors = ['east', 'south', 'west', 'north']
 const botAvatars = ['😎', '🤖', '🧠']
 
@@ -1463,6 +1617,7 @@ const statsPlayers = computed(() => {
       losses: p.status === 'lost' ? 1 : 0,
       color: positionColors[p.position] || 'south',
       isMe: p.id === currentPlayer.value?.id,
+      isBot: isBotPlayer(p),
       isQJCrossed: qjAlertIds.has(p.id),
       qjScore,
       qjGlow: qjScore > qjThreshold * 3,
@@ -1475,8 +1630,44 @@ const statsPlayers = computed(() => {
   })
 })
 
-const handleSpectate = (id: string) => {
-  spectatingId.value = spectatingId.value === id ? null : id
+const handleSpectate = async (id: string) => {
+  if (!gameState.value || !currentPlayer.value || !canUseSpectatorView.value) return
+  const nextTargetId = spectatingId.value === id ? null : id
+  try {
+    const resp = await $fetch('/api/game/spectate', {
+      method: 'POST',
+      body: {
+        gameId: gameState.value.gameId,
+        playerId: currentPlayer.value.id,
+        viewingPlayerId: nextTargetId
+      }
+    }) as any
+    if (resp?.status === 'pending') {
+      addBroadcast('已发送观赛申请，等待对方同意', 'info')
+    }
+    await refreshState()
+  } catch (e: any) {
+    console.error('[Spectate] Failed:', e)
+    addBroadcast(e?.data?.message || e?.message || '观赛视角切换失败', 'warn')
+  }
+}
+const onSpectatorApprovalChoice = async (choice: 'approve' | 'reject') => {
+  if (!gameState.value || !currentPlayer.value || !spectatorApprovalRequest.value) return
+  try {
+    await $fetch('/api/game/spectate-approval', {
+      method: 'POST',
+      body: {
+        gameId: gameState.value.gameId,
+        playerId: currentPlayer.value.id,
+        requestId: spectatorApprovalRequest.value.id,
+        choice
+      }
+    })
+    await refreshState()
+  } catch (e: any) {
+    console.error('[SpectateApproval] Failed:', e)
+    addBroadcast(e?.data?.message || e?.message || '观赛审批失败', 'warn')
+  }
 }
 const isDealer = computed(() => currentPlayer.value?.isDealer)
 const isDealerUser = computed(() => isDealer.value)
@@ -1510,6 +1701,10 @@ const waitingPlayers = computed(() => {
 })
 const overlayReason = computed(() => roomDismissedReason.value || gameState.value?.endReason || null)
 const isOverlayVisible = computed(() => isGameEnded.value || !!roomDismissedReason.value)
+const canStartNextRoundOverlay = computed(() => ![
+  GameEndReason.OWNER_LEFT,
+  GameEndReason.EMPTY_ROOM
+].includes(overlayReason.value as GameEndReason))
 const overlayTitle = computed(() => {
   if (roomDismissedReason.value === GameEndReason.OWNER_LEFT) {
     return '房间已关闭'
@@ -1517,7 +1712,26 @@ const overlayTitle = computed(() => {
   if (overlayReason.value === GameEndReason.WALL_EXHAUSTED) {
     return '🀄 流局'
   }
-  return '游戏结束'
+  return overlayReason.value === GameEndReason.LAST_PLAYER ? '本局结束' : '游戏结束'
+})
+
+const tileLabel = (tile: Partial<Tile> | null | undefined): string => {
+  if (!tile) return ''
+  if (tile.suit === 'hua') return ['春', '夏', '秋', '冬', '梅', '兰', '竹', '菊'][Number(tile.value) - 1] || `花${tile.value}`
+  if (tile.suit === 'feng') return ['东', '南', '西', '北'][Number(tile.value) - 1] || `风${tile.value}`
+  if (tile.suit === 'jian') return ['中', '发', '白'][Number(tile.value) - 1] || `箭${tile.value}`
+  const suitLabel = tile.suit === 'wan' ? '万' : tile.suit === 'dots' ? '筒' : tile.suit === 'tiao' ? '条' : ''
+  const digit = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'][Number(tile.value)] || String(tile.value)
+  return `${digit}${suitLabel}`
+}
+
+const myTingText = computed(() => {
+  if (!currentPlayer.value?.isTing) return ''
+  const tiles = (tingPreview.value?.winningTiles || [])
+    .map((entry: any) => tileLabel(entry.tile))
+    .filter(Boolean)
+  const uniqueTiles = Array.from(new Set(tiles))
+  return uniqueTiles.length ? `您已听牌：${uniqueTiles.join(',')}` : '您已听牌'
 })
 const overlayMessage = computed(() => {
   const reason = overlayReason.value
@@ -1527,13 +1741,13 @@ const overlayMessage = computed(() => {
       return `下局倍数 ×${nextMul}`
     }
     case GameEndReason.LAST_PLAYER:
-      return '只剩一名玩家，本轮结束。'
+      return '本局已结算，可以继续下一局。'
     case GameEndReason.OWNER_LEFT:
       return '房主已离开房间，游戏已解散。'
     case GameEndReason.EMPTY_ROOM:
       return '所有玩家已离开，游戏结束。'
     default:
-      return '本轮已结束，请退出到大厅。'
+      return '本轮已结束，可以继续下一局。'
   }
 })
 
@@ -1946,25 +2160,13 @@ function arrangeWinningHand(hand: any[], existingMelds: any[]): any[] {
 
 // 胡牌选项（从后端获取，含分数和牌型）
 const winOptions = ref<any[]>([])
+const displayWinOptions = computed(() => [...winOptions.value].sort((a, b) => (b.summary?.finalPoints ?? b.score ?? 0) - (a.summary?.finalPoints ?? a.score ?? 0)).slice(0, 3))
 const fetchWinOptions = async () => {
   try {
     const res = await $fetch<any>('/api/game/win-options', {
       query: { gameId: roomId.value, playerId: currentPlayer.value?.id }
     })
-    // 合并后端分数和前端牌面排列
-    const options = res.winOptions || []
-    const hand = playerHand.value || []
-    const melds = playerMelds.value || []
-    const combos = arrangeWinningHand(hand, melds)
-    // 给每个选项附加牌面组合
-    for (let i = 0; i < options.length && i < combos.length; i++) {
-      options[i].tileGroups = combos[i % combos.length]?.groups || []
-    }
-    // 如果选项多于组合，复用第一个组合
-    for (let i = combos.length; i < options.length; i++) {
-      options[i].tileGroups = combos[0]?.groups || []
-    }
-    winOptions.value = options
+    winOptions.value = (res.winOptions || []).slice(0, 3)
   } catch (err) {
     console.error('Failed to fetch win options:', err)
     winOptions.value = []
@@ -1994,7 +2196,7 @@ const onConfirmHu = (index: number) => {
   resetAutoCount()
   playSound('tile-hu')
   showHuPanel.value = false
-  executeAction(ActionType.HU, undefined, undefined, winOptions.value[index]?.label)
+  executeAction(ActionType.HU, undefined, undefined, displayWinOptions.value[index]?.label)
 }
 const onCancelHu = () => {
   showHuPanel.value = false
@@ -2008,12 +2210,7 @@ const myPendingAction = computed(() => {
 })
 
 const actionVisualFreezeUntil = computed(() => {
-  const serverFreezeUntil = currentFreezeUntil.value
-  const pending = myPendingAction.value as { availableActions?: string[]; expiresAt?: number } | null
-  const hasChowPending = !!pending?.availableActions?.includes(ActionType.CHOW)
-  const pendingExpiresAt = typeof pending?.expiresAt === 'number' ? pending.expiresAt : 0
-  const localVisualUntil = hasChowPending ? actionButtonsVisibleUntil.value : 0
-  return Math.max(serverFreezeUntil, pendingExpiresAt, localVisualUntil)
+  return currentFreezeUntil.value
 })
 
 const chowOptions = computed(() => {
@@ -2234,6 +2431,44 @@ const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); executeAction(
 // 退房结算
 const showSettlement = ref(false)
 const settlementData = ref<any>(null)
+
+const formatSignedScore = (score: any): string => {
+  const n = Number(score ?? 0)
+  return n > 0 ? `+${n}` : String(n)
+}
+
+const formatWinnerTiles = (winner: any): string => {
+  const tileFaces = Array.isArray(winner?.tileFaces) ? winner.tileFaces.filter(Boolean) : []
+  if (tileFaces.length) return tileFaces.join(' ')
+  const handTiles = Array.isArray(winner?.handTiles) ? winner.handTiles : []
+  const exposedTiles = Array.isArray(winner?.exposedTiles) ? winner.exposedTiles : []
+  const tiles = [...handTiles, ...exposedTiles]
+  if (tiles.length) return tiles.map(tileLabel).filter(Boolean).join(' ')
+  return '-'
+}
+
+const getRoundSettlementRows = (round: any) => {
+  const winners = Array.isArray(round?.winnerDetails) ? round.winnerDetails : []
+  const winnerByPlayer = new Map(winners.map((winner: any) => [winner.playerId, winner]))
+  return (settlementData.value?.playerStats || []).map((player: any) => {
+    const winner: any = winnerByPlayer.get(player.id)
+    const score = Number(round?.scores?.[player.id] ?? 0)
+    return {
+      playerId: player.id,
+      playerName: player.name,
+      isWinner: !!winner,
+      handType: winner?.handTypeName || '-',
+      tiles: winner ? formatWinnerTiles(winner) : '-',
+      menQing: winner ? (typeof winner.isMenQing === 'boolean' ? (winner.isMenQing ? '门清' : '非门清') : '-') : '-',
+      wild: winner ? (typeof winner.hasWild === 'boolean' ? (winner.hasWild ? '有' : '无') : '-') : '-',
+      baseFan: winner?.baseFan ?? '-',
+      finalPoints: winner?.finalPoints ?? '-',
+      score,
+      scoreLabel: formatSignedScore(score)
+    }
+  })
+}
+
 const onRequestSettle = async () => {
   try {
     const res = await $fetch('/api/game/settle', {
@@ -2284,6 +2519,10 @@ const mySwapInfo = ref<{ totalChances: number; usedChances: number; remaining: n
 const canSwap = computed(() => mySwapInfo.value.remaining > 0)
 const onPlayerNameClick = (player: any) => {
   if (!player) return
+  if (canUseSpectatorView.value && player.id !== currentPlayer.value?.id) {
+    void handleSpectate(player.id)
+    return
+  }
   // 允许点击自己、AI玩家、或（满足换位置条件时）其他真人玩家
   if (player.id !== currentPlayer.value?.id && !isBotPlayer(player) && !canSwap.value) return
   playerCardPlayer.value = player
@@ -2461,7 +2700,7 @@ const handleCircularAction = (type: string) => {
       onHu()
       break
     case 'think':
-      onThinkPopup()
+      onThink()
       break
     case 'rebel':
       onRebel()
@@ -2585,10 +2824,7 @@ const onStartGame = async () => {
     ]
     hasDicePreview.value = true
     playSound('dice-roll')
-    showDiceOverlay.value = false
-    nextTick(() => {
-      showDiceOverlay.value = true
-    })
+    showDiceOverlay.value = true
   } catch (err) {
     console.error('[onStartGame] Failed:', err)
   } finally {
@@ -2665,19 +2901,24 @@ watch(isMyTurn, (isMe) => {
   prevIsMyTurn.value = isMe
 })
 // ---- 追踪其他玩家动作（用于触发音效）----
-const prevOtherPlayerState = new Map<string, { meldCount: number; discardCount: number }>()
+const prevOtherPlayerState = new Map<string, { meldCount: number; discardCount: number; replacedFlowerCount: number }>()
 const getOtherMeldCount = (player: any) => (player?.hand?.exposedMelds?.length ?? 0)
 const getOtherDiscardCount = (player: any) => (player?.hand?.discardedTiles?.length ?? 0)
+const getReplacedFlowerMelds = (player: any) =>
+  (player?.hand?.exposedMelds || []).filter((meld: any) => {
+    const tile = meld?.tiles?.[0]
+    return meld?.tiles?.length === 1 && tile?.suit === 'hua' && !!meld?.replacementDone
+  })
 const checkOtherPlayerSounds = (newState: any) => {
   if (!newState?.players) return
-  const myId = currentPlayer.value?.id
   for (const player of newState.players) {
-    if (player.id === myId) continue
     const prev = prevOtherPlayerState.get(player.id)
     const meldCount = getOtherMeldCount(player)
     const discardCount = getOtherDiscardCount(player)
+    const replacedFlowerMelds = getReplacedFlowerMelds(player)
+    const replacedFlowerCount = replacedFlowerMelds.length
     if (prev) {
-      if (meldCount > prev.meldCount) {
+      if (player.id !== currentPlayer.value?.id && meldCount > prev.meldCount) {
         const newMelds = (player.hand?.exposedMelds || []).slice(prev.meldCount)
         for (const m of newMelds) {
           if (m.type === 'kong' || m.tiles?.length === 4) playSound('tile-kong')
@@ -2685,9 +2926,9 @@ const checkOtherPlayerSounds = (newState: any) => {
           else playSound('tile-chow')
         }
       }
-      if (discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) playSound('tile-discard')
+      if (player.id !== currentPlayer.value?.id && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) playSound('tile-discard')
     }
-    prevOtherPlayerState.set(player.id, { meldCount, discardCount })
+    prevOtherPlayerState.set(player.id, { meldCount, discardCount, replacedFlowerCount })
   }
   const currentIds = new Set(newState.players.map((p: any) => p.id))
   for (const id of prevOtherPlayerState.keys()) {
@@ -3109,18 +3350,18 @@ const forceDiscard = async (p: Player) => {
   transform: translateX(-50%);
 }
 :deep(.discard-zone--bottom) {
-  bottom: var(--discard-bottom-inset);
+  bottom: calc(var(--discard-bottom-inset) - 1%);
   left: 50%;
   transform: translateX(-50%);
 }
 :deep(.discard-zone--left) {
-  top: 50%;
+  top: calc(50% - 1%);
   left: calc(var(--discard-side-inset) - 1%);
   transform: translateY(-50%);
 }
 :deep(.discard-zone--right) {
-  top: 50%;
-  right: calc(var(--discard-side-inset) - 2%);
+  top: calc(50% - 1%);
+  right: calc(var(--discard-side-inset) - 1%);
   transform: translateY(-50%);
 }
 
@@ -3185,12 +3426,6 @@ const forceDiscard = async (p: Player) => {
 .extra-action-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
-}
-
-.extra-action-btn--think:not(:disabled) {
-  background: rgba(124, 58, 237, 0.3);
-  border-color: rgba(139, 92, 246, 0.4);
-  color: #c4b5fd;
 }
 
 .extra-action-btn--liangshan:not(:disabled) {
@@ -4264,131 +4499,63 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 10px;
+}
+.hu-combo-rank {
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: rgba(255, 230, 150, 0.88);
 }
 .hu-combo-label {
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 1.06rem;
+  font-weight: 800;
   color: #fff;
 }
+.hu-combo-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.hu-combo-method {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
 .hu-combo-score {
-  font-size: 1.2rem;
+  font-size: 1.05rem;
   font-weight: 900;
   color: #FFD700;
   text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
 }
-.hu-combo-tiles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 6px 0;
-  align-items: flex-end;
-}
-.hu-tile-group {
-  display: flex;
-  align-items: flex-end;
-  gap: 1px;
-  padding: 3px 5px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.25);
-  position: relative;
-}
-.hu-tile-item {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.hu-wild-label {
-  position: absolute;
-  bottom: -1px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.5rem;
-  color: #FFD700;
-  font-weight: 900;
-  background: rgba(0,0,0,0.7);
-  padding: 0 2px;
-  border-radius: 2px;
-  white-space: nowrap;
-  z-index: 2;
-}
-.hu-group-type {
-  font-size: 0.55rem;
-  color: rgba(255,255,255,0.45);
-  position: absolute;
-  bottom: -9px;
-  right: 2px;
-}
-.hu-combo-details {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
-}
-.hu-detail {
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.65);
-  background: rgba(255, 255, 255, 0.1);
-  padding: 1px 6px;
-  border-radius: 4px;
-}
-.hu-combo-groups {
+.hu-summary-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  align-items: flex-end;
 }
-
-.hu-group {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.2);
-  position: relative;
+.hu-summary-item {
+  min-width: 104px;
+  flex: 1 1 104px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
 }
-
-.hu-group--sequence {
-  border-bottom: 2px solid rgba(100, 200, 255, 0.4);
+.hu-summary-key {
+  display: block;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.58);
+  margin-bottom: 4px;
 }
-
-.hu-group--triplet {
-  border-bottom: 2px solid rgba(255, 150, 50, 0.4);
-}
-
-.hu-group--pair {
-  border-bottom: 2px solid rgba(255, 215, 0, 0.5);
-}
-
-.hu-mini-tile {
-  flex-shrink: 0;
-}
-
-.hu-group-label {
-  position: absolute;
-  top: -10px;
-  right: 4px;
-  font-size: 0.6rem;
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-weight: 700;
-}
-
-.hu-group--sequence .hu-group-label {
-  background: rgba(100, 200, 255, 0.2);
-  color: #64c8ff;
-}
-
-.hu-group--triplet .hu-group-label {
-  background: rgba(255, 150, 50, 0.2);
-  color: #ff9632;
-}
-
-.hu-group--pair .hu-group-label {
-  background: rgba(255, 215, 0, 0.2);
-  color: #ffd700;
+.hu-summary-value {
+  display: block;
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: #fff8da;
 }
 
 .hu-panel-actions {
@@ -4700,6 +4867,43 @@ const forceDiscard = async (p: Player) => {
 .settle-round-subtitle {
   color: rgba(255, 255, 255, 0.72);
   font-size: 0.78rem;
+}
+
+.settle-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.settle-round-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  color: #f3f3f3;
+}
+
+.settle-round-table th,
+.settle-round-table td {
+  padding: 7px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: left;
+  vertical-align: top;
+}
+
+.settle-round-table th {
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.settle-round-table-row--winner {
+  background: rgba(255, 215, 0, 0.07);
+}
+
+.settle-round-tiles {
+  min-width: 180px;
+  line-height: 1.5;
 }
 
 .settle-round-winner {

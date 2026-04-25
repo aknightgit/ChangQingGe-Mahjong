@@ -146,6 +146,44 @@ function normalizeTileSuit(rawSuit: string): TileSuit | null {
   }
 }
 
+function tileKeyOrder(key: string): number {
+  const [suit, valueText] = key.split('-');
+  const value = parseInt(valueText, 10) || 0;
+  const suitRank = (() => {
+    switch (suit) {
+      case TileSuit.DOTS:
+        return 0;
+      case TileSuit.CHARACTERS:
+        return 1;
+      case TileSuit.BAMBOOS:
+        return 2;
+      case TileSuit.WIND:
+        return 3;
+      case TileSuit.DRAGON:
+        return 4;
+      case TileSuit.FLOWER:
+        return 5;
+      default:
+        return 9;
+    }
+  })();
+  return suitRank * 100 + value;
+}
+
+function findLowestPositiveKey(map: Map<string, number>): string | null {
+  let bestKey: string | null = null;
+  let bestOrder = Number.POSITIVE_INFINITY;
+  for (const [key, count] of map) {
+    if (count <= 0) continue;
+    const order = tileKeyOrder(key);
+    if (order < bestOrder) {
+      bestOrder = order;
+      bestKey = key;
+    }
+  }
+  return bestKey;
+}
+
 // ============================================================
 // 手牌数校验（摸牌后必须是 2/5/8/11/14）
 // ============================================================
@@ -315,18 +353,15 @@ function tryFormOnlyTriplets(n: number, wildLeft: number, map: Map<string, numbe
     return wildLeft === 0;
   }
 
-  let firstKey: string | null = null;
-  for (const k of map.keys()) {
-    if ((map.get(k) || 0) > 0) { firstKey = k; break; }
-  }
+  const firstKey = findLowestPositiveKey(map);
 
   if (!firstKey) return wildLeft >= n * 3;
 
   const cnt = map.get(firstKey)!;
-  const needTriplet = 3 - cnt;
+  const needTriplet = Math.max(0, 3 - cnt);
   if (needTriplet <= wildLeft) {
     const saved = cnt;
-    map.set(firstKey, 0);
+    map.set(firstKey, Math.max(0, cnt - 3));
     if (tryFormOnlyTriplets(n - 1, wildLeft - needTriplet, map)) return true;
     map.set(firstKey, saved);
   }
@@ -342,10 +377,7 @@ function tryFormMelds(n: number, wildLeft: number, map: Map<string, number>): bo
   }
 
   // 找第一个还有牌的色值
-  let firstKey: string | null = null;
-  for (const k of map.keys()) {
-    if ((map.get(k) || 0) > 0) { firstKey = k; break; }
-  }
+  const firstKey = findLowestPositiveKey(map);
 
   if (!firstKey) return wildLeft >= n * 3; // 全靠百搭补
 
@@ -373,7 +405,7 @@ function tryFormMelds(n: number, wildLeft: number, map: Map<string, number>): bo
     if (missing <= wildLeft) {
       const s2 = c2, s3 = c3;
       const saved = cnt;
-      map.set(firstKey, 0);
+      map.set(firstKey, cnt - 1);
       if (c2 > 0) map.set(k2, c2 - 1);
       if (c3 > 0) map.set(k3, c3 - 1);
       if (tryFormMelds(n - 1, wildLeft - missing, map)) return true;
@@ -384,6 +416,104 @@ function tryFormMelds(n: number, wildLeft: number, map: Map<string, number>): bo
   }
 
   return false;
+}
+
+function isGarbageMultiSuitsWithSequenceProjectRule(concealedTiles: Tile[]): boolean {
+  const suits = getSuits(concealedTiles);
+  if (suits.size < 2) return false;
+  const nonFlower = concealedTiles.filter(t => !isFlower(t));
+  const m = (nonFlower.length - 2) / 3;
+  if (!Number.isInteger(m) || m < 0) return false;
+  if (canFormOnlyTripletsFrom(nonFlower, m, () => false)) return false;
+  return true;
+}
+
+function canWinByProjectRuleNoWild(concealed: Tile[], exposed: Meld[]): boolean {
+  const concealedNonFlower = concealed.filter(t => !isFlower(t));
+  if (!isValidHandSize(concealedNonFlower.length) && concealedNonFlower.length !== 1) return false;
+
+  const allWind = concealedNonFlower.length > 0 &&
+    concealedNonFlower.every(t => isWind(t) || isDragon(t));
+  if (allWind) return true;
+
+  let remainingMelds: number;
+  if (concealedNonFlower.length === 1) {
+    remainingMelds = 0;
+  } else {
+    remainingMelds = (concealedNonFlower.length - 2) / 3;
+    if (!Number.isInteger(remainingMelds) || remainingMelds < 0) return false;
+  }
+
+  const satisfiesFormat = concealedNonFlower.length === 1
+    ? true
+    : canFormMelds(concealedNonFlower, remainingMelds, () => false);
+  if (!satisfiesFormat) return false;
+
+  const hasExposedSequence = exposed.some(m => m.type === MeldType.SEQUENCE);
+  const canFormOnlyTriplets = concealedNonFlower.length === 1
+    ? false
+    : canFormOnlyTripletsFrom(concealedNonFlower, remainingMelds, () => false);
+
+  if (!hasExposedSequence && canFormOnlyTriplets) return true;
+
+  const allExposedNonFlower = exposed.flatMap(m => m.tiles).filter(t => !isFlower(t));
+  const allNonFlower = [...concealedNonFlower, ...allExposedNonFlower];
+  const suits = getSuits(allNonFlower);
+  const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+  const windSuits = [TileSuit.WIND];
+
+  let numSuitCount = 0;
+  let windCount = 0;
+  for (const s of suits) {
+    if (numSuits.includes(s)) numSuitCount++;
+    else if (windSuits.includes(s) || s === TileSuit.DRAGON) windCount++;
+  }
+
+  if (numSuitCount === 1 && windCount === 0) return true;
+  if (numSuitCount === 1 && windCount >= 1) return true;
+  if (concealedNonFlower.length === 1) return true;
+
+  return !isGarbageMultiSuitsWithSequenceProjectRule(concealedNonFlower);
+}
+
+function canWinByProjectRuleWithWildExact(concealed: Tile[], exposed: Meld[], wildTileId: string): boolean {
+  const parts = wildTileId.split('-');
+  if (parts.length < 2) return canWinByProjectRuleNoWild(concealed, exposed);
+  const [wildSuitRaw, wildVal] = parts;
+  const wildSuit = normalizeTileSuit(wildSuitRaw);
+  if (!wildSuit) return canWinByProjectRuleNoWild(concealed, exposed);
+
+  const isWild = (t: Tile) => t.suit === wildSuit && String(t.value) === wildVal;
+  const wildCount = concealed.filter(t => isWild(t)).length;
+  if (wildCount === 0) return canWinByProjectRuleNoWild(concealed, exposed);
+  if (wildCount > 3) return false;
+
+  const naturals = concealed.filter(t => !isWild(t));
+  const allCandidates: Array<{ suit: TileSuit; value: number }> = [];
+  for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+    for (let value = 1; value <= 9; value++) {
+      allCandidates.push({ suit, value });
+    }
+  }
+  for (let value = 1; value <= 4; value++) allCandidates.push({ suit: TileSuit.WIND, value });
+  for (let value = 1; value <= 3; value++) allCandidates.push({ suit: TileSuit.DRAGON, value });
+
+  const enumerate = (depth: number, alloc: Tile[]): boolean => {
+    if (depth === wildCount) {
+      return canWinByProjectRuleNoWild([...naturals, ...alloc], exposed);
+    }
+    for (const candidate of allCandidates) {
+      alloc.push({ suit: candidate.suit, value: candidate.value, id: `exact-${depth}-${candidate.suit}-${candidate.value}`, isFlower: false });
+      if (enumerate(depth + 1, alloc)) {
+        alloc.pop();
+        return true;
+      }
+      alloc.pop();
+    }
+    return false;
+  };
+
+  return enumerate(0, []);
 }
 
 // ============================================================
@@ -495,7 +625,7 @@ function detectTypes(
   // 判断逻辑：hand spans >= 2 suits AND canFormOnlyTriplets = false（即必须用顺子）
   function isGarbageMultiSuitsWithSequence(concealedTiles: Tile[]): boolean {
     const suits = getSuits(concealedTiles);
-    if (suits.length < 2) return false;  // 单门（清一色/风一色）不是垃圾胡
+    if (suits.size < 2) return false;  // 单门（清一色/风一色）不是垃圾胡
     // 检查是否能全用刻子组成（顺子牌型需要wild配合才成立）
     // 用 canFormOnlyTripletsFrom 检验：不用顺子能否满足 3n+2
     const nonFlower = concealedTiles.filter(t => !isFlower(t));
@@ -694,7 +824,7 @@ export function findBestHandTypes(
   exposed: Meld[],
   wildTileId: string | null
 ): HandType[] {
-  const result = findBestAssignmentHeuristic(tiles, exposed, wildTileId ?? '');
+  const result = findBestAssignmentByPriority(tiles, exposed, wildTileId ?? '');
   // 结果已按优先级排序
   return result;
 }
@@ -744,7 +874,7 @@ function findBestAssignmentHeuristic(
   let bestTypes: HandType[] = [];
   let bestScore = -1;
   let iterations = 0;
-  const ITERATION_LIMIT = 30000;
+  const ITERATION_LIMIT = 50000;
 
   const baselineTypes = detectTypes(concealed, exposed);
   if (baselineTypes.length > 0) {
@@ -769,7 +899,8 @@ function findBestAssignmentHeuristic(
     return detectTypes(virtualHand, exposed);
   };
 
-  if (wildCount <= 2) {
+  // 3 张百搭时全量穷举仍在可控范围内，避免被启发式漏掉真实可胡解
+  if (wildCount <= 3) {
     const enumerateAll = (wildIdx: number, alloc: Array<{ suit: string; value: number }>) => {
       if (wildIdx === wildCount) {
         iterations++;
@@ -898,6 +1029,249 @@ function findBestAssignmentHeuristic(
   return bestTypes;
 }
 
+function findBestAssignmentByPriority(
+  concealed: Tile[],
+  exposed: Meld[],
+  wildTileId: string
+): HandType[] {
+  if (!wildTileId || typeof wildTileId !== 'string') return detectTypes(concealed, exposed);
+  const parts = wildTileId.split('-');
+  if (parts.length < 2) return detectTypes(concealed, exposed);
+  const [wildSuitRaw, wildVal] = parts;
+  const wildSuit = normalizeTileSuit(wildSuitRaw);
+  if (!wildSuit) return detectTypes(concealed, exposed);
+  const isWild = (t: Tile) => t.suit === wildSuit && String(t.value) === wildVal;
+
+  const wildCount = concealed.filter(t => isWild(t)).length;
+  if (wildCount === 0) return detectTypes(concealed, exposed);
+
+  const naturals = concealed.filter(t => !isWild(t));
+  const allCandidates: Array<{ suit: string; value: number }> = [];
+  const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+  for (const suit of numSuits) {
+    for (let value = 1; value <= 9; value++) {
+      allCandidates.push({ suit, value });
+    }
+  }
+  for (let value = 1; value <= 4; value++) {
+    allCandidates.push({ suit: TileSuit.WIND, value });
+  }
+  for (let value = 1; value <= 3; value++) {
+    allCandidates.push({ suit: TileSuit.DRAGON, value });
+  }
+
+  if (naturals.length === 0) {
+    const virtualHand: Tile[] = [];
+    for (let i = 0; i < wildCount; i++) {
+      virtualHand.push({ suit: wildSuit as TileSuit, value: parseInt(wildVal, 10), id: `vhp-${i}`, isFlower: false });
+    }
+    return detectTypes(virtualHand, exposed);
+  }
+
+  const compareTypes = (left: HandType[], right: HandType[]) => {
+    const leftScore = left.length > 0 ? (HAND_TYPE_PRIORITY[left[0]] ?? 0) : -1;
+    const rightScore = right.length > 0 ? (HAND_TYPE_PRIORITY[right[0]] ?? 0) : -1;
+    return leftScore - rightScore;
+  };
+
+  const materializeTypes = (alloc: Array<{ suit: string; value: number }>) => {
+    const virtualHand = [...naturals];
+    for (let i = 0; i < alloc.length; i++) {
+      const tile = alloc[i];
+      virtualHand.push({ suit: tile.suit as TileSuit, value: tile.value, id: `vhp-${i}`, isFlower: false });
+    }
+    return detectTypes(virtualHand, exposed);
+  };
+
+  // 0-3 张百搭是主流业务场景，直接做精确枚举，先保真再谈启发式提速。
+  if (wildCount <= 3) {
+    let bestExact: HandType[] = [];
+    const enumerateExact = (depth: number, alloc: Array<{ suit: string; value: number }>) => {
+      if (depth === wildCount) {
+        const types = materializeTypes(alloc);
+        if (types.length > 0 && compareTypes(types, bestExact) > 0) {
+          bestExact = [...types];
+        }
+        return;
+      }
+
+      for (const candidate of allCandidates) {
+        alloc.push(candidate);
+        enumerateExact(depth + 1, alloc);
+        alloc.pop();
+      }
+    };
+
+    enumerateExact(0, []);
+    return bestExact;
+  }
+
+  const baselineTypes = detectTypes(concealed, exposed);
+  if (baselineTypes.length > 0) return baselineTypes;
+
+  const naturalCountByKey = new Map<string, number>();
+  for (const tile of naturals) {
+    const key = `${tile.suit}-${tile.value}`;
+    naturalCountByKey.set(key, (naturalCountByKey.get(key) || 0) + 1);
+  }
+
+  const pushUniqueCandidate = (
+    target: Array<{ suit: string; value: number }>,
+    seen: Set<string>,
+    suit: string,
+    value: number
+  ) => {
+    const key = `${suit}-${value}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    target.push({ suit, value });
+  };
+
+  const numericCandidatePool = (() => {
+    const candidates: Array<{ suit: string; value: number }> = [];
+    const seen = new Set<string>();
+    const suitCounts = new Map<string, number>();
+
+    for (const tile of naturals) {
+      if (tile.suit === TileSuit.DOTS || tile.suit === TileSuit.CHARACTERS || tile.suit === TileSuit.BAMBOOS) {
+        suitCounts.set(tile.suit, (suitCounts.get(tile.suit) || 0) + 1);
+      }
+    }
+
+    const dominantNumericSuit = Array.from(suitCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0];
+    const orderedNaturals = [...naturals]
+      .filter(tile => tile.suit === TileSuit.DOTS || tile.suit === TileSuit.CHARACTERS || tile.suit === TileSuit.BAMBOOS)
+      .sort((a, b) => {
+        const aCount = naturalCountByKey.get(`${a.suit}-${a.value}`) || 0;
+        const bCount = naturalCountByKey.get(`${b.suit}-${b.value}`) || 0;
+        const aBoost = a.suit === dominantNumericSuit ? 100 : 0;
+        const bBoost = b.suit === dominantNumericSuit ? 100 : 0;
+        return (bBoost + bCount) - (aBoost + aCount);
+      });
+
+    for (const tile of orderedNaturals) {
+      pushUniqueCandidate(candidates, seen, tile.suit, tile.value);
+    }
+    for (const tile of orderedNaturals) {
+      for (const delta of [-2, -1, 1, 2]) {
+        const nextValue = tile.value + delta;
+        if (nextValue >= 1 && nextValue <= 9) {
+          pushUniqueCandidate(candidates, seen, tile.suit, nextValue);
+        }
+      }
+    }
+
+    return candidates;
+  })();
+
+  const buildHonorPool = (suit: TileSuit, maxValue: number) => {
+    const candidates: Array<{ suit: string; value: number }> = [];
+    const seen = new Set<string>();
+    for (let value = 1; value <= maxValue; value++) {
+      if ((naturalCountByKey.get(`${suit}-${value}`) || 0) > 0) {
+        pushUniqueCandidate(candidates, seen, suit, value);
+      }
+    }
+    for (let value = 1; value <= maxValue; value++) {
+      pushUniqueCandidate(candidates, seen, suit, value);
+    }
+    return candidates;
+  };
+
+  const buildPairSeeds = (suit: TileSuit, maxValue: number) => {
+    const seeds: Array<Array<{ suit: string; value: number }>> = [];
+    for (let value = 1; value <= maxValue; value++) {
+      const naturalCount = naturalCountByKey.get(`${suit}-${value}`) || 0;
+      const need = Math.max(0, 2 - naturalCount);
+      if (need <= wildCount) {
+        seeds.push(Array.from({ length: need }, () => ({ suit, value })));
+      }
+    }
+    return seeds.sort((a, b) => a.length - b.length);
+  };
+
+  const runLimitedSearch = (params: {
+    seeds?: Array<Array<{ suit: string; value: number }>>
+    candidatePool: Array<{ suit: string; value: number }>
+    accept?: (types: HandType[]) => boolean
+    stopOnFirst?: boolean
+    width?: number
+  }): HandType[] => {
+    const { seeds = [[]], candidatePool, accept, stopOnFirst = false, width = 6 } = params;
+    let best: HandType[] = [];
+    const trimmedPool = candidatePool.slice(0, Math.max(1, width));
+
+    const search = (alloc: Array<{ suit: string; value: number }>, remaining: number): HandType[] | null => {
+      if (remaining === 0) {
+        const types = materializeTypes(alloc);
+        if (types.length === 0) return null;
+        if (accept && !accept(types)) return null;
+        if (stopOnFirst) return types;
+        if (compareTypes(types, best) > 0) {
+          best = [...types];
+        }
+        return null;
+      }
+
+      for (const candidate of trimmedPool) {
+        alloc.push(candidate);
+        const hit = search(alloc, remaining - 1);
+        alloc.pop();
+        if (hit) return hit;
+      }
+      return null;
+    };
+
+    for (const seed of seeds) {
+      if (seed.length > wildCount) continue;
+      const hit = search([...seed], wildCount - seed.length);
+      if (hit) return hit;
+      if (!stopOnFirst && best.length > 0) return best;
+    }
+
+    return best;
+  };
+
+  const noFlowerSelfDrawTypes = runLimitedSearch({
+    candidatePool: numericCandidatePool,
+    width: 10,
+    accept: (types) =>
+      types.includes(HandType.ALL_TRIPLETS) ||
+      types.includes(HandType.HALF_FLUSH) ||
+      types.includes(HandType.HUN_PENG) ||
+      types.includes(HandType.QING_PENG)
+  });
+  if (noFlowerSelfDrawTypes.length > 0) return noFlowerSelfDrawTypes;
+
+  const dragonTypes = runLimitedSearch({
+    seeds: buildPairSeeds(TileSuit.DRAGON, 3),
+    candidatePool: [
+      ...buildHonorPool(TileSuit.DRAGON, 3),
+      ...buildHonorPool(TileSuit.WIND, 4),
+      ...numericCandidatePool
+    ],
+    width: 10
+  });
+  if (dragonTypes.length > 0) return dragonTypes;
+
+  const windTypes = runLimitedSearch({
+    seeds: buildPairSeeds(TileSuit.WIND, 4),
+    candidatePool: [
+      ...buildHonorPool(TileSuit.WIND, 4),
+      ...buildHonorPool(TileSuit.DRAGON, 3),
+      ...numericCandidatePool
+    ],
+    width: 10
+  });
+  if (windTypes.length > 0) return windTypes;
+
+  return runLimitedSearch({
+    candidatePool: numericCandidatePool.length > 0 ? numericCandidatePool : allCandidates,
+    width: 12,
+    stopOnFirst: true
+  });
+}
+
 export function canWin(
   handTiles: Tile[],
   exposedOrCount: Meld[] | number,
@@ -1003,15 +1377,17 @@ export function canWin(
   // 第二层：标准 3n+2 / 特殊牌型检测
   // _skipWildAssignment 时跳过 findBestAssignment DFS，直接用 detectTypes（用于 baseline 提速）
   const types = (wildTileId && !_skipWildAssignment)
-    ? findBestAssignmentHeuristic(concealed, exposed, wildTileId)
+    ? findBestAssignmentByPriority(concealed, exposed, wildTileId)
     : detectTypes(concealed, exposed);
+  const exactCanWin = wildTileId
+    ? canWinByProjectRuleWithWildExact(concealed, exposed, wildTileId)
+    : canWinByProjectRuleNoWild(concealed, exposed);
+  const finalCanWin = types.length > 0 || exactCanWin;
+  const validTypes = finalCanWin
+    ? (types.length > 0 ? types : [HandType.STANDARD])
+    : [];
 
-  const validTypes = types;
-  if (types.length === 0) {
-  } else {
-  }
-
-  const result = { canWin: validTypes.length > 0, types: validTypes }
+  const result = { canWin: finalCanWin, types: validTypes }
   // 缓存结果（同时缓存 boolean 和 types）
   if (canWinResultCache.size < CAN_WIN_CACHE_MAX) {
     canWinResultCache.set(cacheKey, { canWin: result.canWin, types: result.types })

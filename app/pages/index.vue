@@ -10,8 +10,10 @@
 
       <div class="mahjong-actions">
         <button
+          type="button"
           class="mahjong-button primary"
           :disabled="isCreatingGame"
+          @pointerdown.stop.prevent
           @click.stop="openCreateModal(0)"
         >
           创建新局
@@ -241,7 +243,7 @@
                     <button class="help-btn" @click="toggleHelp('think')">?</button>
                   </div>
                   <input type="number" v-model.number="createParams.thinkChances" min="0" max="10" />
-                  <span v-if="activeHelp === 'think'" class="help-bubble">有胡/碰/杠选项时，可用「慢」按钮让所有对手进入决策犹豫期。每局限N次，默认3次。用完变灰。</span>
+                  <span v-if="activeHelp === 'think'" class="help-bubble">有吃/碰/杠/胡选项时，可用「慢」按钮让所有对手进入决策犹豫期。每局限N次，默认3次。用完变灰。</span>
                 </div>
               </div>
             </div>
@@ -289,7 +291,13 @@
 
           <div class="create-actions">
             <button class="create-btn create-btn--cancel" @click="showCreateModal = false">取消</button>
-            <button class="create-btn create-btn--start" @click="confirmCreateGame" :disabled="isCreatingGame">
+            <button
+              type="button"
+              class="create-btn create-btn--start"
+              :disabled="isCreatingGame"
+              @pointerdown.stop.prevent
+              @click="confirmCreateGame"
+            >
               {{ isCreatingGame ? '创建中...' : '创建新局' }}
             </button>
           </div>
@@ -301,6 +309,43 @@
 <script setup lang="ts">
 // 首页不需要SSR，避免水合期间按钮点击失效
 definePageMeta({ ssr: false })
+
+const PENDING_ROOM_STORAGE_KEY = 'mahjong.pendingRoomTarget'
+const PENDING_ROOM_TTL_MS = 8000
+
+const savePendingRoomTarget = (targetUrl: string) => {
+  if (!process.client) return
+  try {
+    sessionStorage.setItem(PENDING_ROOM_STORAGE_KEY, JSON.stringify({
+      targetUrl,
+      createdAt: Date.now()
+    }))
+  } catch {}
+}
+
+const getPendingRoomTarget = (): string | null => {
+  if (!process.client) return null
+  try {
+    const raw = sessionStorage.getItem(PENDING_ROOM_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { targetUrl?: string; createdAt?: number }
+    if (!parsed?.targetUrl || typeof parsed.createdAt !== 'number') return null
+    if (Date.now() - parsed.createdAt > PENDING_ROOM_TTL_MS) {
+      sessionStorage.removeItem(PENDING_ROOM_STORAGE_KEY)
+      return null
+    }
+    return parsed.targetUrl
+  } catch {
+    return null
+  }
+}
+
+const clearPendingRoomTarget = () => {
+  if (!process.client) return
+  try {
+    sessionStorage.removeItem(PENDING_ROOM_STORAGE_KEY)
+  } catch {}
+}
 
 const userName = useCookie('user_name')
 const isAdmin = useCookie('is_admin')
@@ -389,7 +434,9 @@ const confirmCreateGame = async () => {
     // 先进入房间，避免用户等待机器人加入导致“点击后很慢”
     const targetUrl = `/gameroom/${gameId}?playerId=${playerId}&dice=${createParams.maxDiceRolls}`
     console.log('[Create] Navigating to:', targetUrl)
-    await navigateTo(targetUrl)
+    savePendingRoomTarget(targetUrl)
+    showCreateModal.value = false
+    await router.push(targetUrl)
 
     // 后台并行加入选中的AI（不阻塞首屏响应）
     const botsToJoin = selectedBots.value.slice(0, createParams.maxBots)
@@ -420,6 +467,16 @@ const confirmCreateGame = async () => {
     isCreatingGame.value = false
   }
 }
+
+onMounted(() => {
+  const pendingTarget = getPendingRoomTarget()
+  if (!pendingTarget) return
+  if (router.currentRoute.value.path !== '/') {
+    clearPendingRoomTarget()
+    return
+  }
+  void router.replace(pendingTarget)
+})
 
 const { data: profileResponse, pending: profilePending, error: profileError, refresh: refreshProfile } =
   useFetch('/api/profile', {

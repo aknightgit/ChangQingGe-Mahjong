@@ -208,6 +208,11 @@ export interface RoundStat {
     settlementMultiplier: number;
     finalPoints: number;
     details: string[];
+    handTiles?: Tile[];
+    exposedTiles?: Tile[];
+    tileFaces?: string[];
+    isMenQing?: boolean;
+    hasWild?: boolean;
   }>;
   transfers: Array<{
     fromPlayerId: string;
@@ -227,6 +232,28 @@ export interface RoundStat {
   }>;
 }
 
+export type SpectatorApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export interface SpectatorViewState {
+  viewingPlayerId: string | null;
+  approvedHumanPlayerId?: string | null;
+  pendingHumanPlayerId?: string | null;
+  roundNumber: number;
+  updatedAt: number;
+}
+
+export interface SpectatorApprovalRequest {
+  id: string;
+  requesterId: string;
+  requesterName: string;
+  targetId: string;
+  targetName: string;
+  roundNumber: number;
+  status: SpectatorApprovalStatus;
+  requestedAt: number;
+  resolvedAt?: number;
+}
+
 export interface GameState {
   gameId: string;
   roomNumber?: string; // 4位随机房间号
@@ -240,6 +267,7 @@ export interface GameState {
   actionHistory: GameAction[];
   winnersCount: number;
   roundNumber: number;
+  currentRound?: number;
   createdAt: number;
   lastActionTime: number;
   endedAt?: number;
@@ -303,6 +331,8 @@ export interface GameState {
   swapChances?: Record<string, number>;  // 每位玩家剩余换位次数
   // 胜者观战模式
   spectatorMode?: { playerId: string; viewingPlayerId: string } | null;
+  spectatorViews?: Record<string, SpectatorViewState>;
+  spectatorApprovalRequests?: SpectatorApprovalRequest[];
   // 吃碰排斥规则状态（每局重置）
   chowPongExclusion?: Record<string, { firstActionSuit: string | null; firstActionType: 'chow' | 'pong' | null }>;
   /** 本回合是否已摸牌（防同回合连续摸牌） */

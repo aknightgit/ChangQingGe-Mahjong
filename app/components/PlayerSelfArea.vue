@@ -38,6 +38,7 @@
             :tile="tile"
             :small="true"
             :back="isConcealedMeld(meld)"
+            :back-scheme="isConcealedMeld(meld) ? (tileBackScheme ?? 0) : -1"
             :class="getClaimMarkerClass(meld, tile)"
             :dimmed="isWinner"
           />
@@ -90,6 +91,7 @@ const props = defineProps<{
   name?: string
   hand: Tile[]
   melds: Meld[]
+  tileBackScheme?: number
   selectedTileId?: string | null
   isWinner?: boolean
   justDrawnTileId?: string | null
@@ -116,12 +118,12 @@ const isConcealedMeld = (meld: Meld): boolean => {
 // relativePos: 0=自己(极少), 1=下家(右), 2=对家(上), 3=上家(左)
 function getRelativeSourcePosition(sourcePosition: number, myPosition?: number): number {
   const observerPos = myPosition ?? 0
-  return (observerPos - sourcePosition + 4) % 4
+  return (sourcePosition - observerPos + 4) % 4
 }
 
 function getSourceLabel(sourcePosition: number, myPosition?: number): string {
   const relativePos = getRelativeSourcePosition(sourcePosition, myPosition)
-  const labels = ['自', '上', '对', '下']
+  const labels = ['自', '下', '对', '上']
   return labels[relativePos] || '?'
 }
 
@@ -280,10 +282,11 @@ const onPointerCancel = () => {
   border-color: transparent !important;
   background: transparent !important;
   padding: 0 1px 0 0;
+  gap: 1px;
 }
 
 .meld--flower + .meld--flower {
-  margin-left: -4px;
+  margin-left: -7px;
 }
 
 /* 暗杠 meld：紫色边框 + 背景 */
@@ -326,8 +329,13 @@ const onPointerCancel = () => {
 .player-hand :deep(.tile) {
   cursor: pointer;
   margin: 0 0 2px 0;
-  width: 31px;
-  height: 45px;
+  width: 34.1px;
+  height: 49.5px;
+}
+
+.player-melds :deep(.tile) {
+  width: 30.8px;
+  height: 44px;
 }
 
 /* 玩家颜色圆点 */
@@ -388,26 +396,28 @@ const onPointerCancel = () => {
 
 :deep(.claimed-tile) {
   position: relative;
+  overflow: visible !important;
 }
 
 :deep(.claimed-tile)::after {
   content: '';
   position: absolute;
-  top: -12px;
+  top: -4px;
   left: 50%;
   transform: translateX(-50%);
   width: 0;
   height: 0;
-  border-left: 20px solid transparent;
-  border-right: 20px solid transparent;
-  border-top: 32px solid rgba(255,255,255,0.95);
-  filter: drop-shadow(0 0 6px rgba(0,0,0,0.42));
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 16px solid rgba(255,255,255,0.95);
+  filter: drop-shadow(0 0 3px rgba(0,0,0,0.42));
+  z-index: 4;
 }
 
 :deep(.claimed-tile--self)::after { border-top-color: #f44336; }
-:deep(.claimed-tile--lower)::after { border-top-color: #1e88e5; }
-:deep(.claimed-tile--opposite)::after { border-top-color: #43a047; }
-:deep(.claimed-tile--upper)::after { border-top-color: #e53935; }
+:deep(.claimed-tile--lower)::after { border-top-color: #1e88e5; transform: translateX(-50%) rotate(-90deg); }
+:deep(.claimed-tile--opposite)::after { border-top-color: #43a047; transform: translateX(-50%) rotate(180deg); }
+:deep(.claimed-tile--upper)::after { border-top-color: #e53935; transform: translateX(-50%) rotate(90deg); }
 
 /* 自摸 = 灰色 */
 .meld-arrow--self {

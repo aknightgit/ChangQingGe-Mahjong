@@ -270,6 +270,10 @@ export interface WinOption {
   type: 'self_draw' | 'discard';
   handTypeName?: string;
   handTypes?: HandType[];
+  summary?: Pick<
+    ScoreResult,
+    'baseFan' | 'extraMultipliers' | 'roundMultiplier' | 'settlementMultiplier' | 'finalPoints'
+  >;
   _decompKey?: string; // 内部字段，标记该选项来自哪个牌型分解
 }
 
@@ -328,6 +332,13 @@ export function generateWinOptions(params: {
           type: 'self_draw',
           handTypeName: selfDrawResult.handTypeName,
           handTypes: [...decomp.types],
+          summary: {
+            baseFan: selfDrawResult.baseFan,
+            extraMultipliers: selfDrawResult.extraMultipliers,
+            roundMultiplier: selfDrawResult.roundMultiplier,
+            settlementMultiplier: selfDrawResult.settlementMultiplier,
+            finalPoints: selfDrawResult.finalPoints
+          },
           _decompKey: decompKey
         });
       } else if (selfDrawResult.finalPoints > existing.score) {
@@ -335,6 +346,13 @@ export function generateWinOptions(params: {
         existing.details = [...selfDrawResult.details];
         existing.handTypeName = selfDrawResult.handTypeName;
         existing.handTypes = [...decomp.types];
+        existing.summary = {
+          baseFan: selfDrawResult.baseFan,
+          extraMultipliers: selfDrawResult.extraMultipliers,
+          roundMultiplier: selfDrawResult.roundMultiplier,
+          settlementMultiplier: selfDrawResult.settlementMultiplier,
+          finalPoints: selfDrawResult.finalPoints
+        };
         existing._decompKey = decompKey;
       }
     }
@@ -358,6 +376,13 @@ export function generateWinOptions(params: {
           type: 'discard',
           handTypeName: discardResult.handTypeName,
           handTypes: [...decomp.types],
+          summary: {
+            baseFan: discardResult.baseFan,
+            extraMultipliers: discardResult.extraMultipliers,
+            roundMultiplier: discardResult.roundMultiplier,
+            settlementMultiplier: discardResult.settlementMultiplier,
+            finalPoints: discardResult.finalPoints
+          },
           _decompKey: decompKey
         });
       } else if (discardResult.finalPoints > existing.score) {
@@ -365,6 +390,13 @@ export function generateWinOptions(params: {
         existing.details = [...discardResult.details];
         existing.handTypeName = discardResult.handTypeName;
         existing.handTypes = [...decomp.types];
+        existing.summary = {
+          baseFan: discardResult.baseFan,
+          extraMultipliers: discardResult.extraMultipliers,
+          roundMultiplier: discardResult.roundMultiplier,
+          settlementMultiplier: discardResult.settlementMultiplier,
+          finalPoints: discardResult.finalPoints
+        };
         existing._decompKey = decompKey;
       }
     }
@@ -396,13 +428,27 @@ export function generateWinOptions(params: {
             details: [...noWildResult.details, `无百搭翻倍 ×2 = ${doubledPoints}点`],
             type: 'self_draw',
             handTypeName: noWildResult.handTypeName,
-            handTypes: [...noWildTypes]
+            handTypes: [...noWildTypes],
+            summary: {
+              baseFan: noWildResult.baseFan,
+              extraMultipliers: noWildResult.extraMultipliers * 2,
+              roundMultiplier: noWildResult.roundMultiplier,
+              settlementMultiplier: noWildResult.settlementMultiplier,
+              finalPoints: doubledPoints
+            }
           });
         } else if (doubledPoints > existingNoWild.score) {
           existingNoWild.score = doubledPoints;
           existingNoWild.handTypeName = noWildResult.handTypeName;
           existingNoWild.handTypes = [...noWildTypes];
           existingNoWild.details = [...noWildResult.details, `无百搭翻倍 ×2 = ${doubledPoints}点`];
+          existingNoWild.summary = {
+            baseFan: noWildResult.baseFan,
+            extraMultipliers: noWildResult.extraMultipliers * 2,
+            roundMultiplier: noWildResult.roundMultiplier,
+            settlementMultiplier: noWildResult.settlementMultiplier,
+            finalPoints: doubledPoints
+          };
         }
 
         // 捉冲版
@@ -424,13 +470,27 @@ export function generateWinOptions(params: {
             details: [...noWildDiscard.details, `无百搭翻倍 ×2 = ${doubledDiscard}点`],
             type: 'discard',
             handTypeName: noWildDiscard.handTypeName,
-            handTypes: [...noWildTypes]
+            handTypes: [...noWildTypes],
+            summary: {
+              baseFan: noWildDiscard.baseFan,
+              extraMultipliers: noWildDiscard.extraMultipliers * 2,
+              roundMultiplier: noWildDiscard.roundMultiplier,
+              settlementMultiplier: noWildDiscard.settlementMultiplier,
+              finalPoints: doubledDiscard
+            }
           });
         } else if (doubledDiscard > existingNoWildDiscard.score) {
           existingNoWildDiscard.score = doubledDiscard;
           existingNoWildDiscard.handTypeName = noWildDiscard.handTypeName;
           existingNoWildDiscard.handTypes = [...noWildTypes];
           existingNoWildDiscard.details = [...noWildDiscard.details, `无百搭翻倍 ×2 = ${doubledDiscard}点`];
+          existingNoWildDiscard.summary = {
+            baseFan: noWildDiscard.baseFan,
+            extraMultipliers: noWildDiscard.extraMultipliers * 2,
+            roundMultiplier: noWildDiscard.roundMultiplier,
+            settlementMultiplier: noWildDiscard.settlementMultiplier,
+            finalPoints: doubledDiscard
+          };
         }
       }
     }
