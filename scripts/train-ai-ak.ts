@@ -881,7 +881,9 @@ type AkDiscardDecision = {
   score: number
 }
 
-function shouldAkTakeClaim(
+export function shouldAkTakeClaim(
+  player: BotPlayer,
+  claimTile: Tile,
   passEval: AkPostDiscardEvaluation,
   claimEval: AkPostDiscardEvaluation,
   mode: 'peng' | 'chow'
@@ -903,7 +905,32 @@ function shouldAkTakeClaim(
     lowerShanten &&
     claimEval.score >= passEval.score + (mode === 'peng' ? 14 : 18)
 
-  return strongScoreGain || moreWaits || moreReadyDraws || moreWinDraws || moreImproves || lowerShantenWithStableShape || lowerShantenWithBigShapeGain
+  const routeSignal = inferTrainingRouteSignal(player.hand, player.exposedMelds, makeWT(player))
+  const keepsMenqing = player.exposedMelds.length === 0
+  const shapeImprovesEnough =
+    strongScoreGain || moreWaits || moreReadyDraws || moreWinDraws || moreImproves || lowerShantenWithStableShape || lowerShantenWithBigShapeGain
+
+  if (routeSignal.route === 'MENQING_SPEED' && keepsMenqing) {
+    const canBreakMenqing =
+      lowerShanten ||
+      moreWaits ||
+      moreReadyDraws ||
+      (mode === 'peng' && strongScoreGain) ||
+      claimEval.score >= passEval.score + (mode === 'peng' ? 18 : 24)
+    if (!canBreakMenqing) return false
+  }
+
+  if (routeSignal.route === 'ALL_PUNGS' && mode === 'chow') return false
+  if (routeSignal.route === 'HONOR_HEAVY') {
+    if (mode === 'chow') return false
+    if (!isHonor(claimTile)) return false
+  }
+  if (routeSignal.route === 'HALF_FLUSH') {
+    const isOnRoute = isHonor(claimTile) || (routeSignal.targetSuit && claimTile.suit === routeSignal.targetSuit)
+    if (!isOnRoute) return false
+  }
+
+  return shapeImprovesEnough
 }
 
 function compareAkDiscardDecision(a: AkDiscardDecision, b: AkDiscardDecision): number {
@@ -934,20 +961,20 @@ function evaluateAkDiscardDecision(handTiles: Tile[], discardTile: Tile, exposed
   }
 }
 
-function canAkPengSafely(p: BotPlayer, tile: Tile): boolean {
+export function canAkPengSafely(p: BotPlayer, tile: Tile): boolean {
   if (!canPeng(p, tile)) return false
   if (!checkChowPongExclusion(p.chowPongExclusion, 'pong', tile.suit)) return false
   const passEval = evaluateAkPostDiscardState(p.hand, p.exposedMelds, makeWT(p))
   const claimEval = evaluateAkPengClaim(p.hand, tile, p.exposedMelds, makeWT(p))
-  return shouldAkTakeClaim(passEval, claimEval, 'peng')
+  return shouldAkTakeClaim(p, tile, passEval, claimEval, 'peng')
 }
 
-function canAkChowSafely(p: BotPlayer, tile: Tile): boolean {
+export function canAkChowSafely(p: BotPlayer, tile: Tile): boolean {
   if (!canChow(p, tile)) return false
   if (!checkChowPongExclusion(p.chowPongExclusion, 'chow', tile.suit)) return false
   const passEval = evaluateAkPostDiscardState(p.hand, p.exposedMelds, makeWT(p))
   const claimEval = evaluateAkChowClaim(p.hand, tile, p.exposedMelds, makeWT(p))
-  return shouldAkTakeClaim(passEval, claimEval, 'chow')
+  return shouldAkTakeClaim(p, tile, passEval, claimEval, 'chow')
 }
 
 function evaluateAkPostDiscardState(handTiles: Tile[], exposedMelds: Meld[], wildTileId: string): AkPostDiscardEvaluation {
@@ -2166,6 +2193,11 @@ interface GameDiagnostics {
   akDiscardWinOpportunities: number
   akDiscardWinDeclines: number
   akTingEntryCount: number
+  akRouteObservationCount: number
+  akRouteCommitSamples: number
+  akRouteFlipCount: number
+  akOpenCount: number
+  akBadOpenCount: number
   playersWithCanWin: string[]
   playersWithTing: string[]
 }
@@ -2180,6 +2212,11 @@ interface EvalDiagnostics {
   akDiscardWinOpportunities: number
   akDiscardWinDeclines: number
   akTingEntryCount: number
+  akRouteObservationCount: number
+  akRouteCommitSamples: number
+  akRouteFlipCount: number
+  akOpenCount: number
+  akBadOpenCount: number
   gamesWithNoWinOpportunity: number
   gamesWithNoAkWinOpportunity: number
   gamesWithTingButNoWinOpportunity: number
@@ -2219,6 +2256,132 @@ interface WinningGameRecord {
   winningFrom?: string; // 捉冲时放冲玩家名称
   gameMeta?: GameMeta
   result?: any  // GameResult，用于settlementLog
+}
+
+type TrainingRouteKind =
+  | 'MENQING_SPEED'
+  | 'OPEN_SPEED'
+  | 'HALF_FLUSH'
+  | 'ALL_PUNGS'
+  | 'HONOR_HEAVY'
+
+interface TrainingRouteSignal {
+  route: TrainingRouteKind
+  confidence: number
+  targetSuit: TileSuit | null
+}
+
+function inferTrainingRouteSignal(handTiles: Tile[], exposedMelds: Meld[], wildTileId: string | null): TrainingRouteSignal {
+  const hand = normalizeHand(handTiles)
+  const suitCounts: Record<string, number> = {}
+  const groups = groupTiles(hand)
+  let pairCount = 0
+  let tripletCount = 0
+  let honorCount = 0
+  let honorPairCount = 0
+  let sequenceLikeCount = 0
+  let wildCount = 0
+  let exposedTriplets = 0
+  let exposedSequences = 0
+
+  const isWildTile = (tile: Tile) => !!wildTileId && `${tile.suit}-${tile.value}` === wildTileId
+  const adjacentPartners = (tile: Tile) => {
+    if (isHonor(tile) || tile.suit === TileSuit.FLOWER) return 0
+    return hand.filter(candidate =>
+      candidate.id !== tile.id &&
+      candidate.suit === tile.suit &&
+      Math.abs(candidate.value - tile.value) > 0 &&
+      Math.abs(candidate.value - tile.value) <= 2
+    ).length
+  }
+
+  for (const tile of hand) {
+    if (tile.suit === TileSuit.DOTS || tile.suit === TileSuit.CHARACTERS || tile.suit === TileSuit.BAMBOOS) {
+      suitCounts[tile.suit] = (suitCounts[tile.suit] || 0) + 1
+    }
+    if (isHonor(tile)) honorCount++
+    if (isWildTile(tile)) wildCount++
+    if (adjacentPartners(tile) > 0) sequenceLikeCount++
+  }
+
+  for (const tiles of groups.values()) {
+    const sample = tiles[0]
+    if (tiles.length >= 2) pairCount++
+    if (tiles.length >= 3) tripletCount++
+    if (isHonor(sample) && tiles.length >= 2) honorPairCount++
+  }
+
+  for (const meld of exposedMelds) {
+    if (meld.type === MeldType.SEQUENCE) exposedSequences++
+    if (meld.type === MeldType.TRIPLET || meld.type === MeldType.KONG || meld.type === MeldType.CONCEALED_KONG) {
+      exposedTriplets++
+      tripletCount++
+    }
+    if (meld.tiles.some(tile => isHonor(tile))) honorCount += meld.tiles.filter(tile => isHonor(tile)).length
+  }
+
+  const orderedSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
+    .map(suit => ({ suit, count: suitCounts[suit] || 0 }))
+    .sort((a, b) => b.count - a.count)
+  const longestSuit = orderedSuits[0]?.suit || null
+  const longestSuitCount = orderedSuits[0]?.count || 0
+  const secondSuitCount = orderedSuits[1]?.count || 0
+  const suitedCount = orderedSuits.reduce((sum, entry) => sum + entry.count, 0)
+
+  const scores: Array<{ route: TrainingRouteKind; score: number }> = [
+    {
+      route: 'MENQING_SPEED',
+      score:
+        24 +
+        pairCount * 2.2 +
+        sequenceLikeCount * 0.5 -
+        exposedMelds.length * 3 -
+        exposedSequences * 1.4 -
+        Math.max(0, honorCount - 4) * 0.3,
+    },
+    {
+      route: 'OPEN_SPEED',
+      score:
+        8 +
+        exposedMelds.length * 3.2 +
+        pairCount * 1.5 +
+        tripletCount * 2.4 +
+        exposedSequences * 1.2,
+    },
+    {
+      route: 'HALF_FLUSH',
+      score:
+        longestSuitCount * 3.4 +
+        honorCount * 2.8 +
+        honorPairCount * 2.2 +
+        wildCount * 1.8 -
+        secondSuitCount * 1.9,
+    },
+    {
+      route: 'ALL_PUNGS',
+      score:
+        pairCount * 4.2 +
+        tripletCount * 5.3 +
+        exposedTriplets * 1.6 +
+        honorPairCount * 2.3 -
+        sequenceLikeCount * 0.9 -
+        exposedSequences * 2.4,
+    },
+    {
+      route: 'HONOR_HEAVY',
+      score:
+        honorCount * 4.1 +
+        honorPairCount * 3.2 +
+        wildCount * 2 -
+        suitedCount * 0.7,
+    },
+  ].sort((a, b) => b.score - a.score)
+
+  return {
+    route: scores[0]?.route || 'MENQING_SPEED',
+    confidence: (scores[0]?.score || 0) - (scores[1]?.score || 0),
+    targetSuit: scores[0]?.route === 'HALF_FLUSH' ? longestSuit : null,
+  }
 }
 interface GameResult {
   winner: number; scores: number[]; events: GameEvent[]; multiplier: number
@@ -2320,7 +2483,13 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     akDiscardWinOpportunities: 0,
     akDiscardWinDeclines: 0,
     akTingEntryCount: 0,
+    akRouteObservationCount: 0,
+    akRouteCommitSamples: 0,
+    akRouteFlipCount: 0,
+    akOpenCount: 0,
+    akBadOpenCount: 0,
   }
+  const akRouteTracker: { lastCommittedRoute: TrainingRouteKind | null } = { lastCommittedRoute: null }
   let turn = 0
 
   // 每回合快照（--detail 时收集）
@@ -2364,6 +2533,21 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     playersWithTing.add(playerName)
     diagnosticsState.tingEntryCount++
     if (playerName === 'AI-AK') diagnosticsState.akTingEntryCount++
+  }
+
+  const observeAkRoute = (player: BotPlayer): TrainingRouteSignal | null => {
+    if (player.name !== 'AI-AK' || player.status === 'won') return null
+    const signal = inferTrainingRouteSignal(player.hand, player.exposedMelds, makeWT(player))
+    diagnosticsState.akRouteObservationCount++
+    const committed = signal.confidence >= 2.5 || player.exposedMelds.length > 0
+    if (committed) {
+      diagnosticsState.akRouteCommitSamples++
+      if (akRouteTracker.lastCommittedRoute && akRouteTracker.lastCommittedRoute !== signal.route) {
+        diagnosticsState.akRouteFlipCount++
+      }
+      akRouteTracker.lastCommittedRoute = signal.route
+    }
+    return signal
   }
 
   // buildResult: 血战模式统一出口，构造 GameResult
@@ -2589,6 +2773,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       console.error(`[INV_TRACE] DEAL ${p.name} h=${p.hand.length} m=0 exp=${expected} diff=${p.hand.length-expected} wall=${g.wallIdx} flowerTiles=${p.flowerTiles.length} ids=[${ids}] hand=[${sortTiles([...p.hand]).map(tileStrWithId).join(' ')}]`)
     }
   }
+  observeAkRoute(g.players[AK_IDX])
 
   const MAX_ROUNDS = 200
   let consecutiveDraws = 0
@@ -2627,6 +2812,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       console.error(`[INV_TRACE] DRAW ${player.name} h=${h} m=${m} exp=${expected} diff=${h-expected} drawn=${tileStrWithId(drawn)} wall=${g.wallIdx} flowers=${player.flowerTiles.length} hand=[${sortTiles(normalizeHand(player.hand)).map(tileStrWithId).join(' ')}] melds=[${player.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
     }
     checkHandInvariant(player, 'draw')  // 摸牌后铁律：14/11/8/5/2张
+    observeAkRoute(player)
 
     // Self-draw win check
     const normalizedHand = normalizeHand(player.hand)
@@ -2877,7 +3063,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         if (opp.name === 'AI-AK') {
           akPassEval = evaluateAkPostDiscardState(opp.hand, opp.exposedMelds, makeWT(opp))
           akPengEval = evaluateAkPengClaim(opp.hand, discard, opp.exposedMelds, makeWT(opp))
-          const improvesByClaim = shouldAkTakeClaim(akPassEval, akPengEval, 'peng')
+          const improvesByClaim = shouldAkTakeClaim(opp, discard, akPassEval, akPengEval, 'peng')
           if (!improvesByClaim) {
             console.error(
               `[AK_SKIP_PENG] tile=${tileStr(discard)} pass=${akPassEval.score.toFixed(2)}/${akPassEval.shantenLike}/${akPassEval.improvingDraws} ` +
@@ -2893,7 +3079,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
 
         let shouldPeng = false
         if (opp.name === 'AI-AK') {
-          const takeByShape = !!akPassEval && !!akPengEval && shouldAkTakeClaim(akPassEval, akPengEval, 'peng')
+          const takeByShape = !!akPassEval && !!akPengEval && shouldAkTakeClaim(opp, discard, akPassEval, akPengEval, 'peng')
           shouldPeng = takeByShape && Math.random() < opp.policy.pengChance
           console.error(`[AK_PENG_DECISION] tile=${tileStr(discard)} takeByShape=${takeByShape} final=${shouldPeng}`)
         } else {
@@ -2905,6 +3091,15 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           shouldPeng = pengRoll < pengChance
         }
         if (shouldPeng) {
+          const akRouteBeforeOpen = opp.name === 'AI-AK'
+            ? inferTrainingRouteSignal(opp.hand, opp.exposedMelds, makeWT(opp))
+            : null
+          if (opp.name === 'AI-AK') {
+            diagnosticsState.akOpenCount++
+            if (akRouteBeforeOpen && (akRouteBeforeOpen.route === 'MENQING_SPEED' || akRouteBeforeOpen.confidence < 2.5)) {
+              diagnosticsState.akBadOpenCount++
+            }
+          }
           const meldCountBefore = opp.exposedMelds.length
           const handBeforePeng = opp.hand.length
           applyPeng(opp, discard, curr)  // 内部已normalize，失败则不push meld
@@ -2949,7 +3144,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     if (nextP.name === 'AI-AK' && akCanChowSafely) {
       akPassEval = evaluateAkPostDiscardState(nextP.hand, nextP.exposedMelds, makeWT(nextP))
       akChowEval = evaluateAkChowClaim(nextP.hand, discard, nextP.exposedMelds, makeWT(nextP))
-      const improvesByClaim = shouldAkTakeClaim(akPassEval, akChowEval, 'chow')
+      const improvesByClaim = shouldAkTakeClaim(nextP, discard, akPassEval, akChowEval, 'chow')
       if (!improvesByClaim) {
         console.error(
           `[AK_SKIP_CHOW] tile=${tileStr(discard)} pass=${akPassEval.score.toFixed(2)}/${akPassEval.shantenLike}/${akPassEval.improvingDraws} ` +
@@ -2962,15 +3157,24 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         )
       }
       if (!improvesByClaim) shouldChow = false
-      else shouldChow = !chowExcluded && !!akPassEval && !!akChowEval && shouldAkTakeClaim(akPassEval, akChowEval, 'chow') && Math.random() < nextP.policy.chowChance
+      else shouldChow = !chowExcluded && !!akPassEval && !!akChowEval && shouldAkTakeClaim(nextP, discard, akPassEval, akChowEval, 'chow') && Math.random() < nextP.policy.chowChance
       console.error(`[AK_CHOW_DECISION] tile=${tileStr(discard)} excluded=${chowExcluded} final=${shouldChow}`)
     } else {
       shouldChow = canChow(nextP, discard) && Math.random() < nextP.policy.chowChance
     }
     if (nextP.name === 'AI-AK' && shouldChow) {
       if (akPassEval && akChowEval) {
-        const stillGood = shouldAkTakeClaim(akPassEval, akChowEval, 'chow')
+        const stillGood = shouldAkTakeClaim(nextP, discard, akPassEval, akChowEval, 'chow')
         if (!stillGood) shouldChow = false
+      }
+    }
+    const akRouteBeforeChow = nextP.name === 'AI-AK' && shouldChow
+      ? inferTrainingRouteSignal(nextP.hand, nextP.exposedMelds, makeWT(nextP))
+      : null
+    if (nextP.name === 'AI-AK' && shouldChow) {
+      diagnosticsState.akOpenCount++
+      if (akRouteBeforeChow && (akRouteBeforeChow.route === 'MENQING_SPEED' || akRouteBeforeChow.confidence < 2.5)) {
+        diagnosticsState.akBadOpenCount++
       }
     }
     if (shouldChow) {
@@ -3079,6 +3283,28 @@ function formatDiagnosticsSummary(diag: EvalDiagnostics, totalGames: number): st
   ]
 }
 
+function formatDiagnosticsSummaryV2(diag: EvalDiagnostics, totalGames: number): string[] {
+  const routeCommitRate = diag.akRouteCommitSamples / Math.max(1, diag.akRouteObservationCount)
+  const badOpenRate = diag.akBadOpenCount / Math.max(1, diag.akOpenCount)
+
+  return [
+    '### 训练诊断',
+    `- 自摸可胡机会: ${diag.selfWinOpportunities}，被概率放弃: ${diag.selfWinDeclines}`,
+    `- 放冲可胡机会: ${diag.discardWinOpportunities}，被概率放弃: ${diag.discardWinDeclines}`,
+    `- 听牌进入次数: ${diag.tingEntryCount}`,
+    `- AI-AK 自摸可胡机会: ${diag.akSelfWinOpportunities}，被概率放弃: ${diag.akSelfWinDeclines}`,
+    `- AI-AK 放冲可胡机会: ${diag.akDiscardWinOpportunities}，被概率放弃: ${diag.akDiscardWinDeclines}`,
+    `- AI-AK 听牌进入次数: ${diag.akTingEntryCount}`,
+    `- AI-AK 路线锁定采样: ${diag.akRouteCommitSamples}/${Math.max(1, diag.akRouteObservationCount)} (${(routeCommitRate * 100).toFixed(1)}%)`,
+    `- AI-AK 路线翻转次数: ${diag.akRouteFlipCount}`,
+    `- AI-AK 开门次数: ${diag.akOpenCount}，疑似坏开门: ${diag.akBadOpenCount} (${(badOpenRate * 100).toFixed(1)}%)`,
+    `- 全局从未出现可胡机会的局数: ${diag.gamesWithNoWinOpportunity}/${totalGames}`,
+    `- AI-AK 从未出现可胡机会的局数: ${diag.gamesWithNoAkWinOpportunity}/${totalGames}`,
+    `- 有人进听但全局从未出现可胡机会的局数: ${diag.gamesWithTingButNoWinOpportunity}/${totalGames}`,
+    `- AI-AK 进听但自己从未出现可胡机会的局数: ${diag.gamesWithAkTingButNoAkWinOpportunity}/${totalGames}`,
+  ]
+}
+
 function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy: BotPolicy): string {
   const ts = new Date().toISOString()
   const drawGames = evalResult.totalGames - evalResult.winGames
@@ -3098,7 +3324,7 @@ function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy
   lines.push(`- 门清胡牌率(胡牌中): ${(evalResult.menqingWinGames / Math.max(1, evalResult.winGames) * 100).toFixed(2)}%`)
   lines.push(`- Fitness: ${evalResult.akScore.toFixed(4)}`)
   lines.push('')
-  lines.push(...formatDiagnosticsSummary(evalResult.diagnostics, evalResult.totalGames))
+  lines.push(...formatDiagnosticsSummaryV2(evalResult.diagnostics, evalResult.totalGames))
   lines.push('')
 
   lines.push('### 本轮最佳策略参数')
@@ -3215,6 +3441,11 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
     akDiscardWinOpportunities: 0,
     akDiscardWinDeclines: 0,
     akTingEntryCount: 0,
+    akRouteObservationCount: 0,
+    akRouteCommitSamples: 0,
+    akRouteFlipCount: 0,
+    akOpenCount: 0,
+    akBadOpenCount: 0,
     gamesWithNoWinOpportunity: 0,
     gamesWithNoAkWinOpportunity: 0,
     gamesWithTingButNoWinOpportunity: 0,
@@ -3239,6 +3470,11 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
       diagnostics.akDiscardWinOpportunities += result.diagnostics.akDiscardWinOpportunities
       diagnostics.akDiscardWinDeclines += result.diagnostics.akDiscardWinDeclines
       diagnostics.akTingEntryCount += result.diagnostics.akTingEntryCount
+      diagnostics.akRouteObservationCount += result.diagnostics.akRouteObservationCount
+      diagnostics.akRouteCommitSamples += result.diagnostics.akRouteCommitSamples
+      diagnostics.akRouteFlipCount += result.diagnostics.akRouteFlipCount
+      diagnostics.akOpenCount += result.diagnostics.akOpenCount
+      diagnostics.akBadOpenCount += result.diagnostics.akBadOpenCount
       const anyWinOpportunity = result.diagnostics.playersWithCanWin.length > 0
       const akHasWinOpportunity = result.diagnostics.playersWithCanWin.includes('AI-AK')
       const anyTing = result.diagnostics.playersWithTing.length > 0
@@ -3323,6 +3559,9 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   const fightToLastRate = winGames > 0 ? fightToLastGames / winGames : 0
   const bigHandRate = winnerInstances > 0 ? bigWinGames / winnerInstances : 0
   const menqingWinRate = winnerInstances > 0 ? menqingWinGames / winnerInstances : 0
+  const routeCommitRate = diagnostics.akRouteCommitSamples / Math.max(1, diagnostics.akRouteObservationCount)
+  const routeFlipPerGame = diagnostics.akRouteFlipCount / Math.max(1, games)
+  const badOpenRate = diagnostics.akBadOpenCount / Math.max(1, diagnostics.akOpenCount)
 
   let mf = 0
   mf -= Math.max(0, drawRate - 0.10) * 5000  // 流局率惩罚（目标<10%）
@@ -3338,6 +3577,9 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   // 门清胡牌率（目标7-12%）
   if (menqingWinRate < 0.07) mf -= (0.07 - menqingWinRate) * 400
   if (menqingWinRate > 0.12) mf -= (menqingWinRate - 0.12) * 400
+  if (routeCommitRate < 0.45) mf -= (0.45 - routeCommitRate) * 350
+  if (routeFlipPerGame > 0.6) mf -= (routeFlipPerGame - 0.6) * 220
+  if (badOpenRate > 0.35) mf -= (badOpenRate - 0.35) * 320
 
   return {
     akScore: scores['AI-AK'], akWins: wins['AI-AK'], winRates, scores, draws,
@@ -3404,7 +3646,7 @@ function main() {
     : `AI-AK baseline: score=${baseline.akScore}  wins=${baseline.akWins}/${GAMES_PER_ROUND}  draws=${baseline.draws ?? 0}`
   console.log(baseLine)
   logLines.push(baseLine)
-  const baselineDiagLines = formatDiagnosticsSummary(baseline.diagnostics, baseline.totalGames)
+  const baselineDiagLines = formatDiagnosticsSummaryV2(baseline.diagnostics, baseline.totalGames)
   console.log(baselineDiagLines.join('\n'))
   logLines.push(...baselineDiagLines)
 
@@ -3567,6 +3809,8 @@ let finalEvalLines: string[] = []
           akSelfWinOpportunities: 0, akSelfWinDeclines: 0,
           akDiscardWinOpportunities: 0, akDiscardWinDeclines: 0,
           akTingEntryCount: 0,
+          akRouteObservationCount: 0, akRouteCommitSamples: 0, akRouteFlipCount: 0,
+          akOpenCount: 0, akBadOpenCount: 0,
           gamesWithNoWinOpportunity: 0, gamesWithNoAkWinOpportunity: 0,
           gamesWithTingButNoWinOpportunity: 0, gamesWithAkTingButNoAkWinOpportunity: 0,
         },
@@ -3577,7 +3821,7 @@ let finalEvalLines: string[] = []
     const finalReportFormatted = formatRoundReport(finalReport, false, '最终评估')
     console.log(finalReportFormatted)
     finalEvalLines.push(finalReportFormatted)
-    finalEvalLines.push(...formatDiagnosticsSummary(finalEval.diagnostics, finalEval.totalGames))
+    finalEvalLines.push(...formatDiagnosticsSummaryV2(finalEval.diagnostics, finalEval.totalGames))
 
     // 最具参考价值的逐局明细保留到 logLines（三口/四口关系 + 结算逐笔）
     if (finalEval.worstSingleLoss) {
@@ -3643,6 +3887,9 @@ let finalEvalLines: string[] = []
     fitness: lastRoundEval!.akScore,
     huRate: lastRoundEval!.winRates['AI-AK'],
     drawRate: lastRoundEval!.draws / Math.max(1, lastRoundEval!.totalGames),
+    routeCommitRate: lastRoundEval!.diagnostics.akRouteCommitSamples / Math.max(1, lastRoundEval!.diagnostics.akRouteObservationCount),
+    routeFlipPerGame: lastRoundEval!.diagnostics.akRouteFlipCount / Math.max(1, lastRoundEval!.totalGames),
+    badOpenRate: lastRoundEval!.diagnostics.akBadOpenCount / Math.max(1, lastRoundEval!.diagnostics.akOpenCount),
     totalGames: ROUNDS * GAMES_PER_ROUND,
     note: `AI-AK iterative training - ${ROUNDS}x${GAMES_PER_ROUND}`
   }

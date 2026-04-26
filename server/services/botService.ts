@@ -6,6 +6,9 @@ import { GameState, Player, Tile, TileSuit, MeldType, PlayerStatus, ActionType }
 import { groupTiles, tilesEqual, isFlower, isHonor, isWind, isDragon } from '../utils/tiles'
 import { canWin, findBestDiscardForTing, checkChowPongExclusion, updateChowPongExclusion, ChowPongExclusionState } from '../utils/handValidator'
 import { USE_PIPELINE_SCORER, PIPELINE_SHADOW_MODE } from '../ai/config/policyFlags'
+import { evaluateRouteState } from '../ai/route/routeEvaluator'
+import { scoreRouteDiscardCandidate } from '../ai/route/discardPlanner'
+import { evaluateRouteClaim } from '../ai/route/claimPlanner'
 import fs from 'fs'
 import path from 'path'
 
@@ -111,6 +114,7 @@ function softScoreWins(
   // 分数差（对所有候选统一标准化）
   // 重要：shanten通常吃碰前后相同（都是0），tune是实际区分因素
   // tune权重从0.1提升到1.0，让evaluateChowValue的策略评估真正生效
+  s = { ...s, shanten: (s.shanten - best.shanten) * 1.2 };
   const scoreDiff =
     (-s.shanten - 0) * 1 +           // shanten越低越好
     (s.effective - best.effective) * 1 + // effective进张（与tune同等权重）
@@ -126,10 +130,66 @@ function softScoreWins(
 
 // ===== Policy loading (per-character) =====
 let _policies: Record<string, any> = {}
+let _policySources: Record<string, { path: string; mtimeMs: number }> = {}
+
+function tuneLiveClaimPolicy(policy: any): any {
+  const tuned = { ...(policy || {}) }
+  const raise = (key: string, value: number) => {
+    tuned[key] = Math.max(Number(tuned[key] ?? 0), value)
+  }
+  const lower = (key: string, value: number) => {
+    tuned[key] = Math.min(Number(tuned[key] ?? value), value)
+  }
+
+  raise('pengChance', 0.9)
+  raise('chowChance', 0.92)
+  raise('kongChance', 0.72)
+  raise('minkanAggression', 0.75)
+  raise('speedVsValueBalance', 0.78)
+  raise('wallEarlySpeedPush', 0.82)
+  raise('wallMidBalance', 0.72)
+  raise('wild0Aggression', 0.55)
+  raise('wild1Aggression', 0.62)
+  raise('wild2Aggression', 0.75)
+
+  lower('menqingKeepBonus', 0.35)
+  lower('defenseRiskAversion', 0.16)
+  lower('wallLateDefense', 0.25)
+  lower('safeTilePriority', 0.24)
+  lower('oppTingDetection', 0.18)
+  lower('bao2ClaimPenalty', 0.25)
+  lower('bao3AvoidThreshold', 0.35)
+  lower('baoRiskAversion', 0.3)
+  lower('baoSelfClaimCaution', 0.18)
+  lower('allPungsPursuit', 0.35)
+  lower('pureFlushPursuit', 0.45)
+  lower('halfFlushWeight', 0.45)
+
+  return tuned
+}
+
+function loadPolicyFile(cacheKey: string, filePath: string, logLabel: string): any {
+  const stat = fs.statSync(filePath)
+  const cachedSource = _policySources[cacheKey]
+  if (
+    _policies[cacheKey]
+    && cachedSource
+    && cachedSource.path === filePath
+    && cachedSource.mtimeMs === stat.mtimeMs
+  ) {
+    return _policies[cacheKey]
+  }
+
+  const raw = fs.readFileSync(filePath, 'utf-8')
+  const data = JSON.parse(raw)
+  const policy = data.policy || data
+  _policies[cacheKey] = policy
+  _policySources[cacheKey] = { path: filePath, mtimeMs: stat.mtimeMs }
+  console.log(`[BotService] Loaded policy for ${logLabel}:`, policy.id || 'character')
+  return policy
+}
 
 function loadCharacterPolicy(botName: string): any {
-  if (_policies[botName]) return _policies[botName]
-  
   // Try loading character-specific policy first
   const characterPaths = [
     path.resolve(process.cwd(), `AI_policies/characters/${botName}.json`),
@@ -139,6 +199,11 @@ function loadCharacterPolicy(botName: string): any {
   
   for (const p of characterPaths) {
     if (fs.existsSync(p)) {
+      try {
+        return loadPolicyFile(botName, p, botName)
+      } catch (err: any) {
+        console.warn(`[BotService] Failed to parse ${p}:`, err.message)
+      }
       try {
         const raw = fs.readFileSync(p, 'utf-8')
         const data = JSON.parse(raw)
@@ -152,14 +217,26 @@ function loadCharacterPolicy(botName: string): any {
   }
   
   // Fall back to default/best policy
+  const defaultPaths = [
+    path.resolve(process.cwd(), 'AI_policies/best-policy.json'),
+    path.resolve(process.cwd(), 'training-output/best-policy.json'),
+    path.resolve(process.cwd(), 'training/best-policy.json'),
+    path.resolve(process.cwd(), '../../AI_policies/best-policy.json'),
+    path.resolve(process.cwd(), '../../training-output/best-policy.json'),
+  ]
+
+  for (const p of defaultPaths) {
+    if (fs.existsSync(p)) {
+      try {
+        loadPolicyFile('default', p, 'default')
+        break
+      } catch (err: any) {
+        console.warn(`[BotService] Failed to parse ${p}:`, err.message)
+      }
+    }
+  }
+
   if (!_policies['default']) {
-    const defaultPaths = [
-      path.resolve(process.cwd(), 'AI_policies/best-policy.json'),
-      path.resolve(process.cwd(), 'training-output/best-policy.json'),
-      path.resolve(process.cwd(), 'training/best-policy.json'),
-      path.resolve(process.cwd(), '../../AI_policies/best-policy.json'),
-      path.resolve(process.cwd(), '../../training-output/best-policy.json'),
-    ]
     
     for (const p of defaultPaths) {
       if (fs.existsSync(p)) {
@@ -201,12 +278,14 @@ function loadCharacterPolicy(botName: string): any {
         honorRushBoost: 0.2,
         bailoutHuPenaltyPerMeld: 0.01,
       }
+      _policies['default'] = tuneLiveClaimPolicy(_policies['default'])
       console.log('[BotService] ⚠️ Using hardcoded fallback policy')
     }
   }
   
   // Use default for this character
   _policies[botName] = _policies['default']
+  _policySources[botName] = _policySources['default']
   console.log(`[BotService] policy id for ${botName}: ${_policies[botName]?.id || 'unknown'}`)
   return _policies[botName]
 }
@@ -223,6 +302,7 @@ function getPolicyForPlayer(player: Player): any {
 // Clear policy cache (for testing)
 function resetPolicyCache(): void {
   _policies = {}
+  _policySources = {}
 }
 
 /**
@@ -257,12 +337,111 @@ function isWildTile(tile: Tile, game: GameState): boolean {
   return false
 }
 
+function isNumberTile(tile: Tile): boolean {
+  return tile.suit === TileSuit.DOTS || tile.suit === TileSuit.CHARACTERS || tile.suit === TileSuit.BAMBOOS
+}
+
+function tilesMatch(a: Tile, b: Tile): boolean {
+  return a.suit === b.suit && a.value === b.value
+}
+
+function countVisibleCopies(target: Tile, game: GameState): number {
+  let visible = 0
+
+  for (const tile of game.discardPile || []) {
+    if (tilesMatch(tile, target)) visible++
+  }
+
+  for (const player of game.players || []) {
+    for (const meld of player.hand.exposedMelds || []) {
+      for (const tile of meld.tiles || []) {
+        if (tilesMatch(tile, target)) visible++
+      }
+    }
+  }
+
+  return visible
+}
+
+function estimateOpponentThreat(opponent: Player, game: GameState): number {
+  if (opponent.status !== PlayerStatus.PLAYING) return 0
+
+  let threat = 0
+  const discardCount = opponent.hand.discardedTiles?.length || 0
+  const exposedCount = opponent.hand.exposedMelds?.length || 0
+
+  if (opponent.isTing) threat += 1
+  if (exposedCount > 0) threat += Math.min(0.45, exposedCount * 0.16)
+  if (discardCount >= 9) threat += 0.15
+  if (discardCount >= 13) threat += 0.1
+  if ((game.discardPile?.length || 0) >= 28) threat += 0.08
+
+  return Math.min(1, threat)
+}
+
+function estimateTableThreat(game: GameState, selfId: string): number {
+  let threat = 0
+  for (const opponent of game.players || []) {
+    if (opponent.id === selfId) continue
+    threat = Math.max(threat, estimateOpponentThreat(opponent, game))
+  }
+  return threat
+}
+
+function getDiscardDangerScore(tile: Tile, game: GameState, player: Player): number {
+  if (isFlower(tile)) return 0
+
+  const visibleCopies = countVisibleCopies(tile, game)
+  let baseDanger = 0.55
+
+  if (isHonor(tile)) baseDanger = 0.42
+  else if (tile.value === 1 || tile.value === 9) baseDanger = 0.3
+  else if (tile.value === 2 || tile.value === 8) baseDanger = 0.48
+  else baseDanger = 0.68
+
+  baseDanger *= Math.max(0.12, 1 - visibleCopies * 0.18)
+
+  let danger = 0
+  for (const opponent of game.players || []) {
+    if (opponent.id === player.id) continue
+
+    const threat = estimateOpponentThreat(opponent, game)
+    if (threat <= 0) continue
+
+    const opponentDiscards = opponent.hand.discardedTiles || []
+    if (opponentDiscards.some(discard => tilesMatch(discard, tile))) {
+      danger += 0.04 * threat
+      continue
+    }
+
+    let opponentFactor = 1
+    if (isHonor(tile) && opponentDiscards.length > 0) opponentFactor -= 0.1
+    if (isNumberTile(tile)) {
+      const sameSuitDiscards = opponentDiscards.filter(discard => discard.suit === tile.suit)
+      if (sameSuitDiscards.some(discard => Math.abs(discard.value - tile.value) >= 3)) {
+        opponentFactor -= 0.08
+      }
+    }
+
+    danger += baseDanger * Math.max(0.2, opponentFactor) * threat
+  }
+
+  return Math.max(0, Math.min(1, danger))
+}
+
 /**
  * Score each tile in hand for discard priority.
  * Higher score = MORE likely to discard (worse tile).
  * We want to discard the tile with the HIGHEST score.
  */
-function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: Player): number {
+function scoreTileForDiscard(
+  tile: Tile,
+  hand: Tile[],
+  game: GameState,
+  player: Player,
+  postDiscardShanten?: number,
+  postDiscardEffective?: number
+): number {
   const policy = getPolicyForPlayer(player)
   let score = 0
 
@@ -304,6 +483,8 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
   const groups = groupTiles(hand)
   const tileKey = `${tile.suit}-${tile.value}`
   const sameTypeCount = groups.get(tileKey)?.length || 0
+  const tableThreat = estimateTableThreat(game, player.id)
+  const discardDanger = getDiscardDangerScore(tile, game, player)
 
   // === 1. Wild tile: penalize discarding, scaled by wild count (wild0~3Aggression) ===
   if (isWildTile(tile, game)) {
@@ -446,6 +627,15 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
     score += (policy.wallLateDefense || 0) * 0.4
   }
 
+  const threatScale = Math.max(
+    isLatePhase ? 0.7 : 0.25,
+    tableThreat * ((policy.oppTingDetection || 0) * 0.9 + (policy.wallLateDefense || 0) * 0.4 + 0.35)
+  )
+  const safetyBonus = (1 - discardDanger) * ((policy.safeTilePriority || 0) * 1.8 + (policy.wallLateDefense || 0) * 0.8)
+  const threatPenalty = discardDanger * ((policy.defenseRiskAversion || 0) * 3.2 + (policy.oppTingDetection || 0) * 2.2 + 0.4)
+  score += safetyBonus * threatScale
+  score -= threatPenalty * threatScale
+
   // === 7. Score-based strategic modifiers ===
   // 使用参数：scoreBehindRiskBoost / scoreLeadDefenseBoost
   const playerScore = player.score ?? 0
@@ -459,6 +649,10 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
   if (scoreDiff > 1000 && (policy.scoreLeadDefenseBoost ?? 0) > 0) {
     const leadFactor = Math.min(1.0, scoreDiff / 5000)
     score += ((policy.scoreLeadDefenseBoost ?? 1.0) - 1.0) * leadFactor * 0.5
+  }
+  if (scoreDiff < -1000 && tableThreat < 0.6) {
+    const chaseBoost = Math.min(1, Math.abs(scoreDiff) / 6000)
+    score += chaseBoost * Math.max(0, 0.75 - discardDanger) * 0.8
   }
 
   // === 8. Wild defense keep ===
@@ -523,6 +717,13 @@ function scoreTileForDiscard(tile: Tile, hand: Tile[], game: GameState, player: 
     )
     const neighbors3 = sameSuitTiles3.filter(t => Math.abs(t.value - tile.value) <= 2)
     if (neighbors3.length === 0) score += multLowSpeedBias * 1
+  }
+
+  if (postDiscardShanten === 0) {
+    score += 1.2
+    score += Math.max(0, (postDiscardEffective ?? 0) - 4) * 0.08
+  } else if (postDiscardShanten === 1) {
+    score += Math.max(0, (postDiscardEffective ?? 0) - 6) * 0.04
   }
 
   return score
@@ -677,11 +878,31 @@ export function selectDiscardTile(player: Player, game: GameState): string {
 
   const exposedCount = player.hand.exposedMelds.length
   const wildChecker = (tile: Tile) => isWildTile(tile, game)
+  const wallRemaining = game.wall?.length || 0
+  const currentShanten = calculateShanten(hand, exposedCount, wildChecker)
+  const currentEffective = countEffectiveTiles(hand, exposedCount, wildChecker)
+  const tableThreat = estimateTableThreat(game, player.id)
+  const topOpponentScore = Math.max(...game.players.filter(p => p.id !== player.id).map(p => p.score ?? 0), 0)
+  const scoreLead = (player.score ?? 0) - topOpponentScore
+  const useRoutePlanner = player.name === 'AI-AK'
+  const routeState = useRoutePlanner
+    ? evaluateRouteState({
+        game,
+        player,
+        hand,
+        shanten: currentShanten,
+        effectiveTiles: currentEffective,
+        tableThreat,
+        wallRemaining,
+      })
+    : null
 
   let bestTile = discardCandidates[0]
   let bestShanten = Infinity
   let bestEffective = -1
   let bestScore = -Infinity
+  let bestTingValue = -Infinity
+  let bestComposite = -Infinity
 
   for (let i = 0; i < discardCandidates.length; i++) {
     const tile = discardCandidates[i]
@@ -696,16 +917,71 @@ export function selectDiscardTile(player: Player, game: GameState): string {
 
     const shanten = calculateShanten(remaining, exposedCount, wildChecker)
     const effective = countEffectiveTiles(remaining, exposedCount, wildChecker)
-    const score = scoreTileForDiscard(tile, hand, game, player)
+    let score = scoreTileForDiscard(tile, hand, game, player, shanten, effective)
+    const discardDanger = getDiscardDangerScore(tile, game, player)
+    const winningTiles = shanten === 0 ? countWinningTilesForHand(remaining, exposedCount, game) : 0
+    const waitWeight = scoreLead < -1000 ? 1.15 : 1
+    const safetyWeight = tableThreat * (scoreLead > 1000 ? 5.5 : 3.2)
+    const timingValue = shanten === 0
+      ? winningTiles * waitWeight - discardDanger * safetyWeight
+      : -Infinity
+    let composite = -shanten * 100 + effective * 2.5 + score
 
-    if (
+    if (useRoutePlanner && routeState) {
+      const afterRouteState = evaluateRouteState({
+        game,
+        player,
+        hand: remaining,
+        shanten,
+        effectiveTiles: effective,
+        tableThreat,
+        wallRemaining,
+      })
+      const routeScore = scoreRouteDiscardCandidate({
+        tile,
+        hand,
+        player,
+        game,
+        routeState,
+        candidateShanten: shanten,
+        candidateEffective: effective,
+        discardDanger,
+        winningTiles,
+        legacyScore: score,
+        afterRouteState,
+      })
+      score += routeScore
+      composite += routeScore * 2
+      if (shanten === 0) {
+        composite += timingValue * 4
+      } else if (routeState.phase === 'OBSERVE' && routeState.current === 'MENQING_SPEED') {
+        composite += (effective - currentEffective) * 0.4
+      }
+    }
+
+    if (useRoutePlanner) {
+      if (
+        composite > bestComposite + 0.001 ||
+        (Math.abs(composite - bestComposite) <= 0.001 && shanten < bestShanten) ||
+        (Math.abs(composite - bestComposite) <= 0.001 && shanten === bestShanten && effective > bestEffective)
+      ) {
+        bestComposite = composite
+        bestShanten = shanten
+        bestEffective = effective
+        bestScore = score
+        bestTingValue = timingValue
+        bestTile = tile
+      }
+    } else if (
       shanten < bestShanten ||
+      (shanten === 0 && bestShanten === 0 && timingValue > bestTingValue + 0.001) ||
       (shanten === bestShanten && effective > bestEffective) ||
       (shanten === bestShanten && effective === bestEffective && score > bestScore)
     ) {
       bestShanten = shanten
       bestEffective = effective
       bestScore = score
+      bestTingValue = timingValue
       bestTile = tile
     }
   }
@@ -717,9 +993,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
  * Count how many tiles from the remaining wall would complete the hand (听牌总张数).
  * Tests each tile type (4 suits × 9 values + honors) against the player's concealed tiles.
  */
-function countWinningTiles(player: Player, game: GameState): number {
-  const hand = player.hand.concealedTiles
-  const exposed = player.hand.exposedMelds
+function countWinningTilesForHand(hand: Tile[], exposedCount: number, game: GameState): number {
   if (hand.length === 0) return 0
 
   const wildTileId = game.customScoringMode || null
@@ -731,11 +1005,11 @@ function countWinningTiles(player: Player, game: GameState): number {
     for (let v = 1; v <= 9; v++) {
       const testTile: Tile = { suit, value: v, id: `test-${suit}-${v}` }
       const testHand = [...hand, testTile]
-      const result = canWin(testHand, exposed.length, wildTileId)
+      const result = canWin(testHand, exposedCount, wildTileId)
       if (result.canWin) {
-        // Estimate remaining count (4 minus what's in hand/visible)
         const inHand = hand.filter(t => t.suit === suit && t.value === v).length
-        count += Math.max(0, 4 - inHand)
+        const visible = countVisibleCopies(testTile, game)
+        count += Math.max(0, 4 - inHand - visible)
       }
     }
   }
@@ -744,18 +1018,22 @@ function countWinningTiles(player: Player, game: GameState): number {
     const testTile: Tile = { suit: TileSuit.WIND, value: 0, id: `test-wind-${w}` }
     // WIND tiles use value to distinguish, but canWin checks suit
     const testHand = [...hand, testTile]
-    const result = canWin(testHand, exposed.length, wildTileId)
-    if (result.canWin) count += 4
+    const result = canWin(testHand, exposedCount, wildTileId)
+    if (result.canWin) count += Math.max(0, 4 - countVisibleCopies(testTile, game))
   }
   // Dragon tiles (中发白)
   for (let v = 1; v <= 3; v++) {
     const testTile: Tile = { suit: TileSuit.DRAGON, value: v, id: `test-dragon-${v}` }
     const testHand = [...hand, testTile]
-    const result = canWin(testHand, exposed.length, wildTileId)
-    if (result.canWin) count += 4
+    const result = canWin(testHand, exposedCount, wildTileId)
+    if (result.canWin) count += Math.max(0, 4 - countVisibleCopies(testTile, game))
   }
 
   return count
+}
+
+function countWinningTiles(player: Player, game: GameState): number {
+  return countWinningTilesForHand(player.hand.concealedTiles, player.hand.exposedMelds.length, game)
 }
 
 /**
@@ -1064,6 +1342,15 @@ export async function shouldClaimPendingAction(
 
   const wildChecker = (t: Tile) => isWildTile(t, game)
   const exclusionState = game.chowPongExclusion?.[player.id] || { firstActionSuit: null, firstActionType: null }
+  const useRoutePlanner = player.name === 'AI-AK'
+  const wallRemaining = game.wall?.length || 0
+  const tableThreat = estimateTableThreat(game, player.id)
+  const suitCounts: Record<string, number> = {}
+  for (const tile of hand) {
+    if (tile.suit === TileSuit.DOTS || tile.suit === TileSuit.CHARACTERS || tile.suit === TileSuit.BAMBOOS) {
+      suitCounts[tile.suit] = (suitCounts[tile.suit] || 0) + 1
+    }
+  }
 
   const actionScores = new Map<ActionType, { shanten: number; effective: number; tune: number }>()
 
@@ -1090,6 +1377,19 @@ export async function shouldClaimPendingAction(
     const effective = countEffectiveTiles(hand, exposedCount, wildChecker)
     actionScores.set(ActionType.PASS, { shanten, effective, tune: 0 })
   }
+
+  const passEval = actionScores.get(ActionType.PASS)!
+  const routeState = useRoutePlanner
+    ? evaluateRouteState({
+        game,
+        player,
+        hand,
+        shanten: passEval.shanten,
+        effectiveTiles: passEval.effective,
+        tableThreat,
+        wallRemaining,
+      })
+    : null
 
   // PENG
   if (
@@ -1133,8 +1433,30 @@ export async function shouldClaimPendingAction(
           pengTune *= Math.max(0, 1.0 - (policy.oppTingDetection || 0) * 0.8)
         }
 
-        pengTune = Math.max(0.05, pengTune)
-        actionScores.set(ActionType.PENG, { shanten, effective, tune: pengTune })
+        let pengBlockedByRoute = false
+        if (useRoutePlanner && routeState) {
+          const routeDecision = evaluateRouteClaim({
+            action: ActionType.PENG,
+            player,
+            game,
+            claimTile,
+            routeState,
+            candidateHand,
+            candidateShanten: shanten,
+            candidateEffective: effective,
+            passShanten: passEval.shanten,
+            passEffective: passEval.effective,
+            tableThreat,
+            wallRemaining,
+          })
+          pengBlockedByRoute = !routeDecision.allowed
+          pengTune = routeDecision.allowed ? pengTune + routeDecision.tuneDelta : 0.01
+        }
+
+        if (!pengBlockedByRoute) {
+          pengTune = Math.max(0.05, pengTune)
+          actionScores.set(ActionType.PENG, { shanten, effective, tune: pengTune })
+        }
       }
     }
   }
@@ -1195,7 +1517,30 @@ export async function shouldClaimPendingAction(
         }
 
         kongTune = Math.max(0.05, Math.min(2.0, kongTune)) // 上限 2.0，防止 kongWildBoost 过大导致过度杠牌
-        actionScores.set(ActionType.KONG, { shanten, effective, tune: kongTune })
+        let kongBlockedByRoute = false
+        if (useRoutePlanner && routeState) {
+          const routeDecision = evaluateRouteClaim({
+            action: ActionType.KONG,
+            player,
+            game,
+            claimTile,
+            routeState,
+            candidateHand,
+            candidateShanten: shanten,
+            candidateEffective: effective,
+            passShanten: passEval.shanten,
+            passEffective: passEval.effective,
+            tableThreat,
+            wallRemaining,
+          })
+          kongBlockedByRoute = !routeDecision.allowed
+          kongTune = routeDecision.allowed ? kongTune + routeDecision.tuneDelta : 0.01
+        }
+
+        if (!kongBlockedByRoute) {
+          kongTune = Math.max(0.05, Math.min(2.0, kongTune))
+          actionScores.set(ActionType.KONG, { shanten, effective, tune: kongTune })
+        }
       }
     }
   }
@@ -1215,7 +1560,7 @@ export async function shouldClaimPendingAction(
       [v + 1, v + 2],
     ]
 
-    let bestChow: { shanten: number; effective: number; tune: number } | null = null
+    let bestChow: { shanten: number; effective: number; tune: number; candidateHand: Tile[] } | null = null
 
     for (const [a, b] of chowPatterns) {
       if (a < 1 || b > 9) continue
@@ -1229,7 +1574,7 @@ export async function shouldClaimPendingAction(
 
       const { shanten, effective } = evaluateResultingHand(candidateHand)
       const chowTune = evaluateChowValue(player, game, claimTile)
-      const candidate = { shanten, effective, tune: chowTune }
+      const candidate = { shanten, effective, tune: chowTune, candidateHand }
 
       if (
         !bestChow ||
@@ -1269,8 +1614,34 @@ export async function shouldClaimPendingAction(
         }
       }
 
-      bestChow.tune = Math.max(0.05, bestChow.tune)
-      actionScores.set(ActionType.CHOW, bestChow)
+      let chowBlockedByRoute = false
+      if (useRoutePlanner && routeState) {
+        const routeDecision = evaluateRouteClaim({
+          action: ActionType.CHOW,
+          player,
+          game,
+          claimTile,
+          routeState,
+          candidateHand: bestChow.candidateHand,
+          candidateShanten: bestChow.shanten,
+          candidateEffective: bestChow.effective,
+          passShanten: passEval.shanten,
+          passEffective: passEval.effective,
+          tableThreat,
+          wallRemaining,
+        })
+        chowBlockedByRoute = !routeDecision.allowed
+        bestChow.tune = routeDecision.allowed ? bestChow.tune + routeDecision.tuneDelta : 0.01
+      }
+
+      if (!chowBlockedByRoute) {
+        bestChow.tune = Math.max(0.05, bestChow.tune)
+        actionScores.set(ActionType.CHOW, {
+          shanten: bestChow.shanten,
+          effective: bestChow.effective,
+          tune: bestChow.tune,
+        })
+      }
     }
   }
 
@@ -1312,7 +1683,7 @@ export async function shouldClaimPendingAction(
 
   for (const [action, s] of actionScores.entries()) {
     if (action === ActionType.PASS) continue
-    if (!softScoreWins(s, best, baseChances[action] ?? 0.5, 1.0)) continue
+    if (!softScoreWins(s, best, baseChances[action] ?? 0.5, 0.75)) continue
     bestAction = action
     best = s
   }

@@ -116,6 +116,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { formatBeijingDateTime } from '~/utils/beijingTime'
 
 interface MatchHistoryResult {
   playerId: string
@@ -230,8 +231,7 @@ onMounted(() => {
 const goBack = () => navigateTo('/')
 
 const formatDate = (value: string | Date) => {
-  const date = typeof value === 'string' ? new Date(value) : value
-  return date.toLocaleString()
+  return formatBeijingDateTime(value)
 }
 
 const formatSigned = (value: number) => {

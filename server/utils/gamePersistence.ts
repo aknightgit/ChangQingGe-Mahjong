@@ -27,6 +27,7 @@ type PersistedMahjongGame = MahjongGame & {
   rebelEvent?: { playerId: string; playerName: string; newDealerIndex: number }
   hesitationWindow?: number
   diceRollCount?: number
+  trainingRoundStartSnapshot?: any
 }
 
 const tileToStored = (tile: Tile): StoredTile => ({
@@ -143,7 +144,8 @@ const gameStateToDocument = (game: GameState): PersistedMahjongGame => ({
   inheritedGlobalMultiplier: game.inheritedGlobalMultiplier,
   rebelEvent: game.rebelEvent,
   hesitationWindow: game.hesitationWindow,
-  diceRollCount: game.diceRollCount
+  diceRollCount: game.diceRollCount,
+  trainingRoundStartSnapshot: (game as any).trainingRoundStartSnapshot
 })
 
 const documentToGameState = (doc: PersistedMahjongGame): GameState => ({
@@ -170,7 +172,8 @@ const documentToGameState = (doc: PersistedMahjongGame): GameState => ({
   inheritedGlobalMultiplier: doc.inheritedGlobalMultiplier,
   rebelEvent: doc.rebelEvent,
   hesitationWindow: doc.hesitationWindow,
-  diceRollCount: doc.diceRollCount
+  diceRollCount: doc.diceRollCount,
+  trainingRoundStartSnapshot: doc.trainingRoundStartSnapshot
 })
 
 export const saveGameState = async (game: GameState): Promise<void> => {

@@ -25,12 +25,30 @@
     <!-- 主区域：melds左 + 手牌右（含出牌区 overlay） -->
     <div class="player-main-row">
       <!-- 门口牌：左侧 -->
-      <div class="player-melds" v-if="melds.length">
+      <div class="player-flowers" v-if="flowerMelds.length">
         <div
-          v-for="(meld, i) in melds"
+          v-for="(meld, i) in flowerMelds"
+          :key="`flower-${i}`"
+          class="meld meld--flower"
+        >
+          <MahjongTile
+            v-for="tile in meld.tiles"
+            :key="tile.id"
+            :tile="tile"
+            :small="true"
+            :back="false"
+            :back-scheme="-1"
+            :dimmed="isWinner"
+          />
+        </div>
+      </div>
+
+      <div class="player-melds" v-if="mainMelds.length">
+        <div
+          v-for="(meld, i) in mainMelds"
           :key="i"
           class="meld"
-          :class="[`meld--${meld.type}`, { 'meld--flower': isFlowerMeld(meld), 'meld--concealed': meld.type === 'concealed_kong' }]"
+          :class="[`meld--${meld.type}`, { 'meld--concealed': meld.type === 'concealed_kong' }]"
         >
           <MahjongTile
             v-for="tile in meld.tiles"
@@ -40,6 +58,7 @@
             :back="isConcealedMeld(meld)"
             :back-scheme="isConcealedMeld(meld) ? (tileBackScheme ?? 0) : -1"
             :class="getClaimMarkerClass(meld, tile)"
+            :style="getClaimMarkerStyle(meld)"
             :dimmed="isWinner"
           />
           <!-- 吃碰杠箭头指示来源 -->
@@ -47,6 +66,7 @@
             v-if="meld.sourcePosition !== undefined"
             class="meld-arrow"
             :class="[getSourceArrowClass(meld.sourcePosition, playerPosition)]"
+            :style="getSourceBadgeStyle(meld.sourcePosition)"
           >{{ getSourceLabel(meld.sourcePosition, playerPosition) }}</span>
           <!-- 兼容旧字段 sourceIndex -->
           <span
@@ -110,6 +130,15 @@ const isFlowerMeld = (meld: Meld): boolean => {
   return meld.tiles.some(t => t.suit === 'hua' || t.isFlower)
 }
 
+const orderedMelds = computed(() => {
+  const flowerMelds = props.melds.filter(meld => isFlowerMeld(meld))
+  const mainMelds = props.melds.filter(meld => !isFlowerMeld(meld))
+  return [...flowerMelds, ...mainMelds]
+})
+
+const flowerMelds = computed(() => orderedMelds.value.filter(meld => isFlowerMeld(meld)))
+const mainMelds = computed(() => orderedMelds.value.filter(meld => !isFlowerMeld(meld)))
+
 const isConcealedMeld = (meld: Meld): boolean => {
   return meld.type === 'concealed_kong' || !!(meld as any).isConcealed
 }
@@ -134,10 +163,23 @@ function getSourceArrowClass(sourcePosition: number, myPosition?: number): strin
   return classes[relativePos] || ''
 }
 
+function getSourceBadgeStyle(sourcePosition: number): Record<string, string> {
+  return {
+    backgroundColor: colors.value[sourcePosition] || '#757575',
+    color: '#fff',
+  }
+}
+
 function getClaimMarkerClass(meld: Meld, tile: Tile): string[] {
   if (!meld.sourceTileId || meld.sourceTileId !== tile.id || meld.type === 'concealed_kong') return []
   const tone = meld.sourcePosition !== undefined ? getSourceArrowClass(meld.sourcePosition, props.playerPosition) : 'meld-arrow--self'
   return ['claimed-tile', tone.replace('meld-arrow', 'claimed-tile')]
+}
+
+function getClaimMarkerStyle(meld: Meld): Record<string, string> {
+  return meld.sourcePosition !== undefined
+    ? { '--claim-source-color': colors.value[meld.sourcePosition] || '#757575' }
+    : {}
 }
 
 // 弃牌区每行6张，自动换行（由CSS flex-wrap处理，无需computed）
@@ -264,6 +306,18 @@ const onPointerCancel = () => {
   /* P0 FIX: 门口牌受容器裁剪 */
   flex-shrink: 0;
   overflow: visible;
+  z-index: 2;
+}
+
+.player-flowers {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 50px;
+  flex-shrink: 0;
+  overflow: visible;
+  position: relative;
+  z-index: 1;
 }
 
 .meld {
@@ -308,6 +362,7 @@ const onPointerCancel = () => {
   width: 100%;
   /* P0 FIX: 手牌区也受裁剪约束 */
   overflow: visible;
+  z-index: 3;
 }
 
 .player-hand {
@@ -409,15 +464,14 @@ const onPointerCancel = () => {
   height: 0;
   border-left: 10px solid transparent;
   border-right: 10px solid transparent;
-  border-top: 16px solid rgba(255,255,255,0.95);
+  border-top: 16px solid var(--claim-source-color, rgba(255,255,255,0.95));
   filter: drop-shadow(0 0 3px rgba(0,0,0,0.42));
   z-index: 4;
 }
 
-:deep(.claimed-tile--self)::after { border-top-color: #f44336; }
-:deep(.claimed-tile--lower)::after { border-top-color: #1e88e5; transform: translateX(-50%) rotate(-90deg); }
-:deep(.claimed-tile--opposite)::after { border-top-color: #43a047; transform: translateX(-50%) rotate(180deg); }
-:deep(.claimed-tile--upper)::after { border-top-color: #e53935; transform: translateX(-50%) rotate(90deg); }
+:deep(.claimed-tile--lower)::after { transform: translateX(-50%) rotate(-90deg); }
+:deep(.claimed-tile--opposite)::after { transform: translateX(-50%) rotate(180deg); }
+:deep(.claimed-tile--upper)::after { transform: translateX(-50%) rotate(90deg); }
 
 /* 自摸 = 灰色 */
 .meld-arrow--self {

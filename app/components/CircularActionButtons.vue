@@ -457,7 +457,7 @@ onUnmounted(() => {
 }
 
 .action-btn--hu.action-btn--highlight-pulse {
-  animation: action-breathe-strong 0.78s ease-in-out infinite, hu-glow-strong 0.78s ease-in-out infinite;
+  animation: action-breathe-strong 0.78s ease-in-out infinite, hu-glow-strong 0.78s ease-in-out infinite, heartbeat 1.2s ease-in-out infinite;
 }
 
 .action-btn--kong.action-btn--highlight {
@@ -514,22 +514,22 @@ onUnmounted(() => {
   }
 }
 
-.action-btn--small:nth-child(1).action-btn--highlight {
+.action-grid > .action-btn--small:nth-child(1).action-btn--highlight {
   background: linear-gradient(135deg, #1d6ef2, #45a5ff);
   box-shadow: 0 0 18px rgba(51, 136, 255, 0.38);
 }
 
-.action-btn--small:nth-child(2).action-btn--highlight {
+.action-grid > .action-btn--small:nth-child(2).action-btn--highlight {
   background: linear-gradient(135deg, #e38b16, #ffc54d);
   box-shadow: 0 0 18px rgba(255, 180, 48, 0.34);
 }
 
-.action-btn--small:nth-child(3).action-btn--highlight {
+.action-grid > .action-btn--small:nth-child(3).action-btn--highlight {
   background: linear-gradient(135deg, #c62828, #ff6b6b);
   box-shadow: 0 0 18px rgba(255, 90, 90, 0.38);
 }
 
-.action-btn--small:nth-child(4).action-btn--highlight {
+.action-grid > .action-btn--small:nth-child(4).action-btn--highlight {
   background: linear-gradient(135deg, #7b3fe4, #b47cff);
   box-shadow: 0 0 18px rgba(164, 109, 255, 0.38);
 }
@@ -598,7 +598,7 @@ onUnmounted(() => {
 }
 
 /* 胡牌高亮色 */
-.action-btn:nth-child(3).action-btn--highlight {
+.action-grid > .action-btn:nth-child(3).action-btn--highlight {
   background: linear-gradient(135deg, #c62828, #ef5350);
   border-color: rgba(239, 83, 80, 0.8);
   box-shadow: 0 0 14px rgba(239, 83, 80, 0.4);
@@ -661,6 +661,9 @@ onUnmounted(() => {
   color: #fff;
   box-shadow: 0 0 12px rgba(139, 92, 246, 0.4);
 }
+.action-btn--think.action-btn--highlight-pulse {
+  animation: action-breathe 0.96s ease-in-out infinite, think-glow 0.96s ease-in-out infinite;
+}
 .action-btn--think.action-btn--disabled {
   opacity: 0.3;
   cursor: not-allowed;
@@ -668,6 +671,17 @@ onUnmounted(() => {
 
 .action-btn--think-inline {
   min-width: 46px;
+}
+
+@keyframes think-glow {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(139, 92, 246, 0.36);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(167, 139, 250, 0.58);
+    filter: brightness(1.12);
+  }
 }
 
 /* 造反按钮 */

@@ -1,10 +1,13 @@
 {
-  "savedAt": "2026-04-25T06:05:16.672Z",
+  "savedAt": "2026-04-25T16:24:41.570Z",
   "round": 0,
   "metrics": {
     "fitness": 0,
     "huRate": 0,
     "drawRate": 1,
+    "routeCommitRate": 0.8805970149253731,
+    "routeFlipPerGame": 0,
+    "badOpenRate": 1,
     "totalGames": 20,
     "note": "AI-AK iterative training - 1x20"
   },

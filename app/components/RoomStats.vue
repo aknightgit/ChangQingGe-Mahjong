@@ -48,7 +48,11 @@
       </table>
     </div>
 
-    <div v-if="canSpectate" class="stats-spectate">
+    <div
+      v-if="showSpectateArea"
+      class="stats-spectate"
+      :class="{ 'stats-spectate--disabled': !canSpectate }"
+    >
       <p class="spectate-title">观赛视角{{ currentSpectatingName ? `：${currentSpectatingName}` : '' }}</p>
       <!--
       <p class="spectate-title">👁️ 观赛视角{{ spectatingId ? '（已锁定）' : '' }}</p>
@@ -102,6 +106,7 @@ const props = defineProps<{
   spectatingId?: string | null
   pendingSpectateId?: string | null
   approvedHumanSpectateId?: string | null
+  showSpectateArea?: boolean
   canSpectate?: boolean
 }>()
 
@@ -225,6 +230,10 @@ const isSpectateLocked = (player: PlayerStat) => {
 .stats-spectate {
   padding-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.stats-spectate--disabled .spectate-title,
+.stats-spectate--disabled .spectate-btn {
+  opacity: 0.48;
 }
 .spectate-title {
   font-size: 0.75rem; color: rgba(255,255,255,0.5); margin-bottom: 6px;

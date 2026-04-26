@@ -103,6 +103,7 @@ const phase = ref<'idle' | 'rolling' | 'result'>('idle')
 const rollingSeed = ref(Date.now() % 997)
 const currentRoll = ref(0)
 const showResultBurst = ref(false)
+const RESULT_HOLD_MS = 500
 const maxRollsLimit = computed(() => props.maxRolls || 1)
 const canReroll = computed(() => currentRoll.value < maxRollsLimit.value && phase.value === 'result')
 const isQuadCombo = computed(() => {
@@ -153,7 +154,7 @@ const flashResultBurst = () => {
   burstTimer = setTimeout(() => {
     showResultBurst.value = false
     burstTimer = null
-  }, 500)
+  }, RESULT_HOLD_MS)
 }
 
 const onRoll = () => {
@@ -185,7 +186,7 @@ const onRollAndDeal = () => {
     flashResultBurst()
     setTimeout(() => {
       onDeal()
-    }, 800)
+    }, Math.max(800, RESULT_HOLD_MS + 300))
   }, 850)
 }
 

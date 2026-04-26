@@ -149,14 +149,19 @@ const LAYER_OFFSET = 1
 .wall-back--css::after {
   content: '';
   position: absolute;
-  inset: 18% 24%;
-  border-radius: 999px;
+  top: 50%;
+  left: 50%;
+  width: 54%;
+  height: auto;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
   background: currentColor;
   opacity: 0.22;
 }
 
 .wall-back--css::after {
-  inset: 35% 38%;
+  width: 24%;
   opacity: 0.35;
 }
 

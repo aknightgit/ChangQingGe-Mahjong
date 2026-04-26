@@ -4,25 +4,10 @@
     :class="`player-other--${position}`"
     :style="containerStyle"
   >
-    <!-- ==================== 瀵瑰锛坱op锛?==================== -->
     <template v-if="position === 'top'">
       <div class="player-other-stack player-other-stack--top">
-        <!-- 鎵嬬墝 + 鑺辩墝锛堝悓涓€琛岋紝鏁翠綋 180掳 鏃嬭浆锛?-->
         <div class="seat-line seat-line--top">
-          <div v-if="hand.length" class="hand-lane hand-lane--top">
-            <MahjongTile
-              v-for="tile in hand"
-              :key="tile.id"
-              :tile="tile"
-              :small="true"
-              :back="!showHand"
-              :back-scheme="showHand ? -1 : (tileBackScheme ?? 0)"
-              :just-drawn="justDrawnTileId === tile.id"
-              :dimmed="isWinner"
-            />
-          </div>
-          <!-- 鑺辩墝锛氱揣璺熸墜鐗屽彸渚э紝鏃嬭浆 180掳 璁╃墝澶存湞鐗屾涓績 -->
-          <div v-if="flowerMelds.length" class="flower-lane flower-lane--top-inline">
+          <div v-if="flowerMelds.length" class="flower-lane flower-lane--top-inline top-slot top-slot--flower">
             <div
               v-for="(m, i) in flowerMelds"
               :key="`flower-top-${i}`"
@@ -39,15 +24,13 @@
               />
             </div>
           </div>
-        </div>
-        <!-- 闂ㄥ彛鐗岋紙鍚冪鏉狅級 -->
-        <div v-if="mainMelds.length" class="meld-lane meld-lane--top">
-          <div
-            v-for="(m, i) in mainMelds"
-            :key="i"
-            class="meld-group"
-            :class="{ 'meld-group--kong': m.type === 'kong' }"
-          >
+          <div v-if="mainMelds.length" class="meld-lane meld-lane--top top-slot top-slot--meld">
+            <div
+              v-for="(m, i) in mainMelds"
+              :key="i"
+              class="meld-group"
+              :class="{ 'meld-group--kong': m.type === 'kong' }"
+            >
               <MahjongTile
                 v-for="t in m.tiles"
                 :key="t.id"
@@ -56,41 +39,18 @@
                 :back="isConcealedMeld(m)"
                 :back-scheme="isConcealedMeld(m) ? (tileBackScheme ?? 0) : -1"
                 :class="[getClaimMarkerClass(m, t), { 'top-exposed-tile': !isConcealedMeld(m) }]"
+                :style="getClaimMarkerStyle(m)"
                 :dimmed="isWinner"
               />
-            <!-- 鍚冪鏉ユ簮鏍囩 -->
-            <span
-              v-if="m.sourcePosition !== undefined && !isConcealedMeld(m)"
-              class="meld-source meld-source--top"
-              :class="getSourceArrowClass(m.sourcePosition)"
-            >{{ getSourceLabel(m.sourcePosition) }}</span>
+              <span
+                v-if="m.sourcePosition !== undefined && !isConcealedMeld(m)"
+                class="meld-source meld-source--top"
+                :class="getSourceArrowClass(m.sourcePosition)"
+                :style="getSourceBadgeStyle(m.sourcePosition)"
+              >{{ getSourceLabel(m.sourcePosition) }}</span>
+            </div>
           </div>
-        </div>
-      </div>
-    </template>
-
-    <!-- ==================== 宸﹀锛坙eft锛?==================== -->
-    <template v-else-if="position === 'left'">
-      <div class="player-other-stack player-other-stack--left">
-        <div v-if="flowerMelds.length" class="flower-lane flower-lane--left">
-          <div
-            v-for="(m, i) in flowerMelds"
-            :key="`flower-left-${i}`"
-            class="meld-group meld-group--flower meld-group--vertical"
-          >
-            <MahjongTile
-              v-for="t in m.tiles"
-              :key="t.id"
-              :tile="t"
-              :small="true"
-              :back="false"
-              :back-scheme="-1"
-              :dimmed="isWinner"
-            />
-          </div>
-        </div>
-        <div class="seat-line seat-line--left">
-          <div v-if="hand.length" class="hand-lane hand-lane--left">
+          <div v-if="hand.length" class="hand-lane hand-lane--top top-slot top-slot--hand">
             <MahjongTile
               v-for="tile in hand"
               :key="tile.id"
@@ -98,8 +58,33 @@
               :small="true"
               :back="!showHand"
               :back-scheme="showHand ? -1 : (tileBackScheme ?? 0)"
+              :just-drawn="justDrawnTileId === tile.id"
               :dimmed="isWinner"
             />
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <template v-else-if="position === 'left'">
+      <div class="player-other-stack player-other-stack--left">
+        <div class="seat-line seat-line--left">
+          <div v-if="flowerMelds.length" class="flower-lane flower-lane--left">
+            <div
+              v-for="(m, i) in flowerMelds"
+              :key="`flower-left-${i}`"
+              class="meld-group meld-group--flower meld-group--vertical"
+            >
+              <MahjongTile
+                v-for="t in m.tiles"
+                :key="t.id"
+                :tile="t"
+                :small="true"
+                :back="false"
+                :back-scheme="-1"
+                :dimmed="isWinner"
+              />
+            </div>
           </div>
           <div v-if="mainMelds.length" class="meld-lane meld-lane--left">
             <div
@@ -116,24 +101,18 @@
                 :back="isConcealedMeld(m)"
                 :back-scheme="isConcealedMeld(m) ? (tileBackScheme ?? 0) : -1"
                 :class="getClaimMarkerClass(m, t)"
+                :style="getClaimMarkerStyle(m)"
                 :dimmed="isWinner"
               />
               <span
                 v-if="m.sourcePosition !== undefined && !isConcealedMeld(m)"
                 class="meld-source meld-source--left"
                 :class="getSourceArrowClass(m.sourcePosition)"
-              >{{ getSourceLabel(m.sourcePosition) }}</span>
+                :style="getSourceBadgeStyle(m.sourcePosition)"
+                >{{ getSourceLabel(m.sourcePosition) }}</span>
             </div>
           </div>
-        </div>
-      </div>
-    </template>
-
-    <!-- ==================== 鍙冲锛坮ight锛?==================== -->
-    <template v-else>
-      <div class="player-other-stack player-other-stack--right">
-        <div class="seat-line seat-line--right">
-          <div v-if="hand.length" class="hand-lane hand-lane--right">
+          <div v-if="hand.length" class="hand-lane hand-lane--left">
             <MahjongTile
               v-for="tile in hand"
               :key="tile.id"
@@ -144,48 +123,66 @@
               :dimmed="isWinner"
             />
           </div>
-          <div v-if="mainMelds.length || flowerMelds.length" class="right-support-stack">
-            <div v-if="mainMelds.length" class="meld-lane meld-lane--right">
-              <div
-                v-for="(m, i) in mainMelds"
-                :key="i"
-                class="meld-group meld-group--vertical"
-                :class="{ 'meld-group--kong': m.type === 'kong' }"
-              >
-                <MahjongTile
-                  v-for="t in m.tiles"
-                  :key="t.id"
-                  :tile="t"
-                  :small="true"
-                  :back="isConcealedMeld(m)"
-                  :back-scheme="isConcealedMeld(m) ? (tileBackScheme ?? 0) : -1"
-                  :class="getClaimMarkerClass(m, t)"
-                  :dimmed="isWinner"
-                />
-                <span
-                  v-if="m.sourcePosition !== undefined && !isConcealedMeld(m)"
-                  class="meld-source meld-source--right"
-                  :class="getSourceArrowClass(m.sourcePosition)"
-                >{{ getSourceLabel(m.sourcePosition) }}</span>
-              </div>
+        </div>
+      </div>
+    </template>
+
+    <template v-else>
+      <div class="player-other-stack player-other-stack--right">
+        <div class="seat-line seat-line--right">
+          <div v-if="flowerMelds.length" class="flower-lane flower-lane--right">
+            <div
+              v-for="(m, i) in flowerMelds"
+              :key="`flower-right-${i}`"
+              class="meld-group meld-group--flower meld-group--vertical"
+            >
+              <MahjongTile
+                v-for="t in m.tiles"
+                :key="t.id"
+                :tile="t"
+                :small="true"
+                :back="false"
+                :back-scheme="-1"
+                :dimmed="isWinner"
+              />
             </div>
-            <div v-if="flowerMelds.length" class="flower-lane flower-lane--right">
-              <div
-                v-for="(m, i) in flowerMelds"
-                :key="`flower-right-${i}`"
-                class="meld-group meld-group--flower meld-group--vertical"
-              >
-                <MahjongTile
-                  v-for="t in m.tiles"
-                  :key="t.id"
-                  :tile="t"
-                  :small="true"
-                  :back="false"
-                  :back-scheme="-1"
-                  :dimmed="isWinner"
-                />
-              </div>
+          </div>
+          <div v-if="mainMelds.length" class="meld-lane meld-lane--right">
+            <div
+              v-for="(m, i) in mainMelds"
+              :key="i"
+              class="meld-group meld-group--vertical"
+              :class="{ 'meld-group--kong': m.type === 'kong' }"
+            >
+              <MahjongTile
+                v-for="t in m.tiles"
+                :key="t.id"
+                :tile="t"
+                :small="true"
+                :back="isConcealedMeld(m)"
+                :back-scheme="isConcealedMeld(m) ? (tileBackScheme ?? 0) : -1"
+                :class="getClaimMarkerClass(m, t)"
+                :style="getClaimMarkerStyle(m)"
+                :dimmed="isWinner"
+              />
+              <span
+                v-if="m.sourcePosition !== undefined && !isConcealedMeld(m)"
+                class="meld-source meld-source--right"
+                :class="getSourceArrowClass(m.sourcePosition)"
+                :style="getSourceBadgeStyle(m.sourcePosition)"
+              >{{ getSourceLabel(m.sourcePosition) }}</span>
             </div>
+          </div>
+          <div v-if="hand.length" class="hand-lane hand-lane--right">
+            <MahjongTile
+              v-for="tile in hand"
+              :key="tile.id"
+              :tile="tile"
+              :small="true"
+              :back="!showHand"
+              :back-scheme="showHand ? -1 : (tileBackScheme ?? 0)"
+              :dimmed="isWinner"
+            />
           </div>
         </div>
       </div>
@@ -207,6 +204,7 @@ const props = defineProps<{
   isWinner?: boolean
   justDrawnTileId?: string | null
   playerPosition?: number
+  playerColors?: string[]
 }>()
 
 const containerStyle = computed(() => ({
@@ -218,18 +216,14 @@ const containerStyle = computed(() => ({
   height: props.position === 'top' ? 'auto' : '100%',
 }))
 
-const isFlowerMeld = (meld: Meld): boolean => {
-  return meld.tiles.length === 1 && meld.tiles[0]?.suit === 'hua'
-}
+const isFlowerMeld = (meld: Meld): boolean => meld.tiles.length === 1 && meld.tiles[0]?.suit === 'hua'
+const colors = computed(() => props.playerColors || ['#e53935', '#43a047', '#1e88e5', '#fb8c00'])
 
 const flowerMelds = computed(() => props.melds.filter(meld => isFlowerMeld(meld)))
 const mainMelds = computed(() => props.melds.filter(meld => !isFlowerMeld(meld)))
 
-const isConcealedMeld = (meld: Meld): boolean => {
-  return meld.type === 'concealed_kong' || !!(meld as any).isConcealed
-}
+const isConcealedMeld = (meld: Meld): boolean => meld.type === 'concealed_kong' || !!(meld as any).isConcealed
 
-// sourcePosition: 1=涓嬪, 2=瀵瑰, 3=涓婂锛?鑷涓嶄細鍑虹幇锛?
 function getRelativeSource(sourcePosition: number): number {
   const observerPos = props.playerPosition ?? 0
   return (sourcePosition - observerPos + 4) % 4
@@ -245,10 +239,23 @@ function getSourceArrowClass(sourcePosition: number): string {
   return ['src--lower', 'src--opposite', 'src--upper'][rel - 1] || 'src--opposite'
 }
 
+function getSourceBadgeStyle(sourcePosition: number): Record<string, string> {
+  return {
+    backgroundColor: colors.value[sourcePosition] || '#757575',
+    color: '#fff',
+  }
+}
+
 function getClaimMarkerClass(meld: Meld, tile: any): string[] {
   if (!meld.sourceTileId || meld.sourceTileId !== tile.id || meld.type === 'concealed_kong') return []
   const tone = meld.sourcePosition !== undefined ? getSourceArrowClass(meld.sourcePosition) : 'src--self'
   return ['claimed-tile', `claimed-tile--${tone}`]
+}
+
+function getClaimMarkerStyle(meld: Meld): Record<string, string> {
+  return meld.sourcePosition !== undefined
+    ? { '--claim-source-color': colors.value[meld.sourcePosition] || '#757575' }
+    : {}
 }
 </script>
 
@@ -295,7 +302,6 @@ function getClaimMarkerClass(meld: Meld, tile: any): string[] {
   height: 100%;
 }
 
-/* ---- seat-line ---- */
 .seat-line {
   display: flex;
   flex-shrink: 0;
@@ -303,11 +309,14 @@ function getClaimMarkerClass(meld: Meld, tile: any): string[] {
 }
 
 .seat-line--top {
-  flex-direction: row;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
   align-items: center;
   justify-content: center;
-  gap: 0;
+  gap: 8px;
   width: 100%;
+  min-height: 48px;
 }
 
 .seat-line--left,
@@ -324,13 +333,31 @@ function getClaimMarkerClass(meld: Meld, tile: any): string[] {
   transform: translateY(24px);
 }
 
-/* ---- hand / meld / flower lanes ---- */
 .hand-lane,
 .meld-lane,
 .flower-lane {
   display: flex;
   flex-shrink: 0;
   overflow: visible;
+}
+
+.top-slot {
+  flex-shrink: 0;
+}
+
+.top-slot--flower {
+  justify-self: end;
+  z-index: 3;
+}
+
+.top-slot--meld {
+  justify-self: center;
+  z-index: 2;
+}
+
+.top-slot--hand {
+  justify-self: start;
+  z-index: 3;
 }
 
 .hand-lane--top {
@@ -345,16 +372,16 @@ function getClaimMarkerClass(meld: Meld, tile: any): string[] {
   align-items: center;
   justify-content: center;
   gap: 1px;
-  margin-top: 2px;
+  margin-top: 0;
+  transform: translateX(-10%);
 }
 
-/* 瀵瑰鑺辩墝锛氬唴鑱旀墜鐗屽彸渚э紝鏃嬭浆 180掳 璁╃墝澶存湞鐗屾涓績 */
 .flower-lane--top-inline {
   display: inline-flex;
   flex-direction: row;
   align-items: center;
   gap: 1px;
-  margin-left: 4px;
+  margin-right: 2px;
   transform: rotate(180deg);
 }
 
@@ -373,6 +400,8 @@ function getClaimMarkerClass(meld: Meld, tile: any): string[] {
 .flower-lane--left,
 .flower-lane--right {
   gap: 1px;
+  position: relative;
+  z-index: 3;
 }
 
 .meld-group {
@@ -395,6 +424,18 @@ function getClaimMarkerClass(meld: Meld, tile: any): string[] {
   flex-direction: row;
 }
 
+.meld-lane--left,
+.meld-lane--right {
+  position: relative;
+  z-index: 2;
+}
+
+.hand-lane--left,
+.hand-lane--right {
+  position: relative;
+  z-index: 1;
+}
+
 .meld-group--kong {
   box-shadow: 0 0 8px rgba(255, 214, 0, 0.35);
 }
@@ -405,27 +446,28 @@ function getClaimMarkerClass(meld: Meld, tile: any): string[] {
   gap: 1px;
 }
 
-/* ---- 鍚冪鏉ユ簮鏍囩 ---- */
 .meld-source {
   position: absolute;
-  font-size: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  font-size: 0.65rem;
   font-weight: 700;
   line-height: 1;
-  padding: 1px 2px;
-  border-radius: 3px;
+  padding: 2px 5px;
+  border-radius: 4px;
   pointer-events: none;
   white-space: nowrap;
   z-index: 2;
 }
 
-/* 瀵瑰锛氭爣绛惧湪 meld 涓婃柟 */
 .meld-source--top {
   top: -2px;
   left: 50%;
   transform: translateX(-50%) rotate(180deg);
 }
 
-/* 宸﹀ / 鍙冲锛氭爣绛惧湪 meld 鏃佽竟 */
 .meld-source--left,
 .meld-source--right {
   bottom: -2px;
@@ -446,33 +488,25 @@ function getClaimMarkerClass(meld: Meld, tile: any): string[] {
   transform: translateX(-50%);
   width: 0;
   height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-top: 9px solid rgba(255, 255, 255, 0.95);
-  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.4));
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 16px solid var(--claim-source-color, rgba(255, 255, 255, 0.95));
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.42));
   z-index: 4;
 }
 
 .player-other :deep(.claimed-tile--src--lower)::after {
-  border-top-color: rgba(67, 160, 71, 0.95);
   transform: translateX(-50%) rotate(-90deg);
 }
 
 .player-other :deep(.claimed-tile--src--opposite)::after {
-  border-top-color: rgba(30, 136, 229, 0.95);
   transform: translateX(-50%) rotate(180deg);
 }
 
 .player-other :deep(.claimed-tile--src--upper)::after {
-  border-top-color: rgba(251, 140, 0, 0.95);
   transform: translateX(-50%) rotate(90deg);
 }
 
-.src--lower   { background: rgba(67, 160, 71, 0.85); color: #fff; }
-.src--opposite{ background: rgba(30, 136, 229, 0.85); color: #fff; }
-.src--upper   { background: rgba(251, 140, 0, 0.85); color: #fff; }
-
-/* ---- tile 灏哄 ---- */
 .player-other :deep(.tile) {
   width: 28px;
   height: 40px;
@@ -489,15 +523,13 @@ function getClaimMarkerClass(meld: Meld, tile: any): string[] {
 
 .player-other :deep(.tile-img) {
   border-radius: 3px;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4)) brightness(1.08);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) brightness(1.08);
 }
 
-/* 瀵瑰闂ㄥ彛鐗岋細闈炴殫鏉犵殑鐗屾棆杞?180掳 璁╃墝闈㈡湞鎴戞柟 */
 .meld-lane--top :deep(.top-exposed-tile) {
   transform: rotate(180deg);
 }
 
-/* ---- 宸﹀ / 鍙冲鏃嬭浆 ---- */
 .hand-lane--left,
 .meld-lane--left,
 .flower-lane--left {
@@ -520,32 +552,7 @@ function getClaimMarkerClass(meld: Meld, tile: any): string[] {
   transform-origin: center;
 }
 
-.right-support-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  margin-top: 96px;
-  transform: translateY(calc(108px + 15%));
-  position: relative;
-  z-index: 1;
-}
-
 .hand-lane--right {
-  position: relative;
-  z-index: 3;
+  transform: rotate(-90deg);
 }
-
-.meld-lane--right {
-  position: relative;
-  z-index: 2;
-}
-
-.flower-lane--right {
-  position: relative;
-  z-index: 1;
-}
-
-/* ---- 鎽哥墝楂樹寒锛堝鐢?MahjongTile 鍐呯疆鏍峰紡锛?---- */
-/* tile--just-drawn 宸插湪 MahjongTile.vue 涓畾涔夛紝姝ゅ鏃犻渶棰濆鏍峰紡 */
 </style>

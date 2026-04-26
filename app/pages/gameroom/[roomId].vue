@@ -578,7 +578,8 @@
                 :show-hand="isOpponentHandRevealed(topPlayer)"
                 :is-winner="northIsWinner"
                 :just-drawn-tile-id="northJustDrawnTileId"
-                :player-position="currentPlayer?.position"
+                :player-colors="claimSourceColors"
+                :player-position="topPlayer?.position"
               />
             </div>
 
@@ -592,7 +593,8 @@
                 :show-hand="isOpponentHandRevealed(leftPlayer)"
                 :is-winner="westIsWinner"
                 :just-drawn-tile-id="westJustDrawnTileId"
-                :player-position="currentPlayer?.position"
+                :player-colors="claimSourceColors"
+                :player-position="leftPlayer?.position"
               />
             </div>
 
@@ -606,18 +608,21 @@
                 :show-hand="isOpponentHandRevealed(rightPlayer)"
                 :is-winner="eastIsWinner"
                 :just-drawn-tile-id="eastJustDrawnTileId"
-                :player-position="currentPlayer?.position"
+                :player-colors="claimSourceColors"
+                :player-position="rightPlayer?.position"
               />
             </div>
 
             <!-- Bottom (self) player -->
             <div class="seat seat-bottom">
               <div class="self-area-with-actions">
+                <div v-if="myTingText" class="self-ting-banner">{{ myTingText }}</div>
                 <PlayerSelfArea
                   name=""
                   :hand="playerHand"
                   :melds="playerMelds"
                   :tile-back-scheme="tileBackScheme"
+                  :player-colors="claimSourceColors"
                   :just-drawn-tile-id="selfJustDrawnTileId"
                   :player-position="currentPlayer?.position"
                   :selected-tile-id="selectedTileId"
@@ -712,6 +717,7 @@
             :spectating-id="spectatingId"
             :pending-spectate-id="pendingSpectateId"
             :approved-human-spectate-id="approvedHumanSpectateId"
+            :show-spectate-area="showSpectatorControls"
             :can-spectate="canUseSpectatorView"
             @spectate="handleSpectate"
             @name-click="onPlayerNameClick"
@@ -773,12 +779,12 @@
                 <template v-else-if="isAIControlled">
                   🤖 AI托管中
                 </template>
-                <template v-else-if="myTingText">{{ myTingText }}</template>
                 <template v-else-if="showMobileActionNotice">{{ mobileActionNoticeText }}</template>
                 <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
                   ⏱ {{ turnTimer }}s
                 </span>
               </div>
+              <div v-if="myTingText" class="ting-action-reminder">{{ myTingText }}</div>
               <CircularActionButtons
                 :available-actions="availableActions"
                 :is-connected="isConnected"
@@ -913,6 +919,8 @@ import { useGame } from '~/composables/useGame'
 import { useSound } from '~/composables/useSound'
 import { useBackgroundMusic } from '~/composables/useBackgroundMusic'
 import { buildDiscardGuardSnapshot, shouldReleasePendingDiscardGuard, type DiscardGuardSnapshot } from '~/utils/discardGuard'
+import { collectClaimedDiscardIds, filterVisibleDiscards } from '~/utils/discardVisibility'
+import { formatBeijingTime } from '~/utils/beijingTime'
 import { ActionType, GamePhase, GameEndReason, type Tile, type Meld, type Player } from '~/types/game'
 
 const PENDING_ROOM_STORAGE_KEY = 'mahjong.pendingRoomTarget'
@@ -1245,6 +1253,7 @@ let flowerReplacementNoticeTimer: ReturnType<typeof setTimeout> | null = null
 
 const triggerDoubleReminder = (multiplier: number) => {
   if (multiplier < 2) return
+  if (!showDiceOverlay.value) return
   doubleReminderText.value = `本局骰子倍率 x${multiplier}`
   showDoubleReminder.value = true
   if (doubleReminderTimer) {
@@ -1386,13 +1395,17 @@ const globalLatestDiscardId = computed(() => {
   return allDiscards.length > 0 ? allDiscards[allDiscards.length - 1]?.id : null
 })
 
+const claimedDiscardIds = computed(() => collectClaimedDiscardIds(gameState.value?.players))
+
+const getVisiblePlayerDiscards = (player?: Player | null) => filterVisibleDiscards(player?.hand?.discardedTiles, claimedDiscardIds.value)
+
 const selfLatestDiscardId = computed(() => globalLatestDiscardId.value)
 const northLatestDiscardId = computed(() => globalLatestDiscardId.value)
 const westLatestDiscardId = computed(() => globalLatestDiscardId.value)
 const eastLatestDiscardId = computed(() => globalLatestDiscardId.value)
 const playerHand = computed(() => currentPlayer.value?.hand.concealedTiles || [])
 const playerMelds = computed(() => currentPlayer.value?.hand.exposedMelds || [])
-const playerDiscards = computed(() => currentPlayer.value?.hand.discardedTiles || [])
+const playerDiscards = computed(() => getVisiblePlayerDiscards(currentPlayer.value))
 const isWinner = computed(() => currentPlayer.value?.status === 'won')
 
 const clearFlowerReplacementNotice = () => {
@@ -1438,7 +1451,11 @@ watch(
 )
 
 // 胜者观战模式
-const canUseSpectatorView = computed(() => currentPlayer.value?.status === 'won')
+const showSpectatorControls = computed(() => {
+  const phase = gameState.value?.phase
+  return !!currentPlayer.value && (phase === GamePhase.PLAYING || phase === GamePhase.ENDED)
+})
+const canUseSpectatorView = computed(() => showSpectatorControls.value && currentPlayer.value?.status === 'won')
 const mySpectatorView = computed(() => {
   const myId = currentPlayer.value?.id
   if (!myId) return null
@@ -1548,6 +1565,7 @@ const wildTile = computed(() => {
 
 // ---- Room Stats ----
 const positionColors = ['east', 'south', 'west', 'north']
+const claimSourceColors = ['#e53935', '#43a047', '#1e88e5', '#fb8c00']
 const botAvatars = ['😎', '🤖', '🧠']
 
 // Track today's best hand (max wonFan) per room
@@ -1605,10 +1623,18 @@ const statsPlayers = computed(() => {
   if (!gameState.value) return []
   const qjAlertIds = new Set((gameState.value as any).qjAlerts?.map((a: any) => a.playerId) || [])
   const qjThreshold = (gameState.value as any).liangShanThreshold ?? 4000
+  const roundStats = Array.isArray((gameState.value as any).roundStats) ? (gameState.value as any).roundStats : []
   return gameState.value.players.map((p, i) => {
     const alert = (gameState.value as any).qjAlerts?.find((a: any) => a.playerId === p.id)
     const qjScore = alert?.score || 0
     const cumulative = roomCumulative.value[p.id] || { wins: 0, losses: 0, lastStatus: 'none' }
+    const winCount = roundStats.filter((round: any) => Array.isArray(round?.winners) && round.winners.includes(p.id)).length
+    const selfDrawCount = roundStats.filter((round: any) => Array.isArray(round?.selfDraws) && round.selfDraws.includes(p.id)).length
+    const discardCount = Math.max(0, winCount - selfDrawCount)
+    const bestRound = roundStats.reduce((best: number | null, round: any) => {
+      const score = Number(round?.scores?.[p.id] ?? 0)
+      return best === null ? score : Math.max(best, score)
+    }, null)
     return {
       id: p.id,
       name: p.name,
@@ -1621,7 +1647,10 @@ const statsPlayers = computed(() => {
       isQJCrossed: qjAlertIds.has(p.id),
       qjScore,
       qjGlow: qjScore > qjThreshold * 3,
-      bestRound: null as number | null,
+      winCount,
+      discardCount,
+      selfDrawCount,
+      bestRound,
       totalWins: cumulative.wins,
       totalLosses: cumulative.losses,
       lastRoundStatus: cumulative.lastStatus,
@@ -1726,8 +1755,10 @@ const tileLabel = (tile: Partial<Tile> | null | undefined): string => {
 }
 
 const myTingText = computed(() => {
-  if (!currentPlayer.value?.isTing) return ''
-  const tiles = (tingPreview.value?.winningTiles || [])
+  const winningTiles = tingPreview.value?.winningTiles || []
+  const isTing = !!currentPlayer.value?.isTing || !!tingPreview.value?.isTing || winningTiles.length > 0
+  if (!isTing) return ''
+  const tiles = winningTiles
     .map((entry: any) => tileLabel(entry.tile))
     .filter(Boolean)
   const uniqueTiles = Array.from(new Set(tiles))
@@ -1830,7 +1861,7 @@ const canStartGame = computed(() => {
 // ---- Other Players State ----
 const northHand = computed(() => topPlayer.value?.hand.concealedTiles || []) // Will be empty/hidden by backend usually
 const northMelds = computed(() => topPlayer.value?.hand.exposedMelds || [])
-const northDiscards = computed(() => topPlayer.value?.hand.discardedTiles || [])
+const northDiscards = computed(() => getVisiblePlayerDiscards(topPlayer.value))
 const northIsWinner = computed(() => topPlayer.value?.status === 'won')
 
 const activePosition = computed(() => gameState.value?.currentPlayerIndex ?? null)
@@ -1883,12 +1914,12 @@ const turnMessage = computed(() => {
 
 const westHand = computed(() => leftPlayer.value?.hand.concealedTiles || [])
 const westMelds = computed(() => leftPlayer.value?.hand.exposedMelds || [])
-const westDiscards = computed(() => leftPlayer.value?.hand.discardedTiles || [])
+const westDiscards = computed(() => getVisiblePlayerDiscards(leftPlayer.value))
 const westIsWinner = computed(() => leftPlayer.value?.status === 'won')
 
 const eastHand = computed(() => rightPlayer.value?.hand.concealedTiles || [])
 const eastMelds = computed(() => rightPlayer.value?.hand.exposedMelds || [])
-const eastDiscards = computed(() => rightPlayer.value?.hand.discardedTiles || [])
+const eastDiscards = computed(() => getVisiblePlayerDiscards(rightPlayer.value))
 const eastIsWinner = computed(() => rightPlayer.value?.status === 'won')
 
 // ---- 各家摸牌标记（手牌数 +1 → 最后一张为新摸的牌，3s 后清除） ----
@@ -2013,8 +2044,11 @@ const handleTileClick = (tile: Tile) => {
 // but `gameManager.ts` implementation of `handlePeng` finds matching tiles automatically.
 
 const showDraw = computed(() => availableActions.value.includes(ActionType.DRAW))
+const showChowPicker = ref(false)
+const selectedChowOption = ref<number | null>(null)
 const shouldShowActionButton = (type: ActionType) => {
   if (!availableActions.value.includes(type)) return false
+  if (type === ActionType.CHOW && showChowPicker.value) return true
   return nowTs.value <= actionButtonsVisibleUntil.value
 }
 
@@ -2059,8 +2093,6 @@ watch(thinkFreezeActive, (active) => {
 
 // 胡牌面板状态
 const showHuPanel = ref(false)
-const showChowPicker = ref(false)
-const selectedChowOption = ref<number | null>(null)
 
 // 计算胡牌组合：将手牌排列成 顺子/刻子 + 对子
 const huCombinations = computed(() => {
@@ -2266,7 +2298,7 @@ watch(
     const mine = myId ? pending.find((pa: any) => pa.playerId === myId) : null
     const selfAvailableActions = availableActions.value || []
     if (mine || selfAvailableActions.includes(ActionType.HU)) {
-      actionButtonsVisibleUntil.value = Date.now() + getActionWindowMs(gameState.value)
+      actionButtonsVisibleUntil.value = mine?.expiresAt || Date.now() + getActionWindowMs(gameState.value)
     } else {
       actionButtonsVisibleUntil.value = 0
     }
@@ -2431,6 +2463,7 @@ const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); executeAction(
 // 退房结算
 const showSettlement = ref(false)
 const settlementData = ref<any>(null)
+const lastAutoSettlementKey = ref('')
 
 const formatSignedScore = (score: any): string => {
   const n = Number(score ?? 0)
@@ -2838,6 +2871,11 @@ const onDealTiles = async () => {
   isGameStarting.value = true
   hasDicePreview.value = false
   showDiceOverlay.value = false
+  showDoubleReminder.value = false
+  if (doubleReminderTimer) {
+    clearTimeout(doubleReminderTimer)
+    doubleReminderTimer = null
+  }
   // 等 DiceAnimation 的 Leave 动画完成（约 300ms）再正式开始
   await new Promise(resolve => setTimeout(resolve, 350))
   console.log('[onDealTiles] Calling startGame API...')
@@ -2864,14 +2902,24 @@ const broadcastMessages = ref<BroadcastMsg[]>([])
 let broadcastId = 0
 const addBroadcast = (text: string, type: BroadcastMsg['type'] = 'info') => {
   const now = Date.now()
-  const d = new Date(now)
-  const timeLabel = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+  const timeLabel = formatBeijingTime(now)
   broadcastMessages.value.push({ id: ++broadcastId, text, type, timestamp: now, timeLabel })
   // 最多保留 20 条
-  if (broadcastMessages.value.length > 20) {
-    broadcastMessages.value = broadcastMessages.value.slice(-20)
+  if (broadcastMessages.value.length > 5) {
+    broadcastMessages.value = broadcastMessages.value.slice(-5)
   }
 }
+
+watch(
+  () => [gameState.value?.phase, (gameState.value as any)?.roundStats?.length ?? 0, gameState.value?.gameId],
+  async ([phase, roundCount, gameId]) => {
+    if (phase !== GamePhase.ENDED || !gameId || !currentPlayer.value?.id) return
+    const settlementKey = `${gameId}-${roundCount}`
+    if (lastAutoSettlementKey.value === settlementKey) return
+    lastAutoSettlementKey.value = settlementKey
+    await onRequestSettle()
+  }
+)
 
 // 追踪上一轮游戏状态，检测变化生成广播
 const prevWinnersCount = ref(0)
@@ -3589,7 +3637,7 @@ const forceDiscard = async (p: Player) => {
   left: 50%;
   transform: translateX(-50%);
   transform-origin: bottom center;
-  width: var(--seat-bottom-width);
+  width: min(var(--seat-bottom-width), calc(100% - 320px));
   min-height: 138px;
   height: auto;
 }
@@ -3627,6 +3675,27 @@ const forceDiscard = async (p: Player) => {
   gap: 14px;
   width: 100%;
   position: relative;
+}
+
+.self-ting-banner {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  max-width: min(80vw, 520px);
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(6, 18, 12, 0.7);
+  border: 1px solid rgba(255, 215, 0, 0.28);
+  color: rgba(255, 247, 209, 0.96);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24);
+  pointer-events: none;
+  z-index: 6;
 }
 
 /* 内联动作按钮组 — 放在手牌右侧 */
@@ -3720,7 +3789,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .inline-action-btn--hu.inline-action-btn--claim-pulse {
-  animation: inline-claim-breathe-strong 0.72s ease-in-out infinite, inline-hu-glow 0.72s ease-in-out infinite;
+  animation: inline-claim-breathe-strong 0.72s ease-in-out infinite, inline-hu-glow 0.72s ease-in-out infinite, heartbeat 1.2s ease-in-out infinite;
 }
 
 @keyframes inline-claim-breathe {
@@ -4007,6 +4076,19 @@ const forceDiscard = async (p: Player) => {
   padding: 8px 0 4px;
   font-weight: 600;
   white-space: nowrap;
+}
+.ting-action-reminder {
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 214, 102, 0.34);
+  border-radius: 10px;
+  background: rgba(75, 54, 10, 0.62);
+  color: #ffd666;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 .turn-timer-inline {
   margin-left: 6px;

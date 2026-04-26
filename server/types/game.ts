@@ -333,6 +333,7 @@ export interface GameState {
   spectatorMode?: { playerId: string; viewingPlayerId: string } | null;
   spectatorViews?: Record<string, SpectatorViewState>;
   spectatorApprovalRequests?: SpectatorApprovalRequest[];
+  trainingRoundStartSnapshot?: any;
   // 吃碰排斥规则状态（每局重置）
   chowPongExclusion?: Record<string, { firstActionSuit: string | null; firstActionType: 'chow' | 'pong' | null }>;
   /** 本回合是否已摸牌（防同回合连续摸牌） */

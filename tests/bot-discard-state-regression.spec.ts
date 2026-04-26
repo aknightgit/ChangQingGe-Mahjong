@@ -163,5 +163,35 @@ ok(
   `concealed=${claimer.hand.concealedTiles.length}, drawn=${pengGame.drawnThisTurn}`
 );
 
+const chowDiscarder = makePlayer('chow-discarder', 13);
+const chowBot = makePlayer('AI-chow-bot', 13);
+const chowGame = makeGame([chowDiscarder, chowBot, makePlayer('chow-filler-a', 13), makePlayer('chow-filler-b', 13)]);
+chowGame.hesitationWindow = 1000;
+const chowTile = tile(TileSuit.CHARACTERS, 3, 'chow-discard-3');
+chowGame.discardPile = [chowTile];
+chowGame.pendingActions = [{
+  playerId: chowBot.id,
+  availableActions: [ActionType.CHOW, ActionType.PASS],
+  tile: chowTile,
+  chowOptions: [['AI-chow-bot-1', 'AI-chow-bot-2', chowTile.id]],
+  expiresAt: Date.now() + 60000,
+}];
+anyManager.games.set(chowGame.gameId, chowGame);
+const originalPersistGame = anyManager.persistGame;
+const originalBroadcastGameState = anyManager.broadcastGameState;
+try {
+  anyManager.persistGame = async () => {};
+  anyManager.broadcastGameState = () => {};
+  await anyManager.handleBotPendingActions(chowGame.gameId);
+  const pending = chowGame.pendingActions.find((pa: any) => pa.playerId === chowBot.id);
+  ok('bot chow pending is preserved for timeout resolution', !!pending, `pending=${JSON.stringify(chowGame.pendingActions)}`);
+  ok('bot chow pending uses bot hesitation window', !!pending?.expiresAt && pending.expiresAt - Date.now() <= 1500, `expiresAt=${pending?.expiresAt}`);
+} finally {
+  anyManager.persistGame = originalPersistGame;
+  anyManager.broadcastGameState = originalBroadcastGameState;
+  anyManager.clearPendingActionTimer(chowGame.gameId);
+  anyManager.games.delete(chowGame.gameId);
+}
+
 console.log(`\nResult: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

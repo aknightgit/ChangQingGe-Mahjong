@@ -358,6 +358,46 @@ const chineseNum = computed(() => {
 }
 
 /* ==================== 万子 ==================== */
+.tile-back-ivory {
+  color: #8f6c2a;
+  overflow: hidden;
+}
+
+.tile-back-capri {
+  color: #d7fbff;
+}
+
+.tile-back-ivory::before,
+.tile-back-ivory::after,
+.tile-back-capri::before,
+.tile-back-capri::after {
+  content: '';
+  position: absolute;
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  height: auto;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 0;
+  border-radius: 50%;
+  background: currentColor;
+  animation: none;
+  pointer-events: none;
+}
+
+.tile-back-ivory::before,
+.tile-back-capri::before {
+  width: 54%;
+  opacity: 0.22;
+}
+
+.tile-back-ivory::after,
+.tile-back-capri::after {
+  width: 24%;
+  opacity: 0.35;
+}
+
 .tile-char-top {
   font-size: 1.5rem;
   font-weight: 900;

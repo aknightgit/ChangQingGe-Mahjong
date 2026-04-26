@@ -67,6 +67,10 @@ export default defineEventHandler(async (event) => {
     });
 
     const availableActions = await gameManager.getAvailableActions(gameId, playerId);
+    const tingPreview = await gameManager.getTingPreviewForPlayer(gameId, playerId).catch(() => ({
+      isTing: false,
+      winningTiles: []
+    }));
 
     // 获取互包关系
     const bailoutRelations = gameManager.getMutualBailoutRelations(gameId);
@@ -76,6 +80,7 @@ export default defineEventHandler(async (event) => {
       data: {
         game: {
           ...game,
+          currentRound: game?.currentRound ?? ((game?.roundStats?.length || 0) + (game?.phase === 'ended' ? 0 : 1)),
           globalMultiplier: getEffectiveGlobalMultiplier(game),
           bailoutRelations,
           players: game!.players.map(p => ({
@@ -87,7 +92,8 @@ export default defineEventHandler(async (event) => {
           }))
         },
         playerView: player?.hand,
-        availableActions
+        availableActions,
+        tingPreview
       }
     };
   } catch (error: any) {

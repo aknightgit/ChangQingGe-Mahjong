@@ -10,6 +10,9 @@
 ### [TODO] Train-001：AI-AK 尽快学会做牌、进听、胡牌
 **优先级**：P0
 
+**配套设计**
+- 详细执行方案见 [AI_AK_ROUTE_EXECUTION_PLAN.md](E:\MyWorkSpace\ChangQingGe-Mahjong\docs\AI_AK_ROUTE_EXECUTION_PLAN.md)
+
 **现状**
 - 主训练入口、参数传递、输出目录、报告生成已基本理顺。
 - 近期已经出现过至少一局真实胡牌，说明主流程不是完全堵死。

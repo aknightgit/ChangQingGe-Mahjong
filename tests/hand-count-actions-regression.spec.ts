@@ -217,6 +217,7 @@ await run('吃牌后落在 before-discard 集合', () => {
   currentGame.pendingActions.push({ playerId: p1.id, availableActions: [ActionType.CHOW], tile: discard, expiresAt: Date.now() + 1000 });
 
   (gameManager as any).executeChowDirectly(currentGame, p1);
+  ok('chow removes claimed tile from discarder discard area', !discarder.hand.discardedTiles.some(t => t.id === discard.id));
   assertBeforeDiscard('吃牌', currentGame, p1);
 });
 
@@ -260,6 +261,8 @@ await run('明杠补牌后落在 before-discard 集合', () => {
   currentGame.pendingActions.push({ playerId: p1.id, availableActions: [ActionType.KONG], tile: discard, expiresAt: Date.now() + 1000 });
 
   (gameManager as any).executeKongDirectly(currentGame, p1, discard.id);
+  ok('kong removes claimed tile from discarder discard area', !discarder.hand.discardedTiles.some(t => t.id === discard.id));
+  ok('明杠后补牌仍标记为已摸牌', currentGame.drawnThisTurn === true, `drawn=${currentGame.drawnThisTurn}`);
   assertBeforeDiscard('明杠补牌', currentGame, p1);
   ok('明杠副露类型正确', p1.hand.exposedMelds[0]?.type === MeldType.KONG, `got ${String(p1.hand.exposedMelds[0]?.type)}`);
   const bailoutCount = (gameManager as any).mutualBailout.get(currentGame.gameId)?.get(p1.id)?.get(discarder.id) || 0;
@@ -311,6 +314,7 @@ await run('吃牌支持指定组合', () => {
   if (!selected) return;
 
   (gameManager as any).executeChowDirectly(currentGame, p1, selected);
+  ok('selected chow removes claimed tile from discarder discard area', !discarder.hand.discardedTiles.some(t => t.id === discard.id));
   const meld = p1.hand.exposedMelds[0];
   const meldIds = meld?.tiles.map(t => t.id).sort().join('|') || '';
   ok('吃牌使用玩家指定组合', meldIds === ['discard-3', 'right-4', 'right-5'].sort().join('|'), `got ${meldIds}`);
@@ -402,8 +406,49 @@ await run('自摸胡时暗手张数保持合法', async () => {
   ok('胡牌动作执行成功', currentGame.phase === GamePhase.ENDED || currentGame.endReason === GameEndReason.LAST_PLAYER);
 });
 
+await run('吃窗口开启后摸牌与吃牌同时可用', async () => {
+  const discarder = player('discarder', [
+    ...seq(1, 'd1'),
+    ...seq(4, 'd2'),
+    ...seq(7, 'd3'),
+    ...pair(TileSuit.DOTS, 1, 'd4'),
+  ]);
+  const claimer = player('claimer', [
+    ...seq(6, 'a'),
+    ...triplet(TileSuit.DOTS, 3, 'dots3'),
+    ...pair(TileSuit.BAMBOOS, 1, 'pair'),
+    tile(TileSuit.CHARACTERS, 1, 'left-1'),
+    tile(TileSuit.CHARACTERS, 2, 'left-2'),
+    tile(TileSuit.CHARACTERS, 4, 'right-4'),
+    tile(TileSuit.CHARACTERS, 5, 'right-5'),
+  ]);
+  const currentGame = game([discarder, claimer, player('f3', []), player('f4', [])], [tile(TileSuit.DOTS, 9, 'wall-draw')]);
+  const discard = tile(TileSuit.CHARACTERS, 3, 'discard-3');
+  currentGame.currentPlayerIndex = 0;
+  currentGame.discardPile.push(discard);
+  currentGame.actionHistory.push({ playerId: discarder.id, type: ActionType.DISCARD, tile: discard, timestamp: Date.now() });
+  (gameManager as any).games.set(currentGame.gameId, currentGame);
+
+  try {
+    (gameManager as any).checkPendingActions(currentGame, discard);
+    ok('chow-only pending immediately hands turn to next player', currentGame.currentPlayerIndex === 1, `current=${currentGame.currentPlayerIndex}`);
+    const actions = await gameManager.getAvailableActions(currentGame.gameId, claimer.id);
+    ok('current player can still chow during hesitation window', actions.includes(ActionType.CHOW), `actions=${actions.join(',')}`);
+    ok('current player can still pass during hesitation window', actions.includes(ActionType.PASS), `actions=${actions.join(',')}`);
+    ok('current player can also draw during hesitation window', actions.includes(ActionType.DRAW), `actions=${actions.join(',')}`);
+
+    (gameManager as any).handlePass(currentGame, claimer);
+    const afterPass = await gameManager.getAvailableActions(currentGame.gameId, claimer.id);
+    ok('timeout/pass on chow does not skip draw', afterPass.includes(ActionType.DRAW), `actions=${afterPass.join(',')}`);
+    ok('timeout/pass keeps turn on the chow player', currentGame.currentPlayerIndex === 1, `current=${currentGame.currentPlayerIndex}`);
+  } finally {
+    (gameManager as any).games.delete(currentGame.gameId);
+  }
+});
+
 console.log(`\n${'='.repeat(50)}`);
 console.log(`测试结果: ${passed} 通过, ${failed} 失败`);
 if (failed > 0) {
   process.exit(1);
 }
+process.exit(0);

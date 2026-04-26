@@ -104,6 +104,10 @@ test(
 
 player.isTing = false;
 (gameManager as any).invalidateWinEvaluationCache(currentGame.gameId, [player.id]);
+const staleFlagPreview = await gameManager.getTingPreviewForPlayer(currentGame.gameId, player.id);
+test('听牌标记延迟时仍返回听牌预览', staleFlagPreview.isTing === true && staleFlagPreview.winningTiles.length > 0);
+player.status = PlayerStatus.LOST;
+(gameManager as any).invalidateWinEvaluationCache(currentGame.gameId, [player.id]);
 const clearedPreview = await gameManager.getTingPreviewForPlayer(currentGame.gameId, player.id);
 test('失去听牌状态后预计算返回空', clearedPreview.isTing === false && clearedPreview.winningTiles.length === 0);
 

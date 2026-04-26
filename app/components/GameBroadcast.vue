@@ -34,7 +34,7 @@ const props = defineProps<{
   messages: BroadcastMessage[]
 }>()
 
-const MAX_VISIBLE = 6
+const MAX_VISIBLE = 5
 
 const visibleMessages = computed(() => {
   return props.messages.slice(-MAX_VISIBLE)

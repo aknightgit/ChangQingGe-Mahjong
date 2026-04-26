@@ -18,7 +18,11 @@ import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculat
 import { randomUUID } from 'crypto';
 import { saveGameState, loadGameState, loadAllGameStates, deleteGameState } from './gamePersistence';
 import { MatchHistoryService } from '../services/matchHistoryService';
+import { TrainingRecordService } from '../services/trainingRecordService';
 import { isBotPlayer, selectDiscardTile, shouldClaimPendingAction } from '../services/botService';
+import { formatBeijingTime } from './beijingTime';
+
+const CHOW_CHOICE_TIMEOUT_MS = 60000;
 
 /**
  * In-memory game state manager
@@ -79,8 +83,37 @@ class GameManager {
       text: `🌸 ${player.name}补花`,
       type: 'info',
       timestamp: Date.now(),
-      timeLabel: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      timeLabel: formatBeijingTime()
     });
+  }
+
+  private broadcastKongSupplement(game: GameState, player: Player, kind: 'ming' | 'an' | 'jia'): void {
+    if (!this.wsManager) return;
+    const label = kind === 'an' ? '暗杠' : kind === 'jia' ? '补杠' : '明杠';
+    this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      text: `🀄 ${player.name}${label}后补牌`,
+      type: 'info',
+      timestamp: Date.now(),
+      timeLabel: formatBeijingTime()
+    });
+  }
+
+  private canPlayerDrawOnCurrentTurn(game: GameState, player: Player): boolean {
+    return game.phase === GamePhase.PLAYING
+      && game.players[game.currentPlayerIndex]?.id === player.id
+      && !game.drawnThisTurn
+      && this.getPlayableTileCount(player) < 14
+      && game.wall.length > 0;
+  }
+
+  private isChowOnlyPendingTurn(game: GameState, playerId: string): boolean {
+    if (game.players[game.currentPlayerIndex]?.id !== playerId) return false;
+    if (game.pendingActions.length === 0) return false;
+    return game.pendingActions.every(pa =>
+      pa.playerId === playerId &&
+      pa.availableActions.every(action => action === ActionType.CHOW || action === ActionType.PASS)
+    );
   }
 
   // Freeze/dealer auto-draw timers(需要在新局开始时清除)
@@ -362,6 +395,33 @@ class GameManager {
     return this.getHesitationWindow(game);
   }
 
+  private isChowChoiceOnlyActions(actions: ActionType[]): boolean {
+    return actions.includes(ActionType.CHOW) &&
+      !actions.some(action => [
+        ActionType.HU,
+        ActionType.PENG,
+        ActionType.KONG,
+        ActionType.CONCEALED_KONG,
+        ActionType.EXTENDED_KONG
+      ].includes(action));
+  }
+
+  private getPendingActionExpiresAt(game: GameState, actions: ActionType[]): number {
+    return Date.now() + (this.isChowChoiceOnlyActions(actions) ? CHOW_CHOICE_TIMEOUT_MS : this.getHesitationWindow(game));
+  }
+
+  private getPendingActionWaitMs(gameId: string): number {
+    const game = this.games.get(gameId);
+    if (!game?.pendingActions.length) return this.getHesitationWaitMs(gameId);
+    const now = Date.now();
+    const nextExpiresAt = Math.min(
+      ...game.pendingActions.map(pa =>
+        typeof pa.expiresAt === 'number' ? pa.expiresAt : now + this.getHesitationWindow(game)
+      )
+    );
+    return Math.max(0, nextExpiresAt - now);
+  }
+
   setWebSocketManager(manager: any) {
     this.wsManager = manager;
   }
@@ -453,7 +513,12 @@ class GameManager {
         // 训练模式(allClaimMode): 等所有pending玩家响应(含bot决策)
         // 实战模式: bot和人类共享同一个hesitationWindow
         const allClaimMode = (game as any).allClaimMode;
-        const pending = [...game.pendingActions];
+        const now = Date.now();
+        const pending = game.pendingActions.filter(pa => !pa.expiresAt || pa.expiresAt <= now);
+        if (pending.length === 0) {
+          this.schedulePendingActionTimeout(gameId);
+          return;
+        }
 
         const resolvedPlayerIds = new Set<string>();
 
@@ -475,17 +540,6 @@ class GameManager {
               await this.resolvePendingAction(game, player, pa);
               resolvedPlayerIds.add(player.id);
             } else {
-              const humanChowChoiceOnly =
-                pa.availableActions.includes(ActionType.CHOW) &&
-                !pa.availableActions.some(action => [
-                  ActionType.HU,
-                  ActionType.PENG,
-                  ActionType.KONG,
-                  ActionType.CONCEALED_KONG,
-                  ActionType.EXTENDED_KONG
-                ].includes(action));
-              if (humanChowChoiceOnly) continue;
-
               // 人类玩家超时没响应 = PASS
               this.handlePass(game, player);
               resolvedPlayerIds.add(player.id);
@@ -503,22 +557,28 @@ class GameManager {
         game.pendingActions = game.pendingActions.filter(pa => !resolvedPlayerIds.has(pa.playerId));
         await this.persistGame(game);
         this.broadcastGameState(gameId);
+        if (game.pendingActions.length > 0) {
+          this.schedulePendingActionTimeout(gameId);
+          return;
+        }
         // 如果所有pending清除后还有当前玩家需要出牌,调度bot出牌
         const currentPlayer = game.players[game.currentPlayerIndex];
-        if (currentPlayer && this.isPlayerBotControlled(currentPlayer) && currentPlayer.hand.concealedTiles.length % 3 === 2) {
+        if (currentPlayer && this.isPlayerBotControlled(currentPlayer) && (currentPlayer.hand.concealedTiles.length % 3 === 2 || this.canPlayerDrawOnCurrentTurn(game, currentPlayer))) {
           this.scheduleBotDiscard(gameId, currentPlayer.id);
         }
         // 如果当前玩家手牌不是2 mod 3,说明claim已执行但后续流程断了,推进到下家
-        if (currentPlayer && currentPlayer.hand.concealedTiles.length % 3 !== 2) {
+        if (currentPlayer && !this.canPlayerDrawOnCurrentTurn(game, currentPlayer) && currentPlayer.hand.concealedTiles.length % 3 !== 2) {
           await this.moveToNextPlayer(game);
         }
       } catch (err) {
         console.error('Failed to auto-resolve pending actions:', err);
       } finally {
         this.actionResolutionLocks.delete(gameId);
-        this.pendingActionTimers.delete(gameId);
+        if (this.pendingActionTimers.get(gameId) === timer) {
+          this.pendingActionTimers.delete(gameId);
+        }
       }
-    }, this.getHesitationWaitMs(gameId))); // 决策犹豫期(训练模式可加速)
+    }, this.getPendingActionWaitMs(gameId))); // 决策犹豫期(训练模式可加速)
 
     this.pendingActionTimers.set(gameId, timer);
   }
@@ -617,6 +677,7 @@ class GameManager {
           return winOptions.length > 0;
         });
         if (filteredHigherActions.length === 0) {
+          if (pa.availableActions.includes(ActionType.CHOW)) continue;
           this.handlePass(game, player);
           continue;
         }
@@ -667,7 +728,16 @@ class GameManager {
       } else {
         // bot 没有高优先级动作 → 清除 bot 的 pending，保留人类的
         const botIds = new Set(game.players.filter(p => this.isPlayerBotControlled(p)).map(p => p.id));
-        game.pendingActions = game.pendingActions.filter(pa => !botIds.has(pa.playerId));
+        game.pendingActions = game.pendingActions.filter(pa =>
+          !botIds.has(pa.playerId) || pa.availableActions.includes(ActionType.CHOW)
+        );
+        const now = Date.now();
+        for (const pa of game.pendingActions) {
+          const pendingPlayer = game.players.find(p => p.id === pa.playerId);
+          if (pendingPlayer && this.isPlayerBotControlled(pendingPlayer) && this.isChowChoiceOnlyActions(pa.availableActions)) {
+            pa.expiresAt = now + this.getHesitationWindow(game);
+          }
+        }
       }
 
       await this.persistGame(game);
@@ -683,6 +753,8 @@ class GameManager {
         // 所有 bot 都 PASS 且没有人类 pending 残留时，必须继续推进回合。
         // 否则会停在弃牌者身上，出现 "Skipped: pending cleared but turn not advanced" 卡死。
         await this.moveToNextPlayer(game);
+      } else {
+        this.schedulePendingActionTimeout(gameId);
       }
     } catch (err) {
       console.error('[BotService] Pending action error:', err);
@@ -772,7 +844,7 @@ class GameManager {
         text: `📣 ${player.name}已经搞了${source.name}两口了！`,
         type: 'special',
         timestamp: Date.now(),
-        timeLabel: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+        timeLabel: formatBeijingTime()
       });
     }
 
@@ -787,7 +859,7 @@ class GameManager {
             text: msg,
             type: 'special',
             timestamp: Date.now(),
-            timeLabel: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+            timeLabel: formatBeijingTime()
           });
         }
       }
@@ -825,6 +897,12 @@ class GameManager {
       if (game.actionHistory[i].type === ActionType.DISCARD) {
         return game.actionHistory[i].playerId;
       }
+    }
+    const lastDiscard = game.discardPile[game.discardPile.length - 1];
+    if (lastDiscard) {
+      const discarder = game.players.find(p => p.hand.discardedTiles.some(t => t.id === lastDiscard.id));
+      if (discarder) return discarder.id;
+      return game.players[game.currentPlayerIndex]?.id;
     }
     return undefined;
   }
@@ -1322,6 +1400,7 @@ class GameManager {
     game.currentPlayerIndex = game.dealerIndex;
     game.phase = GamePhase.PLAYING;
     game.lastActionTime = Date.now();
+    TrainingRecordService.captureRoundStart(game);
 
     console.log(`[WallDebug] after flower replacement: wall=${game.wall.length} tiles, PLAYING phase`);
     await this.persistGame(game);
@@ -1484,6 +1563,13 @@ class GameManager {
           return [...pendingAction.availableActions, ActionType.THINK];
         }
       }
+      if (this.isChowOnlyPendingTurn(game, playerId)) {
+        const actionsWithDraw = [...pendingAction.availableActions];
+        if (this.canPlayerDrawOnCurrentTurn(game, player) && !actionsWithDraw.includes(ActionType.DRAW)) {
+          actionsWithDraw.push(ActionType.DRAW);
+        }
+        return actionsWithDraw;
+      }
       return pendingAction.availableActions;
     }
 
@@ -1518,7 +1604,7 @@ class GameManager {
     // freeze 百搭期间不能出牌(响应其他玩家弃牌),但可以摸牌(自己的回合动作)
     if (currentPlayer.id === playerId) {
       // 有其他玩家在抢牌(pending claim),当前玩家等待决策窗口
-      if (game.pendingActions.length > 0) {
+      if (game.pendingActions.length > 0 && !this.isChowOnlyPendingTurn(game, playerId)) {
         return [];
       }
 
@@ -1593,6 +1679,8 @@ class GameManager {
       const used = game.thinkUsage?.[playerId] ?? 0;
       if (used < maxChances) {
         actions.push(ActionType.THINK);
+      } else {
+        this.schedulePendingActionTimeout(gameId);
       }
     }
 
@@ -1645,11 +1733,15 @@ class GameManager {
       throw new Error('Player not found');
     }
 
-    if (player.status !== PlayerStatus.PLAYING || !player.isTing) {
+    if (player.status !== PlayerStatus.PLAYING) {
       return { isTing: false, winningTiles: [] };
     }
 
-    return this.getCachedTingPreview(game, player);
+    const preview = this.getCachedTingPreview(game, player);
+    if (!preview.isTing && !player.isTing) {
+      return { isTing: false, winningTiles: [] };
+    }
+    return preview;
   }
 
   /**
@@ -1824,6 +1916,11 @@ class GameManager {
           this.scheduleBotDiscard(gameId, currentP.id);
         }
       }
+      if (action === ActionType.PASS && currentP && currentP.status === PlayerStatus.PLAYING && !this.isConcealedDiscardState(currentP)) {
+        await this.moveToNextPlayer(game);
+      } else {
+        this.schedulePendingActionTimeout(gameId);
+      }
     }
 
     this.invalidateWinEvaluationCache(gameId);
@@ -1889,7 +1986,7 @@ class GameManager {
           text: `🃏 ${player.name}打出了百搭，本轮不能吃碰捉冲！`,
           type: 'warn',
           timestamp: Date.now(),
-          timeLabel: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+          timeLabel: formatBeijingTime()
         });
       }
       await this.persistGame(game);
@@ -2463,7 +2560,9 @@ class GameManager {
 
     const discardedTile = pendingAction.tile;
     // 修复BUG:吃牌玩家应该是弃牌者的下家(下一个活跃玩家),不是前一个
-    const nextPlayerAfterDiscarder = this.getNextActivePlayer(game, game.currentPlayerIndex);
+    const sourcePlayerId = this.getLastDiscardPlayerId(game);
+    const discarderIndex = game.players.findIndex(p => p.id === sourcePlayerId);
+    const nextPlayerAfterDiscarder = discarderIndex >= 0 ? this.getNextActivePlayer(game, discarderIndex) : undefined;
     if (!nextPlayerAfterDiscarder || nextPlayerAfterDiscarder.id !== player.id) {
       console.warn(`[CHOW] Not the next player after discarder: expected=${nextPlayerAfterDiscarder?.name}, got=${player.id}`);
       return;
@@ -2475,7 +2574,6 @@ class GameManager {
     const sequence = this.selectChowSequence(sequences, discardedTile, tileIds);
     const handTiles = sequence.filter(t => t.id !== discardedTile.id);
 
-    const sourcePlayerId = this.getLastDiscardPlayerId(game);
     this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.SEQUENCE);
 
     this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
@@ -2502,6 +2600,10 @@ class GameManager {
     // Bug6: 用findIndex找并移除被吃牌
     const cdIdx = game.discardPile.findIndex(t => t.id === discardedTile.id);
     if (cdIdx >= 0) game.discardPile.splice(cdIdx, 1);
+    const discarder = game.players.find(p => p.id === sourcePlayerId);
+    if (discarder) {
+      discarder.hand.discardedTiles = discarder.hand.discardedTiles.filter(t => t.id !== discardedTile.id);
+    }
     game.pendingActions = [];
     game.pengChowConflict = null;
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
@@ -2610,12 +2712,18 @@ class GameManager {
     // Bug6: 用findIndex找并移除被杠牌
     const kgIdx = game.discardPile.findIndex(t => t.id === lastDiscard.id);
     if (kgIdx >= 0) game.discardPile.splice(kgIdx, 1);
+    const discarder = game.players.find(p => p.id === sourcePlayerId);
+    if (discarder) {
+      discarder.hand.discardedTiles = discarder.hand.discardedTiles.filter(t => t.id !== lastDiscard.id);
+    }
     // 点杠积分:出牌者付2分
     player.windScore += 2;
     game.pendingActions = [];
     game.pengChowConflict = null;
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
     this.handleDraw(game, player);
+    game.drawnThisTurn = true;
+    this.broadcastKongSupplement(game, player, 'ming');
   }
 
   /**
@@ -2762,6 +2870,7 @@ class GameManager {
     // Draw supplement tile
     this.handleDraw(game, player);
     game.drawnThisTurn = true;
+    this.broadcastKongSupplement(game, player, 'an');
   }
 
   private handleExtendedKong(game: GameState, player: Player, tileId: string): void {
@@ -2862,6 +2971,7 @@ class GameManager {
     // Draw supplement tile
     this.handleDraw(game, player);
     game.drawnThisTurn = true;
+    this.broadcastKongSupplement(game, player, 'jia');
   }
 
   private resolveRobKongIfNeeded(game: GameState): boolean {
@@ -3034,64 +3144,24 @@ class GameManager {
     }
 
     const remainingActive = game.players.filter(p => p.status === PlayerStatus.PLAYING).length;
-    if (remainingActive <= 1) {
-      this.endRound(game, GameEndReason.LAST_PLAYER);
-      return;
-    }
-
-    // 一炮多响 / 抢杠多响:若还有同张牌可胡玩家,等待其继续响应(在清空pending之前检查)
     const hadPendingForMultiHu = !isSelfDrawn && game.pendingActions.some(
       pa => pa.playerId !== player.id && pa.availableActions.includes(ActionType.HU)
     );
 
-    // 胡牌后解冻:清除其他家的pending(保留可胡的pending给一炮多响)
-    if (!hadPendingForMultiHu) {
-      game.pendingActions = [];
-      delete (game as any)._freezeUntil;
-      this.clearPendingActionTimer(game.gameId);
-    } else {
-      // 一炮多响:只移除已胡玩家的pending,保留其他人
-      game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
-    }
-
-    if (hadPendingForMultiHu) {
-      if (game.multiHuStarterIndex === undefined) {
-        game.multiHuStarterIndex = game.players.findIndex(p => p.id === player.id);
-      }
-      if (isRobbingKong && game.pendingKongClaim) {
-        game.pendingKongClaim.cancelledByHu = true;
-      }
-      return;  // 等待其他可胡玩家响应
-    }
-
-    // 抢杠:若有人胡牌则补杠作废;否则恢复补杠
-    if (isRobbingKong) {
-      game.pendingKongClaim = undefined;
-    } else if (this.resolveRobKongIfNeeded(game)) {
+    if (remainingActive <= 1 || !hadPendingForMultiHu) {
+      this.endRound(game, GameEndReason.LAST_PLAYER);
       return;
     }
 
-    // Continue playing from next active player
-    if (!isSelfDrawn && game.multiHuStarterIndex !== undefined) {
-      const starter = game.multiHuStarterIndex;
-      game.multiHuStarterIndex = undefined;
-      const next = this.getNextActivePlayer(game, starter);
-      if (next) {
-        game.currentPlayerIndex = game.players.findIndex(p => p.id === next.id);
-        this.replaceFlowers(game, next);
-        this.handleDraw(game, next);
-        return;
-      }
+    // 胡牌后解冻:清除其他家的pending(保留可胡的pending给一炮多响)
+    game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
+    if (game.multiHuStarterIndex === undefined) {
+      game.multiHuStarterIndex = game.players.findIndex(p => p.id === player.id);
     }
-
-    // 从胡牌玩家的下家开始继续
-    const winnerIndex = game.players.findIndex(p => p.id === player.id);
-    const nextPlayer = this.getNextActivePlayer(game, winnerIndex);
-    if (nextPlayer) {
-      game.currentPlayerIndex = winnerIndex;
-      console.log(`[handleHu] ${player.name}胡牌,从${nextPlayer.name}继续牌局`);
+    if (isRobbingKong && game.pendingKongClaim) {
+      game.pendingKongClaim.cancelledByHu = true;
     }
-    await this.moveToNextPlayer(game);
+    return;  // 等待其他可胡玩家响应
   }
 
   /**
@@ -3134,7 +3204,7 @@ class GameManager {
         text: `⚔️ ${player.name}造反成功！下把翻倍！`,
         type: 'special',
         timestamp: Date.now(),
-        timeLabel: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+        timeLabel: formatBeijingTime()
       });
     }
   }
@@ -3494,6 +3564,7 @@ class GameManager {
 
   private checkPendingActions(game: GameState, discardedTile: Tile): void {
     game.pendingActions = [];
+    const discarderIndex = game.currentPlayerIndex;
 
     const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
 
@@ -3560,7 +3631,7 @@ class GameManager {
           playerId: player.id,
           availableActions: actions,
           tile: discardedTile,
-          expiresAt: Date.now() + this.getHesitationWindow(game) // 决策犹豫期
+          expiresAt: this.getPendingActionExpiresAt(game, actions) // 决策犹豫期
         });
       }
     }
@@ -3575,7 +3646,7 @@ class GameManager {
       this.prewarmWinEvaluation(game, targetPlayer, 'discard', pending.tile);
     }
 
-    const chowPlayer = this.getNextActivePlayer(game, game.currentPlayerIndex);
+    const chowPlayer = this.getNextActivePlayer(game, discarderIndex);
     if (chowPlayer) {
       const sequences = this.findChowSequences(chowPlayer.hand.concealedTiles, discardedTile, game);
       if (sequences.length > 0) {
@@ -3593,8 +3664,23 @@ class GameManager {
             availableActions: [ActionType.CHOW, ActionType.PASS],
             tile: discardedTile,
             chowOptions,
-            expiresAt: Date.now() + this.getHesitationWindow(game) // 决策犹豫期
+            expiresAt: this.getPendingActionExpiresAt(game, [ActionType.CHOW, ActionType.PASS]) // 决策犹豫期
           });
+        }
+      }
+    }
+
+    if (chowPlayer) {
+      const chowPlayerIndex = game.players.findIndex(p => p.id === chowPlayer.id);
+      if (chowPlayerIndex >= 0) {
+        const chowOnlyPending = game.pendingActions.length > 0
+          && game.pendingActions.every(pa =>
+            pa.playerId === chowPlayer.id &&
+            pa.availableActions.every(action => action === ActionType.CHOW || action === ActionType.PASS)
+          );
+        if (chowOnlyPending) {
+          game.currentPlayerIndex = chowPlayerIndex;
+          game.drawnThisTurn = false;
         }
       }
     }
@@ -3833,7 +3919,7 @@ class GameManager {
             text: `🃏 冷冻解除，现在可以正常吃碰捉冲了！`,
             type: 'info',
             timestamp: Date.now(),
-            timeLabel: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+            timeLabel: formatBeijingTime()
           });
         }
       }
@@ -4401,17 +4487,23 @@ class GameManager {
       specialEvents: specialEvents.length ? specialEvents : undefined
     });
 
+    const latestRoundStat = game.roundStats[game.roundStats.length - 1];
+
     const endedAt = Date.now();
     game.phase = GamePhase.ENDED;
     game.endReason = finalReason;
     game.pendingActions = [];
     game.endedAt = endedAt;
     game.lastActionTime = endedAt;
-    game.customScoringMode = null;
-
     MatchHistoryService.recordMatch(game, finalScores, finalReason).catch((error) => {
       console.error('Failed to persist match history:', error);
     });
+
+    TrainingRecordService.recordRound(game, finalReason, finalScores, latestRoundStat).catch((error) => {
+      console.error('Failed to persist training round record:', error);
+    });
+
+    game.customScoringMode = null;
 
     // 处理下局移除/替换请求
     this.applyPendingChanges(game);
