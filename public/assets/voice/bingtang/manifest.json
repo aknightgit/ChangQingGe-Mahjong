@@ -3,178 +3,423 @@
   "tiles": [
     {
       "key": "feng_east",
-      "text": "东风",
-      "opus": "/assets/voice/bingtang/feng_east.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/feng_east.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/feng_east.opus",
+      "skipped": false
+    },
+    {
+      "key": "feng_east",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/feng_east.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/feng_east.opus",
+      "skipped": false
     },
     {
       "key": "feng_north",
-      "text": "北风",
-      "opus": "/assets/voice/bingtang/feng_north.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/feng_north.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/feng_north.opus",
+      "skipped": false
+    },
+    {
+      "key": "feng_north",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/feng_north.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/feng_north.opus",
+      "skipped": false
     },
     {
       "key": "feng_south",
-      "text": "南风",
-      "opus": "/assets/voice/bingtang/feng_south.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/feng_south.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/feng_south.opus",
+      "skipped": false
+    },
+    {
+      "key": "feng_south",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/feng_south.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/feng_south.opus",
+      "skipped": false
     },
     {
       "key": "feng_west",
-      "text": "西风",
-      "opus": "/assets/voice/bingtang/feng_west.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/feng_west.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/feng_west.opus",
+      "skipped": false
+    },
+    {
+      "key": "feng_west",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/feng_west.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/feng_west.opus",
+      "skipped": false
     },
     {
       "key": "hua_plum",
-      "text": "梅",
-      "opus": "/assets/voice/bingtang/hua_plum.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/hua_plum.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/hua_plum.opus",
+      "skipped": false
+    },
+    {
+      "key": "hua_plum",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/hua_plum.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/hua_plum.opus",
+      "skipped": false
     },
     {
       "key": "jian_bai",
-      "text": "白板",
-      "opus": "/assets/voice/bingtang/jian_bai.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/jian_bai.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/jian_bai.opus",
+      "skipped": false
+    },
+    {
+      "key": "jian_bai",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/jian_bai.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/jian_bai.opus",
+      "skipped": false
     },
     {
       "key": "jian_fa",
-      "text": "发财",
-      "opus": "/assets/voice/bingtang/jian_fa.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/jian_fa.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/jian_fa.opus",
+      "skipped": false
+    },
+    {
+      "key": "jian_fa",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/jian_fa.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/jian_fa.opus",
+      "skipped": false
     },
     {
       "key": "jian_zhong",
-      "text": "红中",
-      "opus": "/assets/voice/bingtang/jian_zhong.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/jian_zhong.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/jian_zhong.opus",
+      "skipped": false
+    },
+    {
+      "key": "jian_zhong",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/jian_zhong.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/jian_zhong.opus",
+      "skipped": false
     },
     {
       "key": "tiao_1",
-      "text": "一条",
-      "opus": "/assets/voice/bingtang/tiao_1.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_1.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_1.opus",
+      "skipped": false
+    },
+    {
+      "key": "tiao_1",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_1.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_1.opus",
+      "skipped": false
     },
     {
       "key": "tiao_2",
-      "text": "二条",
-      "opus": "/assets/voice/bingtang/tiao_2.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_2.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_2.opus",
+      "skipped": false
+    },
+    {
+      "key": "tiao_2",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_2.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_2.opus",
+      "skipped": false
     },
     {
       "key": "tiao_3",
-      "text": "三条",
-      "opus": "/assets/voice/bingtang/tiao_3.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_3.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_3.opus",
+      "skipped": false
+    },
+    {
+      "key": "tiao_3",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_3.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_3.opus",
+      "skipped": false
     },
     {
       "key": "tiao_4",
-      "text": "四条",
-      "opus": "/assets/voice/bingtang/tiao_4.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_4.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_4.opus",
+      "skipped": false
+    },
+    {
+      "key": "tiao_4",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_4.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_4.opus",
+      "skipped": false
     },
     {
       "key": "tiao_5",
-      "text": "五条",
-      "opus": "/assets/voice/bingtang/tiao_5.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_5.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_5.opus",
+      "skipped": false
+    },
+    {
+      "key": "tiao_5",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_5.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_5.opus",
+      "skipped": false
     },
     {
       "key": "tiao_6",
-      "text": "六条",
-      "opus": "/assets/voice/bingtang/tiao_6.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_6.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_6.opus",
+      "skipped": false
+    },
+    {
+      "key": "tiao_6",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_6.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_6.opus",
+      "skipped": false
     },
     {
       "key": "tiao_7",
-      "text": "七条",
-      "opus": "/assets/voice/bingtang/tiao_7.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_7.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_7.opus",
+      "skipped": false
+    },
+    {
+      "key": "tiao_7",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_7.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_7.opus",
+      "skipped": false
     },
     {
       "key": "tiao_8",
-      "text": "八条",
-      "opus": "/assets/voice/bingtang/tiao_8.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_8.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_8.opus",
+      "skipped": false
+    },
+    {
+      "key": "tiao_8",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_8.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_8.opus",
+      "skipped": false
     },
     {
       "key": "tiao_9",
-      "text": "九条",
-      "opus": "/assets/voice/bingtang/tiao_9.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_9.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_9.opus",
+      "skipped": false
+    },
+    {
+      "key": "tiao_9",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_9.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tiao_9.opus",
+      "skipped": false
     },
     {
       "key": "tong_1",
-      "text": "一筒",
-      "opus": "/assets/voice/bingtang/tong_1.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_1.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_1.opus",
+      "skipped": false
+    },
+    {
+      "key": "tong_1",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_1.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_1.opus",
+      "skipped": false
     },
     {
       "key": "tong_2",
-      "text": "二筒",
-      "opus": "/assets/voice/bingtang/tong_2.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_2.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_2.opus",
+      "skipped": false
+    },
+    {
+      "key": "tong_2",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_2.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_2.opus",
+      "skipped": false
     },
     {
       "key": "tong_3",
-      "text": "三筒",
-      "opus": "/assets/voice/bingtang/tong_3.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_3.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_3.opus",
+      "skipped": false
+    },
+    {
+      "key": "tong_3",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_3.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_3.opus",
+      "skipped": false
     },
     {
       "key": "tong_4",
-      "text": "四筒",
-      "opus": "/assets/voice/bingtang/tong_4.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_4.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_4.opus",
+      "skipped": false
+    },
+    {
+      "key": "tong_4",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_4.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_4.opus",
+      "skipped": false
     },
     {
       "key": "tong_5",
-      "text": "五筒",
-      "opus": "/assets/voice/bingtang/tong_5.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_5.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_5.opus",
+      "skipped": false
+    },
+    {
+      "key": "tong_5",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_5.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_5.opus",
+      "skipped": false
     },
     {
       "key": "tong_6",
-      "text": "六筒",
-      "opus": "/assets/voice/bingtang/tong_6.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_6.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_6.opus",
+      "skipped": false
+    },
+    {
+      "key": "tong_6",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_6.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_6.opus",
+      "skipped": false
     },
     {
       "key": "tong_7",
-      "text": "七筒",
-      "opus": "/assets/voice/bingtang/tong_7.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_7.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_7.opus",
+      "skipped": false
+    },
+    {
+      "key": "tong_7",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_7.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_7.opus",
+      "skipped": false
     },
     {
       "key": "tong_8",
-      "text": "八筒",
-      "opus": "/assets/voice/bingtang/tong_8.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_8.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_8.opus",
+      "skipped": false
+    },
+    {
+      "key": "tong_8",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_8.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_8.opus",
+      "skipped": false
     },
     {
       "key": "tong_9",
-      "text": "九筒",
-      "opus": "/assets/voice/bingtang/tong_9.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_9.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_9.opus",
+      "skipped": false
+    },
+    {
+      "key": "tong_9",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_9.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/tong_9.opus",
+      "skipped": false
     },
     {
       "key": "wan_1",
-      "text": "一万",
-      "opus": "/assets/voice/bingtang/wan_1.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_1.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_1.opus",
+      "skipped": false
+    },
+    {
+      "key": "wan_1",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_1.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_1.opus",
+      "skipped": false
     },
     {
       "key": "wan_2",
-      "text": "二万",
-      "opus": "/assets/voice/bingtang/wan_2.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_2.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_2.opus",
+      "skipped": false
+    },
+    {
+      "key": "wan_2",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_2.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_2.opus",
+      "skipped": false
     },
     {
       "key": "wan_3",
-      "text": "三万",
-      "opus": "/assets/voice/bingtang/wan_3.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_3.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_3.opus",
+      "skipped": false
+    },
+    {
+      "key": "wan_3",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_3.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_3.opus",
+      "skipped": false
     },
     {
       "key": "wan_4",
-      "text": "四万",
-      "opus": "/assets/voice/bingtang/wan_4.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_4.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_4.opus",
+      "skipped": false
+    },
+    {
+      "key": "wan_4",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_4.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_4.opus",
+      "skipped": false
     },
     {
       "key": "wan_5",
-      "text": "五万",
-      "opus": "/assets/voice/bingtang/wan_5.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_5.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_5.opus",
+      "skipped": false
+    },
+    {
+      "key": "wan_5",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_5.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_5.opus",
+      "skipped": false
     },
     {
       "key": "wan_6",
-      "text": "六万",
-      "opus": "/assets/voice/bingtang/wan_6.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_6.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_6.opus",
+      "skipped": false
+    },
+    {
+      "key": "wan_6",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_6.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_6.opus",
+      "skipped": false
     },
     {
       "key": "wan_7",
-      "text": "七万",
-      "opus": "/assets/voice/bingtang/wan_7.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_7.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_7.opus",
+      "skipped": false
+    },
+    {
+      "key": "wan_7",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_7.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_7.opus",
+      "skipped": false
     },
     {
       "key": "wan_8",
-      "text": "八万",
-      "opus": "/assets/voice/bingtang/wan_8.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_8.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_8.opus",
+      "skipped": false
+    },
+    {
+      "key": "wan_8",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_8.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_8.opus",
+      "skipped": false
     },
     {
       "key": "wan_9",
-      "text": "九万",
-      "opus": "/assets/voice/bingtang/wan_9.opus"
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_9.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_9.opus",
+      "skipped": false
+    },
+    {
+      "key": "wan_9",
+      "mp3": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_9.mp3",
+      "opus": "/home/node/.openclaw/workspace/ChangQingGe-Mahjong/public/assets/voice/bingtang/wan_9.opus",
+      "skipped": false
     }
   ]
 }
