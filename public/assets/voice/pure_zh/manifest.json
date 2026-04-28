@@ -1,0 +1,180 @@
+{
+  "voice": "Chloe",
+  "tiles": [
+    {
+      "key": "feng_east",
+      "text": "东风",
+      "opus": "/assets/voice/pure_zh/feng_east.opus"
+    },
+    {
+      "key": "feng_north",
+      "text": "北风",
+      "opus": "/assets/voice/pure_zh/feng_north.opus"
+    },
+    {
+      "key": "feng_south",
+      "text": "南风",
+      "opus": "/assets/voice/pure_zh/feng_south.opus"
+    },
+    {
+      "key": "feng_west",
+      "text": "西风",
+      "opus": "/assets/voice/pure_zh/feng_west.opus"
+    },
+    {
+      "key": "hua_plum",
+      "text": "梅",
+      "opus": "/assets/voice/pure_zh/hua_plum.opus"
+    },
+    {
+      "key": "jian_bai",
+      "text": "白板",
+      "opus": "/assets/voice/pure_zh/jian_bai.opus"
+    },
+    {
+      "key": "jian_fa",
+      "text": "发财",
+      "opus": "/assets/voice/pure_zh/jian_fa.opus"
+    },
+    {
+      "key": "jian_zhong",
+      "text": "红中",
+      "opus": "/assets/voice/pure_zh/jian_zhong.opus"
+    },
+    {
+      "key": "tiao_1",
+      "text": "一条",
+      "opus": "/assets/voice/pure_zh/tiao_1.opus"
+    },
+    {
+      "key": "tiao_2",
+      "text": "二条",
+      "opus": "/assets/voice/pure_zh/tiao_2.opus"
+    },
+    {
+      "key": "tiao_3",
+      "text": "三条",
+      "opus": "/assets/voice/pure_zh/tiao_3.opus"
+    },
+    {
+      "key": "tiao_4",
+      "text": "四条",
+      "opus": "/assets/voice/pure_zh/tiao_4.opus"
+    },
+    {
+      "key": "tiao_5",
+      "text": "五条",
+      "opus": "/assets/voice/pure_zh/tiao_5.opus"
+    },
+    {
+      "key": "tiao_6",
+      "text": "六条",
+      "opus": "/assets/voice/pure_zh/tiao_6.opus"
+    },
+    {
+      "key": "tiao_7",
+      "text": "七条",
+      "opus": "/assets/voice/pure_zh/tiao_7.opus"
+    },
+    {
+      "key": "tiao_8",
+      "text": "八条",
+      "opus": "/assets/voice/pure_zh/tiao_8.opus"
+    },
+    {
+      "key": "tiao_9",
+      "text": "九条",
+      "opus": "/assets/voice/pure_zh/tiao_9.opus"
+    },
+    {
+      "key": "tong_1",
+      "text": "一筒",
+      "opus": "/assets/voice/pure_zh/tong_1.opus"
+    },
+    {
+      "key": "tong_2",
+      "text": "二筒",
+      "opus": "/assets/voice/pure_zh/tong_2.opus"
+    },
+    {
+      "key": "tong_3",
+      "text": "三筒",
+      "opus": "/assets/voice/pure_zh/tong_3.opus"
+    },
+    {
+      "key": "tong_4",
+      "text": "四筒",
+      "opus": "/assets/voice/pure_zh/tong_4.opus"
+    },
+    {
+      "key": "tong_5",
+      "text": "五筒",
+      "opus": "/assets/voice/pure_zh/tong_5.opus"
+    },
+    {
+      "key": "tong_6",
+      "text": "六筒",
+      "opus": "/assets/voice/pure_zh/tong_6.opus"
+    },
+    {
+      "key": "tong_7",
+      "text": "七筒",
+      "opus": "/assets/voice/pure_zh/tong_7.opus"
+    },
+    {
+      "key": "tong_8",
+      "text": "八筒",
+      "opus": "/assets/voice/pure_zh/tong_8.opus"
+    },
+    {
+      "key": "tong_9",
+      "text": "九筒",
+      "opus": "/assets/voice/pure_zh/tong_9.opus"
+    },
+    {
+      "key": "wan_1",
+      "text": "一万",
+      "opus": "/assets/voice/pure_zh/wan_1.opus"
+    },
+    {
+      "key": "wan_2",
+      "text": "二万",
+      "opus": "/assets/voice/pure_zh/wan_2.opus"
+    },
+    {
+      "key": "wan_3",
+      "text": "三万",
+      "opus": "/assets/voice/pure_zh/wan_3.opus"
+    },
+    {
+      "key": "wan_4",
+      "text": "四万",
+      "opus": "/assets/voice/pure_zh/wan_4.opus"
+    },
+    {
+      "key": "wan_5",
+      "text": "五万",
+      "opus": "/assets/voice/pure_zh/wan_5.opus"
+    },
+    {
+      "key": "wan_6",
+      "text": "六万",
+      "opus": "/assets/voice/pure_zh/wan_6.opus"
+    },
+    {
+      "key": "wan_7",
+      "text": "七万",
+      "opus": "/assets/voice/pure_zh/wan_7.opus"
+    },
+    {
+      "key": "wan_8",
+      "text": "八万",
+      "opus": "/assets/voice/pure_zh/wan_8.opus"
+    },
+    {
+      "key": "wan_9",
+      "text": "九万",
+      "opus": "/assets/voice/pure_zh/wan_9.opus"
+    }
+  ]
+}

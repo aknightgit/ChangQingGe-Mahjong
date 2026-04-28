@@ -441,6 +441,11 @@
                     <div class="glass-toggle-knob"></div>
                   </div>
                 </div>
+                <div class="glass-settings-row" @click="cycleVoiceScheme">
+                  <span class="glass-settings-icon">🗣️</span>
+                  <span class="glass-settings-label">出牌音色</span>
+                  <span class="glass-voice-name">{{ currentVoiceName }}</span>
+                </div>
                 <div class="glass-settings-theme-block">
                   <div class="glass-settings-theme-title">🎵 背景音乐</div>
                   <div class="glass-settings-row" @click="setBackgroundMusicEnabled(!bgmEnabled)">
@@ -921,6 +926,7 @@ import { useBackgroundMusic } from '~/composables/useBackgroundMusic'
 import { buildDiscardGuardSnapshot, shouldReleasePendingDiscardGuard, type DiscardGuardSnapshot } from '~/utils/discardGuard'
 import { collectClaimedDiscardIds, filterVisibleDiscards } from '~/utils/discardVisibility'
 import { formatBeijingTime } from '~/utils/beijingTime'
+import { useVoiceTile, type VoiceScheme } from '~/composables/useVoiceTile'
 import { ActionType, GamePhase, GameEndReason, type Tile, type Meld, type Player } from '~/types/game'
 
 const PENDING_ROOM_STORAGE_KEY = 'mahjong.pendingRoomTarget'
@@ -979,8 +985,15 @@ const {
   next: playNextBackgroundTrack
 } = useBackgroundMusic()
 
+const { loadVoiceScheme, playVoiceTile, currentScheme, currentVoiceName } = useVoiceTile()
+
 const toggleSound = () => {
   setSoundEnabled(!soundEnabled.value)
+}
+const cycleVoiceScheme = async () => {
+  const next = currentScheme.value === 'bingtang' ? 'pure_zh' : 'bingtang'
+  await loadVoiceScheme(next)
+  try { localStorage.setItem('mahjong.voiceScheme', next) } catch {}
 }
 const bgmVolumePercent = computed(() => Math.round((bgmVolume.value ?? 0.5) * 100))
 const onChangeBgmTrack = (event: Event) => {
@@ -1080,6 +1093,8 @@ onMounted(() => {
   window.addEventListener('mahjong-realtime-state', handleRealtimeState as EventListener)
   ensureBackgroundMusicInitialized()
   if (bgmEnabled.value) playBackgroundMusic()
+  // 加载出牌语音（默认冰糖音色）
+  loadVoiceScheme('bingtang').then(() => preloadAllTiles())
   try {
     const savedTheme = localStorage.getItem('mahjong.tableTheme') as 'classic-green' | 'jade-green' | 'royal-red' | null
     if (savedTheme === 'classic-green' || savedTheme === 'jade-green' || savedTheme === 'royal-red') {
@@ -2010,6 +2025,8 @@ const commitDiscard = (tile: Tile) => {
   selectedTileId.value = null
   resetAutoCount()
   playSound('tile-discard')
+  // 出牌念牌
+  if (tile.suit) playVoiceTile(tile.suit, tile.value)
   void executeAction(ActionType.DISCARD, tile.id).then((success) => {
     if (success) return
     pendingDiscardTileId.value = null
@@ -2979,6 +2996,9 @@ const handleRealtimeState = (e: Event) => {
   if (discardCount > prevRealtimeDiscardCount.value) {
     lastFastDiscardAt.value = Date.now()
     playSound('tile-discard')
+    // 念其他玩家出的牌
+    const lastTile = detail?.discardPile?.[discardCount - 1]
+    if (lastTile?.suit) playVoiceTile(lastTile.suit, lastTile.value)
   }
   prevRealtimeDiscardCount.value = discardCount
 }
@@ -3014,7 +3034,12 @@ const checkOtherPlayerSounds = (newState: any) => {
           else playSound('tile-chow')
         }
       }
-      if (player.id !== currentPlayer.value?.id && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) playSound('tile-discard')
+      if (player.id !== currentPlayer.value?.id && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
+        playSound('tile-discard')
+        const newDiscards = (player.hand?.discardedTiles || []).slice(prev.discardCount)
+        const lastNew = newDiscards[newDiscards.length - 1]
+        if (lastNew?.suit) playVoiceTile(lastNew.suit, lastNew.value)
+      }
     }
     prevOtherPlayerState.set(player.id, { meldCount, discardCount, replacedFlowerCount })
   }
@@ -5703,6 +5728,19 @@ const forceDiscard = async (p: Player) => {
 .layout-debug .action-buttons,
 .layout-debug .inline-action-buttons {
   outline: 2px solid #ff0000 !important;
+}
+
+
+
+/* 语音名称标签（设置面板） */
+.glass-voice-name {
+  font-size: 12px;
+  color: #a8d8ea;
+  margin-left: auto;
+  font-weight: 500;
+  padding: 2px 8px;
+  background: rgba(168, 216, 234, 0.12);
+  border-radius: 10px;
 }
 
 </style>
