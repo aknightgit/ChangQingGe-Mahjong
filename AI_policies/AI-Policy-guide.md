@@ -1,248 +1,595 @@
 # AI Policy Guide
 
-## Purpose
+## 目的
 
-This guide is the canonical reference for AI policy iteration, route tuning, and training evaluation.
-Future AI-AK optimization should follow this guide instead of using scattered notes in temporary plans.
+本文档是长清阁麻将 编写AI 策略、做牌指导、训练验收的唯一正式依据。
+后续 AI-AK 以及其他角色 AI 的出牌、吃碰、听牌、风险控制、训练指标设计，都以本文件为准，不再以零散临时计划作为准绳。
 
-## Core Principle
+## 适用范围
 
-Do not rewrite the route system casually.
-Optimize within the existing route framework first:
+- 适用于长清阁麻将规则下的 AI 决策设计
+- 适用于实战 bot 逻辑与训练器策略评估
+- 适用于 AI 做牌教学、调参、回归测试与策略验收
 
-- `MENQING_SPEED`
-- `OPEN_SPEED`
-- `HALF_FLUSH`
-- `ALL_PUNGS`
-- `HONOR_HEAVY`
+## 规则前提
 
-The first priority is to make route execution stable, interpretable, and aligned with the intended human-designed style.
+本指南建立在长清阁麻将既有规则之上，尤其强调以下事实：
 
-## AI-AK Target Style
+- AI 不是做普通麻将通用策略，而是做长清阁定制策略
+- 胡牌目标不是“随便成胡”，而是围绕长清阁有效牌型与得分结构决策
+- 长清阁里门清、碰碰胡、混一色、清一色、风一色、风碰、无花自摸、百搭利用、互包关系，都会影响路线选择
+- AI 必须同时考虑成牌速度、牌型收益、放铳风险、他家进度、剩余牌量
 
-AI-AK is not a random safety bot and not a simplistic honor-dump bot.
-Its style should be:
+## 总原则
 
-- clear route commitment
-- recognizable early-game structure building
-- restrained but purposeful opening
-- preference for shape quality over noisy early claims
-- route-consistent discard order instead of generic heuristic cleanup
+当前系统的核心问题，不是单点细节不够，而是缺少稳定的阶段化主脑。
+后续所有策略必须遵循以下统一框架：
 
-### Expected early-game behavior
+1. 阶段判断
+2. 路线评分
+3. 动作约束
+4. 弃牌精排
+5. 听牌与风险收益优化
 
-In the opening stage, AI-AK should usually:
+禁止继续把 AI 设计成“看到能吃就吃、看到能碰就碰、局部加一点权重就算完成”的拼凑系统。
+所有吃碰、弃牌、守门清、追大牌、防止放铳，都必须从当前路线出发解释得通。
 
-- preserve menqing unless claim value is clear
-- avoid defaulting to discard winds/dragons just because they are singletons
-- first remove obvious weak number waste when such waste exists
-- avoid noisy early chow/peng that does not clearly improve route speed or route value
-- keep discard order explainable from route choice
+**弃牌服务路线原则**：弃牌不是孤立行为，所有的弃牌都是为了路线选择服务的。每张弃牌都必须能回答：它强化了哪条路线、它放弃了哪条路线、为什么在这个阶段弃这张而不是那张。
 
-### What AI-AK should not do
+## AI 目标风格
 
-- opening with habitual `东 / 中 / 北 / 西 / 发 / 白` cleanup regardless of shape
-- opening the hand too early with low-value chow/peng
-- flipping route frequently
-- claiming tiles that do not improve shanten-like state, ready draws, or route strength
-- behaving like a generic discard heuristic instead of a route-driven character
+AI-AK 的目标不是保守发呆，也不是无脑激进，而是具备以下风格：
 
-## Route Intent
+- 开局稳，先看结构，不乱拆、不乱吃碰
+- 中盘准，能够判断主方向，并持续围绕该方向做牌
+- 冲刺狠，进听前后能在速度、番数、风险之间做清晰权衡
+- 行为稳，路线不能频繁抖动，弃牌顺序必须能解释
+- 有牌感，能利用上家、下家、两边对手和场面信息调整策略
 
-### MENQING_SPEED
+## 四层决策框架
 
-Intent:
+### 1. 阶段层
 
-- preserve closed-hand structure
-- improve shape efficiently
-- break menqing only when speed gain is real
+每巡先判断当前属于哪个阶段。
 
-Rules:
+#### 开局观察期
 
-- early claim must require clear gain
-- claim should usually reduce shanten-like pressure or materially improve effective draws
-- honor claims in opening should be stricter than mid/late claims
+定义：前 1 到 5 巡。
 
-### OPEN_SPEED
+目标：
 
-Intent:
+- 观察自身结构
+- 观察上家不要什么门
+- 观察其他两家是否已有明显做牌方向
+- 优先保留长门、对子、搭子、百搭、潜力风箭
+- 默认保留门清概念
 
-- accelerate once hand structure already supports fast completion
+#### 中盘定向期
 
-Rules:
+定义：前 6 到 10 巡。
 
-- opening is acceptable only when route already supports tempo conversion
-- avoid fake speed where opening reduces long-term improvement
+目标：
 
-### HALF_FLUSH
+- 评估他家速度与牌型倾向
+- 给候选路线重新打分
+- 从观察期的弱倾向转为主路线锁定
+- 明确自己是守门清、转混清一色、转碰碰胡，还是转风一色/风碰
 
-Intent:
+#### 冲刺期
 
-- concentrate into one suit plus honors
+定义：进听前后，或者手牌已接近成型时。
 
-Rules:
+目标：
 
-- discard off-suit numbers early
-- honor support is acceptable
-- do not break target suit discipline casually
+- 优化听口数
+- 优化剩余张数
+- 优化预期番数
+- 判断是否值得继续守门清
+- 判断是否值得破门清追捉冲或快速收口
 
-### ALL_PUNGS
+#### 防守/止损期
 
-Intent:
+定义：任一时刻，只要满足高危条件即可进入。
 
-- favor pair/triplet conversion
+高危条件示例：
 
-Rules:
+- 他家吃碰明显过快
+- 下家连续吃碰，且对我方出牌有压制
+- 他家牌面已显著做大
+- 我方当前路线回报比极低
 
-- peng/kong can be aggressive
-- chow is generally route-breaking
+目标：
 
-### HONOR_HEAVY
+- 降低无意义冒险
+- 允许回退高收益低命中路线
+- 必要时优先安全张、熟张、低放铳牌
+- 极端情况下允许“有胡不接”或主动放弃低收益捉冲
 
-Intent:
+### 2. 路线评分层
 
-- preserve honor-heavy value routes
+每巡都要给候选路线打分，但路线切换必须缓慢，不能抖动。
 
-Rules:
+#### 固定候选路线
 
-- number chow should be rejected
-- honor claims may be encouraged
-- this route must be rare and explainable, not accidental
+- `MENQING_SPEED`：门清平推，闭门成型
+- `OPEN_SPEED`：确定需要提速后的快速吃碰成型
+- `HALF_FLUSH`：混一色/清一色方向，围绕一门集中
+- `ALL_PUNGS`：碰碰胡方向，以对子、刻子、大吊为核心
+- `HONOR_HEAVY`：风一色/风碰方向，以风箭牌密度和外部剩余量为核心
 
-## Opening Discipline
+#### 路线评分输入
 
-Opening discipline is the highest-risk area and must be protected.
+每巡评分时，至少考虑以下因素：
 
-### Opening stage definition
+- 最长门长度
+- 次长门长度
+- 最短门废牌数量
+- 对子数量
+- 刻子数量
+- 搭子质量
+- 百搭数量与可塑性
+- 风箭牌数量与密度
+- 是否持有 8 张及以上风箭牌含百搭
+- 某一门加百搭加风箭是否可达到 7 张以上
+- 某一门加百搭加风箭是否可达到 9 张以上
+- 上家明确不做哪一门
+- 其他两家是否明显不做哪一门
+- 下家是否已经对我方形成吃碰压力
+- 他家是否已吃碰 2 次以上
+- 他家是否已明显在做某一门并开始打风向
+- 我方是否只有 3 张左右废牌，具备强门清条件
 
-Treat these as opening indicators:
+#### 路线评分基准
 
-- concealed hand still around 11 to 14 tiles
-- no exposed melds yet
-- route still in observation or early commitment
+`MENQING_SPEED` 倾向更高的典型条件：
 
-### Opening discard priorities
+- 长门明显清晰
+- 搭子与对子结构完整
+- 手牌本身壮（主门≥7张且对子≥2对）
+- 废牌仅 2 到 3 张
+- 场面节奏不快
+- 吃碰带来的收益不足以覆盖破门清成本
 
-Prefer this order:
+**特别强调：门清不是默认必须保留的美德，除非手牌本身强（满足上述≥3条件），否则不要美化门清、硬守门清。**
 
-1. obvious weak number waste
-2. off-route suit waste
-3. structurally isolated terminal waste
-4. isolated honors only when number waste is not clearly worse
+`OPEN_SPEED` 倾向更高的典型条件：
 
-### Opening claim rules
+- 他家明显更快
+- 我方若继续守门清容易失速
+- 吃碰后可明显缩短成型路径
+- 吃碰后不会严重破坏后续听牌质量
 
-Early chow/peng should require at least one of:
+`HALF_FLUSH` 倾向更高的典型条件：
 
-- lower shanten-like value
-- clearly higher ready-draw count
-- clearly higher improving-draw count
-- strong route gain
-- explicit route-consistent conversion into `ALL_PUNGS`, `HALF_FLUSH`, or strong `OPEN_SPEED`
+- 某一门加百搭加风箭达到 7 张以上
+- 若达到 9 张以上，则应积极转向
+- 目标门搭子质量高
+- 其余两门废牌较集中，容易清理
+- 上家明显不做该门，或外部竞争小
 
-Do not open just because:
+`ALL_PUNGS` 倾向更高的典型条件：
 
-- the tile is claimable
-- the route score is only slightly higher
-- an honor pair looks superficially attractive
+- 手牌对子 4 对以上且有百搭时，应非常积极
+- 手牌对子 3 对以上且有百搭时，应尝试并保留副路线
+- 下家已吃碰我方 2 口以上，或他家速度明显快时，碰碰胡价值上升
+- 手里顺子价值低、对子价值高
 
-## Training Metrics
+`HONOR_HEAVY` 倾向更高的典型条件：
 
-Training should not be judged by win rate alone.
+- 风箭加百搭已达到 9 到 10 张范围
+- 外面风箭仍然很多，碰牌空间较大
+- 数字牌结构差，风箭路线更可解释
+- 若只剩 1 到 2 张非风箭废牌且手牌极强，也可考虑门清风一色/风碰
 
-The following metrics matter:
+#### 路线锁定机制
+
+必须引入 `routeState` 与 `lockStrength` 概念。
+
+规则：
+
+- 开局观察期只允许弱锁定
+- 中盘定向期允许中等锁定
+- 路线一旦领先到阈值，应进入锁定或半锁定
+- 除非连续数巡证据反转，否则不允许频繁换线
+- `routeFlipCount` 必须被视为关键负面指标
+
+### 3. 动作约束层
+
+路线选完后，不是简单加点权重，而是直接限制行为空间。
+
+所有吃、碰、杠、过、弃牌，都先判断是否符合当前路线，再判断收益是否比 `PASS` 明显更好。
+
+#### MENQING_SPEED 约束
+
+- 默认不吃不碰
+- 只有在吃碰后明显缩短成牌时间，且他家明显更快时，才允许破门清
+- 开局期对风牌碰、数字牌吃都要更严格
+- 若只是微弱收益，不得破门清
+
+#### OPEN_SPEED 约束
+
+- 允许积极吃碰，但前提是路线已确定要提速
+- 不允许假提速，即表面缩短向听，实则破坏后续听口与番型
+- 每次吃碰都要验证：是否真的比过牌更快、更稳
+
+#### HALF_FLUSH 约束
+
+- 非目标门牌张进入高优先弃牌区
+- 目标门搭子、对子权重上升
+- 若决定做混一色/清一色，必须坚决清掉其他两门
+- 可以拆短门对子，但不能轻易拆目标门核心
+- 吃碰只服务于目标门收束，不服务于无关提速
+
+#### ALL_PUNGS 约束
+
+- 对子、刻子、百搭价值大幅提高
+- 顺子价值下降
+- 吃通常视为路线破坏行为
+- 碰、杠意愿上升，但仍需考虑是否暴露过早、是否降低听牌质量
+- 若大吊潜力明确，可为大吊路线做准备
+
+#### HONOR_HEAVY 约束
+
+- 风箭牌保留优先级大幅上升
+- 数字牌吃通常应拒绝
+- 风箭碰牌意愿提高
+- 若场外风箭剩余少，需及时降权，避免死守无效路线
+- 只有在牌山支持、结构合理时才可长期坚持该路线
+
+### 4. 弃牌精排层
+
+弃牌不再只看局部 heuristic，必须在当前路线约束下做总分排序。
+
+每张候选弃牌至少计算以下维度：
+
+- 成型收益：是否改善向听、有效进张、进听速度
+- 路线一致性：是否破坏长门、对子、目标门、风箭核心
+- 安全性：是否熟张，是否更不容易点给下家或明显做大的对手
+- 回报比：未来番型、剩余牌数、自摸收益、捉冲收益、门清价值
+
+#### 开局观察期弃牌原则
+
+**核心原则：弃牌顺序按优先级 A→B→C→D→E 执行，所有弃牌都必须能解释为路线服务。**
+
+初期弃牌优先级（手牌≥11张时激活，按顺序优先）：
+
+**A. 上家明显选择的方向，且我方较弱的一门**
+- 判断上家弃牌的花色分布，识别上家明显不做的门
+- 若上家在该门上已弃≥2张，且我方这门也弱（张数少、结构差），则该门优先清理
+
+**B. 最短门外面已出现过的孤张**
+- 最短门（数牌张数最少的一门）的单张
+- 且该牌已在弃牌池或别人碰杠中出现过≥1张
+- 说明该牌几乎不可能进张，优先弃
+
+**C. 最短门孤张（外面未出现）**
+- 最短门的单张
+- 外面尚未出现，可留一张观察，但若有多张则优先按B→C顺序清理
+
+**D. 做不了风一色时，外面已出现较多的风向牌**
+- 若风箭密度不足以支撑风一色路线（<8张），则风向牌视为普通废张
+- 若某风向牌已在弃牌池出现≥3张，说明该风已成危险边张，优先弃
+
+**E. 次短门废张**
+- 次短门的废牌（孤立张、非搭子连接张）
+
+积极保留：
+
+- 百搭
+- 最长门
+- 上家明确不做的门
+- 其余三家都不做的数字牌
+- 持有 8 张以上的风箭牌含百搭
+- 对子与优质搭子
+
+**严禁行为（与第4条对应）：**
+- 禁止因为能吃碰就过早破门清（破门清的条件是：手牌本身不壮，且吃碰收益明显）
+- 禁止“明显没有强大牌力，还在坚持做门清、不吃碰”——这与美化门清是同一类错误
+- 看到单张风箭就习惯性先打
+- 没有路线依据地乱拆对子
+
+#### 中盘定向期弃牌原则
+
+若选择 `HALF_FLUSH`：
+
+- 坚决清掉其他两门
+- 可以拆短门对子
+- 优先跟打熟张
+- 优先打下家低概率吃碰的牌
+
+若选择 `ALL_PUNGS`：
+
+- 坚决保留对子、刻子、百搭
+- 主动打掉顺子型低价值牌
+- 跟打熟张
+- 主动打多家已确定在做的门
+- 保留所有家不做的门的生张作为未来可塑性
+
+若选择 `HONOR_HEAVY`：
+
+- 积极保留风箭与百搭
+- 风牌碰牌意愿增强
+- 非风箭废牌优先清理
+- 若手牌已极强且仅剩 1 到 2 张废牌，可保留门清概念
+
+若选择 `MENQING_SPEED`：
+
+- 继续保长门、对子、优质搭子
+- 保持闭门质量
+- 弃牌顺序以去废留形为主，不盲目追大
+
+#### 冲刺期弃牌原则
+
+必须精细化比较：
+
+- 听口数
+- 剩余张数
+- 预期番数
+- 是否保留门清
+- 是否更利于自摸
+- 是否更利于捉冲
+- 是否放大放铳风险
+
+**一般规则（听牌面广时优先自摸）：**
+- 听牌可胡张数≥12张，且剩余牌量充足，且外面风险不大（无明显高压家）→ 优先等待自摸，不急于吃碰加速
+- 听牌张数少（<8张），或外面风险大（高压家已成型），或局面倍数高 → 优先安全张，可接受捉冲或快速收口
+- 回报比高，则优先保门清或保大番
+- 回报比一般但他家快，则允许破门清快速收口
+- 回报比极低且他家牌面极大，则优先安全张，甚至允许主动不胡
+
+## 阶段化实战细则
+
+### 开局 1 到 5 巡
+
+这是观察期，不是乱冲期。
+
+要求：
+
+- 先看自己最长门、对子、风箭密度、百搭分布
+- 先看上家不要什么门
+- 兼顾防守下家
+- 先保结构，再决定路线
+- 没有特别强证据时，默认主路线是 `MENQING_SPEED`
+
+典型高分开局特征：
+
+- 只有 3 张左右废牌，可强保门清
+- 对子 4 对且有百搭，可强推 `ALL_PUNGS`
+- 某一门加百搭加风箭超过 9 张，可积极推 `HALF_FLUSH`
+- 风箭达到 8 张以上且外部剩余量足，可预热 `HONOR_HEAVY`
+
+### 中盘 6 到 10 巡
+
+这是定方向的关键区。
+
+要求：
+
+- 判断他家是否已经吃碰 2 次以上
+- 判断他家是否已经明显做一门
+- 判断我方继续守门清是否值得
+- 判断是否要坚定转向清混一色、碰碰胡、风一色/风碰
+
+核心原则：
+
+- 方向一旦确定，不要每两巡换一次
+- 吃碰必须服务于方向
+- 弃牌必须围绕方向持续清理
+
+### 冲刺与听牌优化区
+
+要求：
+
+- 不只看向听，还要看收益和风险
+- 让自己听口更多，或让听口更大、更安全
+- 计算剩余张数与场面可行性
+- 兼顾无花自摸、混一色 10 点、清一色、碰碰胡等长清阁收益结构
+
+## 五毒散与造反
+
+开局阶段必须先判断是否具备五毒散造反潜力。
+
+这部分不要求所有局都强行追求，但必须存在专项评估入口：
+
+- 能否造反
+- 造反成功后的预期收益是否显著高于常规路线
+- 若造反路线失败，是否会严重拖慢主线成牌
+
+五毒散相关判断，属于开局阶段的附加高收益分支，不能替代基础路线系统，但必须被纳入开局评分。
+
+## 吃碰决策总规则
+
+吃碰判断必须改为二段式：
+
+1. 是否符合当前路线
+2. 吃碰后是否比 `PASS` 明显更好
+
+只有两个条件都成立，才允许执行吃碰。
+
+### 吃碰互斥原则
+
+**核心规则：碰/杠之后只能同门吃，不允许跨门吃。**
+
+已执行碰/杠后，手牌已暴露该门方向，此时吃另一个花色的顺子会：
+- 破坏已建立的门向一致性
+- 造成手牌结构性混乱
+- 与"弃牌服务路线"原则相悖
+
+因此，若已有明面子（碰/杠），CHOW 时必须检查：claimTile 花色是否与已有面子花色一致。不一致时，视为违反互斥原则，强制压制吃牌意愿。
+
+### 吃第一口时的额外门槛
+
+**吃第一口之前，必须同时满足以下条件才算"确定做清/混一色、最优门"：**
+
+1. 手牌中主门（目标花色）数牌≥6张
+2. claimTile 花色即为目标最优门（不是次优门）
+3. 吃后不破坏已存在的对子/刻子
+
+不满足时，即使满足互斥原则，也大幅压低吃牌意愿。
+
+### 严禁的坏吃碰
+
+以下行为记为坏吃碰，训练中必须重罚：
+
+- 仅因为可吃可碰就吃碰
+- 吃碰后没有明显缩短成型路径
+- 吃碰后破坏当前主路线
+- 吃碰后降低听牌质量或番型上限
+- 开局期为微小收益破门清
+- **明显没有强大牌力，还坚持做门清不吃碰**——这是当前系统最常见的错误，与"无意义破门清"同等严重
+- 吃碰时违反互斥原则（碰后跨门吃）
+- 吃第一口时不满足门力门槛（主门不足6张，或不是最优门）
+
+## 听牌与收益风险比
+
+进入冲刺区后，AI 必须建立风险回报比概念。
+
+每个候选听牌方案，至少评估：
+
+- 听口数量
+- 听牌剩余张数
+- 预期番数
+- 自摸收益
+- 捉冲收益
+- 放铳风险
+- 他家牌型压力
+- 门清保留价值
+
+策略要求：
+
+- **听牌可胡张数≥12张，且外面风险不大时 → 优先等待自摸**，不急于吃碰加速
+- 回报比高，优先保门清或大牌
+- 回报比一般，且他家快，优先快速成型
+- 回报比极低，且外部高危，优先防守和止损
+
+## 训练验收指标
+
+训练不能只看胡牌率或总胜率，必须增加路线与行为指标。
+
+### 基础指标
+
+- `huRate`
+- `drawRate`
+- `selfDrawRate`
+- `discardWinRate`
+- `menqingWinRate`
+- `bigHandRate`
+
+### 路线指标
 
 - `routeCommitRate`
-- `routeFlipPerGame`
+- `routeFlipCount`
+- `menqingHoldTurns`
+- `forcedOpenRate`
 - `badOpenRate`
-- hu rate
-- draw rate
-- self-draw / discard-win balance
-- menqing win rate
-- big-hand rate
+- `deadHandRate`
 
-### Metric interpretation
+### 听牌质量指标
+
+- `tingQuality`
+- 平均听口数
+- 平均剩余张数
+- 平均预期番数
+
+### 指标解释
 
 `routeCommitRate`
 
-- should be stable, but not artificially locked at extreme levels
-- too low means no route identity
-- too high with poor outcomes may indicate rigid route fixation
+- 太低表示没有主见
+- 太高但结果差，表示僵死锁线
 
-`routeFlipPerGame`
+`routeFlipCount`
 
-- should stay low
-- repeated flips usually mean weak route confidence or noisy heuristics
+- 必须低
+- 高频换线代表路线系统不稳定
+
+`menqingHoldTurns`
+
+- 用来衡量门清是否被莫名其妙破坏
+
+`forcedOpenRate`
+
+- 衡量在外部高压下主动破门清的占比
+- 该指标合理上升是允许的
 
 `badOpenRate`
 
-- this is a key guardrail
-- any opening that breaks menqing without clear structural gain should count as suspicious
-- this metric must remain heavily penalized in training
+- 关键红线指标
+- 所有无显著收益的破门清都应计入可疑开门
 
-### Current guidance
+`deadHandRate`
 
-- keep strong penalty on `badOpenRate`
-- treat `0 hu / all draw` results as route execution failure, not acceptable stability
-- do not allow training to optimize for cosmetic route consistency while losing all finishing power
+- 中盘锁线后无法收口的比例
+- 可用于识别过早锁线或错误追大
 
-## Live Policy vs Training Policy
+## 训练验收门槛
 
-Live bot logic and training evaluator must stay aligned.
+必须建立对照组，不允许只看单一版本自我感觉良好。
 
-Whenever opening or discard logic changes:
+推荐固定对照：
 
-- update live route discard/claim logic
-- update training discard/claim logic if it mirrors the same decision family
-- add or update regression tests
+- `baseline-menqing-only`
+- `AI-AK-current`
+- `AI-AK-route-v1`
 
-Do not let training converge toward a behavior that live bot logic actively rejects.
+底线要求：
 
-## Regression Requirements
+- 如果一个版本在 1000 局里连基础门清胡牌都明显偏低，说明主脑没有立住
+- 如果路线更稳定，但胡牌能力明显消失，视为失败
+- 如果坏吃碰下降、路线更清晰、门清胡牌恢复、流局率下降，才算正向改进
 
-Every significant policy adjustment should try to preserve or add tests for:
+## 实战逻辑与训练逻辑一致性
 
-- AI-AK opening does not default to dumping single honors before obvious number waste
-- route-blocked early chow is rejected
-- all-pungs route blocks chow and supports peng
-- honor-heavy route rejects number claims
-- ting preview and settlement regressions remain unaffected by AI policy changes
+实战 bot 与训练器必须使用同一套方向哲学。
 
-## Iteration Method
+要求：
 
-Use this sequence for future work:
+- live bot 的路线约束与训练器评分要一致
+- 不允许训练鼓励的行为，在实战里又被否定
+- 每次调整吃碰或弃牌逻辑，都要同步更新训练侧诊断与回归项
 
-1. identify one behavior-level problem
-2. determine whether it is a discard issue, route issue, or claim issue
-3. make the smallest route-consistent fix
-4. run targeted regression tests
-5. run quick `1 * 20` training/evaluation
-6. inspect logs for behavioral change, not just summary metrics
-7. only then consider stronger tuning
+## 回归测试要求
 
-## What Counts As A Good Change
+每次重大策略改动后，至少验证以下行为：
 
-A good policy change should improve at least one of these without breaking route identity:
+- 开局不会无脑先打单张风箭，而忽视明显数字废牌
+- `MENQING_SPEED` 下，早期低收益吃碰会被拒绝
+- `ALL_PUNGS` 路线会压低吃牌意愿并提升碰牌意愿
+- `HALF_FLUSH` 路线会持续清理非目标门
+- `HONOR_HEAVY` 路线不会被普通数字顺子轻易带偏
+- 听牌预览、胡牌判定、结算规则不受 AI 策略改动破坏
 
-- fewer meaningless early honor dumps
-- fewer bad openings
-- clearer discard order from chosen route
-- better conversion from structure to ready state
-- lower draw-only runs
+## 实施顺序
 
-## What To Avoid
+后续落地必须按以下顺序进行，避免一上来大改导致不可控：
 
-- replacing route logic with broad generic heuristics
-- overfitting one trace example
-- pushing AI-AK into random aggression
-- using training score alone as proof of correctness
-- large strategy rewrites without first exhausting constrained fixes
+1. 先做 `RouteState` 与阶段划分
+2. 再把吃碰改成“路线约束 + PASS 收益比较”
+3. 再把弃牌重构为“成型收益 + 路线一致性 + 安全性 + 回报比”综合排序
+4. 最后把路线诊断指标接回训练器，并更新 fitness
 
-## Working Rule For Future Iterations
+## 禁止事项
 
-When in doubt:
+明确禁止以下做法：
 
-- keep the route framework
-- tighten entry conditions
-- prefer interpretable behavior
-- optimize for stable style first, then finish rate
+- 用泛化 heuristic 替代路线系统
+- 因为某一局 trace 好看就过拟合
+- 用快吃快碰掩盖主脑缺失
+- 只看训练总分，不看具体行为质量
+- 没有完成约束化路线系统，就继续堆更多散参数
+
+## 好改动的标准
+
+一个策略改动，至少应改善以下一项，且不能破坏路线身份：
+
+- 更少无意义早巡风箭乱打
+- 更少坏吃碰
+- 弃牌顺序更能体现所选路线
+- 从结构到进听的转化更顺
+- 流局型死手更少
+- 门清与大牌路线切换更合理
+
+## 一句话结论
+
+长清阁麻将 AI 的核心，不是“看到什么牌能动就动”，而是“先判断阶段，再锁定路线，再让吃碰与弃牌都服从路线，最后在听牌阶段用收益风险比完成收口”。
+
+以后所有 AI 做牌教学、出牌逻辑、训练调参，都必须围绕这套框架执行。
