@@ -77,8 +77,6 @@ function resolveTileKey(suit: string, value: number): string {
   }
   const windMap: Record<number, string> = { 1: 'east', 2: 'south', 3: 'west', 4: 'north' }
   const jianMap: Record<number, string> = { 1: 'zhong', 2: 'fa', 3: 'bai' }
-  const flowerMap: Record<number, string> = { 1: 'spring', 2: 'summer', 3: 'autumn', 4: 'winter', 5: 'plum', 6: 'orchid', 7: 'bamboo', 8: 'chrysanthemum' }
-
   const prefix = suitMap[suit.toLowerCase()] || suit.toLowerCase()
   let suffix: string
 
@@ -87,7 +85,8 @@ function resolveTileKey(suit: string, value: number): string {
   } else if (suit === 'jian' || suit === 'DRAGON') {
     suffix = jianMap[value] || String(value)
   } else if (suit === 'hua' || suit === 'FLOWER') {
-    suffix = flowerMap[value] || String(value)
+    // 所有花牌统一用「花」语音（hua_plum）
+    return 'hua_plum'
   } else {
     suffix = String(value)
   }
