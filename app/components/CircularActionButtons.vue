@@ -1,5 +1,16 @@
 <template>
   <div class="action-panel" :class="{ 'action-panel--compact': compact, 'action-panel--offline': !isConnected }">
+    <button
+      class="action-btn action-btn--draw action-btn--think action-btn--think-large"
+      :class="{
+        'action-btn--active': hasThink,
+        'action-btn--highlight': hasThink && hasAnyPriorityAction,
+        'action-btn--highlight-pulse': hasThink && hasAnyPriorityAction,
+        'action-btn--disabled': !hasThink || !effectiveCanUseThink
+      }"
+      :disabled="!hasThink || !effectiveCanUseThink || isInteractionLocked || !!isPaused || !isConnected"
+      @click="$emit('action', 'think')"
+    >慢{{ effectiveThinkRemaining > 0 ? effectiveThinkRemaining : '' }}</button>
     <!-- 左侧 2×2 小圆：吃/碰/胡/杠 -->
     <div class="priority-action-group" :class="{ 'priority-action-group--active': hasAnyPriorityAction }">
       <div
@@ -21,7 +32,7 @@
             'action-btn--highlight': hasChow,
             'action-btn--highlight-pulse': hasChow
           }"
-          :disabled="!hasChow || isInteractionLocked || !isConnected"
+          :disabled="!hasChow || isInteractionLocked || !!isPaused || !isConnected"
           @click="$emit('action', 'chow')"
         >吃</button>
 
@@ -33,7 +44,7 @@
             'action-btn--highlight': hasPeng,
             'action-btn--highlight-pulse': hasPeng
           }"
-          :disabled="!hasPeng || isInteractionLocked || !isConnected"
+          :disabled="!hasPeng || isInteractionLocked || !!isPaused || !isConnected"
           @click="$emit('action', 'peng')"
         >碰</button>
 
@@ -45,7 +56,7 @@
             'action-btn--highlight': hasHu,
             'action-btn--highlight-pulse': hasHu
           }"
-          :disabled="!hasHu || isInteractionLocked || !isConnected"
+          :disabled="!hasHu || isInteractionLocked || !!isPaused || !isConnected"
           @click="$emit('action', 'hu')"
         >胡</button>
 
@@ -57,7 +68,7 @@
             'action-btn--highlight': hasKong,
             'action-btn--highlight-pulse': hasKong
           }"
-          :disabled="!hasKong || isInteractionLocked || !isConnected"
+          :disabled="!hasKong || isInteractionLocked || !!isPaused || !isConnected"
           @click="$emit('action', 'kong')"
         >杠</button>
       </div>
@@ -73,7 +84,7 @@
           'action-btn--freezing': isFreezing
         }"
         :style="isFreezing ? { '--freeze-progress': freezeProgress, '--freeze-duration-ms': `${safeFreezeDurationMs}ms` } : {}"
-        :disabled="!canDraw || isFreezing || isInteractionLocked || !isConnected"
+        :disabled="!canDraw || isFreezing || isInteractionLocked || !!isPaused || !isConnected"
         @click="$emit('action', 'draw')"
       >
         <span v-if="isFreezing" class="freeze-progress-ring"></span>
@@ -88,7 +99,7 @@
           'action-btn--highlight-pulse': hasThink && hasAnyPriorityAction,
           'action-btn--disabled': !hasThink || !effectiveCanUseThink
         }"
-        :disabled="!hasThink || !effectiveCanUseThink || isInteractionLocked || !isConnected"
+        :disabled="!hasThink || !effectiveCanUseThink || isInteractionLocked || !!isPaused || !isConnected"
         @click="$emit('action', 'think')"
       >慢{{ effectiveThinkRemaining > 0 ? effectiveThinkRemaining : '' }}</button>
     </div>
@@ -103,7 +114,7 @@
           'action-btn--active': hasRebel,
           'action-btn--highlight': hasRebel && !isDelaying
         }"
-        :disabled="!hasRebel || isInteractionLocked || !isConnected"
+        :disabled="!hasRebel || isInteractionLocked || !!isPaused || !isConnected"
         @click="$emit('action', 'rebel')"
       >反</button>
 
@@ -116,7 +127,7 @@
           'action-btn--highlight': hasLiangShan && !isDelaying,
           'action-btn--voted': hasVotedLiangShan
         }"
-        :disabled="!hasLiangShan || isInteractionLocked || !isConnected || effectiveHasVotedLiangShan"
+        :disabled="!hasLiangShan || isInteractionLocked || !!isPaused || !isConnected || effectiveHasVotedLiangShan"
         @click="$emit('action', 'liangshan')"
       >义</button>
 
@@ -134,6 +145,7 @@ interface Props {
   availableActions: ActionType[]
   isConnected: boolean
   isInteractionLocked: boolean
+  isPaused?: boolean
   lastStateChangeAt: number
   nowTs: number
   highlightDelayMs: number
@@ -669,8 +681,13 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
+.action-btn--think-large {
+  flex-shrink: 0;
+  font-size: 1.05rem;
+}
+
 .action-btn--think-inline {
-  min-width: 46px;
+  display: none;
 }
 
 @keyframes think-glow {

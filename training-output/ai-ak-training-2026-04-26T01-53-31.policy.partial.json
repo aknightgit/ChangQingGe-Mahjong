@@ -3,6 +3,9 @@
     "fitness": 0,
     "huRate": 0,
     "drawRate": 1,
+    "routeCommitRate": 0.9857142857142858,
+    "routeFlipPerGame": 0.1,
+    "badOpenRate": 1,
     "totalGames": 20,
     "note": "AI-AK iterative training - 1x20"
   },

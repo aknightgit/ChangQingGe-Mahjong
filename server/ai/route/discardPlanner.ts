@@ -20,6 +20,7 @@ function scoreByRoute(input: RouteDiscardInput): number {
   const { routeState, tile } = input
   const count = sameTypeCount(input)
   const nearby = adjacentCount(input)
+  const isAiAkOpening = input.player.name === 'AI-AK' && input.hand.length >= 11
   const longestSuit = routeState.features.longestSuit
   const shortestSuit = routeState.features.shortestSuit
 
@@ -29,14 +30,15 @@ function scoreByRoute(input: RouteDiscardInput): number {
         (shortestSuit && tile.suit === shortestSuit ? 2.4 : 0) +
         (count === 1 ? 1.2 : -2.6) +
         (nearby === 0 ? 1.4 : -0.8 * nearby) +
-        (isHonor(tile) && count === 1 ? 1.8 : 0)
+        (isHonor(tile) && count === 1 ? (isAiAkOpening ? -1.2 : 1.8) : 0)
       )
 
     case 'OPEN_SPEED':
       return (
         (count === 1 ? 1.8 : -1.4) +
         (nearby === 0 ? 1.2 : -0.35 * nearby) +
-        (isHonor(tile) && count === 1 ? 0.8 : 0)
+        (longestSuit && tile.suit !== longestSuit && !isHonor(tile) ? 2.2 : 0) +
+        (isHonor(tile) && count === 1 ? 1.2 : 0)
       )
 
     case 'HALF_FLUSH':

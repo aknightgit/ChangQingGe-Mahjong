@@ -274,6 +274,23 @@ export const useGame = () => {
     }
   }
 
+  const replacePendingAction = (action: ActionType, extras: Record<string, any> = {}) => {
+    if (!gameState.value || !playerId.value) return
+    const nextPending = (gameState.value.pendingActions || []).filter((pa: any) => pa.playerId !== playerId.value)
+    nextPending.push({
+      playerId: playerId.value,
+      availableActions: [action],
+      expiresAt: Date.now() + 5000,
+      ...extras
+    })
+    gameState.value = {
+      ...gameState.value,
+      pendingActions: nextPending
+    }
+    availableActions.value = [action]
+    lastStateChangeAt.value = Date.now()
+  }
+
   const executeAction = async (action: ActionType, tileId?: string, tileIds?: string[], winOptionLabel?: string) => {
     if (!gameId.value || !playerId.value) return false
     if (gameState.value?.phase === GamePhase.ENDED) return false
@@ -361,6 +378,7 @@ export const useGame = () => {
     startGame,
     refreshState,
     forceRefreshState,
+    replacePendingAction,
     isActionPending,
     roomDismissedReason,
     lastStateChangeAt,

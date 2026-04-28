@@ -299,7 +299,7 @@
               </div>
             </div>
 
-            <div v-if="settlementData?.roundDetails?.length" class="settle-rounds">
+            <div v-if="false" class="settle-rounds">
               <h3 class="settle-rounds-title">每局结算明细</h3>
               <div
                 v-for="round in settlementData.roundDetails"
@@ -383,7 +383,7 @@
             </div>
 
             <div class="settle-actions">
-              <button class="settle-back-btn" @click="showSettlement = false">
+              <button v-if="false" class="settle-back-btn" @click="showSettlement = false">
                 ← 返回牌桌
               </button>
               <button class="settle-save-btn" @click="onSaveSettle">
@@ -784,11 +784,11 @@
                   ⏱ {{ turnTimer }}s
                 </span>
               </div>
-              <div v-if="myTingText" class="ting-action-reminder">{{ myTingText }}</div>
               <CircularActionButtons
-                :available-actions="availableActions"
+                :available-actions="filteredCircularAvailableActions"
                 :is-connected="isConnected"
                 :is-interaction-locked="isInteractionLocked"
+                :is-paused="thinkFreezeActive && !isMyThinkFreezeOwner"
                 :last-state-change-at="lastStateChangeAt"
                 :now-ts="nowTs"
                 :highlight-delay-ms="hesitationWindow"
@@ -949,6 +949,7 @@ const {
   startGame,
   refreshState,
   forceRefreshState,
+  replacePendingAction,
   isActionPending,
   roomDismissedReason,
   lastStateChangeAt,
@@ -1455,7 +1456,19 @@ const showSpectatorControls = computed(() => {
   const phase = gameState.value?.phase
   return !!currentPlayer.value && (phase === GamePhase.PLAYING || phase === GamePhase.ENDED)
 })
-const canUseSpectatorView = computed(() => showSpectatorControls.value && currentPlayer.value?.status === 'won')
+const canUseDebugAiAkSpectator = computed(() => {
+  const me = currentPlayer.value
+  if (!showSpectatorControls.value || !me) return false
+  return (gameState.value?.players || []).some(player =>
+    player.id !== me.id &&
+    player.name === 'AI-AK' &&
+    isBotPlayer(player)
+  )
+})
+const canUseSpectatorView = computed(() =>
+  showSpectatorControls.value &&
+  (currentPlayer.value?.status === 'won' || canUseDebugAiAkSpectator.value)
+)
 const mySpectatorView = computed(() => {
   const myId = currentPlayer.value?.id
   if (!myId) return null
@@ -1470,8 +1483,7 @@ const spectatorApprovalRequest = computed(() => {
   const requests = (gameState.value as any)?.spectatorApprovalRequests || []
   return requests.find((request: any) =>
     request.status === 'pending' &&
-    request.targetId === myId &&
-    request.roundNumber === gameState.value?.roundNumber
+    request.targetId === myId
   ) || null
 })
 
@@ -1764,6 +1776,7 @@ const myTingText = computed(() => {
   const uniqueTiles = Array.from(new Set(tiles))
   return uniqueTiles.length ? `您已听牌：${uniqueTiles.join(',')}` : '您已听牌'
 })
+const formatHuOptionFormula = (opt: any) => String(opt?.label || '')
 const overlayMessage = computed(() => {
   const reason = overlayReason.value
   switch (reason) {
@@ -2043,7 +2056,23 @@ const handleTileClick = (tile: Tile) => {
 // The backend `executeAction` for PENG doesn't require tileId if it's obvious, 
 // but `gameManager.ts` implementation of `handlePeng` finds matching tiles automatically.
 
-const showDraw = computed(() => availableActions.value.includes(ActionType.DRAW))
+const showPendingClaim = computed(() => {
+  const mine = myPendingAction.value
+  if (!mine) return false
+  return mine.availableActions.some(action =>
+    action === ActionType.CHOW ||
+    action === ActionType.PENG ||
+    action === ActionType.KONG ||
+    action === ActionType.HU ||
+    action === ActionType.CONCEALED_KONG ||
+    action === ActionType.EXTENDED_KONG
+  )
+})
+const showDraw = computed(() => availableActions.value.includes(ActionType.DRAW) && !showPendingClaim.value)
+const filteredCircularAvailableActions = computed(() => {
+  if (!showPendingClaim.value) return availableActions.value
+  return availableActions.value.filter(action => action !== ActionType.DRAW)
+})
 const showChowPicker = ref(false)
 const selectedChowOption = ref<number | null>(null)
 const shouldShowActionButton = (type: ActionType) => {
@@ -2074,6 +2103,10 @@ const thinkFreezePlayerName = computed(() => {
   const pid = (gameState.value as any)?.thinkFreezePlayerId
   if (!pid || !gameState.value) return ''
   return gameState.value.players.find(p => p.id === pid)?.name || ''
+})
+const isMyThinkFreezeOwner = computed(() => {
+  const pid = (gameState.value as any)?.thinkFreezePlayerId
+  return !!pid && pid === currentPlayer.value?.id
 })
 const thinkFreezeCountdown = ref(0)
 let thinkCountdownTimer: any = null
@@ -2228,7 +2261,7 @@ const onConfirmHu = (index: number) => {
   resetAutoCount()
   playSound('tile-hu')
   showHuPanel.value = false
-  executeAction(ActionType.HU, undefined, undefined, displayWinOptions.value[index]?.label)
+  executeAction(ActionType.HU, undefined, undefined, displayWinOptions.value[index]?.internalLabel || displayWinOptions.value[index]?.label)
 }
 const onCancelHu = () => {
   showHuPanel.value = false
@@ -2383,6 +2416,8 @@ const onApprovalChoice = async (choice: string) => {
       }
     })
     actionApprovalEvent.value = null
+    replacePendingAction(choice === 'pass' ? ActionType.PASS : (choice as ActionType))
+    await refreshState()
   } catch (err) {
     console.error('Approval choice failed:', err)
   }
@@ -2911,9 +2946,14 @@ const addBroadcast = (text: string, type: BroadcastMsg['type'] = 'info') => {
 }
 
 watch(
-  () => [gameState.value?.phase, (gameState.value as any)?.roundStats?.length ?? 0, gameState.value?.gameId],
-  async ([phase, roundCount, gameId]) => {
+  () => [gameState.value?.phase, (gameState.value as any)?.roundStats?.length ?? 0, gameState.value?.gameId, (gameState.value as any)?.endReason],
+  async ([phase, roundCount, gameId, endReason]) => {
     if (phase !== GamePhase.ENDED || !gameId || !currentPlayer.value?.id) return
+    if (endReason === GameEndReason.WALL_EXHAUSTED) {
+      showSettlement.value = false
+      settlementData.value = null
+      return
+    }
     const settlementKey = `${gameId}-${roundCount}`
     if (lastAutoSettlementKey.value === settlementKey) return
     lastAutoSettlementKey.value = settlementKey
@@ -4593,6 +4633,8 @@ const forceDiscard = async (p: Player) => {
   font-size: 1.06rem;
   font-weight: 800;
   color: #fff;
+  white-space: normal;
+  line-height: 1.45;
 }
 .hu-combo-main {
   display: flex;
@@ -4608,6 +4650,10 @@ const forceDiscard = async (p: Player) => {
   background: rgba(255, 255, 255, 0.08);
   border-radius: 999px;
   padding: 4px 10px;
+}
+.hu-combo-method,
+.hu-summary-grid {
+  display: none;
 }
 .hu-combo-score {
   font-size: 1.05rem;
@@ -4830,9 +4876,10 @@ const forceDiscard = async (p: Player) => {
   border: 1px solid rgba(255, 215, 0, 0.15);
   border-radius: 20px;
   padding: 32px;
-  width: min(520px, 92%);
+  width: fit-content;
+  max-width: min(1100px, 96vw);
   max-height: 85vh;
-  overflow-y: auto;
+  overflow: visible;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
   animation: settle-in 0.3s ease;
 }
@@ -4952,8 +4999,9 @@ const forceDiscard = async (p: Player) => {
 }
 
 .settle-table-wrap {
-  width: 100%;
-  overflow-x: auto;
+  width: fit-content;
+  max-width: min(1040px, 92vw);
+  overflow: visible;
 }
 
 .settle-round-table {

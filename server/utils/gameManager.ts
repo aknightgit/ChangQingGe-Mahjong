@@ -13,13 +13,13 @@
   GameEndReason
 } from '../types/game';
 import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isFivePoison } from './tiles';
-import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
+import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion, findBestDiscardForTing } from './handValidator';
 import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier, calculateSettlementBreakdownByRules, generateWinOptions, type WinOption } from './scoring';
 import { randomUUID } from 'crypto';
 import { saveGameState, loadGameState, loadAllGameStates, deleteGameState } from './gamePersistence';
 import { MatchHistoryService } from '../services/matchHistoryService';
 import { TrainingRecordService } from '../services/trainingRecordService';
-import { isBotPlayer, selectDiscardTile, shouldClaimPendingAction } from '../services/botService';
+import { isBotPlayer, selectBotChowTileIds, selectDiscardTile, shouldClaimPendingAction } from '../services/botService';
 import { formatBeijingTime } from './beijingTime';
 
 const CHOW_CHOICE_TIMEOUT_MS = 60000;
@@ -308,12 +308,29 @@ class GameManager {
     return candidates;
   }
 
+  private getTingPreviewCandidates(game: GameState): Array<{ suit: TileSuit; value: number }> {
+    const candidates = this.getWinningTileCandidates();
+    if (game.customScoringMode?.startsWith(`${TileSuit.FLOWER}-`) && Array.isArray(game.wildTileGroup)) {
+      for (const valueText of game.wildTileGroup) {
+        const value = parseInt(valueText, 10);
+        if (!Number.isNaN(value) && value >= 1 && value <= 8) {
+          candidates.push({ suit: TileSuit.FLOWER, value });
+        }
+      }
+    }
+    return candidates;
+  }
+
+  private getTileMaxCopies(suit: TileSuit): number {
+    return suit === TileSuit.FLOWER ? 1 : 4;
+  }
+
   private getVisibleRemainingCount(game: GameState, player: Player, suit: TileSuit, value: number): number {
     const visibleCount =
       player.hand.concealedTiles.filter(tile => tile.suit === suit && tile.value === value).length +
       game.discardPile.filter(tile => tile.suit === suit && tile.value === value).length +
       game.players.flatMap(p => p.hand.exposedMelds).flatMap(meld => meld.tiles).filter(tile => tile.suit === suit && tile.value === value).length;
-    return Math.max(0, 4 - visibleCount);
+    return Math.max(0, this.getTileMaxCopies(suit) - visibleCount);
   }
 
   private getCachedTingPreview(game: GameState, player: Player) {
@@ -324,42 +341,112 @@ class GameManager {
       return cached;
     }
 
-    const candidates = this.getWinningTileCandidates();
-    const winningTiles = candidates.flatMap(({ suit, value }) => {
-      const remainingCount = this.getVisibleRemainingCount(game, player, suit, value);
-      if (remainingCount <= 0) return [];
+    const candidates = this.getTingPreviewCandidates(game);
+    const wildChecker = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
+    const winningTileMap = new Map<string, {
+      tile: Tile;
+      remainingCount: number;
+      bestDiscardOption: WinOption | null;
+      bestSelfDrawOption: WinOption | null;
+      bestOverallOption: WinOption | null;
+    }>();
 
-      const testTile: Tile = {
-        id: `ting-preview-${suit}-${value}`,
-        suit,
-        value,
-        isFlower: false
-      };
-      const winCheck = canWin([...player.hand.concealedTiles, testTile], player.hand.exposedMelds, game.customScoringMode || null);
-      if (!winCheck.canWin) return [];
+    if (this.isConcealedDiscardState(player)) {
+      for (let index = 0; index < player.hand.concealedTiles.length; index++) {
+        const remainingHand = player.hand.concealedTiles.filter((_, tileIndex) => tileIndex !== index);
+        for (const { suit, value } of candidates) {
+          const testTile: Tile = {
+            id: `ting-preview-${suit}-${value}`,
+            suit,
+            value,
+            isFlower: suit === TileSuit.FLOWER
+          };
+          const winCheck = canWin([...remainingHand, testTile], player.hand.exposedMelds.length, wildChecker);
+          if (!winCheck.canWin) continue;
+          const remainingCount = this.getVisibleRemainingCount(game, player, suit, value);
+          if (remainingCount <= 0) continue;
+          const key = `${suit}-${value}`;
+          const existing = winningTileMap.get(key);
+          if (existing && existing.remainingCount >= remainingCount) continue;
+          winningTileMap.set(key, {
+            tile: {
+              id: `ting-preview-${suit}-${value}`,
+              suit,
+              value,
+              isFlower: suit === TileSuit.FLOWER
+            },
+            remainingCount,
+            bestDiscardOption: null,
+            bestSelfDrawOption: null,
+            bestOverallOption: null
+          });
+        }
+      }
+    } else {
+      for (const { suit, value } of candidates) {
+        const remainingCount = this.getVisibleRemainingCount(game, player, suit, value);
+        if (remainingCount <= 0) continue;
 
-      const discardOptions = this.getCachedWinOptions(game, player, 'discard', {
-        extraTile: testTile,
-        isRobbingKong: false
-      });
-      const selfDrawOptions = this.getCachedWinOptions(game, player, 'self_draw', {
-        extraTile: testTile,
-        isKongFlower: false
-      });
-      const bestDiscardOption = discardOptions[0] || null;
-      const bestSelfDrawOption = selfDrawOptions[0] || null;
-      const bestOverallOption = [bestDiscardOption, bestSelfDrawOption]
-        .filter(Boolean)
-        .sort((a, b) => (b!.score ?? 0) - (a!.score ?? 0))[0] || null;
+        const testTile: Tile = {
+          id: `ting-preview-${suit}-${value}`,
+          suit,
+          value,
+          isFlower: false
+        };
+        const winCheck = canWin([...player.hand.concealedTiles, testTile], player.hand.exposedMelds, game.customScoringMode || null);
+        if (!winCheck.canWin) continue;
 
-      return [{
-        tile: testTile,
-        remainingCount,
-        bestDiscardOption,
-        bestSelfDrawOption,
-        bestOverallOption
-      }];
-    }).sort((a, b) => {
+        const discardOptions = this.getCachedWinOptions(game, player, 'discard', {
+          extraTile: testTile,
+          isRobbingKong: false
+        });
+        const selfDrawOptions = this.getCachedWinOptions(game, player, 'self_draw', {
+          extraTile: testTile,
+          isKongFlower: false
+        });
+        const bestDiscardOption = discardOptions[0] || null;
+        const bestSelfDrawOption = selfDrawOptions[0] || null;
+        const bestOverallOption = [bestDiscardOption, bestSelfDrawOption]
+          .filter(Boolean)
+          .sort((a, b) => (b!.score ?? 0) - (a!.score ?? 0))[0] || null;
+
+        winningTileMap.set(`${suit}-${value}`, {
+          tile: testTile,
+          remainingCount,
+          bestDiscardOption,
+          bestSelfDrawOption,
+          bestOverallOption
+        });
+      }
+    }
+
+    if (winningTileMap.size === 0 && this.isConcealedDiscardState(player)) {
+      const fallback = findBestDiscardForTing(
+        player.hand.concealedTiles,
+        player.hand.exposedMelds.length,
+        wildChecker
+      );
+      for (const winningTile of fallback.winningTiles) {
+        const suit = winningTile.suit as TileSuit;
+        const value = winningTile.value;
+        const remainingCount = this.getVisibleRemainingCount(game, player, suit, value);
+        if (remainingCount <= 0) continue;
+        winningTileMap.set(`${suit}-${value}`, {
+          tile: {
+            id: `ting-preview-${suit}-${value}`,
+            suit,
+            value,
+            isFlower: suit === TileSuit.FLOWER
+          },
+          remainingCount,
+          bestDiscardOption: null,
+          bestSelfDrawOption: null,
+          bestOverallOption: null
+        });
+      }
+    }
+
+    const winningTiles = [...winningTileMap.values()].sort((a, b) => {
       const scoreDelta = (b.bestOverallOption?.score ?? 0) - (a.bestOverallOption?.score ?? 0);
       if (scoreDelta !== 0) return scoreDelta;
       return b.remainingCount - a.remainingCount;
@@ -605,7 +692,7 @@ class GameManager {
       const chowTotal = player.hand.concealedTiles.length + chowExposed;
       if (chowTotal - 2 + 3 <= 14) {
         console.log(`[PendingResolve] ${player.name} executing CHOW (concealed=${player.hand.concealedTiles.length}, exposed=${chowExposed})`);
-        this.handleChow(game, player);
+        this.handleChow(game, player, pa.selectedChowTileIds);
       } else {
         console.warn(`[PendingResolve] ${player.name} CHOW blocked: would exceed 14 tiles (total=${chowTotal})`);
         this.handlePass(game, player);
@@ -735,6 +822,9 @@ class GameManager {
         for (const pa of game.pendingActions) {
           const pendingPlayer = game.players.find(p => p.id === pa.playerId);
           if (pendingPlayer && this.isPlayerBotControlled(pendingPlayer) && this.isChowChoiceOnlyActions(pa.availableActions)) {
+            pa.selectedChowTileIds = pa.tile
+              ? selectBotChowTileIds(pendingPlayer, game, pa.tile, pa.chowOptions)
+              : undefined;
             pa.expiresAt = now + this.getHesitationWindow(game);
           }
         }
@@ -1806,6 +1896,9 @@ class GameManager {
         break;
 
       case ActionType.DRAW:
+        if (this.isChowOnlyPendingTurn(game, player.id)) {
+          game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
+        }
         // 【状态机修复】每回合最多摸一次，防同回合连续摸牌
         if (game.drawnThisTurn) {
           console.warn(`[DRAW] Blocked: ${player.name} already drew this turn (double-draw attempt)`);
@@ -1955,6 +2048,7 @@ class GameManager {
 
     // Remove from hand
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tileId);
+    (player as any).lastDrawnTile = null;
     player.hand.discardedTiles.push(tile);
     game.discardPile.push(tile);
 
@@ -1970,8 +2064,12 @@ class GameManager {
     }
 
     // Check for ting status
-    const wildForTing = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
-    player.isTing = isTing(player.hand.concealedTiles, player.hand.exposedMelds.length, wildForTing);
+    player.isTing = isTing(
+      player.hand.concealedTiles,
+      player.hand.exposedMelds.length,
+      game.customScoringMode || null,
+      game.wildTileGroup
+    );
 
     // 百搭打出 → 触发冷冻(一圈内不能吃/碰/捉冲)
     // 冷冻规则：打出百搭的玩家，下家/对家/上家各出一张牌后（即该玩家再次轮到）解除冷冻
@@ -2130,6 +2228,7 @@ class GameManager {
       // 普通牌 → 进手牌
       player.hand.concealedTiles.push(tile);
     }
+    (player as any).lastDrawnTile = tile;
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
   }
 
@@ -3017,16 +3116,12 @@ class GameManager {
       pa.playerId !== player.id && pa.availableActions.includes(ActionType.HU)
     );
 
-    player.status = PlayerStatus.WON;
-    player.winOrder = game.winnersCount + 1;
-    player.winRound = game.roundNumber;
-    player.winTimestamp = Date.now();
-    game.winnersCount++;
     const isSelfDrawn = !pendingAction;
+    const projectedWinOrder = game.winnersCount + 1;
 
     // 设置下局庄家
     if (!game.nextDealerId) {
-      if (player.winOrder === 1) {
+      if (projectedWinOrder === 1) {
         // 首胡者为庄
         game.nextDealerId = player.id;
         // 一炮多响:如果有人因放冲导致多胡,放冲者为庄
@@ -3048,7 +3143,18 @@ class GameManager {
     if (!winCheck.canWin) {
       throw new Error('Invalid Hu declaration');
     }
-    // 牌型校验:必须有效牌型；传null触发fallback到game.wildTileGroup（不再被!pendingAction绕过）
+    const isKongFlower = this.isWinAfterKong(game, player.id);
+    const isRobbingKong = !!pendingAction?.tile && !!game.pendingKongClaim;
+    const preferredWinType = isSelfDrawn ? 'self_draw' : 'discard';
+    const filteredWinOptions = this.getCachedWinOptions(game, player, preferredWinType, {
+      isKongFlower,
+      isRobbingKong
+    });
+    const selectedWinOption = selectedWinOptionLabel
+      ? filteredWinOptions.find(option => option.label === selectedWinOptionLabel)
+      : filteredWinOptions[0];
+
+    // 牌型校验: 优先用即时检测, 若空结果则回退到可胡缓存/结算候选, 避免自动结算链被误中断。
     const huHandTypes = detectHandTypes(
       player.hand.concealedTiles,
       player.hand.exposedMelds,
@@ -3057,13 +3163,12 @@ class GameManager {
       game.customScoringMode,
       game.wildTileGroup
     );
-    if (huHandTypes.length === 0) {
+    const resolvedHuHandTypes = huHandTypes.length
+      ? huHandTypes
+      : (selectedWinOption?.handTypes?.length ? selectedWinOption.handTypes : winCheck.types);
+    if (!resolvedHuHandTypes.length) {
       throw new Error('No valid hand type for Hu');
     }
-
-    const isKongFlower = this.isWinAfterKong(game, player.id);
-    const isRobbingKong = !!pendingAction?.tile && !!game.pendingKongClaim;
-
 
     // 收集花牌
     const flowerTiles = player.hand.exposedMelds
@@ -3095,21 +3200,12 @@ class GameManager {
     // 大吊检测：手牌（非花牌）剩1张
     const concealedNonFlower = player.hand.concealedTiles.filter(t => !isFlower(t));
     const isDaDiao = concealedNonFlower.length === 1;
-    const preferredWinType = isSelfDrawn ? 'self_draw' : 'discard';
-    const filteredWinOptions = this.getCachedWinOptions(game, player, preferredWinType, {
-      isKongFlower,
-      isRobbingKong
-    });
-    const selectedWinOption = selectedWinOptionLabel
-      ? filteredWinOptions.find(option => option.label === selectedWinOptionLabel)
-      : filteredWinOptions[0];
-
     // 计算番数
     const scoreResult = calculateScore({
       handTiles: player.hand.concealedTiles,
       exposedMelds: player.hand.exposedMelds,
       flowerTiles,
-      handTypes: selectedWinOption?.handTypes?.length ? selectedWinOption.handTypes : handTypes,
+      handTypes: selectedWinOption?.handTypes?.length ? selectedWinOption.handTypes : (handTypes.length ? handTypes : resolvedHuHandTypes),
       isSelfDrawn,
       isKongFlower,
       isRobbingKong,
@@ -3126,6 +3222,11 @@ class GameManager {
 
     // wonFan 存最终点数（baseFan × extraMultipliers × globalMultiplier）
     // 用于所有结算：正常赔付 + 互包赔付 × 3/5/2
+    player.status = PlayerStatus.WON;
+    player.winOrder = projectedWinOrder;
+    player.winRound = game.roundNumber;
+    player.winTimestamp = Date.now();
+    game.winnersCount++;
     player.wonFan = selectedWinOption?.score ?? scoreResult.finalPoints;
     player.winHandType = selectedWinOption?.handTypeName ?? scoreResult.handTypeName;
     player.isSelfDrawn = isSelfDrawn;
@@ -3148,7 +3249,7 @@ class GameManager {
       pa => pa.playerId !== player.id && pa.availableActions.includes(ActionType.HU)
     );
 
-    if (remainingActive <= 1 || !hadPendingForMultiHu) {
+    if (remainingActive <= 1) {
       this.endRound(game, GameEndReason.LAST_PLAYER);
       return;
     }
@@ -3160,6 +3261,9 @@ class GameManager {
     }
     if (isRobbingKong && game.pendingKongClaim) {
       game.pendingKongClaim.cancelledByHu = true;
+    }
+    if (!hadPendingForMultiHu) {
+      game.pendingActions = [];
     }
     return;  // 等待其他可胡玩家响应
   }
@@ -3318,6 +3422,16 @@ class GameManager {
     // 冻结8秒
     game.thinkFreezeUntil = Date.now() + 8000;
     game.thinkFreezePlayerId = player.id;
+    const freezeTimer = this.freezeTimers.get(game.gameId);
+    if (freezeTimer) {
+      clearTimeout(freezeTimer);
+      this.freezeTimers.delete(game.gameId);
+    }
+    const botTimer = this.botTimers.get(game.gameId);
+    if (botTimer) {
+      clearTimeout(botTimer);
+      this.botTimers.delete(game.gameId);
+    }
 
     for (const pending of game.pendingActions) {
       pending.expiresAt = Math.max(pending.expiresAt ?? 0, game.thinkFreezeUntil);
@@ -3341,6 +3455,14 @@ class GameManager {
         if (freshGame.thinkFreezePlayerId === expectedPlayerId) {
           freshGame.thinkFreezeUntil = undefined;
           freshGame.thinkFreezePlayerId = undefined;
+          if (freshGame.pendingActions.length > 0 || freshGame.pengChowConflict) {
+            this.schedulePendingActionTimeout(gameId);
+          } else {
+            const currentPlayer = freshGame.players[freshGame.currentPlayerIndex];
+            if (currentPlayer && currentPlayer.status === PlayerStatus.PLAYING && this.isPlayerBotControlled(currentPlayer)) {
+              this.scheduleBotDiscard(gameId, currentPlayer.id);
+            }
+          }
           await this.persistGame(freshGame);
           this.broadcastGameState(gameId);
           console.log(`[Think] ${player.name} 的思考时间结束`);
@@ -3658,12 +3780,18 @@ class GameManager {
             existing.availableActions.push(ActionType.CHOW);
           }
           existing.chowOptions = chowOptions;
+          existing.selectedChowTileIds = this.isPlayerBotControlled(chowPlayer)
+            ? selectBotChowTileIds(chowPlayer, game, discardedTile, chowOptions)
+            : undefined;
         } else {
           game.pendingActions.push({
             playerId: chowPlayer.id,
             availableActions: [ActionType.CHOW, ActionType.PASS],
             tile: discardedTile,
             chowOptions,
+            selectedChowTileIds: this.isPlayerBotControlled(chowPlayer)
+              ? selectBotChowTileIds(chowPlayer, game, discardedTile, chowOptions)
+              : undefined,
             expiresAt: this.getPendingActionExpiresAt(game, [ActionType.CHOW, ActionType.PASS]) // 决策犹豫期
           });
         }

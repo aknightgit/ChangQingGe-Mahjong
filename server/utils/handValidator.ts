@@ -1321,7 +1321,8 @@ export function canWin(
   // 花=普通牌时：花不参与手牌数计算，在 detectTypes 里处理八花
   // 八花统计范围：concealed（手牌）+ exposed（门口/副露区）合计
   const concealedFlowers = concealed.filter(t => isFlower(t));
-  const concealedNonFlower = concealed.filter(t => !isFlower(t));
+  const isWildTileFn = buildWildTileChecker(wildTileId);
+  const concealedNonFlower = concealed.filter(t => !isFlower(t) || isWildTileFn(t));
   // 八花优化：只有 concealed 里 >=6 花才需要统计 exposed（节省遍历开销）
   const flowerCount = concealedFlowers.length >= 6
     ? concealedFlowers.length + exposed.flatMap(m => m.tiles).filter(t => isFlower(t)).length
@@ -1330,8 +1331,7 @@ export function canWin(
   // 四百搭（只能靠concealed自摸，exposed不可能有百搭）
   let isFourWild = false;
   if (wildTileId) {
-    const wildTileFn = buildWildTileChecker(wildTileId);
-    const wildCount = concealed.filter(t => wildTileFn(t)).length;
+    const wildCount = concealed.filter(t => isWildTileFn(t)).length;
     isFourWild = wildCount >= 4 && exposed.length === 0 && isValidHandSize(concealedNonFlower.length);
   }
   if (isFourWild) {
@@ -1344,7 +1344,6 @@ export function canWin(
   if (wildTileId) {
     // 花做百搭：花参与手牌数计算，但普通花牌（不是万能花）不占手牌位
     // 过滤掉普通花牌，只保留万能花牌+非花牌参与手牌数校验
-    const concealedNonFlower = concealed.filter(t => !isFlower(t));
     if (!isValidHandSize(concealedNonFlower.length)) {
       return { canWin: false, types: [] };
     }
@@ -1358,8 +1357,6 @@ export function canWin(
       return { canWin: false, types: [] };
     }
   }
-
-  const isWildTileFn = buildWildTileChecker(wildTileId);
 
   // 八花自摸：只有花是普通牌时才检测（wildTile 路径不检测八花）
   // 花=普通牌时：8张花即可胡（门口+手牌）
@@ -1500,8 +1497,17 @@ export function getIsTingCacheStats(): { hits: number; misses: number; hitRate: 
 export function isTing(
   tiles: Tile[],
   existingMelds: number,
-  isWildTile: WildTileChecker = () => false
+  wildTileIdOrChecker: string | null | WildTileChecker = () => false,
+  wildTileGroup?: string[]
 ): boolean {
+  const isWildTile =
+    typeof wildTileIdOrChecker === 'function'
+      ? wildTileIdOrChecker
+      : buildWildTileChecker(wildTileIdOrChecker, wildTileGroup);
+  const wildKey =
+    typeof wildTileIdOrChecker === 'function'
+      ? `fn:${wildTileGroup?.join(',') || ''}`
+      : `${wildTileIdOrChecker || ''}|${wildTileGroup?.join(',') || ''}`;
   // 摸牌后手牌数 = 14 - 3*existingMelds（每有一个面子，手牌少3张；起手13+摸牌1=14）
   // 非万能花牌不占手牌位，过滤后再校验
   const nonFlower = tiles.filter(t => !isFlower(t) || isWildTile(t));
@@ -1514,7 +1520,7 @@ export function isTing(
   const sig = handSignature(tiles)
   // 从 isWildTile 函数提取 wildId（尝试从闭包中获取）
   // 简化：用 existingMelds + tiles.length 做key（同一局wildId不变）
-  const key = `${sig}|${existingMelds}`
+  const key = `${sig}|${existingMelds}|${wildKey}`
 
   if (isTingCache.has(key)) {
     _isTingHits++
@@ -1522,12 +1528,26 @@ export function isTing(
   }
   _isTingMisses++
 
-  const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-  const honorSuits = [TileSuit.WIND, TileSuit.DRAGON];
   const candidates: Tile[] = [];
-  for (const s of [...numSuits, ...honorSuits])
-    for (let v = 1; v <= 9; v++)
-      candidates.push({ suit: s, value: v, id: `t-${s}-${v}`, isFlower: false });
+  for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+    for (let value = 1; value <= 9; value++) {
+      candidates.push({ suit, value, id: `t-${suit}-${value}`, isFlower: false });
+    }
+  }
+  for (let value = 1; value <= 4; value++) {
+    candidates.push({ suit: TileSuit.WIND, value, id: `t-${TileSuit.WIND}-${value}`, isFlower: false });
+  }
+  for (let value = 1; value <= 3; value++) {
+    candidates.push({ suit: TileSuit.DRAGON, value, id: `t-${TileSuit.DRAGON}-${value}`, isFlower: false });
+  }
+  if (typeof wildTileIdOrChecker !== 'function' && wildTileIdOrChecker?.startsWith(`${TileSuit.FLOWER}-`) && wildTileGroup?.length) {
+    for (const valueText of wildTileGroup) {
+      const value = parseInt(valueText, 10);
+      if (!Number.isNaN(value) && value >= 1 && value <= 8) {
+        candidates.push({ suit: TileSuit.FLOWER, value, id: `t-${TileSuit.FLOWER}-${value}`, isFlower: true });
+      }
+    }
+  }
 
   for (const t of candidates) {
     if (canWin([...tiles, t], existingMelds, isWildTile).canWin) {

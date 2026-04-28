@@ -1,10 +1,18 @@
-import { PlayerStatus, type GameState, type Player, type SpectatorViewState } from '../types/game';
+import { GamePhase, PlayerStatus, type GameState, type Player, type SpectatorViewState } from '../types/game';
 import { isBotPlayer } from '../services/botService';
+
+const TEMP_DEBUG_SPECTATE_BOT_NAMES = new Set(['AI-AK']);
+
+function getSpectatorScope(game: GameState): number {
+  const completedHands = Array.isArray(game.roundStats) ? game.roundStats.length : 0;
+  return game.phase === GamePhase.ENDED ? completedHands : completedHands + 1;
+}
 
 export function getSpectatorView(game: GameState, viewerId: string): SpectatorViewState {
   if (!game.spectatorViews) game.spectatorViews = {};
   const existing = game.spectatorViews[viewerId];
-  if (existing && existing.roundNumber === game.roundNumber) {
+  const scope = getSpectatorScope(game);
+  if (existing && existing.roundNumber === scope) {
     return existing;
   }
 
@@ -12,7 +20,7 @@ export function getSpectatorView(game: GameState, viewerId: string): SpectatorVi
     viewingPlayerId: null,
     approvedHumanPlayerId: null,
     pendingHumanPlayerId: null,
-    roundNumber: game.roundNumber,
+    roundNumber: scope,
     updatedAt: Date.now()
   };
   game.spectatorViews[viewerId] = view;
@@ -25,7 +33,7 @@ export function clearPendingSpectatorRequests(game: GameState, requesterId: stri
     if (
       request.status === 'pending' &&
       request.requesterId === requesterId &&
-      request.roundNumber === game.roundNumber &&
+      request.roundNumber === getSpectatorScope(game) &&
       (!targetId || request.targetId === targetId)
     ) {
       request.status = 'cancelled';
@@ -38,15 +46,24 @@ export function isSpectatorTargetWatchable(target: Player): boolean {
   return target.status === PlayerStatus.PLAYING || target.status === PlayerStatus.WON;
 }
 
+export function canUseDebugBotSpectator(viewer: Player | null | undefined, target: Player | null | undefined): boolean {
+  return !!viewer &&
+    !!target &&
+    viewer.id !== target.id &&
+    isBotPlayer(target) &&
+    TEMP_DEBUG_SPECTATE_BOT_NAMES.has(target.name);
+}
+
 export function canRevealSpectatorTarget(game: GameState, viewerId: string, target: Player): boolean {
   const viewer = game.players.find((entry) => entry.id === viewerId);
-  if (!viewer || viewer.status !== PlayerStatus.WON) return false;
-
   const view = game.spectatorViews?.[viewerId];
-  if (!view || view.roundNumber !== game.roundNumber || view.viewingPlayerId !== target.id) {
+  if (!view || view.roundNumber !== getSpectatorScope(game) || view.viewingPlayerId !== target.id) {
     return false;
   }
 
+  if (viewer?.status === PlayerStatus.WON && isBotPlayer(target)) return true;
+  if (canUseDebugBotSpectator(viewer, target)) return true;
+  if (!viewer || viewer.status !== PlayerStatus.WON) return false;
   if (isBotPlayer(target)) return true;
   return view.approvedHumanPlayerId === target.id;
 }

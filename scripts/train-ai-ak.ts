@@ -452,6 +452,20 @@ function meldStrWithIds(m: Meld): string {
   return `${prefix}:${sortTiles([...m.tiles]).map(tileStrWithId).join(' ')}`
 }
 function isHonor(t: Tile): boolean { return t.suit === TileSuit.WIND || t.suit === TileSuit.DRAGON }
+function hasWeakNumberWasteCandidate(handTiles: Tile[], excludeTileId?: string): boolean {
+  const tiles = normalizeHand(handTiles)
+  return tiles.some(candidate => {
+    if (candidate.id === excludeTileId || isHonor(candidate) || candidate.suit === TileSuit.FLOWER) return false
+    const count = tiles.filter(t => t.suit === candidate.suit && t.value === candidate.value).length
+    if (count >= 2) return false
+    return !tiles.some(other =>
+      other.id !== candidate.id &&
+      other.suit === candidate.suit &&
+      Math.abs(other.value - candidate.value) > 0 &&
+      Math.abs(other.value - candidate.value) <= 2
+    )
+  })
+}
 function isWild(t: Tile, ws?: TileSuit, wv?: number): boolean { return ws && wv ? t.suit === ws && t.value === wv : false }
 const LOGICAL_TILES: Tile[] = [
   ...[TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS].flatMap(suit =>
@@ -761,6 +775,7 @@ function evaluateAkDiscardChoice(handTiles: Tile[], discardTile: Tile, exposedMe
   const improvingDraws = futureDraws.totalImprovingDraws
   const tiles = normalizeHand(nextHand)
   const earlyHand = tiles.length >= 11
+  const openingHasWeakNumberWaste = earlyHand && hasWeakNumberWasteCandidate(handTiles, discardTile.id)
   const suitOnlyTiles = tiles.filter(tile => !isHonor(tile) && tile.suit !== TileSuit.FLOWER)
   const suitCounts = new Map<TileSuit, number>([
     [TileSuit.DOTS, 0],
@@ -855,7 +870,7 @@ function evaluateAkDiscardChoice(handTiles: Tile[], discardTile: Tile, exposedMe
     weakEdgeShapes * 22 +
     disconnectedMiddlePenalty * 28 +
     menqingBonus * -4 +
-    isolatedHonors * (earlyHand ? 58 : 42) +
+    isolatedHonors * (earlyHand ? (openingHasWeakNumberWaste ? 16 : 36) : 42) +
     isolatedTerminals * 18 +
     isolatedTiles * 12
   )
@@ -907,6 +922,7 @@ export function shouldAkTakeClaim(
 
   const routeSignal = inferTrainingRouteSignal(player.hand, player.exposedMelds, makeWT(player))
   const keepsMenqing = player.exposedMelds.length === 0
+  const openingMenqing = keepsMenqing && player.hand.length >= 11
   const shapeImprovesEnough =
     strongScoreGain || moreWaits || moreReadyDraws || moreWinDraws || moreImproves || lowerShantenWithStableShape || lowerShantenWithBigShapeGain
 
@@ -918,6 +934,16 @@ export function shouldAkTakeClaim(
       (mode === 'peng' && strongScoreGain) ||
       claimEval.score >= passEval.score + (mode === 'peng' ? 18 : 24)
     if (!canBreakMenqing) return false
+
+    if (openingMenqing) {
+      const openingBreakEnough =
+        lowerShanten ||
+        moreWaits ||
+        moreReadyDraws ||
+        claimEval.improvingDraws >= passEval.improvingDraws + (mode === 'peng' ? 6 : 5) ||
+        claimEval.score >= passEval.score + (mode === 'peng' ? 20 : 26)
+      if (!openingBreakEnough) return false
+    }
   }
 
   if (routeSignal.route === 'ALL_PUNGS' && mode === 'chow') return false
@@ -3579,7 +3605,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   if (menqingWinRate > 0.12) mf -= (menqingWinRate - 0.12) * 400
   if (routeCommitRate < 0.45) mf -= (0.45 - routeCommitRate) * 350
   if (routeFlipPerGame > 0.6) mf -= (routeFlipPerGame - 0.6) * 220
-  if (badOpenRate > 0.35) mf -= (badOpenRate - 0.35) * 320
+  if (badOpenRate > 0.20) mf -= (badOpenRate - 0.20) * 900
 
   return {
     akScore: scores['AI-AK'], akWins: wins['AI-AK'], winRates, scores, draws,

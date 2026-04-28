@@ -111,6 +111,51 @@ player.status = PlayerStatus.LOST;
 const clearedPreview = await gameManager.getTingPreviewForPlayer(currentGame.gameId, player.id);
 test('失去听牌状态后预计算返回空', clearedPreview.isTing === false && clearedPreview.winningTiles.length === 0);
 
+const flowerWildPlayer = {
+  ...player,
+  id: 'flower-wild-player',
+  userId: 'flower-wild-player',
+  name: 'flower-wild-player',
+  status: PlayerStatus.PLAYING,
+  isTing: false,
+  hand: {
+    concealedTiles: [
+      tile('fw1', TileSuit.WIND, 1),
+      tile('fw2', TileSuit.WIND, 1),
+      tile('fw3', TileSuit.WIND, 1),
+      tile('fw4', TileSuit.DOTS, 2),
+      tile('fw5', TileSuit.DOTS, 3),
+      tile('fw6', TileSuit.DOTS, 4),
+      tile('fw7', TileSuit.DOTS, 5),
+      tile('fw8', TileSuit.DOTS, 6),
+      tile('fw9', TileSuit.DOTS, 7),
+      tile('fw10', TileSuit.DRAGON, 2),
+      tile('fw11', TileSuit.DRAGON, 2),
+      tile('fw12', TileSuit.DOTS, 9),
+      tile('fw13', TileSuit.FLOWER, 1),
+    ],
+    exposedMelds: [],
+    discardedTiles: []
+  }
+} as any;
+const flowerWildGame = {
+  ...currentGame,
+  gameId: 'ting-preview-flower-wild',
+  players: [flowerWildPlayer],
+  customScoringMode: 'hua-1',
+  wildTileGroup: ['1', '2', '3', '4'],
+  discardPile: [],
+  actionHistory: []
+} as any;
+(gameManager as any).games.set(flowerWildGame.gameId, flowerWildGame);
+(gameManager as any).invalidateWinEvaluationCache(flowerWildGame.gameId, [flowerWildPlayer.id]);
+const flowerPreview = await gameManager.getTingPreviewForPlayer(flowerWildGame.gameId, flowerWildPlayer.id);
+test(
+  'èŠ±ç™¾æ­è§„åˆ™ä¸‹å¬ç‰Œé¢„è§ˆä»èƒ½å±•å¼€å¤šå€™é€‰',
+  flowerPreview.winningTiles.length >= 3,
+  `tiles=${flowerPreview.winningTiles.map(item => `${item.tile.suit}-${item.tile.value}`).join(',')}`
+);
+
 console.log('\n==================================================');
 console.log(`测试结果: ${passed} 通过, ${failed} 失败`);
 if (failed > 0) {

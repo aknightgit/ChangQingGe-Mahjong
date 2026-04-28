@@ -147,8 +147,8 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
     case 'HALF_FLUSH':
       targetSuit = features.longestSuit
       score += features.longestSuitCount * 3.4
-      score += features.honorCount * 2.8
-      score += features.honorPairCount * 2.4
+      score += features.honorCount * 1.6
+      score += features.honorPairCount * 1.5
       score += features.wildCount * 2.2
       score -= features.secondSuitCount * 1.9
       if (features.upstreamVoidSuit && features.upstreamVoidSuit === targetSuit) {
@@ -174,9 +174,18 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       score += features.honorCount * 4
       score += features.honorPairCount * 3.5
       score += features.wildCount * 2.6
-      score += features.liveHonorCount * 0.7
+      score += features.liveHonorCount * 0.4
       score -= (features.longestSuitCount + features.secondSuitCount) * 0.7
-      if (features.honorCount >= 5) {
+      if (features.honorCount < 6) {
+        score -= 11
+      }
+      if (features.longestSuitCount >= 4) {
+        score -= 8
+      }
+      if (features.longestSuitCount + features.honorCount >= 8) {
+        score -= 6
+      }
+      if (features.honorCount >= 6) {
         reasons.push('dense_honors')
       }
       break

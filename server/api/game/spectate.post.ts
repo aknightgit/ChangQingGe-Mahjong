@@ -3,7 +3,17 @@ import { gameManager } from '../../utils/gameManager';
 import { requireGamePlayerAccess } from '../../utils/session';
 import { GamePhase, PlayerStatus } from '../../types/game';
 import { isBotPlayer } from '../../services/botService';
-import { clearPendingSpectatorRequests, getSpectatorView, isSpectatorTargetWatchable } from '../../utils/spectatorView';
+import {
+  canUseDebugBotSpectator,
+  clearPendingSpectatorRequests,
+  getSpectatorView,
+  isSpectatorTargetWatchable
+} from '../../utils/spectatorView';
+
+function getSpectatorScope(game: any): number {
+  const completedRounds = Array.isArray(game.roundStats) ? game.roundStats.length : 0;
+  return game.phase === GamePhase.ENDED ? completedRounds : completedRounds + 1;
+}
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -23,9 +33,6 @@ export default defineEventHandler(async (event) => {
   }
 
   const { player } = await requireGamePlayerAccess(event, game, playerId);
-  if (player.status !== PlayerStatus.WON) {
-    throw createError({ statusCode: 400, message: 'Only players who have won can use spectator view' });
-  }
 
   if (game.phase !== GamePhase.PLAYING && game.phase !== GamePhase.ENDED) {
     throw createError({ statusCode: 400, message: 'Spectator view is only available after the round starts' });
@@ -49,6 +56,9 @@ export default defineEventHandler(async (event) => {
   const target = game.players.find((entry) => entry.id === viewingPlayerId);
   if (!target) {
     throw createError({ statusCode: 404, message: 'Target player not found' });
+  }
+  if (player.status !== PlayerStatus.WON && !canUseDebugBotSpectator(player, target)) {
+    throw createError({ statusCode: 400, message: 'Only players who have won can use spectator view' });
   }
   if (!isSpectatorTargetWatchable(target)) {
     throw createError({ statusCode: 400, message: 'Target player is not watchable in this round' });
@@ -92,7 +102,7 @@ export default defineEventHandler(async (event) => {
   game.spectatorApprovalRequests = game.spectatorApprovalRequests || [];
   let request = game.spectatorApprovalRequests.find((entry) =>
     entry.status === 'pending' &&
-    entry.roundNumber === game.roundNumber &&
+    entry.roundNumber === getSpectatorScope(game) &&
     entry.requesterId === player.id &&
     entry.targetId === target.id
   );
@@ -105,7 +115,7 @@ export default defineEventHandler(async (event) => {
       requesterName: player.name,
       targetId: target.id,
       targetName: target.name,
-      roundNumber: game.roundNumber,
+      roundNumber: getSpectatorScope(game),
       status: 'pending',
       requestedAt: Date.now()
     };

@@ -85,3 +85,6 @@
 - `pendingActions` 卡死主链路修复
 - 建房双击、吃碰杠胡按钮提示、弃牌区位置微调
 - `P1-2` 操作提示与桌面反馈收口：抢动作提示条、移动端具体操作提示、按钮呼吸提示统一
+This file has been intentionally cleared.
+
+Use `AI_policies/AI-Policy-guide.md` as the canonical guide for future AI policy iteration.

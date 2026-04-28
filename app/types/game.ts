@@ -176,5 +176,6 @@ export interface PendingAction {
   availableActions: ActionType[];
   tile?: Tile;
   chowOptions?: string[][];
+  selectedChowTileIds?: string[];
   expiresAt: number;
 }

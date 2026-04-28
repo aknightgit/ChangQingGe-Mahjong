@@ -67,7 +67,7 @@
             class="meld-arrow"
             :class="[getSourceArrowClass(meld.sourcePosition, playerPosition)]"
             :style="getSourceBadgeStyle(meld.sourcePosition)"
-          >{{ getSourceLabel(meld.sourcePosition, playerPosition) }}</span>
+          ></span>
           <!-- 兼容旧字段 sourceIndex -->
           <span
             v-else-if="(meld as any).sourceIndex !== undefined"

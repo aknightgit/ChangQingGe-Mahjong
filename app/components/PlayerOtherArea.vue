@@ -7,22 +7,18 @@
     <template v-if="position === 'top'">
       <div class="player-other-stack player-other-stack--top">
         <div class="seat-line seat-line--top">
-          <div v-if="flowerMelds.length" class="flower-lane flower-lane--top-inline top-slot top-slot--flower">
-            <div
-              v-for="(m, i) in flowerMelds"
-              :key="`flower-top-${i}`"
-              class="meld-group meld-group--flower"
-            >
-              <MahjongTile
-                v-for="t in m.tiles"
-                :key="t.id"
-                :tile="t"
-                :small="true"
-                :back="false"
-                :back-scheme="-1"
-                :dimmed="isWinner"
-              />
-            </div>
+          <div v-if="hand.length" class="hand-lane hand-lane--top top-slot top-slot--hand">
+            <MahjongTile
+              v-for="tile in hand"
+              :key="tile.id"
+              :tile="tile"
+              :small="true"
+              :back="!showHand"
+              :back-scheme="showHand ? -1 : (tileBackScheme ?? 0)"
+              :just-drawn="justDrawnTileId === tile.id"
+              class="top-seat-tile"
+              :dimmed="isWinner"
+            />
           </div>
           <div v-if="mainMelds.length" class="meld-lane meld-lane--top top-slot top-slot--meld">
             <div
@@ -38,7 +34,7 @@
                 :small="true"
                 :back="isConcealedMeld(m)"
                 :back-scheme="isConcealedMeld(m) ? (tileBackScheme ?? 0) : -1"
-                :class="[getClaimMarkerClass(m, t), { 'top-exposed-tile': !isConcealedMeld(m) }]"
+                :class="['top-seat-tile', ...getClaimMarkerClass(m, t)]"
                 :style="getClaimMarkerStyle(m)"
                 :dimmed="isWinner"
               />
@@ -47,20 +43,26 @@
                 class="meld-source meld-source--top"
                 :class="getSourceArrowClass(m.sourcePosition)"
                 :style="getSourceBadgeStyle(m.sourcePosition)"
-              >{{ getSourceLabel(m.sourcePosition) }}</span>
+              ></span>
             </div>
           </div>
-          <div v-if="hand.length" class="hand-lane hand-lane--top top-slot top-slot--hand">
-            <MahjongTile
-              v-for="tile in hand"
-              :key="tile.id"
-              :tile="tile"
-              :small="true"
-              :back="!showHand"
-              :back-scheme="showHand ? -1 : (tileBackScheme ?? 0)"
-              :just-drawn="justDrawnTileId === tile.id"
-              :dimmed="isWinner"
-            />
+          <div v-if="flowerMelds.length" class="flower-lane flower-lane--top top-slot top-slot--flower">
+            <div
+              v-for="(m, i) in flowerMelds"
+              :key="`flower-top-${i}`"
+              class="meld-group meld-group--flower"
+            >
+              <MahjongTile
+                v-for="t in m.tiles"
+                :key="t.id"
+                :tile="t"
+                :small="true"
+                :back="false"
+                :back-scheme="-1"
+                class="top-seat-tile"
+                :dimmed="isWinner"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -90,7 +92,7 @@
             <div
               v-for="(m, i) in mainMelds"
               :key="i"
-              class="meld-group meld-group--vertical"
+              class="meld-group"
               :class="{ 'meld-group--kong': m.type === 'kong' }"
             >
               <MahjongTile
@@ -109,7 +111,7 @@
                 class="meld-source meld-source--left"
                 :class="getSourceArrowClass(m.sourcePosition)"
                 :style="getSourceBadgeStyle(m.sourcePosition)"
-                >{{ getSourceLabel(m.sourcePosition) }}</span>
+                ></span>
             </div>
           </div>
           <div v-if="hand.length" class="hand-lane hand-lane--left">
@@ -151,7 +153,7 @@
             <div
               v-for="(m, i) in mainMelds"
               :key="i"
-              class="meld-group meld-group--vertical"
+              class="meld-group"
               :class="{ 'meld-group--kong': m.type === 'kong' }"
             >
               <MahjongTile
@@ -170,7 +172,7 @@
                 class="meld-source meld-source--right"
                 :class="getSourceArrowClass(m.sourcePosition)"
                 :style="getSourceBadgeStyle(m.sourcePosition)"
-              >{{ getSourceLabel(m.sourcePosition) }}</span>
+              ></span>
             </div>
           </div>
           <div v-if="hand.length" class="hand-lane hand-lane--right">
@@ -321,16 +323,17 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
 
 .seat-line--left,
 .seat-line--right {
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 18px;
-  height: 100%;
+  gap: 8px;
+  width: max-content;
+  height: auto;
 }
 
 .seat-line--right {
-  gap: 18px;
-  transform: translateY(24px);
+  transform: rotate(-90deg);
+  transform-origin: center;
 }
 
 .hand-lane,
@@ -367,22 +370,12 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   gap: 1px;
 }
 
-.meld-lane--top {
+.meld-lane--top,
+.flower-lane--top {
   flex-direction: row;
   align-items: center;
   justify-content: center;
   gap: 1px;
-  margin-top: 0;
-  transform: translateX(-10%);
-}
-
-.flower-lane--top-inline {
-  display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 1px;
-  margin-right: 2px;
-  transform: rotate(180deg);
 }
 
 .hand-lane--left,
@@ -417,11 +410,6 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
 
 .meld-group--vertical {
   flex-direction: column;
-}
-
-.meld-lane--left .meld-group--vertical,
-.meld-lane--right .meld-group--vertical {
-  flex-direction: row;
 }
 
 .meld-lane--left,
@@ -523,36 +511,15 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
 
 .player-other :deep(.tile-img) {
   border-radius: 3px;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) brightness(1.08);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
 }
 
-.meld-lane--top :deep(.top-exposed-tile) {
+.seat-line--top :deep(.top-seat-tile) {
   transform: rotate(180deg);
 }
 
-.hand-lane--left,
-.meld-lane--left,
-.flower-lane--left {
+.seat-line--left {
   transform: rotate(90deg);
   transform-origin: center;
-}
-
-.hand-lane--left {
-  margin-bottom: 8px;
-}
-
-.meld-lane--left {
-  margin-top: 8px;
-}
-
-.hand-lane--right,
-.meld-lane--right,
-.flower-lane--right {
-  transform: rotate(-90deg);
-  transform-origin: center;
-}
-
-.hand-lane--right {
-  transform: rotate(-90deg);
 }
 </style>

@@ -1,6 +1,7 @@
 import {
   GamePhase,
   GameState,
+  MeldType,
   Player,
   PlayerStatus,
   Tile,
@@ -161,6 +162,80 @@ console.log('\n=== Regression: route discard planner ===\n')
     selected === loneNumber.id || selected === 'wan-7',
     `selected=${selected}`
   )
+}
+
+{
+  const isolatedWan = tile(TileSuit.CHARACTERS, 9, 'open-wan-9')
+  const ai = makePlayer('ai4', 'AI-AK', [
+    tile(TileSuit.DOTS, 2, 'd2'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 4, 'd4'),
+    tile(TileSuit.DOTS, 5, 'd5'),
+    tile(TileSuit.DOTS, 6, 'd6'),
+    tile(TileSuit.BAMBOOS, 3, 'b3'),
+    tile(TileSuit.BAMBOOS, 4, 'b4'),
+    tile(TileSuit.BAMBOOS, 5, 'b5'),
+    tile(TileSuit.CHARACTERS, 2, 'w2'),
+    tile(TileSuit.CHARACTERS, 3, 'w3'),
+    tile(TileSuit.WIND, 1, 'east'),
+    tile(TileSuit.DRAGON, 1, 'red'),
+    tile(TileSuit.WIND, 4, 'north'),
+    isolatedWan,
+  ])
+  const game = makeGame([ai, makePlayer('p2', 'AI-胖胖', []), makePlayer('p3', 'AI-阿水', []), makePlayer('p4', 'AI-老赵', [])], [])
+  const selected = selectDiscardTile(ai, game)
+  ok(
+    'AI-AK opening should not default to discarding single honors before isolated number waste',
+    selected === isolatedWan.id,
+    `selected=${selected}`
+  )
+}
+
+{
+  const ai = makePlayer('ai5', 'AI-AK', [
+    tile(TileSuit.DOTS, 1, 'd1'),
+    tile(TileSuit.DOTS, 2, 'd2'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 4, 'd4'),
+    tile(TileSuit.DOTS, 6, 'd6'),
+    tile(TileSuit.DOTS, 7, 'd7'),
+    tile(TileSuit.DOTS, 8, 'd8'),
+    tile(TileSuit.BAMBOOS, 1, 'b1'),
+    tile(TileSuit.BAMBOOS, 4, 'b4'),
+    tile(TileSuit.BAMBOOS, 7, 'b7'),
+    tile(TileSuit.BAMBOOS, 9, 'b9'),
+    tile(TileSuit.WIND, 1, 'east'),
+    tile(TileSuit.WIND, 2, 'south'),
+    tile(TileSuit.DRAGON, 1, 'red'),
+  ])
+  const game = makeGame([ai, makePlayer('p2', 'AI-2', []), makePlayer('p3', 'AI-3', []), makePlayer('p4', 'AI-4', [])], [])
+  const selected = selectDiscardTile(ai, game)
+  ok('two-suit 7v4 imbalance should cut short suit before long suit', ['b1', 'b4', 'b7', 'b9', 'east', 'south', 'red'].includes(selected), `selected=${selected}`)
+}
+
+{
+  const ai = makePlayer('ai6', 'AI-AK', [
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 4, 'd4'),
+    tile(TileSuit.DOTS, 8, 'd8'),
+    tile(TileSuit.CHARACTERS, 1, 'w1'),
+    tile(TileSuit.CHARACTERS, 4, 'w4'),
+    tile(TileSuit.CHARACTERS, 7, 'w7'),
+    tile(TileSuit.CHARACTERS, 8, 'w8'),
+    tile(TileSuit.WIND, 1, 'east'),
+    tile(TileSuit.WIND, 2, 'south'),
+    tile(TileSuit.DRAGON, 1, 'red'),
+    tile(TileSuit.DRAGON, 2, 'green'),
+  ])
+  ai.hand.exposedMelds = [{
+    type: MeldType.SEQUENCE,
+    tiles: [tile(TileSuit.DOTS, 2, 'm-d2'), tile(TileSuit.DOTS, 3, 'm-d3'), tile(TileSuit.DOTS, 4, 'm-d4')],
+    sourcePosition: 1,
+    sourceTileId: 'm-d3',
+  } as any]
+  const game = makeGame([ai, makePlayer('p2', 'AI-2', []), makePlayer('p3', 'AI-3', []), makePlayer('p4', 'AI-4', [])], [])
+  const selected = selectDiscardTile(ai, game)
+  ok('after opening one number suit, AI-AK should not throw that suit while other number waste remains', !['d3', 'd4', 'd8'].includes(selected), `selected=${selected}`)
 }
 
 console.log(`\nResult: ${passed} passed, ${failed} failed`)

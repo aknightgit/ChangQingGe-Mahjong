@@ -363,6 +363,61 @@ function countVisibleCopies(target: Tile, game: GameState): number {
   return visible
 }
 
+function hasWeakNumberWasteCandidate(hand: Tile[], excludeTileId?: string): boolean {
+  const groups = groupTiles(hand)
+  return hand.some(candidate => {
+    if (candidate.id === excludeTileId || isHonor(candidate) || candidate.suit === TileSuit.FLOWER) return false
+    const candidateCount = groups.get(`${candidate.suit}-${candidate.value}`)?.length || 0
+    if (candidateCount >= 2) return false
+    return !hand.some(other =>
+      other.id !== candidate.id &&
+      other.suit === candidate.suit &&
+      Math.abs(other.value - candidate.value) > 0 &&
+      Math.abs(other.value - candidate.value) <= 2
+    )
+  })
+}
+
+function getCommittedOpenNumberSuit(player: Player): TileSuit | null {
+  const suits = new Set<TileSuit>()
+  let numberedTileCount = 0
+
+  for (const meld of player.hand.exposedMelds || []) {
+    for (const tile of meld.tiles || []) {
+      if (!isNumberTile(tile)) continue
+      suits.add(tile.suit)
+      numberedTileCount++
+    }
+  }
+
+  if (numberedTileCount < 3 || suits.size !== 1) return null
+  return [...suits][0] || null
+}
+
+function getNumberSuitCounts(hand: Tile[]): Array<{ suit: TileSuit; count: number }> {
+  return [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
+    .map(suit => ({
+      suit,
+      count: hand.filter(tile => tile.suit === suit).length
+    }))
+    .filter(entry => entry.count > 0)
+    .sort((a, b) => b.count - a.count)
+}
+
+function hasOffSuitNumberWaste(hand: Tile[], committedSuit: TileSuit, excludeTileId?: string): boolean {
+  return hand.some(tile => {
+    if (tile.id === excludeTileId || tile.suit === committedSuit || !isNumberTile(tile)) return false
+    const sameTileCount = hand.filter(other => other.suit === tile.suit && other.value === tile.value).length
+    if (sameTileCount >= 2) return false
+    return !hand.some(other =>
+      other.id !== tile.id &&
+      other.suit === tile.suit &&
+      Math.abs(other.value - tile.value) > 0 &&
+      Math.abs(other.value - tile.value) <= 2
+    )
+  })
+}
+
 function estimateOpponentThreat(opponent: Player, game: GameState): number {
   if (opponent.status !== PlayerStatus.PLAYING) return 0
 
@@ -483,6 +538,7 @@ function scoreTileForDiscard(
   const groups = groupTiles(hand)
   const tileKey = `${tile.suit}-${tile.value}`
   const sameTypeCount = groups.get(tileKey)?.length || 0
+  const isAiAkOpening = player.name === 'AI-AK' && isEarlyPhase
   const tableThreat = estimateTableThreat(game, player.id)
   const discardDanger = getDiscardDangerScore(tile, game, player)
 
@@ -537,6 +593,10 @@ function scoreTileForDiscard(
     } else {
       // Single honor: high to discard (good candidate to throw away)
       score += 5
+      if (isAiAkOpening) {
+        const hasWeakNumberWaste = hasWeakNumberWasteCandidate(hand, tile.id)
+        score += hasWeakNumberWaste ? 6.2 : 3.6
+      }
       // allHonorsPungsPursuit：风一色/碰碰胡路线时，单张风箭也要保留
       if (honorFocus && (policy.allHonorsPungsPursuit || 0) > 0) {
         score -= (policy.allHonorsPungsPursuit || 0) * 2.0
@@ -875,6 +935,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   if (hand.length === 0) return ''
   const nonWildHand = hand.filter(tile => !isWildTile(tile, game))
   const discardCandidates = nonWildHand.length > 0 ? nonWildHand : hand
+  const aiAkOpeningHasWeakNumberWaste = player.name === 'AI-AK' && hand.length >= 11 && hasWeakNumberWasteCandidate(hand)
 
   const exposedCount = player.hand.exposedMelds.length
   const wildChecker = (tile: Tile) => isWildTile(tile, game)
@@ -885,6 +946,14 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   const topOpponentScore = Math.max(...game.players.filter(p => p.id !== player.id).map(p => p.score ?? 0), 0)
   const scoreLead = (player.score ?? 0) - topOpponentScore
   const useRoutePlanner = player.name === 'AI-AK'
+  const committedOpenSuit = useRoutePlanner ? getCommittedOpenNumberSuit(player) : null
+  const hasCommittedOpenOffSuitNumberCandidate = !!committedOpenSuit && discardCandidates.some(tile =>
+    isNumberTile(tile) && tile.suit !== committedOpenSuit
+  )
+  const numberSuitCounts = useRoutePlanner ? getNumberSuitCounts(hand) : []
+  const dominantTwoSuitGap = numberSuitCounts.length === 2
+    ? numberSuitCounts[0].count - numberSuitCounts[1].count
+    : 0
   const routeState = useRoutePlanner
     ? evaluateRouteState({
         game,
@@ -906,6 +975,9 @@ export function selectDiscardTile(player: Player, game: GameState): string {
 
   for (let i = 0; i < discardCandidates.length; i++) {
     const tile = discardCandidates[i]
+    if (committedOpenSuit && hasCommittedOpenOffSuitNumberCandidate && tile.suit === committedOpenSuit) {
+      continue
+    }
     let removed = false
     const remaining = hand.filter(candidate => {
       if (!removed && candidate.id === tile.id) {
@@ -926,6 +998,37 @@ export function selectDiscardTile(player: Player, game: GameState): string {
       ? winningTiles * waitWeight - discardDanger * safetyWeight
       : -Infinity
     let composite = -shanten * 100 + effective * 2.5 + score
+
+    if (aiAkOpeningHasWeakNumberWaste && isHonor(tile) && !hand.some(other => other.id !== tile.id && tilesMatch(other, tile))) {
+      composite -= 10
+    }
+
+    if (committedOpenSuit) {
+      const tilePairCount = hand.filter(other => tilesMatch(other, tile)).length
+      const hasOtherNumberSuitTiles = hand.some(other =>
+        other.id !== tile.id &&
+        isNumberTile(other) &&
+        other.suit !== committedOpenSuit
+      )
+      const offSuitWasteExists = hasOffSuitNumberWaste(hand, committedOpenSuit, tile.id)
+      if (tile.suit === committedOpenSuit) {
+        composite -= hasOtherNumberSuitTiles ? 28 : offSuitWasteExists ? 22 : 12
+      } else if (isHonor(tile)) {
+        composite += tilePairCount >= 2 ? -1.5 : 2.4
+      } else {
+        composite += hasOtherNumberSuitTiles ? 22 : offSuitWasteExists ? 18 : 12.5
+      }
+    }
+
+    if (useRoutePlanner && dominantTwoSuitGap >= 3 && isNumberTile(tile)) {
+      const dominantSuit = numberSuitCounts[0]?.suit || null
+      const minoritySuit = numberSuitCounts[1]?.suit || null
+      if (tile.suit === dominantSuit) {
+        composite -= 12 + dominantTwoSuitGap
+      } else if (tile.suit === minoritySuit) {
+        composite += 8 + dominantTwoSuitGap
+      }
+    }
 
     if (useRoutePlanner && routeState) {
       const afterRouteState = evaluateRouteState({
@@ -989,6 +1092,100 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   return bestTile.id
 }
 
+export function selectBotChowTileIds(
+  player: Player,
+  game: GameState,
+  claimTile: Tile,
+  chowOptions?: string[][]
+): string[] | undefined {
+  if (!chowOptions?.length) return undefined
+
+  const hand = player.hand.concealedTiles
+  const exposedCount = player.hand.exposedMelds.length
+  const wildChecker = (tile: Tile) => isWildTile(tile, game)
+  const wallRemaining = game.wall?.length || 0
+  const tableThreat = estimateTableThreat(game, player.id)
+  const useRoutePlanner = player.name === 'AI-AK'
+
+  const evaluateResultingHand = (candidateHand: Tile[]): { shanten: number; effective: number } => {
+    let bestShanten = Infinity
+    let bestEffective = -1
+
+    for (let i = 0; i < candidateHand.length; i++) {
+      const remain = candidateHand.filter((_, idx) => idx !== i)
+      const shanten = calculateShanten(remain, exposedCount + 1, wildChecker)
+      const effective = countEffectiveTiles(remain, exposedCount + 1, wildChecker)
+      if (shanten < bestShanten || (shanten === bestShanten && effective > bestEffective)) {
+        bestShanten = shanten
+        bestEffective = effective
+      }
+    }
+
+    return { shanten: bestShanten, effective: bestEffective }
+  }
+
+  const passShanten = calculateShanten(hand, exposedCount, wildChecker)
+  const passEffective = countEffectiveTiles(hand, exposedCount, wildChecker)
+  const routeState = useRoutePlanner
+    ? evaluateRouteState({
+        game,
+        player,
+        hand,
+        shanten: passShanten,
+        effectiveTiles: passEffective,
+        tableThreat,
+        wallRemaining,
+      })
+    : null
+
+  let best: { tileIds: string[]; shanten: number; effective: number; tune: number } | null = null
+
+  for (const option of chowOptions) {
+    const optionIds = option.filter(id => id !== claimTile.id)
+    const removeIds = [...optionIds]
+    const candidateHand = hand.filter(tile => {
+      const idx = removeIds.indexOf(tile.id)
+      if (idx === -1) return true
+      removeIds.splice(idx, 1)
+      return false
+    })
+    if (candidateHand.length === 0) continue
+
+    const { shanten, effective } = evaluateResultingHand(candidateHand)
+    let tune = evaluateChowValue(player, game, claimTile)
+
+    if (useRoutePlanner && routeState) {
+      const routeDecision = evaluateRouteClaim({
+        action: ActionType.CHOW,
+        player,
+        game,
+        claimTile,
+        routeState,
+        candidateHand,
+        candidateShanten: shanten,
+        candidateEffective: effective,
+        passShanten,
+        passEffective,
+        tableThreat,
+        wallRemaining,
+      })
+      if (!routeDecision.allowed) continue
+      tune += routeDecision.tuneDelta
+    }
+
+    if (
+      !best ||
+      shanten < best.shanten ||
+      (shanten === best.shanten && effective > best.effective) ||
+      (shanten === best.shanten && effective === best.effective && tune > best.tune)
+    ) {
+      best = { tileIds: optionIds, shanten, effective, tune }
+    }
+  }
+
+  return best?.tileIds
+}
+
 /**
  * Count how many tiles from the remaining wall would complete the hand (听牌总张数).
  * Tests each tile type (4 suits × 9 values + honors) against the player's concealed tiles.
@@ -1014,19 +1211,38 @@ function countWinningTilesForHand(hand: Tile[], exposedCount: number, game: Game
     }
   }
   // Wind tiles (东南西北)
-  for (const w of ['east', 'south', 'west', 'north']) {
-    const testTile: Tile = { suit: TileSuit.WIND, value: 0, id: `test-wind-${w}` }
-    // WIND tiles use value to distinguish, but canWin checks suit
+  for (let v = 1; v <= 4; v++) {
+    const testTile: Tile = { suit: TileSuit.WIND, value: v, id: `test-wind-${v}` }
     const testHand = [...hand, testTile]
     const result = canWin(testHand, exposedCount, wildTileId)
-    if (result.canWin) count += Math.max(0, 4 - countVisibleCopies(testTile, game))
+    if (result.canWin) {
+      const inHand = hand.filter(t => t.suit === TileSuit.WIND && t.value === v).length
+      count += Math.max(0, 4 - inHand - countVisibleCopies(testTile, game))
+    }
   }
   // Dragon tiles (中发白)
   for (let v = 1; v <= 3; v++) {
     const testTile: Tile = { suit: TileSuit.DRAGON, value: v, id: `test-dragon-${v}` }
     const testHand = [...hand, testTile]
     const result = canWin(testHand, exposedCount, wildTileId)
-    if (result.canWin) count += Math.max(0, 4 - countVisibleCopies(testTile, game))
+    if (result.canWin) {
+      const inHand = hand.filter(t => t.suit === TileSuit.DRAGON && t.value === v).length
+      count += Math.max(0, 4 - inHand - countVisibleCopies(testTile, game))
+    }
+  }
+
+  if (wildTileId?.startsWith(`${TileSuit.FLOWER}-`) && Array.isArray(game.wildTileGroup)) {
+    for (const valueText of game.wildTileGroup) {
+      const v = parseInt(valueText, 10)
+      if (Number.isNaN(v) || v < 1 || v > 8) continue
+      const testTile: Tile = { suit: TileSuit.FLOWER, value: v, id: `test-flower-${v}`, isFlower: true }
+      const testHand = [...hand, testTile]
+      const result = canWin(testHand, exposedCount, wildTileId)
+      if (result.canWin) {
+        const inHand = hand.filter(t => t.suit === TileSuit.FLOWER && t.value === v).length
+        count += Math.max(0, 1 - inHand - countVisibleCopies(testTile, game))
+      }
+    }
   }
 
   return count

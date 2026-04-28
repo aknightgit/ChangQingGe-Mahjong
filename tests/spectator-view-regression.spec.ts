@@ -106,6 +106,24 @@ view.updatedAt = Date.now();
 ok('second human target stays hidden without approval', !canRevealSpectatorTarget(game, viewer.id, otherHuman));
 
 game.roundNumber += 1;
+const sameHandView = getSpectatorView(game, viewer.id);
+
+ok('discard-round changes do not clear spectator lock', sameHandView.viewingPlayerId === otherHuman.id, `viewing=${sameHandView.viewingPlayerId}`);
+
+game.roundStats = [{
+  roundNumber: 1,
+  scores: {},
+  winners: [],
+  selfDraws: [],
+  diceMultiplier: 1,
+  inheritMultiplier: 1,
+  effectiveMultiplier: 1,
+  settlementMultiplier: 1,
+  overflowCarryMultiplierNextRound: 1,
+  bailoutRelations: [],
+  winnerDetails: [],
+  transfers: []
+}] as any;
 const nextRoundView = getSpectatorView(game, viewer.id);
 
 ok('new round resets approved human spectator view', nextRoundView.approvedHumanPlayerId === null && nextRoundView.viewingPlayerId === null);

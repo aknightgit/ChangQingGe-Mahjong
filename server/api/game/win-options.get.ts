@@ -1,5 +1,32 @@
 import { gameManager } from '../../utils/gameManager';
 import { requireGamePlayerAccess } from '../../utils/session';
+import { getTileDisplayName } from '../../utils/tiles';
+
+function buildDisplayLabel(option: any, winningTileName: string): string {
+  const summary = option?.summary || {};
+  const baseFan = Number(summary.baseFan ?? 0);
+  const roundMultiplier = Number(summary.roundMultiplier ?? 1);
+  const settlementMultiplier = Number(summary.settlementMultiplier ?? 1);
+  const finalPoints = Number(summary.finalPoints ?? option?.score ?? 0);
+  const details = Array.isArray(option?.details) ? option.details as string[] : [];
+  const label = String(option?.label || '')
+    .replace(/·自摸|·捉冲|\(无百搭×2\)/g, '')
+    .trim();
+  const method = option?.type === 'self_draw'
+    ? `自摸${winningTileName}`
+    : `捉冲${winningTileName}`;
+
+  const factors: string[] = [`基础番${baseFan}`];
+  if (details.some(detail => detail.includes('门清'))) {
+    factors.push('门清2');
+  }
+  if (details.some(detail => detail.includes('无百搭'))) {
+    factors.push('无百搭*2');
+  }
+  factors.push(`全局倍数${roundMultiplier}`);
+  factors.push(`结算系数${settlementMultiplier}`);
+  return `[${label}：${method}（${factors.join('*')}）=${finalPoints}]`;
+}
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
@@ -15,9 +42,18 @@ export default defineEventHandler(async (event) => {
 
     await requireGamePlayerAccess(event, game, playerId);
 
+    const pendingAction = game.pendingActions.find((entry) => entry.playerId === playerId);
+    const currentPlayer = game.players.find((entry) => entry.id === playerId);
+    const winningTile = pendingAction?.tile || (currentPlayer as any)?.lastDrawnTile || null;
+    const winningTileName = winningTile ? getTileDisplayName(winningTile) : '';
     const filteredWinOptions = await gameManager.getWinOptionsForPlayer(gameId, playerId);
+    const decoratedWinOptions = filteredWinOptions.map((option: any) => ({
+      ...option,
+      internalLabel: option.label,
+      label: buildDisplayLabel(option, winningTileName)
+    }));
 
-    return { success: true, winOptions: filteredWinOptions };
+    return { success: true, winOptions: decoratedWinOptions };
   } catch (error: any) {
     throw createError({ statusCode: 400, message: error.message || 'Failed to get win options' });
   }

@@ -82,17 +82,11 @@ const BackTile = defineComponent({
   setup(tileProps) {
     return () => {
       const baseClass = ['wall-back', tileProps.outer ? 'wall-back--outer' : '']
-      if (tileProps.scheme === 0) {
-        return h('img', {
-          src: '/assets/tileset/pomax_hq/Back.png',
-          class: baseClass
-        })
-      }
       return h('div', {
         class: [
           ...baseClass,
           'wall-back--css',
-          tileProps.scheme === 1 ? 'wall-back--ivory' : 'wall-back--capri'
+          tileProps.scheme === 1 ? 'wall-back--ivory' : tileProps.scheme === 2 ? 'wall-back--capri' : 'wall-back--jade'
         ]
       })
     }
@@ -163,6 +157,14 @@ const LAYER_OFFSET = 1
 .wall-back--css::after {
   width: 24%;
   opacity: 0.35;
+}
+
+.wall-back--jade {
+  color: #e0f6d4;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.24), transparent 36%),
+    linear-gradient(180deg, #2d8b57 0%, #1d653d 100%);
+  border-color: rgba(213, 245, 196, 0.22);
 }
 
 .wall-back--ivory {

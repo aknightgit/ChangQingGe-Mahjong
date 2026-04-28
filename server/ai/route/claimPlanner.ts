@@ -28,6 +28,20 @@ function isNumberSuit(suit: TileSuit): boolean {
   return suit === TileSuit.DOTS || suit === TileSuit.CHARACTERS || suit === TileSuit.BAMBOOS
 }
 
+function getCommittedOpenNumberSuit(player: Player): TileSuit | null {
+  const suits = new Set<TileSuit>()
+  let numberedTileCount = 0
+  for (const meld of player.hand.exposedMelds || []) {
+    for (const tile of meld.tiles || []) {
+      if (!isNumberSuit(tile.suit)) continue
+      suits.add(tile.suit)
+      numberedTileCount++
+    }
+  }
+  if (numberedTileCount < 3 || suits.size !== 1) return null
+  return [...suits][0] || null
+}
+
 export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
   const {
     action,
@@ -58,6 +72,24 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
   const isTargetSuit = !!routeState.targetSuit && claimTile.suit === routeState.targetSuit
   const isHonorTile = isHonor(claimTile)
   const phase = routeState.phase
+  const openingMenqing = player.hand.exposedMelds.length === 0 && player.hand.concealedTiles.length >= 11
+  const committedOpenSuit = getCommittedOpenNumberSuit(player)
+  const shortestSuitChow =
+    action === ActionType.CHOW &&
+    !!routeState.features.shortestSuit &&
+    claimTile.suit === routeState.features.shortestSuit
+
+  if (
+    shortestSuitChow &&
+    candidateShanten >= passShanten &&
+    candidateEffective <= passEffective + 1
+  ) {
+    return { allowed: false, tuneDelta: -1.9, reason: 'shortest_suit_chow_blocked' }
+  }
+
+  if (committedOpenSuit && action === ActionType.CHOW && claimTile.suit !== committedOpenSuit) {
+    return { allowed: false, tuneDelta: -1.6, reason: 'off_route_open_suit_chow' }
+  }
 
   switch (routeState.current) {
     case 'MENQING_SPEED': {
@@ -66,19 +98,31 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
         (phase === 'RUSH' && candidateShanten <= passShanten && candidateEffective >= passEffective - 1) ||
         (tableThreat >= 0.82 && candidateShanten <= passShanten && speedGain >= 0)
 
-      if (action === ActionType.CHOW && player.hand.exposedMelds.length === 0 && !canBreakForSpeed) {
+      const openingBreakNeeds =
+        candidateShanten < passShanten ||
+        candidateEffective >= passEffective + (action === ActionType.CHOW ? 5 : 7) ||
+        speedGain >= (action === ActionType.CHOW ? 1.35 : 1.75) ||
+        routeGain >= (isHonorTile ? 1.2 : 0.9)
+
+      const canBreakOpeningMenqing = openingMenqing ? openingBreakNeeds : canBreakForSpeed
+
+      if (action === ActionType.CHOW && player.hand.exposedMelds.length === 0 && !canBreakOpeningMenqing) {
         return { allowed: false, tuneDelta: -1.5, reason: 'menqing_hold_chow' }
       }
-      if ((action === ActionType.PENG || action === ActionType.KONG) && player.hand.exposedMelds.length === 0 && !canBreakForSpeed) {
+      if ((action === ActionType.PENG || action === ActionType.KONG) && player.hand.exposedMelds.length === 0 && !canBreakOpeningMenqing) {
         return { allowed: false, tuneDelta: -1.2, reason: 'menqing_hold_pung' }
       }
-      return { allowed: true, tuneDelta: canBreakForSpeed ? 0.15 + routeGain * 0.03 : -0.25, reason: 'menqing_speed' }
+      return { allowed: true, tuneDelta: canBreakOpeningMenqing ? 0.15 + routeGain * 0.03 : -0.25, reason: 'menqing_speed' }
     }
 
     case 'OPEN_SPEED':
       return {
         allowed: true,
-        tuneDelta: 0.35 + Math.max(0, speedGain) * 0.08 + (action === ActionType.CHOW ? 0.08 : 0.12),
+        tuneDelta:
+          0.35 +
+          Math.max(0, speedGain) * 0.08 +
+          (action === ActionType.CHOW ? 0.08 : 0.12) +
+          (committedOpenSuit && claimTile.suit === committedOpenSuit ? 0.35 : 0),
         reason: 'open_speed_push',
       }
 

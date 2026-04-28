@@ -156,3 +156,6 @@ GPT建议方案:
   4. 最后才把这些接回训练器，增加路线诊断和 fitness
 
   一句话结论
+This file has been intentionally cleared.
+
+Use `AI_policies/AI-Policy-guide.md` as the canonical guide for future AI policy iteration.

@@ -1,7 +1,7 @@
 import { gameManager } from '../../utils/gameManager';
 import { TileSuit } from '../../types/game';
 import { requireGamePlayerAccess } from '../../utils/session';
-import { canRevealSpectatorTarget } from '../../utils/spectatorView';
+import { canRevealSpectatorTarget, canUseDebugBotSpectator } from '../../utils/spectatorView';
 
 function getEffectiveGlobalMultiplier(game: any): number {
   const inherit = game.inheritMultiplier ?? game.inheritedGlobalMultiplier ?? 1;
@@ -12,6 +12,11 @@ function getEffectiveGlobalMultiplier(game: any): number {
 function getCurrentRoundNumber(game: any): number {
   const completedRounds = Array.isArray(game.roundStats) ? game.roundStats.length : 0;
   return game.phase === 'ended' ? Math.max(1, completedRounds) : completedRounds + 1;
+}
+
+function getSpectatorScope(game: any): number {
+  const completedRounds = Array.isArray(game.roundStats) ? game.roundStats.length : 0;
+  return game.phase === 'ended' ? completedRounds : completedRounds + 1;
 }
 
 export default defineEventHandler(async (event) => {
@@ -78,10 +83,17 @@ export default defineEventHandler(async (event) => {
   (game as any).bailoutRelations = bailoutRelations;
 
   const maskedPlayers = game.players.map((p) => {
+    const hasDebugSpectatorLock =
+      !!player &&
+      !!(game.spectatorViews?.[normalizedPlayerId]) &&
+      game.spectatorViews?.[normalizedPlayerId]?.roundNumber === getSpectatorScope(game) &&
+      game.spectatorViews?.[normalizedPlayerId]?.viewingPlayerId === p.id &&
+      canUseDebugBotSpectator(player, p);
     const shouldReveal =
       isAdmin ||
       p.id === normalizedPlayerId ||
-      canRevealSpectatorTarget(game, normalizedPlayerId, p);
+      canRevealSpectatorTarget(game, normalizedPlayerId, p) ||
+      hasDebugSpectatorLock;
 
     return {
       ...p,

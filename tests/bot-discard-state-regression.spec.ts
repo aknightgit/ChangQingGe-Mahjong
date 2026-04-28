@@ -9,6 +9,7 @@ import {
   TileSuit,
 } from '../server/types/game';
 import { gameManager } from '../server/utils/gameManager';
+import { selectBotChowTileIds } from '../server/services/botService';
 
 let passed = 0;
 let failed = 0;
@@ -192,6 +193,35 @@ try {
   anyManager.clearPendingActionTimer(chowGame.gameId);
   anyManager.games.delete(chowGame.gameId);
 }
+
+const aiAk = makePlayer('ai-ak', 13);
+aiAk.name = 'AI-AK';
+aiAk.hand.concealedTiles = [
+  tile(TileSuit.DOTS, 1, 'd1'),
+  tile(TileSuit.DOTS, 2, 'd2'),
+  tile(TileSuit.DOTS, 3, 'd3'),
+  tile(TileSuit.DOTS, 5, 'd5'),
+  tile(TileSuit.DOTS, 6, 'd6'),
+  tile(TileSuit.DOTS, 7, 'd7'),
+  tile(TileSuit.BAMBOOS, 2, 't2'),
+  tile(TileSuit.BAMBOOS, 3, 't3'),
+  tile(TileSuit.BAMBOOS, 4, 't4'),
+  tile(TileSuit.CHARACTERS, 2, 'w2'),
+  tile(TileSuit.CHARACTERS, 3, 'w3'),
+  tile(TileSuit.CHARACTERS, 4, 'w4'),
+  tile(TileSuit.WIND, 1, 'east'),
+];
+const selectedChow = selectBotChowTileIds(
+  aiAk,
+  makeGame([aiAk, makePlayer('p2', 13), makePlayer('p3', 13), makePlayer('p4', 13)]),
+  tile(TileSuit.DOTS, 4, 'live-dot-4'),
+  [['d2', 'd3'], ['d3', 'd5'], ['d5', 'd6']]
+);
+ok(
+  'AI-AK chow option selection returns a concrete option',
+  !!selectedChow && selectedChow.length === 2,
+  `selected=${JSON.stringify(selectedChow)}`
+);
 
 console.log(`\nResult: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

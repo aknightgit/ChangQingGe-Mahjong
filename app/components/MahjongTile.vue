@@ -52,7 +52,7 @@
     </template>
     <template v-else>
       <!-- 牌背：3套方案轮流使用 -->
-      <img v-if="effectiveBackScheme === 0" src="/assets/tileset/pomax_hq/Back.png" class="tile-img" loading="lazy" />
+      <div v-if="effectiveBackScheme === 0" class="tile-back-face" />
       <div v-else-if="effectiveBackScheme === 1" class="tile-back-ivory" />
       <div v-else class="tile-back-capri" />
     </template>
@@ -233,25 +233,31 @@ const chineseNum = computed(() => {
 
 /* ==================== 牌背（CSS渲染，与牌墙统一） ==================== */
 .tile-back-face {
+  --tile-back-ring-size: 46%;
+  --tile-back-dot-size: 18%;
+  --tile-back-ring-opacity: 0.3;
+  --tile-back-dot-opacity: 0.42;
   width: 100%;
   height: 100%;
   border-radius: 4px 4px 3px 3px;
   background:
     linear-gradient(180deg,
-      rgba(255,255,255,0.15) 0%,
-      rgba(255,255,255,0.04) 25%,
+      rgba(255,255,255,0.18) 0%,
+      rgba(255,255,255,0.07) 25%,
       transparent 50%,
-      rgba(0,0,0,0.4) 100%),
+      rgba(0,0,0,0.32) 100%),
     linear-gradient(155deg,
-      #1a4a28 0%,
-      #123a1e 35%,
-      #0a2212 65%,
-      #040f08 100%);
-  border: 0.5px solid rgba(180,220,160,0.12);
+      #2d8b57 0%,
+      #247348 34%,
+      #1a5d39 68%,
+      #114329 100%);
+  border: 0.5px solid rgba(213, 245, 196, 0.22);
   box-shadow:
-    inset 0 1px 2px rgba(255,255,255,0.1),
+    inset 0 1px 2px rgba(255,255,255,0.14),
     inset 0 -1px 3px rgba(0,0,0,0.35);
   position: relative;
+  color: rgba(228, 249, 213, 0.96);
+  overflow: hidden;
 }
 .tile-back-face::after {
   content: '';
@@ -268,6 +274,10 @@ const chineseNum = computed(() => {
 
 /* ===== 方案二：象牙白/米色 ===== */
 .tile-back-ivory {
+  --tile-back-ring-size: 46%;
+  --tile-back-dot-size: 18%;
+  --tile-back-ring-opacity: 0.22;
+  --tile-back-dot-opacity: 0.34;
   width: 100%;
   height: 100%;
   border-radius: 4px 4px 3px 3px;
@@ -304,6 +314,10 @@ const chineseNum = computed(() => {
 
 /* ===== 方案三：卡布里蓝 + 波光粼粼 ===== */
 .tile-back-capri {
+  --tile-back-ring-size: 46%;
+  --tile-back-dot-size: 18%;
+  --tile-back-ring-opacity: 0.22;
+  --tile-back-dot-opacity: 0.34;
   width: 100%;
   height: 100%;
   border-radius: 4px 4px 3px 3px;
@@ -367,6 +381,8 @@ const chineseNum = computed(() => {
   color: #d7fbff;
 }
 
+.tile-back-face::before,
+.tile-back-face::after,
 .tile-back-ivory::before,
 .tile-back-ivory::after,
 .tile-back-capri::before,
@@ -386,16 +402,21 @@ const chineseNum = computed(() => {
   pointer-events: none;
 }
 
+.tile-back-face::before,
 .tile-back-ivory::before,
 .tile-back-capri::before {
-  width: 54%;
-  opacity: 0.22;
+  width: var(--tile-back-ring-size);
+  border: 1px solid currentColor;
+  background: transparent;
+  opacity: var(--tile-back-ring-opacity);
 }
 
+.tile-back-face::after,
 .tile-back-ivory::after,
 .tile-back-capri::after {
-  width: 24%;
-  opacity: 0.35;
+  width: var(--tile-back-dot-size);
+  background: currentColor;
+  opacity: var(--tile-back-dot-opacity);
 }
 
 .tile-char-top {
