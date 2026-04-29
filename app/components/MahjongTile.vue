@@ -62,6 +62,7 @@
 <script setup lang="ts">
 import { computed, ref, inject } from 'vue'
 import type { Tile } from '~/types/game'
+import { getTileAssetUrl } from '~/composables/useTileAsset'
 
 const props = withDefaults(defineProps<{
   tile: Tile
@@ -110,37 +111,33 @@ const onClick = () => {
 }
 
 // ===== PNG 牌图映射 =====
-// 优先使用 ak_jpg 实体牌素材，fallback 到 pomax_hq
+// 资源统一走 assets/tileset，由构建产物输出真实 URL
 const tileImageSrc = computed(() => {
   const { suit, value } = props.tile
 
-  // 数字牌
-  if (suit === 'wan' || suit === 'man') return `/assets/tileset/ak_jpg/man${value}.jpg`
-  if (suit === 'dots' || suit === 'tong') return `/assets/tileset/ak_jpg/pin${value}.jpg`
-  if (suit === 'tiao') return `/assets/tileset/ak_jpg/bamboo${value}.jpg`
+  if (suit === 'wan' || suit === 'man') return getTileAssetUrl(`ak_jpg/man${value}.jpg`)
+  if (suit === 'dots' || suit === 'tong') return getTileAssetUrl(`ak_jpg/pin${value}.jpg`)
+  if (suit === 'tiao') return getTileAssetUrl(`ak_jpg/bamboo${value}.jpg`)
 
-  // 风牌
   if (suit === 'feng') {
     const windMap: Record<number, string> = { 1: 'east', 2: 'south', 3: 'west', 4: 'north' }
     const name = windMap[value]
-    return name ? `/assets/tileset/ak_jpg/${name}.jpg` : null
+    return name ? getTileAssetUrl(`ak_jpg/${name}.jpg`) : null
   }
 
-  // 箭牌: 中发白
   if (suit === 'jian') {
     const dragonMap: Record<number, string> = { 1: 'zhong', 2: 'fa', 3: 'bai' }
     const name = dragonMap[value]
-    return name ? `/assets/tileset/ak_jpg/${name}.jpg` : null
+    return name ? getTileAssetUrl(`ak_jpg/${name}.jpg`) : null
   }
 
-  // 花牌
   if (suit === 'hua') {
     const flowerMap: Record<number, string> = {
       1: 'spring', 2: 'summer', 3: 'autumn', 4: 'winter',
       5: 'plum', 6: 'orchid', 7: 'bamboo_flower', 8: 'chrysanthemum'
     }
     const name = flowerMap[value]
-    return name ? `/assets/tileset/ak_jpg/${name}.jpg` : null
+    return name ? getTileAssetUrl(`ak_jpg/${name}.jpg`) : null
   }
 
   return null

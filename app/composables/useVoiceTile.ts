@@ -1,16 +1,16 @@
 /**
  * 麻将牌面语音播放
- * 支持多音色方案（bingtang / pure_zh）
- * 每张出牌立即念牌
+ * 资源统一放在 assets/voice 下，不依赖 public 目录
  */
 
 import { ref, computed } from 'vue'
 
-export type VoiceScheme = 'bingtang' | 'pure_zh'
+export type VoiceScheme = 'bingtang'
 
 interface TileVoiceEntry {
   key: string
   text: string
+  mp3?: string
   opus: string
 }
 
@@ -19,13 +19,59 @@ interface Manifest {
   tiles: TileVoiceEntry[]
 }
 
-// 全局单例
+const VOICE_TEXT_MAP: Record<string, string> = {
+  feng_east: '东',
+  feng_south: '南',
+  feng_west: '西',
+  feng_north: '北',
+  jian_zhong: '中',
+  jian_fa: '发',
+  jian_bai: '白板',
+  hua_plum: '花',
+  wan_1: '一万', wan_2: '二万', wan_3: '三万', wan_4: '四万', wan_5: '五万', wan_6: '六万', wan_7: '七万', wan_8: '八万', wan_9: '九万',
+  tong_1: '一筒', tong_2: '二筒', tong_3: '三筒', tong_4: '四筒', tong_5: '五筒', tong_6: '六筒', tong_7: '七筒', tong_8: '八筒', tong_9: '九筒',
+  tiao_1: '一条', tiao_2: '二条', tiao_3: '三条', tiao_4: '四条', tiao_5: '五条', tiao_6: '六条', tiao_7: '七条', tiao_8: '八条', tiao_9: '九条',
+}
+
+const audioModules = import.meta.glob('../../assets/voice/**/*.{mp3,opus}', {
+  eager: true,
+  import: 'default',
+}) as Record<string, string>
+
+const schemeEntries = Object.entries(audioModules)
+  .map(([path, url]) => {
+    const match = path.match(/\.\.\/\.\.\/assets\/voice\/([^/]+)\/([^/.]+)\.(mp3|opus)$/)
+    if (!match) return null
+    const [, scheme, key, ext] = match
+    return { scheme, key, ext, url }
+  })
+  .filter(Boolean) as Array<{ scheme: string, key: string, ext: 'mp3' | 'opus', url: string }>
+
+const buildManifest = (scheme: VoiceScheme): Manifest => {
+  const grouped = new Map<string, Partial<TileVoiceEntry>>()
+  for (const entry of schemeEntries) {
+    if (entry.scheme !== scheme) continue
+    const current = grouped.get(entry.key) || { key: entry.key, text: VOICE_TEXT_MAP[entry.key] || entry.key }
+    if (entry.ext === 'mp3') current.mp3 = entry.url
+    if (entry.ext === 'opus') current.opus = entry.url
+    grouped.set(entry.key, current)
+  }
+
+  const tiles = [...grouped.values()]
+    .filter((item): item is TileVoiceEntry => !!item.opus)
+    .sort((a, b) => a.key.localeCompare(b.key, 'zh-CN'))
+
+  return {
+    voice: '冰糖',
+    tiles,
+  }
+}
+
 const _currentScheme = ref<VoiceScheme>('bingtang')
 const _manifest = ref<Manifest | null>(null)
 const _audioMap = ref<Map<string, string>>(new Map())
 let _audioEl: HTMLAudioElement | null = null
 
-// 获取音频元素（复用）
 const getAudioEl = (): HTMLAudioElement => {
   if (!_audioEl) {
     _audioEl = new Audio()
@@ -34,17 +80,12 @@ const getAudioEl = (): HTMLAudioElement => {
   return _audioEl
 }
 
-// 加载音色方案
 export const loadVoiceScheme = async (scheme: VoiceScheme): Promise<void> => {
-  const manifestPath = `/assets/voice/${scheme}/manifest.json`
   try {
-    const res = await fetch(manifestPath)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const manifest: Manifest = await res.json()
+    const manifest = buildManifest(scheme)
     _manifest.value = manifest
     _currentScheme.value = scheme
 
-    // 建立 key → opus URL 的映射
     const map = new Map<string, string>()
     for (const tile of manifest.tiles) {
       map.set(tile.key, tile.opus)
@@ -56,78 +97,53 @@ export const loadVoiceScheme = async (scheme: VoiceScheme): Promise<void> => {
   }
 }
 
-// 将牌面 key 映射为出声 key（处理特殊情况）
 function resolveTileKey(suit: string, value: number): string {
-  // suit 来自 TileSuit enum 或字面量（小写）
+  const normalizedSuit = suit.toLowerCase()
   const suitMap: Record<string, string> = {
     wan: 'wan',
+    man: 'wan',
     dots: 'tong',
+    tong: 'tong',
     tiao: 'tiao',
+    characters: 'tiao',
+    bamboos: 'tiao',
     feng: 'feng',
+    wind: 'feng',
     jian: 'jian',
+    dragon: 'jian',
     hua: 'hua',
-    // 大写枚举值（TileSuit.WAN 等）
-    WAN: 'wan',
-    DOTS: 'tong',
-    CHARACTERS: 'tiao',
-    BAMBOOS: 'tiao',
-    WIND: 'feng',
-    DRAGON: 'jian',
-    FLOWER: 'hua',
+    flower: 'hua',
   }
   const windMap: Record<number, string> = { 1: 'east', 2: 'south', 3: 'west', 4: 'north' }
   const jianMap: Record<number, string> = { 1: 'zhong', 2: 'fa', 3: 'bai' }
-  const prefix = suitMap[suit.toLowerCase()] || suit.toLowerCase()
-  let suffix: string
+  const prefix = suitMap[normalizedSuit] || normalizedSuit
 
-  if (suit === 'feng' || suit === 'WIND') {
-    suffix = windMap[value] || String(value)
-  } else if (suit === 'jian' || suit === 'DRAGON') {
-    suffix = jianMap[value] || String(value)
-  } else if (suit === 'hua' || suit === 'FLOWER') {
-    // 所有花牌统一用「花」语音（hua_plum）
-    return 'hua_plum'
-  } else {
-    suffix = String(value)
-  }
-
-  return `${prefix}_${suffix}`
+  if (prefix === 'feng') return `feng_${windMap[value] || value}`
+  if (prefix === 'jian') return `jian_${jianMap[value] || value}`
+  if (prefix === 'hua') return 'hua_plum'
+  return `${prefix}_${value}`
 }
 
-/** 播放指定牌面的语音 */
 export const playVoiceTile = (suit: string, value: number): void => {
   if (!process.client) return
   const key = resolveTileKey(suit, value)
   const url = _audioMap.value.get(key)
   if (!url) {
-    // 尝试兜底：用 value 配合 suit 前缀
-    const altKey = `${suit.toLowerCase()}_${value}`
-    const altUrl = _audioMap.value.get(altKey)
-    if (altUrl) {
-      playAudio(altUrl)
-    } else {
-      console.warn(`[VoiceTile] No audio for key="${key}" alt="${altKey}" scheme="${_currentScheme.value}"`)
-    }
+    console.warn(`[VoiceTile] No audio for key="${key}" scheme="${_currentScheme.value}"`)
     return
   }
   playAudio(url)
 }
 
-/** 播放 URL */
 const playAudio = (url: string) => {
   const el = getAudioEl()
   el.src = url
   el.currentTime = 0
-  el.play().catch(() => {
-    // 播放失败静默
-  })
+  el.play().catch(() => {})
 }
 
-/** 预加载所有音频（可选，加速首次播放） */
 export const preloadAllTiles = async (): Promise<void> => {
-  const map = _audioMap.value
-  const urls = [...map.values()]
-  // 并发预加载（不阻塞）
+  const urls = [..._audioMap.value.values()]
   urls.forEach(url => {
     const link = document.createElement('link')
     link.rel = 'preload'
@@ -135,10 +151,8 @@ export const preloadAllTiles = async (): Promise<void> => {
     link.href = url
     document.head.appendChild(link)
   })
-  console.info(`[VoiceTile] Preloading ${urls.length} audio files`)
 }
 
-/** 获取当前音色名 */
 export const getCurrentVoiceName = (): string => {
   return _manifest.value?.voice ?? _currentScheme.value
 }

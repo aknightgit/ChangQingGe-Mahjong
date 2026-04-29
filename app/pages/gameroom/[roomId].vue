@@ -923,7 +923,7 @@ const toggleSound = () => {
   setSoundEnabled(!soundEnabled.value)
 }
 const cycleVoiceScheme = async () => {
-  const next = currentScheme.value === 'bingtang' ? 'pure_zh' : 'bingtang'
+  const next: VoiceScheme = 'bingtang'
   await loadVoiceScheme(next)
   try { localStorage.setItem('mahjong.voiceScheme', next) } catch {}
 }

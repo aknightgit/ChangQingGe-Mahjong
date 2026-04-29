@@ -634,7 +634,8 @@ export function buildRoundReport(
   internalResult: any,
   policy: Record<string, number>,
   playerNames: string[],
-  scriptName?: string
+  scriptName?: string,
+  snapshotsOverride?: any[]
 ): RoundReport {
   const winningGames = (internalResult.winningGames || []).sort((a: any, b: any) => a.gameIdx - b.gameIdx)
   const fallbackAverages = computeFallbackAverages(winningGames)
@@ -695,7 +696,7 @@ export function buildRoundReport(
     worstLossGames: internalResult.worstSingleLoss ? [internalResult.worstSingleLoss] : [],
     multiWinDist: internalResult.multiWinDist || [0, 0, 0, 0],
     allWinningGames: winningGames,
-    turnSnapshots: internalResult.turnSnapshots || [],
+    turnSnapshots: snapshotsOverride || internalResult.turnSnapshots || [],
   }
 }
 

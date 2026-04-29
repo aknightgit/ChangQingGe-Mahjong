@@ -943,12 +943,34 @@ function evaluateAkDiscardTieBreak(
       : 0
   const pairKeepBonus = sameTypeCount >= 1 ? -0.35 : 0
   const localShapeBonus = nearbyCount > 0 ? Math.min(0.5, nearbyCount * -0.12) : 0.2
+
+  // 门长度权重：最短门的牌优先出（K哥要求：万子最长门时先清光条子）
+  let shortestSuitBonus = 0
+  if (!isHonor(discardTile) && discardTile.suit !== TileSuit.FLOWER) {
+    const handToCount = normalizeHand(handTiles)
+    const suitCounts: Record<number, number> = {}
+    for (const t of handToCount) {
+      if (!isHonor(t) && t.suit !== TileSuit.FLOWER) {
+        suitCounts[t.suit] = (suitCounts[t.suit] || 0) + 1
+      }
+    }
+    const counts = Object.values(suitCounts)
+    if (counts.length >= 2) {
+      const minCount = Math.min(...counts)
+      const mySuitCount = suitCounts[discardTile.suit] || 0
+      if (mySuitCount === minCount) {
+        shortestSuitBonus = -0.6  // 最短门出牌奖励（负分=更优先出）
+      }
+    }
+  }
+
   let score =
     isolatedHonorPenalty +
     isolatedTerminalPenalty +
     disconnectedMiddlePenalty +
     pairKeepBonus +
-    localShapeBonus
+    localShapeBonus +
+    shortestSuitBonus
 
   return score
 }
@@ -3786,7 +3808,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       recordTurnSnapshot(nextPlayer, '-', tileStr(chowDiscard), { actionType: 'chow-discard', claimTile: tileStr(discard), claimFrom: g.players[curr].name, wallBefore: g.wallIdx })
       meldTaken = true
       g.current = (nextPlayer + 1) % 4  // K哥铁律：吃后下家摸牌，不是吃家继续
-      break  // 吃后退出循环，防止其他家继续碰/杠
+      continue  // 吃后进入下一轮，防止其他家继续碰/杠
     }
 
     g.current = nextPlayer
@@ -4403,7 +4425,7 @@ function main() {
     // 每轮单独输出文件（使用标准化reporter）
     // 无论是否 improved，每局结束后都写 round 文件（--detail 时）
     if (DETAIL_MODE && bestEvalResult) {
-      const report = buildRoundReport(round, bestEvalResult, roundBestPolicy as any, AI_NAMES, 'train-ai-ak.ts')
+      const report = buildRoundReport(round, bestEvalResult, roundBestPolicy as any, AI_NAMES, 'train-ai-ak.ts', baseline.turnSnapshots)
       roundReports.push(report)
       const filename = writeRoundFile(OUT_DIR, report, DETAIL_MODE)
       console.log(`  → 轮次详情已保存: ${filename}`)
