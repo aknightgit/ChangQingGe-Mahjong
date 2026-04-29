@@ -48,11 +48,14 @@ const ROUNDS = parseInt(process.argv[2] || '10') || 10
 const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000') || 1000
 const BASELINE_MODE = process.argv.includes('--baseline')  // 基线训练：优化指标而非得分
 const DETAIL_MODE = process.argv.includes('--detail')
+const AK_DISCARD_TRACE = process.argv.includes('--ak-discard-trace')
+const PERF_TRACE = process.argv.includes('--perf-trace')
 const SKIP_WILD = process.argv.includes('--skip-wild')  // 跳过百搭分配进行胜负判断
 const REWARD_MODE = process.argv.includes('--reward-mode')  // 阶段奖励模式
 const SETTLEMENT_MULT = 10
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
 const OUT_DIR = path.resolve(__dirname, '..', 'training-output')
+let TRACE_DETAIL_GAME = false
 
 // ========== 全局错误处理（防止训练崩溃无日志） ==========
 let _mainRoundReports: any[] = []
@@ -1690,7 +1693,7 @@ function applyPeng(p: BotPlayer, tile: Tile, sourcePos?: number): void {
   const validBefore = before === 13 - 3 * meldCount  // K哥铁律：只看口数
   const matches = p.hand.filter(t => tileEq(t, tile)).slice(0, 2)
   const matchIds = matches.map(m => m.id.slice(-6))
-  console.error(`[PENG] ${p.name} before=${before} matches=${matches.length} matchIds=${matchIds.join(',')} tile=${tileStr(tile)} hand=[${handBeforeIds}]`)
+  if (TRACE_DETAIL_GAME) console.error(`[PENG] ${p.name} before=${before} matches=${matches.length} matchIds=${matchIds.join(',')} tile=${tileStr(tile)} hand=[${handBeforeIds}]`)
   if (matches.length < 2) return
   // 精确移除：记录每一步
   const removedIds: string[] = []
@@ -1703,7 +1706,7 @@ function applyPeng(p: BotPlayer, tile: Tile, sourcePos?: number): void {
   const expected = before - 2
   if (process.env.DEBUG || after !== expected) {
     const handAfterIds = p.hand.map(t => t.id.slice(-6)).join(',')
-    console.error(`[PENG] ${p.name} removed=[${removedIds.join(',')}] before=${before} after=${after} expected=${expected} handAfter=[${handAfterIds}]`)
+    if (TRACE_DETAIL_GAME) console.error(`[PENG] ${p.name} removed=[${removedIds.join(',')}] before=${before} after=${after} expected=${expected} handAfter=[${handAfterIds}]`)
   }
 
   p.exposedMelds.push({ type: MeldType.TRIPLET, tiles: [tile, tile, tile], isConcealed: false })
@@ -1716,8 +1719,11 @@ function applyChow(p: BotPlayer, tile: Tile, sourcePos?: number): void {
   const validBefore = before === 13 - 3 * meldCount  // K哥铁律：只看口数
   const v = tile.value
   const findTile = (suit: TileSuit, val: number) => p.hand.find(t => t.suit === suit && t.value === val)
-  // 用 tileEq（suit+value）移除，绕过 ID 重复 bug
-  const removeTile = (t: Tile) => { const idx = p.hand.findIndex(h => tileEq(h, t)); if (idx >= 0) p.hand.splice(idx, 1) }
+  const removeTileById = (t: Tile) => {
+    const idx = p.hand.findIndex(h => h.id === t.id)
+    if (idx >= 0) p.hand.splice(idx, 1)
+    return idx >= 0
+  }
 
   // 三种吃牌模式，与canChow一致
   let t1: Tile | undefined, t2: Tile | undefined
@@ -1739,10 +1745,15 @@ function applyChow(p: BotPlayer, tile: Tile, sourcePos?: number): void {
 
   if (!validBefore || !t1 || !t2) {
     console.error(`BUG applyChow: ${p.name} before=${before} melds=${meldCount} valid=${validBefore} t1=${t1?.id} t2=${t2?.id} tile=${tileStr(tile)}`)
-    if (!validBefore) return
+    return
   }
   if (t1.id === t2.id) { console.error(`BUG applyChow: same tile! ${p.name} tile=${tileStr(tile)} t1=t2=${t1.id}`); return }
-  removeTile(t1); removeTile(t2)
+  const removed1 = removeTileById(t1)
+  const removed2 = removeTileById(t2)
+  if (!removed1 || !removed2) {
+    console.error(`BUG applyChow: remove failed ${p.name} removed1=${removed1} removed2=${removed2} tile=${tileStr(tile)} t1=${t1.id} t2=${t2.id}`)
+    return
+  }
   const after = p.hand.length
   if (after !== before - 2) console.error(`BUG applyChow: ${p.name} before=${before} after=${after} (expected ${before-2}) tile=${tileStr(tile)} t1=${t1.id} t2=${t2.id}`)
   // 排序tiles为从小到大
@@ -2012,7 +2023,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
   p.hand = normalizeHand(p.hand)
   const policy = p.policy
   const hand = p.hand
-  const shouldTraceAkDiscard = p.name === 'AI-AK' && gameIdx === 0
+  const shouldTraceAkDiscard = AK_DISCARD_TRACE && p.name === 'AI-AK' && gameIdx === 0
   if (process.env.DEBUG_DISCARD === '1') console.error(`[DISCARD] ${p.name} hand_before=${p.hand.length} pos=${p.pos}`)
   const wildCount = hand.filter(t => isWT(t, p)).length
   // 暗杠不破门清：visibleMelds不算暗杠（暗杠属于手牌，不算门口副露）
@@ -3023,7 +3034,10 @@ function runGameWithFightToLast(akPolicy: BotPolicy, otherPolicies: BotPolicy[])
 // 血战到底模式：有人胡牌后继续打，直到流局或只剩1人
 // 所有赢家都记录到 winnersThisGame，最后一起 return
 export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: number = 0): GameResult | null {
+  TRACE_DETAIL_GAME = DETAIL_MODE && gameIdx === 0
   const runGameStart = performance.now()
+  let discardEvalMs = 0
+  let discardEvalCount = 0
   // 每局开始时清空 isTing 缓存（不同局wild牌不同）
   clearIsTingCache()
   clearCanWinCache()
@@ -3156,7 +3170,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
   ): GameResult => {
     const winnerPlayer = g.players[primaryWinner]
     const discarderName = discarder !== undefined ? g.players[discarder].name : '-'
-    console.error(`[INV_TRACE] WIN winner=${winnerPlayer.name} mode=${winMode} fan=${fanScore} handType=${handType} discarder=${discarderName} round=${turn} wall=${g.wallIdx}`)
+    if (shouldTraceDetailGame) console.error(`[INV_TRACE] WIN winner=${winnerPlayer.name} mode=${winMode} fan=${fanScore} handType=${handType} discarder=${discarderName} round=${turn} wall=${g.wallIdx}`)
     return {
       winner: primaryWinner,
       scores: g.players.map(p => p.score),
@@ -3359,14 +3373,16 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     const idCounts: Record<string, number> = {}
     for (const t of p.hand) { idCounts[t.id] = (idCounts[t.id] || 0) + 1 }
     const dupIds = Object.entries(idCounts).filter(([, c]) => c > 1)
-    if (dupIds.length > 0) {
+    if (dupIds.length > 0 && shouldTraceDetailGame) {
       console.error(`[INV_TRACE] DEAL_DUP ${p.name}: ${dupIds.map(([id, c]) => `${id}x${c}`).join(', ')}`)
     }
   }
+  const shouldTraceDetailGame = DETAIL_MODE && gameIdx === 0
+
   // 发牌完成日志
   for (const p of g.players) {
     log(p.name, '发牌', p.hand.map(t => tileStr(t)).join(' '))
-    if (p.name === 'AI-AK' || p.name === 'AI-阿水') {
+    if (shouldTraceDetailGame && (p.name === 'AI-AK' || p.name === 'AI-阿水')) {
       const ids = p.hand.map(t => t.id.slice(-4)).join(',')
       const expected = expectedHandCountForPhase(0, 'discard')
       console.error(`[INV_TRACE] DEAL ${p.name} h=${p.hand.length} m=0 exp=${expected} diff=${p.hand.length-expected} wall=${g.wallIdx} flowerTiles=${p.flowerTiles.length} ids=[${ids}] hand=[${sortTiles([...p.hand]).map(tileStrWithId).join(' ')}]`)
@@ -3380,6 +3396,9 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
   let consecutiveDraws = 0
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
+    if (PERF_TRACE && round > 0 && round % 20 === 0) {
+      console.error(`[PERF_TRACE] game=${gameIdx} round=${round} wall=${g.wallIdx}/${g.deck.length} discardCalls=${discardEvalCount} discardMs=${discardEvalMs.toFixed(1)} avgDiscardMs=${discardEvalCount > 0 ? (discardEvalMs / discardEvalCount).toFixed(2) : '0.00'}`)
+    }
     if (finishedPlayers.has(g.current) || g.players[g.current]?.status === 'won') {
       const nextIdx = nextActivePlayer(g.current)
       if (nextIdx == null) {
@@ -3410,7 +3429,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     if (player.name === 'AI-AK' && player.exposedMelds.length === 0) {
       diagnosticsState.akMenqingHoldTurnTotal++
     }
-    if (player.name === 'AI-AK' || player.name === 'AI-阿水') {
+    if (shouldTraceDetailGame && (player.name === 'AI-AK' || player.name === 'AI-阿水')) {
       const h = player.hand.length, m = player.exposedMelds.length
       const expected = expectedHandCountForPhase(m, 'draw')
       console.error(`[INV_TRACE] DRAW ${player.name} h=${h} m=${m} exp=${expected} diff=${h-expected} drawn=${tileStrWithId(drawn)} wall=${g.wallIdx} flowers=${player.flowerTiles.length} hand=[${sortTiles(normalizeHand(player.hand)).map(tileStrWithId).join(' ')}] melds=[${player.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
@@ -3420,7 +3439,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
 
     // Self-draw win check
     const normalizedHand = normalizeHand(player.hand)
-    const shouldTraceAkPath = gameIdx === 0 && player.name === 'AI-AK'
+    const shouldTraceAkPath = shouldTraceDetailGame && player.name === 'AI-AK'
     // [DEBUG] 追踪canWin诊断
     const numPungs = player.exposedMelds.filter(m => m.type === MeldType.TRIPLET || m.type === MeldType.SEQUENCE).length
     const winCheck = canWin(normalizedHand, player.exposedMelds, makeWT(player), SKIP_WILD)
@@ -3431,7 +3450,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         : '(当前14张无任何成听出路)'
       console.error(`[AK_PATH_DRAW] round=${round} hand=${sortTiles(normalizedHand).map(tileStr).join(' ')} readyOptions=${readySummary}`)
     }
-    if (round < 3 || winCheck.canWin) {
+    if (shouldTraceDetailGame && (round < 3 || winCheck.canWin)) {
       console.error(`[DEBUG round=${round} curr=${curr} ${player.name}] drawn=${tileStr(drawn)} hand=${normalizedHand.length} exposed=${player.exposedMelds.length} wild=${makeWT(player)} canWin=${winCheck.canWin} types=${winCheck.types.join(',')}`)
     }
     if (winCheck.canWin) {
@@ -3443,7 +3462,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       const selfWinRoll = Math.random()
       if (selfWinRoll < winChance) {
         markCanWinOpportunity(player.name, 'self', false)
-        console.error(`[SELF-WIN! round=${round} curr=${curr} ${player.name}] hand=${normalizedHand.length} exposed=${player.exposedMelds.length} canWin=${winCheck.canWin}`)
+        if (shouldTraceDetailGame) console.error(`[SELF-WIN! round=${round} curr=${curr} ${player.name}] hand=${normalizedHand.length} exposed=${player.exposedMelds.length} canWin=${winCheck.canWin}`)
         const { finalPoints: baseScore, baseFan, handTypeName } = calcScore(player, true, false, g.gameMultiplier)
         // 自摸：每人赔baseScore，赢家得3倍
         player.score += baseScore * 3
@@ -3466,7 +3485,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         continue
       } else {
         markCanWinOpportunity(player.name, 'self', true)
-        console.error(`[WIN_DECLINED] type=self player=${player.name} roll=${selfWinRoll.toFixed(3)} threshold=${winChance.toFixed(3)} round=${round}`)
+        if (shouldTraceDetailGame) console.error(`[WIN_DECLINED] type=self player=${player.name} roll=${selfWinRoll.toFixed(3)} threshold=${winChance.toFixed(3)} round=${round}`)
       }
     }
 
@@ -3528,8 +3547,18 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
 
     // Pipeline scorer 目前只接管吃/碰/杠，出牌仍用 legacy aiDiscard
     // TODO(P2-6): 扩展 ActionType 支持 DISCARD_<tileId>，实现完整的 pipeline 出牌决策
+    const discardEvalStart = PERF_TRACE ? performance.now() : 0
     const discard = aiDiscard(player, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, curr, round * 4 + curr, gameIdx)
-    player.hand = player.hand.filter(t => t && t.id !== discard.id)
+    if (PERF_TRACE) {
+      discardEvalMs += performance.now() - discardEvalStart
+      discardEvalCount++
+    }
+    const discardIdx = player.hand.findIndex(t => t && t.id === discard.id)
+    if (discardIdx < 0) {
+      console.error(`[DRAW_DISCARD_MISSING] ${player.name} discard=${tileStrWithId(discard)} hand=[${normalizeHand(player.hand).map(tileStrWithId).join(' ')}]`)
+      continue
+    }
+    player.hand.splice(discardIdx, 1)
     player.discardedTiles.push(discard)
     g.discardPile.push(discard)
     g.playerDiscards[curr].push(discard)
@@ -3553,14 +3582,14 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     if (shouldTraceAkPath) {
       console.error(`[AK_PATH_DISC] round=${round} discarded=${tileStr(discard)} hand=${sortTiles(normalizeHand(player.hand)).map(tileStr).join(' ')} waits=${formatWaitTiles(actualWaits)}`)
     }
-    if (player.name === 'AI-AK' || player.name === 'AI-阿水') {
+    if (shouldTraceDetailGame && (player.name === 'AI-AK' || player.name === 'AI-阿水')) {
       const h = player.hand.length, m = player.exposedMelds.length
       const ids = player.hand.map(t => t.id.slice(-4)).join(',')
       const expected = expectedHandCountForPhase(m, 'discard')
       console.error(`[INV_TRACE] DISC ${player.name} h=${h} m=${m} exp=${expected} diff=${h-expected} discarded=${tileStrWithId(discard)} wall=${g.wallIdx} ids=[${ids}] hand=[${sortTiles(normalizeHand(player.hand)).map(tileStrWithId).join(' ')}] melds=[${player.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
     }
     checkHandInvariant(player, 'discard')  // 出牌后铁律：13/10/7/4/1张
-    if (player.exposedMelds.length >= 2) {
+    if (shouldTraceDetailGame && player.exposedMelds.length >= 2) {
       const cw = canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player), SKIP_WILD)
       console.error(`[DISCARD_WIN] ${player.name} hand=${player.hand.length} melds=${player.exposedMelds.length} canWin=${cw.canWin} types=${cw.types.join(',')}`)
     }
@@ -3604,7 +3633,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           continue
         } else {
           markCanWinOpportunity(opp.name, 'discard', true)
-          console.error(`[WIN_DECLINED] type=discard player=${opp.name} roll=${discardWinRoll.toFixed(3)} threshold=${huChance.toFixed(3)} round=${round} tile=${tileStr(discard)}`)
+          if (shouldTraceDetailGame) console.error(`[WIN_DECLINED] type=discard player=${opp.name} roll=${discardWinRoll.toFixed(3)} threshold=${huChance.toFixed(3)} round=${round} tile=${tileStr(discard)}`)
         }
       }
     }
@@ -3654,8 +3683,19 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
             }
           }
           // 明杠后补摸，非自摸则打出
+          const kongDiscardEvalStart = PERF_TRACE ? performance.now() : 0
           const kongDiscard = aiDiscard(opp, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, otherIdx, round * 4 + otherIdx, gameIdx)
-          opp.hand = opp.hand.filter(t => t.id !== kongDiscard.id)
+          if (PERF_TRACE) {
+            discardEvalMs += performance.now() - kongDiscardEvalStart
+            discardEvalCount++
+          }
+          const kongDiscardIdx = opp.hand.findIndex(t => t.id === kongDiscard.id)
+          if (kongDiscardIdx < 0) {
+            console.error(`[MING_GANG_DISCARD_MISSING] ${opp.name} discard=${tileStrWithId(kongDiscard)} hand=[${normalizeHand(opp.hand).map(tileStrWithId).join(' ')}]`)
+            continue
+          }
+          opp.hand.splice(kongDiscardIdx, 1)
+          checkHandInvariant(opp, 'discard')
           g.discardPile.push(kongDiscard)
           // 【修复】明杠后出牌写入 snapshot（drawnTile=补摸牌，discardedTile=明杠后打出的牌）
           recordTurnSnapshot(otherIdx, extra && !isFlower(extra) ? tileStr(extra) : '-', tileStr(kongDiscard), { actionType: 'ming-gang-discard', claimTile: tileStr(discard), claimFrom: g.players[curr].name, wallBefore: g.wallIdx })
@@ -3686,7 +3726,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
             )
             continue
           }
-          console.error(
+          if (shouldTraceDetailGame) console.error(
             `[AK_TAKE_PENG] tile=${tileStr(discard)} pass=${akPassEval.score.toFixed(2)}/${akPassEval.shantenLike}/${akPassEval.improvingDraws} ` +
             `peng=${akPengEval.score.toFixed(2)}/${akPengEval.shantenLike}/${akPengEval.improvingDraws}`
           )
@@ -3696,7 +3736,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         if (usesSharedTrainingRouteBot(opp.name)) {
           const takeByShape = !!akPassEval && !!akPengEval && shouldAkTakeClaim(opp, discard, akPassEval, akPengEval, 'peng', buildTrainingPlannerContext(g, otherIdx))
           shouldPeng = takeByShape && Math.random() < opp.policy.pengChance
-          console.error(`[AK_PENG_DECISION] tile=${tileStr(discard)} takeByShape=${takeByShape} final=${shouldPeng}`)
+          if (shouldTraceDetailGame) console.error(`[AK_PENG_DECISION] tile=${tileStr(discard)} takeByShape=${takeByShape} final=${shouldPeng}`)
         } else {
           const pengRoll = Math.random()
           console.error(`[PENG_CHECK] ${opp.name} CAN_PENG ${tileStr(discard)} hand=${opp.hand.map(t=>tileStr(t)).join(' ')} roll=${pengRoll.toFixed(3)}`)
@@ -3724,7 +3764,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           if (opp.name === 'AI-AK' || opp.name === 'AI-阿水') {
             const h = opp.hand.length, m = opp.exposedMelds.length
             const expected = expectedHandCountForPhase(m, 'claim')
-            console.error(`[INV_TRACE] PENG_APPLY ${opp.name} h=${h} m=${m} exp=${expected} diff=${h-expected} removed=${handBeforePeng - h} tile=${tileStrWithId(discard)} wall=${g.wallIdx} hand=[${sortTiles(normalizeHand(opp.hand)).map(tileStrWithId).join(' ')}] melds=[${opp.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
+            if (shouldTraceDetailGame) console.error(`[INV_TRACE] PENG_APPLY ${opp.name} h=${h} m=${m} exp=${expected} diff=${h-expected} removed=${handBeforePeng - h} tile=${tileStrWithId(discard)} wall=${g.wallIdx} hand=[${sortTiles(normalizeHand(opp.hand)).map(tileStrWithId).join(' ')}] melds=[${opp.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
           }
           opp.chowPongExclusion = updateChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)  // K哥铁律：记录碰行动
           checkHandInvariant(opp, 'claim')  // claim后（11/8/5/2张）
@@ -3732,14 +3772,25 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
             const h = opp.hand.length, m = opp.exposedMelds.length
             const ids = opp.hand.map(t => t.id.slice(-4)).join(',')
             const expected = expectedHandCountForPhase(m, 'claim')
-            console.error(`[INV_TRACE] CLAIM ${opp.name} h=${h} m=${m} exp=${expected} diff=${h-expected} tile=${tileStrWithId(discard)} wall=${g.wallIdx} ids=[${ids}] hand=[${sortTiles(normalizeHand(opp.hand)).map(tileStrWithId).join(' ')}] melds=[${opp.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
+            if (shouldTraceDetailGame) console.error(`[INV_TRACE] CLAIM ${opp.name} h=${h} m=${m} exp=${expected} diff=${h-expected} tile=${tileStrWithId(discard)} wall=${g.wallIdx} ids=[${ids}] hand=[${sortTiles(normalizeHand(opp.hand)).map(tileStrWithId).join(' ')}] melds=[${opp.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
           }
+          const pengDiscardEvalStart = PERF_TRACE ? performance.now() : 0
           const pengDiscard = aiDiscard(opp, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, otherIdx, round * 4 + otherIdx, gameIdx)
-          opp.hand = opp.hand.filter(t => t.id !== pengDiscard.id)
+          if (PERF_TRACE) {
+            discardEvalMs += performance.now() - pengDiscardEvalStart
+            discardEvalCount++
+          }
+          const pengDiscardIdx = opp.hand.findIndex(t => t.id === pengDiscard.id)
+          if (pengDiscardIdx < 0) {
+            console.error(`[PENG_DISCARD_MISSING] ${opp.name} discard=${tileStrWithId(pengDiscard)} hand=[${normalizeHand(opp.hand).map(tileStrWithId).join(' ')}]`)
+            continue
+          }
+          opp.hand.splice(pengDiscardIdx, 1)
+          checkHandInvariant(opp, 'claim_discard')
           g.discardPile.push(pengDiscard)
           // 【修复】碰后出牌写入 snapshot（碰家无摸牌，drawnTile='-'）
           recordTurnSnapshot(otherIdx, '-', tileStr(pengDiscard), { actionType: 'peng-discard', claimTile: tileStr(discard), claimFrom: g.players[curr].name, wallBefore: g.wallIdx })
-          console.error(`[PENG_SUCCESS] ${opp.name} now hand=${opp.hand.length} melds=${opp.exposedMelds.length}`)
+          if (shouldTraceDetailGame) console.error(`[PENG_SUCCESS] ${opp.name} now hand=${opp.hand.length} melds=${opp.exposedMelds.length}`)
           g.current = (otherIdx + 1) % 4  // K哥铁律：碰后下家摸牌，不是碰家继续
           meldTaken = true
           break
@@ -3767,14 +3818,14 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           `chow=${akChowEval.score.toFixed(2)}/${akChowEval.shantenLike}/${akChowEval.improvingDraws}`
         )
       } else {
-        console.error(
+        if (shouldTraceDetailGame) console.error(
           `[AK_TAKE_CHOW] tile=${tileStr(discard)} pass=${akPassEval.score.toFixed(2)}/${akPassEval.shantenLike}/${akPassEval.improvingDraws} ` +
           `chow=${akChowEval.score.toFixed(2)}/${akChowEval.shantenLike}/${akChowEval.improvingDraws}`
         )
       }
       if (!improvesByClaim) shouldChow = false
       else shouldChow = !chowExcluded && !!akPassEval && !!akChowEval && shouldAkTakeClaim(nextP, discard, akPassEval, akChowEval, 'chow', buildTrainingPlannerContext(g, nextPlayer)) && Math.random() < nextP.policy.chowChance
-      console.error(`[AK_CHOW_DECISION] tile=${tileStr(discard)} excluded=${chowExcluded} final=${shouldChow}`)
+      if (shouldTraceDetailGame) console.error(`[AK_CHOW_DECISION] tile=${tileStr(discard)} excluded=${chowExcluded} final=${shouldChow}`)
     } else {
       shouldChow = canChow(nextP, discard) && Math.random() < nextP.policy.chowChance
     }
@@ -3801,8 +3852,19 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       if (nextP.exposedMelds.length === beforeChowMelds) continue  // apply失败，跳过chow
       nextP.chowPongExclusion = updateChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)  // K哥铁律：记录吃行动
       checkHandInvariant(nextP, 'claim')  // 吃后（未出牌）铁律
+      const chowDiscardEvalStart = PERF_TRACE ? performance.now() : 0
       const chowDiscard = aiDiscard(nextP, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, nextPlayer, round * 4 + nextPlayer, gameIdx)
-      nextP.hand = nextP.hand.filter(t => t.id !== chowDiscard.id)
+      if (PERF_TRACE) {
+        discardEvalMs += performance.now() - chowDiscardEvalStart
+        discardEvalCount++
+      }
+      const chowDiscardIdx = nextP.hand.findIndex(t => t.id === chowDiscard.id)
+      if (chowDiscardIdx < 0) {
+        console.error(`[CHOW_DISCARD_MISSING] ${nextP.name} discard=${tileStrWithId(chowDiscard)} hand=[${normalizeHand(nextP.hand).map(tileStrWithId).join(' ')}]`)
+        continue
+      }
+      nextP.hand.splice(chowDiscardIdx, 1)
+      checkHandInvariant(nextP, 'claim_discard')
       g.discardPile.push(chowDiscard)
       // 【修复】吃后出牌写入 snapshot（吃家无摸牌，drawnTile='-'）
       recordTurnSnapshot(nextPlayer, '-', tileStr(chowDiscard), { actionType: 'chow-discard', claimTile: tileStr(discard), claimFrom: g.players[curr].name, wallBefore: g.wallIdx })
@@ -4062,7 +4124,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   const winningGames: WinningGameRecord[] = []
   const multiWinDist = [0, 0, 0, 0]  // [单人赢,双人赢,三人赢,四人赢] 局数
   const handTypeDist: Record<string, number> = {}
-  const allTurnSnapshots: any[] = []  // --detail 时收集
+  const allTurnSnapshots: any[] = []  // --detail 时仅收集首局快照
   const diagnostics: EvalDiagnostics = {
     selfWinOpportunities: 0,
     selfWinDeclines: 0,
@@ -4130,8 +4192,8 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
       if (!akHasWinOpportunity) diagnostics.gamesWithNoAkWinOpportunity++
       if (anyTing && !anyWinOpportunity) diagnostics.gamesWithTingButNoWinOpportunity++
       if (akTing && !akHasWinOpportunity) diagnostics.gamesWithAkTingButNoAkWinOpportunity++
-      // 收集每局每圈快照
-      if (result.turnSnapshots) allTurnSnapshots.push(...result.turnSnapshots)
+      // --detail 只保留第一局明细，后续局不再累计快照
+      if (DETAIL_MODE && g === 0 && result.turnSnapshots) allTurnSnapshots.push(...result.turnSnapshots)
       const gameWinners = result.winnersThisGame || []
       if (result.winner == null || result.winner < 0 || gameWinners.length === 0) {
         draws++
