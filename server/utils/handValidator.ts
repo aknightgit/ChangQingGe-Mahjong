@@ -110,6 +110,9 @@ export function buildWildTileChecker(wildTileId: string | null, wildTileGroup?: 
     }
     return () => false;
   }
+  if (normalizedSuit === TileSuit.FLOWER && wildTileGroup && wildTileGroup.length > 0) {
+    return (t: Tile) => t.suit === TileSuit.FLOWER && (wildTileGroup as string[]).includes(String(t.value));
+  }
   return (t: Tile) => t.suit === normalizedSuit && String(t.value) === parts[1];
 }
 
@@ -1307,7 +1310,8 @@ export function canWin(
   // canWin 结果缓存（同时缓存 boolean 和 types，避免重复计算）
   const handSig = handSignature(handTiles)
   const meldCount = exposed.length
-  const cacheKey = `${handSig}|${meldCount}|${wildTileId || ''}`
+  const wildCacheKey = typeof wildTileIdOrChecker === 'function' ? '__wild_fn__' : (wildTileId || '')
+  const cacheKey = `${handSig}|${meldCount}|${wildCacheKey}`
   if (canWinResultCache.has(cacheKey)) {
     _canWinHits++
     const cached = canWinResultCache.get(cacheKey)!
@@ -1321,7 +1325,9 @@ export function canWin(
   // 花=普通牌时：花不参与手牌数计算，在 detectTypes 里处理八花
   // 八花统计范围：concealed（手牌）+ exposed（门口/副露区）合计
   const concealedFlowers = concealed.filter(t => isFlower(t));
-  const isWildTileFn = buildWildTileChecker(wildTileId);
+  const isWildTileFn = typeof wildTileIdOrChecker === 'function'
+    ? wildTileIdOrChecker
+    : buildWildTileChecker(wildTileId);
   const concealedNonFlower = concealed.filter(t => !isFlower(t) || isWildTileFn(t));
   // 八花优化：只有 concealed 里 >=6 花才需要统计 exposed（节省遍历开销）
   const flowerCount = concealedFlowers.length >= 6
@@ -1371,6 +1377,21 @@ export function canWin(
     return { canWin: true, types: [HandType.ALL_WIND] };
   }
 
+  if (typeof wildTileIdOrChecker === 'function' && !wildTileId) {
+    const meldsNeeded = Math.floor((concealedNonFlower.length - 2) / 3);
+    const genericCanWin =
+      meldsNeeded >= 0 &&
+      isValidHandSize(concealedNonFlower.length) &&
+      canFormMelds(concealedNonFlower, meldsNeeded, isWildTileFn);
+    const genericResult = {
+      canWin: genericCanWin,
+      types: genericCanWin ? [HandType.STANDARD] : []
+    };
+    if (canWinResultCache.size < CAN_WIN_CACHE_MAX) {
+      canWinResultCache.set(cacheKey, genericResult);
+    }
+    return genericResult;
+  }
   // 第二层：标准 3n+2 / 特殊牌型检测
   // _skipWildAssignment 时跳过 findBestAssignment DFS，直接用 detectTypes（用于 baseline 提速）
   const types = (wildTileId && !_skipWildAssignment)

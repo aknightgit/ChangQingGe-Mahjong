@@ -233,8 +233,8 @@ const chineseNum = computed(() => {
 
 /* ==================== 牌背（CSS渲染，与牌墙统一） ==================== */
 .tile-back-face {
-  --tile-back-ring-size: 46%;
-  --tile-back-dot-size: 18%;
+  --tile-back-ring-size: 13px;
+  --tile-back-dot-size: 5px;
   --tile-back-ring-opacity: 0.3;
   --tile-back-dot-opacity: 0.42;
   width: 100%;
@@ -247,10 +247,10 @@ const chineseNum = computed(() => {
       transparent 50%,
       rgba(0,0,0,0.32) 100%),
     linear-gradient(155deg,
-      #2d8b57 0%,
-      #247348 34%,
-      #1a5d39 68%,
-      #114329 100%);
+      #45d07f 0%,
+      #30b968 34%,
+      #239f57 68%,
+      #197843 100%);
   border: 0.5px solid rgba(213, 245, 196, 0.22);
   box-shadow:
     inset 0 1px 2px rgba(255,255,255,0.14),
@@ -274,8 +274,8 @@ const chineseNum = computed(() => {
 
 /* ===== 方案二：象牙白/米色 ===== */
 .tile-back-ivory {
-  --tile-back-ring-size: 46%;
-  --tile-back-dot-size: 18%;
+  --tile-back-ring-size: 13px;
+  --tile-back-dot-size: 5px;
   --tile-back-ring-opacity: 0.22;
   --tile-back-dot-opacity: 0.34;
   width: 100%;
@@ -314,8 +314,8 @@ const chineseNum = computed(() => {
 
 /* ===== 方案三：卡布里蓝 + 波光粼粼 ===== */
 .tile-back-capri {
-  --tile-back-ring-size: 46%;
-  --tile-back-dot-size: 18%;
+  --tile-back-ring-size: 13px;
+  --tile-back-dot-size: 5px;
   --tile-back-ring-opacity: 0.22;
   --tile-back-dot-opacity: 0.34;
   width: 100%;

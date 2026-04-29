@@ -343,6 +343,11 @@ class GameManager {
 
     const candidates = this.getTingPreviewCandidates(game);
     const wildChecker = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
+    const useFunctionWildCheck =
+      game.customScoringMode?.startsWith(`${TileSuit.FLOWER}-`) &&
+      Array.isArray(game.wildTileGroup) &&
+      game.wildTileGroup.length > 0;
+    const winWildArg = useFunctionWildCheck ? wildChecker : (game.customScoringMode || null);
     const winningTileMap = new Map<string, {
       tile: Tile;
       remainingCount: number;
@@ -361,7 +366,7 @@ class GameManager {
             value,
             isFlower: suit === TileSuit.FLOWER
           };
-          const winCheck = canWin([...remainingHand, testTile], player.hand.exposedMelds.length, wildChecker);
+          const winCheck = canWin([...remainingHand, testTile], player.hand.exposedMelds, winWildArg);
           if (!winCheck.canWin) continue;
           const remainingCount = this.getVisibleRemainingCount(game, player, suit, value);
           if (remainingCount <= 0) continue;
@@ -391,9 +396,9 @@ class GameManager {
           id: `ting-preview-${suit}-${value}`,
           suit,
           value,
-          isFlower: false
+          isFlower: suit === TileSuit.FLOWER
         };
-        const winCheck = canWin([...player.hand.concealedTiles, testTile], player.hand.exposedMelds, game.customScoringMode || null);
+        const winCheck = canWin([...player.hand.concealedTiles, testTile], player.hand.exposedMelds, winWildArg);
         if (!winCheck.canWin) continue;
 
         const discardOptions = this.getCachedWinOptions(game, player, 'discard', {

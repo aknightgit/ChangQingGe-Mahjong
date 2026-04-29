@@ -266,132 +266,64 @@
 
         <!-- 结算面板 -->
         <div v-if="showSettlement" class="settle-overlay">
-          <div class="settle-panel">
-            <h2 class="settle-title-center">最终战绩</h2>
+  <div class="settle-panel">
+    <h2 class="settle-title-center">本局输赢</h2>
 
-            <div class="settle-details">
-              <!-- 列名表头 -->
-              <div class="settle-detail-header">
-                <span class="settle-detail-name"></span>
-                <span class="settle-detail-stat">总输赢</span>
-                <span class="settle-detail-stat settle-detail-stat--record">有效输赢</span>
-                <span class="settle-detail-stat">🤖 vs AI</span>
-                <span class="settle-detail-stat">🀄 自摸</span>
-                <span class="settle-detail-stat">🎯 捉冲</span>
-                <span class="settle-detail-stat settle-detail-stat--win">最大赢</span>
-                <span class="settle-detail-stat settle-detail-stat--loss">最大输</span>
-              </div>
-              <div class="settle-detail-grid">
-                <template v-for="p in (settlementData?.playerStats || [])" :key="p.id + '-detail'">
-                  <div class="settle-detail-row">
-                    <span class="settle-detail-name">{{ p.name }}</span>
-                    <span class="settle-detail-stat" title="总输赢">
-                      {{ (p.totalScore ?? 0) > 0 ? '+' : '' }}{{ p.totalScore ?? 0 }}
-                    </span>
-                    <span class="settle-detail-stat settle-detail-stat--record" title="有效输赢">{{ p.effectiveScore ?? p.totalScore ?? 0 }}</span>
-                    <span class="settle-detail-stat" title="与AI战绩">{{ p.vsAiScore ?? 0 }}</span>
-                    <span class="settle-detail-stat">{{ p.selfDraws ?? 0 }}</span>
-                    <span class="settle-detail-stat">{{ p.discards ?? 0 }}</span>
-                    <span class="settle-detail-stat settle-detail-stat--win">+{{ p.maxWin ?? 0 }}</span>
-                    <span class="settle-detail-stat settle-detail-stat--loss">{{ p.maxLoss ?? 0 }}</span>
-                  </div>
-                </template>
-              </div>
-            </div>
-
-            <div v-if="false" class="settle-rounds">
-              <h3 class="settle-rounds-title">每局结算明细</h3>
-              <div
-                v-for="round in settlementData.roundDetails"
-                :key="'round-' + round.roundNumber"
-                class="settle-round-card"
-              >
-                <div class="settle-round-header">
-                  <span>第 {{ round.roundNumber }} 局</span>
-                  <span>骰子×{{ round.diceMultiplier }} / 继承×{{ round.inheritMultiplier }} / 有效×{{ round.effectiveMultiplier }} / 结算膨胀×{{ round.settlementMultiplier }}</span>
-                </div>
-                <div v-if="round.overflowCarryMultiplierNextRound > 1" class="settle-round-note">
-                  下局继承倍数：×{{ round.overflowCarryMultiplierNextRound }}
-                </div>
-                <div v-if="round.bailoutRelations?.length" class="settle-round-note">
-                  三四口关系：
-                  {{ round.bailoutRelations.map(rel => `${rel.player1Name || rel.player1} ↔ ${rel.player2Name || rel.player2}（${rel.type}）`).join('，') }}
-                </div>
-
-                <div class="settle-round-block">
-                  <div class="settle-round-subtitle">本局结算表</div>
-                  <div class="settle-table-wrap">
-                    <table class="settle-round-table">
-                      <thead>
-                        <tr>
-                          <th>玩家</th>
-                          <th>胡牌牌型</th>
-                          <th>牌面</th>
-                          <th>门清</th>
-                          <th>百搭</th>
-                          <th>基础番</th>
-                          <th>最终点数</th>
-                          <th>总输赢</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr
-                          v-for="row in getRoundSettlementRows(round)"
-                          :key="round.roundNumber + '-settle-row-' + row.playerId"
-                          :class="{ 'settle-round-table-row--winner': row.isWinner }"
-                        >
-                          <td>{{ row.playerName }}</td>
-                          <td>{{ row.handType }}</td>
-                          <td class="settle-round-tiles">{{ row.tiles }}</td>
-                          <td>{{ row.menQing }}</td>
-                          <td>{{ row.wild }}</td>
-                          <td>{{ row.baseFan }}</td>
-                          <td>{{ row.finalPoints }}</td>
-                          <td :class="{ 'settle-round-positive': row.score > 0, 'settle-round-negative': row.score < 0 }">
-                            {{ row.scoreLabel }}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div v-if="round.transfers?.length" class="settle-round-block">
-                  <div class="settle-round-subtitle">赔付流向</div>
-                  <div
-                    v-for="(transfer, idx) in round.transfers"
-                    :key="round.roundNumber + '-transfer-' + idx"
-                    class="settle-round-transfer"
-                  >
-                    <span>{{ transfer.fromPlayerName }} → {{ transfer.toPlayerName }}</span>
-                    <span>{{ transfer.amount }}</span>
-                    <span>{{ transfer.reason }}<template v-if="transfer.bailoutType">（{{ transfer.bailoutType }}）</template></span>
-                  </div>
-                </div>
-
-                <div v-if="round.specialEvents?.length" class="settle-round-block">
-                  <div
-                    v-for="event in round.specialEvents"
-                    :key="round.roundNumber + '-' + event.type + '-' + event.fromPlayerId"
-                    class="settle-round-note"
-                  >
-                    {{ event.fromPlayerName }} 触发谢谢带头大哥，合计赔付 {{ event.totalAmount }}，每家 {{ event.amountPerPlayer }}
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            <div class="settle-actions">
-              <button v-if="false" class="settle-back-btn" @click="showSettlement = false">
-                ← 返回牌桌
-              </button>
-              <button class="settle-save-btn" @click="onSaveSettle">
-                💾 结算保存，下回再战
-              </button>
-            </div>
+    <div class="settle-rounds settle-rounds--single">
+      <div class="settle-round-card">
+        <div v-if="currentSettlementRound" class="settle-round-header">
+          <span>第 {{ currentSettlementRound.roundNumber }} 局</span>
+          <span>
+            骰子 {{ currentSettlementRound.diceMultiplier }}
+            / 传承 {{ currentSettlementRound.inheritMultiplier }}
+            / 有效 {{ currentSettlementRound.effectiveMultiplier }}
+            / 结算 {{ currentSettlementRound.settlementMultiplier }}
+          </span>
+        </div>
+        <div class="settle-round-block">
+          <div class="settle-table-wrap">
+            <table class="settle-round-table settle-round-table--compact">
+              <thead>
+                <tr>
+                  <th>玩家</th>
+                  <th>胡牌牌面</th>
+                  <th>番数</th>
+                  <th>门清</th>
+                  <th>百搭</th>
+                  <th>自摸/捉冲</th>
+                  <th>总输赢</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="row in currentSettlementRows"
+                  :key="'current-settle-row-' + row.playerId"
+                  :class="{ 'settle-round-table-row--winner': row.isWinner }"
+                >
+                  <td>{{ row.playerName }}</td>
+                  <td class="settle-round-tiles">{{ row.tiles }}</td>
+                  <td>{{ row.baseFan }}</td>
+                  <td>{{ row.menQing }}</td>
+                  <td>{{ row.wild }}</td>
+                  <td>{{ row.winMode }}</td>
+                  <td :class="{ 'settle-round-positive': row.score > 0, 'settle-round-negative': row.score < 0 }">
+                    {{ row.scoreLabel }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="settle-actions">
+      <button class="settle-save-btn" @click="startNextRound">
+        下一局
+      </button>
+    </div>
+  </div>
+</div>
 
         <!-- 设置面板（悬浮玻璃态，定位在设置按钮下方） -->
         <Teleport to="body">
@@ -2548,11 +2480,21 @@ const getRoundSettlementRows = (round: any) => {
       wild: winner ? (typeof winner.hasWild === 'boolean' ? (winner.hasWild ? '有' : '无') : '-') : '-',
       baseFan: winner?.baseFan ?? '-',
       finalPoints: winner?.finalPoints ?? '-',
+      winMode: winner ? (winner.discarderId ? '捉冲' : '自摸') : '-',
       score,
       scoreLabel: formatSignedScore(score)
     }
   })
 }
+
+const currentSettlementRound = computed(() => {
+  const rounds = Array.isArray(settlementData.value?.roundDetails) ? settlementData.value.roundDetails : []
+  return rounds.length > 0 ? rounds[rounds.length - 1] : null
+})
+
+const currentSettlementRows = computed(() => {
+  return currentSettlementRound.value ? getRoundSettlementRows(currentSettlementRound.value) : []
+})
 
 const onRequestSettle = async () => {
   try {
@@ -4988,6 +4930,10 @@ const forceDiscard = async (p: Player) => {
   margin-bottom: 20px;
 }
 
+.settle-rounds--single {
+  justify-items: center;
+}
+
 .settle-rounds-title {
   margin: 0;
   color: #ffd700;
@@ -5035,6 +4981,40 @@ const forceDiscard = async (p: Player) => {
   border-collapse: collapse;
   font-size: 0.78rem;
   color: #f3f3f3;
+}
+
+.settle-round-table--compact {
+  min-width: 820px;
+  table-layout: fixed;
+}
+
+.settle-round-table--compact th,
+.settle-round-table--compact td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.settle-round-table--compact th:nth-child(1),
+.settle-round-table--compact td:nth-child(1) {
+  width: 96px;
+}
+
+.settle-round-table--compact th:nth-child(2),
+.settle-round-table--compact td:nth-child(2) {
+  width: 290px;
+}
+
+.settle-round-table--compact th:nth-child(3),
+.settle-round-table--compact td:nth-child(3),
+.settle-round-table--compact th:nth-child(4),
+.settle-round-table--compact td:nth-child(4),
+.settle-round-table--compact th:nth-child(5),
+.settle-round-table--compact td:nth-child(5),
+.settle-round-table--compact th:nth-child(6),
+.settle-round-table--compact td:nth-child(6),
+.settle-round-table--compact th:nth-child(7),
+.settle-round-table--compact td:nth-child(7) {
+  width: 86px;
 }
 
 .settle-round-table th,

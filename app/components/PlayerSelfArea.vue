@@ -416,6 +416,11 @@ const onPointerCancel = () => {
 }
 
 /* 吃碰来源箭头 */
+.meld-arrow,
+.meld-source {
+  display: none;
+}
+
 .meld-arrow {
   position: absolute;
   top: -9px;
@@ -464,7 +469,7 @@ const onPointerCancel = () => {
   height: 0;
   border-left: 10px solid transparent;
   border-right: 10px solid transparent;
-  border-top: 16px solid var(--claim-source-color, rgba(255,255,255,0.95));
+  border-top: 20px solid var(--claim-source-color, rgba(255,255,255,0.95));
   filter: drop-shadow(0 0 3px rgba(0,0,0,0.42));
   z-index: 4;
 }

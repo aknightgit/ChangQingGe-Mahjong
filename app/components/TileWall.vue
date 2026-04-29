@@ -133,6 +133,8 @@ const LAYER_OFFSET = 1
 }
 
 .wall-back--css {
+  --wall-back-ring-size: 13px;
+  --wall-back-dot-size: 5px;
   box-sizing: border-box;
   position: relative;
   overflow: hidden;
@@ -145,7 +147,7 @@ const LAYER_OFFSET = 1
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 54%;
+  width: var(--wall-back-ring-size);
   height: auto;
   aspect-ratio: 1;
   transform: translate(-50%, -50%);
@@ -155,7 +157,7 @@ const LAYER_OFFSET = 1
 }
 
 .wall-back--css::after {
-  width: 24%;
+  width: var(--wall-back-dot-size);
   opacity: 0.35;
 }
 
@@ -163,7 +165,7 @@ const LAYER_OFFSET = 1
   color: #e0f6d4;
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.24), transparent 36%),
-    linear-gradient(180deg, #2d8b57 0%, #1d653d 100%);
+    linear-gradient(180deg, #45d07f 0%, #239f57 100%);
   border-color: rgba(213, 245, 196, 0.22);
 }
 

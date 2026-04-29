@@ -974,6 +974,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   const hasCommittedOpenOffSuitNumberCandidate = !!committedOpenSuit && discardCandidates.some(tile =>
     isNumberTile(tile) && tile.suit !== committedOpenSuit
   )
+  const hasCommittedOpenOffSuitNumberWaste = !!committedOpenSuit && hasOffSuitNumberWaste(hand, committedOpenSuit)
   const numberSuitCounts = useRoutePlanner ? getNumberSuitCounts(hand) : []
   const dominantTwoSuitGap = numberSuitCounts.length === 2
     ? numberSuitCounts[0].count - numberSuitCounts[1].count
@@ -1001,6 +1002,9 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   for (let i = 0; i < discardCandidates.length; i++) {
     const tile = discardCandidates[i]
     if (committedOpenSuit && hasCommittedOpenOffSuitNumberCandidate && tile.suit === committedOpenSuit) {
+      continue
+    }
+    if (committedOpenSuit && hasCommittedOpenOffSuitNumberWaste && isHonor(tile)) {
       continue
     }
     let removed = false

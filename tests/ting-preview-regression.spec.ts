@@ -156,6 +156,48 @@ test(
   `tiles=${flowerPreview.winningTiles.map(item => `${item.tile.suit}-${item.tile.value}`).join(',')}`
 );
 
+const doubleMeldWildPlayer = {
+  ...player,
+  id: 'double-meld-wild-player',
+  userId: 'double-meld-wild-player',
+  name: 'double-meld-wild-player',
+  status: PlayerStatus.PLAYING,
+  isTing: false,
+  hand: {
+    concealedTiles: [
+      tile('dw1', TileSuit.FLOWER, 1),
+      tile('dw2', TileSuit.FLOWER, 2),
+      tile('dw3', TileSuit.DOTS, 2),
+      tile('dw4', TileSuit.DOTS, 6),
+      tile('dw5', TileSuit.DOTS, 6),
+      tile('dw6', TileSuit.DOTS, 8),
+      tile('dw7', TileSuit.DOTS, 9),
+    ],
+    exposedMelds: [
+      { type: 'sequence', tiles: [tile('m1', TileSuit.BAMBOOS, 3), tile('m2', TileSuit.BAMBOOS, 4), tile('m3', TileSuit.BAMBOOS, 5)] },
+      { type: 'sequence', tiles: [tile('m4', TileSuit.CHARACTERS, 4), tile('m5', TileSuit.CHARACTERS, 5), tile('m6', TileSuit.CHARACTERS, 6)] }
+    ],
+    discardedTiles: []
+  }
+} as any;
+const doubleMeldWildGame = {
+  ...currentGame,
+  gameId: 'ting-preview-double-meld-wild',
+  players: [doubleMeldWildPlayer],
+  customScoringMode: 'hua-1',
+  wildTileGroup: ['1', '2', '3', '4'],
+  discardPile: [],
+  actionHistory: []
+} as any;
+(gameManager as any).games.set(doubleMeldWildGame.gameId, doubleMeldWildGame);
+(gameManager as any).invalidateWinEvaluationCache(doubleMeldWildGame.gameId, [doubleMeldWildPlayer.id]);
+const doubleMeldWildPreview = await gameManager.getTingPreviewForPlayer(doubleMeldWildGame.gameId, doubleMeldWildPlayer.id);
+test(
+  '两副露加双百搭的听牌预览不会失效',
+  doubleMeldWildPreview.isTing === true && doubleMeldWildPreview.winningTiles.length > 0,
+  `tiles=${doubleMeldWildPreview.winningTiles.map(item => `${item.tile.suit}-${item.tile.value}`).join(',')}`
+);
+
 console.log('\n==================================================');
 console.log(`测试结果: ${passed} 通过, ${failed} 失败`);
 if (failed > 0) {

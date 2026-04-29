@@ -261,5 +261,30 @@ console.log('\n=== Regression: route discard planner ===\n')
   ok('after opening one number suit, AI-AK should not throw that suit while other number waste remains', !['d3', 'd4', 'd8'].includes(selected), `selected=${selected}`)
 }
 
+{
+  const ai = makePlayer('ai7', 'AI-AK', [
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 4, 'd4'),
+    tile(TileSuit.DOTS, 8, 'd8'),
+    tile(TileSuit.CHARACTERS, 1, 'w1'),
+    tile(TileSuit.CHARACTERS, 4, 'w4'),
+    tile(TileSuit.CHARACTERS, 7, 'w7'),
+    tile(TileSuit.CHARACTERS, 8, 'w8'),
+    tile(TileSuit.WIND, 1, 'east'),
+    tile(TileSuit.WIND, 2, 'south'),
+    tile(TileSuit.DRAGON, 1, 'red'),
+    tile(TileSuit.DRAGON, 2, 'green'),
+  ])
+  ai.hand.exposedMelds = [{
+    type: MeldType.SEQUENCE,
+    tiles: [tile(TileSuit.DOTS, 2, 'm2-d2'), tile(TileSuit.DOTS, 3, 'm2-d3'), tile(TileSuit.DOTS, 4, 'm2-d4')],
+    sourcePosition: 1,
+    sourceTileId: 'm2-d3',
+  } as any]
+  const game = makeGame([ai, makePlayer('p2', 'AI-2', []), makePlayer('p3', 'AI-3', []), makePlayer('p4', 'AI-4', [])], [])
+  const selected = selectDiscardTile(ai, game)
+  ok('after opening one suit, AI-AK clears other number suit waste before winds or dragons', ['w1', 'w4', 'w7', 'w8'].includes(selected), `selected=${selected}`)
+}
+
 console.log(`\nResult: ${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)

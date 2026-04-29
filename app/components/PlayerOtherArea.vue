@@ -435,6 +435,7 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
 }
 
 .meld-source {
+  display: none;
   position: absolute;
   display: inline-flex;
   align-items: center;
@@ -478,7 +479,7 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   height: 0;
   border-left: 10px solid transparent;
   border-right: 10px solid transparent;
-  border-top: 16px solid var(--claim-source-color, rgba(255, 255, 255, 0.95));
+  border-top: 20px solid var(--claim-source-color, rgba(255, 255, 255, 0.95));
   filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.42));
   z-index: 4;
 }
