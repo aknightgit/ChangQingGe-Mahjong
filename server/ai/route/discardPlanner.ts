@@ -2,6 +2,12 @@ import { TileSuit } from '../../types/game'
 import { groupTiles, isHonor } from '../../utils/tiles'
 import type { RouteDiscardInput } from './types'
 
+const SHARED_AK_ROUTE_BOT_NAMES = new Set(['AI-AK', 'AI-阿水', 'AI-小胖', 'AI-老赵', 'AI-小猪'])
+
+function usesSharedAkRouteBot(name: string): boolean {
+  return SHARED_AK_ROUTE_BOT_NAMES.has(name)
+}
+
 function sameTypeCount(input: RouteDiscardInput): number {
   return groupTiles(input.hand).get(`${input.tile.suit}-${input.tile.value}`)?.length || 0
 }
@@ -20,7 +26,7 @@ function scoreByRoute(input: RouteDiscardInput): number {
   const { routeState, tile } = input
   const count = sameTypeCount(input)
   const nearby = adjacentCount(input)
-  const isAiAkOpening = input.player.name === 'AI-AK' && input.hand.length >= 11
+  const isAiAkOpening = usesSharedAkRouteBot(input.player.name) && input.hand.length >= 11
   const longestSuit = routeState.features.longestSuit
   const shortestSuit = routeState.features.shortestSuit
 
@@ -72,6 +78,14 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
     input.routeState.targetSuit && input.afterRouteState.targetSuit === input.routeState.targetSuit ? 0.6 : 0
   const routeStrengthDelta =
     input.afterRouteState.routeScores[0].score - input.routeState.routeScores[0].score
+  const observeOrdering =
+    input.routeState.phase === 'OBSERVE'
+      ? (
+        (input.routeState.features.shortestSuit && input.tile.suit === input.routeState.features.shortestSuit && sameTypeCount(input) === 1 ? 2.3 : 0) +
+        (input.routeState.features.upstreamVoidSuit && input.tile.suit === input.routeState.features.upstreamVoidSuit && sameTypeCount(input) === 1 ? 1.5 : 0) +
+        (input.routeState.features.longestSuit && input.tile.suit === input.routeState.features.longestSuit && sameTypeCount(input) >= 2 ? -1.2 : 0)
+      )
+      : 0
   const dangerAdjustment = (0.65 - input.discardDanger) * (
     input.routeState.phase === 'DEFENSE' ? 4 :
     input.routeState.phase === 'RUSH' ? 2 :
@@ -84,5 +98,5 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
         ? input.candidateEffective * 0.04
         : 0
 
-  return routeBias + preservePrimary + targetSuitBonus + routeStrengthDelta * 0.18 + dangerAdjustment + tingBonus
+  return routeBias + preservePrimary + targetSuitBonus + observeOrdering + routeStrengthDelta * 0.18 + dangerAdjustment + tingBonus
 }

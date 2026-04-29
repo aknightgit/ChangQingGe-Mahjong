@@ -93,6 +93,88 @@ console.log('\n=== Regression: training route claim gating ===\n')
 
 {
   const player = makeAkPlayer([
+    tile(TileSuit.DOTS, 2, 'd2'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 5, 'd5'),
+    tile(TileSuit.BAMBOOS, 2, 'b2'),
+    tile(TileSuit.BAMBOOS, 3, 'b3'),
+    tile(TileSuit.BAMBOOS, 4, 'b4'),
+    tile(TileSuit.BAMBOOS, 6, 'b6'),
+    tile(TileSuit.CHARACTERS, 2, 'w2'),
+    tile(TileSuit.CHARACTERS, 3, 'w3'),
+    tile(TileSuit.CHARACTERS, 4, 'w4'),
+    tile(TileSuit.WIND, 1, 'east-a'),
+    tile(TileSuit.WIND, 1, 'east-b'),
+    tile(TileSuit.DRAGON, 1, 'red-a'),
+  ])
+  const passEval = {
+    score: 100,
+    discard: null,
+    shantenLike: 2,
+    improvingDraws: 11,
+    directWaits: 0,
+    readyDraws: 3,
+    winDraws: 0,
+  }
+  const claimEval = {
+    score: 118,
+    discard: null,
+    shantenLike: 2,
+    improvingDraws: 14,
+    directWaits: 0,
+    readyDraws: 4,
+    winDraws: 0,
+  }
+
+  test(
+    'trainer blocks first chow when best suit has fewer than six tiles',
+    shouldAkTakeClaim(player as any, tile(TileSuit.DOTS, 4, 'claim-d4-first-gate'), passEval, claimEval, 'chow') === false
+  )
+}
+
+{
+  const player = makeAkPlayer([
+    tile(TileSuit.DOTS, 2, 'd2a'),
+    tile(TileSuit.DOTS, 2, 'd2b'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 6, 'd6'),
+    tile(TileSuit.DOTS, 7, 'd7'),
+    tile(TileSuit.DOTS, 8, 'd8'),
+    tile(TileSuit.BAMBOOS, 3, 'b3'),
+    tile(TileSuit.BAMBOOS, 4, 'b4'),
+    tile(TileSuit.BAMBOOS, 5, 'b5'),
+    tile(TileSuit.CHARACTERS, 6, 'w6'),
+    tile(TileSuit.CHARACTERS, 7, 'w7'),
+    tile(TileSuit.WIND, 1, 'east-a'),
+    tile(TileSuit.WIND, 1, 'east-b'),
+  ])
+  const passEval = {
+    score: 100,
+    discard: null,
+    shantenLike: 2,
+    improvingDraws: 12,
+    directWaits: 0,
+    readyDraws: 3,
+    winDraws: 0,
+  }
+  const claimEval = {
+    score: 126,
+    discard: null,
+    shantenLike: 1,
+    improvingDraws: 16,
+    directWaits: 1,
+    readyDraws: 5,
+    winDraws: 1,
+  }
+
+  test(
+    'trainer blocks first chow that breaks a core pair',
+    shouldAkTakeClaim(player as any, tile(TileSuit.DOTS, 1, 'claim-d1-break-pair'), passEval, claimEval, 'chow') === false
+  )
+}
+
+{
+  const player = makeAkPlayer([
     tile(TileSuit.WIND, 1, 'east-a'),
     tile(TileSuit.WIND, 1, 'east-b'),
     tile(TileSuit.WIND, 2, 'south-a'),

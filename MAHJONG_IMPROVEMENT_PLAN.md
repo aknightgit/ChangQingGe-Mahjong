@@ -444,3 +444,79 @@ Guide 要求固定对照组（Guide 524-539），但当前脚本没有系统化�
 
 4. **压缩参数空间**
    - 将大量 `wild*Route*Boost` / `mult*Hand*` 参数归并成更少、更有语义的结构化参数，提升训练收敛稳定性。
+# 2026-04-28 落地更新
+
+## 已完成
+
+- [x] AI-AK 最新 live policy 与做牌路径已共享到 `AI-阿水 / AI-小胖 / AI-老赵 / AI-小猪`
+- [x] 路线规划入口已从仅 `AI-AK` 扩展为共享策略 bot 共用
+- [x] 第一口吃牌硬门槛已落地
+- [x] 规则包括：主门数牌至少 6 张、claim tile 必须属于当前最优门、吃后不能拆核心对子/刻子
+- [x] 训练脚本产出的最优策略会同步保存到上述 5 个角色文件
+- [x] 最小可用 route persistence 已落地，当前会基于上一次 routeState 做弱持久化锁线，降低每巡随意翻线
+- [x] `MENQING_SPEED` 固定高基线已下调，不再默认美化门清
+- [x] 路线评估新增敌情输入：全桌副露速度、下家压制、对手单门外显压力
+- [x] `HALF_FLUSH / ALL_PUNGS / HONOR_HEAVY` 已补入更强阈值信号，避免只靠线性打分
+- [x] 训练侧 `badOpenRate` 已部分收紧：第一口吃闸门违规会计入坏开门判定
+- [x] 训练诊断已新增 `forcedOpenRate` 近似指标（被压开门率）
+- [x] 训练诊断已新增 `tingQuality` 第一阶段落地：`AI-AK` 平均听口
+- [x] 观察期开局弃牌器已补一层顺序规则：短门单张优先、顺上家弃门优先、长门对子回避
+
+## 暂不在本次直接落地
+
+- [ ] 训练器与实战决策内核彻底统一
+- [ ] 开局 A-H 弃牌顺序器完整重构
+- [ ] 更完整的 route history / evidence window / forcedOpenRate / tingQuality 指标体系
+- [ ] 训练侧“拆核心对子/刻子”的坏开门判定还未完全镜像到 live claim planner
+- [ ] `tingQuality` 仍缺“剩余张数 / 预期番型”层
+- [ ] `forcedOpenRate` 目前还是近似高压判定，尚未细化到更严格的因果标签
+
+## 2026-04-28 第二轮落地更新
+
+### 新完成
+
+- [x] 训练侧第一口吃牌闸门继续收紧：现在会额外拦截“为首口吃而拆核心对子/刻子”的场景
+- [x] 训练侧 `badOpenRate` 口径已继续收紧：会把无明显降向听/增听口、伤害听牌质量、破坏目标路线的开门计入坏开门
+- [x] 训练诊断已补入 `menqingHoldTurns`，并接入训练摘要与 metrics 输出
+- [x] 训练诊断已把 `tingQuality` 从“平均听口”扩到“平均听口 + 进听成牌张数”组合指标，并接入 fitness
+- [x] 已补回归：训练器首口吃拆核心对子时必须拒绝开门
+- [x] 训练侧 route 信号已开始直接复用 live `evaluateRouteState()`，不再只走训练脚本内的独立 route heuristic
+- [x] 训练侧 claim 判定已开始直接复用 live `evaluateRouteClaim()` 作为硬闸门
+- [x] 训练侧 discard 排序已开始直接复用 live `scoreRouteDiscardCandidate()`，缩小训练/实战分叉
+- [x] `tingQuality` 已继续扩到“剩余可摸胡张数 / 预期番型 / 风险成本”并接入训练摘要与 fitness
+
+### 仍待继续推进
+
+- [ ] 训练器直接复用 live `evaluateRouteState() / evaluateRouteClaim() / scoreRouteDiscardCandidate()`，彻底消除训练/实战双内核
+- [ ] 把训练脚本中残留的 legacy discard heuristic 进一步下沉，避免 live route score 之外还有过重的旧结构分
+- [ ] `forcedOpenRate` 从近似高压统计升级为更严格的因果标签
+- [ ] 开局 A-H 弃牌顺序器完整重构
+### 2026-04-28 è®­ç»ƒ/å®žæˆ˜å¹¶è½¨è¿½åŠ 
+
+- [x] è®­ç»ƒ discard æŽ’åºå·²æ”¹æˆ live planner composite ä¸»å¯¼ï¼Œ`scoreRouteDiscardCandidate()` ä¸Ž shanten/effective/timing æˆä¸ºä¸»æŽ’åºä¾æ®ï¼Œæ—§ `evaluateAkDiscardChoice()` åˆ†æ•°é™ä¸ºå¼±æƒé‡
+- [x] `AI-AK / AI-é˜¿æ°´ / AI-å°èƒ– / AI-è€èµµ` åœ¨è®­ç»ƒè„šæœ¬ä¸­å·²å…±ç”¨åŒä¸€å¥— route-aware claim/discard å…¥å£ï¼Œä¸å†åªæ˜¯åŒæ­¥ character policy æ–‡ä»¶
+- [ ] legacy discard heuristic å·²é™æƒï¼Œä½† `evaluateAkDiscardChoice()` å†…éƒ¨ä»æœ‰å¤§é‡æ—§ç»“æž„åˆ†ï¼ŒåŽç»­è¦ç»§ç»­æ‹†é™¤æˆ–æ”¶ç¼©åˆ°çº¯ tie-break å±‚
+### 2026-04-28 P0/P1 æŒç»­æŽ¨è¿›
+
+- [x] è®­ç»ƒ discard æŽ’åºä¸­ legacy `evaluateAkDiscardChoice()` å¯¹ live composite çš„å¹²æ‰°å·²ç»§ç»­ä¸‹è°ƒï¼Œplanner ä¸­åªä¿ç•™å¾ˆå¼±çš„ structure tie-break æƒé‡
+- [x] claim å†³ç­–å·²ä»Ž discard è¯„åˆ†ä¸­æ‹†å‡ºç‹¬ç«‹ shape evalï¼Œ`åƒ/ç¢°è¦ä¸è¦å¼€` ä¸å†ç›´æŽ¥å— discard route/composite æŽ’åºå™¨å½±å“
+- [x] `evaluateAkDiscardChoice()` å·²ç»§ç»­ç˜¦èº«ï¼Œdiscard ä¾§åªä¿ç•™å±€éƒ¨ isolate/pair/nearby tie-break å’Œæžå¼± shape æ®‹ä½™ï¼Œä¸å†æ‰¿æ‹…å¤§å— shape ä¸»è¯„åˆ†
+- [ ] `evaluateAkDiscardChoice()` æœ¬ä½“è¿˜æ˜¯å¤§å—æ—§ç»“æž„åˆ†å™¨ï¼ŒåŽç»­è¦ç»§ç»­æ‹†å†æˆâ€œclaim ç”¨ shape evalâ€ä¸Žâ€œdiscard ç”¨ tie-break evalâ€
+- 
+## 2026-04-28 Final Wrap-up
+
+### Completed in this round
+
+- [x] Training-side discard ranking now follows live planner composite first, with `scoreRouteDiscardCandidate()` + shanten/effective/timing as the primary ordering signal.
+- [x] Legacy `evaluateAkDiscardChoice()` influence in training discard ordering was reduced again; the old structural score is no longer the main driver.
+- [x] Claim evaluation and discard evaluation were split one layer further:
+- claim-side post-open comparison now uses dedicated shape evaluation.
+- discard-side keeps only local tie-break style signals.
+- [x] Shared training route logic now applies to `AI-AK`, `AI-阿水`, `AI-小胖`, and `AI-老赵`; they temporarily share one strategy and route logic.
+- [x] Shared policy output remains synchronized from training saves for the shared character set, and the save path still also updates `AI-小猪`.
+
+### Current remaining P0/P1 follow-up
+
+- [x] `evaluateAkDiscardChoice()` has now been finished as an explicit discard tie-break scorer (`evaluateAkDiscardTieBreak()`), with shape evaluation and live route scoring removed from that helper.
+- [ ] Continue closing the `forcedOpenRate` loop so the metric is fully aligned with live open/route pressure and training penalties.
+- [ ] Keep `MAHJONG_IMPROVEMENT_PLAN.md` as the single source of truth for these training/live route convergence steps.

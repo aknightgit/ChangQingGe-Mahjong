@@ -147,6 +147,47 @@ console.log('\n=== Regression: route claim planner ===\n')
 }
 
 {
+  const claimTile = tile(TileSuit.DOTS, 4, 'claim-dot-4-first-gate')
+  const ai = makePlayer('ai-first-gate', 'AI-AK', [
+    tile(TileSuit.DOTS, 2, 'd2'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 5, 'd5'),
+    tile(TileSuit.BAMBOOS, 2, 'b2'),
+    tile(TileSuit.BAMBOOS, 3, 'b3'),
+    tile(TileSuit.BAMBOOS, 4, 'b4'),
+    tile(TileSuit.BAMBOOS, 6, 'b6'),
+    tile(TileSuit.CHARACTERS, 2, 'w2'),
+    tile(TileSuit.CHARACTERS, 3, 'w3'),
+    tile(TileSuit.CHARACTERS, 4, 'w4'),
+    tile(TileSuit.WIND, 1, 'east-a'),
+    tile(TileSuit.WIND, 1, 'east-b'),
+    tile(TileSuit.DRAGON, 1, 'red-a'),
+  ])
+  const game = makeGame([ai, makePlayer('p2', 'B', []), makePlayer('p3', 'C', []), makePlayer('p4', 'D', [])], [])
+  const routeState = buildRouteState(ai, game, 2, 11)
+  const decision = evaluateRouteClaim({
+    action: ActionType.CHOW,
+    player: ai,
+    game,
+    claimTile,
+    routeState,
+    candidateHand: ai.hand.concealedTiles.filter(tile => !['d3', 'd5'].includes(tile.id)),
+    candidateShanten: 2,
+    candidateEffective: 12,
+    passShanten: 2,
+    passEffective: 11,
+    tableThreat: 0.2,
+    wallRemaining: game.wall.length,
+  })
+
+  ok(
+    'first chow gate rejects opening chow when best number suit is under six tiles',
+    !decision.allowed && decision.reason === 'first_chow_requires_six_tiles',
+    `allowed=${decision.allowed}, reason=${decision.reason}`
+  )
+}
+
+{
   const claimTile = tile(TileSuit.WIND, 1, 'claim-east')
   const ai = makePlayer('ai2', 'AI-AK', [
     tile(TileSuit.WIND, 1, 'east-a'),

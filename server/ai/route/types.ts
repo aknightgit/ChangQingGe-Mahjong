@@ -25,6 +25,9 @@ export interface RouteFeatureSummary {
   upstreamVoidSuit: TileSuit | null
   allOpponentsAvoidSuit: TileSuit | null
   liveHonorCount: number
+  opponentOpenMelds: number
+  downstreamPressure: number
+  oneSuitOpponentCount: number
 }
 
 export interface RouteEvaluationInput {
@@ -35,6 +38,7 @@ export interface RouteEvaluationInput {
   effectiveTiles: number
   tableThreat: number
   wallRemaining: number
+  previousRouteState?: RouteState | null
 }
 
 export interface RouteScore {

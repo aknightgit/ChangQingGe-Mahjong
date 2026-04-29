@@ -1,5 +1,5 @@
 import { ActionType, TileSuit, type GameState, type Player, type Tile } from '../../types/game'
-import { isHonor } from '../../utils/tiles'
+import { groupTiles, isHonor } from '../../utils/tiles'
 import { evaluateRouteState } from './routeEvaluator'
 import type { RouteState } from './types'
 
@@ -42,6 +42,33 @@ function getCommittedOpenNumberSuit(player: Player): TileSuit | null {
   return [...suits][0] || null
 }
 
+function getNumberSuitCount(hand: Tile[], suit: TileSuit): number {
+  return hand.filter(tile => tile.suit === suit).length
+}
+
+function getBestNumberSuit(hand: Tile[], routeState: RouteState): TileSuit | null {
+  if (routeState.targetSuit && isNumberSuit(routeState.targetSuit)) return routeState.targetSuit
+
+  const ranked = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
+    .map(suit => ({ suit, count: getNumberSuitCount(hand, suit) }))
+    .sort((a, b) => b.count - a.count)
+
+  return ranked[0]?.count ? ranked[0].suit : null
+}
+
+function breaksCoreStructure(beforeHand: Tile[], afterHand: Tile[]): boolean {
+  const beforeGroups = groupTiles(beforeHand)
+  const afterGroups = groupTiles(afterHand)
+
+  for (const [key, tiles] of beforeGroups.entries()) {
+    if (tiles.length < 2) continue
+    const afterCount = afterGroups.get(key)?.length || 0
+    if (afterCount < Math.min(tiles.length, 2)) return true
+  }
+
+  return false
+}
+
 export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
   const {
     action,
@@ -66,6 +93,7 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     effectiveTiles: candidateEffective,
     tableThreat,
     wallRemaining,
+    previousRouteState: routeState,
   })
   const routeGain = afterRouteState.routeScores[0].score - routeState.routeScores[0].score
   const speedGain = (passShanten - candidateShanten) * 3 + (candidateEffective - passEffective) * 0.08
@@ -89,6 +117,21 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
 
   if (committedOpenSuit && action === ActionType.CHOW && claimTile.suit !== committedOpenSuit) {
     return { allowed: false, tuneDelta: -1.6, reason: 'off_route_open_suit_chow' }
+  }
+
+  if (action === ActionType.CHOW && player.hand.exposedMelds.length === 0) {
+    const bestSuit = getBestNumberSuit(player.hand.concealedTiles, routeState)
+    const bestSuitCount = bestSuit ? getNumberSuitCount(player.hand.concealedTiles, bestSuit) : 0
+
+    if (!bestSuit || bestSuitCount < 6) {
+      return { allowed: false, tuneDelta: -1.8, reason: 'first_chow_requires_six_tiles' }
+    }
+    if (claimTile.suit !== bestSuit) {
+      return { allowed: false, tuneDelta: -1.7, reason: 'first_chow_must_follow_best_suit' }
+    }
+    if (breaksCoreStructure(player.hand.concealedTiles, candidateHand)) {
+      return { allowed: false, tuneDelta: -1.9, reason: 'first_chow_breaks_core_structure' }
+    }
   }
 
   switch (routeState.current) {

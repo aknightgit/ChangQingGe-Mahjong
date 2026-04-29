@@ -131,6 +131,23 @@ function softScoreWins(
 // ===== Policy loading (per-character) =====
 let _policies: Record<string, any> = {}
 let _policySources: Record<string, { path: string; mtimeMs: number }> = {}
+const SHARED_AK_STRATEGY_BOT_NAMES = new Set(['AI-AK', 'AI-阿水', 'AI-小胖', 'AI-老赵', 'AI-小猪'])
+
+function usesSharedAkStrategy(botName: string): boolean {
+  return SHARED_AK_STRATEGY_BOT_NAMES.has(botName)
+}
+
+function resolvePolicyBotName(botName: string): string {
+  return usesSharedAkStrategy(botName) ? 'AI-AK' : botName
+}
+
+function getPlayerRouteMemory(player: Player): any | null {
+  return (player as any).__routeStateMemory || null
+}
+
+function setPlayerRouteMemory(player: Player, routeState: any): void {
+  ;(player as any).__routeStateMemory = routeState
+}
 
 function tuneLiveClaimPolicy(policy: any): any {
   const tuned = { ...(policy || {}) }
@@ -190,25 +207,30 @@ function loadPolicyFile(cacheKey: string, filePath: string, logLabel: string): a
 }
 
 function loadCharacterPolicy(botName: string): any {
+  const resolvedBotName = resolvePolicyBotName(botName)
   // Try loading character-specific policy first
   const characterPaths = [
-    path.resolve(process.cwd(), `AI_policies/characters/${botName}.json`),
-    path.resolve(process.cwd(), `training-output/policies/characters/${botName}.json`),
-    path.resolve(process.cwd(), `../../AI_policies/characters/${botName}.json`),
+    path.resolve(process.cwd(), `AI_policies/characters/${resolvedBotName}.json`),
+    path.resolve(process.cwd(), `training-output/policies/characters/${resolvedBotName}.json`),
+    path.resolve(process.cwd(), `../../AI_policies/characters/${resolvedBotName}.json`),
   ]
   
   for (const p of characterPaths) {
     if (fs.existsSync(p)) {
       try {
-        return loadPolicyFile(botName, p, botName)
+        const policy = loadPolicyFile(resolvedBotName, p, resolvedBotName)
+        _policies[botName] = policy
+        _policySources[botName] = _policySources[resolvedBotName]
+        return policy
       } catch (err: any) {
         console.warn(`[BotService] Failed to parse ${p}:`, err.message)
       }
       try {
         const raw = fs.readFileSync(p, 'utf-8')
         const data = JSON.parse(raw)
-        _policies[botName] = data.policy || data
-        console.log(`[BotService] ✅ Loaded policy for ${botName}:`, _policies[botName].id || 'character')
+        _policies[resolvedBotName] = data.policy || data
+        _policies[botName] = _policies[resolvedBotName]
+        console.log(`[BotService] ✅ Loaded policy for ${resolvedBotName}:`, _policies[resolvedBotName].id || 'character')
         return _policies[botName]
       } catch (err: any) {
         console.warn(`[BotService] ⚠️ Failed to parse ${p}:`, err.message)
@@ -284,6 +306,8 @@ function loadCharacterPolicy(botName: string): any {
   }
   
   // Use default for this character
+  _policies[resolvedBotName] = _policies['default']
+  _policySources[resolvedBotName] = _policySources['default']
   _policies[botName] = _policies['default']
   _policySources[botName] = _policySources['default']
   console.log(`[BotService] policy id for ${botName}: ${_policies[botName]?.id || 'unknown'}`)
@@ -538,7 +562,7 @@ function scoreTileForDiscard(
   const groups = groupTiles(hand)
   const tileKey = `${tile.suit}-${tile.value}`
   const sameTypeCount = groups.get(tileKey)?.length || 0
-  const isAiAkOpening = player.name === 'AI-AK' && isEarlyPhase
+  const isAiAkOpening = usesSharedAkStrategy(player.name) && isEarlyPhase
   const tableThreat = estimateTableThreat(game, player.id)
   const discardDanger = getDiscardDangerScore(tile, game, player)
 
@@ -935,7 +959,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   if (hand.length === 0) return ''
   const nonWildHand = hand.filter(tile => !isWildTile(tile, game))
   const discardCandidates = nonWildHand.length > 0 ? nonWildHand : hand
-  const aiAkOpeningHasWeakNumberWaste = player.name === 'AI-AK' && hand.length >= 11 && hasWeakNumberWasteCandidate(hand)
+  const aiAkOpeningHasWeakNumberWaste = usesSharedAkStrategy(player.name) && hand.length >= 11 && hasWeakNumberWasteCandidate(hand)
 
   const exposedCount = player.hand.exposedMelds.length
   const wildChecker = (tile: Tile) => isWildTile(tile, game)
@@ -945,7 +969,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   const tableThreat = estimateTableThreat(game, player.id)
   const topOpponentScore = Math.max(...game.players.filter(p => p.id !== player.id).map(p => p.score ?? 0), 0)
   const scoreLead = (player.score ?? 0) - topOpponentScore
-  const useRoutePlanner = player.name === 'AI-AK'
+  const useRoutePlanner = usesSharedAkStrategy(player.name)
   const committedOpenSuit = useRoutePlanner ? getCommittedOpenNumberSuit(player) : null
   const hasCommittedOpenOffSuitNumberCandidate = !!committedOpenSuit && discardCandidates.some(tile =>
     isNumberTile(tile) && tile.suit !== committedOpenSuit
@@ -963,6 +987,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         effectiveTiles: currentEffective,
         tableThreat,
         wallRemaining,
+        previousRouteState: getPlayerRouteMemory(player),
       })
     : null
 
@@ -1039,6 +1064,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         effectiveTiles: effective,
         tableThreat,
         wallRemaining,
+        previousRouteState: routeState,
       })
       const routeScore = scoreRouteDiscardCandidate({
         tile,
@@ -1089,6 +1115,10 @@ export function selectDiscardTile(player: Player, game: GameState): string {
     }
   }
 
+  if (useRoutePlanner && routeState) {
+    setPlayerRouteMemory(player, routeState)
+  }
+
   return bestTile.id
 }
 
@@ -1105,7 +1135,7 @@ export function selectBotChowTileIds(
   const wildChecker = (tile: Tile) => isWildTile(tile, game)
   const wallRemaining = game.wall?.length || 0
   const tableThreat = estimateTableThreat(game, player.id)
-  const useRoutePlanner = player.name === 'AI-AK'
+  const useRoutePlanner = usesSharedAkStrategy(player.name)
 
   const evaluateResultingHand = (candidateHand: Tile[]): { shanten: number; effective: number } => {
     let bestShanten = Infinity
@@ -1135,6 +1165,7 @@ export function selectBotChowTileIds(
         effectiveTiles: passEffective,
         tableThreat,
         wallRemaining,
+        previousRouteState: getPlayerRouteMemory(player),
       })
     : null
 
@@ -1181,6 +1212,10 @@ export function selectBotChowTileIds(
     ) {
       best = { tileIds: optionIds, shanten, effective, tune }
     }
+  }
+
+  if (useRoutePlanner && routeState) {
+    setPlayerRouteMemory(player, routeState)
   }
 
   return best?.tileIds
@@ -1558,7 +1593,7 @@ export async function shouldClaimPendingAction(
 
   const wildChecker = (t: Tile) => isWildTile(t, game)
   const exclusionState = game.chowPongExclusion?.[player.id] || { firstActionSuit: null, firstActionType: null }
-  const useRoutePlanner = player.name === 'AI-AK'
+  const useRoutePlanner = usesSharedAkStrategy(player.name)
   const wallRemaining = game.wall?.length || 0
   const tableThreat = estimateTableThreat(game, player.id)
   const suitCounts: Record<string, number> = {}
@@ -1604,6 +1639,7 @@ export async function shouldClaimPendingAction(
         effectiveTiles: passEval.effective,
         tableThreat,
         wallRemaining,
+        previousRouteState: getPlayerRouteMemory(player),
       })
     : null
 
@@ -1902,6 +1938,10 @@ export async function shouldClaimPendingAction(
     if (!softScoreWins(s, best, baseChances[action] ?? 0.5, 0.75)) continue
     bestAction = action
     best = s
+  }
+
+  if (useRoutePlanner && routeState) {
+    setPlayerRouteMemory(player, routeState)
   }
 
   return bestAction

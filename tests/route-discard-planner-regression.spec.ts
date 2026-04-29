@@ -115,6 +115,29 @@ console.log('\n=== Regression: route discard planner ===\n')
 }
 
 {
+  const isolatedWan = tile(TileSuit.CHARACTERS, 9, 'shared-isolated-wan')
+  const ai = makePlayer('shared-ai', 'AI-小胖', [
+    tile(TileSuit.DOTS, 2, 'd2'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 4, 'd4'),
+    tile(TileSuit.DOTS, 5, 'd5'),
+    tile(TileSuit.DOTS, 6, 'd6'),
+    tile(TileSuit.DOTS, 7, 'd7a'),
+    tile(TileSuit.DOTS, 7, 'd7b'),
+    tile(TileSuit.DOTS, 8, 'd8'),
+    tile(TileSuit.DOTS, 9, 'd9'),
+    tile(TileSuit.BAMBOOS, 2, 't2'),
+    tile(TileSuit.BAMBOOS, 3, 't3'),
+    tile(TileSuit.BAMBOOS, 4, 't4'),
+    tile(TileSuit.WIND, 1, 'east'),
+    isolatedWan,
+  ])
+  const game = makeGame([ai, makePlayer('p2', 'AI-AK', []), makePlayer('p3', 'AI-阿水', []), makePlayer('p4', 'AI-老赵', [])], [])
+  const selected = selectDiscardTile(ai, game)
+  ok('shared AK strategy bots reuse the same route-aware discard priorities', selected === isolatedWan.id, `selected=${selected}`)
+}
+
+{
   const offSuit = tile(TileSuit.BAMBOOS, 9, 'off-suit-bamboo')
   const ai = makePlayer('ai2', 'AI-AK', [
     tile(TileSuit.DOTS, 1, 'hd1'),

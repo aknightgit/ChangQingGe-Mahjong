@@ -462,6 +462,13 @@ const confirmCreateGame = async () => {
     }
   } catch (e) {
     console.error('[Create] Error:', e)
+    if (e?.status === 401 || e?.statusCode === 401 || e?.data?.statusCode === 401) {
+      useCookie('auth_token').value = null
+      useCookie('user_id').value = null
+      useCookie('user_name').value = null
+      await navigateTo('/login')
+      return
+    }
     alert('创建房间失败：' + (e?.message || '未知错误'))
   } finally {
     isCreatingGame.value = false
@@ -599,8 +606,9 @@ const onMatchHistory = () => router.push('/history')
 const goToAdminSandbox = () => navigateTo('/admin-test')
 
 const logout = () => {
-  const token = useCookie('auth_token')
-  token.value = null
+  useCookie('auth_token').value = null
+  useCookie('user_id').value = null
+  useCookie('user_name').value = null
   return navigateTo('/login')
 }
 </script>

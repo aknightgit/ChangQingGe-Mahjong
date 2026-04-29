@@ -1,15 +1,18 @@
 {
-  "savedAt": "2026-04-26T02:25:41.266Z",
+  "savedAt": "2026-04-28T14:18:14.514Z",
   "round": 0,
   "metrics": {
     "fitness": 0,
     "huRate": 0,
     "drawRate": 1,
-    "routeCommitRate": 0.9857142857142858,
-    "routeFlipPerGame": 0.1,
-    "badOpenRate": 1,
-    "totalGames": 20,
-    "note": "AI-AK iterative training - 1x20"
+    "routeCommitRate": 1,
+    "routeFlipPerGame": 0,
+    "badOpenRate": 0,
+    "forcedOpenRate": 0,
+    "menqingHoldTurns": 2,
+    "tingQuality": 0,
+    "totalGames": 1,
+    "note": "AI-AK iterative training - 1x1"
   },
   "policy": {
     "id": "AI-AK",
