@@ -1,2 +1,2 @@
 # ChangQingGe-Mahjong
-ChangQingGe-Mahjong 上海长清阁麻将
+上海長青閣麻将项目
