@@ -5,7 +5,12 @@
 import { GameState, Player, Tile, TileSuit, MeldType, PlayerStatus, ActionType } from '../types/game'
 import { groupTiles, tilesEqual, isFlower, isHonor, isWind, isDragon } from '../utils/tiles'
 import { canWin, findBestDiscardForTing, checkChowPongExclusion, updateChowPongExclusion, ChowPongExclusionState } from '../utils/handValidator'
-import { USE_PIPELINE_SCORER, PIPELINE_SHADOW_MODE } from '../ai/config/policyFlags'
+import {
+  DISABLE_LEGACY_BOT_PATH,
+  PIPELINE_SHADOW_MODE,
+  USE_OFFICIAL_ROUTE_BOT_PATH,
+  USE_PIPELINE_SCORER
+} from '../ai/config/policyFlags'
 import { evaluateRouteState } from '../ai/route/routeEvaluator'
 import { scoreRouteDiscardCandidate } from '../ai/route/discardPlanner'
 import { evaluateRouteClaim } from '../ai/route/claimPlanner'
@@ -131,14 +136,12 @@ function softScoreWins(
 // ===== Policy loading (per-character) =====
 let _policies: Record<string, any> = {}
 let _policySources: Record<string, { path: string; mtimeMs: number }> = {}
-const SHARED_AK_STRATEGY_BOT_NAMES = new Set(['AI-AK', 'AI-阿水', 'AI-小胖', 'AI-老赵', 'AI-小猪'])
-
-function usesSharedAkStrategy(botName: string): boolean {
-  return SHARED_AK_STRATEGY_BOT_NAMES.has(botName)
+function usesOfficialRouteStrategy(_botName: string): boolean {
+  return USE_OFFICIAL_ROUTE_BOT_PATH
 }
 
 function resolvePolicyBotName(botName: string): string {
-  return usesSharedAkStrategy(botName) ? 'AI-AK' : botName
+  return botName
 }
 
 function getPlayerRouteMemory(player: Player): any | null {
@@ -562,7 +565,7 @@ function scoreTileForDiscard(
   const groups = groupTiles(hand)
   const tileKey = `${tile.suit}-${tile.value}`
   const sameTypeCount = groups.get(tileKey)?.length || 0
-  const isAiAkOpening = usesSharedAkStrategy(player.name) && isEarlyPhase
+  const isOfficialOpening = usesOfficialRouteStrategy(player.name) && isEarlyPhase
   const tableThreat = estimateTableThreat(game, player.id)
   const discardDanger = getDiscardDangerScore(tile, game, player)
 
@@ -617,7 +620,7 @@ function scoreTileForDiscard(
     } else {
       // Single honor: high to discard (good candidate to throw away)
       score += 5
-      if (isAiAkOpening) {
+      if (isOfficialOpening) {
         const hasWeakNumberWaste = hasWeakNumberWasteCandidate(hand, tile.id)
         score += hasWeakNumberWaste ? 6.2 : 3.6
       }
@@ -959,7 +962,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   if (hand.length === 0) return ''
   const nonWildHand = hand.filter(tile => !isWildTile(tile, game))
   const discardCandidates = nonWildHand.length > 0 ? nonWildHand : hand
-  const aiAkOpeningHasWeakNumberWaste = usesSharedAkStrategy(player.name) && hand.length >= 11 && hasWeakNumberWasteCandidate(hand)
+  const openingHasWeakNumberWaste = usesOfficialRouteStrategy(player.name) && hand.length >= 11 && hasWeakNumberWasteCandidate(hand)
 
   const exposedCount = player.hand.exposedMelds.length
   const wildChecker = (tile: Tile) => isWildTile(tile, game)
@@ -969,7 +972,8 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   const tableThreat = estimateTableThreat(game, player.id)
   const topOpponentScore = Math.max(...game.players.filter(p => p.id !== player.id).map(p => p.score ?? 0), 0)
   const scoreLead = (player.score ?? 0) - topOpponentScore
-  const useRoutePlanner = usesSharedAkStrategy(player.name)
+  const useRoutePlanner = usesOfficialRouteStrategy(player.name)
+  const legacyDiscardPathDisabled = DISABLE_LEGACY_BOT_PATH
   const committedOpenSuit = useRoutePlanner ? getCommittedOpenNumberSuit(player) : null
   const hasCommittedOpenOffSuitNumberCandidate = !!committedOpenSuit && discardCandidates.some(tile =>
     isNumberTile(tile) && tile.suit !== committedOpenSuit
@@ -1028,7 +1032,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
       : -Infinity
     let composite = -shanten * 100 + effective * 2.5 + score
 
-    if (aiAkOpeningHasWeakNumberWaste && isHonor(tile) && !hand.some(other => other.id !== tile.id && tilesMatch(other, tile))) {
+    if (openingHasWeakNumberWaste && isHonor(tile) && !hand.some(other => other.id !== tile.id && tilesMatch(other, tile))) {
       composite -= 10
     }
 
@@ -1080,7 +1084,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         candidateEffective: effective,
         discardDanger,
         winningTiles,
-        legacyScore: score,
+        baselineScore: score,
         afterRouteState,
       })
       score += routeScore
@@ -1105,12 +1109,12 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         bestTingValue = timingValue
         bestTile = tile
       }
-    } else if (
+    } else if (!legacyDiscardPathDisabled && (
       shanten < bestShanten ||
       (shanten === 0 && bestShanten === 0 && timingValue > bestTingValue + 0.001) ||
       (shanten === bestShanten && effective > bestEffective) ||
       (shanten === bestShanten && effective === bestEffective && score > bestScore)
-    ) {
+    )) {
       bestShanten = shanten
       bestEffective = effective
       bestScore = score
@@ -1139,7 +1143,7 @@ export function selectBotChowTileIds(
   const wildChecker = (tile: Tile) => isWildTile(tile, game)
   const wallRemaining = game.wall?.length || 0
   const tableThreat = estimateTableThreat(game, player.id)
-  const useRoutePlanner = usesSharedAkStrategy(player.name)
+  const useRoutePlanner = usesOfficialRouteStrategy(player.name)
 
   const evaluateResultingHand = (candidateHand: Tile[]): { shanten: number; effective: number } => {
     let bestShanten = Infinity
@@ -1597,7 +1601,7 @@ export async function shouldClaimPendingAction(
 
   const wildChecker = (t: Tile) => isWildTile(t, game)
   const exclusionState = game.chowPongExclusion?.[player.id] || { firstActionSuit: null, firstActionType: null }
-  const useRoutePlanner = usesSharedAkStrategy(player.name)
+  const useRoutePlanner = usesOfficialRouteStrategy(player.name)
   const wallRemaining = game.wall?.length || 0
   const tableThreat = estimateTableThreat(game, player.id)
   const suitCounts: Record<string, number> = {}

@@ -134,7 +134,30 @@ console.log('\n=== Regression: route discard planner ===\n')
   ])
   const game = makeGame([ai, makePlayer('p2', 'AI-AK', []), makePlayer('p3', 'AI-阿水', []), makePlayer('p4', 'AI-老赵', [])], [])
   const selected = selectDiscardTile(ai, game)
-  ok('shared AK strategy bots reuse the same route-aware discard priorities', selected === isolatedWan.id, `selected=${selected}`)
+  ok('named AI bots share the official route-aware discard priorities', selected === isolatedWan.id, `selected=${selected}`)
+}
+
+{
+  const isolatedWan = tile(TileSuit.CHARACTERS, 9, 'generic-isolated-wan')
+  const ai = makePlayer('generic-ai', 'AI-2', [
+    tile(TileSuit.DOTS, 2, 'gd2'),
+    tile(TileSuit.DOTS, 3, 'gd3'),
+    tile(TileSuit.DOTS, 4, 'gd4'),
+    tile(TileSuit.DOTS, 5, 'gd5'),
+    tile(TileSuit.DOTS, 6, 'gd6'),
+    tile(TileSuit.DOTS, 7, 'gd7a'),
+    tile(TileSuit.DOTS, 7, 'gd7b'),
+    tile(TileSuit.DOTS, 8, 'gd8'),
+    tile(TileSuit.DOTS, 9, 'gd9'),
+    tile(TileSuit.BAMBOOS, 2, 'gt2'),
+    tile(TileSuit.BAMBOOS, 3, 'gt3'),
+    tile(TileSuit.BAMBOOS, 4, 'gt4'),
+    tile(TileSuit.WIND, 1, 'geast'),
+    isolatedWan,
+  ])
+  const game = makeGame([ai, makePlayer('p2', 'AI-3', []), makePlayer('p3', 'AI-4', []), makePlayer('p4', 'AI-5', [])], [])
+  const selected = selectDiscardTile(ai, game)
+  ok('generic AI names also use the official route discard path', selected === isolatedWan.id, `selected=${selected}`)
 }
 
 {
@@ -208,7 +231,7 @@ console.log('\n=== Regression: route discard planner ===\n')
   const game = makeGame([ai, makePlayer('p2', 'AI-胖胖', []), makePlayer('p3', 'AI-阿水', []), makePlayer('p4', 'AI-老赵', [])], [])
   const selected = selectDiscardTile(ai, game)
   ok(
-    'AI-AK opening should not default to discarding single honors before isolated number waste',
+    'official opening path should not default to discarding single honors before isolated number waste',
     selected === isolatedWan.id,
     `selected=${selected}`
   )
@@ -258,7 +281,7 @@ console.log('\n=== Regression: route discard planner ===\n')
   } as any]
   const game = makeGame([ai, makePlayer('p2', 'AI-2', []), makePlayer('p3', 'AI-3', []), makePlayer('p4', 'AI-4', [])], [])
   const selected = selectDiscardTile(ai, game)
-  ok('after opening one number suit, AI-AK should not throw that suit while other number waste remains', !['d3', 'd4', 'd8'].includes(selected), `selected=${selected}`)
+  ok('after opening one number suit, official route logic should not throw that suit while other number waste remains', !['d3', 'd4', 'd8'].includes(selected), `selected=${selected}`)
 }
 
 {
@@ -283,7 +306,7 @@ console.log('\n=== Regression: route discard planner ===\n')
   } as any]
   const game = makeGame([ai, makePlayer('p2', 'AI-2', []), makePlayer('p3', 'AI-3', []), makePlayer('p4', 'AI-4', [])], [])
   const selected = selectDiscardTile(ai, game)
-  ok('after opening one suit, AI-AK clears other number suit waste before winds or dragons', ['w1', 'w4', 'w7', 'w8'].includes(selected), `selected=${selected}`)
+  ok('after opening one suit, official route logic clears other number suit waste before winds or dragons', ['w1', 'w4', 'w7', 'w8'].includes(selected), `selected=${selected}`)
 }
 
 console.log(`\nResult: ${passed} passed, ${failed} failed`)

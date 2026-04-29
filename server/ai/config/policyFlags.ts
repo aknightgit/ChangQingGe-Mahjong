@@ -6,6 +6,12 @@
 /** 是否启用新管线（false=用legacy，true=用pipeline） */
 export const USE_PIPELINE_SCORER = process.env.USE_PIPELINE_SCORER === 'true'
 
+/** Official bot path: promote the route planner as the default AI decision path. */
+export const USE_OFFICIAL_ROUTE_BOT_PATH = process.env.USE_OFFICIAL_ROUTE_BOT_PATH !== 'false'
+
+/** Legacy bot path stays present only as a disabled rollback branch. */
+export const DISABLE_LEGACY_BOT_PATH = process.env.DISABLE_LEGACY_BOT_PATH !== 'false'
+
 /** Shadow 模式：同时记录新旧评分对比日志 */
 export const PIPELINE_SHADOW_MODE = process.env.PIPELINE_SHADOW_MODE !== 'false' // 默认开启
 

@@ -69,6 +69,6 @@ export interface RouteDiscardInput {
   candidateEffective: number
   discardDanger: number
   winningTiles: number
-  legacyScore: number
+  baselineScore: number
   afterRouteState: RouteState
 }

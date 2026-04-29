@@ -12,10 +12,10 @@
     "menqingHoldTurns": 2,
     "tingQuality": 0,
     "totalGames": 1,
-    "note": "AI-AK iterative training - 1x1"
+    "note": "official route training - 1x1"
   },
   "policy": {
-    "id": "AI-AK",
+    "id": "official-route",
     "selfWinChance": 0.5,
     "discardHuChance": 0.7820781759526138,
     "selfWinWildBoost": 0.13626006977216448,
