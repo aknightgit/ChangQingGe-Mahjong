@@ -1045,11 +1045,11 @@ export function selectDiscardTile(player: Player, game: GameState): string {
       )
       const offSuitWasteExists = hasOffSuitNumberWaste(hand, committedOpenSuit, tile.id)
       if (tile.suit === committedOpenSuit) {
-        composite -= hasOtherNumberSuitTiles ? 28 : offSuitWasteExists ? 22 : 12
+        composite -= hasOtherNumberSuitTiles ? 40 : offSuitWasteExists ? 30 : 16
       } else if (isHonor(tile)) {
-        composite += tilePairCount >= 2 ? -1.5 : 2.4
+        composite += tilePairCount >= 2 ? -1.2 : 1.2
       } else {
-        composite += hasOtherNumberSuitTiles ? 22 : offSuitWasteExists ? 18 : 12.5
+        composite += hasOtherNumberSuitTiles ? 34 : offSuitWasteExists ? 28 : 18
       }
     }
 

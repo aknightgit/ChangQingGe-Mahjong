@@ -39,6 +39,8 @@ function scoreByRoute(input: RouteDiscardInput): number {
         (nearby === 0 ? 1.6 : -0.15 * nearby) +
         (longestSuit && tile.suit !== longestSuit && !isHonor(tile) ? 2.2 : 0) +
         (shortestSuit && tile.suit === shortestSuit && count === 1 ? 1.3 : 0) +
+        (routeState.targetSuit && tile.suit !== routeState.targetSuit && !isHonor(tile) ? 4.8 : 0) +
+        (routeState.targetSuit && tile.suit === routeState.targetSuit && !isHonor(tile) ? -2.6 : 0) +
         (isHonor(tile) && count === 1 ? 0.4 : 0)
       )
 

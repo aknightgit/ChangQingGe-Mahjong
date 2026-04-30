@@ -501,6 +501,23 @@ class GameManager {
     return this.getHesitationWindow(game);
   }
 
+  private getBotDrawFreezeMs(game: GameState): number {
+    const base = this.getHesitationWindow(game);
+    if (this.isTrainingFastMode(game)) {
+      return Math.min(30, Math.max(0, base));
+    }
+    return Math.max(350, Math.floor(base / 2));
+  }
+
+  private getBotDiscardDelayMs(game: GameState): number {
+    const base = this.getHesitationWindow(game);
+    if (this.isTrainingFastMode(game)) {
+      return Math.min(30, Math.max(0, base));
+    }
+    const reducedBase = Math.max(250, Math.floor(base / 2));
+    return reducedBase + Math.floor(Math.random() * 250);
+  }
+
   private isChowChoiceOnlyActions(actions: ActionType[]): boolean {
     return actions.includes(ActionType.CHOW) &&
       !actions.some(action => [
@@ -1550,7 +1567,7 @@ class GameManager {
           } catch (err) {
             console.error('[start-bot-freeze] Error:', err);
           }
-        }, freezeMs));
+        }, this.getBotDrawFreezeMs(game)));
         this.freezeTimers.set(gameId, botTimer);
       } else {
         // Human 庄家:设置 freeze 让客户端显示冻结进度,到期自动摸
@@ -4153,7 +4170,7 @@ class GameManager {
         } catch (err) {
           console.error('[bot-freeze] Error:', err);
         }
-      }, freezeMs));
+      }, this.getBotDrawFreezeMs(game)));
       this.freezeTimers.set(game.gameId, botFreezeTimer);
     } else {
       (game as any)._freezeUntil = Date.now() + freezeMs;
@@ -4338,12 +4355,9 @@ class GameManager {
         console.error('[bot-discard] Error:', err);
       }
     }, (() => {
-      const waitMs = this.getHesitationWaitMs(gameId);
       const g = this.games.get(gameId);
-      if (g && this.isTrainingFastMode(g)) {
-        return Math.min(30, Math.max(0, waitMs));
-      }
-      return waitMs + Math.floor(Math.random() * 500);
+      if (!g) return 500;
+      return this.getBotDiscardDelayMs(g);
     })()));  // 训练模式极速响应,实战保留随机人性化延迟
 
     this.botTimers.set(gameId, timer);
