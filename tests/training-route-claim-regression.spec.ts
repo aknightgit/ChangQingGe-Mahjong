@@ -52,6 +52,47 @@ console.log('\n=== Regression: training route claim gating ===\n')
 
 {
   const player = makeAkPlayer([
+    tile(TileSuit.DOTS, 2, 'd2a'),
+    tile(TileSuit.DOTS, 3, 'd3a'),
+    tile(TileSuit.DOTS, 4, 'd4a'),
+    tile(TileSuit.DOTS, 5, 'd5a'),
+    tile(TileSuit.DOTS, 6, 'd6a'),
+    tile(TileSuit.DOTS, 7, 'd7a'),
+    tile(TileSuit.DOTS, 8, 'd8a'),
+    tile(TileSuit.DOTS, 8, 'd8b'),
+    tile(TileSuit.CHARACTERS, 3, 'w3a'),
+    tile(TileSuit.CHARACTERS, 3, 'w3b'),
+    tile(TileSuit.BAMBOOS, 5, 'b5a'),
+    tile(TileSuit.BAMBOOS, 5, 'b5b'),
+    tile(TileSuit.WIND, 1, 'east-a'),
+  ])
+  const passEval = {
+    score: 100,
+    discard: null,
+    shantenLike: 2,
+    improvingDraws: 12,
+    directWaits: 0,
+    readyDraws: 4,
+    winDraws: 0,
+  }
+  const claimEval = {
+    score: 108,
+    discard: null,
+    shantenLike: 2,
+    improvingDraws: 13,
+    directWaits: 0,
+    readyDraws: 4,
+    winDraws: 0,
+  }
+
+  test(
+    'trainer blocks off-route chow when one suit is already clearly long and pair-heavy',
+    shouldAkTakeClaim(player as any, tile(TileSuit.BAMBOOS, 6, 'claim-b6'), passEval, claimEval, 'chow') === false
+  )
+}
+
+{
+  const player = makeAkPlayer([
     tile(TileSuit.DOTS, 1, 'd1'),
     tile(TileSuit.DOTS, 2, 'd2'),
     tile(TileSuit.DOTS, 3, 'd3'),

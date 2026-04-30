@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="mahjong-page" :class="[{ 'layout-debug': showDebugPanel, 'mobile-portrait': shouldRotateView }]">
     <div class="room-viewport" :class="{ 'room-viewport--rotated': shouldRotateView }">
       <div class="room-container" :class="{ 'room-container--rotated': shouldRotateView }">
@@ -273,12 +273,7 @@
       <div class="settle-round-card">
         <div v-if="currentSettlementRound" class="settle-round-header">
           <span>第 {{ currentSettlementRound.roundNumber }} 局</span>
-          <span>
-            骰子 {{ currentSettlementRound.diceMultiplier }}
-            / 传承 {{ currentSettlementRound.inheritMultiplier }}
-            / 有效 {{ currentSettlementRound.effectiveMultiplier }}
-            / 结算 {{ currentSettlementRound.settlementMultiplier }}
-          </span>
+          <span>全局倍数 ×{{ currentSettlementRound.effectiveMultiplier }}</span>
         </div>
         <div class="settle-round-block">
           <div class="settle-table-wrap">
@@ -287,6 +282,7 @@
                 <tr>
                   <th>玩家</th>
                   <th>胡牌牌面</th>
+                  <th>花</th>
                   <th>番数</th>
                   <th>门清</th>
                   <th>百搭</th>
@@ -302,6 +298,7 @@
                 >
                   <td>{{ row.playerName }}</td>
                   <td class="settle-round-tiles">{{ row.tiles }}</td>
+                  <td>{{ row.flowerCount }}</td>
                   <td>{{ row.baseFan }}</td>
                   <td>{{ row.menQing }}</td>
                   <td>{{ row.wild }}</td>
@@ -838,650 +835,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch, provide } from 'vue'
 
-// 游戏室高度交互，不需要SSR（避免TileSuit等enum在SSR时解析失败）
-definePageMeta({ ssr: false })
-import PlayerSelfArea from '~/components/PlayerSelfArea.vue'
-import PlayerOtherArea from '~/components/PlayerOtherArea.vue'
-import MahjongTile from '~/components/MahjongTile.vue'
-import CircularActionButtons from '~/components/CircularActionButtons.vue'
-import TableCenter from '~/components/TableCenter.vue'
-import TileWall from '~/components/TileWall.vue'
-import DiceAnimation from '~/components/DiceAnimation.vue'
-import PlayerInfo from '~/components/PlayerInfo.vue'
-import RoomStats from '~/components/RoomStats.vue'
-import GameBroadcast from '~/components/GameBroadcast.vue'
-import DiscardZone from '~/components/DiscardZone.vue'
-import LayoutDebugPanel from '~/components/LayoutDebugPanel.vue'
-import { useGame } from '~/composables/useGame'
-import { useSound } from '~/composables/useSound'
-import { useBackgroundMusic } from '~/composables/useBackgroundMusic'
-import { buildDiscardGuardSnapshot, shouldReleasePendingDiscardGuard, type DiscardGuardSnapshot } from '~/utils/discardGuard'
-import { collectClaimedDiscardIds, filterVisibleDiscards } from '~/utils/discardVisibility'
-import { formatBeijingTime } from '~/utils/beijingTime'
-import { useVoiceTile, type VoiceScheme } from '~/composables/useVoiceTile'
-import { ActionType, GamePhase, GameEndReason, type Tile, type Meld, type Player } from '~/types/game'
-
-const PENDING_ROOM_STORAGE_KEY = 'mahjong.pendingRoomTarget'
-const clearPendingRoomTarget = () => {
-  if (!process.client) return
-  try {
-    sessionStorage.removeItem(PENDING_ROOM_STORAGE_KEY)
-  } catch {}
-}
-
-const route = useRoute()
-const userName = useCookie('user_name')
-const roomId = computed(() => String(route.params.roomId || ''))
-const playerId = computed(() => String(route.query.playerId || ''))
-
-const { 
-  gameState, 
-  currentPlayer, 
-  tingPreview,
-  availableActions, 
-  isConnected, 
-  error, 
-  connect, 
-  disconnect, 
-  executeAction,
-  startGame,
-  refreshState,
-  forceRefreshState,
-  replacePendingAction,
-  isActionPending,
-  roomDismissedReason,
-  lastStateChangeAt,
-  leadingBrotherEvent,
-  actionApprovalEvent
-} = useGame()
-
-const backToLobby = () => {
-  clearPendingRoomTarget()
-  return navigateTo('/')
-}
-const { play: playSound, isEnabled: soundEnabled, setEnabled: setSoundEnabled } = useSound()
-const {
-  tracks: bgmTracks,
-  enabled: bgmEnabled,
-  loopMode: bgmLoopMode,
-  currentTrackId: bgmCurrentTrackId,
-  volume: bgmVolume,
-  isPlaying: bgmIsPlaying,
-  ensureInitialized: ensureBackgroundMusicInitialized,
-  setEnabled: setBackgroundMusicEnabled,
-  setLoopMode: setBackgroundMusicLoopMode,
-  setTrack: setBackgroundMusicTrack,
-  setVolume: setBackgroundMusicVolume,
-  play: playBackgroundMusic,
-  pause: pauseBackgroundMusic,
-  next: playNextBackgroundTrack
-} = useBackgroundMusic()
-
-const { loadVoiceScheme, playVoiceTile, currentScheme, currentVoiceName } = useVoiceTile()
-
-const toggleSound = () => {
-  setSoundEnabled(!soundEnabled.value)
-}
-const cycleVoiceScheme = async () => {
-  const next: VoiceScheme = 'bingtang'
-  await loadVoiceScheme(next)
-  try { localStorage.setItem('mahjong.voiceScheme', next) } catch {}
-}
-const bgmVolumePercent = computed(() => Math.round((bgmVolume.value ?? 0.5) * 100))
-const onChangeBgmTrack = (event: Event) => {
-  setBackgroundMusicTrack((event.target as HTMLSelectElement).value)
-}
-const onChangeBgmLoopMode = (event: Event) => {
-  setBackgroundMusicLoopMode((event.target as HTMLSelectElement).value as 'single' | 'all' | 'shuffle')
-}
-const onChangeBgmVolume = (event: Event) => {
-  setBackgroundMusicVolume(Number((event.target as HTMLInputElement).value || 50) / 100)
-}
-const toggleBgmPlayback = () => {
-  if (bgmIsPlaying.value) pauseBackgroundMusic()
-  else playBackgroundMusic()
-}
-// Admin/Debug — 目前禁用 (isAdminUser=false)
-const isAdminUser = computed(() => false)
-const showAllCards = ref(false)
-const shouldRevealOpponents = computed(() => false)
-const isMobilePortrait = ref(false)
-const shouldRotateView = computed(() => isMobilePortrait.value)
-const nowTs = ref(Date.now())
-let actionWindowTimer: ReturnType<typeof setInterval> | null = null
-
-const actionButtonsVisibleUntil = ref(0)
-const isGameStarting = ref(false)
-const getActionWindowMs = (state: any) => {
-  const hw = state?.hesitationWindow
-  return typeof hw === 'number' && hw > 0 ? hw : 5000
-}
-
-// ===== 出牌倒计时 & AI托管 =====
-const TURN_TIMEOUT_SEC = 60
-const CONSECUTIVE_AUTO_THRESHOLD = 2 // 连续自动操作N次后AI接管
-const turnTimer = ref(TURN_TIMEOUT_SEC)
-const turnTimerActive = ref(false)
-let turnTimerInterval: ReturnType<typeof setInterval> | null = null
-let lastWarnAt = 0
-let consecutiveAutoCount = 0   // 连续自动操作次数
-const isAIControlled = ref(false) // 是否被AI接管
-const showSettings = ref(false) // 显示设置面板
-const settingsBtnEl = ref<HTMLElement | null>(null)
-const settingsPanelEl = ref<HTMLElement | null>(null)
-const settingsPanelTop = ref(0)
-const settingsPanelLeft = ref(0)
-
-// 播放咻咻收缩音效
-const playWhoosh = () => {
-  try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
-    const oscillator = ctx.createOscillator()
-    const gainNode = ctx.createGain()
-    oscillator.connect(gainNode)
-    gainNode.connect(ctx.destination)
-    oscillator.type = 'sine'
-    oscillator.frequency.setValueAtTime(880, ctx.currentTime)
-    oscillator.frequency.exponentialRampToValueAtTime(220, ctx.currentTime + 0.18)
-    gainNode.gain.setValueAtTime(0.12, ctx.currentTime)
-    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18)
-    oscillator.start(ctx.currentTime)
-    oscillator.stop(ctx.currentTime + 0.18)
-    setTimeout(() => ctx.close(), 250)
-  } catch (_) {}
-}
-
-// 定位设置面板在按钮下方
-const updateSettingsPosition = () => {
-  if (!settingsBtnEl.value) return
-  const rect = settingsBtnEl.value.getBoundingClientRect()
-  settingsPanelTop.value = rect.bottom + 8
-  settingsPanelLeft.value = rect.right - 300
-}
-
-const toggleSettingsPanel = () => {
-  showSettings.value = !showSettings.value
-}
-
-const handleGlobalPointerDown = (e: MouseEvent) => {
-  if (!showSettings.value) return
-  const target = e.target as Node | null
-  if (settingsPanelEl.value?.contains(target)) return
-  if (settingsBtnEl.value?.contains(target)) return
-  showSettings.value = false
-}
-
-watch(showSettings, (open) => {
-  if (open) {
-    nextTick(updateSettingsPosition)
-  } else {
-    playWhoosh()
-  }
-})
-
-onMounted(() => {
-  window.addEventListener('resize', updateSettingsPosition)
-  document.addEventListener('pointerdown', handleGlobalPointerDown)
-  window.addEventListener('mahjong-realtime-state', handleRealtimeState as EventListener)
-  ensureBackgroundMusicInitialized()
-  if (bgmEnabled.value) playBackgroundMusic()
-  // 加载出牌语音（默认冰糖音色）
-  loadVoiceScheme('bingtang').then(() => preloadAllTiles())
-  try {
-    const savedTheme = localStorage.getItem('mahjong.tableTheme') as 'classic-green' | 'jade-green' | 'royal-red' | null
-    if (savedTheme === 'classic-green' || savedTheme === 'jade-green' || savedTheme === 'royal-red') {
-      tableTheme.value = savedTheme
-    }
-    const savedBackScheme = Number(localStorage.getItem('mahjong.tileBackScheme'))
-    if (savedBackScheme === 0 || savedBackScheme === 1 || savedBackScheme === 2) {
-      tileBackScheme.value = savedBackScheme
-    }
-  } catch {}
-})
-
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', updateSettingsPosition)
-  document.removeEventListener('pointerdown', handleGlobalPointerDown)
-  window.removeEventListener('mahjong-realtime-state', handleRealtimeState as EventListener)
-  pauseBackgroundMusic()
-})
-
-const onSettingsClosed = () => {}
-
-const settingsPanelStyle = computed(() => ({
-  top: `${settingsPanelTop.value}px`,
-  left: `${Math.max(8, settingsPanelLeft.value)}px`,
-}))
-const showDebugPanel = ref(false) // 布局热调面板
-
-// 游戏设置
-const showHintEnabled = ref(true)       // 出牌提示
-const tileAnimationEnabled = ref(true)   // 牌面动画
-const actionSoundEnabled = ref(true)    // 操作音效
-const timerWarningEnabled = ref(true)   // 倒计时警告音
-const tableTheme = ref<'classic-green' | 'jade-green' | 'royal-red'>('classic-green')
-const tileBackScheme = ref<0 | 1 | 2>(0)
-
-const setTableTheme = (theme: 'classic-green' | 'jade-green' | 'royal-red') => {
-  tableTheme.value = theme
-  try { localStorage.setItem('mahjong.tableTheme', theme) } catch {}
-}
-
-const setTileBackScheme = (scheme: 0 | 1 | 2) => {
-  tileBackScheme.value = scheme
-  try { localStorage.setItem('mahjong.tileBackScheme', String(scheme)) } catch {}
-}
-
-const startTurnTimer = () => {
-  stopTurnTimer()
-  // AI接管期间不启动人类计时器
-  if (isAIControlled.value) return
-  turnTimer.value = TURN_TIMEOUT_SEC
-  turnTimerActive.value = true
-  lastWarnAt = 0
-  turnTimerInterval = setInterval(() => {
-    turnTimer.value--
-    // 10秒警告音效
-    if (turnTimer.value === 10 && lastWarnAt !== 10) {
-      playSound('timer-warn')
-      lastWarnAt = 10
-    }
-    if (turnTimer.value <= 0) {
-      stopTurnTimer()
-      handleAutoAction()
-    }
-  }, 1000)
-}
-
-const stopTurnTimer = () => {
-  turnTimerActive.value = false
-  if (turnTimerInterval) {
-    clearInterval(turnTimerInterval)
-    turnTimerInterval = null
-  }
-}
-
-// 玩家主动操作时重置连续计数
-const resetAutoCount = () => {
-  consecutiveAutoCount = 0
-}
-
-// 超时自动操作
-const handleAutoAction = () => {
-  consecutiveAutoCount++
-
-  // 1. 轮到摸牌 → 自动摸
-  if (showDraw.value) {
-    playSound('tile-draw')
-    executeAction(ActionType.DRAW)
-  }
-  // 2. 有优先操作（吃/碰/杠/胡）→ 自动过
-  else if (hasPriorityActions.value) {
-    showChowPicker.value = false
-    selectedChowOption.value = null
-    executeAction(ActionType.PASS)
-  }
-  // 3. 有摸到的牌但没出 → 自动打出摸到的牌
-  else if (currentPlayer.value?.hand?.concealedTiles?.length) {
-    const lastTile = currentPlayer.value.hand.concealedTiles.at(-1)
-    if (lastTile) {
-      playSound('tile-discard')
-      executeAction(ActionType.DISCARD, lastTile.id)
-    }
-  }
-
-  // 检查是否达到连续阈值 → AI托管
-  if (consecutiveAutoCount >= CONSECUTIVE_AUTO_THRESHOLD) {
-    isAIControlled.value = true
-    consecutiveAutoCount = 0
-    // 通知服务器开启AI托管
-    useFetch('/api/game/bot-mode', {
-      method: 'POST',
-      body: { gameId: roomId.value, playerId: playerId.value, enabled: true }
-    }).catch(console.error)
-  }
-}
-
-// 玩家回来：点击"我回来了"恢复控制
-const onPlayerBack = () => {
-  isAIControlled.value = false
-  consecutiveAutoCount = 0
-  // 通知服务器关闭AI托管
-  useFetch('/api/game/bot-mode', {
-    method: 'POST',
-    body: { gameId: roomId.value, playerId: playerId.value, enabled: false }
-  }).catch(console.error)
-  // 恢复后重新启动计时
-  if (isMyTurn.value || hasPriorityActions.value) {
-    startTurnTimer()
-  }
-}
-
-
-// 骰子动画状态
-const showDiceOverlay = ref(false)
-
-// 阶段变化时自动显示骰子动画（所有客户端）
-// 庄家：STARTING 广播 → isWaitingRoom=false + showDice → 进入骰子动画
-// 非庄家：STARTING 广播 → isWaitingRoom=false + showDice → 进入骰子动画
-watch(() => gameState.value?.phase, (newPhase, oldPhase) => {
-  if (newPhase === 'starting' && oldPhase === 'waiting') {
-    console.log('[phase-watcher] Game starting, showing dice for all clients')
-    showDiceOverlay.value = true
-  } else if (newPhase && newPhase !== 'starting') {
-    hasDicePreview.value = false
-  }
-})
-const diceValues = ref<[number, number]>([1, 1])
-watch(
-  () => (gameState.value as any)?.dice,
-  (dice) => {
-    if (Array.isArray(dice) && dice.length === 2) {
-      diceValues.value = [Number(dice[0]) || 1, Number(dice[1]) || 1]
-    }
-  },
-  { immediate: true }
-)
-const hasDicePreview = ref(false)
-const maxDiceRolls = computed(() => {
-  if (!gameState.value) return 2
-  return Number((gameState.value as any).diceRollCount) || Number((route.query as any).dice) || 2
-})
-// 如果本局已因造反/流局/聚义翻倍（inheritedGlobalMultiplier>=2），强制只掷一次骰子
-const isDoubleRound = computed(() => {
-  const igm = (gameState.value as any)?.inheritedGlobalMultiplier
-  return typeof igm === 'number' && igm >= 2
-})
-const effectiveMaxRolls = computed(() => maxDiceRolls.value)
-const showDoubleReminder = ref(false)
-const doubleReminderText = ref('本局骰子倍率 x2')
-let doubleReminderTimer: ReturnType<typeof setTimeout> | null = null
-const flowerReplacementNotice = ref<Tile | null>(null)
-let flowerReplacementNoticeTimer: ReturnType<typeof setTimeout> | null = null
-
-const triggerDoubleReminder = (multiplier: number) => {
-  if (multiplier < 2) return
-  if (!showDiceOverlay.value) return
-  doubleReminderText.value = `本局骰子倍率 x${multiplier}`
-  showDoubleReminder.value = true
-  if (doubleReminderTimer) {
-    clearTimeout(doubleReminderTimer)
-  }
-  doubleReminderTimer = setTimeout(() => {
-    showDoubleReminder.value = false
-    doubleReminderTimer = null
-  }, 500)
-}
-
-watch(
-  () => gameState.value?.roundMultiplier,
-  (next, prev) => {
-    if ((next === 2 || next === 4) && next !== prev) {
-      triggerDoubleReminder(next)
-    }
-  }
-)
-// 决策犹豫期（毫秒），优先从游戏状态读取，兜底5秒
-const hesitationWindow = computed(() => {
-  const hw = (gameState.value as any)?.hesitationWindow
-  return typeof hw === 'number' && hw > 0 ? hw : 5000
-})
-
-// 当前决策犹豫期截止时间（从游戏状态读取）
-const currentFreezeUntil = computed(() => {
-  const fu = (gameState.value as any)?._freezeUntil
-  return typeof fu === 'number' && fu > Date.now() ? fu : 0
-})
-
-// 决策犹豫期结束后主动刷新（避免debounce导致客户端错过auto-draw）
-let freezeRefreshTimer: ReturnType<typeof setTimeout> | null = null
-watch(currentFreezeUntil, (until) => {
-  if (freezeRefreshTimer) { clearTimeout(freezeRefreshTimer); freezeRefreshTimer = null }
-  if (until > 0) {
-    const delay = until - Date.now() + 100 // 决策犹豫期结束后100ms刷新
-    freezeRefreshTimer = setTimeout(() => {
-      refreshState()
-    }, Math.max(delay, 0))
-  }
-})
-
-const onRerollDice = () => {
-  // 翻倍局不允许重掷骰子
-  hasDicePreview.value = true
-  diceValues.value = [
-    Math.floor(Math.random() * 6) + 1,
-    Math.floor(Math.random() * 6) + 1
-  ]
-}
-const dealerName = computed(() => {
-  if (!gameState.value) return ''
-  const dealer = gameState.value.players.find(p => p.isDealer)
-  return dealer?.name || '庄家'
-})
-
-watch(isAdminUser, (next) => {
-  if (!next && showAllCards.value) {
-    showAllCards.value = false
-  }
-})
-
-const evaluateViewport = () => {
-  if (!process.client) {
-    return
-  }
-
-  const { innerWidth: width, innerHeight: height } = window
-  const smallestSide = Math.min(width, height)
-  const isPortrait = height >= width
-  isMobilePortrait.value = isPortrait && smallestSide <= 768
-}
-
-const toggleShowAllCards = () => {
-  if (!isAdminUser.value) return
-  showAllCards.value = !showAllCards.value
-}
-
-onMounted(async () => {
-  if (roomId.value && playerId.value) {
-    await connect(roomId.value, playerId.value)
-    clearPendingRoomTarget()
-    // 等待房间会自动显示（isWaitingRoom computed），不需要自动弹骰子
-    // 庄家在等待房间点击"开始游戏"才会弹出骰子
-  }
-
-  if (process.client) {
-    evaluateViewport()
-    window.addEventListener('resize', evaluateViewport)
-    window.addEventListener('orientationchange', evaluateViewport)
-    // 接收服务端广播的牌局快讯
-    window.addEventListener('mahjong-broadcast', ((e: CustomEvent) => {
-      const d = e.detail
-      addBroadcast(d.text, d.type as BroadcastMsg['type'])
-    }) as EventListener)
-    actionWindowTimer = setInterval(() => {
-      nowTs.value = Date.now()
-    }, 250)
-  }
-})
-
-onUnmounted(() => {
-  disconnect()
-  clearFlowerReplacementNotice()
-  if (doubleReminderTimer) { clearTimeout(doubleReminderTimer); doubleReminderTimer = null }
-  if (northDrawnTimer) { clearTimeout(northDrawnTimer); northDrawnTimer = null }
-  if (westDrawnTimer) { clearTimeout(westDrawnTimer); westDrawnTimer = null }
-  if (eastDrawnTimer) { clearTimeout(eastDrawnTimer); eastDrawnTimer = null }
-  if (selfDrawnTimer) { clearTimeout(selfDrawnTimer); selfDrawnTimer = null }
-
-  if (process.client) {
-    window.removeEventListener('resize', evaluateViewport)
-    window.removeEventListener('orientationchange', evaluateViewport)
-    if (actionWindowTimer) {
-      clearInterval(actionWindowTimer)
-      actionWindowTimer = null
-    }
-    stopTurnTimer()
-  }
-})
-
-// ---- Computed Players ----
-const getPlayerByRelativePos = (offset: number) => {
-  if (!gameState.value || !currentPlayer.value) return null
-  const selfPos = currentPlayer.value.position
-  const targetPos = (selfPos + offset) % 4
-  return gameState.value.players.find(p => p.position === targetPos)
-}
-
-const rightPlayer = computed(() => getPlayerByRelativePos(1))
-const topPlayer = computed(() => getPlayerByRelativePos(2))
-const leftPlayer = computed(() => getPlayerByRelativePos(3))
-
-// ---- Latest Discard ID per Player ----
-// 全局最后一张弃牌（所有玩家中打出的最新一张）
-const globalLatestDiscardId = computed(() => {
-  const allDiscards = gameState.value?.discardPile || []
-  return allDiscards.length > 0 ? allDiscards[allDiscards.length - 1]?.id : null
-})
-
-const claimedDiscardIds = computed(() => collectClaimedDiscardIds(gameState.value?.players))
-
-const getVisiblePlayerDiscards = (player?: Player | null) => filterVisibleDiscards(player?.hand?.discardedTiles, claimedDiscardIds.value)
-
-const selfLatestDiscardId = computed(() => globalLatestDiscardId.value)
-const northLatestDiscardId = computed(() => globalLatestDiscardId.value)
-const westLatestDiscardId = computed(() => globalLatestDiscardId.value)
-const eastLatestDiscardId = computed(() => globalLatestDiscardId.value)
-const playerHand = computed(() => currentPlayer.value?.hand.concealedTiles || [])
-const playerMelds = computed(() => currentPlayer.value?.hand.exposedMelds || [])
-const playerDiscards = computed(() => getVisiblePlayerDiscards(currentPlayer.value))
-const isWinner = computed(() => currentPlayer.value?.status === 'won')
-
-const clearFlowerReplacementNotice = () => {
-  if (flowerReplacementNoticeTimer) {
-    clearTimeout(flowerReplacementNoticeTimer)
-    flowerReplacementNoticeTimer = null
-  }
-  flowerReplacementNotice.value = null
-}
-
-const showFlowerReplacementNotice = (tile: Tile) => {
-  clearFlowerReplacementNotice()
-  flowerReplacementNotice.value = tile
-  flowerReplacementNoticeTimer = setTimeout(() => {
-    flowerReplacementNotice.value = null
-    flowerReplacementNoticeTimer = null
-  }, 200)
-}
-
-const getResolvedFlowerMeldCount = (player?: Player | null) => {
-  if (!player) return 0
-  return (player.hand.exposedMelds || []).filter((meld: any) => {
-    const tile = meld?.tiles?.[0]
-    return meld?.tiles?.length === 1 && tile?.suit === 'hua' && !!meld?.replacementDone
-  }).length
-}
-
-watch(
-  () => ({
-    playerId: currentPlayer.value?.id || '',
-    concealedIds: playerHand.value.map(tile => tile.id),
-    resolvedFlowerCount: getResolvedFlowerMeldCount(currentPlayer.value),
-  }),
-  (next, prev) => {
-    if (!prev || !next.playerId || next.playerId !== prev.playerId) return
-    if (next.resolvedFlowerCount <= prev.resolvedFlowerCount) return
-    const previousIds = new Set(prev.concealedIds)
-    const addedTile = playerHand.value.find(tile => !previousIds.has(tile.id))
-    if (addedTile) {
-      showFlowerReplacementNotice(addedTile)
-    }
-  }
-)
-
-// 胜者观战模式
-const showSpectatorControls = computed(() => {
-  const phase = gameState.value?.phase
-  return !!currentPlayer.value && (phase === GamePhase.PLAYING || phase === GamePhase.ENDED)
-})
-const canUseDebugAiAkSpectator = computed(() => {
-  const me = currentPlayer.value
-  if (!showSpectatorControls.value || !me) return false
-  return (gameState.value?.players || []).some(player =>
-    player.id !== me.id &&
-    player.name === 'AI-AK' &&
-    isBotPlayer(player)
-  )
-})
-const canUseSpectatorView = computed(() =>
-  showSpectatorControls.value &&
-  (currentPlayer.value?.status === 'won' || canUseDebugAiAkSpectator.value)
-)
-const mySpectatorView = computed(() => {
-  const myId = currentPlayer.value?.id
-  if (!myId) return null
-  return (gameState.value as any)?.spectatorViews?.[myId] || null
-})
-const spectatingId = computed(() => mySpectatorView.value?.viewingPlayerId || null)
-const pendingSpectateId = computed(() => mySpectatorView.value?.pendingHumanPlayerId || null)
-const approvedHumanSpectateId = computed(() => mySpectatorView.value?.approvedHumanPlayerId || null)
-const spectatorApprovalRequest = computed(() => {
-  const myId = currentPlayer.value?.id
-  if (!myId) return null
-  const requests = (gameState.value as any)?.spectatorApprovalRequests || []
-  return requests.find((request: any) =>
-    request.status === 'pending' &&
-    request.targetId === myId
-  ) || null
-})
-
-const isHiddenTile = (tile: any) => String(tile?.id || '').startsWith('hidden-') || tile?.value === 0
-const isOpponentHandRevealed = (player?: Player | null) => {
-  if (!player || player.id === currentPlayer.value?.id) return false
-  const hand = player.hand?.concealedTiles || []
-  return hand.length > 0 && hand.some(tile => !isHiddenTile(tile))
-}
-
-
-
-// ---- Table Center Data ----
-const remainingTileCount = computed(() => {
-  const g = gameState.value as any
-  if (!g) return 0
-  // 支持两种格式：wallRemaining（直接数字）或 wall（数组）
-  if (typeof g.wallRemaining === 'number') return g.wallRemaining
-  if (typeof g.wallCount === 'number') return g.wallCount
-  if (Array.isArray(g.wall)) return g.wall.length
-  return 0
-})
-const currentRound = computed(() => {
-  const game = gameState.value as any
-  if (!game) return 1
-  if (typeof game.currentRound === 'number' && game.currentRound > 0) return game.currentRound
-  const completedRounds = Array.isArray(game.roundStats) ? game.roundStats.length : 0
-  return game.phase === GamePhase.ENDED ? Math.max(1, completedRounds) : completedRounds + 1
-})
-// Provide round number for MahjongTile to auto-select back scheme
-provide('roundNumber', currentRound)
-const roundMultiplier = computed(() => gameState.value?.roundMultiplier ?? 1)
-const getDiceRoundMultiplier = (dice1: number, dice2: number) => {
-  if (dice1 === dice2) {
-    return dice1 === 1 || dice1 === 4 ? 4 : 2
-  }
-  if ((dice1 === 1 && dice2 === 4) || (dice1 === 4 && dice2 === 1)) {
-    return 2
-  }
-  return 1
-}
-
-// 圈方位 & 局数（用于显示"第1圈 东二局"格式）
-const windNames = ['东', '南', '西', '北']
-const roundCircle = computed(() => Math.floor((currentRound.value - 1) / 4) + 1)
-const prevailingWind = computed(() => {
-  // 每4局换一次方位：1-4局=东，5-8局=南，9-12局=西，13-16局=北
-  return windNames[Math.floor((currentRound.value - 1) / 4) % 4]
-})
-const roundPosition = computed(() => ((currentRound.value - 1) % 4) + 1)
-const roundDisplay = computed(() => `第${roundCircle.value}圈 ${prevailingWind.value}${roundPosition.value}局`)
+const roundDisplay = computed(() => `第${currentRound.value}局`)
 const globalMultiplier = computed(() => {
   const game = gameState.value
   if (!game) return 1
@@ -1705,10 +1059,11 @@ const overlayTitle = computed(() => {
 
 const tileLabel = (tile: Partial<Tile> | null | undefined): string => {
   if (!tile) return ''
-  if (tile.suit === 'hua') return ['春', '夏', '秋', '冬', '梅', '兰', '竹', '菊'][Number(tile.value) - 1] || `花${tile.value}`
-  if (tile.suit === 'feng') return ['东', '南', '西', '北'][Number(tile.value) - 1] || `风${tile.value}`
-  if (tile.suit === 'jian') return ['中', '发', '白'][Number(tile.value) - 1] || `箭${tile.value}`
-  const suitLabel = tile.suit === 'wan' ? '万' : tile.suit === 'dots' ? '筒' : tile.suit === 'tiao' ? '条' : ''
+  const suit = String(tile.suit || '').toLowerCase()
+  if (suit === 'hua' || suit === 'flower') return ['春', '夏', '秋', '冬', '梅', '兰', '竹', '菊'][Number(tile.value) - 1] || `花${tile.value}`
+  if (suit === 'feng' || suit === 'wind') return ['东', '南', '西', '北'][Number(tile.value) - 1] || `风${tile.value}`
+  if (suit === 'jian' || suit === 'dragon') return ['中', '发', '白'][Number(tile.value) - 1] || `箭${tile.value}`
+  const suitLabel = suit === 'wan' ? '万' : suit === 'dots' ? '筒' : suit === 'tiao' ? '条' : ''
   const digit = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'][Number(tile.value)] || String(tile.value)
   return `${digit}${suitLabel}`
 }
@@ -1959,6 +1314,7 @@ const commitDiscard = (tile: Tile) => {
   playSound('tile-discard')
   // 出牌念牌
   if (tile.suit) playVoiceTile(tile.suit, tile.value)
+  markDiscardAudioPlayed(tile.id)
   void executeAction(ActionType.DISCARD, tile.id).then((success) => {
     if (success) return
     pendingDiscardTileId.value = null
@@ -2017,10 +1373,20 @@ const showPendingClaim = computed(() => {
     action === ActionType.EXTENDED_KONG
   )
 })
-const showDraw = computed(() => availableActions.value.includes(ActionType.DRAW) && !showPendingClaim.value)
+const hasBlockingPendingClaim = computed(() => {
+  const mine = myPendingAction.value
+  if (!mine) return false
+  return mine.availableActions.some(action =>
+    action === ActionType.PENG ||
+    action === ActionType.KONG ||
+    action === ActionType.HU ||
+    action === ActionType.CONCEALED_KONG ||
+    action === ActionType.EXTENDED_KONG
+  )
+})
+const showDraw = computed(() => availableActions.value.includes(ActionType.DRAW))
 const filteredCircularAvailableActions = computed(() => {
-  if (!showPendingClaim.value) return availableActions.value
-  return availableActions.value.filter(action => action !== ActionType.DRAW)
+  return availableActions.value
 })
 const showChowPicker = ref(false)
 const selectedChowOption = ref<number | null>(null)
@@ -2476,6 +1842,7 @@ const getRoundSettlementRows = (round: any) => {
       isWinner: !!winner,
       handType: winner?.handTypeName || '-',
       tiles: winner ? formatWinnerTiles(winner) : '-',
+      flowerCount: winner?.flowerCount ?? 0,
       menQing: winner ? (typeof winner.isMenQing === 'boolean' ? (winner.isMenQing ? '门清' : '非门清') : '-') : '-',
       wild: winner ? (typeof winner.hasWild === 'boolean' ? (winner.hasWild ? '有' : '无') : '-') : '-',
       baseFan: winner?.baseFan ?? '-',
@@ -2932,15 +2299,26 @@ const prevSwapRequestIds = ref<Set<string>>(new Set())
 const prevIsMyTurn = ref(false)
 const lastFastDiscardAt = ref(0)
 const prevRealtimeDiscardCount = ref(0)
+const lastDiscardAudioTileId = ref<string | null>(null)
+const markDiscardAudioPlayed = (tileId?: string | null) => {
+  if (!tileId) return
+  lastDiscardAudioTileId.value = tileId
+}
+const recentlyPlayedDiscardAudio = (tileId?: string | null) => !!tileId && lastDiscardAudioTileId.value === tileId
 const handleRealtimeState = (e: Event) => {
   const detail = (e as CustomEvent).detail as any
   const discardCount = Array.isArray(detail?.discardPile) ? detail.discardPile.length : 0
   if (discardCount > prevRealtimeDiscardCount.value) {
+    const lastTile = detail?.discardPile?.[discardCount - 1]
+    if (recentlyPlayedDiscardAudio(lastTile?.id)) {
+      prevRealtimeDiscardCount.value = discardCount
+      return
+    }
     lastFastDiscardAt.value = Date.now()
     playSound('tile-discard')
     // 念其他玩家出的牌
-    const lastTile = detail?.discardPile?.[discardCount - 1]
     if (lastTile?.suit) playVoiceTile(lastTile.suit, lastTile.value)
+    markDiscardAudioPlayed(lastTile?.id)
   }
   prevRealtimeDiscardCount.value = discardCount
 }
@@ -2968,7 +2346,7 @@ const checkOtherPlayerSounds = (newState: any) => {
     const replacedFlowerMelds = getReplacedFlowerMelds(player)
     const replacedFlowerCount = replacedFlowerMelds.length
     if (prev) {
-      if (player.id !== currentPlayer.value?.id && meldCount > prev.meldCount) {
+      if (player.id !== playerId.value && meldCount > prev.meldCount) {
         const newMelds = (player.hand?.exposedMelds || []).slice(prev.meldCount)
         for (const m of newMelds) {
           if (m.type === 'kong' || m.tiles?.length === 4) playSound('tile-kong')
@@ -2976,11 +2354,14 @@ const checkOtherPlayerSounds = (newState: any) => {
           else playSound('tile-chow')
         }
       }
-      if (player.id !== currentPlayer.value?.id && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
-        playSound('tile-discard')
+      if (player.id !== playerId.value && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
         const newDiscards = (player.hand?.discardedTiles || []).slice(prev.discardCount)
         const lastNew = newDiscards[newDiscards.length - 1]
-        if (lastNew?.suit) playVoiceTile(lastNew.suit, lastNew.value)
+        if (!recentlyPlayedDiscardAudio(lastNew?.id)) {
+          playSound('tile-discard')
+          if (lastNew?.suit) playVoiceTile(lastNew.suit, lastNew.value)
+          markDiscardAudioPlayed(lastNew?.id)
+        }
       }
     }
     prevOtherPlayerState.set(player.id, { meldCount, discardCount, replacedFlowerCount })

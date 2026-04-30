@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 麻将牌面语音播放
  * 资源统一放在 assets/voice 下，不依赖 public 目录
  */
@@ -114,7 +114,8 @@ function resolveTileKey(suit: string, value: number): string {
     hua: 'hua',
     flower: 'hua',
   }
-  const windMap: Record<number, string> = { 1: 'east', 2: 'south', 3: 'west', 4: 'north' }
+  // 冰糖风牌素材里南/西命名与实际内容相反，这里统一纠正映射，避免播报错位。
+  const windMap: Record<number, string> = { 1: 'east', 2: 'west', 3: 'south', 4: 'north' }
   const jianMap: Record<number, string> = { 1: 'zhong', 2: 'fa', 3: 'bai' }
   const prefix = suitMap[normalizedSuit] || normalizedSuit
 

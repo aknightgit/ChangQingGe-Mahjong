@@ -92,6 +92,28 @@ function makeGame(players: Player[], discardPile: Tile[] = [], wallLength = 60):
 console.log('\n=== Regression: route discard planner ===\n')
 
 {
+  const ai = makePlayer('ai-honor-opening', 'AI-AK', [
+    tile(TileSuit.DOTS, 2, 'd2'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 4, 'd4'),
+    tile(TileSuit.DOTS, 5, 'd5'),
+    tile(TileSuit.DOTS, 6, 'd6'),
+    tile(TileSuit.DOTS, 7, 'd7'),
+    tile(TileSuit.DOTS, 8, 'd8'),
+    tile(TileSuit.BAMBOOS, 1, 'b1'),
+    tile(TileSuit.BAMBOOS, 4, 'b4'),
+    tile(TileSuit.BAMBOOS, 7, 'b7'),
+    tile(TileSuit.CHARACTERS, 9, 'w9'),
+    tile(TileSuit.WIND, 2, 'south'),
+    tile(TileSuit.WIND, 3, 'west'),
+    tile(TileSuit.DRAGON, 1, 'red'),
+  ])
+  const game = makeGame([ai, makePlayer('p2', 'AI-2', []), makePlayer('p3', 'AI-3', []), makePlayer('p4', 'AI-4', [])], [])
+  const selected = selectDiscardTile(ai, game)
+  ok('opening route should clear short-suit waste before singleton honors', ['b1', 'b4', 'b7', 'w9'].includes(selected), `selected=${selected}`)
+}
+
+{
   const isolatedWan = tile(TileSuit.CHARACTERS, 9, 'isolated-wan')
   const ai = makePlayer('ai1', 'AI-AK', [
     tile(TileSuit.DOTS, 2, 'd2'),

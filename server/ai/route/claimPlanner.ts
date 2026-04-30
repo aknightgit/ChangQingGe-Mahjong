@@ -46,6 +46,14 @@ function getNumberSuitCount(hand: Tile[], suit: TileSuit): number {
   return hand.filter(tile => tile.suit === suit).length
 }
 
+function countPairs(hand: Tile[]): number {
+  let pairs = 0
+  for (const tiles of groupTiles(hand).values()) {
+    if (tiles.length >= 2) pairs++
+  }
+  return pairs
+}
+
 function getBestNumberSuit(hand: Tile[], routeState: RouteState): TileSuit | null {
   if (routeState.targetSuit && isNumberSuit(routeState.targetSuit)) return routeState.targetSuit
 
@@ -102,6 +110,15 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
   const phase = routeState.phase
   const openingMenqing = player.hand.exposedMelds.length === 0 && player.hand.concealedTiles.length >= 11
   const committedOpenSuit = getCommittedOpenNumberSuit(player)
+  const honorPengPush =
+    action === ActionType.PENG &&
+    isHonorTile &&
+    (
+      routeState.current === 'ALL_PUNGS' ||
+      routeState.current === 'HONOR_HEAVY' ||
+      routeState.features.honorPairCount >= 1 ||
+      routeState.features.tripletCount >= 1
+    )
   const shortestSuitChow =
     action === ActionType.CHOW &&
     !!routeState.features.shortestSuit &&
@@ -122,6 +139,8 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
   if (action === ActionType.CHOW && player.hand.exposedMelds.length === 0) {
     const bestSuit = getBestNumberSuit(player.hand.concealedTiles, routeState)
     const bestSuitCount = bestSuit ? getNumberSuitCount(player.hand.concealedTiles, bestSuit) : 0
+    const claimSuitCount = isNumberSuit(claimTile.suit) ? getNumberSuitCount(player.hand.concealedTiles, claimTile.suit) : 0
+    const pairCount = countPairs(player.hand.concealedTiles)
 
     if (!bestSuit || bestSuitCount < 6) {
       return { allowed: false, tuneDelta: -1.8, reason: 'first_chow_requires_six_tiles' }
@@ -129,13 +148,41 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     if (claimTile.suit !== bestSuit) {
       return { allowed: false, tuneDelta: -1.7, reason: 'first_chow_must_follow_best_suit' }
     }
+    if (pairCount >= 4 && candidateShanten >= passShanten && candidateEffective <= passEffective + 2) {
+      return { allowed: false, tuneDelta: -2, reason: 'first_chow_breaks_pair_heavy_shape' }
+    }
+    if (bestSuitCount >= claimSuitCount + 3 && candidateShanten >= passShanten && candidateEffective <= passEffective + 2) {
+      return { allowed: false, tuneDelta: -1.9, reason: 'first_chow_abandons_long_suit' }
+    }
     if (breaksCoreStructure(player.hand.concealedTiles, candidateHand)) {
       return { allowed: false, tuneDelta: -1.9, reason: 'first_chow_breaks_core_structure' }
     }
   }
 
+  const bestSuit = getBestNumberSuit(player.hand.concealedTiles, routeState)
+  const bestSuitCount = bestSuit ? getNumberSuitCount(player.hand.concealedTiles, bestSuit) : 0
+  if (
+    action === ActionType.CHOW &&
+    bestSuit &&
+    isNumberSuit(claimTile.suit) &&
+    claimTile.suit !== bestSuit &&
+    bestSuitCount >= 6 &&
+    candidateShanten >= passShanten &&
+    candidateEffective <= passEffective + 2
+  ) {
+    return { allowed: false, tuneDelta: -1.7, reason: 'off_route_chow_from_long_suit_hand' }
+  }
+
   switch (routeState.current) {
     case 'MENQING_SPEED': {
+      if (
+        honorPengPush &&
+        candidateShanten <= passShanten &&
+        candidateEffective + 2 >= passEffective
+      ) {
+        return { allowed: true, tuneDelta: 0.65 + routeGain * 0.05, reason: 'honor_peng_push' }
+      }
+
       const canBreakForSpeed =
         candidateShanten < passShanten ||
         (phase === 'RUSH' && candidateShanten <= passShanten && candidateEffective >= passEffective - 1) ||

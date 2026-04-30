@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div
     class="player-other"
     :class="`player-other--${position}`"
@@ -38,12 +38,6 @@
                 :style="getClaimMarkerStyle(m)"
                 :dimmed="isWinner"
               />
-              <span
-                v-if="m.sourcePosition !== undefined && !isConcealedMeld(m)"
-                class="meld-source meld-source--top"
-                :class="getSourceArrowClass(m.sourcePosition)"
-                :style="getSourceBadgeStyle(m.sourcePosition)"
-              ></span>
             </div>
           </div>
           <div v-if="flowerMelds.length" class="flower-lane flower-lane--top top-slot top-slot--flower">
@@ -106,12 +100,6 @@
                 :style="getClaimMarkerStyle(m)"
                 :dimmed="isWinner"
               />
-              <span
-                v-if="m.sourcePosition !== undefined && !isConcealedMeld(m)"
-                class="meld-source meld-source--left"
-                :class="getSourceArrowClass(m.sourcePosition)"
-                :style="getSourceBadgeStyle(m.sourcePosition)"
-                ></span>
             </div>
           </div>
           <div v-if="hand.length" class="hand-lane hand-lane--left">
@@ -167,12 +155,6 @@
                 :style="getClaimMarkerStyle(m)"
                 :dimmed="isWinner"
               />
-              <span
-                v-if="m.sourcePosition !== undefined && !isConcealedMeld(m)"
-                class="meld-source meld-source--right"
-                :class="getSourceArrowClass(m.sourcePosition)"
-                :style="getSourceBadgeStyle(m.sourcePosition)"
-              ></span>
             </div>
           </div>
           <div v-if="hand.length" class="hand-lane hand-lane--right">
@@ -226,27 +208,12 @@ const mainMelds = computed(() => props.melds.filter(meld => !isFlowerMeld(meld))
 
 const isConcealedMeld = (meld: Meld): boolean => meld.type === 'concealed_kong' || !!(meld as any).isConcealed
 
-function getRelativeSource(sourcePosition: number): number {
-  const observerPos = props.playerPosition ?? 0
-  return (sourcePosition - observerPos + 4) % 4
-}
-
-function getSourceLabel(sourcePosition: number): string {
-  const rel = getRelativeSource(sourcePosition)
-  return ['', '下', '对', '上'][rel] || ''
-}
-
 function getSourceArrowClass(sourcePosition: number): string {
-  const rel = getRelativeSource(sourcePosition)
-  return ['src--lower', 'src--opposite', 'src--upper'][rel - 1] || 'src--opposite'
+  const ownerPosition = props.playerPosition ?? 0
+  const rel = (sourcePosition - ownerPosition + 4) % 4
+  return ['src--self', 'src--lower', 'src--opposite', 'src--upper'][rel] || 'src--self'
 }
 
-function getSourceBadgeStyle(sourcePosition: number): Record<string, string> {
-  return {
-    backgroundColor: colors.value[sourcePosition] || '#757575',
-    color: '#fff',
-  }
-}
 
 function getClaimMarkerClass(meld: Meld, tile: any): string[] {
   if (!meld.sourceTileId || meld.sourceTileId !== tile.id || meld.type === 'concealed_kong') return []
@@ -434,36 +401,6 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   gap: 1px;
 }
 
-.meld-source {
-  display: none;
-  position: absolute;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  line-height: 1;
-  padding: 2px 5px;
-  border-radius: 4px;
-  pointer-events: none;
-  white-space: nowrap;
-  z-index: 2;
-}
-
-.meld-source--top {
-  top: -2px;
-  left: 50%;
-  transform: translateX(-50%) rotate(180deg);
-}
-
-.meld-source--left,
-.meld-source--right {
-  bottom: -2px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
 .player-other :deep(.claimed-tile) {
   position: relative;
   overflow: visible !important;
@@ -482,6 +419,10 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   border-top: 20px solid var(--claim-source-color, rgba(255, 255, 255, 0.95));
   filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.42));
   z-index: 4;
+}
+
+.player-other :deep(.claimed-tile--src--self)::after {
+  transform: translateX(-50%) rotate(0deg);
 }
 
 .player-other :deep(.claimed-tile--src--lower)::after {

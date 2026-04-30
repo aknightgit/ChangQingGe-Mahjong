@@ -1,4 +1,4 @@
-import { TileSuit } from '../../types/game'
+﻿import { TileSuit } from '../../types/game'
 import { groupTiles, isHonor } from '../../utils/tiles'
 import type { RouteDiscardInput } from './types'
 
@@ -77,7 +77,11 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
       ? (
         (input.routeState.features.shortestSuit && input.tile.suit === input.routeState.features.shortestSuit && sameTypeCount(input) === 1 ? 2.3 : 0) +
         (input.routeState.features.upstreamVoidSuit && input.tile.suit === input.routeState.features.upstreamVoidSuit && sameTypeCount(input) === 1 ? 1.5 : 0) +
-        (input.routeState.features.longestSuit && input.tile.suit === input.routeState.features.longestSuit && sameTypeCount(input) >= 2 ? -1.2 : 0)
+        (input.routeState.features.longestSuit && input.tile.suit === input.routeState.features.longestSuit && sameTypeCount(input) >= 2 ? -1.2 : 0) +
+        (input.routeState.features.longestSuit && input.routeState.features.longestSuitCount >= 6 && input.tile.suit === input.routeState.features.longestSuit ? -3.2 : 0) +
+        (input.routeState.features.longestSuitCount - input.routeState.features.secondSuitCount >= 3 &&
+          input.routeState.features.longestSuit &&
+          input.tile.suit === input.routeState.features.longestSuit ? -2.4 : 0)
       )
       : 0
   const dangerAdjustment = (0.65 - input.discardDanger) * (

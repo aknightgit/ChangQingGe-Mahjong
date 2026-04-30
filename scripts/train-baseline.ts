@@ -16,12 +16,14 @@ import {
 import {
   calculateScore
 } from '../server/utils/scoring'
-import { TileSuit, MeldType, WinType, type Tile, type Meld } from '../server/types/game'
+import { ActionType, TileSuit, MeldType, WinType, type Tile, type Meld } from '../server/types/game'
 import * as fs from 'fs'
 import * as path from 'path'
 import { fileURLToPath } from 'url'
 import mysql from 'mysql2/promise'
-import { evaluateAllRoutes, selectDiscard as routeSelectDiscard, shouldClaim as routeShouldClaim, determinePhase, Phase, Route, PARAMS, calcTenpaiDistance as tenpaiDist } from './route-evaluator'
+import { evaluateRouteState } from '../server/ai/route/routeEvaluator'
+import { scoreRouteDiscardCandidate } from '../server/ai/route/discardPlanner'
+import { evaluateRouteClaim } from '../server/ai/route/claimPlanner'
 import { writeRoundFile, buildRoundReport, formatRoundReport, writeIndexFile, prepareTrainingOutputDir } from './training-reporter'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -31,6 +33,7 @@ const ROUNDS = parseInt(process.argv[2] || '10')
 const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000')
 const BASELINE_MODE = process.argv[4] === '--baseline'  // 基线训练:优化指标而非得分
 const DETAIL_MODE = process.argv.includes('--detail')  // 每圈明细开关,默认关闭
+const TRAINING_CANDIDATES = process.env.TRAINING_CANDIDATES ? parseInt(process.env.TRAINING_CANDIDATES) : 2
 const SETTLEMENT_MULT = 10
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
 const OUT_DIR = path.resolve(__dirname, '..', 'training-output')
@@ -523,7 +526,7 @@ function setupGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): GameState {
     isBot: true, isTing: false, score: 0, wildSuit: ws, wildValue: wv, kongCount: 0, id: `p${i}`,
     status: 'playing' as const, policy: policies[i],
     meldSources: [0, 0, 0, 0], discardedTiles: [] as Tile[],
-    chowPongExclusion: { eatenSuits: [] as string[], pongedSuits: [] as string[] }
+    chowPongExclusion: { firstActionSuit: null, firstActionType: null }
   }))
 
   const dice1 = Math.floor(Math.random() * 6) + 1
@@ -553,6 +556,175 @@ function drawTile(g: GameState, p: BotPlayer): Tile | null {
 
 function isWT(t: Tile, p: BotPlayer): boolean { return isWild(t, p.wildSuit, p.wildValue) }
 function makeWT(p: BotPlayer) { return buildWildTileChecker(p.wildSuit && p.wildValue ? `${p.wildSuit}-${p.wildValue}` : null) }
+
+let trainingShantenCache = new Map<string, number>()
+
+function trainingTileKey(tiles: Tile[], exposedCount: number): string {
+  const counts = new Map<string, number>()
+  for (const tile of tiles) {
+    const key = `${tile.suit}-${tile.value}`
+    counts.set(key, (counts.get(key) || 0) + 1)
+  }
+  return `${[...counts.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) => `${k}:${v}`).join(',')};e${exposedCount}`
+}
+
+function computeShanten(
+  tiles: Tile[],
+  exposedCount: number,
+  isWildTileChecker: (tile: Tile) => boolean
+): number {
+  const key = trainingTileKey(tiles, exposedCount)
+  const cached = trainingShantenCache.get(key)
+  if (cached !== undefined) return cached
+
+  const groups = new Map<string, number>()
+  for (const tile of tiles) {
+    if (isWildTileChecker(tile)) continue
+    const groupKey = `${tile.suit}-${tile.value}`
+    groups.set(groupKey, (groups.get(groupKey) || 0) + 1)
+  }
+
+  let pairs = 0
+  let triplets = 0
+  let sequences = 0
+  const counted = new Set<string>()
+
+  for (const [groupKey, count] of groups) {
+    if (count >= 3) {
+      triplets++
+      counted.add(groupKey)
+    }
+  }
+
+  for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+    for (let value = 1; value <= 7; value++) {
+      const k1 = `${suit}-${value}`
+      const k2 = `${suit}-${value + 1}`
+      const k3 = `${suit}-${value + 2}`
+      if (counted.has(k1) || counted.has(k2) || counted.has(k3)) continue
+      if ((groups.get(k1) || 0) > 0 && (groups.get(k2) || 0) > 0 && (groups.get(k3) || 0) > 0) {
+        sequences++
+        counted.add(k1)
+        counted.add(k2)
+        counted.add(k3)
+      }
+    }
+  }
+
+  for (const [groupKey, count] of groups) {
+    if (!counted.has(groupKey) && count >= 2) {
+      pairs++
+      counted.add(groupKey)
+    }
+  }
+
+  const melds = triplets + sequences
+  const shanten = Math.max(0, Math.min(8, 8 - 2 * melds - Math.max(0, pairs - 1)))
+  trainingShantenCache.set(key, shanten)
+  if (trainingShantenCache.size > 20000) {
+    trainingShantenCache = new Map()
+  }
+  return shanten
+}
+
+function countEffectiveTiles(
+  tiles: Tile[],
+  exposedCount: number,
+  isWildTileChecker: (tile: Tile) => boolean
+): number {
+  const currentShanten = computeShanten(tiles, exposedCount, isWildTileChecker)
+  let total = 0
+  for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+    for (let value = 1; value <= 9; value++) {
+      const testTile: Tile = { suit, value, id: `eff-${suit}-${value}` }
+      if (computeShanten([...tiles, testTile], exposedCount, isWildTileChecker) < currentShanten) {
+        total += Math.max(0, 4 - tiles.filter(tile => tile.suit === suit && tile.value === value).length)
+      }
+    }
+  }
+  for (let value = 1; value <= 4; value++) {
+    const testTile: Tile = { suit: TileSuit.WIND, value, id: `eff-wind-${value}` }
+    if (computeShanten([...tiles, testTile], exposedCount, isWildTileChecker) < currentShanten) {
+      total += Math.max(0, 4 - tiles.filter(tile => tile.suit === TileSuit.WIND && tile.value === value).length)
+    }
+  }
+  for (let value = 1; value <= 3; value++) {
+    const testTile: Tile = { suit: TileSuit.DRAGON, value, id: `eff-dragon-${value}` }
+    if (computeShanten([...tiles, testTile], exposedCount, isWildTileChecker) < currentShanten) {
+      total += Math.max(0, 4 - tiles.filter(tile => tile.suit === TileSuit.DRAGON && tile.value === value).length)
+    }
+  }
+  return total
+}
+
+function markWild(tile: Tile, isWildTile: (t: Tile) => boolean): Tile {
+  return { ...tile, isWild: isWildTile(tile) }
+}
+
+function toRoutePlayerView(player: BotPlayer) {
+  const wildChecker = makeWT(player)
+  return {
+    id: player.id,
+    name: player.name,
+    position: player.pos,
+    score: player.score,
+    isTing: player.isTing,
+    hand: {
+      concealedTiles: player.hand.map(tile => markWild(tile, wildChecker)),
+      exposedMelds: player.exposedMelds.map(meld => ({
+        ...meld,
+        tiles: meld.tiles.map(tile => markWild(tile, wildChecker))
+      })),
+      discardedTiles: player.discardedTiles.map(tile => markWild(tile, wildChecker))
+    }
+  }
+}
+
+function toRouteGameView(g: GameState) {
+  return {
+    discardPile: g.discardPile.map(tile => ({ ...tile })),
+    players: g.players.map(toRoutePlayerView),
+    currentPlayerIndex: g.current,
+    wall: g.deck.slice(g.wallIdx),
+  }
+}
+
+function estimateTrainingTableThreat(g: GameState, myPos: number): number {
+  const opponents = g.players.filter((_, idx) => idx !== myPos)
+  let threat = 0
+  for (const opp of opponents) {
+    if (opp.isTing) threat += 0.42
+    threat += Math.min(0.32, opp.exposedMelds.length * 0.08)
+  }
+  return Math.min(1, threat)
+}
+
+function countTrainingWinningTiles(tiles: Tile[], player: BotPlayer): number {
+  const isWildTile = makeWT(player)
+  const exposedCount = player.exposedMelds.length
+  const candidates: Array<{ suit: TileSuit; value: number; maxCopies: number }> = []
+  for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+    for (let value = 1; value <= 9; value++) {
+      candidates.push({ suit, value, maxCopies: 4 })
+    }
+  }
+  for (let value = 1; value <= 4; value++) candidates.push({ suit: TileSuit.WIND, value, maxCopies: 4 })
+  for (let value = 1; value <= 3; value++) candidates.push({ suit: TileSuit.DRAGON, value, maxCopies: 4 })
+
+  let total = 0
+  for (const candidate of candidates) {
+    const testTile: Tile = {
+      id: `wait-${candidate.suit}-${candidate.value}`,
+      suit: candidate.suit,
+      value: candidate.value,
+      isFlower: false
+    }
+    if (!canWin([...tiles, testTile], exposedCount, isWildTile, true).canWin) continue
+    const inHand = tiles.filter(t => t.suit === candidate.suit && t.value === candidate.value).length
+    total += Math.max(0, candidate.maxCopies - inHand)
+  }
+  return total
+}
 
 // ========== Meld detection ==========
 function canPeng(p: BotPlayer, tile: Tile): boolean {
@@ -647,7 +819,7 @@ function applyPeng(p: BotPlayer, tile: Tile, sourcePos?: number): boolean {
   p.hand = normalizeHand(p.hand)  // K哥铁律:apply前先normalize
   const before = p.hand.length
   const meldCount = p.exposedMelds.length
-  const expected = before === 13 - 3 * meldCount  // K哥铁律:吃碰前手牌=13-3*melds
+  const expected = before === 13 - 3 * meldCount || before === 14 - 3 * meldCount
   const matches = p.hand.filter(t => tileEq(t, tile)).slice(0, 2)
   if (!expected || matches.length < 2) {
     console.error(`BUG applyPeng: ${p.name} before=${before} melds=${meldCount} valid=${expected} matches=${matches.length}`)
@@ -664,7 +836,7 @@ function applyChow(p: BotPlayer, tile: Tile, sourcePos?: number): boolean {
   p.hand = normalizeHand(p.hand)  // K哥铁律:apply前先normalize
   const before = p.hand.length
   const meldCount = p.exposedMelds.length
-  const validBefore = before === 13 - 3 * meldCount  // K哥铁律:吃碰前手牌=13-3*melds
+  const validBefore = before === 13 - 3 * meldCount || before === 14 - 3 * meldCount
   const v = tile.value
   const findTile = (suit: TileSuit, val: number) => p.hand.find(t => t.suit === suit && t.value === val)
   const removeTile = (t: Tile) => { const idx = p.hand.findIndex(h => h.id === t.id); if (idx >= 0) p.hand.splice(idx, 1) }
@@ -736,9 +908,92 @@ function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean, roundM
   return result.finalPoints
 }
 
+function hasTenPointClaimExemption(handTypes: HandType[], isDaDiao: boolean): boolean {
+  if (isDaDiao) return true
+  return handTypes.some(type => [
+    HandType.FENG_PENG,
+    HandType.ALL_WIND,
+    HandType.QING_PENG,
+    HandType.HUN_PENG,
+    HandType.EIGHT_FLOWERS,
+    HandType.FOUR_WILD,
+    HandType.FULL_FLUSH
+  ].includes(type))
+}
+
+function canDiscardWinByProjectRules(
+  handTiles: Tile[],
+  exposedMelds: Meld[],
+  handTypes: HandType[],
+  flowerTiles: Tile[]
+): boolean {
+  const concealedNonFlower = handTiles.filter(t => !isFlower(t))
+  const isDaDiao = concealedNonFlower.length === 1
+  if (hasTenPointClaimExemption(handTypes, isDaDiao)) return true
+
+  const hasFlowerAtDoor = flowerTiles.length > 0
+  const hasWindDragonTriplet = exposedMelds.some(m =>
+    (m.type === MeldType.TRIPLET || m.type === MeldType.KONG) &&
+    m.tiles[0] && (m.tiles[0].suit === TileSuit.WIND || m.tiles[0].suit === TileSuit.DRAGON)
+  )
+  const hasAnyKong = exposedMelds.some(m => m.type === MeldType.KONG)
+  return hasFlowerAtDoor || hasWindDragonTriplet || hasAnyKong
+}
+
 export function combineClaimChance(policyChance: number, routeProb: number): number {
+  if (routeProb <= 0) return 0
   if (routeProb >= 0.95) return Math.max(policyChance, routeProb)
   return Math.max(Math.min(1, policyChance * 0.7 + routeProb * 0.6), policyChance * 0.35)
+}
+
+function toRouteClaimProbability(
+  routeAllowed: boolean,
+  tuneDelta: number,
+  passShanten: number,
+  candidateShanten: number,
+  passEffective: number,
+  candidateEffective: number
+): number {
+  if (!routeAllowed) return 0
+  const speedDelta = (passShanten - candidateShanten) * 0.16
+  const effectiveDelta = (candidateEffective - passEffective) * 0.012
+  return Math.max(0.02, Math.min(0.98, 0.5 + tuneDelta * 0.18 + speedDelta + effectiveDelta))
+}
+
+function evaluateClaimResultingHand(hand: Tile[], exposedCount: number, wildChecker: (tile: Tile) => boolean): { shanten: number; effective: number } {
+  let bestShanten = Infinity
+  let bestEffective = -1
+  for (let i = 0; i < hand.length; i++) {
+    const remain = hand.filter((_, idx) => idx !== i)
+    const shanten = computeShanten(remain, exposedCount, wildChecker)
+    const effective = countEffectiveTiles(remain, exposedCount, wildChecker)
+    if (shanten < bestShanten || (shanten === bestShanten && effective > bestEffective)) {
+      bestShanten = shanten
+      bestEffective = effective
+    }
+  }
+  return { shanten: bestShanten, effective: bestEffective }
+}
+
+function getTrainingChowOptionIds(hand: Tile[], claimTile: Tile): string[][] {
+  if (claimTile.suit === TileSuit.WIND || claimTile.suit === TileSuit.DRAGON || claimTile.suit === TileSuit.FLOWER) {
+    return []
+  }
+  const patterns: Array<[number, number]> = [
+    [claimTile.value - 2, claimTile.value - 1],
+    [claimTile.value - 1, claimTile.value + 1],
+    [claimTile.value + 1, claimTile.value + 2]
+  ]
+  const options: string[][] = []
+  for (const [a, b] of patterns) {
+    if (a < 1 || b > 9) continue
+    const first = hand.find(tile => tile.suit === claimTile.suit && tile.value === a)
+    if (!first) continue
+    const second = hand.find(tile => tile.id !== first.id && tile.suit === claimTile.suit && tile.value === b)
+    if (!second) continue
+    options.push([first.id, claimTile.id, second.id])
+  }
+  return options
 }
 
 // ========== 互包结算 ==========
@@ -905,7 +1160,7 @@ function findTingPaiDiscard(p: BotPlayer, isWT: (t: Tile, p: BotPlayer) => boole
 // - 前 N 回合:机械规则(最短门→风箭→对子),纯快速搭牌
 // - N+ 回合:无论远近都跑 route evaluator,持续选路线+验证+推进
 // - 听牌阶段(distance ≤ 2):精收口,选最优弃牌最大化待胡池
-const EARLY_ROUNDS = process.env.EARLY_ROUNDS ? parseInt(process.env.EARLY_ROUNDS) : 999  // baseline全称机械规则,训练时设EARLY_ROUNDS=3
+const EARLY_ROUNDS = process.env.EARLY_ROUNDS ? parseInt(process.env.EARLY_ROUNDS) : 2
 const TENPAI_THRESHOLD = process.env.TENPAI_THRESHOLD ? parseInt(process.env.TENPAI_THRESHOLD) : 2
 
 function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[] = [],
@@ -926,24 +1181,106 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     return mechanicalDiscard(p, discardPile)
   }
 
-  // N+回合:听牌距离优先 + 路线评分 tie-break
+  const routeGame = toRouteGameView({
+    deck: Array.from({ length: deckLen }, (_, idx) => ({ id: `wall-${idx}`, suit: TileSuit.DOTS, value: 1 })),
+    wallIdx,
+    players: allPlayers,
+    current: myPos,
+    wildSuit: p.wildSuit,
+    wildValue: p.wildValue,
+    discardPile,
+    gameMultiplier,
+    dice1: 1,
+    dice2: 1,
+    diceMultiplier: gameMultiplier,
+    inheritanceMultiplier: 1,
+    playerDiscards: [[], [], [], []]
+  })
+  const routePlayer = routeGame.players[myPos]
+  const wildChecker = makeWT(p)
+  const exposedCount = p.exposedMelds.length
+  const wallRemaining = Math.max(0, deckLen - wallIdx)
+  const tableThreat = estimateTrainingTableThreat({
+    deck: [],
+    wallIdx,
+    players: allPlayers,
+    current: myPos,
+    wildSuit: p.wildSuit,
+    wildValue: p.wildValue,
+    discardPile,
+    gameMultiplier,
+    dice1: 1,
+    dice2: 1,
+    diceMultiplier: gameMultiplier,
+    inheritanceMultiplier: 1,
+    playerDiscards: [[], [], [], []]
+  }, myPos)
+  const currentShanten = computeShanten(routePlayer.hand.concealedTiles, exposedCount, wildChecker)
+  const currentEffective = countEffectiveTiles(routePlayer.hand.concealedTiles, exposedCount, wildChecker)
+  const routeState = evaluateRouteState({
+    game: routeGame as any,
+    player: routePlayer as any,
+    hand: routePlayer.hand.concealedTiles,
+    shanten: currentShanten,
+    effectiveTiles: currentEffective,
+    tableThreat,
+    wallRemaining,
+    previousRouteState: (p as any).__routeStateMemory || null
+  })
+
   let bestTile = nonWild[0]
   let bestShanten = Infinity
-  let bestRouteScore = -Infinity
+  let bestComposite = -Infinity
 
   for (const t of nonWild) {
-    const remaining = hand.filter(x => x.id !== t.id)
-    const shanten = tenpaiDist(remaining, p.exposedMelds, p.wildSuit, p.wildValue)
-    const remainingPhase = determinePhase(remaining.length, p.exposedMelds.length, deckLen - wallIdx)
-    const newRoutes = evaluateAllRoutes(remaining, p.exposedMelds, wilds.length, remainingPhase, deckLen - wallIdx, gameMultiplier >= 4 ? 'trailing' : 'mid', p.wildSuit, p.wildValue)
-    const routeScore = newRoutes.reduce((s, r) => s + r.score, 0)
+    let removed = false
+    const remaining = routePlayer.hand.concealedTiles.filter(tile => {
+      if (!removed && tile.id === t.id) {
+        removed = true
+        return false
+      }
+      return true
+    })
+    const shanten = computeShanten(remaining, exposedCount, wildChecker)
+    const effective = countEffectiveTiles(remaining, exposedCount, wildChecker)
+    const winningTiles = shanten <= TENPAI_THRESHOLD ? countTrainingWinningTiles(remaining, p) : 0
+    const discardDanger = Math.min(1, discardPile.filter(tile => tile.suit === t.suit && tile.value === t.value).length * 0.18)
+    const afterRouteState = evaluateRouteState({
+      game: routeGame as any,
+      player: routePlayer as any,
+      hand: remaining,
+      shanten,
+      effectiveTiles: effective,
+      tableThreat,
+      wallRemaining,
+      previousRouteState: routeState
+    })
+    const routeScore = scoreRouteDiscardCandidate({
+      tile: markWild(t, wildChecker),
+      hand: routePlayer.hand.concealedTiles,
+      player: routePlayer as any,
+      game: routeGame as any,
+      routeState,
+      candidateShanten: shanten,
+      candidateEffective: effective,
+      discardDanger,
+      winningTiles,
+      baselineScore: 0,
+      afterRouteState
+    })
+    const composite =
+      -shanten * 100 +
+      effective * 2.4 +
+      routeScore * 2 +
+      winningTiles * (shanten <= TENPAI_THRESHOLD ? 0.75 : 0)
 
-    if (shanten < bestShanten || (shanten === bestShanten && routeScore > bestRouteScore)) {
+    if (composite > bestComposite || (composite === bestComposite && shanten < bestShanten)) {
       bestShanten = shanten
-      bestRouteScore = routeScore
+      bestComposite = composite
       bestTile = t
     }
   }
+  ;(p as any).__routeStateMemory = routeState
   return bestTile
 }
 
@@ -1257,6 +1594,29 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: numbe
     }
   }
 
+  const getValidatedWinInfo = (
+    player: BotPlayer,
+    isSelfDraw: boolean,
+    isKongWin: boolean,
+    winMode: string,
+    winningTile?: Tile
+  ): ReturnType<typeof getWinInfo> | null => {
+    const winInfo = getWinInfo(player, isSelfDraw, isKongWin, winMode, winningTile)
+    if (!Number.isFinite(winInfo.baseFan) || winInfo.baseFan <= 0) return null
+    if (winInfo.handType.includes('未知牌型') || winInfo.handType.includes('无效牌型')) return null
+
+    const wildTileId = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : null
+    const detectedTypes = detectHandTypes(player.hand, player.exposedMelds, wildTileId, isSelfDraw, player.flowerTiles.length)
+      .filter(type => type !== HandType.STANDARD)
+    if (detectedTypes.length === 0) return null
+
+    if (!isSelfDraw && !canDiscardWinByProjectRules(player.hand, player.exposedMelds, detectedTypes, player.flowerTiles)) {
+      return null
+    }
+
+    return winInfo
+  }
+
   // 垃圾胡检测:3n+2 + 数牌≥2门 + 至少一个顺子(不是碰碰胡)
   const isGarbageHand = (tiles: Tile[], isWildTile: WildTileChecker): boolean => {
     const nonFlower = tiles.filter(t => !isFlower(t))
@@ -1282,11 +1642,32 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: numbe
   // 胡牌检测：baseline 用简化版本，跳过 findBestAssignment 的昂贵 DFS
   // 只用 detectTypes 快速判断，避免 34^wildCount 的搜索爆炸
   const canWinWithType = (tiles: Tile[], p: BotPlayer, makeWT: (p: BotPlayer) => WildTileChecker, kongCount = 0): boolean => {
-    const isWildTile = makeWT(p)
     const wildTileId = g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : null
-    // 快速路径：只用 detectTypes，跳过 findBestAssignment 的 DFS
-    const win = canWin(tiles, p.exposedMelds, wildTileId, true)  // skipWildAssignment=true
-    if (!win.canWin) return false
+    const fastWin = canWin(tiles, p.exposedMelds, wildTileId, true)
+    if (!fastWin.canWin) return false
+    const verifiedWin = canWin(tiles, p.exposedMelds, wildTileId)
+    if (!verifiedWin.canWin) return false
+
+    const handTypes = detectHandTypes(tiles, p.exposedMelds, wildTileId, true, p.flowerTiles.length)
+      .filter(type => type !== HandType.STANDARD)
+    if (handTypes.length === 0) return false
+
+    const scoreResult = calculateScore({
+      handTiles: tiles,
+      exposedMelds: p.exposedMelds,
+      flowerTiles: p.flowerTiles,
+      handTypes,
+      isSelfDrawn: true,
+      isKongFlower: kongCount > 0,
+      isRobbingKong: false,
+      isMenQing: p.exposedMelds.length === 0,
+      wildTileSuit: g.wildSuit,
+      wildTileValue: g.wildValue,
+      settlementMultiplier: SETTLEMENT_MULT
+    })
+
+    if (!Number.isFinite(scoreResult.baseFan) || scoreResult.baseFan <= 0) return false
+    if (scoreResult.handTypeName === '无效牌型' || scoreResult.handTypeName.startsWith('未知牌型')) return false
     return true
   }
 
@@ -1384,6 +1765,8 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: numbe
       winChance += wildCount * player.policy.selfWinWildBoost
       winChance -= player.exposedMelds.length * player.policy.meldPenalty
       if (Math.random() < winChance) {
+        const validatedSelfWinInfo = getValidatedWinInfo(player, true, false, '自摸')
+        if (!validatedSelfWinInfo) continue
         const baseScore = calcScore(player, true, false, g.diceMultiplier, g.inheritanceMultiplier)
         // 自摸:每人赔baseScore,赢家得3倍
         player.score += baseScore * 3
@@ -1394,7 +1777,7 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: numbe
         log(player.name, '自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}] [手牌${player.hand.length}张+副露${player.exposedMelds.length}]`)
         const winInfo = getWinInfo(player, true, false, '自摸')
         recordTurnSnapshot(curr)
-        return buildResult(curr, winInfo)
+        return buildResult(curr, validatedSelfWinInfo)
       }
     }
 
@@ -1405,13 +1788,15 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: numbe
         const extra = drawTile(g, player)
         if (extra && !isFlower(extra)) {
           if (canWinWithType(normalizeHand(player.hand), player, makeWT, player.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
+            const validatedKongWinInfo = getValidatedWinInfo(player, true, true, '杠上自摸')
+            if (!validatedKongWinInfo) continue
             const baseScore = calcScore(player, true, true, g.diceMultiplier, g.inheritanceMultiplier)
             player.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
             applyBaoSettlement(g, curr, true, null, baseScore)
             const winInfo = getWinInfo(player, true, true, '杠上自摸')
             recordTurnSnapshot(curr)
-            return buildResult(curr, winInfo)
+            return buildResult(curr, validatedKongWinInfo)
           }
         }
       }
@@ -1422,13 +1807,15 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: numbe
         const extra = drawTile(g, player)
         if (extra && !isFlower(extra)) {
           if (canWinWithType(normalizeHand(player.hand), player, makeWT, player.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
+            const validatedJiaKongWinInfo = getValidatedWinInfo(player, true, true, '杠上自摸')
+            if (!validatedJiaKongWinInfo) continue
             const baseScore = calcScore(player, true, true, g.diceMultiplier, g.inheritanceMultiplier)
             player.score += baseScore * 3
             for (let i = 0; i < 4; i++) { if (i !== curr) g.players[i].score -= baseScore }
             applyBaoSettlement(g, curr, true, null, baseScore)
             const winInfo1 = getWinInfo(player, true, true, '杠上自摸')
             recordTurnSnapshot(curr)
-            return buildResult(curr, winInfo1)
+            return buildResult(curr, validatedJiaKongWinInfo)
           }
         }
       }
@@ -1450,12 +1837,17 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: numbe
       const opp = g.players[other]
       const testHand = [...opp.hand.filter(t => t !== undefined), discard]
       if (canWinWithType(testHand, opp, makeWT, opp.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
+        opp.hand = normalizeHand(testHand)
+        const validatedDiscardWinInfo = getValidatedWinInfo(opp, false, false, '放冲', discard)
+        if (!validatedDiscardWinInfo) {
+          opp.hand = opp.hand.filter(t => t.id !== discard.id)
+          continue
+        }
         let huChance = opp.policy.discardHuChance
         const wildCount = opp.hand.filter(t => isWT(t, opp)).length
         huChance -= wildCount * opp.policy.discardHuWildPenalty
         if (opp.exposedMelds.length === 0) huChance -= opp.policy.discardHuMenQingPenalty
         if (Math.random() < huChance) {
-          opp.hand = normalizeHand(testHand)
           const score = calcScore(opp, false, false, g.diceMultiplier, g.inheritanceMultiplier)
           opp.score += score; player.score -= score
           // 互包结算:如果有人对opp有包三,且放炮者不是包家
@@ -1463,8 +1855,9 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: numbe
           recordPayment(player.name, opp.name, score, '放炮')
           const winInfo2 = getWinInfo(opp, false, false, '放冲', discard)
           recordTurnSnapshot(curr)
-          return buildResult(other, winInfo2, player.name, tileStr(discard))
+          return buildResult(other, validatedDiscardWinInfo, player.name, tileStr(discard))
         }
+        opp.hand = opp.hand.filter(t => t.id !== discard.id)
       }
     }
 
@@ -1473,22 +1866,124 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: numbe
     const prevPlayer = (curr + 3) % 4
     const oppositePlayer = (curr + 2) % 4
 
+    const claimRouteGame = toRouteGameView(g)
+    const wallRemaining = Math.max(0, g.deck.length - g.wallIdx)
     let meldTaken = false
     for (const otherIdx of [nextPlayer, prevPlayer, oppositePlayer]) {
       const opp = g.players[otherIdx]
       if (opp.exposedMelds.length >= 4) continue  // 最多4组牌
+      const routePlayer = claimRouteGame.players[otherIdx]
+      const wildChecker = makeWT(opp)
+      const passShanten = computeShanten(routePlayer.hand.concealedTiles, opp.exposedMelds.length, wildChecker)
+      const passEffective = countEffectiveTiles(routePlayer.hand.concealedTiles, opp.exposedMelds.length, wildChecker)
+      const tableThreat = estimateTrainingTableThreat(g, otherIdx)
+      const routeState = evaluateRouteState({
+        game: claimRouteGame as any,
+        player: routePlayer as any,
+        hand: routePlayer.hand.concealedTiles,
+        shanten: passShanten,
+        effectiveTiles: passEffective,
+        tableThreat,
+        wallRemaining,
+        previousRouteState: (opp as any).__routeStateMemory || null
+      })
+
+      if (canMingKong(opp, discard) && checkChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)) {
+        const candidateHand = routePlayer.hand.concealedTiles.filter((tile, idx, arr) => {
+          if (tile.suit !== discard.suit || tile.value !== discard.value) return true
+          const priorMatches = arr.slice(0, idx).filter(other => other.suit === discard.suit && other.value === discard.value).length
+          return priorMatches >= 3
+        })
+        const { shanten, effective } = evaluateClaimResultingHand(candidateHand, opp.exposedMelds.length + 1, wildChecker)
+        const routeDecision = evaluateRouteClaim({
+          action: ActionType.KONG,
+          player: routePlayer as any,
+          game: claimRouteGame as any,
+          claimTile: markWild(discard, wildChecker),
+          routeState,
+          candidateHand,
+          candidateShanten: shanten,
+          candidateEffective: effective,
+          passShanten,
+          passEffective,
+          tableThreat,
+          wallRemaining,
+        })
+        let kongChance = combineClaimChance(
+          opp.policy.minkanAggression ?? opp.policy.kongChance,
+          toRouteClaimProbability(routeDecision.allowed, routeDecision.tuneDelta, passShanten, shanten, passEffective, effective)
+        )
+        if (opp.wildSuit && opp.wildValue && discard.suit === opp.wildSuit && discard.value === opp.wildValue) {
+          kongChance += opp.policy.kongWildBoost
+        }
+        if (Math.random() < kongChance) {
+          applyMingKong(opp, discard, curr)
+          const extra = drawTile(g, opp)
+          if (extra && !isFlower(extra) && canWinWithType(normalizeHand(opp.hand), opp, makeWT, opp.exposedMelds.filter(m => m.type === MeldType.KONG).length)) {
+            const validatedMingKongWinInfo = getValidatedWinInfo(opp, true, true, '杠上自摸')
+            if (!validatedMingKongWinInfo) {
+            } else {
+            const baseScore = calcScore(opp, true, true, g.diceMultiplier, g.inheritanceMultiplier)
+            opp.score += baseScore * 3
+            for (let i = 0; i < 4; i++) { if (i !== otherIdx) g.players[i].score -= baseScore }
+            applyBaoSettlement(g, otherIdx, true, null, baseScore)
+            const kongWinInfo = getWinInfo(opp, true, true, '杠上自摸')
+            recordTurnSnapshot(otherIdx)
+            return buildResult(otherIdx, validatedMingKongWinInfo)
+            }
+          }
+          const kongDiscard = aiDiscard(opp, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, otherIdx)
+          opp.hand = opp.hand.filter(t => t.id !== kongDiscard.id)
+          opp.discardedTiles.push(kongDiscard)
+          g.discardPile.push(kongDiscard)
+          g.playerDiscards[otherIdx].push(kongDiscard)
+          prevDiscard = kongDiscard
+          ;(opp as any).__routeStateMemory = routeState
+          recordTurnSnapshot(otherIdx)
+          g.current = (otherIdx + 1) % 4
+          meldTaken = true
+          break
+        }
+      }
+
       if (canPeng(opp, discard) && checkChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)) {
-        const pengRouteProb = routeShouldClaim('peng', opp.hand, opp.exposedMelds, opp.hand.filter(t=>isWT(t,opp)).length, determinePhase(opp.hand.length, opp.exposedMelds.length, g.deck.length - g.wallIdx), g.deck.length - g.wallIdx, g.gameMultiplier >= 4 ? 'trailing' : 'mid', opp.exposedMelds.length === 0, opp.wildSuit, opp.wildValue)
-        let pengChance = combineClaimChance(opp.policy.pengChance, pengRouteProb)
-        if (opp.wildSuit && opp.wildValue && discard.suit === opp.wildSuit && discard.value === opp.wildValue)
+        const candidateHand = routePlayer.hand.concealedTiles.filter((tile, idx, arr) => {
+          if (tile.suit !== discard.suit || tile.value !== discard.value) return true
+          const priorMatches = arr.slice(0, idx).filter(other => other.suit === discard.suit && other.value === discard.value).length
+          return priorMatches >= 2
+        })
+        const { shanten, effective } = evaluateClaimResultingHand(candidateHand, opp.exposedMelds.length + 1, wildChecker)
+        const routeDecision = evaluateRouteClaim({
+          action: ActionType.PENG,
+          player: routePlayer as any,
+          game: claimRouteGame as any,
+          claimTile: markWild(discard, wildChecker),
+          routeState,
+          candidateHand,
+          candidateShanten: shanten,
+          candidateEffective: effective,
+          passShanten,
+          passEffective,
+          tableThreat,
+          wallRemaining,
+        })
+        let pengChance = combineClaimChance(
+          opp.policy.pengChance,
+          toRouteClaimProbability(routeDecision.allowed, routeDecision.tuneDelta, passShanten, shanten, passEffective, effective)
+        )
+        if (opp.wildSuit && opp.wildValue && discard.suit === opp.wildSuit && discard.value === opp.wildValue) {
           pengChance += opp.policy.pengWildBoost
+        }
         if (Math.random() < pengChance) {
           if (!applyPeng(opp, discard, curr)) continue
           opp.chowPongExclusion = updateChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)
           const pengDiscard = aiDiscard(opp, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, otherIdx)
           opp.hand = opp.hand.filter(t => t.id !== pengDiscard.id)
+          opp.discardedTiles.push(pengDiscard)
           g.discardPile.push(pengDiscard)
+          g.playerDiscards[otherIdx].push(pengDiscard)
           prevDiscard = pengDiscard
+          ;(opp as any).__routeStateMemory = routeState
           recordTurnSnapshot(otherIdx)
           g.current = (otherIdx + 1) % 4
           meldTaken = true
@@ -1500,20 +1995,60 @@ function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: numbe
 
     // Check chow (only next player)
     const nextP = g.players[nextPlayer]
-    // 路线评分计算吃概率(返回 0-1)
-    // 课程学习:前N回合不压制吃牌,让AI自由搭牌
-    // 吃牌=方向锁定,必须全程 route evaluator 评分(参考防死牌四大准则)
-    const chowRouteProb = routeShouldClaim('chow', nextP.hand, nextP.exposedMelds, nextP.hand.filter(t=>isWT(t,nextP)).length, determinePhase(nextP.hand.length, nextP.exposedMelds.length, g.deck.length - g.wallIdx), g.deck.length - g.wallIdx, g.gameMultiplier >= 4 ? 'trailing' : 'mid', nextP.exposedMelds.length === 0, nextP.wildSuit, nextP.wildValue)
-    if (canChow(nextP, discard) && checkChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit) && Math.random() < combineClaimChance(nextP.policy.chowChance, chowRouteProb)) {
+    if (canChow(nextP, discard) && checkChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)) {
+      const routePlayer = claimRouteGame.players[nextPlayer]
+      const wildChecker = makeWT(nextP)
+      const passShanten = computeShanten(routePlayer.hand.concealedTiles, nextP.exposedMelds.length, wildChecker)
+      const passEffective = countEffectiveTiles(routePlayer.hand.concealedTiles, nextP.exposedMelds.length, wildChecker)
+      const tableThreat = estimateTrainingTableThreat(g, nextPlayer)
+      const routeState = evaluateRouteState({
+        game: claimRouteGame as any,
+        player: routePlayer as any,
+        hand: routePlayer.hand.concealedTiles,
+        shanten: passShanten,
+        effectiveTiles: passEffective,
+        tableThreat,
+        wallRemaining,
+        previousRouteState: (nextP as any).__routeStateMemory || null
+      })
+      const chowOptions = getTrainingChowOptionIds(nextP.hand, discard)
+      let bestRouteProb = 0
+      for (const option of chowOptions) {
+        const removeIds = option.filter(id => id !== discard.id)
+        const candidateHand = routePlayer.hand.concealedTiles.filter(tile => !removeIds.includes(tile.id))
+        const { shanten, effective } = evaluateClaimResultingHand(candidateHand, nextP.exposedMelds.length + 1, wildChecker)
+        const routeDecision = evaluateRouteClaim({
+          action: ActionType.CHOW,
+          player: routePlayer as any,
+          game: claimRouteGame as any,
+          claimTile: markWild(discard, wildChecker),
+          routeState,
+          candidateHand,
+          candidateShanten: shanten,
+          candidateEffective: effective,
+          passShanten,
+          passEffective,
+          tableThreat,
+          wallRemaining,
+        })
+        bestRouteProb = Math.max(
+          bestRouteProb,
+          toRouteClaimProbability(routeDecision.allowed, routeDecision.tuneDelta, passShanten, shanten, passEffective, effective)
+        )
+      }
+      if (Math.random() < combineClaimChance(nextP.policy.chowChance, bestRouteProb)) {
       if (!applyChow(nextP, discard, curr)) continue
       nextP.chowPongExclusion = updateChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)
       const chowDiscard = aiDiscard(nextP, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, nextPlayer)
       nextP.hand = nextP.hand.filter(t => t.id !== chowDiscard.id)
+      nextP.discardedTiles.push(chowDiscard)
       g.discardPile.push(chowDiscard)
+      g.playerDiscards[nextPlayer].push(chowDiscard)
       prevDiscard = chowDiscard
       recordTurnSnapshot(nextPlayer)
       g.current = (nextPlayer + 1) % 4
       continue
+      }
     }
 
     g.current = nextPlayer
@@ -2040,7 +2575,7 @@ async function main() {
     if (plateauCount >= 4) intensity = 2.5
 
     const candidates: BotPolicy[] = []
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < TRAINING_CANDIDATES; i++) {
       candidates.push(mutatePolicy(bestPolicy, intensity))
     }
     // 轻度变异保底
@@ -2308,6 +2843,6 @@ function testOneGame() {
 }
 
 // 入口:统一走主训练流程，detail 只控制是否额外输出单局明细日志
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1])) {
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
   main().catch(e => { console.error('[MAIN ERROR]', e); process.exit(1) })
 }

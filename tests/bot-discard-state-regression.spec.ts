@@ -223,5 +223,53 @@ ok(
   `selected=${JSON.stringify(selectedChow)}`
 );
 
+{
+  const winner = makePlayer('winner', 14);
+  const upper = makePlayer('upper', 13);
+  const lower = makePlayer('lower', 13);
+  const other = makePlayer('other', 13);
+  winner.name = 'winner';
+  upper.name = 'upper';
+  lower.name = 'lower';
+  other.name = 'other';
+  winner.hand.concealedTiles = [
+    tile(TileSuit.DOTS, 1, 'w-d1a'),
+    tile(TileSuit.DOTS, 1, 'w-d1b'),
+    tile(TileSuit.DOTS, 1, 'w-d1c'),
+    tile(TileSuit.DOTS, 2, 'w-d2'),
+    tile(TileSuit.DOTS, 3, 'w-d3'),
+    tile(TileSuit.DOTS, 4, 'w-d4'),
+    tile(TileSuit.BAMBOOS, 2, 'w-b2'),
+    tile(TileSuit.BAMBOOS, 3, 'w-b3'),
+    tile(TileSuit.BAMBOOS, 4, 'w-b4'),
+    tile(TileSuit.CHARACTERS, 5, 'w-c5'),
+    tile(TileSuit.CHARACTERS, 6, 'w-c6'),
+    tile(TileSuit.CHARACTERS, 7, 'w-c7'),
+    tile(TileSuit.DRAGON, 1, 'w-r1a'),
+    tile(TileSuit.DRAGON, 1, 'w-r1b'),
+  ];
+  const huGame = makeGame([winner, upper, lower, other]);
+  huGame.currentPlayerIndex = 0;
+  huGame.drawnThisTurn = true;
+  anyManager.games.set(huGame.gameId, huGame);
+
+  const originalPersistGame2 = anyManager.persistGame;
+  const originalBroadcastGameState2 = anyManager.broadcastGameState;
+  const originalGetCachedWinCheck = anyManager.getCachedWinCheck;
+  try {
+    anyManager.persistGame = async () => {};
+    anyManager.broadcastGameState = () => {};
+    anyManager.getCachedWinCheck = () => ({ canWin: true, types: ['all_triplets'] });
+    await anyManager.executeAction(huGame.gameId, winner.id, ActionType.HU);
+    ok('self-draw hu advances turn away from winner when round continues', huGame.currentPlayerIndex !== 0, `current=${huGame.currentPlayerIndex}`);
+  } finally {
+    anyManager.persistGame = originalPersistGame2;
+    anyManager.broadcastGameState = originalBroadcastGameState2;
+    anyManager.getCachedWinCheck = originalGetCachedWinCheck;
+    anyManager.clearPendingActionTimer(huGame.gameId);
+    anyManager.games.delete(huGame.gameId);
+  }
+}
+
 console.log(`\nResult: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

@@ -230,8 +230,8 @@ const chineseNum = computed(() => {
 
 /* ==================== 牌背（CSS渲染，与牌墙统一） ==================== */
 .tile-back-face {
-  --tile-back-ring-size: 13px;
-  --tile-back-dot-size: 5px;
+  --tile-back-ring-size: 19.5px;
+  --tile-back-dot-size: 7.5px;
   --tile-back-ring-opacity: 0.3;
   --tile-back-dot-opacity: 0.42;
   width: 100%;
@@ -271,8 +271,8 @@ const chineseNum = computed(() => {
 
 /* ===== 方案二：象牙白/米色 ===== */
 .tile-back-ivory {
-  --tile-back-ring-size: 13px;
-  --tile-back-dot-size: 5px;
+  --tile-back-ring-size: 19.5px;
+  --tile-back-dot-size: 7.5px;
   --tile-back-ring-opacity: 0.22;
   --tile-back-dot-opacity: 0.34;
   width: 100%;
@@ -311,8 +311,8 @@ const chineseNum = computed(() => {
 
 /* ===== 方案三：卡布里蓝 + 波光粼粼 ===== */
 .tile-back-capri {
-  --tile-back-ring-size: 13px;
-  --tile-back-dot-size: 5px;
+  --tile-back-ring-size: 19.5px;
+  --tile-back-dot-size: 7.5px;
   --tile-back-ring-opacity: 0.22;
   --tile-back-dot-opacity: 0.34;
   width: 100%;

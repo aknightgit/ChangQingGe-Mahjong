@@ -1549,26 +1549,7 @@ export function isTing(
   }
   _isTingMisses++
 
-  const candidates: Tile[] = [];
-  for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
-    for (let value = 1; value <= 9; value++) {
-      candidates.push({ suit, value, id: `t-${suit}-${value}`, isFlower: false });
-    }
-  }
-  for (let value = 1; value <= 4; value++) {
-    candidates.push({ suit: TileSuit.WIND, value, id: `t-${TileSuit.WIND}-${value}`, isFlower: false });
-  }
-  for (let value = 1; value <= 3; value++) {
-    candidates.push({ suit: TileSuit.DRAGON, value, id: `t-${TileSuit.DRAGON}-${value}`, isFlower: false });
-  }
-  if (typeof wildTileIdOrChecker !== 'function' && wildTileIdOrChecker?.startsWith(`${TileSuit.FLOWER}-`) && wildTileGroup?.length) {
-    for (const valueText of wildTileGroup) {
-      const value = parseInt(valueText, 10);
-      if (!Number.isNaN(value) && value >= 1 && value <= 8) {
-        candidates.push({ suit: TileSuit.FLOWER, value, id: `t-${TileSuit.FLOWER}-${value}`, isFlower: true });
-      }
-    }
-  }
+  const candidates = buildTingCandidateTiles(wildTileIdOrChecker, wildTileGroup)
 
   for (const t of candidates) {
     if (canWin([...tiles, t], existingMelds, isWildTile).canWin) {
@@ -1646,10 +1627,49 @@ export interface TingAnalysis {
   isTing: boolean;
 }
 
+function buildTingCandidateTiles(
+  wildTileIdOrChecker: string | null | WildTileChecker = null,
+  wildTileGroup?: string[]
+): Tile[] {
+  const candidates: Tile[] = []
+  for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+    for (let value = 1; value <= 9; value++) {
+      candidates.push({ suit, value, id: `t-${suit}-${value}`, isFlower: false })
+    }
+  }
+  for (let value = 1; value <= 4; value++) {
+    candidates.push({ suit: TileSuit.WIND, value, id: `t-${TileSuit.WIND}-${value}`, isFlower: false })
+  }
+  for (let value = 1; value <= 3; value++) {
+    candidates.push({ suit: TileSuit.DRAGON, value, id: `t-${TileSuit.DRAGON}-${value}`, isFlower: false })
+  }
+
+  const includeFlowerWilds =
+    Array.isArray(wildTileGroup) &&
+    wildTileGroup.length > 0 &&
+    (
+      typeof wildTileIdOrChecker === 'function' ||
+      !wildTileIdOrChecker ||
+      wildTileIdOrChecker.startsWith(`${TileSuit.FLOWER}-`)
+    )
+
+  if (includeFlowerWilds) {
+    for (const valueText of wildTileGroup) {
+      const value = parseInt(valueText, 10)
+      if (!Number.isNaN(value) && value >= 1 && value <= 8) {
+        candidates.push({ suit: TileSuit.FLOWER, value, id: `t-${TileSuit.FLOWER}-${value}`, isFlower: true })
+      }
+    }
+  }
+
+  return candidates
+}
+
 export function findBestDiscardForTing(
   tiles: Tile[],
   existingMelds: number,
-  isWildTile: WildTileChecker = () => false
+  isWildTile: WildTileChecker = () => false,
+  wildTileGroup?: string[]
 ): TingAnalysis {
   // 2张手牌已经是将牌状态，不需要弃牌
   if (tiles.length <= 2) {
@@ -1661,18 +1681,7 @@ export function findBestDiscardForTing(
     };
   }
 
-  // 生成合法候选听牌：数牌1-9，风牌1-4，箭牌1-3
-  const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-  const allTileTypes: Array<{ suit: string; value: number }> = [];
-  for (const s of numSuits)
-    for (let v = 1; v <= 9; v++)
-      allTileTypes.push({ suit: s, value: v });
-  // 风牌 1-4
-  for (let v = 1; v <= 4; v++)
-    allTileTypes.push({ suit: TileSuit.WIND, value: v });
-  // 箭牌 1-3
-  for (let v = 1; v <= 3; v++)
-    allTileTypes.push({ suit: TileSuit.DRAGON, value: v });
+  const allTileTypes = buildTingCandidateTiles(isWildTile, wildTileGroup);
 
   let bestResult: TingAnalysis = {
     discardTile: null,
@@ -1689,12 +1698,18 @@ export function findBestDiscardForTing(
     let totalCount = 0;
 
     for (const tt of allTileTypes) {
-      const testTile: Tile = { suit: tt.suit as TileSuit, value: tt.value, id: `test-${tt.suit}-${tt.value}`, isFlower: false };
+      const testTile: Tile = {
+        suit: tt.suit as TileSuit,
+        value: tt.value,
+        id: `test-${tt.suit}-${tt.value}`,
+        isFlower: tt.suit === TileSuit.FLOWER
+      };
       const testHand = [...remaining, testTile];
       const result = canWin(testHand, existingMelds, isWildTile);
       if (result.canWin) {
         const inRemaining = remaining.filter(t => t.suit === tt.suit && t.value === tt.value).length;
-        const count = Math.max(0, 4 - inRemaining);
+        const maxCopies = tt.suit === TileSuit.FLOWER ? 1 : 4;
+        const count = Math.max(0, maxCopies - inRemaining);
         if (count > 0) {
           tingTiles.push({ suit: tt.suit, value: tt.value, count });
           totalCount += count;

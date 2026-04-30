@@ -106,18 +106,6 @@
 
     <!-- 第二列：特殊操作按钮 -->
     <div class="action-grid-secondary" v-if="hasSecondaryActionRow">
-      <!-- 造反 -->
-      <button
-        v-if="hasRebel"
-        class="action-btn action-btn--small action-btn--rebel"
-        :class="{
-          'action-btn--active': hasRebel,
-          'action-btn--highlight': hasRebel && !isDelaying
-        }"
-        :disabled="!hasRebel || isInteractionLocked || !!isPaused || !isConnected"
-        @click="$emit('action', 'rebel')"
-      >反</button>
-
       <!-- 梁山聚义 -->
       <button
         v-if="hasLiangShan"
@@ -176,10 +164,9 @@ const hasHu = computed(() => props.availableActions.includes(ActionType.HU))
 
 // 特殊操作按钮
 const hasThink = computed(() => props.availableActions.includes(ActionType.THINK))
-const hasRebel = computed(() => props.availableActions.includes(ActionType.REBEL))
 const hasLiangShan = computed(() => props.availableActions.includes(ActionType.LIANG_SHAN))
 
-const hasSecondaryActionRow = computed(() => hasRebel.value || hasLiangShan.value)
+const hasSecondaryActionRow = computed(() => hasLiangShan.value)
 
 // 使用父组件传入的实时状态
 const effectiveCanUseThink = computed(() => props.canUseThink ?? true)

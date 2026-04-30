@@ -296,10 +296,16 @@ export function getFlowerName(value: number): string {
  * - 无百搭
  * - 无对子或刻子（全是搭子/散牌）
  */
-export function isFivePoison(tiles: Tile[], wildTileSuit?: TileSuit, wildTileValue?: number): boolean {
+export function isFivePoison(
+  tiles: Tile[],
+  wildTileSuit?: TileSuit,
+  wildTileValue?: number,
+  exposedTiles: Tile[] = []
+): boolean {
   // 过滤花牌
   const nonFlowerTiles = tiles.filter(t => !isFlower(t));
   if (nonFlowerTiles.length !== tiles.length) return false; // 有花牌
+  if (exposedTiles.some(t => isFlower(t))) return false;
   
   // 检查三门花色都有
   const suits = getSuits(nonFlowerTiles);
