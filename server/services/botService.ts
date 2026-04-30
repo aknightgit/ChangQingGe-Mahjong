@@ -622,7 +622,7 @@ function scoreTileForDiscard(
       score += 5
       if (isOfficialOpening) {
         const hasWeakNumberWaste = hasWeakNumberWasteCandidate(hand, tile.id)
-        score += hasWeakNumberWaste ? -5.6 : 1.8
+        score += hasWeakNumberWaste ? -7.2 : -0.8
       }
       // allHonorsPungsPursuit：风一色/碰碰胡路线时，单张风箭也要保留
       if (honorFocus && (policy.allHonorsPungsPursuit || 0) > 0) {

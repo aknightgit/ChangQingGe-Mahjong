@@ -27,33 +27,34 @@ function scoreByRoute(input: RouteDiscardInput): number {
   switch (routeState.current) {
     case 'MENQING_SPEED':
       return (
-        (shortestSuit && tile.suit === shortestSuit ? 2.4 : 0) +
+        (shortestSuit && tile.suit === shortestSuit ? 3.4 : 0) +
         (count === 1 ? 1.2 : -2.6) +
-        (nearby === 0 ? 1.4 : -0.8 * nearby) +
-        (isHonor(tile) && count === 1 ? (isOfficialOpening ? -1.2 : 1.8) : 0)
+        (nearby === 0 ? 1.8 : -0.65 * nearby) +
+        (isHonor(tile) && count === 1 ? (isOfficialOpening ? -2.4 : 1.2) : 0)
       )
 
     case 'OPEN_SPEED':
       return (
-        (count === 1 ? 1.8 : -1.4) +
-        (nearby === 0 ? 1.2 : -0.35 * nearby) +
+        (count === 1 ? 2.2 : -1.6) +
+        (nearby === 0 ? 1.6 : -0.15 * nearby) +
         (longestSuit && tile.suit !== longestSuit && !isHonor(tile) ? 2.2 : 0) +
-        (isHonor(tile) && count === 1 ? 1.2 : 0)
+        (shortestSuit && tile.suit === shortestSuit && count === 1 ? 1.3 : 0) +
+        (isHonor(tile) && count === 1 ? 0.4 : 0)
       )
 
     case 'HALF_FLUSH':
       if (tile.suit === routeState.targetSuit) {
-        return (count >= 2 ? -3.4 : -1.8) + (nearby > 0 ? -1.2 : 0.2)
+        return (count >= 2 ? -4.4 : -3.2) + (nearby > 0 ? -1.6 : -0.3)
       }
       if (isHonor(tile)) {
-        return count === 1 ? 0.5 : -1.2
+        return count === 1 ? -0.1 : -1.8
       }
-      return 4.6 + (tile.suit === shortestSuit ? 0.8 : 0)
+      return 5.8 + (tile.suit === shortestSuit ? 1.1 : 0)
 
     case 'ALL_PUNGS':
       return (
-        (count >= 2 ? -3.8 : 2.3) +
-        (nearby > 0 && count === 1 ? 0.9 : 0) +
+        (count >= 2 ? -4.4 : 2.8) +
+        (nearby > 0 && count === 1 ? 1.6 : 0) +
         (isHonor(tile) && count >= 2 ? -1 : 0)
       )
 

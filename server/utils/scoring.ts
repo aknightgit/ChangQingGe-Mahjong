@@ -272,7 +272,7 @@ export interface WinOption {
   handTypes?: HandType[];
   summary?: Pick<
     ScoreResult,
-    'baseFan' | 'extraMultipliers' | 'roundMultiplier' | 'settlementMultiplier' | 'finalPoints'
+    'baseFan' | 'extraMultipliers' | 'roundMultiplier' | 'globalMultiplier' | 'settlementMultiplier' | 'finalPoints'
   >;
   _decompKey?: string; // 内部字段，标记该选项来自哪个牌型分解
 }
@@ -336,6 +336,7 @@ export function generateWinOptions(params: {
             baseFan: selfDrawResult.baseFan,
             extraMultipliers: selfDrawResult.extraMultipliers,
             roundMultiplier: selfDrawResult.roundMultiplier,
+            globalMultiplier: selfDrawResult.globalMultiplier,
             settlementMultiplier: selfDrawResult.settlementMultiplier,
             finalPoints: selfDrawResult.finalPoints
           },
@@ -350,6 +351,7 @@ export function generateWinOptions(params: {
           baseFan: selfDrawResult.baseFan,
           extraMultipliers: selfDrawResult.extraMultipliers,
           roundMultiplier: selfDrawResult.roundMultiplier,
+          globalMultiplier: selfDrawResult.globalMultiplier,
           settlementMultiplier: selfDrawResult.settlementMultiplier,
           finalPoints: selfDrawResult.finalPoints
         };
@@ -380,6 +382,7 @@ export function generateWinOptions(params: {
             baseFan: discardResult.baseFan,
             extraMultipliers: discardResult.extraMultipliers,
             roundMultiplier: discardResult.roundMultiplier,
+            globalMultiplier: discardResult.globalMultiplier,
             settlementMultiplier: discardResult.settlementMultiplier,
             finalPoints: discardResult.finalPoints
           },
@@ -394,6 +397,7 @@ export function generateWinOptions(params: {
           baseFan: discardResult.baseFan,
           extraMultipliers: discardResult.extraMultipliers,
           roundMultiplier: discardResult.roundMultiplier,
+          globalMultiplier: discardResult.globalMultiplier,
           settlementMultiplier: discardResult.settlementMultiplier,
           finalPoints: discardResult.finalPoints
         };
@@ -433,6 +437,7 @@ export function generateWinOptions(params: {
               baseFan: noWildResult.baseFan,
               extraMultipliers: noWildResult.extraMultipliers * 2,
               roundMultiplier: noWildResult.roundMultiplier,
+              globalMultiplier: noWildResult.globalMultiplier,
               settlementMultiplier: noWildResult.settlementMultiplier,
               finalPoints: doubledPoints
             }
@@ -446,6 +451,7 @@ export function generateWinOptions(params: {
             baseFan: noWildResult.baseFan,
             extraMultipliers: noWildResult.extraMultipliers * 2,
             roundMultiplier: noWildResult.roundMultiplier,
+            globalMultiplier: noWildResult.globalMultiplier,
             settlementMultiplier: noWildResult.settlementMultiplier,
             finalPoints: doubledPoints
           };
@@ -475,6 +481,7 @@ export function generateWinOptions(params: {
               baseFan: noWildDiscard.baseFan,
               extraMultipliers: noWildDiscard.extraMultipliers * 2,
               roundMultiplier: noWildDiscard.roundMultiplier,
+              globalMultiplier: noWildDiscard.globalMultiplier,
               settlementMultiplier: noWildDiscard.settlementMultiplier,
               finalPoints: doubledDiscard
             }
@@ -488,6 +495,7 @@ export function generateWinOptions(params: {
             baseFan: noWildDiscard.baseFan,
             extraMultipliers: noWildDiscard.extraMultipliers * 2,
             roundMultiplier: noWildDiscard.roundMultiplier,
+            globalMultiplier: noWildDiscard.globalMultiplier,
             settlementMultiplier: noWildDiscard.settlementMultiplier,
             finalPoints: doubledDiscard
           };

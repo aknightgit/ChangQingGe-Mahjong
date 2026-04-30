@@ -154,11 +154,30 @@
               >
                 <div class="hu-combo-header">
                   <span class="hu-combo-rank">TOP {{ idx + 1 }}</span>
-                  <span class="hu-combo-score">总赢 {{ opt.summary?.finalPoints ?? opt.score }}</span>
+                  <span class="hu-combo-score">总赢 {{ getHuOptionTotalWin(opt) }}</span>
                 </div>
                 <div class="hu-combo-main">
                   <span class="hu-combo-label">{{ opt.label.replace(/·自摸|·捉冲|\(无百搭×2\)/g, '') }}</span>
                   <span class="hu-combo-method">{{ opt.type === 'self_draw' ? '自摸' : '捉冲' }}</span>
+                </div>
+                <div class="hu-combo-formula">{{ getHuOptionFormula(opt) }}</div>
+                <div v-if="getHuOptionGroups(opt).length" class="hu-group-list">
+                  <div
+                    v-for="(group, groupIndex) in getHuOptionGroups(opt)"
+                    :key="`group-${idx}-${groupIndex}`"
+                    class="hu-group"
+                  >
+                    <span class="hu-group-kind">{{ getHuGroupKind(group.type) }}</span>
+                    <div class="hu-group-tiles">
+                      <MahjongTile
+                        v-for="tile in group.tiles"
+                        :key="tile.id"
+                        :tile="tile"
+                        :size="28"
+                        :small="true"
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div class="hu-summary-grid">
                   <div class="hu-summary-item">
@@ -275,6 +294,7 @@
           <span>第 {{ currentSettlementRound.roundNumber }} 局</span>
           <span>全局倍数 ×{{ currentSettlementRound.effectiveMultiplier }}</span>
         </div>
+        <div class="settle-round-summary-line">全局倍数 {{ currentSettlementRound.effectiveMultiplier }} / 结算倍数 {{ currentSettlementRound.settlementMultiplier }}</div>
         <div class="settle-round-block">
           <div class="settle-table-wrap">
             <table class="settle-round-table settle-round-table--compact">
@@ -513,7 +533,7 @@
                 :is-winner="northIsWinner"
                 :just-drawn-tile-id="northJustDrawnTileId"
                 :player-colors="claimSourceColors"
-                :player-position="topPlayer?.position"
+                :viewer-position="currentPlayer?.position"
               />
             </div>
 
@@ -528,7 +548,7 @@
                 :is-winner="westIsWinner"
                 :just-drawn-tile-id="westJustDrawnTileId"
                 :player-colors="claimSourceColors"
-                :player-position="leftPlayer?.position"
+                :viewer-position="currentPlayer?.position"
               />
             </div>
 
@@ -543,7 +563,7 @@
                 :is-winner="eastIsWinner"
                 :just-drawn-tile-id="eastJustDrawnTileId"
                 :player-colors="claimSourceColors"
-                :player-position="rightPlayer?.position"
+                :viewer-position="currentPlayer?.position"
               />
             </div>
 
@@ -558,7 +578,7 @@
                   :tile-back-scheme="tileBackScheme"
                   :player-colors="claimSourceColors"
                   :just-drawn-tile-id="selfJustDrawnTileId"
-                  :player-position="currentPlayer?.position"
+                  :viewer-position="currentPlayer?.position"
                   :selected-tile-id="selectedTileId"
                   :is-winner="isWinner"
                   @tileClick="handleTileClick"
@@ -1068,17 +1088,55 @@ const tileLabel = (tile: Partial<Tile> | null | undefined): string => {
   return `${digit}${suitLabel}`
 }
 
+const tileSuitOrder: Record<string, number> = { wan: 0, tiao: 1, dots: 2, feng: 3, jian: 4, hua: 5 }
+const compareTilesForDisplay = (a: Partial<Tile>, b: Partial<Tile>): number => {
+  const suitDelta = (tileSuitOrder[a.suit || ''] ?? 99) - (tileSuitOrder[b.suit || ''] ?? 99)
+  if (suitDelta !== 0) return suitDelta
+  return Number(a.value ?? 0) - Number(b.value ?? 0)
+}
+const isWildPreviewTile = (tile: Partial<Tile> | null | undefined): boolean => {
+  if (!tile || !wildTile.value) return false
+  if (wildTile.value.suit === 'hua') {
+    return tile.suit === 'hua' && (wildTile.value.flowerGroup || []).includes(String(tile.value))
+  }
+  return tile.suit === wildTile.value.suit && Number(tile.value) === Number(wildTile.value.value)
+}
+
 const myTingText = computed(() => {
   const winningTiles = tingPreview.value?.winningTiles || []
   const isTing = !!currentPlayer.value?.isTing || !!tingPreview.value?.isTing || winningTiles.length > 0
   if (!isTing) return ''
   const tiles = winningTiles
-    .map((entry: any) => tileLabel(entry.tile))
+    .map((entry: any) => entry.tile)
+    .filter((tile: Tile) => !!tile && !isWildPreviewTile(tile))
+    .sort(compareTilesForDisplay)
+    .map((tile: Tile) => tileLabel(tile))
     .filter(Boolean)
   const uniqueTiles = Array.from(new Set(tiles))
   return uniqueTiles.length ? `您已听牌：${uniqueTiles.join(',')}` : '您已听牌'
 })
-const formatHuOptionFormula = (opt: any) => String(opt?.label || '')
+const huWinnerCount = computed(() => Math.max(1, gameState.value?.players?.filter(player => player.status === 'won').length || 0))
+const getHuOptionBasePoints = (opt: any) => Number(opt?.summary?.finalPoints ?? opt?.score ?? 0)
+const getHuOptionTotalWin = (opt: any) => getHuOptionBasePoints(opt) * huWinnerCount.value
+const getHuOptionFormula = (opt: any) => {
+  const summary = opt?.summary || {}
+  const baseFan = Number(summary.baseFan ?? 0)
+  const globalMultiplier = Number(summary.globalMultiplier ?? 1)
+  const extraMultipliers = Number(summary.extraMultipliers ?? 1)
+  const settlementMultiplier = Number(summary.settlementMultiplier ?? 1)
+  const finalPoints = getHuOptionBasePoints(opt)
+  return `${baseFan} × ${globalMultiplier} × ${extraMultipliers} × ${settlementMultiplier} = ${finalPoints}`
+}
+const getHuGroupKind = (type: string) => {
+  if (type === 'pair') return '将'
+  if (type === 'triplet') return '刻'
+  if (type === 'sequence') return '顺'
+  return '组'
+}
+const getHuOptionGroups = (_opt: any) => {
+  const combo = huCombinations.value[0]
+  return Array.isArray(combo?.groups) ? combo.groups : []
+}
 const overlayMessage = computed(() => {
   const reason = overlayReason.value
   switch (reason) {
@@ -1314,7 +1372,7 @@ const commitDiscard = (tile: Tile) => {
   playSound('tile-discard')
   // 出牌念牌
   if (tile.suit) playVoiceTile(tile.suit, tile.value)
-  markDiscardAudioPlayed(tile.id)
+  markDiscardAudioPlayed(tile)
   void executeAction(ActionType.DISCARD, tile.id).then((success) => {
     if (success) return
     pendingDiscardTileId.value = null
@@ -1913,10 +1971,6 @@ const mySwapInfo = ref<{ totalChances: number; usedChances: number; remaining: n
 const canSwap = computed(() => mySwapInfo.value.remaining > 0)
 const onPlayerNameClick = (player: any) => {
   if (!player) return
-  if (canUseSpectatorView.value && player.id !== currentPlayer.value?.id) {
-    void handleSpectate(player.id)
-    return
-  }
   // 允许点击自己、AI玩家、或（满足换位置条件时）其他真人玩家
   if (player.id !== currentPlayer.value?.id && !isBotPlayer(player) && !canSwap.value) return
   playerCardPlayer.value = player
@@ -2299,18 +2353,40 @@ const prevSwapRequestIds = ref<Set<string>>(new Set())
 const prevIsMyTurn = ref(false)
 const lastFastDiscardAt = ref(0)
 const prevRealtimeDiscardCount = ref(0)
-const lastDiscardAudioTileId = ref<string | null>(null)
-const markDiscardAudioPlayed = (tileId?: string | null) => {
-  if (!tileId) return
-  lastDiscardAudioTileId.value = tileId
+const voicedDiscardTiles = new Map<string, number>()
+const voicedDiscardFingerprints = new Map<string, number>()
+const DISCARD_VOICE_DEDUP_MS = 4000
+const getDiscardVoiceFingerprint = (tile?: Partial<Tile> | null) => {
+  if (!tile?.suit) return ''
+  return `${tile.suit}-${tile.value}`
 }
-const recentlyPlayedDiscardAudio = (tileId?: string | null) => !!tileId && lastDiscardAudioTileId.value === tileId
+const markDiscardAudioPlayed = (tileOrId?: Partial<Tile> | string | null) => {
+  const now = Date.now()
+  const tileId = typeof tileOrId === 'string' ? tileOrId : tileOrId?.id
+  const fingerprint = typeof tileOrId === 'string' ? '' : getDiscardVoiceFingerprint(tileOrId)
+  if (tileId) voicedDiscardTiles.set(tileId, now)
+  if (fingerprint) voicedDiscardFingerprints.set(fingerprint, now)
+  for (const [id, ts] of voicedDiscardTiles) {
+    if (now - ts > DISCARD_VOICE_DEDUP_MS) voicedDiscardTiles.delete(id)
+  }
+  for (const [fingerprintKey, ts] of voicedDiscardFingerprints) {
+    if (now - ts > DISCARD_VOICE_DEDUP_MS) voicedDiscardFingerprints.delete(fingerprintKey)
+  }
+}
+const recentlyPlayedDiscardAudio = (tile?: Partial<Tile> | null) => {
+  if (!tile) return false
+  const now = Date.now()
+  const lastById = tile.id ? voicedDiscardTiles.get(tile.id) : undefined
+  const fingerprint = getDiscardVoiceFingerprint(tile)
+  const lastByFingerprint = fingerprint ? voicedDiscardFingerprints.get(fingerprint) : undefined
+  return !!((lastById && now - lastById < DISCARD_VOICE_DEDUP_MS) || (lastByFingerprint && now - lastByFingerprint < DISCARD_VOICE_DEDUP_MS))
+}
 const handleRealtimeState = (e: Event) => {
   const detail = (e as CustomEvent).detail as any
   const discardCount = Array.isArray(detail?.discardPile) ? detail.discardPile.length : 0
   if (discardCount > prevRealtimeDiscardCount.value) {
     const lastTile = detail?.discardPile?.[discardCount - 1]
-    if (recentlyPlayedDiscardAudio(lastTile?.id)) {
+    if (recentlyPlayedDiscardAudio(lastTile)) {
       prevRealtimeDiscardCount.value = discardCount
       return
     }
@@ -2318,7 +2394,7 @@ const handleRealtimeState = (e: Event) => {
     playSound('tile-discard')
     // 念其他玩家出的牌
     if (lastTile?.suit) playVoiceTile(lastTile.suit, lastTile.value)
-    markDiscardAudioPlayed(lastTile?.id)
+    markDiscardAudioPlayed(lastTile)
   }
   prevRealtimeDiscardCount.value = discardCount
 }
@@ -2357,10 +2433,10 @@ const checkOtherPlayerSounds = (newState: any) => {
       if (player.id !== playerId.value && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
         const newDiscards = (player.hand?.discardedTiles || []).slice(prev.discardCount)
         const lastNew = newDiscards[newDiscards.length - 1]
-        if (!recentlyPlayedDiscardAudio(lastNew?.id)) {
+        if (!recentlyPlayedDiscardAudio(lastNew)) {
           playSound('tile-discard')
           if (lastNew?.suit) playVoiceTile(lastNew.suit, lastNew.value)
-          markDiscardAudioPlayed(lastNew?.id)
+          markDiscardAudioPlayed(lastNew)
         }
       }
     }
@@ -4003,6 +4079,35 @@ const forceDiscard = async (p: Player) => {
 .hu-summary-grid {
   display: none;
 }
+.hu-combo-formula {
+  margin-bottom: 10px;
+  font-size: 0.83rem;
+  line-height: 1.5;
+  color: rgba(255, 240, 190, 0.88);
+}
+.hu-group-list {
+  display: grid;
+  gap: 8px;
+}
+.hu-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.hu-group-kind {
+  min-width: 28px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: rgba(255, 230, 150, 0.88);
+}
+.hu-group-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
 .hu-combo-score {
   font-size: 1.05rem;
   font-weight: 900;
@@ -4010,7 +4115,7 @@ const forceDiscard = async (p: Player) => {
   text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
 }
 .hu-summary-grid {
-  display: flex;
+  display: none;
   flex-wrap: wrap;
   gap: 8px;
 }
@@ -4338,6 +4443,12 @@ const forceDiscard = async (p: Player) => {
   color: #f7e6a8;
   font-weight: 600;
   font-size: 0.86rem;
+}
+
+.settle-round-summary-line {
+  color: rgba(255, 244, 191, 0.9);
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
 .settle-round-block {

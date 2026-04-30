@@ -13,7 +13,7 @@
   GameEndReason
 } from '../types/game';
 import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isFivePoison } from './tiles';
-import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion, findBestDiscardForTing } from './handValidator';
+import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
 import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier, calculateSettlementBreakdownByRules, generateWinOptions, type WinOption } from './scoring';
 import { randomUUID } from 'crypto';
 import { saveGameState, loadGameState, loadAllGameStates, deleteGameState } from './gamePersistence';
@@ -125,6 +125,11 @@ class GameManager {
   private getConcealedPlayableTiles(game: GameState, player: Player): Tile[] {
     const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
     return player.hand.concealedTiles.filter(tile => !isFlower(tile) || isWildTile(tile));
+  }
+
+  private isListeningPreviewState(game: GameState, player: Player): boolean {
+    const concealedPlayableCount = this.getConcealedPlayableTiles(game, player).length;
+    return [1, 4, 7, 10, 13].includes(concealedPlayableCount);
   }
 
   private isDaDiaoReadyState(game: GameState, player: Player): boolean {
@@ -400,112 +405,71 @@ class GameManager {
       bestOverallOption: WinOption | null;
     }>();
 
-    if (this.isConcealedDiscardState(player)) {
-      for (let index = 0; index < player.hand.concealedTiles.length; index++) {
-        const remainingHand = player.hand.concealedTiles.filter((_, tileIndex) => tileIndex !== index);
-        for (const { suit, value } of candidates) {
-          const testTile: Tile = {
-            id: `ting-preview-${suit}-${value}`,
-            suit,
-            value,
-            isFlower: suit === TileSuit.FLOWER
-          };
-          const winCheck = canWin([...remainingHand, testTile], player.hand.exposedMelds, winWildArg);
-          if (!winCheck.canWin) continue;
-          const remainingCount = this.getVisibleRemainingCount(game, player, suit, value);
-          if (remainingCount <= 0) continue;
-          const key = `${suit}-${value}`;
-          const existing = winningTileMap.get(key);
-          if (existing && existing.remainingCount >= remainingCount) continue;
-          winningTileMap.set(key, {
-            tile: {
-              id: `ting-preview-${suit}-${value}`,
-              suit,
-              value,
-              isFlower: suit === TileSuit.FLOWER
-            },
-            remainingCount,
-            bestDiscardOption: null,
-            bestSelfDrawOption: null,
-            bestOverallOption: null
-          });
-        }
-      }
-    } else {
-      for (const { suit, value } of candidates) {
-        const remainingCount = this.getVisibleRemainingCount(game, player, suit, value);
-        if (remainingCount <= 0) continue;
+    if (!this.isListeningPreviewState(game, player)) {
+      const emptyResult = { isTing: false, winningTiles: [] as Array<{
+        tile: Tile;
+        remainingCount: number;
+        bestDiscardOption: WinOption | null;
+        bestSelfDrawOption: WinOption | null;
+        bestOverallOption: WinOption | null;
+      }> };
+      playerCache.ting.set(cacheKey, emptyResult);
+      return emptyResult;
+    }
 
-        const testTile: Tile = {
-          id: `ting-preview-${suit}-${value}`,
-          suit,
-          value,
-          isFlower: suit === TileSuit.FLOWER
+    for (const { suit, value } of candidates) {
+      const remainingCount = this.getVisibleRemainingCount(game, player, suit, value);
+      if (remainingCount <= 0) continue;
+
+      const testTile: Tile = {
+        id: `ting-preview-${suit}-${value}`,
+        suit,
+        value,
+        isFlower: suit === TileSuit.FLOWER
+      };
+      const winCheck = canWin([...player.hand.concealedTiles, testTile], player.hand.exposedMelds, winWildArg);
+      if (!winCheck.canWin) continue;
+
+      const discardOptions = this.getCachedWinOptions(game, player, 'discard', {
+        extraTile: testTile,
+        isRobbingKong: false
+      });
+      const selfDrawOptions = this.getCachedWinOptions(game, player, 'self_draw', {
+        extraTile: testTile,
+        isKongFlower: false
+      });
+      const bestDiscardOption = discardOptions[0] || null;
+      const bestSelfDrawOption = selfDrawOptions[0] || null;
+      const bestOverallOption = [bestDiscardOption, bestSelfDrawOption]
+        .filter(Boolean)
+        .sort((a, b) => (b!.score ?? 0) - (a!.score ?? 0))[0] || null;
+
+      winningTileMap.set(`${suit}-${value}`, {
+        tile: testTile,
+        remainingCount,
+        bestDiscardOption,
+        bestSelfDrawOption,
+        bestOverallOption
+      });
+    }
+
+    const winningTiles = this.filterBigDiaoPreviewTiles(game, player, [...winningTileMap.values()])
+      .filter(entry => !wildChecker(entry.tile))
+      .sort((a, b) => {
+        const suitOrder: Record<string, number> = {
+          [TileSuit.CHARACTERS]: 0,
+          [TileSuit.BAMBOOS]: 1,
+          [TileSuit.DOTS]: 2,
+          [TileSuit.WIND]: 3,
+          [TileSuit.DRAGON]: 4,
+          [TileSuit.FLOWER]: 5
         };
-        const winCheck = canWin([...player.hand.concealedTiles, testTile], player.hand.exposedMelds, winWildArg);
-        if (!winCheck.canWin) continue;
-
-        const discardOptions = this.getCachedWinOptions(game, player, 'discard', {
-          extraTile: testTile,
-          isRobbingKong: false
-        });
-        const selfDrawOptions = this.getCachedWinOptions(game, player, 'self_draw', {
-          extraTile: testTile,
-          isKongFlower: false
-        });
-        const bestDiscardOption = discardOptions[0] || null;
-        const bestSelfDrawOption = selfDrawOptions[0] || null;
-        const bestOverallOption = [bestDiscardOption, bestSelfDrawOption]
-          .filter(Boolean)
-          .sort((a, b) => (b!.score ?? 0) - (a!.score ?? 0))[0] || null;
-
-        winningTileMap.set(`${suit}-${value}`, {
-          tile: testTile,
-          remainingCount,
-          bestDiscardOption,
-          bestSelfDrawOption,
-          bestOverallOption
-        });
-      }
-    }
-
-    if (this.isConcealedDiscardState(player)) {
-      const fallback = findBestDiscardForTing(
-        player.hand.concealedTiles,
-        player.hand.exposedMelds.length,
-        wildChecker,
-        game.wildTileGroup
-      );
-      if (winningTileMap.size === 0) {
-        for (const winningTile of fallback.winningTiles) {
-          const suit = winningTile.suit as TileSuit;
-          const value = winningTile.value;
-          const remainingCount = this.getVisibleRemainingCount(game, player, suit, value);
-          if (remainingCount <= 0) continue;
-          const key = `${suit}-${value}`;
-          const existing = winningTileMap.get(key);
-          if (existing && existing.remainingCount >= remainingCount) continue;
-          winningTileMap.set(key, {
-            tile: {
-              id: `ting-preview-${suit}-${value}`,
-              suit,
-              value,
-              isFlower: suit === TileSuit.FLOWER
-            },
-            remainingCount,
-            bestDiscardOption: null,
-            bestSelfDrawOption: null,
-            bestOverallOption: null
-          });
-        }
-      }
-    }
-
-    const winningTiles = this.filterBigDiaoPreviewTiles(game, player, [...winningTileMap.values()]).sort((a, b) => {
-      const scoreDelta = (b.bestOverallOption?.score ?? 0) - (a.bestOverallOption?.score ?? 0);
-      if (scoreDelta !== 0) return scoreDelta;
-      return b.remainingCount - a.remainingCount;
-    });
+        const suitDelta = (suitOrder[a.tile.suit] ?? 99) - (suitOrder[b.tile.suit] ?? 99);
+        if (suitDelta !== 0) return suitDelta;
+        const valueDelta = a.tile.value - b.tile.value;
+        if (valueDelta !== 0) return valueDelta;
+        return b.remainingCount - a.remainingCount;
+      });
 
     const result = {
       isTing: winningTiles.length > 0,

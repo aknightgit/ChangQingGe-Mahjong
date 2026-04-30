@@ -14,6 +14,7 @@
       }
     ]"
     @click="onClick"
+    @dblclick="onDblclick"
     @pointerdown="$emit('pointerdown', $event)"
     @pointerup="$emit('pointerup', $event)"
     @pointercancel="$emit('pointercancel')"
@@ -86,7 +87,6 @@ const emit = defineEmits<{
 }>()
 
 let clickTimer: ReturnType<typeof setTimeout> | null = null
-let clickCount = 0
 
 // 自动牌背方案：默认按局数轮流 (0=原版, 1=象牙白, 2=卡布里蓝)
 // 父组件可通过 inject roundNumber 或手动传 backScheme
@@ -97,17 +97,19 @@ const effectiveBackScheme = computed(() => {
 })
 
 const onClick = () => {
-  clickCount++
-  if (clickCount === 1) {
-    clickTimer = setTimeout(() => {
-      clickCount = 0
-      emit('click', props.tile)
-    }, 250)
-  } else if (clickCount === 2) {
-    if (clickTimer) clearTimeout(clickTimer)
-    clickCount = 0
-    emit('dblclick', props.tile)
+  if (clickTimer) clearTimeout(clickTimer)
+  clickTimer = setTimeout(() => {
+    emit('click', props.tile)
+    clickTimer = null
+  }, 220)
+}
+
+const onDblclick = () => {
+  if (clickTimer) {
+    clearTimeout(clickTimer)
+    clickTimer = null
   }
+  emit('dblclick', props.tile)
 }
 
 // ===== PNG 牌图映射 =====

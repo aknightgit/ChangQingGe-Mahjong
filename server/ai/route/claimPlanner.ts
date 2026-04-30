@@ -127,7 +127,7 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
   if (
     shortestSuitChow &&
     candidateShanten >= passShanten &&
-    candidateEffective <= passEffective + 1
+    candidateEffective <= passEffective
   ) {
     return { allowed: false, tuneDelta: -1.9, reason: 'shortest_suit_chow_blocked' }
   }
@@ -142,8 +142,8 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     const claimSuitCount = isNumberSuit(claimTile.suit) ? getNumberSuitCount(player.hand.concealedTiles, claimTile.suit) : 0
     const pairCount = countPairs(player.hand.concealedTiles)
 
-    if (!bestSuit || bestSuitCount < 6) {
-      return { allowed: false, tuneDelta: -1.8, reason: 'first_chow_requires_six_tiles' }
+    if (!bestSuit || bestSuitCount < 5) {
+      return { allowed: false, tuneDelta: -1.3, reason: 'first_chow_requires_five_tiles' }
     }
     if (claimTile.suit !== bestSuit) {
       return { allowed: false, tuneDelta: -1.7, reason: 'first_chow_must_follow_best_suit' }
@@ -151,7 +151,7 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     if (pairCount >= 4 && candidateShanten >= passShanten && candidateEffective <= passEffective + 2) {
       return { allowed: false, tuneDelta: -2, reason: 'first_chow_breaks_pair_heavy_shape' }
     }
-    if (bestSuitCount >= claimSuitCount + 3 && candidateShanten >= passShanten && candidateEffective <= passEffective + 2) {
+    if (bestSuitCount >= claimSuitCount + 4 && candidateShanten >= passShanten && candidateEffective <= passEffective + 1) {
       return { allowed: false, tuneDelta: -1.9, reason: 'first_chow_abandons_long_suit' }
     }
     if (breaksCoreStructure(player.hand.concealedTiles, candidateHand)) {
@@ -166,9 +166,9 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     bestSuit &&
     isNumberSuit(claimTile.suit) &&
     claimTile.suit !== bestSuit &&
-    bestSuitCount >= 6 &&
+    bestSuitCount >= 7 &&
     candidateShanten >= passShanten &&
-    candidateEffective <= passEffective + 2
+    candidateEffective <= passEffective + 1
   ) {
     return { allowed: false, tuneDelta: -1.7, reason: 'off_route_chow_from_long_suit_hand' }
   }
@@ -190,9 +190,9 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
 
       const openingBreakNeeds =
         candidateShanten < passShanten ||
-        candidateEffective >= passEffective + (action === ActionType.CHOW ? 5 : 7) ||
-        speedGain >= (action === ActionType.CHOW ? 1.35 : 1.75) ||
-        routeGain >= (isHonorTile ? 1.2 : 0.9)
+        candidateEffective >= passEffective + (action === ActionType.CHOW ? 3 : 6) ||
+        speedGain >= (action === ActionType.CHOW ? 0.8 : 1.5) ||
+        routeGain >= (isHonorTile ? 1.0 : 0.65)
 
       const canBreakOpeningMenqing = openingMenqing ? openingBreakNeeds : canBreakForSpeed
 
@@ -202,16 +202,16 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       if ((action === ActionType.PENG || action === ActionType.KONG) && player.hand.exposedMelds.length === 0 && !canBreakOpeningMenqing) {
         return { allowed: false, tuneDelta: -1.2, reason: 'menqing_hold_pung' }
       }
-      return { allowed: true, tuneDelta: canBreakOpeningMenqing ? 0.15 + routeGain * 0.03 : -0.25, reason: 'menqing_speed' }
+      return { allowed: true, tuneDelta: canBreakOpeningMenqing ? 0.35 + routeGain * 0.04 : -0.15, reason: 'menqing_speed' }
     }
 
     case 'OPEN_SPEED':
       return {
         allowed: true,
         tuneDelta:
-          0.35 +
-          Math.max(0, speedGain) * 0.08 +
-          (action === ActionType.CHOW ? 0.08 : 0.12) +
+          0.48 +
+          Math.max(0, speedGain) * 0.1 +
+          (action === ActionType.CHOW ? 0.2 : 0.12) +
           (committedOpenSuit && claimTile.suit === committedOpenSuit ? 0.35 : 0),
         reason: 'open_speed_push',
       }
@@ -222,7 +222,7 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       }
       return {
         allowed: true,
-        tuneDelta: (isTargetSuit ? 0.5 : 0.18) + routeGain * 0.05,
+        tuneDelta: (isTargetSuit ? 0.72 : 0.28) + routeGain * 0.06,
         reason: isTargetSuit ? 'target_suit_claim' : 'honor_support_claim',
       }
 

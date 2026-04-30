@@ -133,8 +133,8 @@ const LAYER_OFFSET = 1
 }
 
 .wall-back--css {
-  --wall-back-ring-size: 13px;
-  --wall-back-dot-size: 5px;
+  --wall-back-ring-size: 19.5px;
+  --wall-back-dot-size: 7.5px;
   box-sizing: border-box;
   position: relative;
   overflow: hidden;

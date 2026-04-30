@@ -187,7 +187,7 @@ const props = defineProps<{
   showHand?: boolean
   isWinner?: boolean
   justDrawnTileId?: string | null
-  playerPosition?: number
+  viewerPosition?: number
   playerColors?: string[]
 }>()
 
@@ -209,9 +209,9 @@ const mainMelds = computed(() => props.melds.filter(meld => !isFlowerMeld(meld))
 const isConcealedMeld = (meld: Meld): boolean => meld.type === 'concealed_kong' || !!(meld as any).isConcealed
 
 function getSourceArrowClass(sourcePosition: number): string {
-  const ownerPosition = props.playerPosition ?? 0
-  const rel = (sourcePosition - ownerPosition + 4) % 4
-  return ['src--self', 'src--lower', 'src--opposite', 'src--upper'][rel] || 'src--self'
+  const viewerPosition = props.viewerPosition ?? 0
+  const rel = (sourcePosition - viewerPosition + 4) % 4
+  return ['src--self', 'src--upper', 'src--opposite', 'src--lower'][rel] || 'src--self'
 }
 
 

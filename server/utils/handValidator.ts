@@ -195,6 +195,10 @@ function isValidHandSize(count: number): boolean {
   return [2, 5, 8, 11, 14].includes(count);
 }
 
+function isValidTingHandSize(count: number): boolean {
+  return [1, 4, 7, 10, 13].includes(count);
+}
+
 // ============================================================
 // 核心：检查 tiles 能否组成 n 个面子（3n+2 格式中的 n）
 // 先选对子（eyes）再检查剩余能否成面子
@@ -1532,8 +1536,8 @@ export function isTing(
   // 摸牌后手牌数 = 14 - 3*existingMelds（每有一个面子，手牌少3张；起手13+摸牌1=14）
   // 非万能花牌不占手牌位，过滤后再校验
   const nonFlower = tiles.filter(t => !isFlower(t) || isWildTile(t));
-  const expected = 14 - 3 * existingMelds;
-  if (nonFlower.length !== expected) {
+  const expected = 13 - 3 * existingMelds;
+  if (!isValidTingHandSize(nonFlower.length) || nonFlower.length !== expected) {
     return false;
   }
 

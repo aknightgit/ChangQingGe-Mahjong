@@ -67,15 +67,21 @@ function buildFeatureSummary(input: RouteEvaluationInput): RouteFeatureSummary {
 
   const upstream = game.players[(player.position + 3) % game.players.length]
   const downstream = game.players[(player.position + 1) % game.players.length]
+  const upstreamDiscards = (upstream?.hand.discardedTiles || []).filter(discard => NUMBER_SUITS.includes(discard.suit))
   const upstreamSuitCounts: Record<string, number> = {}
-  for (const discard of upstream?.hand.discardedTiles || []) {
-    if (NUMBER_SUITS.includes(discard.suit)) {
-      upstreamSuitCounts[discard.suit] = (upstreamSuitCounts[discard.suit] || 0) + 1
-    }
+  for (const discard of upstreamDiscards) {
+    upstreamSuitCounts[discard.suit] = (upstreamSuitCounts[discard.suit] || 0) + 1
   }
   const upstreamVoidSuit = NUMBER_SUITS
-    .map(suit => ({ suit, count: upstreamSuitCounts[suit] || 0 }))
-    .sort((a, b) => b.count - a.count)[0]
+    .map(suit => ({
+      suit,
+      count: upstreamSuitCounts[suit] || 0,
+      consecutive: upstreamDiscards.some((discard, index) =>
+        discard.suit === suit &&
+        upstreamDiscards[index + 1]?.suit === suit
+      )
+    }))
+    .sort((a, b) => (Number(b.consecutive) - Number(a.consecutive)) || (b.count - a.count))[0]
   const allOpponentsAvoidSuit = NUMBER_SUITS.find(suit =>
     game.players
       .filter(candidate => candidate.id !== player.id)
@@ -125,7 +131,7 @@ function buildFeatureSummary(input: RouteEvaluationInput): RouteFeatureSummary {
     honorCount,
     honorPairCount,
     wildCount,
-    upstreamVoidSuit: upstreamVoidSuit && upstreamVoidSuit.count >= 2 ? upstreamVoidSuit.suit : null,
+    upstreamVoidSuit: upstreamVoidSuit && (upstreamVoidSuit.consecutive || upstreamVoidSuit.count >= 2) ? upstreamVoidSuit.suit : null,
     allOpponentsAvoidSuit,
     liveHonorCount,
     opponentOpenMelds,
@@ -149,6 +155,8 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       score += Math.max(0, features.longestSuitCount - 4) * 0.7
       score -= features.isolatedCount * 1.8
       score -= input.player.hand.exposedMelds.length * 3.2
+      score -= Math.max(0, features.longestSuitCount - 6) * 1.1
+      score -= Math.max(0, features.pairCount - 3) * 1.3
       score -= input.tableThreat * 4
       score -= features.opponentOpenMelds * 1.35
       score -= features.downstreamPressure * 2.2
@@ -161,11 +169,12 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       break
 
     case 'OPEN_SPEED':
-      score += 6
+      score += 8
       score += Math.max(0, 8 - input.shanten * 2.5)
-      score += input.effectiveTiles * 0.18
+      score += input.effectiveTiles * 0.22
       score += features.tripletCount * 2.2
       score += features.pairCount * 1.4
+      score += Math.max(0, features.longestSuitCount - features.secondSuitCount) * 0.7
       score += input.tableThreat * 8
       score += features.downstreamPressure * 4.2
       score += features.opponentOpenMelds * 1.4
@@ -176,17 +185,17 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
 
     case 'HALF_FLUSH':
       targetSuit = features.longestSuit
-      score += features.longestSuitCount * 3.4
+      score += features.longestSuitCount * 4.1
       score += features.honorCount * 1.6
       score += features.honorPairCount * 1.5
       score += features.wildCount * 2.2
-      score -= features.secondSuitCount * 1.9
+      score -= features.secondSuitCount * 2.5
       if (features.longestSuitCount >= 9) {
         reasons.push('half_flush_nine_tiles')
-        score += 12
+        score += 16
       } else if (features.longestSuitCount >= 7) {
         reasons.push('half_flush_seven_tiles')
-        score += 6
+        score += 10
       } else if (features.longestSuitCount < 6) {
         score -= 6
       }
@@ -202,15 +211,15 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       break
 
     case 'ALL_PUNGS':
-      score += features.pairCount * 4.4
-      score += features.tripletCount * 5.2
+      score += features.pairCount * 5.2
+      score += features.tripletCount * 5.8
       score += features.honorPairCount * 2.5
       score += features.wildCount * 2.8
-      score -= features.sequenceLikeCount * 1.2
+      score -= features.sequenceLikeCount * 1.8
       score -= Math.max(0, features.secondSuitCount - 3) * 0.6
       if (features.pairCount + features.tripletCount >= 4 && features.wildCount > 0) {
         reasons.push('pair_stack_with_wild')
-        score += 8
+        score += 10
       } else if (features.pairCount + features.tripletCount < 3) {
         score -= 5
       }

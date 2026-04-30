@@ -70,14 +70,28 @@ const buildManifest = (scheme: VoiceScheme): Manifest => {
 const _currentScheme = ref<VoiceScheme>('bingtang')
 const _manifest = ref<Manifest | null>(null)
 const _audioMap = ref<Map<string, string>>(new Map())
+const _volume = ref(0.85)
 let _audioEl: HTMLAudioElement | null = null
 
 const getAudioEl = (): HTMLAudioElement => {
   if (!_audioEl) {
     _audioEl = new Audio()
-    _audioEl.volume = 0.85
+    _audioEl.volume = _volume.value
   }
   return _audioEl
+}
+
+export const setVoiceVolume = (volume: number): void => {
+  const normalized = Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 0.85
+  _volume.value = normalized
+  if (_audioEl) {
+    _audioEl.volume = normalized
+  }
+  if (process.client) {
+    try {
+      localStorage.setItem('mahjong.voiceVolume', String(normalized))
+    } catch {}
+  }
 }
 
 export const loadVoiceScheme = async (scheme: VoiceScheme): Promise<void> => {
@@ -159,11 +173,22 @@ export const getCurrentVoiceName = (): string => {
 }
 
 export const useVoiceTile = () => {
+  if (process.client) {
+    try {
+      const saved = Number(localStorage.getItem('mahjong.voiceVolume'))
+      if (Number.isFinite(saved) && saved >= 0 && saved <= 1 && Math.abs(saved - _volume.value) > 0.0001) {
+        setVoiceVolume(saved)
+      }
+    } catch {}
+  }
+
   return {
     currentScheme: _currentScheme,
     currentVoiceName: computed(() => _manifest.value?.voice ?? _currentScheme.value),
+    currentVoiceVolume: computed(() => _volume.value),
     loadVoiceScheme,
     playVoiceTile,
     preloadAllTiles,
+    setVoiceVolume,
   }
 }

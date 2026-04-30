@@ -13,7 +13,6 @@
           type="button"
           class="mahjong-button primary"
           :disabled="isCreatingGame"
-          @pointerdown.stop.prevent
           @click.stop="openCreateModal(0)"
         >
           创建新局
@@ -295,7 +294,6 @@
               type="button"
               class="create-btn create-btn--start"
               :disabled="isCreatingGame"
-              @pointerdown.stop.prevent
               @click="confirmCreateGame"
             >
               {{ isCreatingGame ? '创建中...' : '创建新局' }}
@@ -345,6 +343,30 @@ const clearPendingRoomTarget = () => {
   try {
     sessionStorage.removeItem(PENDING_ROOM_STORAGE_KEY)
   } catch {}
+}
+
+const navigateToCreatedRoom = async (targetUrl: string) => {
+  savePendingRoomTarget(targetUrl)
+
+  try {
+    await navigateTo(targetUrl)
+  } catch (error) {
+    console.warn('[Create] navigateTo failed, falling back to location.assign:', error)
+  }
+
+  if (!process.client) return
+
+  const currentPath = window.location.pathname
+  if (currentPath === targetUrl.split('?')[0]) {
+    clearPendingRoomTarget()
+    return
+  }
+
+  console.warn('[Create] Route did not leave lobby, forcing location.assign:', {
+    currentHref: window.location.href,
+    targetUrl
+  })
+  window.location.assign(targetUrl)
 }
 
 const userName = useCookie('user_name')
@@ -434,9 +456,8 @@ const confirmCreateGame = async () => {
     // 先进入房间，避免用户等待机器人加入导致“点击后很慢”
     const targetUrl = `/gameroom/${gameId}?playerId=${playerId}&dice=${createParams.maxDiceRolls}`
     console.log('[Create] Navigating to:', targetUrl)
-    savePendingRoomTarget(targetUrl)
     showCreateModal.value = false
-    await router.push(targetUrl)
+    await navigateToCreatedRoom(targetUrl)
 
     // 后台并行加入选中的AI（不阻塞首屏响应）
     const botsToJoin = selectedBots.value.slice(0, createParams.maxBots)
@@ -482,7 +503,7 @@ onMounted(() => {
     clearPendingRoomTarget()
     return
   }
-  void router.replace(pendingTarget)
+  void navigateToCreatedRoom(pendingTarget)
 })
 
 const { data: profileResponse, pending: profilePending, error: profileError, refresh: refreshProfile } =
