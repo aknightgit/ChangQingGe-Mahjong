@@ -987,6 +987,7 @@ const {
   loadVoiceScheme,
   preloadAllTiles,
   playVoiceTile,
+  playVoiceAction,
   setVoiceVolume
 } = useVoiceTile()
 
@@ -1154,6 +1155,21 @@ onMounted(async () => {
   }
   await loadVoiceScheme('bingtang')
   ensureBackgroundMusicInitialized()
+  // 首次进入自动播放BGM（需要用户已开启）
+  playBackgroundMusic()
+
+  // 监听广播消息播放对应音效
+  window.addEventListener('mahjong-broadcast', ((event: CustomEvent) => {
+    const detail = event.detail
+    addBroadcast(detail.text, detail.type as BroadcastMsg['type'])
+    // 根据广播内容播放音效和语音
+    const text = detail.text || ''
+    if (text.includes('补花')) { playSound('tile-draw'); playVoiceAction('flowerReplace') }
+    else if (text.includes('补杠') || text.includes('杠后补牌')) { playSound('kong-draw'); playVoiceAction('kong') }
+    else if (text.includes('碰')) playVoiceAction('pong')
+    else if (text.includes('吃')) playVoiceAction('chow')
+    else if (text.includes('胡') || text.includes('自摸')) playVoiceAction('hu')
+  }) as EventListener)
 
   if (process.client) {
     void preloadAllTiles()
@@ -1161,10 +1177,7 @@ onMounted(async () => {
     window.addEventListener('resize', evaluateViewport)
     window.addEventListener('orientationchange', evaluateViewport)
     window.addEventListener('pointerdown', handleGlobalPointerDown as EventListener)
-    window.addEventListener('mahjong-broadcast', ((event: CustomEvent) => {
-      const detail = event.detail
-      addBroadcast(detail.text, detail.type as BroadcastMsg['type'])
-    }) as EventListener)
+    // mahjong-broadcast listener 已移至外层
     actionWindowTimer = setInterval(() => {
       nowTs.value = Date.now()
     }, 250)

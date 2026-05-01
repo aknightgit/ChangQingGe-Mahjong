@@ -33,6 +33,16 @@ const VOICE_TEXT_MAP: Record<string, string> = {
   tiao_1: '一条', tiao_2: '二条', tiao_3: '三条', tiao_4: '四条', tiao_5: '五条', tiao_6: '六条', tiao_7: '七条', tiao_8: '八条', tiao_9: '九条',
 }
 
+// 动作语音（补花、吃、碰、杠、胡、自摸）
+const VOICE_ACTION_MAP: Record<string, string> = {
+  flowerReplace: '补花',
+  chow: '我吃',
+  pong: '碰',
+  kong: '杠',
+  hu: '胡了',
+  selfHu: '自摸',
+}
+
 const audioModules = import.meta.glob('../../assets/voice/**/*.{mp3,opus}', {
   eager: true,
   import: 'default',
@@ -139,6 +149,19 @@ function resolveTileKey(suit: string, value: number): string {
   return `${prefix}_${value}`
 }
 
+export const playVoiceAction = (action: keyof typeof VOICE_ACTION_MAP): void => {
+  if (!process.client) return
+  const key = VOICE_ACTION_MAP[action]
+  if (!key) return
+  // 动作语音放在 bingtang/ 目录，key 即文件名
+  const url = _audioMap.value.get(key)
+  if (url) {
+    playAudio(url)
+  } else {
+    console.warn(`[VoiceTile] No action audio for action="${action}" key="${key}"`)
+  }
+}
+
 export const playVoiceTile = (suit: string, value: number): void => {
   if (!process.client) return
   const key = resolveTileKey(suit, value)
@@ -188,6 +211,7 @@ export const useVoiceTile = () => {
     currentVoiceVolume: computed(() => _volume.value),
     loadVoiceScheme,
     playVoiceTile,
+    playVoiceAction,
     preloadAllTiles,
     setVoiceVolume,
   }
