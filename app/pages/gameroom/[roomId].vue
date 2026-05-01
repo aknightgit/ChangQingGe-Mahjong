@@ -1541,25 +1541,50 @@ const myTingText = computed(() => {
 })
 const huWinnerCount = computed(() => Math.max(1, gameState.value?.players?.filter(player => player.status === 'won').length || 0))
 const getHuOptionBasePoints = (opt: any) => Number(opt?.summary?.finalPoints ?? opt?.score ?? 0)
-const getHuOptionTotalWin = (opt: any) => getHuOptionBasePoints(opt) * huWinnerCount.value
+// 总赢 = finalPoints（已包含完整赔付结构，无需乘以赢家人数）
+// finalPoints = 自摸时一个人应付的点数，或捉冲时放冲者独自应付的点数
+const getHuOptionTotalWin = (opt: any) => getHuOptionBasePoints(opt)
 const getHuOptionFormula = (opt: any) => {
   const summary = opt?.summary || {}
   const baseFan = Number(summary.baseFan ?? 0)
-  const globalMultiplier = Number(summary.globalMultiplier ?? 1)
   const extraMultipliers = Number(summary.extraMultipliers ?? 1)
+  const roundMultiplier = Number(summary.roundMultiplier ?? 1)
+  const globalMultiplier = Number(summary.globalMultiplier ?? 1)
   const settlementMultiplier = Number(summary.settlementMultiplier ?? 1)
   const finalPoints = getHuOptionBasePoints(opt)
-  return `${baseFan} × ${globalMultiplier} × ${extraMultipliers} × ${settlementMultiplier} = ${finalPoints}`
+  // 正确顺序：baseFan × extraMultipliers × roundMultiplier × globalMultiplier × settlementMultiplier
+  // extraMultipliers = 门清×2 × 无百搭×2
+  // globalMultiplier = 骰子倍数 × 继承倍数
+  return `${baseFan} × ${extraMultipliers} × ${roundMultiplier} × ${globalMultiplier} × ${settlementMultiplier} = ${finalPoints}`
 }
 const getHuGroupKind = (type: string) => {
-  if (type === 'pair') return '将'
-  if (type === 'triplet') return '刻'
-  if (type === 'sequence') return '顺'
-  return '组'
+  // type 是 HandType 字符串，如 ALL_TRIPLETS / HALF_FLUSH / FULL_FLUSH 等
+  return HAND_TYPE_DISPLAY[type] || '组'
 }
-const getHuOptionGroups = (_opt: any) => {
-  const combo = huCombinations.value[0]
-  return Array.isArray(combo?.groups) ? combo.groups : []
+// 用 scoring.ts 枚举的真实牌型分解（handTypes），而非 arrangeWinningHand 的随意排列
+const HAND_TYPE_DISPLAY: Record<string, string> = {
+  STANDARD: '普通胡',
+  FENG_PENG: '风碰',
+  ALL_WIND: '风一色',
+  QING_PENG: '清碰',
+  HUN_PENG: '混碰',
+  EIGHT_FLOWERS: '八花自摸',
+  FULL_FLUSH: '清一色',
+  FOUR_WILD: '四百搭',
+  DA_DIAO: '大吊',
+  HALF_FLUSH: '混一色',
+  ALL_TRIPLETS: '碰碰胡'
+}
+
+const getHuOptionGroups = (opt: any) => {
+  const handTypes: string[] = Array.isArray(opt?.handTypes) ? opt.handTypes : []
+  if (!handTypes.length) return []
+  // handTypes 来自 scoring.ts HandType 枚举，如 ['ALL_TRIPLETS'] / ['HALF_FLUSH'] / ['FULL_FLUSH']
+  return handTypes.map((type: string) => ({
+    type,
+    label: HAND_TYPE_DISPLAY[type] || type, // 显示中文牌型名
+    tiles: [] // 牌面已在上方 hu-combo-label 展示，这里不重复显示
+  }))
 }
 const overlayMessage = computed(() => {
   const reason = overlayReason.value
@@ -2083,7 +2108,17 @@ const myPendingAction = computed(() => {
 })
 
 const actionVisualFreezeUntil = computed(() => {
-  return currentFreezeUntil.value
+  // 吃碰杠胡响应：follow pendingAction / hesitationWindow
+  const freezeFromPending = currentFreezeUntil.value
+  if (freezeFromPending > Date.now()) return freezeFromPending
+
+  // 轮到自己摸牌/出牌：follow actionButtonsVisibleUntil（从 DRAW 出现开始计时）
+  if (isMyTurn.value && (availableActions.value?.includes(ActionType.DRAW) || availableActions.value?.includes(ActionType.DISCARD))) {
+    const until = actionButtonsVisibleUntil.value
+    if (until > Date.now()) return until
+  }
+
+  return 0
 })
 
 const chowOptions = computed(() => {
@@ -2138,7 +2173,7 @@ watch(
     const pending = (gameState.value as any)?.pendingActions || []
     const mine = myId ? pending.find((pa: any) => pa.playerId === myId) : null
     const selfAvailableActions = availableActions.value || []
-    if (mine || selfAvailableActions.includes(ActionType.HU)) {
+    if (mine || selfAvailableActions.includes(ActionType.HU) || selfAvailableActions.includes(ActionType.DRAW)) {
       actionButtonsVisibleUntil.value = mine?.expiresAt || Date.now() + getActionWindowMs(gameState.value)
     } else {
       actionButtonsVisibleUntil.value = 0
@@ -2616,9 +2651,18 @@ watch([isMyTurn, hasPriorityActions], ([myTurn, hasActions]) => {
 })
 
 const actionWindowText = computed(() => {
-  if (!hasPriorityActions.value) return ''
+  if (!hasPriorityActions.value && !isMyTurn.value) return ''
   const pending = myPendingAction.value
-  if (!pending?.expiresAt) return '响应窗口：1.0s（超时自动过）'
+  if (!pending?.expiresAt) {
+    // DRAW 摸牌：用 actionButtonsVisibleUntil 显示倒计时
+    if (isMyTurn.value && availableActions.value?.includes(ActionType.DRAW)) {
+      const until = actionButtonsVisibleUntil.value
+      if (until > Date.now()) {
+        return `响应窗口：${((until - Date.now()) / 1000).toFixed(1)}s`
+      }
+    }
+    return ''
+  }
   const leftMs = Math.max(0, pending.expiresAt - nowTs.value)
   return `响应窗口：${(leftMs / 1000).toFixed(1)}s（超时自动过）`
 })
