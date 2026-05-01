@@ -97,6 +97,7 @@ const props = defineProps<{
   bailoutCounts?: Record<string, number>
   playerColors?: string[]
   viewerPosition?: number
+  ownerPosition?: number
 }>()
 
 const sortedHand = computed(() => props.hand)
@@ -110,27 +111,24 @@ const isConcealedMeld = (meld: Meld): boolean => {
   return meld.type === 'concealed_kong' || !!(meld as any).isConcealed
 }
 
-function getRelativeSourcePosition(sourcePosition: number, viewerPosition?: number): number {
-  const observerPos = viewerPosition ?? 0
-  return (sourcePosition - observerPos + 4) % 4
-}
-
-function getSourceArrowClass(sourcePosition: number, viewerPosition?: number): string {
-  const relativePos = getRelativeSourcePosition(sourcePosition, viewerPosition)
-  const classes = ['meld-arrow--self', 'meld-arrow--upper', 'meld-arrow--opposite', 'meld-arrow--lower']
-  return classes[relativePos] || ''
+function getSourceArrowClass(sourcePosition: number): string {
+  const ownerPosition = props.ownerPosition ?? props.viewerPosition ?? 0
+  const relativePos = (sourcePosition - ownerPosition + 4) % 4
+  const classes = ['claimed-tile--from-self', 'claimed-tile--from-right', 'claimed-tile--from-opposite', 'claimed-tile--from-left']
+  return classes[relativePos] || 'claimed-tile--from-self'
 }
 
 function getClaimMarkerClass(meld: Meld, tile: Tile): string[] {
   if (!meld.sourceTileId || meld.sourceTileId !== tile.id || meld.type === 'concealed_kong') return []
-  const tone = meld.sourcePosition !== undefined ? getSourceArrowClass(meld.sourcePosition, props.viewerPosition) : 'meld-arrow--self'
-  return ['claimed-tile', tone.replace('meld-arrow', 'claimed-tile')]
+  const tone = meld.sourcePosition !== undefined ? getSourceArrowClass(meld.sourcePosition) : 'claimed-tile--from-self'
+  return ['claimed-tile', tone]
 }
 
 function getClaimMarkerStyle(meld: Meld): Record<string, string> {
-  return meld.sourcePosition !== undefined
-    ? { '--claim-source-color': colors.value[meld.sourcePosition] || '#757575' }
-    : {}
+  if (meld.sourcePosition === undefined) return {}
+  const viewerPosition = props.viewerPosition ?? props.ownerPosition ?? 0
+  const viewerRelativePos = (meld.sourcePosition - viewerPosition + 4) % 4
+  return { '--claim-source-color': colors.value[viewerRelativePos] || '#757575' }
 }
 
 function getPlayerIndex(playerId: string): number {
@@ -346,10 +344,10 @@ const onPointerCancel = () => {
   z-index: 4;
 }
 
-:deep(.claimed-tile--lower)::after { transform: translateX(-50%) rotate(-90deg); }
-:deep(.claimed-tile--opposite)::after { transform: translateX(-50%) rotate(180deg); }
-:deep(.claimed-tile--upper)::after { transform: translateX(-50%) rotate(90deg); }
-:deep(.claimed-tile--meld-arrow--self)::after { transform: translateX(-50%) rotate(0deg); }
+:deep(.claimed-tile--from-right)::after { transform: translateX(-50%) rotate(-90deg); }
+:deep(.claimed-tile--from-opposite)::after { transform: translateX(-50%) rotate(0deg); }
+:deep(.claimed-tile--from-left)::after { transform: translateX(-50%) rotate(90deg); }
+:deep(.claimed-tile--from-self)::after { transform: translateX(-50%) rotate(180deg); }
 
 .bailout-warning {
   background: rgba(255, 152, 0, 0.2);

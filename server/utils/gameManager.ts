@@ -116,6 +116,33 @@ class GameManager {
     );
   }
 
+  private canCurrentTurnPlayerDrawDuringPending(game: GameState, playerId: string): boolean {
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (!currentPlayer || currentPlayer.id !== playerId) return false;
+    const player = game.players.find(p => p.id === playerId);
+    if (!player) return false;
+    if (!game.pendingActions.some(pa => pa.playerId === playerId)) return false;
+    if (this.isDaDiaoReadyState(game, player)) return false;
+    return this.canPlayerDrawOnCurrentTurn(game, player);
+  }
+
+  private autoDrawForCurrentPlayer(game: GameState): boolean {
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (!currentPlayer || currentPlayer.status !== PlayerStatus.PLAYING) return false;
+    if (!this.canPlayerDrawOnCurrentTurn(game, currentPlayer)) return false;
+
+    this.replaceInitialFlowers(game, currentPlayer);
+    const totalTileCount = this.getPlayableTileCount(currentPlayer);
+    if (totalTileCount >= 14) {
+      game.drawnThisTurn = true;
+      return true;
+    }
+
+    this.handleDraw(game, currentPlayer);
+    game.drawnThisTurn = true;
+    return true;
+  }
+
   private canPlayerDeclareTurnHu(game: GameState, player: Player): boolean {
     if (!game.drawnThisTurn) return false;
     const lastAction = game.actionHistory[game.actionHistory.length - 1];
@@ -257,6 +284,16 @@ class GameManager {
     ].join('|');
   }
 
+  private getWinWildArg(game: GameState): string | null | ((tile: Tile) => boolean) {
+    const usesFlowerWildGroup =
+      game.customScoringMode?.startsWith(`${TileSuit.FLOWER}-`) &&
+      Array.isArray(game.wildTileGroup) &&
+      game.wildTileGroup.length > 0;
+    return usesFlowerWildGroup
+      ? buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup)
+      : (game.customScoringMode || null);
+  }
+
   private getCachedWinCheck(game: GameState, player: Player): { canWin: boolean; types: HandType[] } {
     const playerCache = this.getPlayerWinCache(game.gameId, player.id);
     const cacheKey = this.getPlayerWinContextKey(game, player);
@@ -265,7 +302,7 @@ class GameManager {
       return cached;
     }
 
-    const result = canWin(player.hand.concealedTiles, player.hand.exposedMelds, game.customScoringMode || null);
+    const result = canWin(player.hand.concealedTiles, player.hand.exposedMelds, this.getWinWildArg(game));
     playerCache.fast.set(cacheKey, result);
     return result;
   }
@@ -293,7 +330,7 @@ class GameManager {
       ? [...player.hand.concealedTiles, flags.extraTile]
       : player.hand.concealedTiles;
     const winCheck = flags?.extraTile
-      ? canWin(handTiles, player.hand.exposedMelds, game.customScoringMode || null)
+      ? canWin(handTiles, player.hand.exposedMelds, this.getWinWildArg(game))
       : this.getCachedWinCheck(game, player);
     const wildParts = game.customScoringMode?.split('-');
     const wildSuit = wildParts?.[0] ? wildParts[0] as TileSuit : undefined;
@@ -331,7 +368,7 @@ class GameManager {
   ): void {
     if (player.status !== PlayerStatus.PLAYING) return;
     const winCheck = extraTile
-      ? canWin([...player.hand.concealedTiles, extraTile], player.hand.exposedMelds, game.customScoringMode || null)
+      ? canWin([...player.hand.concealedTiles, extraTile], player.hand.exposedMelds, this.getWinWildArg(game))
       : this.getCachedWinCheck(game, player);
     if (!winCheck.canWin) return;
     this.getCachedWinOptions(game, player, context, {
@@ -696,6 +733,11 @@ class GameManager {
         if (currentPlayer && this.isPlayerBotControlled(currentPlayer) && (currentPlayer.hand.concealedTiles.length % 3 === 2 || this.canPlayerDrawOnCurrentTurn(game, currentPlayer))) {
           this.scheduleBotDiscard(gameId, currentPlayer.id);
         }
+        if (this.autoDrawForCurrentPlayer(game)) {
+          await this.persistGame(game);
+          this.broadcastGameState(gameId);
+          return;
+        }
         // 如果当前玩家手牌不是2 mod 3,说明claim已执行但后续流程断了,推进到下家
         if (currentPlayer && !this.canPlayerDrawOnCurrentTurn(game, currentPlayer) && currentPlayer.hand.concealedTiles.length % 3 !== 2) {
           await this.moveToNextPlayer(game);
@@ -752,6 +794,7 @@ class GameManager {
   private countExposedTilesExcludingFlowerMelds(player: Player): number {
     return player.hand.exposedMelds.reduce((sum, m) => {
       if (m.tiles.length === 1 && isFlower(m.tiles[0])) return sum;
+      if (m.type === MeldType.KONG || m.type === MeldType.CONCEALED_KONG) return sum + 3;
       return sum + m.tiles.length;
     }, 0);
   }
@@ -1699,7 +1742,7 @@ class GameManager {
           return [...pendingAction.availableActions, ActionType.THINK];
         }
       }
-      if (this.isChowOnlyPendingTurn(game, playerId)) {
+      if (this.canCurrentTurnPlayerDrawDuringPending(game, playerId)) {
         const actionsWithDraw = [...pendingAction.availableActions];
         if (
           this.canPlayerDrawOnCurrentTurn(game, player) &&
@@ -1744,7 +1787,7 @@ class GameManager {
     // freeze 百搭期间不能出牌(响应其他玩家弃牌),但可以摸牌(自己的回合动作)
     if (currentPlayer.id === playerId) {
       // 有其他玩家在抢牌(pending claim),当前玩家等待决策窗口
-      if (game.pendingActions.length > 0 && !this.isChowOnlyPendingTurn(game, playerId)) {
+      if (game.pendingActions.length > 0 && !this.canCurrentTurnPlayerDrawDuringPending(game, playerId)) {
         return [];
       }
 
@@ -2245,19 +2288,16 @@ class GameManager {
       .filter(t => isFlower(t)).length;
   }
 
-  private handleDraw(game: GameState, player: Player): void {
+  private handleDraw(game: GameState, player: Player, options?: { allowFullHand?: boolean }): void {
     if (game.wall.length === 0) {
       this.endRound(game, GameEndReason.WALL_EXHAUSTED);
       return;
     }
 
     // 牌数上限检查(不含花牌的门口牌+手牌 < 14 才能摸)
-    const nonFlowerExposed = player.hand.exposedMelds.reduce((sum, m) => {
-      if (m.tiles.length === 1 && isFlower(m.tiles[0])) return sum;
-      return sum + m.tiles.length;
-    }, 0);
-    if (player.hand.concealedTiles.length + nonFlowerExposed >= 14) {
-      console.warn(`[DRAW] Skipped: ${player.name} already has ${player.hand.concealedTiles.length + nonFlowerExposed} tiles (excl flowers)`);
+    const playableTileCount = this.getPlayableTileCount(player);
+    if (!options?.allowFullHand && playableTileCount >= 14) {
+      console.warn(`[DRAW] Skipped: ${player.name} already has ${playableTileCount} playable tiles`);
       return;
     }
 
@@ -2411,7 +2451,7 @@ class GameManager {
       // 检查能否胡(必须有有效牌型)
       const testHand = [...p.hand.concealedTiles, discardedTile];
       const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
-      const winCheck = canWin(testHand, p.hand.exposedMelds.length, game.customScoringMode || null);
+      const winCheck = canWin(testHand, p.hand.exposedMelds.length, this.getWinWildArg(game));
       if (winCheck.canWin) {
         const handTypes = detectHandTypes(testHand, p.hand.exposedMelds, false, this.countFlowerTiles(p), null, game.wildTileGroup);
         if (handTypes.length > 0) {
@@ -2510,9 +2550,13 @@ class GameManager {
       );
       const existingPending = game.pendingActions.find(pa => pa.playerId === candidate.playerId);
       if (existingPending) {
+        const previousHadHu = existingPending.availableActions.includes(ActionType.HU);
+        const previousExpiresAt = existingPending.expiresAt;
         existingPending.availableActions = candidate.availableActions as ActionType[];
         existingPending.tile = conflict.tile;
-        existingPending.expiresAt = expiresAt;
+        existingPending.expiresAt = previousHadHu && typeof previousExpiresAt === 'number'
+          ? previousExpiresAt
+          : expiresAt;
       } else {
         game.pendingActions.push({
           playerId: candidate.playerId,
@@ -2896,7 +2940,7 @@ class GameManager {
     game.pendingActions = [];
     game.pengChowConflict = null;
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
-    this.handleDraw(game, player);
+    this.handleDraw(game, player, { allowFullHand: true });
     game.drawnThisTurn = true;
     this.broadcastKongSupplement(game, player, 'ming');
   }
@@ -3043,7 +3087,7 @@ class GameManager {
     player.rainScore += nonWinners.length * 2;
 
     // Draw supplement tile
-    this.handleDraw(game, player);
+    this.handleDraw(game, player, { allowFullHand: true });
     game.drawnThisTurn = true;
     this.broadcastKongSupplement(game, player, 'an');
   }
@@ -3144,7 +3188,7 @@ class GameManager {
     player.windScore += nonWinners.length * 1;
 
     // Draw supplement tile
-    this.handleDraw(game, player);
+    this.handleDraw(game, player, { allowFullHand: true });
     game.drawnThisTurn = true;
     this.broadcastKongSupplement(game, player, 'jia');
   }
@@ -3882,12 +3926,8 @@ class GameManager {
     if (chowPlayer) {
       const chowPlayerIndex = game.players.findIndex(p => p.id === chowPlayer.id);
       if (chowPlayerIndex >= 0) {
-        const chowOnlyPending = game.pendingActions.length > 0
-          && game.pendingActions.every(pa =>
-            pa.playerId === chowPlayer.id &&
-            pa.availableActions.every(action => action === ActionType.CHOW || action === ActionType.PASS)
-          );
-        if (chowOnlyPending) {
+        const hasPendingForChowPlayer = game.pendingActions.some(pa => pa.playerId === chowPlayer.id);
+        if (hasPendingForChowPlayer) {
           game.currentPlayerIndex = chowPlayerIndex;
           game.drawnThisTurn = false;
         }

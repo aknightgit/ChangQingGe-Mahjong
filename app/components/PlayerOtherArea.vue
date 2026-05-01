@@ -7,7 +7,7 @@
     <template v-if="position === 'top'">
       <div class="player-other-stack player-other-stack--top">
         <div class="seat-line seat-line--top">
-          <div v-if="hand.length" class="hand-lane hand-lane--top top-slot top-slot--hand">
+          <div v-if="hand.length" v-memo="[hand, showHand, justDrawnTileId, isWinner, tileBackScheme]" class="hand-lane hand-lane--top top-slot top-slot--hand">
             <MahjongTile
               v-for="tile in hand"
               :key="tile.id"
@@ -102,7 +102,7 @@
               />
             </div>
           </div>
-          <div v-if="hand.length" class="hand-lane hand-lane--left">
+          <div v-if="hand.length" v-memo="[hand, showHand, justDrawnTileId, isWinner, tileBackScheme]" class="hand-lane hand-lane--left">
             <MahjongTile
               v-for="tile in hand"
               :key="tile.id"
@@ -157,7 +157,7 @@
               />
             </div>
           </div>
-          <div v-if="hand.length" class="hand-lane hand-lane--right">
+          <div v-if="hand.length" v-memo="[hand, showHand, justDrawnTileId, isWinner, tileBackScheme]" class="hand-lane hand-lane--right">
             <MahjongTile
               v-for="tile in hand"
               :key="tile.id"
@@ -189,6 +189,7 @@ const props = defineProps<{
   justDrawnTileId?: string | null
   viewerPosition?: number
   playerColors?: string[]
+  ownerPosition?: number
 }>()
 
 const containerStyle = computed(() => ({
@@ -209,11 +210,10 @@ const mainMelds = computed(() => props.melds.filter(meld => !isFlowerMeld(meld))
 const isConcealedMeld = (meld: Meld): boolean => meld.type === 'concealed_kong' || !!(meld as any).isConcealed
 
 function getSourceArrowClass(sourcePosition: number): string {
-  const viewerPosition = props.viewerPosition ?? 0
-  const rel = (sourcePosition - viewerPosition + 4) % 4
-  return ['src--self', 'src--upper', 'src--opposite', 'src--lower'][rel] || 'src--self'
+  const ownerPosition = props.ownerPosition ?? props.viewerPosition ?? 0
+  const rel = (sourcePosition - ownerPosition + 4) % 4
+  return ['src--self', 'src--right', 'src--opposite', 'src--left'][rel] || 'src--self'
 }
-
 
 function getClaimMarkerClass(meld: Meld, tile: any): string[] {
   if (!meld.sourceTileId || meld.sourceTileId !== tile.id || meld.type === 'concealed_kong') return []
@@ -222,9 +222,10 @@ function getClaimMarkerClass(meld: Meld, tile: any): string[] {
 }
 
 function getClaimMarkerStyle(meld: Meld): Record<string, string> {
-  return meld.sourcePosition !== undefined
-    ? { '--claim-source-color': colors.value[meld.sourcePosition] || '#757575' }
-    : {}
+  if (meld.sourcePosition === undefined) return {}
+  const viewerPosition = props.viewerPosition ?? props.ownerPosition ?? 0
+  const viewerRelativePos = (meld.sourcePosition - viewerPosition + 4) % 4
+  return { '--claim-source-color': colors.value[viewerRelativePos] || '#757575' }
 }
 </script>
 
@@ -422,18 +423,18 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
 }
 
 .player-other :deep(.claimed-tile--src--self)::after {
-  transform: translateX(-50%) rotate(0deg);
+  transform: translateX(-50%) rotate(180deg);
 }
 
-.player-other :deep(.claimed-tile--src--lower)::after {
+.player-other :deep(.claimed-tile--src--right)::after {
   transform: translateX(-50%) rotate(-90deg);
 }
 
 .player-other :deep(.claimed-tile--src--opposite)::after {
-  transform: translateX(-50%) rotate(180deg);
+  transform: translateX(-50%) rotate(0deg);
 }
 
-.player-other :deep(.claimed-tile--src--upper)::after {
+.player-other :deep(.claimed-tile--src--left)::after {
   transform: translateX(-50%) rotate(90deg);
 }
 

@@ -6,7 +6,7 @@
         <div class="room-info">
           <div class="room-title-line">
             <h1 class="mahjong-title">长清阁麻将</h1>
-            <span class="round-info-header" v-if="gameState?.phase === 'playing'">{{ roundDisplay }}</span>
+            <span class="round-info-header" v-if="currentRound > 0">{{ roundDisplay }}</span>
           </div>
         </div>
 
@@ -537,6 +537,7 @@
                 :just-drawn-tile-id="northJustDrawnTileId"
                 :player-colors="claimSourceColors"
                 :viewer-position="currentPlayer?.position"
+                :owner-position="topPlayer?.position"
               />
             </div>
 
@@ -552,6 +553,7 @@
                 :just-drawn-tile-id="westJustDrawnTileId"
                 :player-colors="claimSourceColors"
                 :viewer-position="currentPlayer?.position"
+                :owner-position="leftPlayer?.position"
               />
             </div>
 
@@ -567,6 +569,7 @@
                 :just-drawn-tile-id="eastJustDrawnTileId"
                 :player-colors="claimSourceColors"
                 :viewer-position="currentPlayer?.position"
+                :owner-position="rightPlayer?.position"
               />
             </div>
 
@@ -582,6 +585,7 @@
                   :player-colors="claimSourceColors"
                   :just-drawn-tile-id="selfJustDrawnTileId"
                   :viewer-position="currentPlayer?.position"
+                  :owner-position="currentPlayer?.position"
                   :selected-tile-id="selectedTileId"
                   :is-winner="isWinner"
                   @tileClick="handleTileClick"
@@ -1135,6 +1139,23 @@ const isOpponentHandRevealed = (player?: Player | null) => {
   return hand.length > 0 && hand.some(tile => !isHiddenTile(tile))
 }
 
+const hiddenHandCache = new Map<string, Tile[]>()
+const getStableOpponentHand = (player?: Player | null): Tile[] => {
+  if (!player) return []
+  const hand = player.hand?.concealedTiles || []
+  if (isOpponentHandRevealed(player)) return hand
+  const cacheKey = `${player.id}:${hand.length}`
+  const cached = hiddenHandCache.get(cacheKey)
+  if (cached) return cached
+  const stableHiddenHand = hand.map((_, index) => ({
+    id: `stable-hidden-${player.id}-${index}`,
+    suit: 'wan' as Tile['suit'],
+    value: 0
+  }))
+  hiddenHandCache.set(cacheKey, stableHiddenHand)
+  return stableHiddenHand
+}
+
 const handleGlobalPointerDown = (event: MouseEvent) => {
   if (!showSettings.value) return
   const target = event.target as Node | null
@@ -1297,7 +1318,7 @@ const wildTile = computed(() => {
 
 // ---- Room Stats ----
 const positionColors = ['east', 'south', 'west', 'north']
-const claimSourceColors = ['#f44336', '#4caf50', '#2196f3', '#ffc107']
+const claimSourceColors = ['#4caf50', '#f44336', '#ffc107', '#2196f3']
 const botAvatars = ['😎', '🤖', '🧠']
 
 // Track today's best hand (max wonFan) per room
@@ -1530,14 +1551,44 @@ const myTingText = computed(() => {
   const winningTiles = tingPreview.value?.winningTiles || []
   const isTing = !!currentPlayer.value?.isTing || !!tingPreview.value?.isTing || winningTiles.length > 0
   if (!isTing) return ''
-  const tiles = winningTiles
+  const visibleWinningTiles = winningTiles
     .map((entry: any) => entry.tile)
     .filter((tile: Tile) => !!tile && !isWildPreviewTile(tile))
     .sort(compareTilesForDisplay)
     .map((tile: Tile) => tileLabel(tile))
     .filter(Boolean)
-  const uniqueTiles = Array.from(new Set(tiles))
-  return uniqueTiles.length ? `您已听牌：${uniqueTiles.join(',')}` : '您已听牌'
+  const discardHuTiles = winningTiles
+    .filter((entry: any) => !!entry?.bestDiscardOption)
+    .map((entry: any) => entry.tile)
+    .filter((tile: Tile) => !!tile && !isWildPreviewTile(tile))
+    .sort(compareTilesForDisplay)
+    .map((tile: Tile) => tileLabel(tile))
+    .filter(Boolean)
+  const selfDrawOnlyTiles = winningTiles
+    .filter((entry: any) => !entry?.bestDiscardOption && !!entry?.bestSelfDrawOption)
+    .map((entry: any) => entry.tile)
+    .filter((tile: Tile) => !!tile && !isWildPreviewTile(tile))
+    .sort(compareTilesForDisplay)
+    .map((tile: Tile) => tileLabel(tile))
+    .filter(Boolean)
+
+  const uniqueDiscardHuTiles = Array.from(new Set(discardHuTiles))
+  const uniqueSelfDrawOnlyTiles = Array.from(new Set(selfDrawOnlyTiles))
+  const uniqueVisibleWinningTiles = Array.from(new Set(visibleWinningTiles))
+
+  if (uniqueDiscardHuTiles.length && uniqueSelfDrawOnlyTiles.length) {
+    return `您已听牌：${uniqueDiscardHuTiles.join(',')}；仅自摸：${uniqueSelfDrawOnlyTiles.join(',')}`
+  }
+  if (uniqueDiscardHuTiles.length) {
+    return `您已听牌：${uniqueDiscardHuTiles.join(',')}`
+  }
+  if (uniqueSelfDrawOnlyTiles.length) {
+    return `您已听牌（仅自摸）：${uniqueSelfDrawOnlyTiles.join(',')}`
+  }
+  if (uniqueVisibleWinningTiles.length) {
+    return `您已听牌：${uniqueVisibleWinningTiles.join(',')}`
+  }
+  return '您已听牌'
 })
 const huWinnerCount = computed(() => Math.max(1, gameState.value?.players?.filter(player => player.status === 'won').length || 0))
 const getHuOptionBasePoints = (opt: any) => Number(opt?.summary?.finalPoints ?? opt?.score ?? 0)
@@ -1610,11 +1661,8 @@ const showApprovalOverlay = computed(() => false)
 const startNextRound = async () => { 
   showSettlement.value = false;
   try {
-    if (isDealerUser.value) {
-      await onStartGame();
-    } else {
-      await forceRefreshState();
-    }
+    await startGame({ hesitationWindow: hesitationWindow.value })
+    await forceRefreshState()
     console.log('[startNextRound] Next round flow entered, phase:', gameState.value?.phase);
   } catch (e) {
     console.error('[startNextRound] Failed:', e);
@@ -1671,7 +1719,7 @@ const playerResults = computed(() => {
     })
 })
 // ---- Other Players State ----
-const northHand = computed(() => topPlayer.value?.hand.concealedTiles || []) // Will be empty/hidden by backend usually
+const northHand = computed(() => getStableOpponentHand(topPlayer.value))
 const northMelds = computed(() => topPlayer.value?.hand.exposedMelds || [])
 const northDiscards = computed(() => getVisiblePlayerDiscards(topPlayer.value))
 const northIsWinner = computed(() => topPlayer.value?.status === 'won')
@@ -1724,12 +1772,12 @@ const turnMessage = computed(() => {
   return '等待其他玩家出牌'
 })
 
-const westHand = computed(() => leftPlayer.value?.hand.concealedTiles || [])
+const westHand = computed(() => getStableOpponentHand(leftPlayer.value))
 const westMelds = computed(() => leftPlayer.value?.hand.exposedMelds || [])
 const westDiscards = computed(() => getVisiblePlayerDiscards(leftPlayer.value))
 const westIsWinner = computed(() => leftPlayer.value?.status === 'won')
 
-const eastHand = computed(() => rightPlayer.value?.hand.concealedTiles || [])
+const eastHand = computed(() => getStableOpponentHand(rightPlayer.value))
 const eastMelds = computed(() => rightPlayer.value?.hand.exposedMelds || [])
 const eastDiscards = computed(() => getVisiblePlayerDiscards(rightPlayer.value))
 const eastIsWinner = computed(() => rightPlayer.value?.status === 'won')
@@ -1741,9 +1789,6 @@ const westJustDrawnTileId = ref<string | null>(null)
 const eastJustDrawnTileId = ref<string | null>(null)
 const selfJustDrawnTileId = ref<string | null>(null)
 
-let northDrawnTimer: ReturnType<typeof setTimeout> | null = null
-let westDrawnTimer: ReturnType<typeof setTimeout> | null = null
-let eastDrawnTimer: ReturnType<typeof setTimeout> | null = null
 let selfDrawnTimer: ReturnType<typeof setTimeout> | null = null
 
 function trackDrawnTile(
@@ -1775,9 +1820,21 @@ const westPrevHandIds = { value: westHand.value.map(tile => tile.id) }
 const eastPrevHandIds = { value: eastHand.value.map(tile => tile.id) }
 const selfPrevHandIds = { value: playerHand.value.map(tile => tile.id) }
 
-watch(northHand, (h) => trackDrawnTile(h, northPrevHandLen, northPrevHandIds, northJustDrawnTileId, { get: () => northDrawnTimer, set: (v) => { northDrawnTimer = v } }))
-watch(westHand, (h) => trackDrawnTile(h, westPrevHandLen, westPrevHandIds, westJustDrawnTileId, { get: () => westDrawnTimer, set: (v) => { westDrawnTimer = v } }))
-watch(eastHand, (h) => trackDrawnTile(h, eastPrevHandLen, eastPrevHandIds, eastJustDrawnTileId, { get: () => eastDrawnTimer, set: (v) => { eastDrawnTimer = v } }))
+watch(northHand, (h) => {
+  northPrevHandLen.value = h.length
+  northPrevHandIds.value = h.map(tile => tile?.id).filter(Boolean)
+  northJustDrawnTileId.value = null
+})
+watch(westHand, (h) => {
+  westPrevHandLen.value = h.length
+  westPrevHandIds.value = h.map(tile => tile?.id).filter(Boolean)
+  westJustDrawnTileId.value = null
+})
+watch(eastHand, (h) => {
+  eastPrevHandLen.value = h.length
+  eastPrevHandIds.value = h.map(tile => tile?.id).filter(Boolean)
+  eastJustDrawnTileId.value = null
+})
 watch(playerHand, (h) => trackDrawnTile(h, selfPrevHandLen, selfPrevHandIds, selfJustDrawnTileId, { get: () => selfDrawnTimer, set: (v) => { selfDrawnTimer = v } }))
 
 // ---- Interaction ----
@@ -2107,15 +2164,18 @@ const myPendingAction = computed(() => {
   return gameState.value.pendingActions.find(pa => pa.playerId === currentPlayer.value!.id) || null
 })
 
+const hasSharedDrawWindow = computed(() => {
+  const pendingExpiresAt = Number((myPendingAction.value as any)?.expiresAt ?? 0)
+  return availableActions.value.includes(ActionType.DRAW) && pendingExpiresAt > Date.now()
+})
+
 const actionVisualFreezeUntil = computed(() => {
-  // 吃碰杠胡响应：follow pendingAction / hesitationWindow
+  // 服务端显式 freeze 优先；若当前轮到自己且共享 claim 窗口里允许 DRAW，则直接跟 pending.expiresAt 对齐。
   const freezeFromPending = currentFreezeUntil.value
   if (freezeFromPending > Date.now()) return freezeFromPending
 
-  // 轮到自己摸牌/出牌：follow actionButtonsVisibleUntil（从 DRAW 出现开始计时）
-  if (isMyTurn.value && (availableActions.value?.includes(ActionType.DRAW) || availableActions.value?.includes(ActionType.DISCARD))) {
-    const until = actionButtonsVisibleUntil.value
-    if (until > Date.now()) return until
+  if (hasSharedDrawWindow.value) {
+    return Number((myPendingAction.value as any)?.expiresAt ?? 0)
   }
 
   return 0
@@ -2167,15 +2227,14 @@ watch(
     () => gameState.value?.availableActions,
     () => gameState.value?.hesitationWindow,
     () => currentPlayer.value?.id,
-    () => isMyTurn.value  // 只在自己回合内且DRAW出现时才启动摸牌倒计时
+    () => isMyTurn.value
   ],
   () => {
     const myId = currentPlayer.value?.id
     const pending = (gameState.value as any)?.pendingActions || []
     const mine = myId ? pending.find((pa: any) => pa.playerId === myId) : null
     const selfAvailableActions = availableActions.value || []
-    const isMyDrawTurn = selfAvailableActions.includes(ActionType.DRAW) && isMyTurn.value
-    if (mine || selfAvailableActions.includes(ActionType.HU) || isMyDrawTurn) {
+    if (mine || selfAvailableActions.includes(ActionType.HU) || hasSharedDrawWindow.value) {
       const newUntil = mine?.expiresAt || Date.now() + getActionWindowMs(gameState.value)
       // 只设置更大的值（不重启已有的倒计时）
       if (newUntil > actionButtonsVisibleUntil.value) {
@@ -2318,6 +2377,7 @@ const submitChow = (tileIds?: string[]) => {
   hideActionButtonsNow()
   resetAutoCount()
   playSound('tile-chow')
+  playVoiceAction('chow')
   showChowPicker.value = false
   selectedChowOption.value = null
   executeAction(ActionType.CHOW, undefined, tileIds)
@@ -2338,7 +2398,7 @@ const onCancelChowPicker = () => {
   showChowPicker.value = false
   selectedChowOption.value = null
 }
-const onPeng = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-pong'); executeAction(ActionType.PENG) }
+const onPeng = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-pong'); playVoiceAction('pong'); executeAction(ActionType.PENG) }
 const onKong = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-kong'); executeAction(ActionType.KONG) }
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); executeAction(ActionType.REBEL) }
 const onThink = () => { resetAutoCount(); executeAction(ActionType.THINK) }
@@ -2638,6 +2698,7 @@ const showConcealedKong = computed(() => availableActions.value.includes(ActionT
 const showExtendedKong = computed(() => availableActions.value.includes(ActionType.EXTENDED_KONG))
 const hasPriorityActions = computed(
   () =>
+    hasSharedDrawWindow.value ||
     showChow.value ||
     showPeng.value ||
     showKong.value ||
@@ -2659,17 +2720,9 @@ watch([isMyTurn, hasPriorityActions], ([myTurn, hasActions]) => {
 const actionWindowText = computed(() => {
   if (!hasPriorityActions.value && !isMyTurn.value) return ''
   const pending = myPendingAction.value
-  if (!pending?.expiresAt) {
-    // DRAW 摸牌：用 actionButtonsVisibleUntil 显示倒计时
-    if (isMyTurn.value && availableActions.value?.includes(ActionType.DRAW)) {
-      const until = actionButtonsVisibleUntil.value
-      if (until > Date.now()) {
-        return `响应窗口：${((until - Date.now()) / 1000).toFixed(1)}s`
-      }
-    }
-    return ''
-  }
-  const leftMs = Math.max(0, pending.expiresAt - nowTs.value)
+  const expiresAt = Number(pending?.expiresAt ?? 0)
+  if (!expiresAt) return ''
+  const leftMs = Math.max(0, expiresAt - nowTs.value)
   return `响应窗口：${(leftMs / 1000).toFixed(1)}s（超时自动过）`
 })
 
@@ -2811,7 +2864,10 @@ let broadcastId = 0
 const addBroadcast = (text: string, type: BroadcastMsg['type'] = 'info') => {
   const now = Date.now()
   const timeLabel = formatBeijingTime(now)
-  broadcastMessages.value.push({ id: ++broadcastId, text, type, timestamp: now, timeLabel })
+  const sanitizedText = type === 'win'
+    ? text.replace(/(胡牌)\s*[·•･][^·•･()（）\s]+/u, '$1')
+    : text
+  broadcastMessages.value.push({ id: ++broadcastId, text: sanitizedText, type, timestamp: now, timeLabel })
   // 最多保留 20 条
   if (broadcastMessages.value.length > 5) {
     broadcastMessages.value = broadcastMessages.value.slice(-5)
@@ -2918,9 +2974,16 @@ const checkOtherPlayerSounds = (newState: any) => {
       if (player.id !== playerId.value && meldCount > prev.meldCount) {
         const newMelds = (player.hand?.exposedMelds || []).slice(prev.meldCount)
         for (const m of newMelds) {
-          if (m.type === 'kong' || m.tiles?.length === 4) playSound('tile-kong')
-          else if (m.type === 'triplet' || m.tiles?.length === 3) playSound('tile-pong')
-          else playSound('tile-chow')
+          if (m.type === 'kong' || m.tiles?.length === 4) {
+            playSound('tile-kong')
+            playVoiceAction('kong')
+          } else if (m.type === 'triplet' || m.tiles?.length === 3) {
+            playSound('tile-pong')
+            playVoiceAction('pong')
+          } else {
+            playSound('tile-chow')
+            playVoiceAction('chow')
+          }
         }
       }
       if (player.id !== playerId.value && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
