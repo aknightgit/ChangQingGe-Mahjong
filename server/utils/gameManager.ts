@@ -1321,9 +1321,12 @@ class GameManager {
     await this.hydrateFromDatabase();
     const game = await this.ensureGameLoaded(gameId);
     if (!game) throw new Error('Game not found');
-    if (game.phase !== GamePhase.WAITING) return;
+    if (game.phase !== GamePhase.WAITING && game.phase !== GamePhase.ENDED) return;
     if (game.players.length < 2) throw new Error('Need at least 2 players');
 
+    game.endReason = null;
+    game.endedAt = undefined;
+    game.finalScores = undefined;
     game.phase = GamePhase.STARTING;
     await this.persistGame(game);
     this.broadcastGameState(gameId);

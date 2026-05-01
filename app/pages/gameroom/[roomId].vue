@@ -146,7 +146,7 @@
             <h3 class="hu-panel-title">🀄 选择胡牌牌型</h3>
             <div class="hu-combos">
               <div
-                v-for="(opt, idx) in displayWinOptions"
+                v-for="(opt, idx) in activeHuOptions"
                 :key="idx"
                 class="hu-combo"
                 :class="{ 'hu-combo--selected': selectedHuCombo === idx }"
@@ -200,7 +200,7 @@
               </div>
             </div>
             <div class="hu-panel-actions">
-              <button class="hu-confirm-btn" @click="onConfirmHu(selectedHuCombo ?? 0)" :disabled="selectedHuCombo === null">
+              <button v-if="!isHuReviewMode" class="hu-confirm-btn" @click="onConfirmHu(selectedHuCombo ?? 0)" :disabled="selectedHuCombo === null">
                 🀄 确认胡牌
               </button>
               <button class="hu-cancel-btn" @click="onCancelHu">取消</button>
@@ -268,13 +268,10 @@
             </div>
 
             <div v-if="isDealerUser && waitingPlayers.length >= 2" class="waiting-actions">
-              <button class="mahjong-button primary waiting-start-btn" @click="onStartGame">
-                🎲 开始游戏（{{ waitingPlayers.length }}/4 人）
-              </button>
-              <p class="waiting-hint">人数不足时可带电脑玩家开局</p>
+              <p class="waiting-hint">人数已满足，正在自动进入掷骰子开局…</p>
             </div>
             <div v-else-if="!isDealerUser" class="waiting-actions">
-              <p class="waiting-hint">等待庄家 {{ dealerName }} 开始游戏...</p>
+              <p class="waiting-hint">等待庄家 {{ dealerName }} 自动开局...</p>
             </div>
 
             <button class="mahjong-button secondary waiting-leave-btn" @click="backToLobby">
@@ -292,9 +289,8 @@
       <div class="settle-round-card">
         <div v-if="currentSettlementRound" class="settle-round-header">
           <span>第 {{ currentSettlementRound.roundNumber }} 局</span>
-          <span>全局倍数 ×{{ currentSettlementRound.effectiveMultiplier }}</span>
+          <span>全局倍数 ×{{ currentSettlementRound.effectiveMultiplier }} / 结算倍数 ×{{ currentSettlementRound.settlementMultiplier }}</span>
         </div>
-        <div class="settle-round-summary-line">全局倍数 {{ currentSettlementRound.effectiveMultiplier }} / 结算倍数 {{ currentSettlementRound.settlementMultiplier }}</div>
         <div class="settle-round-block">
           <div class="settle-table-wrap">
             <table class="settle-round-table settle-round-table--compact">
@@ -335,6 +331,9 @@
     </div>
 
     <div class="settle-actions">
+      <button v-if="canReviewHuSelection" class="settle-save-btn settle-save-btn--secondary" @click="openHuReviewPanel">
+        回看胡牌选择
+      </button>
       <button class="settle-save-btn" @click="startNextRound">
         下一局
       </button>
@@ -394,6 +393,10 @@
                   <span class="glass-settings-icon">🗣️</span>
                   <span class="glass-settings-label">出牌音色</span>
                   <span class="glass-voice-name">{{ currentVoiceName }}</span>
+                </div>
+                <div class="glass-settings-select-wrap">
+                  <div class="glass-settings-select-label">出牌音量 {{ voiceVolumePercent }}%</div>
+                  <input class="glass-settings-range" type="range" min="0" max="100" step="1" :value="voiceVolumePercent" @input="onChangeVoiceVolume" />
                 </div>
                 <div class="glass-settings-theme-block">
                   <div class="glass-settings-theme-title">🎵 背景音乐</div>
@@ -682,14 +685,6 @@
 
 
 
-          <!-- 房间控制 / 管理面板 -->
-          <div class="ext-section" v-if="canStartGame">
-            <h3 class="ext-title">房间控制</h3>
-            <button class="mahjong-button panel-button" @click="onStartGame" :disabled="isInteractionLocked">
-              🎲 掷骰子开局 ({{ gameState?.players.length }}/4)
-            </button>
-          </div>
-
           <div class="ext-section" v-if="isAdminUser">
             <h3 class="ext-title">调试</h3>
             <p class="ext-meta">阶段: {{ gameState?.phase }} · {{ gameState?.players.length }}人</p>
@@ -853,9 +848,396 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch, provide } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, provide } from 'vue'
+import PlayerSelfArea from '~/components/PlayerSelfArea.vue'
+import PlayerOtherArea from '~/components/PlayerOtherArea.vue'
+import MahjongTile from '~/components/MahjongTile.vue'
+import CircularActionButtons from '~/components/CircularActionButtons.vue'
+import TableCenter from '~/components/TableCenter.vue'
+import TileWall from '~/components/TileWall.vue'
+import DiceAnimation from '~/components/DiceAnimation.vue'
+import PlayerInfo from '~/components/PlayerInfo.vue'
+import RoomStats from '~/components/RoomStats.vue'
+import GameBroadcast from '~/components/GameBroadcast.vue'
+import DiscardZone from '~/components/DiscardZone.vue'
+import LayoutDebugPanel from '~/components/LayoutDebugPanel.vue'
+import { useGame } from '~/composables/useGame'
+import { useSound } from '~/composables/useSound'
+import { useBackgroundMusic } from '~/composables/useBackgroundMusic'
+import { useVoiceTile } from '~/composables/useVoiceTile'
+import { buildDiscardGuardSnapshot, shouldReleasePendingDiscardGuard, type DiscardGuardSnapshot } from '~/utils/discardGuard'
+import { collectClaimedDiscardIds, filterVisibleDiscards } from '~/utils/discardVisibility'
+import { formatBeijingTime } from '~/utils/beijingTime'
+import { ActionType, GamePhase, GameEndReason, type Tile, type Meld, type Player } from '~/types/game'
 
+definePageMeta({ ssr: false })
+
+const PENDING_ROOM_STORAGE_KEY = 'mahjong.pendingRoomTarget'
+const clearPendingRoomTarget = () => {
+  if (!process.client) return
+  try {
+    sessionStorage.removeItem(PENDING_ROOM_STORAGE_KEY)
+  } catch {}
+}
+const getPendingRoomTarget = () => {
+  if (!process.client) return null
+  try {
+    const raw = sessionStorage.getItem(PENDING_ROOM_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { targetUrl?: string; createdAt?: number }
+    return typeof parsed?.targetUrl === 'string' ? parsed.targetUrl : null
+  } catch {
+    return null
+  }
+}
+const getPendingPlayerIdForRoom = (room: string) => {
+  const targetUrl = getPendingRoomTarget()
+  if (!targetUrl || !process.client) return ''
+  try {
+    const parsed = new URL(targetUrl, window.location.origin)
+    const targetRoomId = parsed.pathname.split('/').filter(Boolean).pop() || ''
+    if (targetRoomId !== room) return ''
+    return parsed.searchParams.get('playerId') || ''
+  } catch {
+    return ''
+  }
+}
+
+const route = useRoute()
+const router = useRouter()
+const roomId = computed(() => String(route.params.roomId || ''))
+const playerId = computed(() => {
+  const routePlayerId = String(route.query.playerId || '')
+  if (routePlayerId) return routePlayerId
+  return getPendingPlayerIdForRoom(roomId.value)
+})
+const userName = useCookie<string | null>('user_name')
+const isAdmin = useCookie<string | boolean | null>('is_admin')
+const isAdminUser = computed(() => isAdmin.value === 'true' || isAdmin.value === true)
+
+const {
+  gameState,
+  currentPlayer,
+  currentRound,
+  tingPreview,
+  availableActions,
+  isConnected,
+  error,
+  connect,
+  disconnect,
+  executeAction,
+  startGame,
+  refreshState,
+  forceRefreshState,
+  replacePendingAction,
+  isActionPending,
+  roomDismissedReason,
+  lastStateChangeAt,
+  leadingBrotherEvent,
+  actionApprovalEvent
+} = useGame()
+
+const backToLobby = () => {
+  clearPendingRoomTarget()
+  return navigateTo('/')
+}
+
+const { play: playSound, isEnabled: soundEnabled, setEnabled: setSoundEnabled } = useSound()
+const {
+  tracks: bgmTracks,
+  enabled: bgmEnabled,
+  loopMode: bgmLoopMode,
+  currentTrackId: bgmCurrentTrackId,
+  volume: bgmVolume,
+  isPlaying: bgmIsPlaying,
+  ensureInitialized: ensureBackgroundMusicInitialized,
+  setEnabled: setBackgroundMusicEnabled,
+  setLoopMode: setBackgroundMusicLoopMode,
+  setTrack: setBackgroundMusicTrack,
+  setVolume: setBackgroundMusicVolume,
+  play: playBackgroundMusic,
+  pause: pauseBackgroundMusic,
+  next: playNextBackgroundTrack
+} = useBackgroundMusic()
+
+const toggleSound = () => {
+  setSoundEnabled(!soundEnabled.value)
+}
+const bgmVolumePercent = computed(() => Math.round((bgmVolume.value ?? 0.5) * 100))
+const voiceVolumePercent = computed(() => Math.round((currentVoiceVolume.value ?? 0.85) * 100))
+const onChangeBgmTrack = (event: Event) => {
+  setBackgroundMusicTrack((event.target as HTMLSelectElement).value)
+}
+const onChangeBgmLoopMode = (event: Event) => {
+  setBackgroundMusicLoopMode((event.target as HTMLSelectElement).value as 'single' | 'all' | 'shuffle')
+}
+const onChangeBgmVolume = (event: Event) => {
+  setBackgroundMusicVolume(Number((event.target as HTMLInputElement).value || 50) / 100)
+}
+const onChangeVoiceVolume = (event: Event) => {
+  setVoiceVolume(Number((event.target as HTMLInputElement).value || 85) / 100)
+}
+const toggleBgmPlayback = () => {
+  if (bgmIsPlaying.value) pauseBackgroundMusic()
+  else playBackgroundMusic()
+}
+const {
+  currentVoiceName,
+  currentVoiceVolume,
+  loadVoiceScheme,
+  preloadAllTiles,
+  playVoiceTile,
+  setVoiceVolume
+} = useVoiceTile()
+
+const showAllCards = ref(false)
+const shouldRevealOpponents = computed(() => showAllCards.value || !!currentPlayer.value?.isSpectator)
+const isMobilePortrait = ref(false)
+const shouldRotateView = computed(() => isMobilePortrait.value)
+const nowTs = ref(Date.now())
+let actionWindowTimer: ReturnType<typeof setInterval> | null = null
+
+const actionButtonsVisibleUntil = ref(0)
+const isGameStarting = ref(false)
+const showDiceOverlay = ref(false)
+const diceValues = ref<[number, number]>([1, 1])
+const hasDicePreview = ref(false)
+const showDoubleReminder = ref(false)
+const flowerReplacementNotice = ref<Tile | null>(null)
+const autoStartRequested = ref(false)
+const showLiangShanOverlay = ref(false)
+let doubleReminderTimer: ReturnType<typeof setTimeout> | null = null
+const getActionWindowMs = (state: any) => {
+  const hw = state?.hesitationWindow
+  return typeof hw === 'number' && hw > 0 ? hw : 5000
+}
+
+const TURN_TIMEOUT_SEC = 60
+const CONSECUTIVE_AUTO_THRESHOLD = 2
+const turnTimer = ref(TURN_TIMEOUT_SEC)
+const turnTimerActive = ref(false)
+let turnTimerInterval: ReturnType<typeof setInterval> | null = null
+let lastWarnAt = 0
+let consecutiveAutoCount = 0
+const isAIControlled = ref(false)
+const showSettings = ref(false)
+const settingsBtnEl = ref<HTMLElement | null>(null)
+const settingsPanelEl = ref<HTMLElement | null>(null)
+const settingsPanelTop = ref(0)
+const settingsPanelLeft = ref(0)
+const showDebugPanel = ref(false)
+const tableTheme = ref<'classic-green' | 'jade-green' | 'royal-red'>('classic-green')
+const tileBackScheme = ref(0)
+const showHintEnabled = ref(true)
+const tileAnimationEnabled = ref(true)
+const actionSoundEnabled = ref(true)
+const timerWarningEnabled = ref(true)
+
+const playWhoosh = () => {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+    const oscillator = ctx.createOscillator()
+    const gainNode = ctx.createGain()
+    oscillator.connect(gainNode)
+    gainNode.connect(ctx.destination)
+    oscillator.type = 'sine'
+    oscillator.frequency.setValueAtTime(880, ctx.currentTime)
+    oscillator.frequency.exponentialRampToValueAtTime(220, ctx.currentTime + 0.18)
+    gainNode.gain.setValueAtTime(0.12, ctx.currentTime)
+    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18)
+    oscillator.start(ctx.currentTime)
+    oscillator.stop(ctx.currentTime + 0.18)
+    setTimeout(() => ctx.close(), 250)
+  } catch {}
+}
+
+const updateSettingsPosition = () => {
+  if (!settingsBtnEl.value) return
+  const rect = settingsBtnEl.value.getBoundingClientRect()
+  settingsPanelTop.value = rect.bottom + 8
+  settingsPanelLeft.value = rect.right - 300
+}
+
+const setTableTheme = (theme: 'classic-green' | 'jade-green' | 'royal-red') => {
+  tableTheme.value = theme
+}
+
+const setTileBackScheme = (scheme: number) => {
+  tileBackScheme.value = scheme
+}
+
+const cycleVoiceScheme = async () => {
+  await loadVoiceScheme('bingtang')
+}
+
+const resetAutoCount = () => {
+  consecutiveAutoCount = 0
+  lastWarnAt = 0
+}
+
+const stopTurnTimer = () => {
+  turnTimerActive.value = false
+  turnTimer.value = TURN_TIMEOUT_SEC
+  if (turnTimerInterval) {
+    clearInterval(turnTimerInterval)
+    turnTimerInterval = null
+  }
+}
+
+const startTurnTimer = () => {
+  stopTurnTimer()
+  turnTimer.value = TURN_TIMEOUT_SEC
+  turnTimerActive.value = true
+  turnTimerInterval = setInterval(() => {
+    if (turnTimer.value <= 0) {
+      stopTurnTimer()
+      return
+    }
+    turnTimer.value -= 1
+  }, 1000)
+}
+
+const toggleSettingsPanel = () => {
+  showSettings.value = !showSettings.value
+}
+
+const settingsPanelStyle = computed(() => ({
+  top: `${settingsPanelTop.value}px`,
+  left: `${settingsPanelLeft.value}px`
+}))
+
+const onSettingsClosed = () => {}
+
+watch(isAdminUser, (next) => {
+  if (!next && showAllCards.value) {
+    showAllCards.value = false
+  }
+})
+
+const toggleShowAllCards = () => {
+  if (!isAdminUser.value) return
+  showAllCards.value = !showAllCards.value
+}
+
+const evaluateViewport = () => {
+  if (!process.client) return
+  const { innerWidth: width, innerHeight: height } = window
+  const smallestSide = Math.min(width, height)
+  const isPortrait = height >= width
+  isMobilePortrait.value = isPortrait && smallestSide <= 768
+}
+
+const isHiddenTile = (tile: any) => String(tile?.id || '').startsWith('hidden-') || tile?.value === 0
+const isOpponentHandRevealed = (player?: Player | null) => {
+  if (!player || player.id === currentPlayer.value?.id) return false
+  const hand = player.hand?.concealedTiles || []
+  return hand.length > 0 && hand.some(tile => !isHiddenTile(tile))
+}
+
+const handleGlobalPointerDown = (event: MouseEvent) => {
+  if (!showSettings.value) return
+  const target = event.target as Node | null
+  if (settingsPanelEl.value?.contains(target)) return
+  if (settingsBtnEl.value?.contains(target)) return
+  showSettings.value = false
+}
+
+watch(showSettings, (open) => {
+  if (open) nextTick(updateSettingsPosition)
+  else playWhoosh()
+})
+
+onMounted(async () => {
+  if (roomId.value && playerId.value) {
+    await connect(roomId.value, playerId.value)
+    clearPendingRoomTarget()
+  }
+
+  await loadVoiceScheme('bingtang')
+
+  if (process.client) {
+    void preloadAllTiles()
+    evaluateViewport()
+    window.addEventListener('resize', evaluateViewport)
+    window.addEventListener('orientationchange', evaluateViewport)
+    window.addEventListener('pointerdown', handleGlobalPointerDown as EventListener)
+    window.addEventListener('mahjong-broadcast', ((event: CustomEvent) => {
+      const detail = event.detail
+      addBroadcast(detail.text, detail.type as BroadcastMsg['type'])
+    }) as EventListener)
+    actionWindowTimer = setInterval(() => {
+      nowTs.value = Date.now()
+    }, 250)
+  }
+})
+
+onUnmounted(() => {
+  disconnect()
+
+  if (process.client) {
+    window.removeEventListener('resize', evaluateViewport)
+    window.removeEventListener('orientationchange', evaluateViewport)
+    window.removeEventListener('pointerdown', handleGlobalPointerDown as EventListener)
+    if (actionWindowTimer) {
+      clearInterval(actionWindowTimer)
+      actionWindowTimer = null
+    }
+    stopTurnTimer()
+  }
+})
+
+const hesitationWindow = computed(() => Math.max(1000, Number(gameState.value?.hesitationWindow ?? 5000)))
+const currentFreezeUntil = computed(() => Number((gameState.value as any)?._freezeUntil ?? 0))
+const playerHand = computed(() => currentPlayer.value?.hand?.concealedTiles || [])
+const playerMelds = computed(() => currentPlayer.value?.hand?.exposedMelds || [])
+const topPlayer = computed(() => {
+  if (!gameState.value || currentPlayer.value?.position === undefined) return null
+  return gameState.value.players.find(player => player.position === (currentPlayer.value!.position + 2) % 4) || null
+})
+const leftPlayer = computed(() => {
+  if (!gameState.value || currentPlayer.value?.position === undefined) return null
+  return gameState.value.players.find(player => player.position === (currentPlayer.value!.position + 3) % 4) || null
+})
+const rightPlayer = computed(() => {
+  if (!gameState.value || currentPlayer.value?.position === undefined) return null
+  return gameState.value.players.find(player => player.position === (currentPlayer.value!.position + 1) % 4) || null
+})
+const globalLatestDiscardId = computed(() => {
+  const allDiscards = gameState.value?.discardPile || []
+  return allDiscards.length > 0 ? allDiscards[allDiscards.length - 1]?.id : null
+})
+const remainingTileCount = computed(() => gameState.value?.wall?.length || 0)
+const claimedDiscardIds = computed(() => collectClaimedDiscardIds(gameState.value?.players))
+const getVisiblePlayerDiscards = (player?: Player | null) => filterVisibleDiscards(player?.hand?.discardedTiles, claimedDiscardIds.value)
+const selfLatestDiscardId = computed(() => globalLatestDiscardId.value)
+const northLatestDiscardId = computed(() => globalLatestDiscardId.value)
+const westLatestDiscardId = computed(() => globalLatestDiscardId.value)
+const eastLatestDiscardId = computed(() => globalLatestDiscardId.value)
+const playerDiscards = computed(() => getVisiblePlayerDiscards(currentPlayer.value))
 const roundDisplay = computed(() => `第${currentRound.value}局`)
+const getDiceRoundMultiplier = (dice1: number, dice2: number) => {
+  const isDouble = dice1 === dice2
+  const isOneFourCombo = (dice1 === 1 && dice2 === 4) || (dice1 === 4 && dice2 === 1)
+
+  if (isDouble) {
+    if (dice1 === 1 || dice1 === 4) return 4
+    return 2
+  }
+  if (isOneFourCombo) return 2
+  return 1
+}
+const effectiveMaxRolls = computed(() => {
+  const raw = Number(gameState.value?.diceRollCount ?? route.query.dice ?? 1)
+  return Number.isFinite(raw) ? Math.max(1, Math.floor(raw)) : 1
+})
+const roundMultiplier = computed(() => {
+  const actualRound = Number(gameState.value?.roundMultiplier ?? 0)
+  if (actualRound > 0) return actualRound
+  if (showDiceOverlay.value && hasDicePreview.value) {
+    return getDiceRoundMultiplier(diceValues.value[0], diceValues.value[1])
+  }
+  return 1
+})
 const globalMultiplier = computed(() => {
   const game = gameState.value
   if (!game) return 1
@@ -871,6 +1253,10 @@ const globalMultiplier = computed(() => {
   }
 
   return game.globalMultiplier ?? inherit
+})
+const dealerName = computed(() => {
+  if (!gameState.value?.players?.length) return ''
+  return gameState.value.players.find(player => player.isDealer)?.name || ''
 })
 const wildTile = computed(() => {
   const raw = gameState.value?.customScoringMode
@@ -898,7 +1284,7 @@ const wildTile = computed(() => {
 
 // ---- Room Stats ----
 const positionColors = ['east', 'south', 'west', 'north']
-const claimSourceColors = ['#e53935', '#43a047', '#1e88e5', '#fb8c00']
+const claimSourceColors = ['#f44336', '#4caf50', '#2196f3', '#ffc107']
 const botAvatars = ['😎', '🤖', '🧠']
 
 // Track today's best hand (max wonFan) per room
@@ -990,6 +1376,31 @@ const statsPlayers = computed(() => {
       _raw: p, // 供战绩榜点击菜单使用
     }
   })
+})
+
+const spectatorViewState = computed(() => {
+  if (!gameState.value || !currentPlayer.value) return null
+  return gameState.value.spectatorViews?.[currentPlayer.value.id] || null
+})
+const spectatingId = computed(() => spectatorViewState.value?.viewingPlayerId || null)
+const pendingSpectateId = computed(() => spectatorViewState.value?.pendingHumanPlayerId || null)
+const approvedHumanSpectateId = computed(() => spectatorViewState.value?.approvedHumanPlayerId || null)
+const hasDebugSpectateBot = computed(() => {
+  return !!gameState.value?.players?.some((player: any) => player?.name === 'AI-AK')
+})
+const spectatorApprovalRequest = computed(() => {
+  if (!gameState.value || !currentPlayer.value) return null
+  return (gameState.value.spectatorApprovalRequests || []).find((request: any) =>
+    request.status === 'pending' && request.targetId === currentPlayer.value?.id
+  ) || null
+})
+const canUseSpectatorView = computed(() => {
+  if (!currentPlayer.value || !gameState.value) return false
+  if (gameState.value.phase !== GamePhase.PLAYING && gameState.value.phase !== GamePhase.ENDED) return false
+  return currentPlayer.value.status === 'won' || hasDebugSpectateBot.value
+})
+const showSpectatorControls = computed(() => {
+  return !!gameState.value?.players?.length
 })
 
 const handleSpectate = async (id: string) => {
@@ -1161,9 +1572,12 @@ const showApprovalOverlay = computed(() => false)
 const startNextRound = async () => { 
   showSettlement.value = false;
   try {
-    await startGame({ hesitationWindow: hesitationWindow.value });
-    await forceRefreshState();
-    console.log('[startNextRound] Game restarted, phase:', gameState.value?.phase);
+    if (isDealerUser.value) {
+      await onStartGame();
+    } else {
+      await forceRefreshState();
+    }
+    console.log('[startNextRound] Next round flow entered, phase:', gameState.value?.phase);
   } catch (e) {
     console.error('[startNextRound] Failed:', e);
   }
@@ -1218,19 +1632,6 @@ const playerResults = computed(() => {
       return a.name.localeCompare(b.name)
     })
 })
-const canStartGame = computed(() => {
-  // Debug log to see why button might not show
-  console.log('canStartGame check:', {
-    isDealer: isDealer.value,
-    phase: gameState.value?.phase,
-    playerCount: gameState.value?.players.length
-  })
-  
-  return isDealer.value && 
-         gameState.value?.phase === 'waiting' && 
-         (gameState.value?.players.length || 0) >= 2
-})
-
 // ---- Other Players State ----
 const northHand = computed(() => topPlayer.value?.hand.concealedTiles || []) // Will be empty/hidden by backend usually
 const northMelds = computed(() => topPlayer.value?.hand.exposedMelds || [])
@@ -1294,6 +1695,7 @@ const eastHand = computed(() => rightPlayer.value?.hand.concealedTiles || [])
 const eastMelds = computed(() => rightPlayer.value?.hand.exposedMelds || [])
 const eastDiscards = computed(() => getVisiblePlayerDiscards(rightPlayer.value))
 const eastIsWinner = computed(() => rightPlayer.value?.status === 'won')
+const isWinner = computed(() => currentPlayer.value?.status === 'won')
 
 // ---- 各家摸牌标记（手牌数 +1 → 最后一张为新摸的牌，3s 后清除） ----
 const northJustDrawnTileId = ref<string | null>(null)
@@ -1598,7 +2000,16 @@ function arrangeWinningHand(hand: any[], existingMelds: any[]): any[] {
 
 // 胡牌选项（从后端获取，含分数和牌型）
 const winOptions = ref<any[]>([])
+const lastHuReviewOptions = ref<any[]>([])
+const lastSelectedHuCombo = ref<number | null>(null)
+const isHuReviewMode = ref(false)
 const displayWinOptions = computed(() => [...winOptions.value].sort((a, b) => (b.summary?.finalPoints ?? b.score ?? 0) - (a.summary?.finalPoints ?? a.score ?? 0)).slice(0, 3))
+const activeHuOptions = computed(() => (isHuReviewMode.value ? lastHuReviewOptions.value : displayWinOptions.value))
+const canReviewHuSelection = computed(() => {
+  if (!showSettlement.value || !currentPlayer.value?.id) return false
+  const winners = Array.isArray(currentSettlementRound.value?.winnerDetails) ? currentSettlementRound.value.winnerDetails : []
+  return winners.some((winner: any) => winner.playerId === currentPlayer.value?.id) && lastHuReviewOptions.value.length > 0
+})
 const fetchWinOptions = async () => {
   try {
     const res = await $fetch<any>('/api/game/win-options', {
@@ -1625,6 +2036,7 @@ watch(() => [showHu.value, isMyTurn.value], ([canHu, myTurn]) => {
 const selectedHuCombo = ref<number | null>(null)
 const onHu = async () => {
   // 不管自摸还是捉冲，都弹面板
+  isHuReviewMode.value = false
   await fetchWinOptions()
   showHuPanel.value = true
   selectedHuCombo.value = 0
@@ -1633,12 +2045,22 @@ const onConfirmHu = (index: number) => {
   hideActionButtonsNow()
   resetAutoCount()
   playSound('tile-hu')
+  lastHuReviewOptions.value = displayWinOptions.value.map((option: any) => ({ ...option }))
+  lastSelectedHuCombo.value = index
+  isHuReviewMode.value = false
   showHuPanel.value = false
   executeAction(ActionType.HU, undefined, undefined, displayWinOptions.value[index]?.internalLabel || displayWinOptions.value[index]?.label)
 }
 const onCancelHu = () => {
   showHuPanel.value = false
-  selectedHuCombo.value = null
+  selectedHuCombo.value = isHuReviewMode.value ? lastSelectedHuCombo.value : null
+  isHuReviewMode.value = false
+}
+const openHuReviewPanel = () => {
+  if (!lastHuReviewOptions.value.length) return
+  isHuReviewMode.value = true
+  showHuPanel.value = true
+  selectedHuCombo.value = lastSelectedHuCombo.value ?? 0
 }
 
 // ===== 审批流程 =====
@@ -1879,11 +2301,9 @@ const formatSignedScore = (score: any): string => {
 }
 
 const formatWinnerTiles = (winner: any): string => {
-  const tileFaces = Array.isArray(winner?.tileFaces) ? winner.tileFaces.filter(Boolean) : []
-  if (tileFaces.length) return tileFaces.join(' ')
   const handTiles = Array.isArray(winner?.handTiles) ? winner.handTiles : []
   const exposedTiles = Array.isArray(winner?.exposedTiles) ? winner.exposedTiles : []
-  const tiles = [...handTiles, ...exposedTiles]
+  const tiles = [...handTiles, ...exposedTiles].filter((tile: any) => tile?.suit !== 'hua' && tile?.suit !== 'flower')
   if (tiles.length) return tiles.map(tileLabel).filter(Boolean).join(' ')
   return '-'
 }
@@ -1905,7 +2325,7 @@ const getRoundSettlementRows = (round: any) => {
       wild: winner ? (typeof winner.hasWild === 'boolean' ? (winner.hasWild ? '有' : '无') : '-') : '-',
       baseFan: winner?.baseFan ?? '-',
       finalPoints: winner?.finalPoints ?? '-',
-      winMode: winner ? (winner.discarderId ? '捉冲' : '自摸') : '-',
+      winMode: winner ? (winner.discarderId ? `捉冲-${winner.discarderName || '未知'}` : '自摸') : '-',
       score,
       scoreLabel: formatSignedScore(score)
     }
@@ -2275,9 +2695,19 @@ const onStartGame = async () => {
     showDiceOverlay.value = true
   } catch (err) {
     console.error('[onStartGame] Failed:', err)
+    autoStartRequested.value = false
   } finally {
     isGameStarting.value = false
   }
+}
+
+const onRerollDice = () => {
+  diceValues.value = [
+    Math.floor(Math.random() * 6) + 1,
+    Math.floor(Math.random() * 6) + 1
+  ]
+  hasDicePreview.value = true
+  playSound('dice-roll')
 }
 
 const onDealTiles = async () => {
@@ -2562,6 +2992,45 @@ watch(() => gameState.value, (newState, oldState) => {
   prevPhase.value = newState.phase
   prevWinnersCount.value = newState.winnersCount || 0
 }, { deep: true })
+
+watch(
+  () => gameState.value?.phase,
+  (phase) => {
+    if (phase === GamePhase.STARTING) {
+      if (!hasDicePreview.value) {
+        diceValues.value = [1, 1]
+      }
+      showDiceOverlay.value = true
+      return
+    }
+    if (phase !== GamePhase.STARTING) {
+      showDiceOverlay.value = false
+      hasDicePreview.value = false
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  () => ({
+    phase: gameState.value?.phase,
+    playerCount: gameState.value?.players.length || 0,
+    isDealer: !!currentPlayer.value?.isDealer,
+    isSpectator: !!currentPlayer.value?.isSpectator
+  }),
+  (state) => {
+    if (state.phase !== 'waiting') {
+      autoStartRequested.value = false
+      return
+    }
+    if (state.playerCount < 2 || !state.isDealer || state.isSpectator) return
+    if (autoStartRequested.value || isGameStarting.value || showDiceOverlay.value) return
+
+    autoStartRequested.value = true
+    onStartGame()
+  },
+  { deep: true, immediate: true }
+)
 
 // AI 接管检测（通过轮询检查 botModePlayers）
 const checkAITakeover = () => {
@@ -4664,6 +5133,16 @@ const forceDiscard = async (p: Player) => {
   box-shadow: 0 0 20px rgba(70, 197, 116, 0.4);
 }
 
+.settle-save-btn--secondary {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08));
+  color: #f5f0df;
+}
+
+.settle-save-btn--secondary:hover {
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.18);
+}
+
 /* AI 玩家操作卡片 */
 .ai-card-overlay {
   position: fixed;
@@ -5216,3 +5695,8 @@ const forceDiscard = async (p: Player) => {
 }
 
 </style>
+
+
+
+
+
