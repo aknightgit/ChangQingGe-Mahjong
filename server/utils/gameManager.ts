@@ -1321,7 +1321,7 @@ class GameManager {
     await this.hydrateFromDatabase();
     const game = await this.ensureGameLoaded(gameId);
     if (!game) throw new Error('Game not found');
-    if (game.phase !== GamePhase.WAITING && game.phase !== GamePhase.ENDED) return;
+    if (game.phase !== GamePhase.WAITING && game.phase !== GamePhase.ENDED && game.phase !== GamePhase.CHA_JIAO) return;
     if (game.players.length < 2) throw new Error('Need at least 2 players');
 
     game.endReason = null;

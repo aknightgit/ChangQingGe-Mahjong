@@ -1152,8 +1152,8 @@ onMounted(async () => {
     await connect(roomId.value, playerId.value)
     clearPendingRoomTarget()
   }
-
   await loadVoiceScheme('bingtang')
+  ensureBackgroundMusicInitialized()
 
   if (process.client) {
     void preloadAllTiles()
