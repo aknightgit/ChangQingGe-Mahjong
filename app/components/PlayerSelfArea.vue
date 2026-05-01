@@ -349,6 +349,7 @@ const onPointerCancel = () => {
 :deep(.claimed-tile--lower)::after { transform: translateX(-50%) rotate(-90deg); }
 :deep(.claimed-tile--opposite)::after { transform: translateX(-50%) rotate(180deg); }
 :deep(.claimed-tile--upper)::after { transform: translateX(-50%) rotate(90deg); }
+:deep(.claimed-tile--meld-arrow--self)::after { transform: translateX(-50%) rotate(0deg); }
 
 .bailout-warning {
   background: rgba(255, 152, 0, 0.2);
