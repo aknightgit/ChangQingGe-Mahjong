@@ -2166,15 +2166,21 @@ watch(
     () => gameState.value?.pendingActions,
     () => gameState.value?.availableActions,
     () => gameState.value?.hesitationWindow,
-    () => currentPlayer.value?.id
+    () => currentPlayer.value?.id,
+    () => isMyTurn.value  // 只在自己回合内且DRAW出现时才启动摸牌倒计时
   ],
   () => {
     const myId = currentPlayer.value?.id
     const pending = (gameState.value as any)?.pendingActions || []
     const mine = myId ? pending.find((pa: any) => pa.playerId === myId) : null
     const selfAvailableActions = availableActions.value || []
-    if (mine || selfAvailableActions.includes(ActionType.HU) || selfAvailableActions.includes(ActionType.DRAW)) {
-      actionButtonsVisibleUntil.value = mine?.expiresAt || Date.now() + getActionWindowMs(gameState.value)
+    const isMyDrawTurn = selfAvailableActions.includes(ActionType.DRAW) && isMyTurn.value
+    if (mine || selfAvailableActions.includes(ActionType.HU) || isMyDrawTurn) {
+      const newUntil = mine?.expiresAt || Date.now() + getActionWindowMs(gameState.value)
+      // 只设置更大的值（不重启已有的倒计时）
+      if (newUntil > actionButtonsVisibleUntil.value) {
+        actionButtonsVisibleUntil.value = newUntil
+      }
     } else {
       actionButtonsVisibleUntil.value = 0
     }
