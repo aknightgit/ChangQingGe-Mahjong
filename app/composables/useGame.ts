@@ -33,6 +33,11 @@ export const useGame = () => {
     return gameState.value.players.find(p => p.id === playerId.value)
   })
 
+  const currentRound = computed(() => {
+    const raw = Number(gameState.value?.currentRound ?? gameState.value?.roundNumber ?? 1)
+    return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 1
+  })
+
   const fetchGameState = async (gId: string, pId: string) => {
     try {
       const response = await $fetch('/api/game/state', {
@@ -187,7 +192,7 @@ export const useGame = () => {
       })
 
       // 牌局快讯广播
-      socket.value.on('broadcastMessage', (data: { id: number; text: string; type: string; timestamp: number; timeLabel: string }) => {
+      socket.value.on('broadcastMessage', (data: { id: number; text: string; type: string; timestamp: number; timeLabel: string; actionKind?: string }) => {
         console.log('📢 广播消息:', data)
         window.dispatchEvent(new CustomEvent('mahjong-broadcast', { detail: data }))
       })
@@ -367,6 +372,7 @@ export const useGame = () => {
 
   return {
     gameState,
+    currentRound,
     currentPlayer,
     tingPreview,
     availableActions,

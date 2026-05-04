@@ -111,24 +111,33 @@ const isConcealedMeld = (meld: Meld): boolean => {
   return meld.type === 'concealed_kong' || !!(meld as any).isConcealed
 }
 
-function getSourceArrowClass(sourcePosition: number): string {
-  const ownerPosition = props.ownerPosition ?? props.viewerPosition ?? 0
-  const relativePos = (sourcePosition - ownerPosition + 4) % 4
-  const classes = ['claimed-tile--from-self', 'claimed-tile--from-right', 'claimed-tile--from-opposite', 'claimed-tile--from-left']
-  return classes[relativePos] || 'claimed-tile--from-self'
+function getViewerRelativeSource(sourcePosition: number): number {
+  const viewerPosition = props.viewerPosition ?? props.ownerPosition ?? 0
+  return (sourcePosition - viewerPosition + 4) % 4
+}
+
+function getClaimArrowRotation(sourcePosition: number): number {
+  const relativePos = getViewerRelativeSource(sourcePosition)
+  const screenAngles: Record<number, number> = {
+    0: 0,
+    1: -90,
+    2: 180,
+    3: 90,
+  }
+  return screenAngles[relativePos] ?? 0
 }
 
 function getClaimMarkerClass(meld: Meld, tile: Tile): string[] {
   if (!meld.sourceTileId || meld.sourceTileId !== tile.id || meld.type === 'concealed_kong') return []
-  const tone = meld.sourcePosition !== undefined ? getSourceArrowClass(meld.sourcePosition) : 'claimed-tile--from-self'
-  return ['claimed-tile', tone]
+  return meld.sourcePosition !== undefined ? ['claimed-tile'] : []
 }
 
 function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   if (meld.sourcePosition === undefined) return {}
-  const viewerPosition = props.viewerPosition ?? props.ownerPosition ?? 0
-  const viewerRelativePos = (meld.sourcePosition - viewerPosition + 4) % 4
-  return { '--claim-source-color': colors.value[viewerRelativePos] || '#757575' }
+  return {
+    '--claim-source-color': colors.value[meld.sourcePosition] || '#757575',
+    '--claim-arrow-rotation': `${getClaimArrowRotation(meld.sourcePosition)}deg`,
+  }
 }
 
 function getPlayerIndex(playerId: string): number {
@@ -334,7 +343,7 @@ const onPointerCancel = () => {
   position: absolute;
   top: -4px;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) rotate(var(--claim-arrow-rotation, 0deg));
   width: 0;
   height: 0;
   border-left: 10px solid transparent;
@@ -343,11 +352,6 @@ const onPointerCancel = () => {
   filter: drop-shadow(0 0 3px rgba(0,0,0,0.42));
   z-index: 4;
 }
-
-:deep(.claimed-tile--from-right)::after { transform: translateX(-50%) rotate(-90deg); }
-:deep(.claimed-tile--from-opposite)::after { transform: translateX(-50%) rotate(0deg); }
-:deep(.claimed-tile--from-left)::after { transform: translateX(-50%) rotate(90deg); }
-:deep(.claimed-tile--from-self)::after { transform: translateX(-50%) rotate(180deg); }
 
 .bailout-warning {
   background: rgba(255, 152, 0, 0.2);

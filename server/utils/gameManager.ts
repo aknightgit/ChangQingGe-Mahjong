@@ -81,6 +81,7 @@ class GameManager {
     this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
       id: Date.now() + Math.floor(Math.random() * 1000),
       text: `🌸 ${player.name}补花`,
+      actionKind: 'flowerReplace',
       type: 'info',
       timestamp: Date.now(),
       timeLabel: formatBeijingTime()
@@ -93,6 +94,7 @@ class GameManager {
     this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
       id: Date.now() + Math.floor(Math.random() * 1000),
       text: `🀄 ${player.name}${label}后补牌`,
+      actionKind: 'kongSupplement',
       type: 'info',
       timestamp: Date.now(),
       timeLabel: formatBeijingTime()
@@ -122,6 +124,7 @@ class GameManager {
     const player = game.players.find(p => p.id === playerId);
     if (!player) return false;
     if (!game.pendingActions.some(pa => pa.playerId === playerId)) return false;
+    if (this.isChowOnlyPendingTurn(game, playerId)) return false;
     if (this.isDaDiaoReadyState(game, player)) return false;
     return this.canPlayerDrawOnCurrentTurn(game, player);
   }
@@ -1997,7 +2000,7 @@ class GameManager {
 
       case ActionType.DRAW:
         if (this.isChowOnlyPendingTurn(game, player.id)) {
-          game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
+          throw new Error('Must resolve chow decision before drawing');
         }
         // 【状态机修复】每回合最多摸一次，防同回合连续摸牌
         if (game.drawnThisTurn) {

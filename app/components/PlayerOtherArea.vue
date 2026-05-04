@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div
     class="player-other"
     :class="`player-other--${position}`"
@@ -209,23 +209,40 @@ const mainMelds = computed(() => props.melds.filter(meld => !isFlowerMeld(meld))
 
 const isConcealedMeld = (meld: Meld): boolean => meld.type === 'concealed_kong' || !!(meld as any).isConcealed
 
-function getSourceArrowClass(sourcePosition: number): string {
-  const ownerPosition = props.ownerPosition ?? props.viewerPosition ?? 0
-  const rel = (sourcePosition - ownerPosition + 4) % 4
-  return ['src--self', 'src--right', 'src--opposite', 'src--left'][rel] || 'src--self'
+const SEAT_ROTATION_BY_POSITION: Record<'top' | 'left' | 'right', number> = {
+  top: 180,
+  left: 90,
+  right: -90,
+}
+
+function getViewerRelativeSource(sourcePosition: number): number {
+  const viewerPosition = props.viewerPosition ?? props.ownerPosition ?? 0
+  return (sourcePosition - viewerPosition + 4) % 4
+}
+
+function getClaimArrowRotation(sourcePosition: number): number {
+  const rel = getViewerRelativeSource(sourcePosition)
+  const screenAngles: Record<number, number> = {
+    0: 0,
+    1: -90,
+    2: 180,
+    3: 90,
+  }
+  const seatRotation = SEAT_ROTATION_BY_POSITION[props.position] || 0
+  return (screenAngles[rel] ?? 0) - seatRotation
 }
 
 function getClaimMarkerClass(meld: Meld, tile: any): string[] {
   if (!meld.sourceTileId || meld.sourceTileId !== tile.id || meld.type === 'concealed_kong') return []
-  const tone = meld.sourcePosition !== undefined ? getSourceArrowClass(meld.sourcePosition) : 'src--self'
-  return ['claimed-tile', `claimed-tile--${tone}`]
+  return meld.sourcePosition !== undefined ? ['claimed-tile'] : []
 }
 
 function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   if (meld.sourcePosition === undefined) return {}
-  const viewerPosition = props.viewerPosition ?? props.ownerPosition ?? 0
-  const viewerRelativePos = (meld.sourcePosition - viewerPosition + 4) % 4
-  return { '--claim-source-color': colors.value[viewerRelativePos] || '#757575' }
+  return {
+    '--claim-source-color': colors.value[meld.sourcePosition] || '#757575',
+    '--claim-arrow-rotation': `${getClaimArrowRotation(meld.sourcePosition)}deg`,
+  }
 }
 </script>
 
@@ -412,7 +429,7 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   position: absolute;
   top: -4px;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) rotate(var(--claim-arrow-rotation, 0deg));
   width: 0;
   height: 0;
   border-left: 10px solid transparent;
@@ -420,22 +437,6 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   border-top: 20px solid var(--claim-source-color, rgba(255, 255, 255, 0.95));
   filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.42));
   z-index: 4;
-}
-
-.player-other :deep(.claimed-tile--src--self)::after {
-  transform: translateX(-50%) rotate(180deg);
-}
-
-.player-other :deep(.claimed-tile--src--right)::after {
-  transform: translateX(-50%) rotate(-90deg);
-}
-
-.player-other :deep(.claimed-tile--src--opposite)::after {
-  transform: translateX(-50%) rotate(0deg);
-}
-
-.player-other :deep(.claimed-tile--src--left)::after {
-  transform: translateX(-50%) rotate(90deg);
 }
 
 .player-other :deep(.tile) {

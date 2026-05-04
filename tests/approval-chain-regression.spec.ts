@@ -179,6 +179,39 @@ const events: any[] = [];
   test('确认杠牌后轮到杠牌者', game.currentPlayerIndex === 2);
 }
 
+// 用例4：已有 HU 倒计时不能被后续审批阶段重置
+{
+  const discard = tile('discard-9', TileSuit.DOTS, 9);
+  const discarder = player('discarder4', 0, []);
+  const chowRequester = player('requester4', 1, [tile('r8', TileSuit.DOTS, 8), tile('r10', TileSuit.DOTS, 1)]);
+  const huCandidate = player('hu4', 2, []);
+  const pengCandidate = player('peng4', 3, [tile('p9a', TileSuit.DOTS, 9), tile('p9b', TileSuit.DOTS, 9)]);
+  const game = baseGame([discarder, chowRequester, huCandidate, pengCandidate], discard);
+  const originalExpiresAt = Date.now() + 5000;
+  game.pendingActions = [{
+    playerId: huCandidate.id,
+    availableActions: [ActionType.HU, ActionType.PASS],
+    tile: discard,
+    expiresAt: originalExpiresAt
+  }];
+  (gameManager as any).games.set(game.gameId, game);
+
+  (gameManager as any).startApproval(
+    game,
+    chowRequester.id,
+    'chow',
+    [
+      { playerId: huCandidate.id, availableActions: ['hu'] },
+      { playerId: pengCandidate.id, availableActions: ['peng'] }
+    ],
+    discard,
+    ['r8', 'r10']
+  );
+
+  const huPending = game.pendingActions.find((pa: any) => pa.playerId === huCandidate.id);
+  test('已有 HU pending 的 expiresAt 不会被审批阶段重置', huPending?.expiresAt === originalExpiresAt, `expected=${originalExpiresAt}, actual=${huPending?.expiresAt}`);
+}
+
 console.log('\n==================================================');
 console.log(`测试结果: ${passed} 通过, ${failed} 失败`);
 if (failed > 0) {

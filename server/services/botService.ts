@@ -445,6 +445,14 @@ function hasOffSuitNumberWaste(hand: Tile[], committedSuit: TileSuit, excludeTil
   })
 }
 
+function countHonorSingletons(hand: Tile[], excludeTileId?: string): number {
+  const groups = groupTiles(hand)
+  return hand.filter(tile => {
+    if (tile.id === excludeTileId || !isHonor(tile)) return false
+    return (groups.get(`${tile.suit}-${tile.value}`)?.length || 0) === 1
+  }).length
+}
+
 function estimateOpponentThreat(opponent: Player, game: GameState): number {
   if (opponent.status !== PlayerStatus.PLAYING) return 0
 
@@ -1031,13 +1039,13 @@ export function selectDiscardTile(player: Player, game: GameState): string {
       ? winningTiles * waitWeight - discardDanger * safetyWeight
       : -Infinity
     let composite = -shanten * 100 + effective * 2.5 + score
+    const tilePairCount = hand.filter(other => tilesMatch(other, tile)).length
 
     if (openingHasWeakNumberWaste && isHonor(tile) && !hand.some(other => other.id !== tile.id && tilesMatch(other, tile))) {
       composite -= 10
     }
 
     if (committedOpenSuit) {
-      const tilePairCount = hand.filter(other => tilesMatch(other, tile)).length
       const hasOtherNumberSuitTiles = hand.some(other =>
         other.id !== tile.id &&
         isNumberTile(other) &&
@@ -1050,6 +1058,25 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         composite += tilePairCount >= 2 ? -1.2 : 1.2
       } else {
         composite += hasOtherNumberSuitTiles ? 34 : offSuitWasteExists ? 28 : 18
+      }
+    }
+
+    if (committedOpenSuit && isHonor(tile)) {
+      const visibleCopies = countVisibleCopies(tile, game)
+      const honorSingletons = countHonorSingletons(hand, tile.id)
+      const exposedMeldCount = player.hand.exposedMelds.length
+      const routeWantsCommittedSuit =
+        !!routeState &&
+        (
+          routeState.targetSuit === committedOpenSuit ||
+          routeState.current === 'OPEN_SPEED' ||
+          routeState.current === 'HALF_FLUSH'
+        )
+
+      if (tilePairCount <= 1 && exposedMeldCount >= 2 && routeWantsCommittedSuit) {
+        composite += 12 + visibleCopies * 6 + honorSingletons * 2.5
+      } else if (tilePairCount <= 1 && routeWantsCommittedSuit) {
+        composite += 5 + visibleCopies * 3
       }
     }
 

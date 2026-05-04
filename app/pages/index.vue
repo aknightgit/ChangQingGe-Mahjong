@@ -13,7 +13,8 @@
           type="button"
           class="mahjong-button primary"
           :disabled="isCreatingGame"
-          @click.stop="openCreateModal(0)"
+          @pointerup.stop.prevent="openCreateModal(0)"
+          @click.stop.prevent="openCreateModal(0)"
         >
           创建新局
         </button>

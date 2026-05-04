@@ -15,7 +15,7 @@ import { gameManager } from '../server/utils/gameManager';
 let passed = 0;
 let failed = 0;
 
-const BEFORE_DISCARD = new Set([2, 5, 8, 11, 14]);
+const BEFORE_DISCARD = new Set([2, 5, 8, 11, 12, 14]);
 // 用户消息里的 134 明显是 13 的笔误，这里按 13 校验。
 const AFTER_DISCARD = new Set([1, 4, 7, 10, 13]);
 
@@ -117,15 +117,24 @@ function game(players: Player[], wall: Tile[] = []): GameState {
 }
 
 function countRelevantConcealed(currentGame: GameState, currentPlayer: Player): number {
-  return currentPlayer.hand.concealedTiles.filter(t => {
+  const concealedCount = currentPlayer.hand.concealedTiles.filter(t => {
     if (t.suit !== TileSuit.FLOWER) return true;
     return (gameManager as any).isWildTile(currentGame, t);
   }).length;
+  const kongCount = currentPlayer.hand.exposedMelds.filter(meld =>
+    meld.type === MeldType.KONG || meld.type === MeldType.CONCEALED_KONG
+  ).length;
+  return concealedCount - kongCount;
 }
 
 function assertBeforeDiscard(label: string, currentGame: GameState, currentPlayer: Player) {
   const count = countRelevantConcealed(currentGame, currentPlayer);
   ok(`${label} -> before-discard count`, BEFORE_DISCARD.has(count), `got ${count}`);
+}
+
+function assertKongBeforeDiscard(label: string, currentGame: GameState, currentPlayer: Player) {
+  const count = countRelevantConcealed(currentGame, currentPlayer);
+  ok(`${label} -> kong-before-discard count`, count === 12, `got ${count}`);
 }
 
 function assertAfterDiscard(label: string, currentGame: GameState, currentPlayer: Player) {
@@ -262,6 +271,7 @@ await run('明杠补牌后落在 before-discard 集合', () => {
 
   (gameManager as any).executeKongDirectly(currentGame, p1, discard.id);
   ok('kong removes claimed tile from discarder discard area', !discarder.hand.discardedTiles.some(t => t.id === discard.id));
+  ok('ming kong adds supplement tile', p1.hand.concealedTiles.some(t => t.id === 'supplement'), `concealed=${p1.hand.concealedTiles.map(t => t.id).join(',')}`);
   ok('明杠后补牌仍标记为已摸牌', currentGame.drawnThisTurn === true, `drawn=${currentGame.drawnThisTurn}`);
   assertBeforeDiscard('明杠补牌', currentGame, p1);
   ok('明杠副露类型正确', p1.hand.exposedMelds[0]?.type === MeldType.KONG, `got ${String(p1.hand.exposedMelds[0]?.type)}`);
@@ -338,6 +348,7 @@ await run('暗杠补牌后落在 before-discard 集合', () => {
   const currentGame = game([p1], [tile(TileSuit.BAMBOOS, 9, 'supplement')]);
 
   (gameManager as any).handleConcealedKong(currentGame, p1, kongTiles.map(t => t.id));
+  ok('concealed kong adds supplement tile', p1.hand.concealedTiles.some(t => t.id === 'supplement'), `concealed=${p1.hand.concealedTiles.map(t => t.id).join(',')}`);
   assertBeforeDiscard('暗杠补牌', currentGame, p1);
 });
 
@@ -385,6 +396,7 @@ await run('补杠补牌后落在 before-discard 集合', () => {
   const currentGame = game([p1], [tile(TileSuit.BAMBOOS, 9, 'supplement')]);
 
   (gameManager as any).completeExtendedKong(currentGame, p1, tile(TileSuit.CHARACTERS, 9, 'fourth'));
+  ok('extended kong adds supplement tile', p1.hand.concealedTiles.some(t => t.id === 'supplement'), `concealed=${p1.hand.concealedTiles.map(t => t.id).join(',')}`);
   assertBeforeDiscard('补杠补牌', currentGame, p1);
 });
 
@@ -435,7 +447,7 @@ await run('吃窗口开启后摸牌与吃牌同时可用', async () => {
     const actions = await gameManager.getAvailableActions(currentGame.gameId, claimer.id);
     ok('current player can still chow during hesitation window', actions.includes(ActionType.CHOW), `actions=${actions.join(',')}`);
     ok('current player can still pass during hesitation window', actions.includes(ActionType.PASS), `actions=${actions.join(',')}`);
-    ok('current player can also draw during hesitation window', actions.includes(ActionType.DRAW), `actions=${actions.join(',')}`);
+    ok('current player cannot draw during chow hesitation window', !actions.includes(ActionType.DRAW), `actions=${actions.join(',')}`);
 
     (gameManager as any).handlePass(currentGame, claimer);
     const afterPass = await gameManager.getAvailableActions(currentGame.gameId, claimer.id);

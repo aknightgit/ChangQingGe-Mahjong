@@ -1592,6 +1592,7 @@ export function checkChowPongExclusion(
 ): boolean {
   if (!state.firstActionSuit || !state.firstActionType) return true;  // 无→自由
 
+  if (tileSuit === 'feng' || tileSuit === 'jian') return true;
   const isSameSuit = tileSuit === state.firstActionSuit;
 
   switch (state.firstActionType) {

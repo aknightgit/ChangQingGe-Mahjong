@@ -97,15 +97,21 @@ const game = {
 
 ;(gameManager as any).games.set(game.gameId, game)
 
-await gameManager.executeAction(game.gameId, player.id, ActionType.DRAW)
+let threw = false
+try {
+  await gameManager.executeAction(game.gameId, player.id, ActionType.DRAW)
+} catch {
+  threw = true
+}
 
 const liveGame = await gameManager.getGame(game.gameId)
 const actions = await gameManager.getAvailableActions(game.gameId, player.id)
 
-test('draw clears chow-only pending action', (liveGame?.pendingActions?.length ?? 0) === 0, `pending=${liveGame?.pendingActions?.length ?? -1}`)
-test('player is in discard state after draw', liveGame?.drawnThisTurn === true)
-test('available actions no longer keep chow alive', !actions.includes(ActionType.CHOW), `actions=${actions.join(',')}`)
-test('available actions allow discard after draw', actions.includes(ActionType.DISCARD), `actions=${actions.join(',')}`)
+test('draw is rejected while chow-only pending action exists', threw)
+test('chow-only pending action remains until player responds', (liveGame?.pendingActions?.length ?? 0) === 1, `pending=${liveGame?.pendingActions?.length ?? -1}`)
+test('player is not marked as having drawn', liveGame?.drawnThisTurn === false)
+test('available actions still include chow', actions.includes(ActionType.CHOW), `actions=${actions.join(',')}`)
+test('available actions do not expose draw during chow window', !actions.includes(ActionType.DRAW), `actions=${actions.join(',')}`)
 
 console.log(`\nResult: ${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)

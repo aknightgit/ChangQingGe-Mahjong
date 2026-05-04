@@ -1140,10 +1140,34 @@ const isOpponentHandRevealed = (player?: Player | null) => {
 }
 
 const hiddenHandCache = new Map<string, Tile[]>()
+const stableArrayCache = new Map<string, { signature: string; value: any[] }>()
+
+const reuseStableArray = <T>(cacheKey: string, signature: string, createValue: () => T[]): T[] => {
+  const cached = stableArrayCache.get(cacheKey)
+  if (cached && cached.signature === signature) return cached.value as T[]
+  const nextValue = createValue()
+  stableArrayCache.set(cacheKey, { signature, value: nextValue as any[] })
+  return nextValue
+}
+
+const tileIdSignature = (tiles: Tile[] | undefined | null): string => (tiles || []).map(tile => tile?.id || '').join('|')
+const meldSignature = (melds: Meld[] | undefined | null): string => (melds || [])
+  .map(meld => [
+    meld?.type || '',
+    meld?.sourceTileId || '',
+    meld?.sourcePosition ?? '',
+    (meld as any)?.replacementDone ? '1' : '0',
+    (meld as any)?.isConcealed ? '1' : '0',
+    tileIdSignature(meld?.tiles as Tile[] | undefined)
+  ].join(':'))
+  .join('|')
+
 const getStableOpponentHand = (player?: Player | null): Tile[] => {
   if (!player) return []
   const hand = player.hand?.concealedTiles || []
-  if (isOpponentHandRevealed(player)) return hand
+  if (isOpponentHandRevealed(player)) {
+    return reuseStableArray(`revealed-hand:${player.id}`, tileIdSignature(hand), () => hand)
+  }
   const cacheKey = `${player.id}:${hand.length}`
   const cached = hiddenHandCache.get(cacheKey)
   if (cached) return cached
@@ -1242,7 +1266,16 @@ const globalLatestDiscardId = computed(() => {
 })
 const remainingTileCount = computed(() => gameState.value?.wall?.length || 0)
 const claimedDiscardIds = computed(() => collectClaimedDiscardIds(gameState.value?.players))
-const getVisiblePlayerDiscards = (player?: Player | null) => filterVisibleDiscards(player?.hand?.discardedTiles, claimedDiscardIds.value)
+const getStablePlayerMelds = (player?: Player | null): Meld[] => {
+  if (!player) return []
+  const melds = player.hand?.exposedMelds || []
+  return reuseStableArray(`melds:${player.id}`, meldSignature(melds), () => melds)
+}
+const getVisiblePlayerDiscards = (player?: Player | null) => {
+  if (!player) return []
+  const visible = filterVisibleDiscards(player.hand?.discardedTiles, claimedDiscardIds.value)
+  return reuseStableArray(`discards:${player.id}`, tileIdSignature(visible), () => visible)
+}
 const selfLatestDiscardId = computed(() => globalLatestDiscardId.value)
 const northLatestDiscardId = computed(() => globalLatestDiscardId.value)
 const westLatestDiscardId = computed(() => globalLatestDiscardId.value)
@@ -1318,7 +1351,9 @@ const wildTile = computed(() => {
 
 // ---- Room Stats ----
 const positionColors = ['east', 'south', 'west', 'north']
-const claimSourceColors = ['#4caf50', '#f44336', '#ffc107', '#2196f3']
+// 按 position 顺序：0(东)=红, 1(南)=绿, 2(西)=蓝, 3(北)=黄
+// 与 PlayerInfo.vue 的 dot--east/south/west/north 颜色保持一致
+const claimSourceColors = ['#f44336', '#4caf50', '#2196f3', '#ffc107']
 const botAvatars = ['😎', '🤖', '🧠']
 
 // Track today's best hand (max wonFan) per room
@@ -1720,7 +1755,7 @@ const playerResults = computed(() => {
 })
 // ---- Other Players State ----
 const northHand = computed(() => getStableOpponentHand(topPlayer.value))
-const northMelds = computed(() => topPlayer.value?.hand.exposedMelds || [])
+const northMelds = computed(() => getStablePlayerMelds(topPlayer.value))
 const northDiscards = computed(() => getVisiblePlayerDiscards(topPlayer.value))
 const northIsWinner = computed(() => topPlayer.value?.status === 'won')
 
@@ -1773,12 +1808,12 @@ const turnMessage = computed(() => {
 })
 
 const westHand = computed(() => getStableOpponentHand(leftPlayer.value))
-const westMelds = computed(() => leftPlayer.value?.hand.exposedMelds || [])
+const westMelds = computed(() => getStablePlayerMelds(leftPlayer.value))
 const westDiscards = computed(() => getVisiblePlayerDiscards(leftPlayer.value))
 const westIsWinner = computed(() => leftPlayer.value?.status === 'won')
 
 const eastHand = computed(() => getStableOpponentHand(rightPlayer.value))
-const eastMelds = computed(() => rightPlayer.value?.hand.exposedMelds || [])
+const eastMelds = computed(() => getStablePlayerMelds(rightPlayer.value))
 const eastDiscards = computed(() => getVisiblePlayerDiscards(rightPlayer.value))
 const eastIsWinner = computed(() => rightPlayer.value?.status === 'won')
 const isWinner = computed(() => currentPlayer.value?.status === 'won')
@@ -1788,6 +1823,7 @@ const northJustDrawnTileId = ref<string | null>(null)
 const westJustDrawnTileId = ref<string | null>(null)
 const eastJustDrawnTileId = ref<string | null>(null)
 const selfJustDrawnTileId = ref<string | null>(null)
+const selfPendingSupplementHighlight = ref(false)
 
 let selfDrawnTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -1796,16 +1832,19 @@ function trackDrawnTile(
   prevLen: { value: number },
   prevIds: { value: string[] },
   drawIdRef: { value: string | null },
-  timerRef: { get: () => ReturnType<typeof setTimeout> | null; set: (v: ReturnType<typeof setTimeout> | null) => void }
+  timerRef: { get: () => ReturnType<typeof setTimeout> | null; set: (v: ReturnType<typeof setTimeout> | null) => void },
+  options?: { forceNextNewTile?: { value: boolean } }
 ) {
   const previousIds = new Set(prevIds.value)
-  if (hand.length === prevLen.value + 1) {
-    const newTile = hand.find(tile => tile?.id && !previousIds.has(tile.id))
-    if (newTile?.id && newTile?.suit !== 'hua' && !newTile?.isFlower) {
-      drawIdRef.value = newTile.id
-      if (timerRef.get()) clearTimeout(timerRef.get()!)
-      timerRef.set(setTimeout(() => { drawIdRef.value = null }, 3000))
-    }
+  const newTile = hand.find(tile => tile?.id && !previousIds.has(tile.id))
+  const shouldHighlightNormalDraw = hand.length === prevLen.value + 1
+  const shouldHighlightSupplement = !!options?.forceNextNewTile?.value && !!newTile
+
+  if ((shouldHighlightNormalDraw || shouldHighlightSupplement) && newTile?.id && newTile?.suit !== 'hua' && !newTile?.isFlower) {
+    drawIdRef.value = newTile.id
+    if (timerRef.get()) clearTimeout(timerRef.get()!)
+    timerRef.set(setTimeout(() => { drawIdRef.value = null }, 3000))
+    if (options?.forceNextNewTile) options.forceNextNewTile.value = false
   }
   prevLen.value = hand.length
   prevIds.value = hand.map(tile => tile?.id).filter(Boolean)
@@ -1835,7 +1874,14 @@ watch(eastHand, (h) => {
   eastPrevHandIds.value = h.map(tile => tile?.id).filter(Boolean)
   eastJustDrawnTileId.value = null
 })
-watch(playerHand, (h) => trackDrawnTile(h, selfPrevHandLen, selfPrevHandIds, selfJustDrawnTileId, { get: () => selfDrawnTimer, set: (v) => { selfDrawnTimer = v } }))
+watch(playerHand, (h) => trackDrawnTile(
+  h,
+  selfPrevHandLen,
+  selfPrevHandIds,
+  selfJustDrawnTileId,
+  { get: () => selfDrawnTimer, set: (v) => { selfDrawnTimer = v } },
+  { forceNextNewTile: selfPendingSupplementHighlight }
+))
 
 // ---- Interaction ----
 const selectedTileId = ref<string | null>(null)
@@ -2399,7 +2445,13 @@ const onCancelChowPicker = () => {
   selectedChowOption.value = null
 }
 const onPeng = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-pong'); playVoiceAction('pong'); executeAction(ActionType.PENG) }
-const onKong = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-kong'); executeAction(ActionType.KONG) }
+const onKong = () => {
+  hideActionButtonsNow()
+  resetAutoCount()
+  selfPendingSupplementHighlight.value = true
+  playSound('tile-kong')
+  executeAction(ActionType.KONG)
+}
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); executeAction(ActionType.REBEL) }
 const onThink = () => { resetAutoCount(); executeAction(ActionType.THINK) }
 const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); executeAction(ActionType.CHEAT_HU) }
@@ -2755,6 +2807,7 @@ const onConcealedKong = () => {
     const group = counts[key]
     if (group && group.length === 4) {
       playSound('kong-draw')
+      selfPendingSupplementHighlight.value = true
       executeAction(ActionType.CONCEALED_KONG, undefined, group.map(t => t.id))
       return
     }
@@ -2772,6 +2825,7 @@ const onExtendedKong = () => {
       )
       if (match) {
         playSound('kong-draw')
+        selfPendingSupplementHighlight.value = true
         executeAction(ActionType.EXTENDED_KONG, match.id)
         return
       }
@@ -2971,13 +3025,21 @@ const checkOtherPlayerSounds = (newState: any) => {
     const replacedFlowerMelds = getReplacedFlowerMelds(player)
     const replacedFlowerCount = replacedFlowerMelds.length
     if (prev) {
+      if (player.id !== playerId.value && replacedFlowerCount > prev.replacedFlowerCount) {
+        playSound('tile-draw')
+        playVoiceAction('flowerReplace')
+      }
       if (player.id !== playerId.value && meldCount > prev.meldCount) {
         const newMelds = (player.hand?.exposedMelds || []).slice(prev.meldCount)
         for (const m of newMelds) {
-          if (m.type === 'kong' || m.tiles?.length === 4) {
+          const firstTile = m.tiles?.[0]
+          const isFlowerReplacementMeld = m.tiles?.length === 1 && firstTile?.suit === 'hua'
+          if (isFlowerReplacementMeld) {
+            continue
+          } else if (m.type === 'kong' || m.tiles?.length === 4) {
             playSound('tile-kong')
             playVoiceAction('kong')
-          } else if (m.type === 'triplet' || m.tiles?.length === 3) {
+          } else if (m.type === 'triplet') {
             playSound('tile-pong')
             playVoiceAction('pong')
           } else {

@@ -209,6 +209,35 @@ const chineseNum = computed(() => {
   user-select: none;
   overflow: hidden;
   position: relative;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+@keyframes tile-gold-pulse {
+  0% {
+    box-shadow:
+      inset 0 0 0 2px rgba(255, 214, 64, 0.92),
+      0 0 0 1px rgba(255, 241, 160, 0.65),
+      0 0 16px rgba(255, 193, 7, 0.5),
+      0 0 26px rgba(255, 214, 64, 0.28);
+    filter: saturate(1);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 3px rgba(255, 224, 102, 1),
+      0 0 0 2px rgba(255, 248, 196, 0.85),
+      0 0 22px rgba(255, 214, 64, 0.72),
+      0 0 34px rgba(255, 193, 7, 0.42);
+    filter: saturate(1.08) brightness(1.04);
+  }
+  100% {
+    box-shadow:
+      inset 0 0 0 2px rgba(255, 214, 64, 0.92),
+      0 0 0 1px rgba(255, 241, 160, 0.65),
+      0 0 16px rgba(255, 193, 7, 0.5),
+      0 0 26px rgba(255, 214, 64, 0.28);
+    filter: saturate(1);
+  }
 }
 
 .tile--small {
@@ -505,12 +534,27 @@ const chineseNum = computed(() => {
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
 }
 .tile--just-drawn {
-  border-color: #ffc107;
-  box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.7);
+  border-color: #ffd54f;
+  background:
+    linear-gradient(180deg, rgba(255, 245, 196, 0.26), rgba(255, 214, 64, 0.08)),
+    transparent;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 214, 64, 0.92),
+    0 0 0 1px rgba(255, 241, 160, 0.65),
+    0 0 16px rgba(255, 193, 7, 0.5),
+    0 0 26px rgba(255, 214, 64, 0.28);
+  animation: tile-gold-pulse 1.15s ease-in-out infinite;
 }
 .tile--claim {
-  border-color: #ff9800;
-  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.7);
+  border-color: #ffca28;
+  background:
+    linear-gradient(180deg, rgba(255, 243, 205, 0.22), rgba(255, 202, 40, 0.08)),
+    transparent;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 202, 40, 0.9),
+    0 0 0 1px rgba(255, 236, 179, 0.56),
+    0 0 14px rgba(255, 193, 7, 0.44),
+    0 0 22px rgba(255, 202, 40, 0.24);
 }
 .tile--dimmed {
   opacity: 0.4;
