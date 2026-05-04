@@ -1524,7 +1524,9 @@ const wildTile = computed(() => {
 
 // ---- Room Stats ----
 const positionColors = ['east', 'south', 'west', 'north']
-const claimSourceColors = ['#e53935', '#43a047', '#1e88e5', '#fb8c00']
+// 按 position 顺序：0(东)=红, 1(南)=绿, 2(西)=蓝, 3(北)=黄
+// 与 PlayerInfo.vue 的 dot--east/south/west/north 颜色保持一致
+const claimSourceColors = ['#f44336', '#4caf50', '#2196f3', '#ffc107']
 const botAvatars = ['😎', '🤖', '🧠']
 
 // Track today's best hand (max wonFan) per room

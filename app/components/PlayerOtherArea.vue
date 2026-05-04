@@ -236,6 +236,34 @@ function getSourceLabel(sourcePosition: number): string {
   return ['', '下', '对', '上'][rel] || ''
 }
 
+// 视角旋转偏移：根据 UI position 叠加
+// 底部视角：下家(rel=1)→指向右(-90°)，对家(rel=2)→指向上(180°)，上家(rel=3)→指向左(90°)
+// top(旋转180°)：+180°; left(旋转90°)：+90°; right(旋转-90°)：+270°(-90°)
+const POSITION_ROTATION_OFFSET: Record<string, number> = {
+  top: 180,
+  left: 90,
+  right: -90,
+}
+
+/**
+ * 获取箭头在牌自身坐标系中的旋转角度（deg）
+ * baseRotation: 底部视角下 rel方向对应三角形指向角度
+ *   0°=朝下, 90°=朝左, 180°=朝上, -90°=朝右
+ *   rel=1(下家)→指向右=-90°, rel=2(对家)→指向上=180°, rel=3(上家)→指向左=90°
+ * 然后叠加当前 UI position 的视角偏移
+ */
+function getClaimArrowRotation(sourcePosition: number): number {
+  const rel = getRelativeSource(sourcePosition)
+  // base: 0=自己(不显示箭头), 1=下家→-90°, 2=对家→180°, 3=上家→90°
+  const baseAngles: Record<number, number> = { 1: -90, 2: 180, 3: 90 }
+  const base = baseAngles[rel]
+  if (base === undefined) return 0
+
+  // 叠加 UI position 视角偏移
+  const offset = POSITION_ROTATION_OFFSET[props.position] || 0
+  return base + offset
+}
+
 function getSourceArrowClass(sourcePosition: number): string {
   const rel = getRelativeSource(sourcePosition)
   return ['src--lower', 'src--opposite', 'src--upper'][rel - 1] || 'src--opposite'
@@ -256,7 +284,10 @@ function getClaimMarkerClass(meld: Meld, tile: any): string[] {
 
 function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   return meld.sourcePosition !== undefined
-    ? { '--claim-source-color': colors.value[meld.sourcePosition] || '#757575' }
+    ? {
+        '--claim-source-color': colors.value[meld.sourcePosition] || '#757575',
+        '--claim-arrow-rotation': `${getClaimArrowRotation(meld.sourcePosition)}deg`,
+      }
     : {}
 }
 </script>
@@ -474,7 +505,8 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   position: absolute;
   top: -4px;
   left: 50%;
-  transform: translateX(-50%);
+  /* 旋转角度由 JS 通过 --claim-arrow-rotation 动态计算（已包含 base 方向 + 视角偏移） */
+  transform: translateX(-50%) rotate(var(--claim-arrow-rotation, 0deg));
   width: 0;
   height: 0;
   border-left: 10px solid transparent;
@@ -482,18 +514,6 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   border-top: 20px solid var(--claim-source-color, rgba(255, 255, 255, 0.95));
   filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.42));
   z-index: 4;
-}
-
-.player-other :deep(.claimed-tile--src--lower)::after {
-  transform: translateX(-50%) rotate(-90deg);
-}
-
-.player-other :deep(.claimed-tile--src--opposite)::after {
-  transform: translateX(-50%) rotate(180deg);
-}
-
-.player-other :deep(.claimed-tile--src--upper)::after {
-  transform: translateX(-50%) rotate(90deg);
 }
 
 .player-other :deep(.tile) {
