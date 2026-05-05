@@ -813,6 +813,9 @@ const logout = () => {
   justify-content: center;
   z-index: 9999;
   backdrop-filter: blur(4px);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .create-modal {
@@ -822,7 +825,13 @@ const logout = () => {
   padding: 32px;
   width: 640px;
   max-width: 95vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
 }
 
 .create-title {
@@ -837,22 +846,45 @@ const logout = () => {
 .create-modal-body {
   display: flex;
   gap: 20px;
+  flex-shrink: 0;
+  overflow-y: visible;
 }
 
 .create-modal-left,
 .create-modal-right {
   flex: 1;
   min-width: 0;
+  padding-bottom: 4px;
 }
 
 @media (max-width: 600px) {
   .create-modal {
     width: 95vw;
     padding: 20px;
+    padding-bottom: 100px; /* space for sticky confirm button on small screens */
   }
 
   .create-modal-body {
     flex-direction: column;
+    overflow-y: auto;
+  }
+}
+
+/* Sticky confirm button — stays visible at bottom on small screens */
+@media (max-width: 600px) {
+  .create-actions {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, #0d1f17 80%, transparent);
+    padding: 16px 20px;
+    margin: 0 -20px -20px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    gap: 12px;
+    z-index: 10;
+    -webkit-backdrop-filter: blur(8px);
   }
 }
 

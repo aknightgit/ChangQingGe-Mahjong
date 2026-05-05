@@ -37,6 +37,8 @@
 </template>
 
 <script setup>
+const runtimeConfig = useRuntimeConfig()
+
 const props = defineProps({
   error: {
     type: Object,
@@ -47,7 +49,7 @@ const props = defineProps({
 const is404 = computed(() => props.error?.statusCode === 404)
 
 const goHome = () => {
-  return clearError({ redirect: '/' })
+  return clearError({ redirect: runtimeConfig.app.baseURL || '/' })
 }
 </script>
 

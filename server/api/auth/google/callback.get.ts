@@ -2,6 +2,7 @@ import { getCollection } from '../../../utils/mongo'
 import type { User } from '../../../types/database'
 import { randomUUID } from 'crypto'
 import { setCookie } from 'h3'
+import { joinURL } from 'ufo'
 
 interface GoogleUserPayload {
   sub: string
@@ -19,6 +20,7 @@ interface GoogleUserPayload {
  */
 export default defineEventHandler(async (event) => {
   try {
+    const runtimeConfig = useRuntimeConfig(event)
     const query = getQuery(event)
     const code = query.code as string
 
@@ -103,7 +105,7 @@ export default defineEventHandler(async (event) => {
     setCookie(event, 'user_name', user.name, { path: '/', maxAge: 60 * 60 * 24 * 7 })
     setCookie(event, 'is_admin', user.isAdmin ? 'true' : 'false', { path: '/', maxAge: 60 * 60 * 24 * 7 })
 
-    return sendRedirect(event, '/', 302)
+    return sendRedirect(event, joinURL(runtimeConfig.app.baseURL || '/', '/'), 302)
   } catch (error: any) {
     console.error('Google OAuth Callback Error:', error)
     throw createError({

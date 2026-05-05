@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Allow cleartext HTTP for the ngrok/vicp tunneling domain -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">vicp.fun</domain>
+        <domain includeSubdomains="true">ngrok.io</domain>
+    </domain-config>
+    <!-- Also allow for local development -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.0.0</domain>
+        <domain includeSubdomains="true">192.168.0.0</domain>
+    </domain-config>
+</network-security-config>
