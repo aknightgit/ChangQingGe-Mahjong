@@ -12,9 +12,7 @@
         <button
           type="button"
           class="mahjong-button primary"
-          :disabled="isCreatingGame"
-          @pointerup.stop.prevent="openCreateModal(0)"
-          @click.stop.prevent="openCreateModal(0)"
+          @click="navigateTo('/create-room')"
         >
           创建新局
         </button>
@@ -175,133 +173,7 @@
       </template>
     </UModal>
 
-    <!-- 创建房间参数配置弹窗 -->
-      <div v-if="showCreateModal" class="create-overlay" @click.self="showCreateModal = false">
-        <div class="create-modal" @click.stop>
-          <h2 class="create-title">🀄 创建牌局</h2>
 
-          <div class="create-modal-body">
-            <!-- 左栏：基础设置 + 特殊玩法 -->
-            <div class="create-modal-left">
-              <!-- 基础设置 -->
-              <div class="param-group">
-                <h3 class="param-group-title">⚙️ 基础设置</h3>
-
-                <div class="create-field">
-                  <div class="field-header">
-                    <label>结算膨胀倍数</label>
-                    <button class="help-btn" @click="toggleHelp('settle')">?</button>
-                  </div>
-                  <input type="number" v-model.number="createParams.settlementMultiplier" min="1" max="10" />
-                  <span v-if="activeHelp === 'settle'" class="help-bubble">最终结算时，所有分数额外乘以此倍数。增大数字增加刺激感。默认10倍。</span>
-                </div>
-
-                <div class="create-field">
-                  <div class="field-header">
-                    <label>掷骰子次数</label>
-                    <button class="help-btn" @click="toggleHelp('dice')">?</button>
-                  </div>
-                  <input type="number" v-model.number="createParams.maxDiceRolls" min="1" max="10" />
-                  <span v-if="activeHelp === 'dice'" class="help-bubble">决定发牌起始位置。庄家可掷骰1~N次，取最终结果。影响从牌墙哪个位置开始摸牌。</span>
-                </div>
-
-                <div class="create-field">
-                  <div class="field-header">
-                    <label>决策犹豫期（秒）</label>
-                    <button class="help-btn" @click="toggleHelp('hesitation')">?</button>
-                  </div>
-                  <input type="number" v-model.number="createParams.hesitationSeconds" min="0.5" max="10" step="0.5" />
-                  <span v-if="activeHelp === 'hesitation'" class="help-bubble">上家打出牌后，所有玩家做吃/碰/杠/胡决策的时间窗口。默认5秒。</span>
-                </div>
-
-                <div class="create-field create-field--checkbox">
-                  <label class="checkbox-label">
-                    <input type="checkbox" v-model="createParams.firstRoundDouble" />
-                    <span>首局翻倍</span>
-                    <button class="help-btn help-btn--inline" @click="toggleHelp('double')">?</button>
-                  </label>
-                  <span v-if="activeHelp === 'double'" class="help-bubble">今天第一局全局倍数 ×2，增加开局刺激感。默认开启。</span>
-                </div>
-              </div>
-
-              <!-- 特殊玩法 -->
-              <div class="param-group">
-                <h3 class="param-group-title">🔥 特殊玩法</h3>
-
-                <div class="create-field">
-                  <div class="field-header">
-                    <label>被聚义QJ线</label>
-                    <button class="help-btn" @click="toggleHelp('qj')">?</button>
-                  </div>
-                  <input type="number" v-model.number="createParams.liangShanThreshold" min="0" max="99999" step="100" />
-                  <span v-if="activeHelp === 'qj'" class="help-bubble">累积赢分（已乘膨胀倍数）超过此值的玩家，在「梁山聚义」投票时无否决权，自动视为同意。仅4人真人局生效。默认4000。</span>
-                </div>
-
-                <div class="create-field">
-                  <div class="field-header">
-                    <label>等我想一想 次数</label>
-                    <button class="help-btn" @click="toggleHelp('think')">?</button>
-                  </div>
-                  <input type="number" v-model.number="createParams.thinkChances" min="0" max="10" />
-                  <span v-if="activeHelp === 'think'" class="help-bubble">有吃/碰/杠/胡选项时，可用「慢」按钮让所有对手进入决策犹豫期。每局限N次，默认3次。用完变灰。</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 右栏：AI玩家 -->
-            <div class="create-modal-right">
-              <div class="param-group">
-                <h3 class="param-group-title">🤖 AI玩家</h3>
-                <div class="create-field">
-                  <label>AI玩家上限</label>
-                  <select v-model.number="createParams.maxBots">
-                    <option :value="0">0 - 禁止AI加入</option>
-                    <option :value="1">1个</option>
-                    <option :value="2">2个</option>
-                    <option :value="3">3个（默认）</option>
-                  </select>
-                </div>
-                <button v-if="createParams.maxBots > 0" class="ai-toggle-btn" @click="showAISelection = !showAISelection">
-                  {{ showAISelection ? '▼ 收起' : '▶ 选择AI玩家' }}
-                  <span v-if="selectedBots.length" class="ai-count-badge">{{ selectedBots.length }}/3</span>
-                </button>
-                <div v-if="showAISelection" class="ai-select-list">
-                  <label
-                    v-for="bot in allAIBots"
-                    :key="bot.id"
-                    class="ai-select-item"
-                    :class="{ 'ai-select-item--active': selectedBots.includes(bot.id) }"
-                  >
-                    <input
-                      type="checkbox"
-                      :value="bot.id"
-                      v-model="selectedBots"
-                      :disabled="!selectedBots.includes(bot.id) && selectedBots.length >= 3"
-                    />
-                    <span class="ai-select-name">{{ bot.name }}</span>
-                    <span class="ai-select-desc">{{ bot.desc }}</span>
-                  </label>
-                </div>
-                <span class="create-hint" v-if="selectedBots.length > 0">
-                  已选 {{ selectedBots.length }} 个AI，还需 {{ 4 - selectedBots.length - 1 }} 位真人
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div class="create-actions">
-            <button class="create-btn create-btn--cancel" @click="showCreateModal = false">取消</button>
-            <button
-              type="button"
-              class="create-btn create-btn--start"
-              :disabled="isCreatingGame"
-              @click="confirmCreateGame"
-            >
-              {{ isCreatingGame ? '创建中...' : '创建新局' }}
-            </button>
-          </div>
-        </div>
-      </div>
   </div>
 </template>
 
