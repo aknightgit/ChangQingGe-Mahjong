@@ -17,6 +17,7 @@
     "@capacitor/android": "^8.3.0",
     "@capacitor/cli": "^8.3.0",
     "@capacitor/core": "^8.3.0",
+    "@capacitor/screen-orientation": "^8.0.1",
     "@nuxt/icon": "^2.0.0",
     "@nuxt/ui": "^3.3.3",
     "@socket.io/redis-adapter": "^8.3.0",

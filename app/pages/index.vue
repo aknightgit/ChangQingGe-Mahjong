@@ -814,8 +814,10 @@ const logout = () => {
   z-index: 9999;
   backdrop-filter: blur(4px);
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 
 .create-modal {
@@ -829,6 +831,7 @@ const logout = () => {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
@@ -846,8 +849,9 @@ const logout = () => {
 .create-modal-body {
   display: flex;
   gap: 20px;
-  flex-shrink: 0;
-  overflow-y: visible;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: visible;
 }
 
 .create-modal-left,
@@ -858,15 +862,29 @@ const logout = () => {
 }
 
 @media (max-width: 600px) {
+  .create-overlay {
+    align-items: flex-start;
+    justify-content: center;
+    padding:
+      max(12px, env(safe-area-inset-top))
+      12px
+      max(12px, env(safe-area-inset-bottom))
+      12px;
+  }
+
   .create-modal {
-    width: 95vw;
-    padding: 20px;
-    padding-bottom: 100px; /* space for sticky confirm button on small screens */
+    width: 100%;
+    max-width: 100%;
+    max-height: none;
+    margin: 0;
+    padding: 18px 18px 96px;
+    overflow: visible;
   }
 
   .create-modal-body {
     flex-direction: column;
-    overflow-y: auto;
+    min-height: auto;
+    overflow: visible;
   }
 }
 
@@ -874,16 +892,17 @@ const logout = () => {
 @media (max-width: 600px) {
   .create-actions {
     position: sticky;
-    bottom: 0;
+    bottom: calc(env(safe-area-inset-bottom) * -1);
     left: 0;
     right: 0;
-    background: linear-gradient(to top, #0d1f17 80%, transparent);
-    padding: 16px 20px;
-    margin: 0 -20px -20px;
+    background: linear-gradient(to top, rgba(13, 31, 23, 0.98) 78%, rgba(13, 31, 23, 0));
+    padding: 16px 18px calc(16px + env(safe-area-inset-bottom));
+    margin: 0 -18px -96px;
     border-top: 1px solid rgba(255,255,255,0.06);
     display: flex;
     gap: 12px;
     z-index: 10;
+    backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
   }
 }

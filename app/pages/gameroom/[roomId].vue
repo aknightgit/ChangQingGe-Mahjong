@@ -853,6 +853,8 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, provide } from 'vue'
+import { Capacitor } from '@capacitor/core'
+import { ScreenOrientation } from '@capacitor/screen-orientation'
 import PlayerSelfArea from '~/components/PlayerSelfArea.vue'
 import PlayerOtherArea from '~/components/PlayerOtherArea.vue'
 import MahjongTile from '~/components/MahjongTile.vue'
@@ -1063,6 +1065,24 @@ const updateSettingsPosition = () => {
   settingsPanelLeft.value = rect.right - 300
 }
 
+const lockLandscapeForGameRoom = async () => {
+  if (!process.client || !Capacitor.isNativePlatform()) return
+  try {
+    await ScreenOrientation.lock({ orientation: 'landscape' })
+  } catch (error) {
+    console.warn('[Orientation] failed to lock landscape:', error)
+  }
+}
+
+const unlockOrientationAfterGameRoom = async () => {
+  if (!process.client || !Capacitor.isNativePlatform()) return
+  try {
+    await ScreenOrientation.unlock()
+  } catch (error) {
+    console.warn('[Orientation] failed to unlock orientation:', error)
+  }
+}
+
 const setTableTheme = (theme: 'classic-green' | 'jade-green' | 'royal-red') => {
   tableTheme.value = theme
 }
@@ -1194,6 +1214,8 @@ watch(showSettings, (open) => {
 })
 
 onMounted(async () => {
+  await lockLandscapeForGameRoom()
+
   if (roomId.value && playerId.value) {
     await connect(roomId.value, playerId.value)
     clearPendingRoomTarget()
@@ -1231,6 +1253,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   disconnect()
+  void unlockOrientationAfterGameRoom()
 
   if (process.client) {
     window.removeEventListener('resize', evaluateViewport)
