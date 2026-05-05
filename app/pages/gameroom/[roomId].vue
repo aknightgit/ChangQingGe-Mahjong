@@ -1235,7 +1235,8 @@ onMounted(async () => {
     else if (text.includes('补杠') || text.includes('杠后补牌')) { playSound('kong-draw'); playVoiceAction('kong') }
     else if (text.includes('碰')) playVoiceAction('pong')
     else if (text.includes('吃')) playVoiceAction('chow')
-    else if (text.includes('胡') || text.includes('自摸')) playVoiceAction('hu')
+    else if (text.includes('自摸')) playVoiceAction('selfHu')
+    else if (text.includes('胡')) playVoiceAction('hu')
   }) as EventListener)
 
   if (process.client) {
@@ -1283,10 +1284,6 @@ const rightPlayer = computed(() => {
   if (!gameState.value || currentPlayer.value?.position === undefined) return null
   return gameState.value.players.find(player => player.position === (currentPlayer.value!.position + 1) % 4) || null
 })
-const globalLatestDiscardId = computed(() => {
-  const allDiscards = gameState.value?.discardPile || []
-  return allDiscards.length > 0 ? allDiscards[allDiscards.length - 1]?.id : null
-})
 const remainingTileCount = computed(() => gameState.value?.wall?.length || 0)
 const claimedDiscardIds = computed(() => collectClaimedDiscardIds(gameState.value?.players))
 const getStablePlayerMelds = (player?: Player | null): Meld[] => {
@@ -1299,10 +1296,20 @@ const getVisiblePlayerDiscards = (player?: Player | null) => {
   const visible = filterVisibleDiscards(player.hand?.discardedTiles, claimedDiscardIds.value)
   return reuseStableArray(`discards:${player.id}`, tileIdSignature(visible), () => visible)
 }
-const selfLatestDiscardId = computed(() => globalLatestDiscardId.value)
-const northLatestDiscardId = computed(() => globalLatestDiscardId.value)
-const westLatestDiscardId = computed(() => globalLatestDiscardId.value)
-const eastLatestDiscardId = computed(() => globalLatestDiscardId.value)
+const globalLatestVisibleDiscardId = computed(() => {
+  const pile = filterVisibleDiscards(gameState.value?.discardPile, claimedDiscardIds.value)
+  return pile.length > 0 ? pile[pile.length - 1]?.id || null : null
+})
+const getPlayerLatestHighlightedDiscardId = (player?: Player | null) => {
+  const latestId = globalLatestVisibleDiscardId.value
+  if (!player || !latestId) return null
+  const visible = getVisiblePlayerDiscards(player)
+  return visible.some(tile => tile.id === latestId) ? latestId : null
+}
+const selfLatestDiscardId = computed(() => getPlayerLatestHighlightedDiscardId(currentPlayer.value))
+const northLatestDiscardId = computed(() => getPlayerLatestHighlightedDiscardId(topPlayer.value))
+const westLatestDiscardId = computed(() => getPlayerLatestHighlightedDiscardId(leftPlayer.value))
+const eastLatestDiscardId = computed(() => getPlayerLatestHighlightedDiscardId(rightPlayer.value))
 const playerDiscards = computed(() => getVisiblePlayerDiscards(currentPlayer.value))
 const roundDisplay = computed(() => `第${currentRound.value}局`)
 const getDiceRoundMultiplier = (dice1: number, dice2: number) => {
@@ -1565,7 +1572,11 @@ const waitingPlayers = computed(() => {
   }))
 })
 const overlayReason = computed(() => roomDismissedReason.value || gameState.value?.endReason || null)
-const isOverlayVisible = computed(() => isGameEnded.value || !!roomDismissedReason.value)
+const isOverlayVisible = computed(() => {
+  if (roomDismissedReason.value) return true
+  if (!isGameEnded.value) return false
+  return overlayReason.value !== GameEndReason.LAST_PLAYER
+})
 const canStartNextRoundOverlay = computed(() => ![
   GameEndReason.OWNER_LEFT,
   GameEndReason.EMPTY_ROOM
@@ -1716,15 +1727,31 @@ const overlayMessage = computed(() => {
 const isDrawOverlay = computed(() => overlayReason.value === GameEndReason.WALL_EXHAUSTED)
 const showApprovalOverlay = computed(() => false)
 
-const startNextRound = async () => { 
-  showSettlement.value = false;
+const enterStartingPhaseWithDiceOverlay = async () => {
   try {
-    await startGame({ hesitationWindow: hesitationWindow.value })
-    await forceRefreshState()
-    console.log('[startNextRound] Next round flow entered, phase:', gameState.value?.phase);
+    await $fetch('/api/game/start', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: playerId.value,
+        phaseOnly: true
+      }
+    })
+    diceValues.value = [
+      Math.floor(Math.random() * 6) + 1,
+      Math.floor(Math.random() * 6) + 1
+    ]
+    hasDicePreview.value = true
+    playSound('dice-roll')
+    showDiceOverlay.value = true
   } catch (e) {
-    console.error('[startNextRound] Failed:', e);
+    console.error('[enterStartingPhaseWithDiceOverlay] Failed:', e)
   }
+}
+
+const startNextRound = async () => {
+  showSettlement.value = false
+  await enterStartingPhaseWithDiceOverlay()
 }
 const isInteractionLocked = computed(() => isOverlayVisible.value)
 
@@ -1789,6 +1816,7 @@ const currentTurnPlayer = computed(() => {
 })
 const isMyTurn = computed(() => currentTurnPlayer.value?.id === currentPlayer.value?.id)
 let myTurnRefreshTimer: ReturnType<typeof setTimeout> | null = null
+let pendingExpiryRefreshTimer: ReturnType<typeof setTimeout> | null = null
 watch([isMyTurn, currentFreezeUntil], ([myTurn, freezeUntil]) => {
   if (myTurnRefreshTimer) { clearTimeout(myTurnRefreshTimer); myTurnRefreshTimer = null }
   if (!myTurn) return
@@ -2008,8 +2036,11 @@ const hasBlockingPendingClaim = computed(() => {
     action === ActionType.EXTENDED_KONG
   )
 })
-const showDraw = computed(() => availableActions.value.includes(ActionType.DRAW))
+const showDraw = computed(() => availableActions.value.includes(ActionType.DRAW) || shouldExposeSharedDraw.value)
 const filteredCircularAvailableActions = computed(() => {
+  if (shouldExposeSharedDraw.value && !availableActions.value.includes(ActionType.DRAW)) {
+    return [...availableActions.value, ActionType.DRAW]
+  }
   return availableActions.value
 })
 const showChowPicker = ref(false)
@@ -2232,16 +2263,23 @@ const myPendingAction = computed(() => {
   if (!gameState.value || !currentPlayer.value) return null
   return gameState.value.pendingActions.find(pa => pa.playerId === currentPlayer.value!.id) || null
 })
+const myPendingExpiresAt = computed(() => Number((myPendingAction.value as any)?.expiresAt ?? 0))
+const shouldExposeSharedDraw = computed(() => {
+  if (!isMyTurn.value) return false
+  const pending = myPendingAction.value
+  if (!pending || myPendingExpiresAt.value <= nowTs.value) return false
+  const actions = pending.availableActions || []
+  return actions.length > 0 && actions.every(action => action === ActionType.CHOW || action === ActionType.PASS)
+})
 
 const hasSharedDrawWindow = computed(() => {
-  const pendingExpiresAt = Number((myPendingAction.value as any)?.expiresAt ?? 0)
-  return availableActions.value.includes(ActionType.DRAW) && pendingExpiresAt > Date.now()
+  return (availableActions.value.includes(ActionType.DRAW) || shouldExposeSharedDraw.value) && myPendingExpiresAt.value > nowTs.value
 })
 
 const actionVisualFreezeUntil = computed(() => {
   // 服务端显式 freeze 优先；若当前轮到自己且共享 claim 窗口里允许 DRAW，则直接跟 pending.expiresAt 对齐。
   const freezeFromPending = currentFreezeUntil.value
-  if (freezeFromPending > Date.now()) return freezeFromPending
+  if (freezeFromPending > nowTs.value) return freezeFromPending
 
   if (hasSharedDrawWindow.value) {
     return Number((myPendingAction.value as any)?.expiresAt ?? 0)
@@ -2282,14 +2320,33 @@ const approvalCountdownRatio = computed(() => {
   const expiresAt = actionApprovalEvent.value?.expiresAt
   if (!expiresAt) return 1
   const totalMs = Math.max(getActionWindowMs(gameState.value), 1)
-  const leftMs = Math.max(0, expiresAt - Date.now())
+  const leftMs = Math.max(0, expiresAt - nowTs.value)
   return Math.max(0, Math.min(1, leftMs / totalMs))
 })
 const approvalCountdownSec = computed(() => {
   const expiresAt = actionApprovalEvent.value?.expiresAt
   if (!expiresAt) return 0
-  return Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000))
+  return Math.max(0, Math.ceil((expiresAt - nowTs.value) / 1000))
 })
+watch(
+  [() => isMyTurn.value, () => myPendingExpiresAt.value, () => availableActions.value.join(',')],
+  ([myTurn, expiresAt, actions]) => {
+    if (pendingExpiryRefreshTimer) {
+      clearTimeout(pendingExpiryRefreshTimer)
+      pendingExpiryRefreshTimer = null
+    }
+    if (!myTurn || !expiresAt || expiresAt <= Date.now()) return
+    const actionList = actions ? actions.split(',').filter(Boolean) : []
+    const stillWaitingForWindowToEnd =
+      !actionList.includes(ActionType.DRAW) &&
+      !actionList.includes(ActionType.DISCARD)
+    if (!stillWaitingForWindowToEnd) return
+    pendingExpiryRefreshTimer = setTimeout(() => {
+      refreshState()
+    }, Math.max(expiresAt - Date.now() + 150, 0))
+  },
+  { immediate: true }
+)
 watch(
   [
     () => gameState.value?.pendingActions,
@@ -2429,7 +2486,7 @@ const actionCountdownRatio = computed(() => {
   const pending = myPendingAction.value
   if (!pending?.expiresAt) return 1
   const totalMs = hesitationWindow.value // 决策犹豫期
-  const leftMs = Math.max(0, pending.expiresAt - Date.now())
+  const leftMs = Math.max(0, pending.expiresAt - nowTs.value)
   return Math.max(0, Math.min(1, leftMs / totalMs))
 })
 
@@ -2868,24 +2925,7 @@ const onStartGame = async () => {
   console.log('[onStartGame] Setting STARTING phase on server...')
 
   try {
-    // 先通知服务器进入 STARTING 阶段（广播给所有客户端）
-    await $fetch('/api/game/start', {
-      method: 'POST',
-      body: {
-        gameId: roomId.value,
-        playerId: playerId.value,
-        phaseOnly: true
-      }
-    })
-    // 服务器广播 STARTING 后，phase watcher 会自动显示骰子
-    // 同时也立即显示（防止 watcher 延迟）
-    diceValues.value = [
-      Math.floor(Math.random() * 6) + 1,
-      Math.floor(Math.random() * 6) + 1
-    ]
-    hasDicePreview.value = true
-    playSound('dice-roll')
-    showDiceOverlay.value = true
+    await enterStartingPhaseWithDiceOverlay()
   } catch (err) {
     console.error('[onStartGame] Failed:', err)
     autoStartRequested.value = false

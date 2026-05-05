@@ -329,33 +329,33 @@ const confirmCreateGame = async () => {
     console.log('[Create] Game created:', gameId, 'playerId:', playerId)
 
     // 先进入房间，避免用户等待机器人加入导致“点击后很慢”
-    const targetUrl = `${appBaseURL}/gameroom/${gameId}?playerId=${playerId}&dice=${createParams.maxDiceRolls}`
-    console.log('[Create] Navigating to:', targetUrl)
-    showCreateModal.value = false
-    await navigateToCreatedRoom(targetUrl)
 
     // 后台并行加入选中的AI（不阻塞首屏响应）
     const botsToJoin = selectedBots.value.slice(0, createParams.maxBots)
     if (botsToJoin.length) {
-      Promise.allSettled(
+      const results = await Promise.allSettled(
         botsToJoin.map(botId =>
           $fetch('/api/game/join', {
             method: 'POST',
-            body: { gameId, playerName: botId },
+            body: { gameId, playerName: botId, ownerPlayerId: playerId },
             headers: { 'Cache-Control': 'no-cache' }
           })
         )
-      ).then(results => {
-        results.forEach((result, idx) => {
-          const botId = botsToJoin[idx]
-          if (result.status === 'fulfilled') {
-            console.log('[Create] Bot joined:', botId)
-          } else {
-            console.error('[Create] Bot join failed:', botId, result.reason)
-          }
-        })
+      )
+      results.forEach((result, idx) => {
+        const botId = botsToJoin[idx]
+        if (result.status === 'fulfilled') {
+          console.log('[Create] Bot joined:', botId)
+        } else {
+          console.error('[Create] Bot join failed:', botId, result.reason)
+        }
       })
     }
+
+    const targetUrl = `${appBaseURL}/gameroom/${gameId}?playerId=${playerId}&dice=${createParams.maxDiceRolls}`
+    console.log('[Create] Navigating to:', targetUrl)
+    showCreateModal.value = false
+    await navigateToCreatedRoom(targetUrl)
   } catch (e) {
     console.error('[Create] Error:', e)
     if (e?.status === 401 || e?.statusCode === 401 || e?.data?.statusCode === 401) {

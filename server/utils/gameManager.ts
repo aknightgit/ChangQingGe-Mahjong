@@ -124,7 +124,6 @@ class GameManager {
     const player = game.players.find(p => p.id === playerId);
     if (!player) return false;
     if (!game.pendingActions.some(pa => pa.playerId === playerId)) return false;
-    if (this.isChowOnlyPendingTurn(game, playerId)) return false;
     if (this.isDaDiaoReadyState(game, player)) return false;
     return this.canPlayerDrawOnCurrentTurn(game, player);
   }
@@ -148,6 +147,7 @@ class GameManager {
 
   private canPlayerDeclareTurnHu(game: GameState, player: Player): boolean {
     if (!game.drawnThisTurn) return false;
+    if ((player as any).lastDrawnTile) return true;
     const lastAction = game.actionHistory[game.actionHistory.length - 1];
     return !!lastAction && lastAction.playerId === player.id && lastAction.type === ActionType.DRAW;
   }
@@ -736,7 +736,12 @@ class GameManager {
         if (currentPlayer && this.isPlayerBotControlled(currentPlayer) && (currentPlayer.hand.concealedTiles.length % 3 === 2 || this.canPlayerDrawOnCurrentTurn(game, currentPlayer))) {
           this.scheduleBotDiscard(gameId, currentPlayer.id);
         }
-        if (this.autoDrawForCurrentPlayer(game)) {
+        if (currentPlayer && this.isPlayerBotControlled(currentPlayer) && this.autoDrawForCurrentPlayer(game)) {
+          await this.persistGame(game);
+          this.broadcastGameState(gameId);
+          return;
+        }
+        if (currentPlayer && !this.isPlayerBotControlled(currentPlayer) && this.canPlayerDrawOnCurrentTurn(game, currentPlayer)) {
           await this.persistGame(game);
           this.broadcastGameState(gameId);
           return;
@@ -1999,9 +2004,7 @@ class GameManager {
         break;
 
       case ActionType.DRAW:
-        if (this.isChowOnlyPendingTurn(game, player.id)) {
-          throw new Error('Must resolve chow decision before drawing');
-        }
+        game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
         // 【状态机修复】每回合最多摸一次，防同回合连续摸牌
         if (game.drawnThisTurn) {
           console.warn(`[DRAW] Blocked: ${player.name} already drew this turn (double-draw attempt)`);
@@ -2374,10 +2377,12 @@ class GameManager {
       if (isFlower(replacement) && this.isWildTile(game, replacement)) {
         // 百搭花牌 → 进手牌
         player.hand.concealedTiles.push(replacement);
+        (player as any).lastDrawnTile = replacement;
         player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
       } else {
         // 普通牌 → 进手牌
         player.hand.concealedTiles.push(replacement);
+        (player as any).lastDrawnTile = replacement;
         player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
       }
 
@@ -4448,6 +4453,7 @@ class GameManager {
       if (replacement) {
         // 补到普通牌,加入手牌(替换原来花牌的位置)
         player.hand.concealedTiles.push(replacement);
+        (player as any).lastDrawnTile = replacement;
         this.broadcastFlowerReplacement(game, player);
       }
     }

@@ -282,6 +282,29 @@ console.log('\n=== Regression: route discard planner ===\n')
 }
 
 {
+  const longSuitSingleton = tile(TileSuit.DOTS, 9, 'long-suit-singleton')
+  const ai = makePlayer('ai-short-seq', 'AI-AK', [
+    tile(TileSuit.DOTS, 2, 'sd2'),
+    tile(TileSuit.DOTS, 3, 'sd3'),
+    tile(TileSuit.DOTS, 4, 'sd4'),
+    tile(TileSuit.DOTS, 5, 'sd5'),
+    tile(TileSuit.DOTS, 6, 'sd6'),
+    tile(TileSuit.DOTS, 7, 'sd7'),
+    longSuitSingleton,
+    tile(TileSuit.BAMBOOS, 2, 'sb2'),
+    tile(TileSuit.BAMBOOS, 3, 'sb3'),
+    tile(TileSuit.BAMBOOS, 4, 'sb4'),
+    tile(TileSuit.WIND, 1, 'seast'),
+    tile(TileSuit.WIND, 1, 'seast-2'),
+    tile(TileSuit.DRAGON, 1, 'sred'),
+    tile(TileSuit.DRAGON, 1, 'sred-2'),
+  ])
+  const game = makeGame([ai, makePlayer('p2', 'AI-2', []), makePlayer('p3', 'AI-3', []), makePlayer('p4', 'AI-4', [])], [])
+  const selected = selectDiscardTile(ai, game)
+  ok('short-suit sequence should be cut before long-suit singleton', ['sb2', 'sb3', 'sb4'].includes(selected), `selected=${selected}`)
+}
+
+{
   const ai = makePlayer('ai6', 'AI-AK', [
     tile(TileSuit.DOTS, 3, 'd3'),
     tile(TileSuit.DOTS, 4, 'd4'),

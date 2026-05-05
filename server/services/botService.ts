@@ -368,6 +368,16 @@ function isNumberTile(tile: Tile): boolean {
   return tile.suit === TileSuit.DOTS || tile.suit === TileSuit.CHARACTERS || tile.suit === TileSuit.BAMBOOS
 }
 
+function countNearbySameSuitTiles(tile: Tile, hand: Tile[]): number {
+  if (!isNumberTile(tile)) return 0
+  return hand.filter(candidate =>
+    candidate.id !== tile.id &&
+    candidate.suit === tile.suit &&
+    Math.abs(candidate.value - tile.value) > 0 &&
+    Math.abs(candidate.value - tile.value) <= 2
+  ).length
+}
+
 function tilesMatch(a: Tile, b: Tile): boolean {
   return a.suit === b.suit && a.value === b.value
 }
@@ -1083,10 +1093,18 @@ export function selectDiscardTile(player: Player, game: GameState): string {
     if (useRoutePlanner && dominantTwoSuitGap >= 3 && isNumberTile(tile)) {
       const dominantSuit = numberSuitCounts[0]?.suit || null
       const minoritySuit = numberSuitCounts[1]?.suit || null
+      const dominantSuitCount = numberSuitCounts[0]?.count || 0
+      const minoritySuitCount = numberSuitCounts[1]?.count || 0
+      const nearbySameSuit = countNearbySameSuitTiles(tile, hand)
       if (tile.suit === dominantSuit) {
         composite -= 12 + dominantTwoSuitGap
       } else if (tile.suit === minoritySuit) {
         composite += 8 + dominantTwoSuitGap
+        if (nearbySameSuit > 0 && dominantSuitCount >= 6 && minoritySuitCount <= 3) {
+          composite += 36 + nearbySameSuit * 4 + dominantTwoSuitGap * 2
+        } else if (nearbySameSuit > 0) {
+          composite += 14 + nearbySameSuit * 2 + dominantTwoSuitGap
+        }
       }
     }
 

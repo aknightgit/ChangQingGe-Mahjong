@@ -106,6 +106,12 @@ async function getRoomStatesCollection() {
 export async function initializeSocketIO(server: HTTPServer) {
   if (io) return io
 
+  const transports =
+    process.env.NODE_ENV !== 'production' &&
+    !process.env.NUXT_PUBLIC_SOCKET_TRANSPORTS
+      ? ['polling']
+      : ['websocket', 'polling']
+
   io = new SocketIOServer(server, {
     cors: {
       origin: (origin, callback) => {
@@ -115,7 +121,7 @@ export async function initializeSocketIO(server: HTTPServer) {
       methods: ['GET', 'POST'],
       credentials: true
     },
-    transports: ['polling']
+    transports
   })
 
   // ✅ Configure Redis adapter for horizontal scaling
@@ -138,6 +144,10 @@ export async function initializeSocketIO(server: HTTPServer) {
   }
 
   io.on('connection', (socket: Socket) => {
+    console.log(`[socket] transport=${socket.conn.transport.name} id=${socket.id}`)
+    socket.conn.on('upgrade', () => {
+      console.log(`[socket] upgraded transport=${socket.conn.transport.name} id=${socket.id}`)
+    })
     console.log(`🔌 Client connected: ${socket.id}`)
 
     // Set up GameManager broadcasting

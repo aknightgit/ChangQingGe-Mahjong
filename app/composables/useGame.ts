@@ -6,6 +6,9 @@ import { io, type Socket } from 'socket.io-client'
 
 export const useGame = () => {
   const route = useRoute()
+  const isLocalDevHost =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   const debugAccessToken =
     typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
   const gameState = ref<GameState | null>(null)
@@ -24,6 +27,7 @@ export const useGame = () => {
   const roomDismissedReason = ref<string | null>(null)
   // 延迟高亮：记录最后一次 state-changed 的时间戳
   const lastStateChangeAt = ref<number>(0)
+  let lastRefreshTriggerAt = 0
 
   const playerId = ref<string | null>(null)
   const gameId = ref<string | null>(null)
@@ -59,6 +63,13 @@ export const useGame = () => {
     }
   }
 
+  const requestRefreshState = () => {
+    const now = Date.now()
+    if (now - lastRefreshTriggerAt < 180) return
+    lastRefreshTriggerAt = now
+    void refreshState()
+  }
+
   const connect = async (gId: string, pId: string) => {
     gameId.value = gId
     playerId.value = pId
@@ -75,9 +86,11 @@ export const useGame = () => {
         return
       }
 
-      // Connect Socket.IO
-      // Use WebSocket-first transport for faster, more reliable connections
+      // Connect Socket.IO.
+      // Prefer WebSocket for lower latency on mobile/public networks,
+      // but keep polling as a fallback for restrictive proxies/tunnels.
       const wsUrl = window.location.origin
+      const transports = isLocalDevHost ? ['polling'] : ['websocket', 'polling']
       socket.value = io(wsUrl, {
         auth: {
           debugAccessToken,
@@ -85,7 +98,7 @@ export const useGame = () => {
           playerId: pId
         },
         withCredentials: true,
-        transports: ['polling'],
+        transports,
         timeout: 10000,
         reconnection: true,
         reconnectionAttempts: 10,
@@ -94,7 +107,7 @@ export const useGame = () => {
       })
 
       socket.value.on('connect', () => {
-        console.log('Socket.IO connected:', socket.value?.id)
+        console.log('Socket.IO connected:', socket.value?.id, 'transport=', socket.value?.io.engine.transport.name)
         isConnected.value = true
         error.value = null
 
@@ -118,7 +131,7 @@ export const useGame = () => {
       socket.value.on('connect_error', (err) => {
         // Suppress first websocket error (expected fallback to polling)
         if (err.message?.includes('websocket') && !isConnected.value) return
-        console.warn('Socket connect_error:', err.message)
+        console.warn('Socket connect_error:', err.message, 'transport=', socket.value?.io.engine.transport.name)
         // 已经拿到状态时，保留页面可交互，不退回“连接中”空壳
         if (!gameState.value) {
           isConnected.value = false
@@ -126,7 +139,7 @@ export const useGame = () => {
       })
 
       socket.value.on('disconnect', () => {
-        console.log('Socket disconnected')
+        console.log('Socket disconnected', 'transport=', socket.value?.io.engine.transport.name)
         if (!gameState.value) {
           isConnected.value = false
         }
@@ -135,12 +148,12 @@ export const useGame = () => {
       // Room Events
       socket.value.on('room:user-joined', async (data) => {
         console.log('User joined:', data)
-        await refreshState()
+        requestRefreshState()
       })
 
       socket.value.on('room:user-left', async (data) => {
         console.log('User left:', data)
-        await refreshState()
+        requestRefreshState()
       })
 
       socket.value.on('room:error', (data) => {
@@ -165,7 +178,7 @@ export const useGame = () => {
       socket.value.on('room:owner-reconnected', async (data) => {
         console.log('Owner reconnected:', data)
         error.value = null
-        await refreshState()
+        requestRefreshState()
       })
 
       // Game Events
@@ -174,7 +187,6 @@ export const useGame = () => {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('mahjong-realtime-state', { detail: data }))
         }
-        await refreshState()
       })
 
       // Listen for server's broadcastGameState events (different name from action-triggered events)
@@ -183,12 +195,12 @@ export const useGame = () => {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('mahjong-realtime-state', { detail: data }))
         }
-        await refreshState()
+        requestRefreshState()
       })
 
       socket.value.on('game:action-received', async (data) => {
         console.log('Action received:', data)
-        await refreshState()
+        requestRefreshState()
       })
 
       // 牌局快讯广播
@@ -319,7 +331,6 @@ export const useGame = () => {
 
       if ((response as any)?.success) {
         updateState((response as any).data)
-        await refreshState()
         return true
       } else {
         console.error('Action failed:', response)

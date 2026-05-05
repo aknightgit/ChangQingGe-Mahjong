@@ -23,13 +23,28 @@ function scoreByRoute(input: RouteDiscardInput): number {
   const isOfficialOpening = input.hand.length >= 11
   const longestSuit = routeState.features.longestSuit
   const shortestSuit = routeState.features.shortestSuit
+  const longestSuitCount = routeState.features.longestSuitCount
+  const shortestSuitCount = routeState.features.shortestSuitCount
+  const isShortestSuitTile = !!shortestSuit && tile.suit === shortestSuit
+  const isLongestSuitTile = !!longestSuit && tile.suit === longestSuit
+  const suitGap = Math.max(0, longestSuitCount - shortestSuitCount)
+  const shortestSuitSequenceBreakBias =
+    isShortestSuitTile && nearby > 0
+      ? 6.4 + Math.max(0, suitGap - 1) * 1.2
+      : 0
+  const longestSuitSingletonKeepBias =
+    isLongestSuitTile && count === 1
+      ? 1.2 + nearby * 0.5 + Math.max(0, suitGap - 1) * 0.35
+      : 0
 
   switch (routeState.current) {
     case 'MENQING_SPEED':
       return (
-        (shortestSuit && tile.suit === shortestSuit ? 3.4 : 0) +
+        (isShortestSuitTile ? 5.1 + suitGap * 0.6 : 0) +
+        shortestSuitSequenceBreakBias +
         (count === 1 ? 1.2 : -2.6) +
         (nearby === 0 ? 1.8 : -0.65 * nearby) +
+        (isLongestSuitTile ? -longestSuitSingletonKeepBias : 0) +
         (isHonor(tile) && count === 1 ? (isOfficialOpening ? -2.4 : 1.2) : 0)
       )
 
@@ -38,7 +53,8 @@ function scoreByRoute(input: RouteDiscardInput): number {
         (count === 1 ? 2.2 : -1.6) +
         (nearby === 0 ? 1.6 : -0.15 * nearby) +
         (longestSuit && tile.suit !== longestSuit && !isHonor(tile) ? 2.2 : 0) +
-        (shortestSuit && tile.suit === shortestSuit && count === 1 ? 1.3 : 0) +
+        (isShortestSuitTile ? 2.4 + shortestSuitSequenceBreakBias : 0) +
+        (isLongestSuitTile ? -Math.max(0.8, longestSuitSingletonKeepBias * 0.85) : 0) +
         (routeState.targetSuit && tile.suit !== routeState.targetSuit && !isHonor(tile) ? 4.8 : 0) +
         (routeState.targetSuit && tile.suit === routeState.targetSuit && !isHonor(tile) ? -2.6 : 0) +
         (isHonor(tile) && count === 1 ? 0.4 : 0)
@@ -79,8 +95,10 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
     input.routeState.phase === 'OBSERVE'
       ? (
         (input.routeState.features.shortestSuit && input.tile.suit === input.routeState.features.shortestSuit && sameTypeCount(input) === 1 ? 2.3 : 0) +
+        (input.routeState.features.shortestSuit && input.tile.suit === input.routeState.features.shortestSuit && adjacentCount(input) > 0 ? 5.4 : 0) +
         (input.routeState.features.upstreamVoidSuit && input.tile.suit === input.routeState.features.upstreamVoidSuit && sameTypeCount(input) === 1 ? 1.5 : 0) +
         (input.routeState.features.longestSuit && input.tile.suit === input.routeState.features.longestSuit && sameTypeCount(input) >= 2 ? -1.2 : 0) +
+        (input.routeState.features.longestSuit && input.tile.suit === input.routeState.features.longestSuit && sameTypeCount(input) === 1 ? -1.8 : 0) +
         (input.routeState.features.longestSuit && input.routeState.features.longestSuitCount >= 6 && input.tile.suit === input.routeState.features.longestSuit ? -3.2 : 0) +
         (input.routeState.features.longestSuitCount - input.routeState.features.secondSuitCount >= 3 &&
           input.routeState.features.longestSuit &&

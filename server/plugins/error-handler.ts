@@ -5,6 +5,11 @@ function shouldSuppress(err: any): boolean {
   if (!err) return false
   if (SUPPRESS_CODES.has(err?.code)) return true
   if (typeof err?.message === 'string' && [...SUPPRESS_CODES].some(c => err.message.includes(c))) return true
+  if (typeof err?.stack === 'string' && [...SUPPRESS_CODES].some(c => err.stack.includes(c))) return true
+  if (Array.isArray(err?.errors) && err.errors.some((inner: any) => shouldSuppress(inner))) return true
+  if (err?.error && shouldSuppress(err.error)) return true
+  if (err?.data && shouldSuppress(err.data)) return true
+  if (err?.reason && shouldSuppress(err.reason)) return true
   if (err?.cause) return shouldSuppress(err.cause)
   return false
 }

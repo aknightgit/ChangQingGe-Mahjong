@@ -447,7 +447,7 @@ await run('吃窗口开启后摸牌与吃牌同时可用', async () => {
     const actions = await gameManager.getAvailableActions(currentGame.gameId, claimer.id);
     ok('current player can still chow during hesitation window', actions.includes(ActionType.CHOW), `actions=${actions.join(',')}`);
     ok('current player can still pass during hesitation window', actions.includes(ActionType.PASS), `actions=${actions.join(',')}`);
-    ok('current player cannot draw during chow hesitation window', !actions.includes(ActionType.DRAW), `actions=${actions.join(',')}`);
+    ok('current player can draw during chow hesitation window', actions.includes(ActionType.DRAW), `actions=${actions.join(',')}`);
 
     (gameManager as any).handlePass(currentGame, claimer);
     const afterPass = await gameManager.getAvailableActions(currentGame.gameId, claimer.id);

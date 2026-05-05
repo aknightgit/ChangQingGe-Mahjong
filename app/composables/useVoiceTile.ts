@@ -35,12 +35,12 @@ const VOICE_TEXT_MAP: Record<string, string> = {
 
 // 动作语音（补花、吃、碰、杠、胡、自摸）
 const VOICE_ACTION_MAP: Record<string, string> = {
-  flowerReplace: '补花',
-  chow: '我吃',
-  pong: '碰',
-  kong: '杠',
-  hu: '胡了',
-  selfHu: '自摸',
+  flowerReplace: 'buhua',
+  chow: 'wochi',
+  pong: 'peng',
+  kong: 'gang',
+  hu: 'hule',
+  selfHu: 'zimo',
 }
 
 const audioModules = import.meta.glob('../../assets/voice/**/*.{mp3,opus}', {
@@ -138,8 +138,7 @@ function resolveTileKey(suit: string, value: number): string {
     hua: 'hua',
     flower: 'hua',
   }
-  // 冰糖风牌素材里南/西命名与实际内容相反，这里统一纠正映射，避免播报错位。
-  const windMap: Record<number, string> = { 1: 'east', 2: 'west', 3: 'south', 4: 'north' }
+  const windMap: Record<number, string> = { 1: 'east', 2: 'south', 3: 'west', 4: 'north' }
   const jianMap: Record<number, string> = { 1: 'zhong', 2: 'fa', 3: 'bai' }
   const prefix = suitMap[normalizedSuit] || normalizedSuit
 
