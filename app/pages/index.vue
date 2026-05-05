@@ -218,6 +218,8 @@ const clearPendingRoomTarget = () => {
   } catch {}
 }
 
+const appBaseURL = (useRuntimeConfig().app.baseURL as string || '/').replace(/\/$/, '')
+
 const navigateToCreatedRoom = async (targetUrl: string) => {
   savePendingRoomTarget(targetUrl)
 
@@ -327,7 +329,7 @@ const confirmCreateGame = async () => {
     console.log('[Create] Game created:', gameId, 'playerId:', playerId)
 
     // 先进入房间，避免用户等待机器人加入导致“点击后很慢”
-    const targetUrl = `/gameroom/${gameId}?playerId=${playerId}&dice=${createParams.maxDiceRolls}`
+    const targetUrl = `${appBaseURL}/gameroom/${gameId}?playerId=${playerId}&dice=${createParams.maxDiceRolls}`
     console.log('[Create] Navigating to:', targetUrl)
     showCreateModal.value = false
     await navigateToCreatedRoom(targetUrl)

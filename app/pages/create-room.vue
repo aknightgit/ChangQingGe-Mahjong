@@ -180,6 +180,10 @@ watch(() => createParams.maxBots, (newMax) => {
   if (selectedBots.value.length > newMax) selectedBots.value = selectedBots.value.slice(0, newMax)
 })
 
+const appBaseURL = (useRuntimeConfig().app.baseURL as string || '/').replace(/\/$/, '')
+const buildRoomUrl = (gameId: string, playerId: string, dice: number) =>
+  `${appBaseURL}/gameroom/${gameId}?playerId=${playerId}&dice=${dice}`
+
 const navigateToCreatedRoom = async (targetUrl: string) => {
   savePendingRoomTarget(targetUrl)
   try {
@@ -227,7 +231,7 @@ const confirmCreateGame = async () => {
       return
     }
 
-    const targetUrl = `/gameroom/${gameId}?playerId=${playerId}&dice=${createParams.maxDiceRolls}`
+    const targetUrl = buildRoomUrl(gameId, playerId, createParams.maxDiceRolls)
     const botsToJoin = selectedBots.value.slice(0, createParams.maxBots)
 
     await navigateToCreatedRoom(targetUrl)

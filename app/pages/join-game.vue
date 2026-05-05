@@ -108,6 +108,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 
+const appBaseURL = (useRuntimeConfig().app.baseURL as string || '/').replace(/\/$/, '')
+
 const userName = useCookie('user_name')
 const userId = useCookie('user_id')
 const waitingGames = ref<any[]>([])
@@ -161,7 +163,7 @@ const handleComeback = async (game: any) => {
 
 // 进入已有牌局
 const enterGame = (game: any) => {
-  navigateTo(`/gameroom/${game.gameId}?playerId=${game.myPlayerId}`)
+  navigateTo(`${appBaseURL}/gameroom/${game.gameId}?playerId=${game.myPlayerId}`)
 }
 
 // 获取空闲牌桌
@@ -211,7 +213,7 @@ const joinGame = async (gameId: string) => {
     if (data?.success) {
       const { playerId } = data.data
       console.log('[Join] Joined game:', gameId, 'playerId:', playerId)
-      await navigateTo(`/gameroom/${gameId}?playerId=${playerId}`)
+      await navigateTo(`${appBaseURL}/gameroom/${gameId}?playerId=${playerId}`)
     } else {
       joinError.value = '无法加入牌局，请重试。'
     }
