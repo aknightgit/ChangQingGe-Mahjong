@@ -1,128 +1,129 @@
-<!-- pages/login.vue -->
 <template>
   <div class="mahjong-page">
     <div class="mahjong-card">
-      <h1 class="mahjong-title">长清阁麻将</h1>
-      <p class="mahjong-subtitle">上海麻将 × 四川麻将</p>
+      <div class="login-shell">
+        <section class="login-main">
+          <h1 class="mahjong-title">长清阁麻将</h1>
+          <p class="mahjong-subtitle">海派麻将 × 四川麻将</p>
 
-      <!-- Tab 切换 -->
-      <div class="tab-bar">
-        <button
-          class="tab-btn"
-          :class="{ 'tab-btn--active': activeTab === 'login' }"
-          @click="activeTab = 'login'"
-        >登录</button>
-        <button
-          class="tab-btn"
-          :class="{ 'tab-btn--active': activeTab === 'register' }"
-          @click="activeTab = 'register'"
-        >注册</button>
-      </div>
+          <div class="tab-bar">
+            <button
+              class="tab-btn"
+              :class="{ 'tab-btn--active': activeTab === 'login' }"
+              @click="activeTab = 'login'"
+            >登录</button>
+            <button
+              class="tab-btn"
+              :class="{ 'tab-btn--active': activeTab === 'register' }"
+              @click="activeTab = 'register'"
+            >注册</button>
+          </div>
 
-      <!-- 登录表单 -->
-      <div v-if="activeTab === 'login'" class="form-section">
-        <div class="form-field">
-          <label>手机号</label>
-          <input
-            type="tel"
-            v-model="loginForm.phone"
-            placeholder="输入11位手机号"
-            maxlength="11"
-            autocomplete="tel"
-          />
-        </div>
-        <div class="form-field">
-          <label>密码</label>
-          <input
-            type="password"
-            v-model="loginForm.password"
-            placeholder="输入密码"
-            autocomplete="current-password"
-            @keyup.enter="handlePhoneLogin"
-          />
-        </div>
-        <p v-if="loginError" class="status-text error">{{ loginError }}</p>
-      </div>
-      <div v-if="activeTab === 'login'" class="submit-section">
-        <button
-          class="mahjong-button primary-btn"
-          @click="handlePhoneLogin"
-          :disabled="isSubmitting"
-        >
-          {{ isSubmitting ? '登录中...' : '登录' }}
-        </button>
-      </div>
+          <div v-if="activeTab === 'login'" class="form-section">
+            <div class="form-field">
+              <label>手机号</label>
+              <input
+                v-model="loginForm.phone"
+                type="tel"
+                placeholder="输入11位手机号"
+                maxlength="11"
+                autocomplete="tel"
+              />
+            </div>
+            <div class="form-field">
+              <label>密码</label>
+              <input
+                v-model="loginForm.password"
+                type="password"
+                placeholder="输入密码"
+                autocomplete="current-password"
+                @keyup.enter="handlePhoneLogin"
+              />
+            </div>
+            <p v-if="loginError" class="status-text error">{{ loginError }}</p>
+          </div>
 
-      <!-- 注册表单 -->
-      <div v-if="activeTab === 'register'" class="form-section">
-        <div class="form-field">
-          <label>玩家名 <span class="required">*</span></label>
-          <input
-            type="text"
-            v-model="registerForm.name"
-            placeholder="输入你的昵称"
-            maxlength="20"
-          />
-        </div>
-        <div class="form-field">
-          <label>手机号 <span class="required">*</span></label>
-          <input
-            type="tel"
-            v-model="registerForm.phone"
-            placeholder="输入11位国内手机号"
-            maxlength="11"
-            autocomplete="tel"
-          />
-        </div>
-        <div class="form-field">
-          <label>密码 <span class="required">*</span></label>
-          <input
-            type="password"
-            v-model="registerForm.password"
-            placeholder="至少4位密码"
-            autocomplete="new-password"
-            @keyup.enter="handleRegister"
-          />
-        </div>
-        <p v-if="registerError" class="status-text error">{{ registerError }}</p>
-      </div>
-      <div v-if="activeTab === 'register'" class="submit-section">
-        <button
-          class="mahjong-button primary-btn"
-          @click="handleRegister"
-          :disabled="isSubmitting"
-        >
-          {{ isSubmitting ? '注册中...' : '注册' }}
-        </button>
-      </div>
+          <div v-else class="form-section">
+            <div class="form-field">
+              <label>玩家名 <span class="required">*</span></label>
+              <input
+                v-model="registerForm.name"
+                type="text"
+                placeholder="输入你的昵称"
+                maxlength="20"
+              />
+            </div>
+            <div class="form-field">
+              <label>手机号 <span class="required">*</span></label>
+              <input
+                v-model="registerForm.phone"
+                type="tel"
+                placeholder="输入11位国内手机号"
+                maxlength="11"
+                autocomplete="tel"
+              />
+            </div>
+            <div class="form-field">
+              <label>密码 <span class="required">*</span></label>
+              <input
+                v-model="registerForm.password"
+                type="password"
+                placeholder="至少4位密码"
+                autocomplete="new-password"
+                @keyup.enter="handleRegister"
+              />
+            </div>
+            <p v-if="registerError" class="status-text error">{{ registerError }}</p>
+          </div>
+        </section>
 
-      <!-- 分割线 -->
-      <div class="divider">
-        <span>或选择已有玩家</span>
-      </div>
+        <aside class="login-side">
+          <div class="submit-section">
+            <button
+              v-if="activeTab === 'login'"
+              class="mahjong-button primary-btn"
+              @click="handlePhoneLogin"
+              :disabled="isSubmitting"
+            >
+              {{ isSubmitting ? '登录中...' : '登录' }}
+            </button>
+            <button
+              v-else
+              class="mahjong-button primary-btn"
+              @click="handleRegister"
+              :disabled="isSubmitting"
+            >
+              {{ isSubmitting ? '注册中...' : '注册' }}
+            </button>
+          </div>
 
-      <!-- 玩家列表（快速登录） -->
-      <div class="quick-login">
-        <div v-if="usersPending" class="status-text">加载中…</div>
-        <div v-else-if="playerUsers.length === 0" class="status-text">暂无已有玩家</div>
-        <div v-else class="player-chips">
-          <button
-            v-for="user in playerUsers"
-            :key="user.userId"
-            class="player-chip"
-            @click="handleQuickLogin(user)"
-            :disabled="isSubmitting"
-          >
-            {{ user.name }}
-          </button>
-        </div>
+          <div class="divider">
+            <span>或选择已有玩家</span>
+          </div>
+
+          <div class="quick-login">
+            <div v-if="usersPending" class="status-text">加载中...</div>
+            <div v-else-if="playerUsers.length === 0" class="status-text">暂无已有玩家</div>
+            <div v-else class="player-chips">
+              <button
+                v-for="user in playerUsers"
+                :key="user.userId"
+                class="player-chip"
+                @click="handleQuickLogin(user)"
+                :disabled="isSubmitting"
+              >
+                {{ user.name }}
+              </button>
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-const { data: usersData, pending: usersPending, refresh } = await useFetch('/api/auth/users')
+const { data: usersData, pending: usersPending } = await useFetch('/api/auth/users')
 const playerUsers = computed(() => (usersData.value?.users || []).filter((u) => !u.isAdmin))
 
 const activeTab = ref('login')
@@ -133,7 +134,6 @@ const registerError = ref('')
 const loginForm = reactive({ phone: '', password: '' })
 const registerForm = reactive({ name: '', phone: '', password: '' })
 
-// 尝试从缓存恢复手机号
 onMounted(() => {
   const cached = localStorage.getItem('mj_phone')
   if (cached) {
@@ -152,7 +152,6 @@ const saveSession = (data) => {
   const userId = useCookie('user_id')
   userId.value = data.userId
 
-  // 缓存手机号（下次免输）
   localStorage.setItem('mj_phone', data.phone)
 }
 
@@ -224,7 +223,12 @@ const handleQuickLogin = async (user) => {
       method: 'POST',
       body: { userId: user.userId }
     })
-    saveSession({ token: res.token || `session-${res.user.userId}`, name: res.user.name, userId: res.user.userId, phone: '' })
+    saveSession({
+      token: res.token || `session-${res.user.userId}`,
+      name: res.user.name,
+      userId: res.user.userId,
+      phone: ''
+    })
     await navigateTo('/')
   } catch (err) {
     console.error('Quick login failed:', err)
@@ -238,13 +242,13 @@ const handleQuickLogin = async (user) => {
 .mahjong-page {
   min-height: 100dvh;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   background: radial-gradient(circle at top, #153b2f, #07130e);
   font-family: system-ui, -apple-system, sans-serif;
   color: #f5f5f5;
   width: 100%;
-  padding: 0 10px 10px;
+  padding: 12px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -252,28 +256,37 @@ const handleQuickLogin = async (user) => {
 .mahjong-card {
   background: rgba(7, 19, 14, 0.9);
   border-radius: 18px;
-  padding: 32px 36px;
-  max-width: 400px;
-  width: min(92vw, 400px);
-  text-align: center;
+  padding: 28px 30px;
+  width: min(92vw, 960px);
   box-shadow: 0 18px 45px rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  margin: 4px auto 0;
+}
+
+.login-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.login-main {
+  display: flex;
+  flex-direction: column;
 }
 
 .mahjong-title {
   font-size: 2rem;
-  margin-bottom: 4px;
+  margin: 0 0 4px;
   letter-spacing: 0.08em;
+  text-align: center;
 }
 
 .mahjong-subtitle {
   font-size: 0.9rem;
   opacity: 0.7;
-  margin-bottom: 20px;
+  margin: 0 0 20px;
+  text-align: center;
 }
 
-/* Tab Bar */
 .tab-bar {
   display: flex;
   gap: 0;
@@ -301,7 +314,6 @@ const handleQuickLogin = async (user) => {
   color: #5fffb0;
 }
 
-/* Form */
 .form-section {
   display: flex;
   flex-direction: column;
@@ -344,6 +356,17 @@ const handleQuickLogin = async (user) => {
   color: rgba(255, 255, 255, 0.3);
 }
 
+.login-side {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.submit-section {
+  display: flex;
+  justify-content: center;
+}
+
 .primary-btn {
   width: 100%;
   padding: 14px;
@@ -354,7 +377,6 @@ const handleQuickLogin = async (user) => {
   font-size: 1.1rem;
   font-weight: 700;
   cursor: pointer;
-  margin-top: 4px;
   transition: all 0.2s;
 }
 
@@ -363,7 +385,8 @@ const handleQuickLogin = async (user) => {
   box-shadow: 0 6px 20px rgba(70, 197, 116, 0.3);
 }
 
-.primary-btn:disabled {
+.primary-btn:disabled,
+.player-chip:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
@@ -377,14 +400,13 @@ const handleQuickLogin = async (user) => {
 
 .status-text.error {
   color: #ff9f9f;
+  text-align: left;
 }
 
-/* Divider */
 .divider {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 20px 0 14px;
   color: rgba(255, 255, 255, 0.4);
   font-size: 0.8rem;
 }
@@ -397,7 +419,6 @@ const handleQuickLogin = async (user) => {
   background: rgba(255, 255, 255, 0.1);
 }
 
-/* Quick Login */
 .quick-login {
   text-align: center;
 }
@@ -426,125 +447,79 @@ const handleQuickLogin = async (user) => {
   border-color: rgba(70, 197, 116, 0.3);
 }
 
-.player-chip:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 @media (orientation: landscape) {
   .mahjong-page {
-    min-height: 100dvh;
-    padding: 0 8px 8px;
-    align-items: stretch;
+    padding: 8px;
   }
 
   .mahjong-card {
-    width: min(960px, 100%);
-    max-width: 960px;
-    min-height: calc(100dvh - 8px);
-    padding: 14px 18px;
+    min-height: calc(100dvh - 16px);
+    padding: 18px 20px;
+  }
+
+  .login-shell {
+    height: 100%;
     display: grid;
-    grid-template-columns: minmax(300px, 380px) minmax(260px, 1fr);
-    grid-template-areas:
-      "title quick"
-      "subtitle quick"
-      "tabs quick"
-      "form form"
-      "submit form";
-    column-gap: 20px;
-    row-gap: 8px;
-    align-content: start;
-    text-align: left;
-    overflow: hidden;
+    grid-template-columns: minmax(320px, 1.25fr) minmax(180px, 0.75fr);
+    gap: 20px;
+    align-items: stretch;
   }
 
+  .login-main {
+    min-width: 0;
+  }
+
+  .login-side {
+    min-width: 0;
+    justify-content: center;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    padding-left: 20px;
+  }
+
+  .mahjong-title,
   .mahjong-subtitle {
-    margin-bottom: 0;
-  }
-
-  .tab-btn {
-    font-size: 0.95rem;
-  }
-
-  .form-section {
-    gap: 10px;
-  }
-
-  .primary-btn {
-    width: auto;
-    min-width: 160px;
-    padding: 12px 28px;
+    text-align: left;
   }
 
   .mahjong-title {
-    grid-area: title;
     font-size: 1.7rem;
-    margin: 0;
   }
 
   .mahjong-subtitle {
-    grid-area: subtitle;
-    margin: 0 0 4px;
-  }
-
-  .tab-bar {
-    grid-area: tabs;
-    margin-bottom: 8px;
-  }
-
-  .form-section {
-    grid-area: form;
-    gap: 10px;
+    margin-bottom: 14px;
   }
 
   .submit-section {
-    grid-area: submit;
-    display: flex;
-    justify-content: flex-end;
-    align-items: flex-start;
-    padding-right: 8px;
-  }
-
-  .submit-section .primary-btn {
-    background: linear-gradient(135deg, #1f8a52, #46c574);
-    color: #fff;
-    border: none;
-    font-weight: 700;
-  }
-
-  .divider {
-    display: none;
-  }
-
-  .quick-login {
-    grid-area: quick;
-    align-self: start;
-    height: 100%;
-    min-height: 0;
-    padding-left: 16px;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
-    text-align: center;
-    overflow: hidden;
-  }
-
-  .quick-login::before {
-    content: '快速登录';
-    display: block;
-    margin-bottom: 10px;
-    color: rgba(255, 255, 255, 0.75);
-    font-size: 0.9rem;
-    font-weight: 700;
-  }
-
-  .player-chips {
-    justify-content: center;
-    max-height: calc(100dvh - 84px);
-    overflow-y: auto;
-    padding-right: 4px;
+    justify-content: stretch;
   }
 
   .primary-btn {
-    margin-top: 0;
+    min-height: 56px;
+  }
+
+  .quick-login {
+    text-align: left;
+  }
+
+  .player-chips {
+    justify-content: flex-start;
+    align-content: flex-start;
+    max-height: 36dvh;
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 600px) and (orientation: portrait) {
+  .mahjong-card {
+    padding: 22px 18px;
+  }
+
+  .mahjong-title {
+    font-size: 1.7rem;
+  }
+
+  .mahjong-subtitle {
+    margin-bottom: 16px;
   }
 }
 </style>

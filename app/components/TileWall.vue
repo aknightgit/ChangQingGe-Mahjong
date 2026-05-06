@@ -1,57 +1,57 @@
 <template>
   <div class="tile-wall" :class="`tile-wall--back-${effectiveBackScheme}`">
-    <!-- 上边牌墙：上移20px -->
-    <div class="wall-side wall-top">
-      <div class="wall-layer wall-layer--inner">
-        <div v-for="i in TILES_PER_SIDE" :key="`ti-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: 'calc(16% - 10px)', zIndex: '1', transform: 'translateX(-50%)' }">
+    <div class="wall-side wall-side--top">
+      <div class="wall-track wall-track--horizontal wall-track--inner">
+        <div v-for="i in TILES_PER_SIDE" :key="`top-inner-${i}`" class="tile-slot">
           <BackTile :scheme="effectiveBackScheme" />
         </div>
       </div>
-      <div class="wall-layer wall-layer--outer">
-        <div v-for="i in TILES_PER_SIDE" :key="`to-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: `calc(16% - 10px + ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
+      <div class="wall-track wall-track--horizontal wall-track--outer">
+        <div v-for="i in TILES_PER_SIDE" :key="`top-outer-${i}`" class="tile-slot">
           <BackTile :scheme="effectiveBackScheme" outer />
           <div class="tile-side tile-side--bottom" />
         </div>
       </div>
     </div>
 
-    <!-- 下边牌墙（本家）：位置不变 -->
-    <div class="wall-side wall-bottom">
-      <div class="wall-layer wall-layer--inner">
-        <div v-for="i in TILES_PER_SIDE" :key="`bi-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px + 10px)`, bottom: 'calc(16%)', zIndex: '1', transform: 'translateX(-50%)' }">
+    <div class="wall-side wall-side--bottom">
+      <div class="wall-track wall-track--horizontal wall-track--inner">
+        <div v-for="i in TILES_PER_SIDE" :key="`bottom-inner-${i}`" class="tile-slot">
           <BackTile :scheme="effectiveBackScheme" />
         </div>
       </div>
-      <div class="wall-layer wall-layer--outer">
-        <div v-for="i in TILES_PER_SIDE" :key="`bo-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px + 10px)`, bottom: `calc(16% - ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
+      <div class="wall-track wall-track--horizontal wall-track--outer">
+        <div v-for="i in TILES_PER_SIDE" :key="`bottom-outer-${i}`" class="tile-slot">
           <BackTile :scheme="effectiveBackScheme" outer />
-          <div class="tile-side tile-side--bottom" />
+          <div class="tile-side tile-side--top" />
         </div>
       </div>
     </div>
 
-    <!-- 左边牌墙 -->
-    <div class="wall-side wall-left">
-      <div class="wall-layer wall-layer--outer">
-        <div v-for="i in TILES_PER_SIDE" :key="`lo-${i}`" class="tile-slot tile-slot--vertical"
-          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * V_OVERLAP}px + 15px)`, left: 'calc(16%)', zIndex: '2', transform: 'translateY(-50%)' }">
+    <div class="wall-side wall-side--left">
+      <div class="wall-track wall-track--vertical wall-track--inner">
+        <div v-for="i in TILES_PER_SIDE" :key="`left-inner-${i}`" class="tile-slot tile-slot--vertical">
+          <BackTile :scheme="effectiveBackScheme" />
+        </div>
+      </div>
+      <div class="wall-track wall-track--vertical wall-track--outer">
+        <div v-for="i in TILES_PER_SIDE" :key="`left-outer-${i}`" class="tile-slot tile-slot--vertical">
           <BackTile :scheme="effectiveBackScheme" outer />
-          <div v-if="i === 1" class="tile-side tile-side--bottom" />
+          <div class="tile-side tile-side--right" />
         </div>
       </div>
     </div>
 
-    <!-- 右边牌墙 -->
-    <div class="wall-side wall-right">
-      <div class="wall-layer wall-layer--outer">
-        <div v-for="i in TILES_PER_SIDE" :key="`ro-${i}`" class="tile-slot tile-slot--vertical"
-          :style="{ top: `calc(50% - ${(TILES_PER_SIDE * V_OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * V_OVERLAP}px + 15px)`, right: 'calc(16%)', zIndex: '2', transform: 'translateY(-50%)' }">
+    <div class="wall-side wall-side--right">
+      <div class="wall-track wall-track--vertical wall-track--inner">
+        <div v-for="i in TILES_PER_SIDE" :key="`right-inner-${i}`" class="tile-slot tile-slot--vertical">
+          <BackTile :scheme="effectiveBackScheme" />
+        </div>
+      </div>
+      <div class="wall-track wall-track--vertical wall-track--outer">
+        <div v-for="i in TILES_PER_SIDE" :key="`right-outer-${i}`" class="tile-slot tile-slot--vertical">
           <BackTile :scheme="effectiveBackScheme" outer />
-          <div v-if="i === 1" class="tile-side tile-side--bottom" />
+          <div class="tile-side tile-side--left" />
         </div>
       </div>
     </div>
@@ -80,27 +80,30 @@ const BackTile = defineComponent({
     outer: { type: Boolean, default: false }
   },
   setup(tileProps) {
-    return () => {
-      const baseClass = ['wall-back', tileProps.outer ? 'wall-back--outer' : '']
-      return h('div', {
-        class: [
-          ...baseClass,
-          'wall-back--css',
-          tileProps.scheme === 1 ? 'wall-back--ivory' : tileProps.scheme === 2 ? 'wall-back--capri' : 'wall-back--jade'
-        ]
-      })
-    }
+    return () => h('div', {
+      class: [
+        'wall-back',
+        'wall-back--css',
+        tileProps.outer ? 'wall-back--outer' : '',
+        tileProps.scheme === 1 ? 'wall-back--ivory' : tileProps.scheme === 2 ? 'wall-back--capri' : 'wall-back--jade'
+      ]
+    })
   }
 })
 
 const TILES_PER_SIDE = 18
-const OVERLAP = 30  // 牌宽28 + 间隙2
-const V_OVERLAP = 30  // 牌宽28 + 间隙2
-const LAYER_OFFSET = 1
 </script>
 
 <style scoped>
 .tile-wall {
+  --wall-tile-w: clamp(12px, calc(var(--tile-w, 28px) * 0.82), 24px);
+  --wall-tile-h: clamp(18px, calc(var(--tile-h, 40px) * 0.82), 34px);
+  --wall-seam-overlap: clamp(0px, calc(var(--wall-tile-w) * 0.05), 1px);
+  --wall-layer-offset: clamp(1px, calc(var(--wall-tile-h) * 0.08), 3px);
+  --wall-side-depth: clamp(2px, calc(var(--wall-tile-h) * 0.12), 4px);
+  --wall-top-inset: 12%;
+  --wall-bottom-inset: 12%;
+  --wall-side-inset: 10%;
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -109,36 +112,100 @@ const LAYER_OFFSET = 1
 
 .wall-side {
   position: absolute;
-  inset: 0;
+  display: flex;
+  pointer-events: none;
+}
+
+.wall-side--top {
+  top: var(--wall-top-inset);
+  left: 50%;
+  transform: translateX(-50%);
+  flex-direction: column;
+  align-items: center;
+}
+
+.wall-side--bottom {
+  bottom: var(--wall-bottom-inset);
+  left: 50%;
+  transform: translateX(-50%);
+  flex-direction: column-reverse;
+  align-items: center;
+}
+
+.wall-side--left {
+  left: var(--wall-side-inset);
+  top: 50%;
+  transform: translateY(-50%);
+  flex-direction: row;
+  align-items: center;
+}
+
+.wall-side--right {
+  right: var(--wall-side-inset);
+  top: 50%;
+  transform: translateY(-50%);
+  flex-direction: row-reverse;
+  align-items: center;
+}
+
+.wall-track {
+  display: flex;
+  gap: 0;
+}
+
+.wall-track--horizontal {
+  flex-direction: row;
+}
+
+.wall-track--vertical {
+  flex-direction: column;
+}
+
+.wall-side--top .wall-track--outer,
+.wall-side--bottom .wall-track--outer {
+  margin-top: calc(var(--wall-layer-offset) * -1);
+}
+
+.wall-side--left .wall-track--outer,
+.wall-side--right .wall-track--outer {
+  margin-left: calc(var(--wall-layer-offset) * -1);
+}
+
+.wall-track--horizontal .tile-slot + .tile-slot {
+  margin-left: calc(var(--wall-seam-overlap) * -1);
+}
+
+.wall-track--vertical .tile-slot + .tile-slot {
+  margin-top: calc(var(--wall-seam-overlap) * -1);
 }
 
 .tile-slot {
-  position: absolute;
-  width: 28px;
-  height: 40px;
-  flex-shrink: 0;
+  position: relative;
+  width: var(--wall-tile-w);
+  height: var(--wall-tile-h);
+  flex: 0 0 auto;
 }
 
 .tile-slot--vertical {
-  width: 40px;
-  height: 28px;
+  width: var(--wall-tile-h);
+  height: var(--wall-tile-w);
 }
 
 .wall-back {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  border-radius: 3px;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+  border-radius: 2px;
+  box-sizing: border-box;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
 
 .wall-back--css {
-  --wall-back-ring-size: 19.5px;
-  --wall-back-dot-size: 7.5px;
+  --wall-back-ring-size: calc(var(--wall-tile-w) * 0.5);
+  --wall-back-dot-size: calc(var(--wall-tile-w) * 0.18);
   box-sizing: border-box;
   position: relative;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.45);
 }
 
 .wall-back--css::before,
@@ -147,24 +214,28 @@ const LAYER_OFFSET = 1
   position: absolute;
   top: 50%;
   left: 50%;
-  width: var(--wall-back-ring-size);
-  height: auto;
-  aspect-ratio: 1;
   transform: translate(-50%, -50%);
+  aspect-ratio: 1;
   border-radius: 50%;
-  background: currentColor;
-  opacity: 0.22;
+  pointer-events: none;
+}
+
+.wall-back--css::before {
+  width: var(--wall-back-ring-size);
+  border: 1px solid currentColor;
+  opacity: 0.24;
 }
 
 .wall-back--css::after {
   width: var(--wall-back-dot-size);
-  opacity: 0.35;
+  background: currentColor;
+  opacity: 0.34;
 }
 
 .wall-back--jade {
   color: #e0f6d4;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.24), transparent 36%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.22), transparent 36%),
     linear-gradient(180deg, #45d07f 0%, #239f57 100%);
   border-color: rgba(213, 245, 196, 0.22);
 }
@@ -172,7 +243,7 @@ const LAYER_OFFSET = 1
 .wall-back--ivory {
   color: #8f6c2a;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.55), transparent 36%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.52), transparent 36%),
     linear-gradient(180deg, #f6edd8 0%, #d5b878 100%);
   border-color: rgba(120, 92, 46, 0.35);
 }
@@ -186,47 +257,82 @@ const LAYER_OFFSET = 1
 }
 
 .wall-back--outer {
-  filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5)) brightness(1.1);
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45)) brightness(1.05);
 }
 
 .tile-side {
   position: absolute;
   pointer-events: none;
-  bottom: -5px;
+  background: linear-gradient(180deg, #1a4a28 0%, #1a4a28 33%, #f5efe0 33%, #e8e0d0 100%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.tile-side--bottom,
+.tile-side--top {
   left: 1px;
   right: 1px;
-  height: 5px;
+  height: var(--wall-side-depth);
+}
+
+.tile-side--bottom {
+  bottom: calc(var(--wall-side-depth) * -1);
   border-radius: 0 0 2px 2px;
-  background: linear-gradient(180deg, #1a4a28 0%, #1a4a28 33%, #f5efe0 33%, #e8e0d0 100%);
-  box-shadow: 0 2px 3px rgba(0,0,0,0.25);
+}
+
+.tile-side--top {
+  top: calc(var(--wall-side-depth) * -1);
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(0deg, #1a4a28 0%, #1a4a28 33%, #f5efe0 33%, #e8e0d0 100%);
+}
+
+.tile-side--left,
+.tile-side--right {
+  top: 1px;
+  bottom: 1px;
+  width: var(--wall-side-depth);
+}
+
+.tile-side--left {
+  left: calc(var(--wall-side-depth) * -1);
+  border-radius: 2px 0 0 2px;
+  background: linear-gradient(90deg, #1a4a28 0%, #1a4a28 33%, #f5efe0 33%, #e8e0d0 100%);
+}
+
+.tile-side--right {
+  right: calc(var(--wall-side-depth) * -1);
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(270deg, #1a4a28 0%, #1a4a28 33%, #f5efe0 33%, #e8e0d0 100%);
 }
 
 .tile-wall--back-1 .tile-side {
   background: linear-gradient(180deg, #c7a56a 0%, #c7a56a 33%, #f7efd9 33%, #e6d7b8 100%);
 }
 
+.tile-wall--back-1 .tile-side--top {
+  background: linear-gradient(0deg, #c7a56a 0%, #c7a56a 33%, #f7efd9 33%, #e6d7b8 100%);
+}
+
+.tile-wall--back-1 .tile-side--left {
+  background: linear-gradient(90deg, #c7a56a 0%, #c7a56a 33%, #f7efd9 33%, #e6d7b8 100%);
+}
+
+.tile-wall--back-1 .tile-side--right {
+  background: linear-gradient(270deg, #c7a56a 0%, #c7a56a 33%, #f7efd9 33%, #e6d7b8 100%);
+}
+
 .tile-wall--back-2 .tile-side {
   background: linear-gradient(180deg, #057fa6 0%, #057fa6 33%, #effcff 33%, #c8eef4 100%);
 }
 
-.tile-side--top {
-  top: -5px;
-  bottom: auto;
-  border-radius: 2px 2px 0 0;
-  background: linear-gradient(0deg, #1a4a28 0%, #1a4a28 33%, #f5efe0 33%, #e8e0d0 100%);
-  box-shadow: 0 -2px 3px rgba(0,0,0,0.25);
+.tile-wall--back-2 .tile-side--top {
+  background: linear-gradient(0deg, #057fa6 0%, #057fa6 33%, #effcff 33%, #c8eef4 100%);
 }
 
-@media (max-width: 1300px) {
-  .tile-slot { width: 22px; height: 32px; }
-  .tile-slot--vertical { width: 32px; height: 22px; }
-  .tile-side { height: 4px; bottom: -4px; }
-  .tile-side--top { top: -4px; }
+.tile-wall--back-2 .tile-side--left {
+  background: linear-gradient(90deg, #057fa6 0%, #057fa6 33%, #effcff 33%, #c8eef4 100%);
 }
-@media (max-width: 900px) {
-  .tile-slot { width: 16px; height: 24px; }
-  .tile-slot--vertical { width: 24px; height: 16px; }
-  .tile-side { height: 3px; bottom: -3px; }
-  .tile-side--top { top: -3px; }
+
+.tile-wall--back-2 .tile-side--right {
+  background: linear-gradient(270deg, #057fa6 0%, #057fa6 33%, #effcff 33%, #c8eef4 100%);
 }
 </style>

@@ -449,8 +449,8 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
 }
 
 .player-other :deep(.tile--small) {
-  width: 18px;
-  height: 26px;
+  width: 28px;
+  height: 40px;
 }
 
 .player-other :deep(.tile-img) {
@@ -465,5 +465,12 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
 .seat-line--left {
   transform: rotate(90deg);
   transform-origin: center;
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .player-other :deep(.tile--small) {
+    width: 18px;
+    height: 26px;
+  }
 }
 </style>

@@ -1,7 +1,10 @@
 ﻿<template>
-  <div class="mahjong-page" :class="[{ 'layout-debug': showDebugPanel, 'mobile-portrait': shouldRotateView }]">
+  <div class="mahjong-page" :class="[
+    { 'layout-debug': showDebugPanel, 'mobile-portrait': shouldRotateView },
+    `layout--${layoutMode}`
+  ]">
     <div class="room-viewport" :class="{ 'room-viewport--rotated': shouldRotateView }">
-      <div class="room-container" :class="{ 'room-container--rotated': shouldRotateView }">
+      <div class="room-container" :class="{ 'room-container--rotated': shouldRotateView, 'room-container--mobile-landscape': isMobileLandscapeMode }">
       <header class="room-header">
         <div class="room-info">
           <div class="room-title-line">
@@ -678,6 +681,10 @@
             :players="statsPlayers"
             :current-round="currentRound"
             :spectating-id="spectatingId"
+            :pending-spectate-id="pendingSpectateId"
+            :approved-human-spectate-id="approvedHumanSpectateId"
+            :show-spectate-area="showSpectatorControls"
+            :can-spectate="canUseSpectatorView"
             @spectate="handleSpectate"
             @name-click="onPlayerNameClick"
           />
@@ -1002,7 +1009,14 @@ const {
 const showAllCards = ref(false)
 const shouldRevealOpponents = computed(() => showAllCards.value || !!currentPlayer.value?.isSpectator)
 const isMobilePortrait = ref(false)
+const isMobileLandscape = ref(false)
 const shouldRotateView = computed(() => isMobilePortrait.value)
+const isMobileLandscapeMode = computed(() => isMobileLandscape.value && !shouldRotateView.value)
+const layoutMode = computed<'desktop' | 'mobile-landscape' | 'mobile-portrait'>(() => {
+  if (shouldRotateView.value) return 'mobile-portrait'
+  if (isMobileLandscapeMode.value) return 'mobile-landscape'
+  return 'desktop'
+})
 const nowTs = ref(Date.now())
 let actionWindowTimer: ReturnType<typeof setInterval> | null = null
 
@@ -1152,6 +1166,7 @@ const evaluateViewport = () => {
   const smallestSide = Math.min(width, height)
   const isPortrait = height >= width
   isMobilePortrait.value = isPortrait && smallestSide <= 768
+  isMobileLandscape.value = !isPortrait && width <= 900
 }
 
 const isHiddenTile = (tile: any) => String(tile?.id || '').startsWith('hidden-') || tile?.value === 0
@@ -3381,49 +3396,20 @@ const forceDiscard = async (p: Player) => {
 .room-container--rotated {
   max-width: none;
   display: flex;
-  flex-direction: row;
-  gap: 10px;
+  flex-direction: column;
 }
 
 .room-container {
   background: rgba(7, 19, 14, 0.92);
   border-radius: 20px;
-  padding: 12px 12px 16px;
-  max-width: 1600px;
+  padding: 16px 16px 20px;
+  max-width: 1400px;
   width: 100%;
   box-shadow: 0 18px 45px rgba(0, 0, 0, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-@media (orientation: landscape) and (max-height: 600px) {
-  .mahjong-page { padding: 0; min-height: 100vh; height: 100vh; overflow: hidden; }
-  .room-viewport { width: 100%; height: 100%; }
-  .room-container {
-    padding: 0;
-    gap: 0;
-    border-radius: 0;
-    max-width: none;
-    width: 100%;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    border: none;
-    background: transparent;
-    box-shadow: none;
-  }
-  .room-header { padding: 0 6px; gap: 3px; min-height: 22px; background: rgba(7,19,14,0.95); }
-  .mahjong-title { font-size: 0.75rem; margin: 0; }
-  .mahjong-subtitle { font-size: 0.6rem; }
-  .header-actions { gap: 2px; }
-  .mahjong-button.small { padding: 2px 5px; font-size: 0.6rem; }
-  .room-main { gap: 0; flex: 1; min-height: 0; }
-  .table-wrapper { flex: 1; min-height: 0; padding: 0; }
-  .mahjong-table { width: 100%; height: 100%; max-height: none; aspect-ratio: 16 / 9; border-width: 3px; border-radius: 0; }
-  .extended-info-panel { max-height: 100%; border-radius: 0; padding: 2px; }
-  .room-main { gap: 0; }
+  gap: 12px;
 }
 
 .room-header {
@@ -3524,9 +3510,9 @@ const forceDiscard = async (p: Player) => {
 
 .mahjong-table {
   position: relative;
-  /* 牌桌尽量占满可用空间 */
-  width: min(100%, calc(85vh * 16/9), 1600px);
-  aspect-ratio: 16 / 9;
+  /* 4:3 比例，56em×42em ≈ 896×672px，保证零隐藏 */
+  width: min(100vw, calc(80vh * 4/3), 1200px);
+  aspect-ratio: 4 / 3;
   --tile-w: 28px;
   --tile-h: 40px;
   --tile-gap: 2px;
@@ -3540,16 +3526,16 @@ const forceDiscard = async (p: Player) => {
     0 12px 30px rgba(0, 0, 0, 0.8);
   padding: 0;
   overflow: hidden;
-  --seat-side-inset: 3%;
-  --seat-top-inset: 1%;
-  --seat-bottom-inset: 0.5%;
-  --seat-top-width: 55%;
-  --seat-bottom-width: 75%;
-  --seat-side-width: 100px;
-  --seat-side-height: 50%;
-  --discard-top-inset: 38%;
-  --discard-bottom-inset: 20%;
-  --discard-side-inset: 38%;
+  --seat-side-inset: 4.8%;
+  --seat-top-inset: 2.8%;
+  --seat-bottom-inset: 1.4%;
+  --seat-top-width: 58%;
+  --seat-bottom-width: 72%;
+  --seat-side-width: 96px;
+  --seat-side-height: 70%;
+  --discard-top-inset: 24.8%;
+  --discard-bottom-inset: 23.8%;
+  --discard-side-inset: 27.4%;
 }
 
 /* 绿色麻将桌布内层 */
@@ -3645,14 +3631,13 @@ const forceDiscard = async (p: Player) => {
 
 /* ===== 扩展信息区 ===== */
 .extended-info-panel {
-  flex: 0 0 320px;
-  max-width: 320px;
+  flex: 0 0 354px;
+  max-width: 354px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   overflow-y: auto;
-  max-height: 85vh;
-  font-size: 0.85rem;
+  max-height: 80vh;
 }
 
 /* 操作按钮区：与战绩榜同宽，底部对齐牌桌 */
@@ -3719,69 +3704,146 @@ const forceDiscard = async (p: Player) => {
   color: #ffd6d6;
 }
 
-/* 桌面端 */
+/* 桌面端严格 1/4 宽 */
 @media (min-width: 1101px) {
   .extended-info-panel {
+    /* 牌桌宽度约 75vw (table-wrapper flex), 1/4 ≈ 25vw; 但受 max-width 约束 */
     flex: 0 0 25%;
     max-width: 370px;
   }
 }
 
-/* 平板/小桌面 */
+/* 窄屏降级 */
 @media (max-width: 1100px) {
   .extended-info-panel {
-    flex: 0 0 260px;
-    max-width: 260px;
-    font-size: 0.82rem;
+    flex: 0 0 276px;
+    max-width: 276px;
   }
 }
 
-/* 横屏手机：右侧栏压缩，字体更小 */
-@media (max-width: 900px) and (orientation: landscape) {
-  .room-main {
-    flex-direction: row;
-    gap: 0;
-    min-height: 0;
-    overflow: hidden;
-  }
-  .table-wrapper {
-    flex: 1 1 70%;
-    min-width: 0;
-    overflow: hidden;
-  }
-  .extended-info-panel {
-    flex: 0 1 30%;
-    width: 30%;
-    min-width: 140px;
-    max-width: 280px;
-    font-size: 0.62rem;
-    gap: 3px;
-    max-height: 94vh;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 3px;
-    scrollbar-width: thin;
-  }
-  .extended-info-panel * { max-width: 100%; word-wrap: break-word; overflow-wrap: break-word; }
-  .extended-info-panel .ext-section { padding: 3px 4px 4px; border-radius: 6px; margin: 0; }
-  .extended-info-panel .ext-title { font-size: 0.62rem; margin-bottom: 1px; }
-  .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
-  .extended-info-panel .panel-room-number { font-size: 0.6rem; }
-  .extended-info-panel .extra-action-btn { padding: 2px 4px; font-size: 0.52rem; }
-  .extended-info-panel .extra-actions-bar { padding: 2px 4px; gap: 3px; flex-wrap: wrap; }
-  .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
-  .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
-  .extended-info-panel .action-buttons-panel { gap: 3px; }
-  .extended-info-panel .turn-status-text { font-size: 0.54rem; }
-  .extended-info-panel .room-header-row { gap: 3px; margin: 0; }
-  .extended-info-panel .room-stats { padding: 2px 3px; }
-  .extended-info-panel .player-row { padding: 2px 3px; font-size: 0.52rem; gap: 3px; }
-  .extended-info-panel .broadcast-container { max-height: 50px; padding: 2px 3px; }
-  .extended-info-panel .broadcast-message { font-size: 0.48rem; padding: 1px 0; }
-  .extended-info-panel .action-panel { padding: 4px; gap: 4px; }
-  .extended-info-panel .action-btn--small { width: 28px; height: 28px; font-size: 0.6rem; }
-  .extended-info-panel .action-btn--draw { width: 40px; height: 40px; font-size: 0.75rem; }
+.layout--mobile-landscape {
+  padding: 0;
+  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
+
+.layout--mobile-landscape .room-viewport {
+  width: 100%;
+  height: 100%;
+}
+
+.layout--mobile-landscape .room-container {
+  padding: 0;
+  gap: 0;
+  border-radius: 0;
+  max-width: none;
+  width: 100%;
+  height: 100vh;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.layout--mobile-landscape .room-header {
+  padding: 0 6px;
+  gap: 3px;
+  min-height: 22px;
+  background: rgba(7, 19, 14, 0.95);
+}
+
+.layout--mobile-landscape .mahjong-title {
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+.layout--mobile-landscape .mahjong-subtitle {
+  font-size: 0.6rem;
+}
+
+.layout--mobile-landscape .header-actions {
+  gap: 2px;
+}
+
+.layout--mobile-landscape .mahjong-button.small {
+  padding: 2px 5px;
+  font-size: 0.6rem;
+}
+
+.layout--mobile-landscape .room-main {
+  flex-direction: row;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.layout--mobile-landscape .table-wrapper {
+  flex: 1 1 70%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.layout--mobile-landscape .mahjong-table {
+  width: min(100%, calc(85vh * 16/9), 1600px);
+  height: 100%;
+  max-height: none;
+  aspect-ratio: 16 / 9;
+  border-width: 3px;
+  border-radius: 0;
+  --seat-side-inset: 3%;
+  --seat-top-inset: 1%;
+  --seat-bottom-inset: 0.5%;
+  --seat-top-width: 55%;
+  --seat-bottom-width: 75%;
+  --seat-side-width: 100px;
+  --seat-side-height: 50%;
+  --discard-top-inset: 38%;
+  --discard-bottom-inset: 20%;
+  --discard-side-inset: 38%;
+}
+
+.layout--mobile-landscape .extended-info-panel {
+  flex: 0 1 30%;
+  width: 30%;
+  min-width: 140px;
+  max-width: 280px;
+  max-height: 100%;
+  font-size: 0.62rem;
+  gap: 3px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 3px;
+  border-radius: 0;
+  scrollbar-width: thin;
+}
+
+.layout--mobile-landscape .extended-info-panel * {
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.layout--mobile-landscape .extended-info-panel .ext-section { padding: 3px 4px 4px; border-radius: 6px; margin: 0; }
+.layout--mobile-landscape .extended-info-panel .ext-title { font-size: 0.62rem; margin-bottom: 1px; }
+.layout--mobile-landscape .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
+.layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.6rem; }
+.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: 2px 4px; font-size: 0.52rem; }
+.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: 2px 4px; gap: 3px; flex-wrap: wrap; }
+.layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
+.layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
+.layout--mobile-landscape .extended-info-panel .action-buttons-panel { gap: 3px; }
+.layout--mobile-landscape .extended-info-panel .turn-status-text { font-size: 0.54rem; }
+.layout--mobile-landscape .extended-info-panel .room-header-row { gap: 3px; margin: 0; }
+.layout--mobile-landscape .extended-info-panel .room-stats { padding: 2px 3px; }
+.layout--mobile-landscape .extended-info-panel .player-row { padding: 2px 3px; font-size: 0.52rem; gap: 3px; }
+.layout--mobile-landscape .extended-info-panel .broadcast-container { max-height: 50px; padding: 2px 3px; }
+.layout--mobile-landscape .extended-info-panel .broadcast-message { font-size: 0.48rem; padding: 1px 0; }
+.layout--mobile-landscape .extended-info-panel .action-panel { padding: 4px; gap: 4px; }
+.layout--mobile-landscape .extended-info-panel .action-btn--small { width: 28px; height: 28px; font-size: 0.6rem; }
+.layout--mobile-landscape .extended-info-panel .action-btn--draw { width: 40px; height: 40px; font-size: 0.75rem; }
 
 /* 竖屏手机：右侧栏变底部横排 */
 @media (max-width: 900px) and (orientation: portrait) {
@@ -5911,28 +5973,26 @@ const forceDiscard = async (p: Player) => {
 }
 
 /* 横屏手机：牌桌缩小，牌跟着缩 */
-@media (orientation: landscape) and (max-height: 600px) {
-  .mahjong-table {
-    --tile-w: 18px;
-    --tile-h: 26px;
-    --tile-gap: 0px;
-    border-width: 3px;
-    --seat-side-inset: 2%;
-    --seat-top-inset: 0.5%;
-    --seat-bottom-inset: 0.2%;
-    --seat-top-width: 65%;
-    --seat-bottom-width: 80%;
-    --seat-side-width: 60px;
-    --seat-side-height: 45%;
-  }
-  .seat-top { min-height: 42px; }
-  .seat-bottom { min-height: 58px; width: min(80%, calc(100% - 80px)); }
-  .seat-left { width: 60px; }
-  .seat-right { width: 70px; }
+.layout--mobile-landscape .mahjong-table {
+  --tile-w: 18px;
+  --tile-h: 26px;
+  --tile-gap: 0px;
+  border-width: 3px;
+  --seat-side-inset: 2%;
+  --seat-top-inset: 0.5%;
+  --seat-bottom-inset: 0.2%;
+  --seat-top-width: 65%;
+  --seat-bottom-width: 80%;
+  --seat-side-width: 60px;
+  --seat-side-height: 45%;
 }
+.layout--mobile-landscape .seat-top { min-height: 42px; }
+.layout--mobile-landscape .seat-bottom { min-height: 58px; width: min(80%, calc(100% - 80px)); }
+.layout--mobile-landscape .seat-left { width: 60px; }
+.layout--mobile-landscape .seat-right { width: 70px; }
 
-@media (orientation: landscape) and (max-height: 450px) {
-  .mahjong-table {
+@media (max-height: 450px) and (orientation: landscape) {
+  .layout--mobile-landscape .mahjong-table {
     --tile-w: 14px;
     --tile-h: 20px;
     --tile-gap: 0px;
@@ -5940,8 +6000,8 @@ const forceDiscard = async (p: Player) => {
     --seat-side-width: 50px;
     --seat-side-height: 40%;
   }
-  .seat-top { min-height: 36px; }
-  .seat-bottom { min-height: 48px; width: min(85%, calc(100% - 60px)); }
+  .layout--mobile-landscape .seat-top { min-height: 36px; }
+  .layout--mobile-landscape .seat-bottom { min-height: 48px; width: min(85%, calc(100% - 60px)); }
 }
 
 /* 移动竖屏旋转模式 */
@@ -5996,101 +6056,45 @@ const forceDiscard = async (p: Player) => {
   }
 }
 
-/* 移动端横屏（标准横屏，不旋转） */
-@media (max-width: 1024px) and (orientation: landscape), (max-height: 560px) and (orientation: landscape) {
-  .mahjong-page,
-  .room-viewport,
-  .room-container {
-    height: 100vh;
-    max-height: 100vh;
-    overflow: hidden;
-  }
+.layout--mobile-landscape .room-header {
+  display: none;
+}
 
-  .room-container {
-    padding: 8px;
-    gap: 8px;
-  }
+.layout--mobile-landscape .panel-room-header-row {
+  gap: 6px;
+}
 
-  /* 横屏直接复刻 web：顶部大header隐藏，右侧面板内已有房间信息 */
-  .room-header {
-    display: none;
-  }
+.layout--mobile-landscape .panel-room-number,
+.layout--mobile-landscape .mahjong-subtitle {
+  font-size: 0.78rem;
+}
 
-  .room-main {
-    flex: 1 1 auto;
-    min-height: 0;
-    flex-direction: row !important;
-    align-items: stretch;
-    gap: 8px;
-  }
+.layout--mobile-landscape .ext-section {
+  padding: 6px 8px 8px;
+  border-radius: 10px;
+}
 
-  .table-wrapper {
-    flex: 1 1 72%;
-    min-width: 0;
-    min-height: 0;
-    align-items: center;
-    justify-content: center;
-  }
+.layout--mobile-landscape .ext-title {
+  font-size: 0.8rem;
+  margin-bottom: 4px;
+}
 
-  .mahjong-table {
-    height: 100%;
-    width: auto;
-    max-width: 100%;
-    max-height: 100%;
-  }
+.layout--mobile-landscape .ext-meta,
+.layout--mobile-landscape .turn-status-text,
+.layout--mobile-landscape .extra-actions-label,
+.layout--mobile-landscape .extra-action-btn,
+.layout--mobile-landscape .mahjong-button.small,
+.layout--mobile-landscape .panel-button.small {
+  font-size: 0.68rem;
+}
 
-  .extended-info-panel {
-    flex: 0 0 28%;
-    max-width: 28%;
-    min-width: 230px;
-    min-height: 0;
-    max-height: 100%;
-    overflow: hidden;
-    gap: 6px;
-  }
+.layout--mobile-landscape .action-buttons-panel {
+  gap: 6px;
+}
 
-  .panel-room-header-row {
-    gap: 6px;
-  }
-
-  .panel-room-number,
-  .mahjong-subtitle {
-    font-size: 0.78rem;
-  }
-
-  .settle-btn-header {
-    min-width: 88px;
-    padding: 2px 10px;
-    font-size: 0.65rem;
-  }
-
-  .ext-section {
-    padding: 6px 8px 8px;
-    border-radius: 10px;
-  }
-
-  .ext-title {
-    font-size: 0.8rem;
-    margin-bottom: 4px;
-  }
-
-  .ext-meta,
-  .turn-status-text,
-  .extra-actions-label,
-  .extra-action-btn,
-  .mahjong-button.small,
-  .panel-button.small {
-    font-size: 0.68rem;
-  }
-
-  .action-buttons-panel {
-    gap: 6px;
-  }
-
-  .extra-actions-bar {
-    gap: 6px;
-    padding: 4px 8px;
-  }
+.layout--mobile-landscape .extra-actions-bar {
+  gap: 6px;
+  padding: 4px 8px;
 }
 /* ===== Layout debug borders ===== */
 .layout-debug {

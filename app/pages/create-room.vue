@@ -38,8 +38,6 @@
             <input type="number" v-model.number="createParams.thinkChances" min="0" max="10" />
             <span v-if="activeHelp === 'think'" class="help-bubble">每局限N次。默认3次。</span>
           </div>
-
-
         </section>
 
         <section class="param-group">
@@ -61,6 +59,15 @@
             </div>
             <input type="number" v-model.number="createParams.liangShanThreshold" min="0" max="99999" step="100" />
             <span v-if="activeHelp === 'qj'" class="help-bubble">累积赢分超过此值的玩家，在梁山聚义投票时无否决权。默认4000。</span>
+          </div>
+
+          <div class="create-field create-field--checkbox">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="createParams.firstRoundDouble" />
+              <span>首局翻倍</span>
+              <button class="help-btn help-btn--inline" @click="toggleHelp('double')">?</button>
+            </label>
+            <span v-if="activeHelp === 'double'" class="help-bubble">今天第一局全局倍数 ×2。默认开启。</span>
           </div>
         </section>
 
@@ -102,19 +109,6 @@
           <span class="create-hint" v-if="selectedBots.length > 0">
             已选 {{ selectedBots.length }} 个AI，还需 {{ 4 - selectedBots.length - 1 }} 位真人
           </span>
-        </section>
-
-        <section class="param-group">
-          <h3 class="param-group-title">📋 其他设置</h3>
-
-          <div class="create-field create-field--checkbox">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="createParams.firstRoundDouble" />
-              <span>首局翻倍</span>
-              <button class="help-btn help-btn--inline" @click="toggleHelp('double')">?</button>
-            </label>
-            <span v-if="activeHelp === 'double'" class="help-bubble">今天第一局全局倍数 ×2。默认开启。</span>
-          </div>
         </section>
       </div>
 
