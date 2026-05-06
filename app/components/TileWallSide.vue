@@ -66,14 +66,14 @@ function showSideTile(index: number) {
 
 .tile-slot {
   position: absolute;
-  width: 40px;
-  height: 28px;
+  width: var(--tile-h, 40px);
+  height: var(--tile-w, 28px);
   flex-shrink: 0;
 }
 
 .tile-slot--vertical {
-  width: 28px;
-  height: 40px;
+  width: var(--tile-w, 28px);
+  height: var(--tile-h, 40px);
 }
 
 .wall-back {
@@ -102,13 +102,9 @@ function showSideTile(index: number) {
 }
 
 @media (max-width: 1300px) {
-  .tile-slot { width: 32px; height: 22px; }
-  .tile-slot--vertical { width: 22px; height: 32px; }
   .tile-side { height: 4px; bottom: -4px; }
 }
 @media (max-width: 900px) {
-  .tile-slot { width: 24px; height: 16px; }
-  .tile-slot--vertical { width: 16px; height: 24px; }
   .tile-side { height: 3px; bottom: -3px; }
 }
 </style>

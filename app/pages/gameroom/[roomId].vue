@@ -241,7 +241,7 @@
         <div v-if="isWaitingRoom" class="waiting-overlay">
           <div class="waiting-card">
             <h2 class="waiting-title">🀄 长清阁麻将</h2>
-            <p class="waiting-subtitle">房间 #{{ roomId }}</p>
+            <p class="waiting-subtitle">房间 #{{ gameState?.roomNumber || roomId }}</p>
 
             <div class="waiting-players">
               <div
@@ -678,10 +678,6 @@
             :players="statsPlayers"
             :current-round="currentRound"
             :spectating-id="spectatingId"
-            :pending-spectate-id="pendingSpectateId"
-            :approved-human-spectate-id="approvedHumanSpectateId"
-            :show-spectate-area="showSpectatorControls"
-            :can-spectate="canUseSpectatorView"
             @spectate="handleSpectate"
             @name-click="onPlayerNameClick"
           />
@@ -834,9 +830,13 @@
                   <span class="ai-card-hint">下局由你接替</span>
                 </button>
               </template>
-              <!-- 其他真人玩家的操作（输家换位置） -->
-              <template v-else-if="canSwap && playerCardPlayer?.id !== currentPlayer?.id">
-                <button class="ai-card-btn ai-card-btn--swap" @click="onSwapPosition">
+              <!-- 其他真人玩家的操作 -->
+              <template v-else-if="playerCardPlayer?.id !== currentPlayer?.id">
+                <button v-if="canUseSpectatorView" class="ai-card-btn ai-card-btn--spectate" @click="onSpectateFromCard">
+                  👁️ 观赛TA
+                  <span class="ai-card-hint">查看对方手牌</span>
+                </button>
+                <button v-if="canSwap" class="ai-card-btn ai-card-btn--swap" @click="onSwapPosition">
                   🔄 跟TA换位置
                   <span class="ai-card-hint">剩余 {{ mySwapInfo.remaining }} 次机会</span>
                 </button>
@@ -1531,6 +1531,11 @@ const handleSpectate = async (id: string) => {
     console.error('[Spectate] Failed:', e)
     addBroadcast(e?.data?.message || e?.message || '观赛视角切换失败', 'warn')
   }
+}
+const onSpectateFromCard = () => {
+  if (!playerCardPlayer.value) return
+  showPlayerCard.value = false
+  handleSpectate(playerCardPlayer.value.id)
 }
 const onSpectatorApprovalChoice = async (choice: 'approve' | 'reject') => {
   if (!gameState.value || !currentPlayer.value || !spectatorApprovalRequest.value) return
@@ -3383,14 +3388,42 @@ const forceDiscard = async (p: Player) => {
 .room-container {
   background: rgba(7, 19, 14, 0.92);
   border-radius: 20px;
-  padding: 16px 16px 20px;
-  max-width: 1400px;
+  padding: 12px 12px 16px;
+  max-width: 1600px;
   width: 100%;
   box-shadow: 0 18px 45px rgba(0, 0, 0, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+  .mahjong-page { padding: 0; min-height: 100vh; height: 100vh; overflow: hidden; }
+  .room-viewport { width: 100%; height: 100%; }
+  .room-container {
+    padding: 0;
+    gap: 0;
+    border-radius: 0;
+    max-width: none;
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+  }
+  .room-header { padding: 0 6px; gap: 3px; min-height: 22px; background: rgba(7,19,14,0.95); }
+  .mahjong-title { font-size: 0.75rem; margin: 0; }
+  .mahjong-subtitle { font-size: 0.6rem; }
+  .header-actions { gap: 2px; }
+  .mahjong-button.small { padding: 2px 5px; font-size: 0.6rem; }
+  .room-main { gap: 0; flex: 1; min-height: 0; }
+  .table-wrapper { flex: 1; min-height: 0; padding: 0; }
+  .mahjong-table { width: 100%; height: 100%; max-height: none; aspect-ratio: 16 / 9; border-width: 3px; border-radius: 0; }
+  .extended-info-panel { max-height: 100%; border-radius: 0; padding: 2px; }
+  .room-main { gap: 0; }
 }
 
 .room-header {
@@ -3491,9 +3524,12 @@ const forceDiscard = async (p: Player) => {
 
 .mahjong-table {
   position: relative;
-  /* 4:3 比例，56em×42em ≈ 896×672px，保证零隐藏 */
-  width: min(100vw, calc(80vh * 4/3), 1200px);
-  aspect-ratio: 4 / 3;
+  /* 牌桌尽量占满可用空间 */
+  width: min(100%, calc(85vh * 16/9), 1600px);
+  aspect-ratio: 16 / 9;
+  --tile-w: 28px;
+  --tile-h: 40px;
+  --tile-gap: 2px;
   border-radius: 20px;
   /* 深木色外框 */
   background: #4a2c0a;
@@ -3504,16 +3540,16 @@ const forceDiscard = async (p: Player) => {
     0 12px 30px rgba(0, 0, 0, 0.8);
   padding: 0;
   overflow: hidden;
-  --seat-side-inset: 4.8%;
-  --seat-top-inset: 2.8%;
-  --seat-bottom-inset: 1.4%;
-  --seat-top-width: 58%;
-  --seat-bottom-width: 72%;
-  --seat-side-width: 96px;
-  --seat-side-height: 70%;
-  --discard-top-inset: 24.8%;
-  --discard-bottom-inset: 23.8%;
-  --discard-side-inset: 27.4%;
+  --seat-side-inset: 3%;
+  --seat-top-inset: 1%;
+  --seat-bottom-inset: 0.5%;
+  --seat-top-width: 55%;
+  --seat-bottom-width: 75%;
+  --seat-side-width: 100px;
+  --seat-side-height: 50%;
+  --discard-top-inset: 38%;
+  --discard-bottom-inset: 20%;
+  --discard-side-inset: 38%;
 }
 
 /* 绿色麻将桌布内层 */
@@ -3609,13 +3645,14 @@ const forceDiscard = async (p: Player) => {
 
 /* ===== 扩展信息区 ===== */
 .extended-info-panel {
-  flex: 0 0 354px;
-  max-width: 354px;
+  flex: 0 0 320px;
+  max-width: 320px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   overflow-y: auto;
-  max-height: 80vh;
+  max-height: 85vh;
+  font-size: 0.85rem;
 }
 
 /* 操作按钮区：与战绩榜同宽，底部对齐牌桌 */
@@ -3682,24 +3719,72 @@ const forceDiscard = async (p: Player) => {
   color: #ffd6d6;
 }
 
-/* 桌面端严格 1/4 宽 */
+/* 桌面端 */
 @media (min-width: 1101px) {
   .extended-info-panel {
-    /* 牌桌宽度约 75vw (table-wrapper flex), 1/4 ≈ 25vw; 但受 max-width 约束 */
     flex: 0 0 25%;
     max-width: 370px;
   }
 }
 
-/* 窄屏降级 */
+/* 平板/小桌面 */
 @media (max-width: 1100px) {
   .extended-info-panel {
-    flex: 0 0 276px;
-    max-width: 276px;
+    flex: 0 0 260px;
+    max-width: 260px;
+    font-size: 0.82rem;
   }
 }
 
-@media (max-width: 900px) {
+/* 横屏手机：右侧栏压缩，字体更小 */
+@media (max-width: 900px) and (orientation: landscape) {
+  .room-main {
+    flex-direction: row;
+    gap: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .table-wrapper {
+    flex: 1 1 70%;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .extended-info-panel {
+    flex: 0 1 30%;
+    width: 30%;
+    min-width: 140px;
+    max-width: 280px;
+    font-size: 0.62rem;
+    gap: 3px;
+    max-height: 94vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 3px;
+    scrollbar-width: thin;
+  }
+  .extended-info-panel * { max-width: 100%; word-wrap: break-word; overflow-wrap: break-word; }
+  .extended-info-panel .ext-section { padding: 3px 4px 4px; border-radius: 6px; margin: 0; }
+  .extended-info-panel .ext-title { font-size: 0.62rem; margin-bottom: 1px; }
+  .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
+  .extended-info-panel .panel-room-number { font-size: 0.6rem; }
+  .extended-info-panel .extra-action-btn { padding: 2px 4px; font-size: 0.52rem; }
+  .extended-info-panel .extra-actions-bar { padding: 2px 4px; gap: 3px; flex-wrap: wrap; }
+  .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
+  .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
+  .extended-info-panel .action-buttons-panel { gap: 3px; }
+  .extended-info-panel .turn-status-text { font-size: 0.54rem; }
+  .extended-info-panel .room-header-row { gap: 3px; margin: 0; }
+  .extended-info-panel .room-stats { padding: 2px 3px; }
+  .extended-info-panel .player-row { padding: 2px 3px; font-size: 0.52rem; gap: 3px; }
+  .extended-info-panel .broadcast-container { max-height: 50px; padding: 2px 3px; }
+  .extended-info-panel .broadcast-message { font-size: 0.48rem; padding: 1px 0; }
+  .extended-info-panel .action-panel { padding: 4px; gap: 4px; }
+  .extended-info-panel .action-btn--small { width: 28px; height: 28px; font-size: 0.6rem; }
+  .extended-info-panel .action-btn--draw { width: 40px; height: 40px; font-size: 0.75rem; }
+}
+
+/* 竖屏手机：右侧栏变底部横排 */
+@media (max-width: 900px) and (orientation: portrait) {
   .extended-info-panel {
     flex: 0 0 auto;
     max-width: 100%;
@@ -3822,7 +3907,7 @@ const forceDiscard = async (p: Player) => {
   left: 50%;
   transform: translateX(-50%);
   width: var(--seat-top-width);
-  min-height: 98px;
+  min-height: 60px;
   height: auto;
 }
 
@@ -3831,8 +3916,8 @@ const forceDiscard = async (p: Player) => {
   left: 50%;
   transform: translateX(-50%);
   transform-origin: bottom center;
-  width: min(var(--seat-bottom-width), calc(100% - 320px));
-  min-height: 138px;
+  width: min(var(--seat-bottom-width), calc(100% - 120px));
+  min-height: 100px;
   height: auto;
 }
 
@@ -5498,6 +5583,14 @@ const forceDiscard = async (p: Player) => {
 .ai-card-btn--swap:hover {
   background: rgba(239, 83, 80, 0.15);
 }
+.ai-card-btn--spectate {
+  border-color: rgba(100, 180, 255, 0.3);
+  background: rgba(100, 180, 255, 0.08);
+  color: #9fd3ff;
+}
+.ai-card-btn--spectate:hover {
+  background: rgba(100, 180, 255, 0.15);
+}
 
 .ai-card-hint {
   font-size: 0.7rem;
@@ -5815,6 +5908,40 @@ const forceDiscard = async (p: Player) => {
     font-size: 0.75rem;
     padding: 6px 10px;
   }
+}
+
+/* 横屏手机：牌桌缩小，牌跟着缩 */
+@media (orientation: landscape) and (max-height: 600px) {
+  .mahjong-table {
+    --tile-w: 18px;
+    --tile-h: 26px;
+    --tile-gap: 0px;
+    border-width: 3px;
+    --seat-side-inset: 2%;
+    --seat-top-inset: 0.5%;
+    --seat-bottom-inset: 0.2%;
+    --seat-top-width: 65%;
+    --seat-bottom-width: 80%;
+    --seat-side-width: 60px;
+    --seat-side-height: 45%;
+  }
+  .seat-top { min-height: 42px; }
+  .seat-bottom { min-height: 58px; width: min(80%, calc(100% - 80px)); }
+  .seat-left { width: 60px; }
+  .seat-right { width: 70px; }
+}
+
+@media (orientation: landscape) and (max-height: 450px) {
+  .mahjong-table {
+    --tile-w: 14px;
+    --tile-h: 20px;
+    --tile-gap: 0px;
+    border-width: 2px;
+    --seat-side-width: 50px;
+    --seat-side-height: 40%;
+  }
+  .seat-top { min-height: 36px; }
+  .seat-bottom { min-height: 48px; width: min(85%, calc(100% - 60px)); }
 }
 
 /* 移动竖屏旋转模式 */

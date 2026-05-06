@@ -511,25 +511,29 @@ const logout = () => {
 
 <style scoped>
 .mahjong-page {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   background: radial-gradient(circle at top, #153b2f, #07130e);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: #f5f5f5;
+  width: 100%;
+  padding: 0 10px 10px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .mahjong-card {
   background: rgba(7, 19, 14, 0.9);
   border-radius: 18px;
   padding: 32px 40px;
-  width: 90%;
+  width: min(92vw, 520px);
   max-width: 520px;
   text-align: center;
   box-shadow: 0 18px 45px rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  margin: 0 auto;
+  margin: 4px auto 0;
 }
 
 .admin-badge {
@@ -651,7 +655,7 @@ const logout = () => {
   width: 100%;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 600px) and (orientation: portrait) {
   .mahjong-card {
     padding: 24px 20px;
   }
@@ -674,6 +678,62 @@ const logout = () => {
   .mahjong-button {
     font-size: 0.8rem;
     padding: 8px 14px;
+  }
+}
+
+@media (orientation: landscape) {
+  .mahjong-page {
+    min-height: 100dvh;
+    padding: 0 8px 8px;
+    align-items: stretch;
+  }
+
+  .mahjong-card {
+    width: min(920px, 100%);
+    max-width: 920px;
+    min-height: calc(100dvh - 8px);
+    padding: 22px 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    overflow: hidden;
+    gap: 14px;
+  }
+
+  .mahjong-title {
+    margin: 0;
+    font-size: 2rem;
+    text-align: center;
+  }
+
+  .mahjong-subtitle {
+    margin: 0;
+    text-align: center;
+    font-size: 1rem;
+  }
+
+  .mahjong-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(220px, 280px));
+    gap: 14px 18px;
+    margin: 6px 0 0;
+    justify-content: center;
+    width: 100%;
+    max-width: 620px;
+  }
+
+  .mahjong-button {
+    width: 100%;
+    min-height: 56px;
+    font-size: 1rem;
+  }
+
+  .mahjong-hint {
+    margin: 4px 0 0;
+    text-align: center;
+    max-width: 560px;
   }
 }
 

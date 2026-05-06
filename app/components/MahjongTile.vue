@@ -180,8 +180,8 @@ const chineseNum = computed(() => {
 
 <style scoped>
 .tile {
-  width: 28px;
-  height: 40px;
+  width: var(--tile-w, 28px);
+  height: var(--tile-h, 40px);
   border-radius: 3px 3px 2px 2px;
   background: transparent;
   border: 0.5px solid rgba(180, 165, 130, 0.5);
@@ -241,8 +241,8 @@ const chineseNum = computed(() => {
 }
 
 .tile--small {
-  width: 28px;
-  height: 40px;
+  width: var(--tile-w, 28px);
+  height: var(--tile-h, 40px);
 }
 
 /* ==================== PNG 牌图 ==================== */

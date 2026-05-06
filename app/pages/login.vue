@@ -41,6 +41,9 @@
             @keyup.enter="handlePhoneLogin"
           />
         </div>
+        <p v-if="loginError" class="status-text error">{{ loginError }}</p>
+      </div>
+      <div v-if="activeTab === 'login'" class="submit-section">
         <button
           class="mahjong-button primary-btn"
           @click="handlePhoneLogin"
@@ -48,7 +51,6 @@
         >
           {{ isSubmitting ? '登录中...' : '登录' }}
         </button>
-        <p v-if="loginError" class="status-text error">{{ loginError }}</p>
       </div>
 
       <!-- 注册表单 -->
@@ -82,6 +84,9 @@
             @keyup.enter="handleRegister"
           />
         </div>
+        <p v-if="registerError" class="status-text error">{{ registerError }}</p>
+      </div>
+      <div v-if="activeTab === 'register'" class="submit-section">
         <button
           class="mahjong-button primary-btn"
           @click="handleRegister"
@@ -89,7 +94,6 @@
         >
           {{ isSubmitting ? '注册中...' : '注册' }}
         </button>
-        <p v-if="registerError" class="status-text error">{{ registerError }}</p>
       </div>
 
       <!-- 分割线 -->
@@ -232,13 +236,17 @@ const handleQuickLogin = async (user) => {
 
 <style scoped>
 .mahjong-page {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   background: radial-gradient(circle at top, #153b2f, #07130e);
   font-family: system-ui, -apple-system, sans-serif;
   color: #f5f5f5;
+  width: 100%;
+  padding: 0 10px 10px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .mahjong-card {
@@ -246,10 +254,11 @@ const handleQuickLogin = async (user) => {
   border-radius: 18px;
   padding: 32px 36px;
   max-width: 400px;
-  width: 90%;
+  width: min(92vw, 400px);
   text-align: center;
   box-shadow: 0 18px 45px rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 4px auto 0;
 }
 
 .mahjong-title {
@@ -420,5 +429,122 @@ const handleQuickLogin = async (user) => {
 .player-chip:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (orientation: landscape) {
+  .mahjong-page {
+    min-height: 100dvh;
+    padding: 0 8px 8px;
+    align-items: stretch;
+  }
+
+  .mahjong-card {
+    width: min(960px, 100%);
+    max-width: 960px;
+    min-height: calc(100dvh - 8px);
+    padding: 14px 18px;
+    display: grid;
+    grid-template-columns: minmax(300px, 380px) minmax(260px, 1fr);
+    grid-template-areas:
+      "title quick"
+      "subtitle quick"
+      "tabs quick"
+      "form form"
+      "submit form";
+    column-gap: 20px;
+    row-gap: 8px;
+    align-content: start;
+    text-align: left;
+    overflow: hidden;
+  }
+
+  .mahjong-subtitle {
+    margin-bottom: 0;
+  }
+
+  .tab-btn {
+    font-size: 0.95rem;
+  }
+
+  .form-section {
+    gap: 10px;
+  }
+
+  .primary-btn {
+    width: auto;
+    min-width: 160px;
+    padding: 12px 28px;
+  }
+
+  .mahjong-title {
+    grid-area: title;
+    font-size: 1.7rem;
+    margin: 0;
+  }
+
+  .mahjong-subtitle {
+    grid-area: subtitle;
+    margin: 0 0 4px;
+  }
+
+  .tab-bar {
+    grid-area: tabs;
+    margin-bottom: 8px;
+  }
+
+  .form-section {
+    grid-area: form;
+    gap: 10px;
+  }
+
+  .submit-section {
+    grid-area: submit;
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+    padding-right: 8px;
+  }
+
+  .submit-section .primary-btn {
+    background: linear-gradient(135deg, #1f8a52, #46c574);
+    color: #fff;
+    border: none;
+    font-weight: 700;
+  }
+
+  .divider {
+    display: none;
+  }
+
+  .quick-login {
+    grid-area: quick;
+    align-self: start;
+    height: 100%;
+    min-height: 0;
+    padding-left: 16px;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    text-align: center;
+    overflow: hidden;
+  }
+
+  .quick-login::before {
+    content: '快速登录';
+    display: block;
+    margin-bottom: 10px;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  .player-chips {
+    justify-content: center;
+    max-height: calc(100dvh - 84px);
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+
+  .primary-btn {
+    margin-top: 0;
+  }
 }
 </style>

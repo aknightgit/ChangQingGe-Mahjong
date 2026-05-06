@@ -9,12 +9,11 @@
       <table class="stats-table">
         <thead>
           <tr>
-            <th>玩家名</th>
-            <th>胡牌</th>
-            <th>捉冲</th>
-            <th>自摸</th>
-            <th>单局最高</th>
-            <th>总分</th>
+            <th>玩家</th>
+            <th>胡</th>
+            <th>冲</th>
+            <th>摸</th>
+            <th>分</th>
           </tr>
         </thead>
         <tbody>
@@ -39,7 +38,6 @@
             <td>{{ player.winCount ?? player.wins ?? 0 }}</td>
             <td>{{ player.discardCount ?? player.losses ?? 0 }}</td>
             <td>{{ player.selfDrawCount ?? 0 }}</td>
-            <td>{{ player.bestRound ?? '-' }}</td>
             <td class="td-score" :class="player.score > 0 ? 'sc-pos' : player.score < 0 ? 'sc-neg' : ''">
               {{ player.score > 0 ? '+' : '' }}{{ player.score }}
             </td>
@@ -48,34 +46,9 @@
       </table>
     </div>
 
-    <div
-      v-if="showSpectateArea"
-      class="stats-spectate"
-      :class="{ 'stats-spectate--disabled': !canSpectate }"
-    >
-      <p class="spectate-title">观赛视角{{ currentSpectatingName ? `：${currentSpectatingName}` : '' }}</p>
-      <!--
-      <p class="spectate-title">👁️ 观赛视角{{ spectatingId ? '（已锁定）' : '' }}</p>
-      -->
-      <div class="spectate-btns">
-        <button
-          v-for="p in spectatablePlayers"
-          :key="'sp-' + p.id"
-          class="spectate-btn"
-          :class="{
-            active: spectatingId === p.id,
-            pending: pendingSpectateId === p.id,
-            locked: isSpectateLocked(p)
-          }"
-          :disabled="isSpectateLocked(p) || pendingSpectateId === p.id"
-          @click="$emit('spectate', p.id)"
-        >
-          {{ p.name }}
-          <span v-if="p.isBot" class="spectate-tag">AI</span>
-          <span v-else-if="pendingSpectateId === p.id" class="spectate-tag">待同意</span>
-          <span v-else-if="spectatingId === p.id" class="spectate-tag">观看中</span>
-        </button>
-      </div>
+    <div v-if="spectatingId" class="stats-spectating">
+      👁️ 观赛中：{{ currentSpectatingName }}
+      <button class="spectate-stop-btn" @click="$emit('spectate', '')">停止</button>
     </div>
   </div>
 </template>
@@ -104,10 +77,6 @@ const props = defineProps<{
   players: PlayerStat[]
   currentRound: number
   spectatingId?: string | null
-  pendingSpectateId?: string | null
-  approvedHumanSpectateId?: string | null
-  showSpectateArea?: boolean
-  canSpectate?: boolean
 }>()
 
 const emit = defineEmits<{ spectate: [id: string]; nameClick: [player: any] }>()
@@ -116,19 +85,10 @@ const rankedPlayers = computed(() =>
   [...props.players].sort((a, b) => b.score - a.score)
 )
 
-const spectatablePlayers = computed(() => rankedPlayers.value.filter(player => !player.isMe))
-
 const currentSpectatingName = computed(() => {
   const target = rankedPlayers.value.find(player => player.id === props.spectatingId)
   return target?.name || ''
 })
-
-const isSpectateLocked = (player: PlayerStat) => {
-  if (!props.canSpectate || player.isMe) return true
-  if (player.isBot) return false
-  if (props.pendingSpectateId && props.pendingSpectateId !== player.id) return true
-  return !!props.approvedHumanSpectateId && props.approvedHumanSpectateId !== player.id
-}
 </script>
 
 <style scoped>
@@ -262,5 +222,19 @@ const isSpectateLocked = (player: PlayerStat) => {
 
 @media (max-width: 900px) {
   .room-stats { width: 100%; }
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .room-stats { padding: 3px 4px; gap: 2px; border-radius: 6px; background: rgba(5,14,10,0.85); border: 1px solid rgba(255,215,0,0.12); }
+  .stats-header { padding-bottom: 3px; gap: 4px; }
+  .stats-title { font-size: 0.65rem; }
+  .stats-round { font-size: 0.55rem; }
+  .stats-table th { font-size: 0.5rem; padding: 2px 2px; }
+  .stats-table td { font-size: 0.52rem; padding: 2px 2px; }
+  .td-name { gap: 3px; }
+  .rank-dot { width: 5px; height: 5px; }
+  .rank-qj-icon { font-size: 0.6rem; }
+  .stats-spectating { font-size: 0.5rem; padding: 2px 0 0; }
+  .spectate-stop-btn { font-size: 0.48rem; padding: 1px 4px; margin-left: 4px; }
 }
 </style>

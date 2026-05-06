@@ -4,7 +4,6 @@
       <header class="create-header">
         <div>
           <h1 class="create-title">🀄 创建牌局</h1>
-          <p class="create-subtitle">整页设置，手机上可直接上下滑动。</p>
         </div>
         <button class="nav-btn" @click="goBack">返回大厅</button>
       </header>
@@ -33,25 +32,27 @@
 
           <div class="create-field">
             <div class="field-header">
+              <label>等我想一想 次数</label>
+              <button class="help-btn" @click="toggleHelp('think')">?</button>
+            </div>
+            <input type="number" v-model.number="createParams.thinkChances" min="0" max="10" />
+            <span v-if="activeHelp === 'think'" class="help-bubble">每局限N次。默认3次。</span>
+          </div>
+
+
+        </section>
+
+        <section class="param-group">
+          <h3 class="param-group-title">🔥 特殊玩法</h3>
+
+          <div class="create-field">
+            <div class="field-header">
               <label>决策犹豫期（秒）</label>
               <button class="help-btn" @click="toggleHelp('hesitation')">?</button>
             </div>
             <input type="number" v-model.number="createParams.hesitationSeconds" min="0.5" max="10" step="0.5" />
             <span v-if="activeHelp === 'hesitation'" class="help-bubble">上家打出牌后，所有玩家做吃/碰/杠/胡决策的时间窗口。默认5秒。</span>
           </div>
-
-          <div class="create-field create-field--checkbox">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="createParams.firstRoundDouble" />
-              <span>首局翻倍</span>
-              <button class="help-btn help-btn--inline" @click="toggleHelp('double')">?</button>
-            </label>
-            <span v-if="activeHelp === 'double'" class="help-bubble">今天第一局全局倍数 ×2。默认开启。</span>
-          </div>
-        </section>
-
-        <section class="param-group">
-          <h3 class="param-group-title">🔥 特殊玩法</h3>
 
           <div class="create-field">
             <div class="field-header">
@@ -60,15 +61,6 @@
             </div>
             <input type="number" v-model.number="createParams.liangShanThreshold" min="0" max="99999" step="100" />
             <span v-if="activeHelp === 'qj'" class="help-bubble">累积赢分超过此值的玩家，在梁山聚义投票时无否决权。默认4000。</span>
-          </div>
-
-          <div class="create-field">
-            <div class="field-header">
-              <label>等我想一想 次数</label>
-              <button class="help-btn" @click="toggleHelp('think')">?</button>
-            </div>
-            <input type="number" v-model.number="createParams.thinkChances" min="0" max="10" />
-            <span v-if="activeHelp === 'think'" class="help-bubble">每局限N次。默认3次。</span>
           </div>
         </section>
 
@@ -110,6 +102,19 @@
           <span class="create-hint" v-if="selectedBots.length > 0">
             已选 {{ selectedBots.length }} 个AI，还需 {{ 4 - selectedBots.length - 1 }} 位真人
           </span>
+        </section>
+
+        <section class="param-group">
+          <h3 class="param-group-title">📋 其他设置</h3>
+
+          <div class="create-field create-field--checkbox">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="createParams.firstRoundDouble" />
+              <span>首局翻倍</span>
+              <button class="help-btn help-btn--inline" @click="toggleHelp('double')">?</button>
+            </label>
+            <span v-if="activeHelp === 'double'" class="help-bubble">今天第一局全局倍数 ×2。默认开启。</span>
+          </div>
         </section>
       </div>
 
@@ -266,20 +271,30 @@ const goBack = () => navigateTo('/')
 
 <style scoped>
 .create-page {
-  min-height: 100vh;
+  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
+  -webkit-overflow-scrolling: touch;
   background: radial-gradient(circle at top, #153b2f, #07130e);
   color: #f5f5f5;
-  padding: max(12px, env(safe-area-inset-top)) 12px max(96px, calc(96px + env(safe-area-inset-bottom)));
+  padding: 0 8px 8px;
+  display: flex;
 }
 
 .create-shell {
-  width: min(760px, 100%);
+  width: min(1180px, 100%);
   margin: 0 auto;
   background: rgba(7, 19, 14, 0.94);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 20px;
-  padding: 20px;
+  padding: 14px 16px;
   box-shadow: 0 18px 45px rgba(0,0,0,0.45);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: calc(100dvh - 8px);
+  max-height: calc(100dvh - 8px);
+  overflow: hidden;
 }
 
 .create-header {
@@ -287,7 +302,8 @@ const goBack = () => navigateTo('/')
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
+  flex: 0 0 auto;
 }
 
 .create-title { font-size: 1.5rem; margin: 0 0 6px; }
@@ -302,16 +318,22 @@ const goBack = () => navigateTo('/')
 }
 
 .create-content {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  align-items: start;
+  padding-bottom: 16px;
 }
 
 .param-group {
-  padding-bottom: 14px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding-right: 10px;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  min-width: 0;
 }
-.param-group:last-child { border-bottom: none; }
+.param-group:last-child { border-right: none; padding-right: 0; }
 .param-group-title {
   font-size: 0.9rem;
   color: rgba(255,255,255,0.65);
@@ -429,12 +451,14 @@ const goBack = () => navigateTo('/')
 .create-actions {
   position: sticky;
   bottom: 0;
-  margin: 20px -20px -20px;
-  padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
+  margin: 8px -16px -14px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
   display: flex;
   gap: 12px;
-  background: linear-gradient(to top, rgba(13,31,23,0.98) 78%, rgba(13,31,23,0));
+  background: linear-gradient(to top, rgba(13,31,23,0.995) 88%, rgba(13,31,23,0.9));
   border-top: 1px solid rgba(255,255,255,0.06);
+  flex: 0 0 auto;
+  min-height: 72px;
 }
 .create-btn {
   flex: 1;
@@ -453,10 +477,33 @@ const goBack = () => navigateTo('/')
   color: #fff;
 }
 
-@media (max-width: 600px) {
-  .create-shell { padding: 16px; }
+@media (max-width: 600px) and (orientation: portrait) {
+  .create-page {
+    overflow-y: auto;
+    height: auto;
+    padding: 4px 8px 82px;
+  }
+  .create-shell {
+    padding: 16px;
+    min-height: auto;
+    max-height: none;
+    overflow: visible;
+  }
   .create-header { flex-direction: column; }
   .nav-btn { width: 100%; }
+  .create-content {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    overflow: visible;
+  }
+  .param-group {
+    padding-right: 0;
+    padding-bottom: 14px;
+    border-right: none;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .param-group:last-child { border-bottom: none; }
   .ai-select-item {
     grid-template-columns: 24px 1fr;
   }
@@ -467,6 +514,103 @@ const goBack = () => navigateTo('/')
     margin: 20px -16px -16px;
     padding-left: 16px;
     padding-right: 16px;
+  }
+}
+
+@media (orientation: landscape) {
+  .create-page {
+    padding: 0 6px 6px;
+  }
+
+  .create-shell {
+    width: 100%;
+    max-width: none;
+    min-height: calc(100dvh - 6px);
+    max-height: calc(100dvh - 6px);
+    padding: 10px 12px;
+    border-radius: 14px;
+  }
+
+  .create-header {
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .create-title {
+    font-size: 1.1rem;
+    margin-bottom: 2px;
+  }
+
+  .create-subtitle {
+    font-size: 0.76rem;
+  }
+
+  .create-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 28px;
+  }
+
+  .param-group {
+    padding-right: 8px;
+  }
+
+  .param-group-title {
+    font-size: 0.82rem;
+    margin-bottom: 8px;
+  }
+
+  .create-field {
+    margin-bottom: 8px;
+  }
+
+  .field-header label,
+  .create-field > label,
+  .checkbox-label {
+    font-size: 0.88rem;
+  }
+
+  .create-field input,
+  .create-field select,
+  .ai-toggle-btn {
+    padding: 8px 10px;
+    font-size: 0.95rem;
+  }
+
+  .ai-select-list {
+    max-height: 100%;
+    overflow-y: auto;
+    padding-right: 4px;
+    gap: 8px;
+  }
+
+  .ai-select-item {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .ai-select-name {
+    font-size: 0.92rem;
+  }
+
+  .ai-select-desc,
+  .create-hint,
+  .help-bubble {
+    font-size: 0.74rem;
+  }
+
+  .create-actions {
+    margin-top: 6px;
+    padding-top: 8px;
+    min-height: 64px;
+  }
+
+  .create-btn {
+    padding: 11px;
+    font-size: 0.95rem;
   }
 }
 </style>
