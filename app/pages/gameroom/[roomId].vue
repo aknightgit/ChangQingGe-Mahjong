@@ -3367,7 +3367,8 @@ const forceDiscard = async (p: Player) => {
 .room-container--rotated {
   max-width: none;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  gap: 10px;
 }
 
 .room-container {
@@ -5821,6 +5822,9 @@ const forceDiscard = async (p: Player) => {
   }
 
   .room-container--rotated {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
     transform: rotate(90deg);
     transform-origin: center;
     width: min(900px, 90vh);
@@ -5829,21 +5833,30 @@ const forceDiscard = async (p: Player) => {
 
   .room-container--rotated .room-header {
     order: 2;
-    margin-top: 12px;
+    flex-shrink: 0;
+    margin-top: 0;
+    align-self: flex-start;
   }
 
   .room-container--rotated .room-main {
     order: 1;
-    flex-direction: column;
+    flex-direction: row;
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .room-container--rotated .table-wrapper {
     order: 1;
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .room-container--rotated .extended-info-panel {
     order: 2;
-    width: 100%;
+    flex: 0 0 min(354px, 30%);
+    max-width: min(354px, 30%);
+    max-height: none;
+    overflow-y: auto;
   }
 }
 /* ===== Layout debug borders ===== */
