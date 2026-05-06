@@ -449,8 +449,8 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
 }
 
 .player-other :deep(.tile--small) {
-  width: 32px;
-  height: 44px;
+  width: 18px;
+  height: 26px;
 }
 
 .player-other :deep(.tile-img) {

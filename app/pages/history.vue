@@ -76,7 +76,7 @@
           <article v-for="match in histories" :key="match.gameId" class="history-card">
             <div class="card-header">
               <div>
-                <p class="room-label">房间 {{ match.roomId }}</p>
+                <p class="room-label">房间 {{ match.roomId.slice(0, 8) }}</p>
                 <h2>{{ formatDate(match.completedAt) }}</h2>
               </div>
               <div class="meta">

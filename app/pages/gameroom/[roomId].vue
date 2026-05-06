@@ -241,7 +241,7 @@
         <div v-if="isWaitingRoom" class="waiting-overlay">
           <div class="waiting-card">
             <h2 class="waiting-title">🀄 长清阁麻将</h2>
-            <p class="waiting-subtitle">房间 #{{ gameState?.roomNumber || roomId }}</p>
+            <p class="waiting-subtitle">房间 #{{ gameState?.roomNumber || '????' }}</p>
 
             <div class="waiting-players">
               <div
@@ -662,7 +662,7 @@
           <!-- 房间号 + 退房结算 -->
           <div class="room-header-row panel-room-header-row">
             <p class="mahjong-subtitle panel-room-number">
-              房间 #{{ gameState?.roomNumber || roomId }}
+              房间 #{{ gameState?.roomNumber || '????' }}
             </p>
             <button
               v-if="gameState?.phase === 'playing' || gameState?.phase === 'ended'"
