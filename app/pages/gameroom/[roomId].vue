@@ -5862,26 +5862,98 @@ const forceDiscard = async (p: Player) => {
 
 /* 移动端横屏（标准横屏，不旋转） */
 @media (max-width: 768px) and (orientation: landscape) {
+  .mahjong-page,
+  .room-viewport,
+  .room-container {
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
+  }
+
+  .room-container {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  /* 横屏直接复刻 web：顶部大header隐藏，右侧面板内已有房间信息 */
+  .room-header {
+    display: none;
+  }
+
   .room-main {
+    flex: 1 1 auto;
+    min-height: 0;
     flex-direction: row !important;
     align-items: stretch;
+    gap: 8px;
   }
 
   .table-wrapper {
-    flex: 1 1 auto;
+    flex: 1 1 72%;
     min-width: 0;
+    min-height: 0;
+    align-items: center;
+    justify-content: center;
   }
 
   .mahjong-table {
-    width: min(100%, calc(90vh * 4/3));
+    height: 100%;
+    width: auto;
     max-width: 100%;
+    max-height: 100%;
   }
 
   .extended-info-panel {
-    flex: 0 0 min(30%, 354px);
-    max-width: min(30%, 354px);
-    max-height: none;
-    overflow-y: auto;
+    flex: 0 0 28%;
+    max-width: 28%;
+    min-width: 230px;
+    min-height: 0;
+    max-height: 100%;
+    overflow: hidden;
+    gap: 6px;
+  }
+
+  .panel-room-header-row {
+    gap: 6px;
+  }
+
+  .panel-room-number,
+  .mahjong-subtitle {
+    font-size: 0.78rem;
+  }
+
+  .settle-btn-header {
+    min-width: 88px;
+    padding: 2px 10px;
+    font-size: 0.65rem;
+  }
+
+  .ext-section {
+    padding: 6px 8px 8px;
+    border-radius: 10px;
+  }
+
+  .ext-title {
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+  }
+
+  .ext-meta,
+  .turn-status-text,
+  .extra-actions-label,
+  .extra-action-btn,
+  .mahjong-button.small,
+  .panel-button.small {
+    font-size: 0.68rem;
+  }
+
+  .action-buttons-panel {
+    gap: 6px;
+  }
+
+  .extra-actions-bar {
+    gap: 6px;
+    padding: 4px 8px;
   }
 }
 /* ===== Layout debug borders ===== */
