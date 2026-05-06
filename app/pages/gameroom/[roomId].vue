@@ -5870,7 +5870,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 /* 移动端横屏（标准横屏，不旋转） */
-@media (max-width: 768px) and (orientation: landscape) {
+@media (max-width: 1024px) and (orientation: landscape), (max-height: 560px) and (orientation: landscape) {
   .mahjong-page,
   .room-viewport,
   .room-container {
