@@ -350,10 +350,12 @@
               class="glass-settings-panel"
               :style="settingsPanelStyle"
               @click.stop
+              @wheel.stop
+              @touchmove.stop
             >
               <!-- 三角指示箭头 -->
               <div class="glass-settings-arrow"></div>
-              <div class="glass-settings-body">
+              <div class="glass-settings-body" @wheel.stop @touchmove.stop>
                 <div class="glass-settings-row" @click="toggleSound">
                   <span class="glass-settings-icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
                   <span class="glass-settings-label">音效</span>
@@ -1209,6 +1211,11 @@ const handleGlobalPointerDown = (event: MouseEvent) => {
 }
 
 watch(showSettings, (open) => {
+  if (process.client) {
+    document.body.style.overflow = open ? 'hidden' : ''
+    document.documentElement.style.overflow = open ? 'hidden' : ''
+  }
+
   if (open) nextTick(updateSettingsPosition)
   else playWhoosh()
 })
@@ -1257,6 +1264,8 @@ onUnmounted(() => {
   void unlockOrientationAfterGameRoom()
 
   if (process.client) {
+    document.body.style.overflow = ''
+    document.documentElement.style.overflow = ''
     window.removeEventListener('resize', evaluateViewport)
     window.removeEventListener('orientationchange', evaluateViewport)
     window.removeEventListener('pointerdown', handleGlobalPointerDown as EventListener)

@@ -8,13 +8,16 @@
   position: fixed;
   z-index: 9999;
   width: 300px;
+  max-height: min(78vh, 560px);
   border-radius: 16px;
   background: rgba(30, 41, 59, 0.75);
   backdrop-filter: blur(18px) saturate(160%);
   -webkit-backdrop-filter: blur(18px) saturate(160%);
   border: 1px solid rgba(255, 255, 255, 0.15);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.2);
-  overflow: visible;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 /* 三角指示箭头 */
@@ -32,6 +35,12 @@
 
 .glass-settings-body {
   padding: 8px 6px 6px;
+  max-height: min(78vh, 560px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 .glass-settings-row {
