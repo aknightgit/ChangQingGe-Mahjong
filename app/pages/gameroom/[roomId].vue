@@ -5859,6 +5859,31 @@ const forceDiscard = async (p: Player) => {
     overflow-y: auto;
   }
 }
+
+/* 移动端横屏（标准横屏，不旋转） */
+@media (max-width: 768px) and (orientation: landscape) {
+  .room-main {
+    flex-direction: row !important;
+    align-items: stretch;
+  }
+
+  .table-wrapper {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .mahjong-table {
+    width: min(100%, calc(90vh * 4/3));
+    max-width: 100%;
+  }
+
+  .extended-info-panel {
+    flex: 0 0 min(30%, 354px);
+    max-width: min(30%, 354px);
+    max-height: none;
+    overflow-y: auto;
+  }
+}
 /* ===== Layout debug borders ===== */
 .layout-debug {
   /* viewport boundaries */
