@@ -4,13 +4,13 @@
     <div class="wall-side wall-top">
       <div class="wall-layer wall-layer--inner">
         <div v-for="i in TILES_PER_SIDE" :key="`ti-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: 'calc(16% - 10px)', zIndex: '1', transform: 'translateX(-50%)' }">
+          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * BASE_OVERLAP) / 2}px + ${(i - 1) * BASE_OVERLAP}px + 10px)`, top: 'calc(16% - 10px)', zIndex: '1', transform: 'translateX(-50%)' }">
           <BackTile :scheme="effectiveBackScheme" />
         </div>
       </div>
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`to-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(i - 1) * OVERLAP}px + 10px)`, top: `calc(16% - 10px + ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
+          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * BASE_OVERLAP) / 2}px + ${(i - 1) * BASE_OVERLAP}px + 10px)`, top: `calc(16% - 10px + ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
           <BackTile :scheme="effectiveBackScheme" outer />
           <div class="tile-side tile-side--bottom" />
         </div>
@@ -21,13 +21,13 @@
     <div class="wall-side wall-bottom">
       <div class="wall-layer wall-layer--inner">
         <div v-for="i in TILES_PER_SIDE" :key="`bi-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px + 10px)`, bottom: 'calc(16%)', zIndex: '1', transform: 'translateX(-50%)' }">
+          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * BASE_OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * BASE_OVERLAP}px + 10px)`, bottom: 'calc(16%)', zIndex: '1', transform: 'translateX(-50%)' }">
           <BackTile :scheme="effectiveBackScheme" />
         </div>
       </div>
       <div class="wall-layer wall-layer--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`bo-${i}`" class="tile-slot"
-          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * OVERLAP}px + 10px)`, bottom: `calc(16% - ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
+          :style="{ left: `calc(50% - ${(TILES_PER_SIDE * BASE_OVERLAP) / 2}px + ${(TILES_PER_SIDE - i) * BASE_OVERLAP}px + 10px)`, bottom: `calc(16% - ${LAYER_OFFSET}px)`, zIndex: '2', transform: 'translateX(-50%)' }">
           <BackTile :scheme="effectiveBackScheme" outer />
           <div class="tile-side tile-side--bottom" />
         </div>
@@ -94,8 +94,9 @@ const BackTile = defineComponent({
 })
 
 const TILES_PER_SIDE = 18
-const OVERLAP = 30  // 牌宽28 + 间隙2
-const V_OVERLAP = 30  // 牌宽28 + 间隙2
+// BASE_OVERLAP: 横向(水平牌墙)每张牌占宽，tile-slot的CSS宽度
+const BASE_OVERLAP = 28  // 紧贴，无间隙
+const V_OVERLAP = 28  // 竖牌(垂直牌墙)每张占高，tile-slot的CSS高度
 const LAYER_OFFSET = 1
 </script>
 
@@ -218,15 +219,17 @@ const LAYER_OFFSET = 1
 }
 
 @media (max-width: 1300px) {
-  .tile-slot { width: 22px; height: 32px; }
-  .tile-slot--vertical { width: 32px; height: 22px; }
+  .tile-slot { width: 22px; height: 22px; }
+  .tile-slot--vertical { width: 22px; height: 22px; }
   .tile-side { height: 4px; bottom: -4px; }
   .tile-side--top { top: -4px; }
+  .tile-side { --wall-back-ring-size: 15px; --wall-back-dot-size: 6px; }
 }
 @media (max-width: 900px) {
-  .tile-slot { width: 16px; height: 24px; }
-  .tile-slot--vertical { width: 24px; height: 16px; }
+  .tile-slot { width: 14px; height: 14px; }
+  .tile-slot--vertical { width: 14px; height: 14px; }
   .tile-side { height: 3px; bottom: -3px; }
   .tile-side--top { top: -3px; }
+  .tile-side { --wall-back-ring-size: 10px; --wall-back-dot-size: 4px; }
 }
 </style>
