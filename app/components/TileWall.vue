@@ -96,11 +96,11 @@ const TILES_PER_SIDE = 18
 
 <style scoped>
 .tile-wall {
-  --wall-tile-w: clamp(12px, calc(var(--tile-w, 28px) * 0.82), 24px);
-  --wall-tile-h: clamp(18px, calc(var(--tile-h, 40px) * 0.82), 34px);
-  --wall-seam-overlap: clamp(0px, calc(var(--wall-tile-w) * 0.05), 1px);
-  --wall-layer-offset: clamp(1px, calc(var(--wall-tile-h) * 0.08), 3px);
-  --wall-side-depth: clamp(2px, calc(var(--wall-tile-h) * 0.12), 4px);
+  --wall-tile-w: clamp(14px, calc(var(--tile-w, 28px) * 0.98), 28px);
+  --wall-tile-h: clamp(21px, calc(var(--tile-h, 40px) * 0.98), 39px);
+  --wall-seam-overlap: clamp(0px, calc(var(--wall-tile-w) * 0.08), 2px);
+  --wall-layer-overlap: clamp(5px, calc(var(--wall-tile-h) * 0.32), 12px);
+  --wall-side-depth: clamp(2px, calc(var(--wall-tile-h) * 0.14), 5px);
   --wall-top-inset: 12%;
   --wall-bottom-inset: 12%;
   --wall-side-inset: 10%;
@@ -114,6 +114,7 @@ const TILES_PER_SIDE = 18
   position: absolute;
   display: flex;
   pointer-events: none;
+  isolation: isolate;
 }
 
 .wall-side--top {
@@ -153,6 +154,16 @@ const TILES_PER_SIDE = 18
   gap: 0;
 }
 
+.wall-track--inner {
+  position: relative;
+  z-index: 1;
+}
+
+.wall-track--outer {
+  position: relative;
+  z-index: 2;
+}
+
 .wall-track--horizontal {
   flex-direction: row;
 }
@@ -163,12 +174,14 @@ const TILES_PER_SIDE = 18
 
 .wall-side--top .wall-track--outer,
 .wall-side--bottom .wall-track--outer {
-  margin-top: calc(var(--wall-layer-offset) * -1);
+  margin-top: 0;
+  transform: translateY(calc(var(--wall-layer-overlap) * -1));
 }
 
 .wall-side--left .wall-track--outer,
 .wall-side--right .wall-track--outer {
-  margin-left: calc(var(--wall-layer-offset) * -1);
+  margin-left: 0;
+  transform: translateX(calc(var(--wall-layer-overlap) * -1));
 }
 
 .wall-track--horizontal .tile-slot + .tile-slot {
@@ -177,6 +190,13 @@ const TILES_PER_SIDE = 18
 
 .wall-track--vertical .tile-slot + .tile-slot {
   margin-top: calc(var(--wall-seam-overlap) * -1);
+}
+
+.wall-side--top .wall-track--inner,
+.wall-side--bottom .wall-track--inner,
+.wall-side--left .wall-track--inner,
+.wall-side--right .wall-track--inner {
+  filter: brightness(0.94);
 }
 
 .tile-slot {
@@ -200,8 +220,8 @@ const TILES_PER_SIDE = 18
 }
 
 .wall-back--css {
-  --wall-back-ring-size: calc(var(--wall-tile-w) * 0.5);
-  --wall-back-dot-size: calc(var(--wall-tile-w) * 0.18);
+  --wall-back-ring-size: min(calc(var(--wall-tile-w) * 0.56), calc(var(--wall-tile-h) * 0.42));
+  --wall-back-dot-size: min(calc(var(--wall-tile-w) * 0.2), calc(var(--wall-tile-h) * 0.16));
   box-sizing: border-box;
   position: relative;
   overflow: hidden;

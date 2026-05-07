@@ -48,32 +48,6 @@
       </table>
     </div>
 
-    <div
-      v-if="showSpectateArea"
-      class="stats-spectate"
-      :class="{ 'stats-spectate--disabled': !canSpectate }"
-    >
-      <p class="spectate-title">观赛视角{{ currentSpectatingName ? `：${currentSpectatingName}` : '' }}</p>
-      <div class="spectate-btns">
-        <button
-          v-for="p in spectatablePlayers"
-          :key="'sp-' + p.id"
-          class="spectate-btn"
-          :class="{
-            active: spectatingId === p.id,
-            pending: pendingSpectateId === p.id,
-            locked: isSpectateLocked(p)
-          }"
-          :disabled="isSpectateLocked(p) || pendingSpectateId === p.id"
-          @click="$emit('spectate', p.id)"
-        >
-          {{ p.name }}
-          <span v-if="p.isBot" class="spectate-tag">AI</span>
-          <span v-else-if="pendingSpectateId === p.id" class="spectate-tag">待同意</span>
-          <span v-else-if="spectatingId === p.id" class="spectate-tag">观看中</span>
-        </button>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -100,32 +74,13 @@ interface PlayerStat {
 const props = defineProps<{
   players: PlayerStat[]
   currentRound: number
-  spectatingId?: string | null
-  pendingSpectateId?: string | null
-  approvedHumanSpectateId?: string | null
-  showSpectateArea?: boolean
-  canSpectate?: boolean
 }>()
 
-const emit = defineEmits<{ spectate: [id: string]; nameClick: [player: any] }>()
+const emit = defineEmits<{ nameClick: [player: any] }>()
 
 const rankedPlayers = computed(() =>
   [...props.players].sort((a, b) => b.score - a.score)
 )
-
-const spectatablePlayers = computed(() => rankedPlayers.value.filter(player => !player.isMe))
-
-const currentSpectatingName = computed(() => {
-  const target = rankedPlayers.value.find(player => player.id === props.spectatingId)
-  return target?.name || ''
-})
-
-const isSpectateLocked = (player: PlayerStat) => {
-  if (!props.canSpectate || player.isMe) return true
-  if (player.isBot) return false
-  if (props.pendingSpectateId && props.pendingSpectateId !== player.id) return true
-  return !!props.approvedHumanSpectateId && props.approvedHumanSpectateId !== player.id
-}
 </script>
 
 <style scoped>
@@ -224,39 +179,6 @@ const isSpectateLocked = (player: PlayerStat) => {
 .sc-pos { color: #66bb6a; }
 .sc-neg { color: #ef5350; }
 
-.stats-spectate {
-  padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-.stats-spectate--disabled .spectate-title,
-.stats-spectate--disabled .spectate-btn {
-  opacity: 0.48;
-}
-.spectate-title {
-  font-size: 0.75rem; color: rgba(255,255,255,0.5); margin-bottom: 6px;
-}
-.spectate-btns { display: flex; flex-wrap: wrap; gap: 4px; }
-.spectate-btn {
-  padding: 3px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.15);
-  background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.6);
-  font-size: 0.7rem; cursor: pointer; transition: all 0.2s;
-}
-.spectate-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
-.spectate-btn.active {
-  background: rgba(255, 215, 0, 0.2); border-color: rgba(255, 215, 0, 0.5); color: #ffd700;
-}
-.spectate-btn.pending {
-  background: rgba(100, 180, 255, 0.14);
-  border-color: rgba(100, 180, 255, 0.45);
-  color: #9fd3ff;
-}
-.spectate-btn.locked { opacity: 0.3; cursor: not-allowed; }
-.spectate-tag {
-  margin-left: 4px;
-  font-size: 0.62rem;
-  opacity: 0.75;
-}
-
 @media (max-width: 900px) {
   .room-stats { width: 100%; }
 }
@@ -271,8 +193,5 @@ const isSpectateLocked = (player: PlayerStat) => {
   .td-name { gap: 3px; }
   .rank-dot { width: 5px; height: 5px; }
   .rank-qj-icon { font-size: 0.6rem; }
-  .spectate-title { font-size: 0.5rem; margin-bottom: 3px; }
-  .spectate-btn { font-size: 0.48rem; padding: 1px 4px; }
-  .spectate-tag { font-size: 0.42rem; }
 }
 </style>

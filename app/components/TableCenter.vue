@@ -109,12 +109,12 @@ const wildTileName = computed(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   pointer-events: auto;
-  padding: 10px 20px;
+  padding: 8px 14px;
   background: radial-gradient(ellipse at center, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 70%, transparent 100%);
   border-radius: 8px;
-  min-width: 90px;
+  min-width: 72px;
 }
 
 /* 信息项通用样式 */
@@ -128,50 +128,50 @@ const wildTileName = computed(() => {
 /* 倍数徽章 */
 .multiplier-badge {
   background: transparent;
-  padding: 4px 10px;
+  padding: 2px 6px;
   border-radius: 999px;
-  font-size: 0.6rem;
+  font-size: 0.52rem;
   font-weight: 800;
 }
 
 .multiplier-badge .badge-icon {
-  font-size: 0.66rem;
+  font-size: 0.56rem;
 }
 
 .multiplier-badge .badge-value {
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-weight: 900;
 }
 
 /* 剩余牌数徽章 */
 .remaining-badge {
   background: transparent;
-  padding: 4px 10px;
+  padding: 2px 6px;
   border-radius: 999px;
-  font-size: 0.6rem;
+  font-size: 0.52rem;
   font-weight: 800;
 }
 
 .remaining-badge .badge-icon {
-  font-size: 0.66rem;
+  font-size: 0.56rem;
 }
 
 .remaining-badge .badge-value {
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-weight: 900;
 }
 
 /* 百搭牌行 */
 .wild-tile-row {
   background: transparent;
-  padding: 4px 8px;
+  padding: 2px 5px;
   border-radius: 8px;
   border: none;
 }
 
 .wild-name {
   color: #ff4444;
-  font-size: 0.6rem;
+  font-size: 0.52rem;
   font-weight: 800;
   text-shadow: 0 1px 4px rgba(0,0,0,0.5);
 }
@@ -196,15 +196,21 @@ const wildTileName = computed(() => {
     width: 45px;
   }
   .center-info {
-    padding: 12px 24px;
-    gap: 10px;
+    padding: 6px 10px;
+    gap: 3px;
+    min-width: 62px;
   }
   .multiplier-badge, .remaining-badge {
-    padding: 5px 12px;
-    font-size: 0.8rem;
+    padding: 2px 5px;
+    font-size: 0.48rem;
   }
   .wild-tile-row {
-    padding: 3px 6px;
+    padding: 1px 4px;
   }
+  .multiplier-badge .badge-icon,
+  .remaining-badge .badge-icon { font-size: 0.5rem; }
+  .multiplier-badge .badge-value,
+  .remaining-badge .badge-value { font-size: 0.56rem; }
+  .wild-name { font-size: 0.46rem; }
 }
 </style>

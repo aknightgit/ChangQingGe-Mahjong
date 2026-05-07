@@ -35,18 +35,18 @@ const props = defineProps<{
 
 const layout = computed(() => {
   if (props.position === 'left' || props.position === 'right') {
-    return { cols: 3, rows: 8, width: 110, height: 232, cellW: 41, cellH: 29 }
+    return { cols: 3, rows: 8, widthPct: 11.5, heightPct: 35, cellW: 33.333, cellH: 12.5 }
   }
 
-  return { cols: 8, rows: 3, width: 231, height: 122, cellW: 29, cellH: 41 }
+  return { cols: 8, rows: 3, widthPct: 24, heightPct: 18.5, cellW: 12.5, cellH: 33.333 }
 })
 
 const maxTiles = computed(() => layout.value.cols * layout.value.rows)
 const visibleTiles = computed(() => props.tiles.slice(0, maxTiles.value))
 
 const zoneStyle = computed(() => ({
-  width: `${layout.value.width}px`,
-  height: `${layout.value.height}px`,
+  width: `${layout.value.widthPct}%`,
+  height: `${layout.value.heightPct}%`,
 }))
 
 function slotStyle(index: number) {
@@ -69,8 +69,10 @@ function slotStyle(index: number) {
   }
 
   return {
-    left: `${col * cellW}px`,
-    top: `${row * cellH}px`,
+    left: `${col * cellW}%`,
+    top: `${row * cellH}%`,
+    width: props.position === 'left' || props.position === 'right' ? '36%' : '13.2%',
+    height: props.position === 'left' || props.position === 'right' ? '14%' : '36%',
   }
 }
 </script>
@@ -88,8 +90,9 @@ function slotStyle(index: number) {
 
 .discard-item {
   position: absolute;
-  width: 28px;
-  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .discard-item--top {
@@ -108,6 +111,8 @@ function slotStyle(index: number) {
 }
 
 .discard-item :deep(.tile) {
+  width: 100% !important;
+  height: 100% !important;
   box-shadow: none !important;
 }
 

@@ -314,13 +314,13 @@ const onPointerCancel = () => {
 .player-hand :deep(.tile) {
   cursor: pointer;
   margin: 0 0 2px 0;
-  width: 34.1px;
-  height: 49.5px;
+  width: 31.5px;
+  height: 45.8px;
 }
 
 .player-melds :deep(.tile) {
-  width: 30.8px;
-  height: 44px;
+  width: 28.6px;
+  height: 41.2px;
 }
 
 .player-dot {

@@ -5,24 +5,37 @@
   ]">
     <div class="room-viewport" :class="{ 'room-viewport--rotated': shouldRotateView }">
       <div class="room-container" :class="{ 'room-container--rotated': shouldRotateView, 'room-container--mobile-landscape': isMobileLandscapeMode }">
-      <header class="room-header">
-        <div class="room-info">
-          <div class="room-title-line">
-            <h1 class="mahjong-title">长清阁麻将</h1>
-            <span class="round-info-header" v-if="currentRound > 0">{{ roundDisplay }}</span>
-          </div>
-        </div>
+      <header class="room-header" :class="{ 'room-header--collapsed': isTopBarCollapsed }">
+        <button
+          class="room-header-toggle"
+          :class="{ 'room-header-toggle--collapsed': isTopBarCollapsed }"
+          @click="toggleTopBar"
+          :aria-expanded="String(!isTopBarCollapsed)"
+          :title="isTopBarCollapsed ? '展开顶部栏' : '收起顶部栏'"
+        >
+          <span class="room-header-toggle__icon">{{ isTopBarCollapsed ? '▼' : '▲' }}</span>
+          <span class="room-header-toggle__label">{{ isTopBarCollapsed ? '展开菜单' : '收起菜单' }}</span>
+        </button>
 
-        <div class="header-actions">
-          <button ref="settingsBtnEl" class="mahjong-button small secondary" @click="toggleSettingsPanel">
-            ⚙️ 设置
-          </button>
-          <button class="mahjong-button small secondary" @click="navigateTo('/rules')">
-            📖 规则
-          </button>
-          <button class="mahjong-button small" @click="backToLobby">
-            返回大厅
-          </button>
+        <div v-show="!isTopBarCollapsed" class="room-header-content">
+          <div class="room-info">
+            <div class="room-title-line">
+              <h1 class="mahjong-title">长清阁麻将</h1>
+              <span class="round-info-header" v-if="currentRound > 0">{{ roundDisplay }}</span>
+            </div>
+          </div>
+
+          <div class="header-actions">
+            <button ref="settingsBtnEl" class="mahjong-button small secondary" @click="toggleSettingsPanel">
+              ⚙️ 设置
+            </button>
+            <button class="mahjong-button small secondary" @click="navigateTo('/rules')">
+              📖 规则
+            </button>
+            <button class="mahjong-button small" @click="backToLobby">
+              返回大厅
+            </button>
+          </div>
         </div>
       </header>
 
@@ -240,48 +253,6 @@
           </div>
         </div>
 
-        <!-- 等待房间 -->
-        <div v-if="isWaitingRoom" class="waiting-overlay">
-          <div class="waiting-card">
-            <h2 class="waiting-title">🀄 长清阁麻将</h2>
-            <p class="waiting-subtitle">房间 #{{ gameState?.roomNumber || '????' }}</p>
-
-            <div class="waiting-players">
-              <div
-                v-for="slot in 4"
-                :key="slot"
-                class="waiting-slot"
-                :class="{ 'waiting-slot--filled': waitingPlayers[slot - 1], 'waiting-slot--dealer': waitingPlayers[slot - 1]?.isDealer }"
-              >
-                <template v-if="waitingPlayers[slot - 1]">
-                  <span class="waiting-avatar">{{ waitingPlayers[slot - 1].isBot ? '🤖' : '🀄' }}</span>
-                  <span class="waiting-name">{{ waitingPlayers[slot - 1].name }}</span>
-                  <span v-if="waitingPlayers[slot - 1].isDealer" class="waiting-dealer-badge">庄</span>
-                </template>
-                <template v-else>
-                  <span class="waiting-avatar waiting-avatar--empty">👤</span>
-                  <span class="waiting-name waiting-name--empty">虚位以待</span>
-                </template>
-              </div>
-            </div>
-
-            <div class="waiting-status">
-              <div class="waiting-spinner"></div>
-              <p>等待 <strong>{{ 4 - waitingPlayers.length }}</strong> 名玩家加入</p>
-            </div>
-
-            <div v-if="isDealerUser && waitingPlayers.length >= 2" class="waiting-actions">
-              <p class="waiting-hint">人数已满足，正在自动进入掷骰子开局…</p>
-            </div>
-            <div v-else-if="!isDealerUser" class="waiting-actions">
-              <p class="waiting-hint">等待庄家 {{ dealerName }} 自动开局...</p>
-            </div>
-
-            <button class="mahjong-button secondary waiting-leave-btn" @click="backToLobby">
-              退出房间
-            </button>
-          </div>
-        </div>
 
         <!-- 结算面板 -->
         <div v-if="showSettlement" class="settle-overlay">
@@ -663,7 +634,7 @@
         <aside class="extended-info-panel">
 
           <!-- 房间号 + 退房结算 -->
-          <div class="room-header-row panel-room-header-row">
+          <div v-if="gameState" class="room-header-row panel-room-header-row">
             <p class="mahjong-subtitle panel-room-number">
               房间 #{{ gameState?.roomNumber || '????' }}
             </p>
@@ -678,19 +649,14 @@
 
           <!-- 战绩统计 -->
           <RoomStats
+            v-if="!isPreGameTransition"
             :players="statsPlayers"
             :current-round="currentRound"
-            :spectating-id="spectatingId"
-            :pending-spectate-id="pendingSpectateId"
-            :approved-human-spectate-id="approvedHumanSpectateId"
-            :show-spectate-area="showSpectatorControls"
-            :can-spectate="canUseSpectatorView"
-            @spectate="handleSpectate"
             @name-click="onPlayerNameClick"
           />
 
           <!-- 牌局快讯 -->
-          <GameBroadcast :messages="broadcastMessages" />
+          <GameBroadcast :messages="displayBroadcastMessages" />
 
 
 
@@ -724,8 +690,8 @@
             </button>
           </div>
 
-          <!-- 操作按钮区：与战绩榜同宽，底部对齐牌桌 -->
-          <div class="action-buttons-panel">
+          <!-- 操作按钮区：等待态隐藏，避免空壳感 -->
+          <div v-if="!isPreGameTransition" class="action-buttons-panel">
               <!-- 状态提示 -->
               <div class="turn-status-text">
                 <template v-if="thinkFreezeActive">
@@ -839,9 +805,13 @@
               </template>
               <!-- 其他真人玩家的操作 -->
               <template v-else-if="playerCardPlayer?.id !== currentPlayer?.id">
-                <button v-if="canUseSpectatorView" class="ai-card-btn ai-card-btn--spectate" @click="onSpectateFromCard">
-                  👁️ 观赛TA
-                  <span class="ai-card-hint">查看对方手牌</span>
+                <button
+                  class="ai-card-btn ai-card-btn--spectate"
+                  :disabled="!canUseSpectatorView"
+                  @click="onSpectateFromCard"
+                >
+                  👁️ {{ spectatingId === playerCardPlayer?.id ? '取消观赛' : '观赛TA' }}
+                  <span class="ai-card-hint">{{ canUseSpectatorView ? '查看对方手牌' : '当前条件下不可观赛' }}</span>
                 </button>
                 <button v-if="canSwap" class="ai-card-btn ai-card-btn--swap" @click="onSwapPosition">
                   🔄 跟TA换位置
@@ -1043,6 +1013,7 @@ let turnTimerInterval: ReturnType<typeof setInterval> | null = null
 let lastWarnAt = 0
 let consecutiveAutoCount = 0
 const isAIControlled = ref(false)
+const isTopBarCollapsed = ref(true)
 const showSettings = ref(false)
 const settingsBtnEl = ref<HTMLElement | null>(null)
 const settingsPanelEl = ref<HTMLElement | null>(null)
@@ -1101,6 +1072,13 @@ const unlockOrientationAfterGameRoom = async () => {
 
 const setTableTheme = (theme: 'classic-green' | 'jade-green' | 'royal-red') => {
   tableTheme.value = theme
+}
+
+const toggleTopBar = () => {
+  isTopBarCollapsed.value = !isTopBarCollapsed.value
+  if (isTopBarCollapsed.value) {
+    showSettings.value = false
+  }
 }
 
 const setTileBackScheme = (scheme: number) => {
@@ -1522,9 +1500,6 @@ const canUseSpectatorView = computed(() => {
   if (gameState.value.phase !== GamePhase.PLAYING && gameState.value.phase !== GamePhase.ENDED) return false
   return currentPlayer.value.status === 'won' || hasDebugSpectateBot.value
 })
-const showSpectatorControls = computed(() => {
-  return !!gameState.value?.players?.length
-})
 
 const handleSpectate = async (id: string) => {
   if (!gameState.value || !currentPlayer.value || !canUseSpectatorView.value) return
@@ -1573,22 +1548,46 @@ const onSpectatorApprovalChoice = async (choice: 'approve' | 'reject') => {
 const isDealer = computed(() => currentPlayer.value?.isDealer)
 const isDealerUser = computed(() => isDealer.value)
 const isGameEnded = computed(() => gameState.value?.phase === GamePhase.ENDED)
+const hasDealtCards = computed(() => {
+  if (!gameState.value?.players?.length) return false
+  return gameState.value.players.some((p: any) => (p.hand?.concealedTiles?.length || 0) > 0)
+})
 
-// 等待房间状态
-const isWaitingRoom = computed(() => {
-  if (!gameState.value) return false
+const isPreGameTransition = computed(() => {
+  if (!gameState.value) return true
+  if (hasDealtCards.value) return false
+
   const phase = gameState.value.phase
-  // 只在 waiting 阶段显示等待房间
-  if (phase !== 'waiting') return false
-  // 如果正在启动游戏（点了创建新局），不显示等待房间
-  if (isGameStarting.value) return false
-  // 如果牌已发（有人有手牌），说明正在发牌中，不显示等待房间
-  const hasDealtCards = (gameState.value.players || []).some(
-    (p: any) => (p.hand?.concealedTiles?.length || 0) > 0
-  )
-  // 如果骰子overlay正在显示，也不要显示等待房间
-  if (showDiceOverlay.value) return false
-  return !hasDealtCards
+  return phase === GamePhase.WAITING || phase === GamePhase.STARTING
+})
+
+const preGameStatusText = computed(() => {
+  if (!gameState.value) {
+    return isConnected.value ? '正在同步房间状态' : '正在连接牌桌'
+  }
+  if (showDiceOverlay.value || gameState.value?.phase === GamePhase.STARTING) {
+    return '正在掷骰子，马上发牌'
+  }
+  if (!isConnected.value) {
+    return '正在连接牌桌'
+  }
+  return waitingPlayers.value.length >= 4 ? '人齐了，牌桌就绪' : '正式牌桌准备中'
+})
+
+const preGameStatusHint = computed(() => {
+  if (!gameState.value) {
+    return '连接成功后将直接进入正式牌桌，不再显示独立等待页'
+  }
+  if (showDiceOverlay.value || gameState.value?.phase === GamePhase.STARTING) {
+    return `庄家 ${dealerName.value} 正在开局，牌局即将开始`
+  }
+  if (!isConnected.value) {
+    return '正在重新连接服务器，牌桌布局保持不变'
+  }
+  if (waitingPlayers.value.length < 4) {
+    return `当前 ${waitingPlayers.value.length}/4 人，继续在正式牌桌上等人`
+  }
+  return '已隐藏独立等待布局，开局前保持正式牌桌画面'
 })
 
 const waitingPlayers = computed(() => {
@@ -1864,15 +1863,11 @@ const turnMessage = computed(() => {
 
   const phase = gameState.value.phase
   // 如果牌已发（有人有手牌），即使 phase 还没更新也按 playing 处理
-  const hasDealtCards = (gameState.value.players || []).some(
-    (p: any) => (p.hand?.concealedTiles?.length || 0) > 0
-  )
-
-  if (phase === 'waiting' && !hasDealtCards) {
+  if (phase === 'waiting' && !hasDealtCards.value) {
     return '等待玩家加入开始'
   }
 
-  if (phase === 'waiting' && hasDealtCards) {
+  if (phase === 'waiting' && hasDealtCards.value) {
     return '准备发牌…'
   }
 
@@ -3006,6 +3001,15 @@ interface BroadcastMsg {
   timeLabel: string
 }
 const broadcastMessages = ref<BroadcastMsg[]>([])
+const displayBroadcastMessages = computed(() => {
+  if (!isPreGameTransition.value) return broadcastMessages.value
+  const waitingText = !gameState.value
+    ? '⏳ 正在连接牌桌…'
+    : waitingPlayers.value.length >= 2 && isDealerUser.value
+      ? '⏳ 人数已满足，等待系统自动开局'
+      : `⏳ 当前 ${waitingPlayers.value.length}/4 人，牌桌准备中`
+  return [{ id: -1, text: waitingText, type: 'info', timestamp: Date.now(), timeLabel: 'NOW' } as BroadcastMsg, ...broadcastMessages.value].slice(0, 5)
+})
 let broadcastId = 0
 const addBroadcast = (text: string, type: BroadcastMsg['type'] = 'info') => {
   const now = Date.now()
@@ -3400,6 +3404,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .room-container {
+  position: relative;
   background: rgba(7, 19, 14, 0.92);
   border-radius: 20px;
   padding: 16px 16px 20px;
@@ -3413,10 +3418,73 @@ const forceDiscard = async (p: Player) => {
 }
 
 .room-header {
+  position: fixed;
+  top: max(6px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  max-width: min(92%, 720px);
+  pointer-events: none;
+}
+
+.room-header--collapsed {
+  gap: 0;
+}
+
+.room-header-content {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: rgba(7, 19, 14, 0.92);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  pointer-events: auto;
+}
+
+.room-header-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  min-width: 44px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 20, 14, 0.82);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  pointer-events: auto;
+}
+
+.room-header-toggle:hover {
+  color: #fff;
+  background: rgba(13, 31, 22, 0.92);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.room-header-toggle--collapsed {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+.room-header-toggle__icon {
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.room-header-toggle__label {
+  line-height: 1;
 }
 
 .header-actions {
@@ -3533,9 +3601,8 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-width: 72%;
   --seat-side-width: 96px;
   --seat-side-height: 70%;
-  --discard-top-inset: 24.8%;
-  --discard-bottom-inset: 23.8%;
-  --discard-side-inset: 27.4%;
+  --discard-ring-gap-x: 4.2%;
+  --discard-ring-gap-y: 3.6%;
 }
 
 /* 绿色麻将桌布内层 */
@@ -3609,24 +3676,24 @@ const forceDiscard = async (p: Player) => {
 /* 上家：靠近牌桌中心，旋转180° */
 /* 四个弃牌区居中对齐牌桌十字 */
 :deep(.discard-zone--top) {
-  top: calc(var(--discard-top-inset) - 2%);
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, calc(-100% - var(--discard-ring-gap-y)));
 }
 :deep(.discard-zone--bottom) {
-  bottom: calc(var(--discard-bottom-inset) - 1%);
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, var(--discard-ring-gap-y));
 }
 :deep(.discard-zone--left) {
-  top: calc(50% - 1%);
-  left: calc(var(--discard-side-inset) - 1%);
-  transform: translateY(-50%);
+  top: 50%;
+  left: 50%;
+  transform: translate(calc(-100% - var(--discard-ring-gap-x)), -50%);
 }
 :deep(.discard-zone--right) {
-  top: calc(50% - 1%);
-  right: calc(var(--discard-side-inset) - 1%);
-  transform: translateY(-50%);
+  top: 50%;
+  left: 50%;
+  transform: translate(var(--discard-ring-gap-x), -50%);
 }
 
 /* ===== 扩展信息区 ===== */
@@ -3746,10 +3813,20 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .room-header {
-  padding: 0 6px;
+  top: max(4px, env(safe-area-inset-top));
+  gap: 2px;
+  max-width: min(96%, 520px);
+}
+
+.layout--mobile-landscape .room-header-content {
+  padding: 4px 6px;
   gap: 3px;
-  min-height: 22px;
-  background: rgba(7, 19, 14, 0.95);
+}
+
+.layout--mobile-landscape .room-header-toggle {
+  min-height: 18px;
+  padding: 2px 8px;
+  font-size: 0.58rem;
 }
 
 .layout--mobile-landscape .mahjong-title {
@@ -3800,9 +3877,8 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-width: 75%;
   --seat-side-width: 100px;
   --seat-side-height: 50%;
-  --discard-top-inset: 38%;
-  --discard-bottom-inset: 20%;
-  --discard-side-inset: 38%;
+  --discard-ring-gap-x: 3.2%;
+  --discard-ring-gap-y: 2.6%;
 }
 
 .layout--mobile-landscape .extended-info-panel {
@@ -4342,8 +4418,8 @@ const forceDiscard = async (p: Player) => {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 30px;
-  height: 30px;
+  width: 22px;
+  height: 22px;
   z-index: 2;
   pointer-events: none;
 }
@@ -4354,11 +4430,11 @@ const forceDiscard = async (p: Player) => {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 173px;
-  height: 173px;
+  width: 132px;
+  height: 132px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 215, 0, 0.15) 0%, rgba(255, 180, 0, 0.08) 50%, transparent 70%);
-  border: 1.5px solid rgba(255, 215, 0, 0.25);
+  border: 1px solid rgba(255, 215, 0, 0.22);
   z-index: 1;
   pointer-events: none;
 }
@@ -4373,6 +4449,19 @@ const forceDiscard = async (p: Player) => {
 .cross-v {
   left: 50%; top: 0; height: 100%; width: 1px;
   transform: translateX(-0.5px);
+}
+
+@media (max-width: 900px) {
+  .cross-marker {
+    width: 16px;
+    height: 16px;
+  }
+
+  .center-glow {
+    width: 94px;
+    height: 94px;
+    border-width: 0.8px;
+  }
 }
 
 /* 玩家名称标注（固定在牌桌四边，不挤占其他容器） */
@@ -5676,54 +5765,55 @@ const forceDiscard = async (p: Player) => {
   color: #fff;
 }
 
-/* 等待房间 */
-.waiting-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(3, 10, 8, 0.92);
+/* 等待房间：信息塞进右侧面板 */
+.waiting-panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.waiting-panel-status {
   display: flex;
   align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(6px);
-  z-index: 10;
+  gap: 10px;
 }
 
-.waiting-card {
-  background: rgba(4, 16, 11, 0.97);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 20px;
-  padding: 36px;
-  width: min(420px, 92%);
-  text-align: center;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+.waiting-panel-main {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
 }
 
-.waiting-title {
-  font-size: 1.5rem;
-  margin: 0 0 4px;
+.waiting-panel-sub {
+  margin: 2px 0 0;
+  font-size: 0.74rem;
+  opacity: 0.72;
 }
 
-.waiting-subtitle {
-  font-size: 0.9rem;
-  opacity: 0.6;
-  margin: 0 0 24px;
+.waiting-panel-tip {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.74rem;
+  line-height: 1.45;
 }
 
 .waiting-players {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
 }
 
 .waiting-slot {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 14px;
-  border-radius: 12px;
+  padding: 8px 12px;
+  border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.04);
   transition: all 0.3s ease;
 }
 
@@ -5772,11 +5862,9 @@ const forceDiscard = async (p: Player) => {
 .waiting-status {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin-bottom: 20px;
+  justify-content: space-between;
+  gap: 12px;
   font-size: 0.9rem;
-  opacity: 0.8;
 }
 
 .waiting-spinner {
@@ -5793,26 +5881,25 @@ const forceDiscard = async (p: Player) => {
 }
 
 .waiting-actions {
-  margin-bottom: 16px;
-}
-
-.waiting-start-btn {
-  width: 100%;
-  padding: 14px 24px;
-  font-size: 1.05rem;
+  margin-top: 6px;
 }
 
 .waiting-hint {
   font-size: 0.8rem;
-  opacity: 0.5;
-  margin: 8px 0 0;
+  opacity: 0.62;
+  margin: 0;
 }
 
 .waiting-leave-btn {
+  margin-top: 10px;
   width: 100%;
   padding: 10px 24px;
   font-size: 0.85rem;
-  opacity: 0.7;
+  opacity: 0.82;
+}
+
+.waiting-players--panel .waiting-slot {
+  max-width: 100%;
 }
 
 .overlay-button {
@@ -5913,8 +6000,16 @@ const forceDiscard = async (p: Player) => {
   }
 
   .room-header {
+    top: max(4px, env(safe-area-inset-top));
+    width: max-content;
+    max-width: min(96%, 420px);
+  }
+
+  .room-header-content {
     flex-direction: column;
     align-items: flex-start;
+    width: 100%;
+    padding: 8px 10px;
   }
 
   .room-title-line {
@@ -6196,8 +6291,3 @@ const forceDiscard = async (p: Player) => {
 }
 
 </style>
-
-
-
-
-
