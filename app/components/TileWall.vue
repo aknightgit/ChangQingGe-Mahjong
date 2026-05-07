@@ -23,7 +23,7 @@
       <div class="wall-track wall-track--horizontal wall-track--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`bottom-outer-${i}`" class="tile-slot">
           <BackTile :scheme="effectiveBackScheme" outer />
-          <div class="tile-side tile-side--top" />
+          <div class="tile-side tile-side--bottom" />
         </div>
       </div>
     </div>
@@ -37,7 +37,7 @@
       <div class="wall-track wall-track--vertical wall-track--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`left-outer-${i}`" class="tile-slot tile-slot--vertical">
           <BackTile :scheme="effectiveBackScheme" outer />
-          <div class="tile-side tile-side--right" />
+          <div class="tile-side tile-side--bottom" />
         </div>
       </div>
     </div>
@@ -51,7 +51,7 @@
       <div class="wall-track wall-track--vertical wall-track--outer">
         <div v-for="i in TILES_PER_SIDE" :key="`right-outer-${i}`" class="tile-slot tile-slot--vertical">
           <BackTile :scheme="effectiveBackScheme" outer />
-          <div class="tile-side tile-side--left" />
+          <div class="tile-side tile-side--bottom" />
         </div>
       </div>
     </div>
@@ -96,14 +96,18 @@ const TILES_PER_SIDE = 18
 
 <style scoped>
 .tile-wall {
-  --wall-tile-w: clamp(20px, calc(var(--tile-w, 28px) * 1.0), 28px);
-  --wall-tile-h: clamp(28px, var(--tile-h, 40px), 40px);
-  --wall-seam-overlap: clamp(2px, calc(var(--wall-tile-w) * 0.1), 3px);
-  --wall-layer-overlap: clamp(8px, calc(var(--tile-h, 40px) * 0.25), 10px);
-  --wall-side-depth: clamp(2px, calc(var(--wall-tile-h) * 0.12), 4px);
-  --wall-top-inset: 11%;
-  --wall-bottom-inset: 11%;
-  --wall-side-inset: 11%;
+  --wall-tile-w: clamp(14px, calc(var(--tile-w, 28px) * 0.98), 28px);
+  --wall-tile-h: clamp(21px, calc(var(--tile-h, 40px) * 0.98), 39px);
+  --wall-seam-overlap: clamp(0px, calc(var(--wall-tile-w) * 0.08), 2px);
+  --wall-layer-shift: 0px;
+  --wall-side-depth: clamp(2px, calc(var(--wall-tile-h) * 0.14), 5px);
+  --wall-top-inset: 12.2%;
+  --wall-bottom-inset: 11.2%;
+  --wall-side-inset: 10.2%;
+  --wall-horizontal-span: calc(var(--wall-tile-w) * 18 - var(--wall-seam-overlap) * 17);
+  --wall-vertical-span: calc(var(--wall-tile-w) * 18 - var(--wall-seam-overlap) * 17);
+  --wall-horizontal-depth: calc(var(--wall-tile-h) + var(--wall-layer-shift) + var(--wall-side-depth));
+  --wall-vertical-depth: calc(var(--wall-tile-h) + var(--wall-layer-shift) + var(--wall-side-depth));
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -121,87 +125,88 @@ const TILES_PER_SIDE = 18
   top: var(--wall-top-inset);
   left: 50%;
   transform: translateX(-50%);
-  flex-direction: column;
-  align-items: center;
+  width: var(--wall-horizontal-span);
+  height: var(--wall-horizontal-depth);
 }
 
 .wall-side--bottom {
   bottom: var(--wall-bottom-inset);
   left: 50%;
   transform: translateX(-50%);
-  flex-direction: column-reverse;
-  align-items: center;
+  width: var(--wall-horizontal-span);
+  height: var(--wall-horizontal-depth);
 }
 
 .wall-side--left {
   left: var(--wall-side-inset);
   top: 50%;
   transform: translateY(-50%);
-  flex-direction: row;
-  align-items: center;
+  width: var(--wall-vertical-depth);
+  height: var(--wall-vertical-span);
 }
 
 .wall-side--right {
   right: var(--wall-side-inset);
   top: 50%;
   transform: translateY(-50%);
-  flex-direction: row-reverse;
-  align-items: center;
+  width: var(--wall-vertical-depth);
+  height: var(--wall-vertical-span);
 }
 
 .wall-track {
   display: flex;
   gap: 0;
+  position: absolute;
 }
 
 .wall-track--inner {
-  position: relative;
   z-index: 1;
 }
 
 .wall-track--outer {
-  position: relative;
   z-index: 2;
 }
 
 .wall-track--horizontal {
   flex-direction: row;
+  left: 0;
 }
 
 .wall-track--vertical {
   flex-direction: column;
+  top: 0;
 }
 
-.wall-side--top .wall-track--inner,
+.wall-side--top .wall-track--inner {
+  top: 0;
+}
+
+.wall-side--top .wall-track--outer {
+  top: var(--wall-layer-shift);
+}
+
 .wall-side--bottom .wall-track--inner {
-  /* inner track forms the visual outer edge of the wall */
-  margin-top: 0;
+  bottom: 0;
 }
 
-.wall-side--top .wall-track--outer,
 .wall-side--bottom .wall-track--outer {
-  /* outer track shifted inward (toward center) by layer-overlap */
-  margin-top: var(--wall-layer-overlap);
+  bottom: var(--wall-layer-shift);
 }
 
 .wall-side--left .wall-track--inner {
-  /* inner track shifted inward (toward center) by layer-overlap from wall edge */
-  margin-left: var(--wall-layer-overlap);
+  left: 0;
 }
 
 .wall-side--left .wall-track--outer {
-  /* outer track on top of inner, also shifted by layer-overlap */
-  margin-left: calc(var(--wall-layer-overlap) * -1);
+  left: var(--wall-layer-shift);
 }
 
 .wall-side--right .wall-track--inner {
-  /* inner track shifted inward (toward center) by layer-overlap from wall edge */
-  margin-right: var(--wall-layer-overlap);
+  right: 0;
 }
 
 .wall-side--right .wall-track--outer {
-  /* outer track on top of inner, also shifted by layer-overlap */
-  margin-right: calc(var(--wall-layer-overlap) * -1);
+  right: var(--wall-layer-shift);
 }
 
 .wall-track--horizontal .tile-slot + .tile-slot {
@@ -300,6 +305,11 @@ const TILES_PER_SIDE = 18
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45)) brightness(1.05);
 }
 
+.wall-side--left .wall-back--outer,
+.wall-side--right .wall-back--outer {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.28)) brightness(1);
+}
+
 .tile-side {
   position: absolute;
   pointer-events: none;
@@ -343,6 +353,7 @@ const TILES_PER_SIDE = 18
   border-radius: 0 2px 2px 0;
   background: linear-gradient(270deg, #1a4a28 0%, #1a4a28 33%, #f5efe0 33%, #e8e0d0 100%);
 }
+
 
 .tile-wall--back-1 .tile-side {
   background: linear-gradient(180deg, #c7a56a 0%, #c7a56a 33%, #f7efd9 33%, #e6d7b8 100%);

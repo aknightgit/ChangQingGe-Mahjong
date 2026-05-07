@@ -216,8 +216,8 @@ const SEAT_ROTATION_BY_POSITION: Record<'top' | 'left' | 'right', number> = {
 }
 
 function getViewerRelativeSource(sourcePosition: number): number {
-  const viewerPosition = props.viewerPosition ?? props.ownerPosition ?? 0
-  return (sourcePosition - viewerPosition + 4) % 4
+  const ownerPosition = props.ownerPosition ?? props.viewerPosition ?? 0
+  return (sourcePosition - ownerPosition + 4) % 4
 }
 
 function getClaimArrowRotation(sourcePosition: number): number {

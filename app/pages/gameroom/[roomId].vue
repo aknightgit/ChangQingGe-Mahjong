@@ -794,6 +794,14 @@
               </template>
               <!-- AI的操作（任何人可点） -->
               <template v-else-if="isBotPlayer(playerCardPlayer)">
+                <button
+                  class="ai-card-btn ai-card-btn--spectate"
+                  :disabled="!canUseSpectatorView"
+                  @click="onSpectateFromCard"
+                >
+                  👁️ {{ spectatingId === playerCardPlayer?.id ? '取消观赛' : '观赛TA' }}
+                  <span class="ai-card-hint">{{ canUseSpectatorView ? '查看对方手牌' : '当前条件下不可观赛' }}</span>
+                </button>
                 <button class="ai-card-btn ai-card-btn--leave" @click="onAILeave">
                   🚪 出局
                   <span class="ai-card-hint">下局移除该AI</span>
@@ -1772,8 +1780,9 @@ const enterStartingPhaseWithDiceOverlay = async () => {
     hasDicePreview.value = true
     playSound('dice-roll')
     showDiceOverlay.value = true
-  } catch (e) {
+  } catch (e: any) {
     console.error('[enterStartingPhaseWithDiceOverlay] Failed:', e)
+    addBroadcast(e?.data?.message || e?.message || '进入下一局失败', 'warn')
   }
 }
 
@@ -2659,10 +2668,17 @@ const isSpectator = computed(() => {
 // 换位置相关
 const mySwapInfo = ref<{ totalChances: number; usedChances: number; remaining: number }>({ totalChances: 0, usedChances: 0, remaining: 0 })
 const canSwap = computed(() => mySwapInfo.value.remaining > 0)
+const canOpenPlayerCardFor = (player: any) => {
+  if (!player) return false
+  if (player.id === currentPlayer.value?.id) return true
+  if (isBotPlayer(player)) return true
+  if (canUseSpectatorView.value) return true
+  if (canSwap.value) return true
+  return false
+}
 const onPlayerNameClick = (player: any) => {
   if (!player) return
-  // 允许点击自己、AI玩家、或（满足换位置条件时）其他真人玩家
-  if (player.id !== currentPlayer.value?.id && !isBotPlayer(player) && !canSwap.value) return
+  if (!canOpenPlayerCardFor(player)) return
   playerCardPlayer.value = player
   showPlayerCard.value = true
 }
@@ -3602,8 +3618,9 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-width: 72%;
   --seat-side-width: 96px;
   --seat-side-height: 70%;
-  --discard-ring-gap-x: 4.2%;
-  --discard-ring-gap-y: 3.6%;
+  --seat-side-player-offset: 1.4%;
+  --discard-center-rect-half-w: 16.2%;
+  --discard-center-rect-half-h: 12.8%;
 }
 
 /* 绿色麻将桌布内层 */
@@ -3677,24 +3694,24 @@ const forceDiscard = async (p: Player) => {
 /* 上家：靠近牌桌中心，旋转180° */
 /* 四个弃牌区居中对齐牌桌十字 */
 :deep(.discard-zone--top) {
-  top: 50%;
+  top: calc(50% - var(--discard-center-rect-half-h));
   left: 50%;
-  transform: translate(-50%, calc(-100% - var(--discard-ring-gap-y)));
+  transform: translate(-50%, -100%);
 }
 :deep(.discard-zone--bottom) {
-  top: 50%;
+  top: calc(50% + var(--discard-center-rect-half-h));
   left: 50%;
-  transform: translate(-50%, var(--discard-ring-gap-y));
+  transform: translate(-50%, 0);
 }
 :deep(.discard-zone--left) {
   top: 50%;
-  left: 50%;
-  transform: translate(calc(-100% - var(--discard-ring-gap-x)), -50%);
+  left: calc(50% - var(--discard-center-rect-half-w));
+  transform: translate(-100%, -50%);
 }
 :deep(.discard-zone--right) {
   top: 50%;
-  left: 50%;
-  transform: translate(var(--discard-ring-gap-x), -50%);
+  left: calc(50% + var(--discard-center-rect-half-w));
+  transform: translate(0, -50%);
 }
 
 /* ===== 扩展信息区 ===== */
@@ -3878,8 +3895,9 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-width: 75%;
   --seat-side-width: 100px;
   --seat-side-height: 50%;
-  --discard-ring-gap-x: 3.2%;
-  --discard-ring-gap-y: 2.6%;
+  --seat-side-player-offset: 0.9%;
+  --discard-center-rect-half-w: 14%;
+  --discard-center-rect-half-h: 10.6%;
 }
 
 .layout--mobile-landscape .extended-info-panel {
@@ -4062,7 +4080,7 @@ const forceDiscard = async (p: Player) => {
 
 /* 对家名字反向旋转，保持正向可读 */
 .seat-left {
-  left: calc(var(--seat-side-inset) - 1%);
+  left: calc(var(--seat-side-inset) - var(--seat-side-player-offset) - var(--tile-w));
   top: 50%;
   transform: translateY(-50%);
   height: calc(var(--seat-side-height) + 4%);
@@ -4074,7 +4092,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .seat-right {
-  right: calc(var(--seat-side-inset) - 2%);
+  right: calc(var(--seat-side-inset) - var(--seat-side-player-offset) - var(--tile-w) - 0.35 * var(--tile-w));
   top: 50%;
   transform: translateY(-50%);
   height: calc(var(--seat-side-height) + 4%);
@@ -6081,6 +6099,7 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-width: 80%;
   --seat-side-width: 60px;
   --seat-side-height: 45%;
+  --seat-side-player-offset: 0.6%;
 }
 .layout--mobile-landscape .seat-top { min-height: 42px; }
 .layout--mobile-landscape .seat-bottom { min-height: 58px; width: min(80%, calc(100% - 80px)); }

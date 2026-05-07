@@ -11,12 +11,14 @@
       :class="`discard-item--${position}`"
       :style="slotStyle(index)"
     >
-      <MahjongTile
-        :tile="tile"
-        :small="true"
-        :dimmed="isWinner && tile.id !== latestTileId"
-        :class="{ 'latest-tile': tile.id === latestTileId && !isWinner }"
-      />
+      <div class="discard-tile-shell" :class="`discard-tile-shell--${position}`">
+        <MahjongTile
+          :tile="tile"
+          :small="true"
+          :dimmed="isWinner && tile.id !== latestTileId"
+          :class="{ 'latest-tile': tile.id === latestTileId && !isWinner }"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -35,22 +37,36 @@ const props = defineProps<{
 
 const layout = computed(() => {
   if (props.position === 'left' || props.position === 'right') {
-    return { cols: 3, rows: 8, widthPct: 11.5, heightPct: 35, cellW: 33.333, cellH: 12.5 }
+    return { cols: 3, rows: 8 }
   }
 
-  return { cols: 8, rows: 3, widthPct: 24, heightPct: 18.5, cellW: 12.5, cellH: 33.333 }
+  return { cols: 10, rows: 3 }
 })
 
 const maxTiles = computed(() => layout.value.cols * layout.value.rows)
 const visibleTiles = computed(() => props.tiles.slice(0, maxTiles.value))
 
-const zoneStyle = computed(() => ({
-  width: `${layout.value.widthPct}%`,
-  height: `${layout.value.heightPct}%`,
-}))
+const isSideZone = computed(() => props.position === 'left' || props.position === 'right')
+
+const zoneStyle = computed(() => {
+  const { cols, rows } = layout.value
+  if (isSideZone.value) {
+    return {
+      width: `calc(var(--discard-step-y) * ${cols - 1} + var(--discard-tile-h))`,
+      height: `calc(var(--discard-step-x) * ${rows - 1} + var(--discard-tile-w))`,
+    }
+  }
+
+  return {
+    width: `calc(var(--discard-step-x) * ${cols - 1} + var(--discard-tile-w))`,
+    height: `calc(var(--discard-step-y) * ${rows - 1} + var(--discard-tile-h))`,
+  }
+})
 
 function slotStyle(index: number) {
-  const { cols, rows, cellW, cellH } = layout.value
+  const { cols, rows } = layout.value
+  const stepX = isSideZone.value ? 'var(--discard-step-y)' : 'var(--discard-step-x)'
+  const stepY = isSideZone.value ? 'var(--discard-step-x)' : 'var(--discard-step-y)'
   let col = 0
   let row = 0
 
@@ -69,16 +85,20 @@ function slotStyle(index: number) {
   }
 
   return {
-    left: `${col * cellW}%`,
-    top: `${row * cellH}%`,
-    width: props.position === 'left' || props.position === 'right' ? '36%' : '13.2%',
-    height: props.position === 'left' || props.position === 'right' ? '14%' : '36%',
+    left: `calc(${stepX} * ${col})`,
+    top: `calc(${stepY} * ${row})`,
+    width: 'var(--discard-tile-w)',
+    height: 'var(--discard-tile-h)',
   }
 }
 </script>
 
 <style scoped>
 .discard-zone {
+  --discard-tile-w: calc(var(--tile-w, 28px) * 0.86);
+  --discard-tile-h: calc(var(--tile-h, 40px) * 0.86);
+  --discard-step-x: calc(var(--discard-tile-w) * 0.968);
+  --discard-step-y: calc(var(--discard-tile-h) * 0.992);
   position: absolute;
   z-index: 6;
   pointer-events: none;
@@ -93,30 +113,42 @@ function slotStyle(index: number) {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: visible;
 }
 
-.discard-item--top {
+.discard-tile-shell {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center;
+}
+
+.discard-tile-shell--top {
   transform: rotate(180deg);
-  transform-origin: center;
 }
 
-.discard-item--left {
+.discard-tile-shell--left {
   transform: rotate(90deg);
-  transform-origin: center;
 }
 
-.discard-item--right {
+.discard-tile-shell--right {
   transform: rotate(-90deg);
-  transform-origin: center;
 }
 
-.discard-item :deep(.tile) {
+.discard-item--left,
+.discard-item--right {
+  transform-origin: top left;
+}
+
+.discard-tile-shell :deep(.tile) {
   width: 100% !important;
   height: 100% !important;
   box-shadow: none !important;
 }
 
-.discard-item :deep(.latest-tile) {
+.discard-tile-shell :deep(.latest-tile) {
   outline: 3px solid rgba(255, 58, 58, 0.82) !important;
   outline-offset: 3px;
   border-radius: 6px;

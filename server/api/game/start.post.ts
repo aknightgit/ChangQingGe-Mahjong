@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
   const { player } = await requireGamePlayerAccess(event, game, playerId);
   const canAnyPlayerRestart = game.phase === 'ended' || game.phase === 'cha_jiao';
 
-  if ((phaseOnly || !canAnyPlayerRestart) && !player.isDealer) {
+  if (!canAnyPlayerRestart && !player.isDealer) {
     throw createError({
       statusCode: 403,
       message: 'Only the dealer can start the game'
