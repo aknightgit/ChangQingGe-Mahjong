@@ -96,14 +96,14 @@ const TILES_PER_SIDE = 18
 
 <style scoped>
 .tile-wall {
-  --wall-tile-w: clamp(14px, calc(var(--tile-w, 28px) * 0.98), 28px);
-  --wall-tile-h: clamp(21px, calc(var(--tile-h, 40px) * 0.98), 39px);
-  --wall-seam-overlap: clamp(0px, calc(var(--wall-tile-w) * 0.08), 2px);
-  --wall-layer-overlap: clamp(5px, calc(var(--wall-tile-h) * 0.32), 12px);
-  --wall-side-depth: clamp(2px, calc(var(--wall-tile-h) * 0.14), 5px);
-  --wall-top-inset: 12%;
-  --wall-bottom-inset: 12%;
-  --wall-side-inset: 10%;
+  --wall-tile-w: clamp(14px, calc(var(--tile-w, 28px) * 0.88), 26px);
+  --wall-tile-h: clamp(21px, calc(var(--tile-h, 40px) * 0.88), 35px);
+  --wall-seam-overlap: clamp(0px, calc(var(--wall-tile-w) * 0.05), 1px);
+  --wall-layer-overlap: clamp(3px, calc(var(--wall-tile-h) * 0.25), 8px);
+  --wall-side-depth: clamp(2px, calc(var(--wall-tile-h) * 0.12), 4px);
+  --wall-top-inset: 14%;
+  --wall-bottom-inset: 14%;
+  --wall-side-inset: 12%;
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -196,7 +196,7 @@ const TILES_PER_SIDE = 18
 .wall-side--bottom .wall-track--inner,
 .wall-side--left .wall-track--inner,
 .wall-side--right .wall-track--inner {
-  filter: brightness(0.94);
+  filter: brightness(0.92);
 }
 
 .tile-slot {
