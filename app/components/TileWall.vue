@@ -96,14 +96,14 @@ const TILES_PER_SIDE = 18
 
 <style scoped>
 .tile-wall {
-  --wall-tile-w: clamp(14px, calc(var(--tile-w, 28px) * 0.88), 26px);
-  --wall-tile-h: clamp(21px, calc(var(--tile-h, 40px) * 0.88), 35px);
-  --wall-seam-overlap: clamp(0px, calc(var(--wall-tile-w) * 0.05), 1px);
-  --wall-layer-overlap: clamp(3px, calc(var(--wall-tile-h) * 0.25), 8px);
+  --wall-tile-w: clamp(20px, calc(var(--tile-w, 28px) * 1.0), 28px);
+  --wall-tile-h: clamp(28px, var(--tile-h, 40px), 40px);
+  --wall-seam-overlap: clamp(2px, calc(var(--wall-tile-w) * 0.1), 3px);
+  --wall-layer-overlap: clamp(8px, calc(var(--tile-h, 40px) * 0.25), 10px);
   --wall-side-depth: clamp(2px, calc(var(--wall-tile-h) * 0.12), 4px);
-  --wall-top-inset: 14%;
-  --wall-bottom-inset: 14%;
-  --wall-side-inset: 12%;
+  --wall-top-inset: 11%;
+  --wall-bottom-inset: 11%;
+  --wall-side-inset: 11%;
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -172,16 +172,36 @@ const TILES_PER_SIDE = 18
   flex-direction: column;
 }
 
-.wall-side--top .wall-track--outer,
-.wall-side--bottom .wall-track--outer {
+.wall-side--top .wall-track--inner,
+.wall-side--bottom .wall-track--inner {
+  /* inner track forms the visual outer edge of the wall */
   margin-top: 0;
-  transform: translateY(calc(var(--wall-layer-overlap) * -1));
 }
 
-.wall-side--left .wall-track--outer,
+.wall-side--top .wall-track--outer,
+.wall-side--bottom .wall-track--outer {
+  /* outer track shifted inward (toward center) by layer-overlap */
+  margin-top: var(--wall-layer-overlap);
+}
+
+.wall-side--left .wall-track--inner {
+  /* inner track shifted inward (toward center) by layer-overlap from wall edge */
+  margin-left: var(--wall-layer-overlap);
+}
+
+.wall-side--left .wall-track--outer {
+  /* outer track on top of inner, also shifted by layer-overlap */
+  margin-left: calc(var(--wall-layer-overlap) * -1);
+}
+
+.wall-side--right .wall-track--inner {
+  /* inner track shifted inward (toward center) by layer-overlap from wall edge */
+  margin-right: var(--wall-layer-overlap);
+}
+
 .wall-side--right .wall-track--outer {
-  margin-left: 0;
-  transform: translateX(calc(var(--wall-layer-overlap) * -1));
+  /* outer track on top of inner, also shifted by layer-overlap */
+  margin-right: calc(var(--wall-layer-overlap) * -1);
 }
 
 .wall-track--horizontal .tile-slot + .tile-slot {
