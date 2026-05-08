@@ -1006,8 +1006,13 @@ const initialViewport = process.client
   : { width: 1024, height: 768 }
 const initialSmallestSide = Math.min(initialViewport.width, initialViewport.height)
 const initialIsPortrait = initialViewport.height >= initialViewport.width
+const isCompactMobileViewport = (width: number, height: number) => {
+  const smallestSide = Math.min(width, height)
+  const isPortrait = height >= width
+  return isPortrait ? smallestSide <= 768 : smallestSide <= 768 || height <= 768
+}
 const isMobilePortrait = ref(initialIsPortrait && initialSmallestSide <= 768)
-const isMobileLandscape = ref(!initialIsPortrait && initialViewport.width <= 900)
+const isMobileLandscape = ref(!initialIsPortrait && isCompactMobileViewport(initialViewport.width, initialViewport.height))
 const shouldRotateView = computed(() => isMobilePortrait.value)
 const isMobileLandscapeMode = computed(() => isMobileLandscape.value && !shouldRotateView.value)
 const layoutMode = computed<'desktop' | 'mobile-landscape' | 'mobile-portrait'>(() => {
@@ -1172,7 +1177,7 @@ const evaluateViewport = () => {
   const smallestSide = Math.min(width, height)
   const isPortrait = height >= width
   isMobilePortrait.value = isPortrait && smallestSide <= 768
-  isMobileLandscape.value = !isPortrait && width <= 900
+  isMobileLandscape.value = !isPortrait && isCompactMobileViewport(width, height)
 }
 
 const isHiddenTile = (tile: any) => String(tile?.id || '').startsWith('hidden-') || tile?.value === 0
@@ -4023,7 +4028,9 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .table-wrapper {
-  flex: 1 1 auto;
+  flex: 0 0 70%;
+  width: 70%;
+  max-width: 70%;
   min-width: 0;
   min-height: 0;
   padding: 0;
@@ -4053,10 +4060,10 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .extended-info-panel {
-  flex: 0 1 30%;
+  flex: 0 0 30%;
   width: 30%;
-  min-width: 140px;
-  max-width: 300px;
+  min-width: 0;
+  max-width: 30%;
   max-height: 100%;
   font-size: 0.62rem;
   gap: 3px;
