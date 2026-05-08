@@ -1,7 +1,7 @@
 <template>
   <div
     v-if="hand.length"
-    v-memo="[hand, showHand, justDrawnTileId, isWinner, tileBackScheme, position]"
+    v-memo="[handMemoKey, showHand, justDrawnTileId, isWinner, tileBackScheme, position]"
     :class="laneClass"
   >
     <MahjongTile
@@ -41,4 +41,13 @@ const laneClass = computed(() => ({
 }))
 
 const tileClass = computed(() => (props.position === 'top' ? 'top-seat-tile' : ''))
+const handMemoKey = computed(() => props.hand.map(tile => tile?.id || '').join('|'))
 </script>
+
+<style scoped>
+.hand-lane {
+  contain: layout paint;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+</style>

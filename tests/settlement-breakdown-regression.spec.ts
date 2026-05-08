@@ -189,6 +189,59 @@ console.log('\n=== 回归测试: 结算明细/参数映射 ===\n');
   test('带头大哥赔付流向写入 transfers', round?.transfers?.some((transfer: any) => transfer.reason === '谢谢带头大哥赔付'));
 }
 
+{
+  const players = [player('w1', 0), player('w2', 1), player('l3', 2), player('l4', 3)];
+  const currentGame = baseGame(`settle-multi-${Date.now()}`, players);
+  currentGame.roundMultiplier = 1;
+  currentGame.inheritMultiplier = 1;
+  currentGame.settlementMultiplier = 1;
+
+  const firstWinner = currentGame.players[0];
+  firstWinner.status = PlayerStatus.WON;
+  firstWinner.winOrder = 1;
+  firstWinner.isSelfDrawn = false;
+  firstWinner.discarderId = 'l3';
+  firstWinner.wonFan = 10;
+  firstWinner.winHandType = 'first-win';
+  firstWinner.winningScoreBreakdown = {
+    baseFan: 10,
+    extraMultipliers: 1,
+    diceMultiplier: 1,
+    inheritMultiplier: 1,
+    effectiveMultiplier: 1,
+    settlementMultiplier: 1,
+    finalPoints: 10,
+    details: ['first winner discard']
+  };
+
+  const secondWinner = currentGame.players[1];
+  secondWinner.status = PlayerStatus.WON;
+  secondWinner.winOrder = 2;
+  secondWinner.isSelfDrawn = true;
+  secondWinner.wonFan = 20;
+  secondWinner.winHandType = 'second-win';
+  secondWinner.winningScoreBreakdown = {
+    baseFan: 20,
+    extraMultipliers: 1,
+    diceMultiplier: 1,
+    inheritMultiplier: 1,
+    effectiveMultiplier: 1,
+    settlementMultiplier: 1,
+    finalPoints: 20,
+    details: ['second winner self draw']
+  };
+
+  (gameManager as any).endRound(currentGame, GameEndReason.LAST_PLAYER);
+
+  const round = currentGame.roundStats?.[0];
+  const selfDrawTransfersToSecondWinner = round?.transfers?.filter((transfer: any) => transfer.toPlayerId === 'w2');
+
+  test('later self draw only collects from remaining players', selfDrawTransfersToSecondWinner?.length === 2, `actual=${selfDrawTransfersToSecondWinner?.length}`);
+  test('earlier winner is excluded from later self draw payout', !selfDrawTransfersToSecondWinner?.some((transfer: any) => transfer.fromPlayerId === 'w1'), JSON.stringify(selfDrawTransfersToSecondWinner));
+  test('first winner only keeps discard win points', currentGame.finalScores?.w1 === 10, `actual=${currentGame.finalScores?.w1}`);
+  test('second winner only gets two active-player self draw payments', currentGame.finalScores?.w2 === 40, `actual=${currentGame.finalScores?.w2}`);
+}
+
 console.log('\n==================================================');
 console.log(`测试结果: ${passed} 通过, ${failed} 失败`);
 if (failed > 0) {

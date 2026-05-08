@@ -1,5 +1,6 @@
 <template>
   <div
+    v-memo="[areaMemoKey, justDrawnTileId, isWinner, tileBackScheme]"
     class="player-other"
     :class="`player-other--${position}`"
     :style="containerStyle"
@@ -196,6 +197,23 @@ const colors = computed(() => props.playerColors || ['#e53935', '#43a047', '#1e8
 
 const flowerMelds = computed(() => props.melds.filter(meld => isFlowerMeld(meld)))
 const mainMelds = computed(() => props.melds.filter(meld => !isFlowerMeld(meld)))
+const handMemoKey = computed(() => props.hand.map(tile => tile?.id || '').join('|'))
+const meldMemoKey = computed(() => props.melds
+  .map(meld => [
+    meld?.type || '',
+    meld?.sourceTileId || '',
+    meld?.sourcePosition ?? '',
+    (meld?.tiles || []).map(tile => tile?.id || '').join(',')
+  ].join(':'))
+  .join('|'))
+const areaMemoKey = computed(() => [
+  props.position,
+  handMemoKey.value,
+  meldMemoKey.value,
+  props.showHand ? '1' : '0',
+  props.ownerPosition ?? '',
+  props.viewerPosition ?? ''
+].join('|'))
 
 const isConcealedMeld = (meld: Meld): boolean => meld.type === 'concealed_kong' || !!(meld as any).isConcealed
 
@@ -237,6 +255,9 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   display: flex;
   align-items: center;
   justify-content: center;
+  contain: layout paint;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .player-other--top {
@@ -275,6 +296,7 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   display: flex;
   flex-shrink: 0;
   overflow: visible;
+  contain: layout paint;
 }
 
 .seat-line--top {

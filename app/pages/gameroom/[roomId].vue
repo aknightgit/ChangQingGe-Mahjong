@@ -209,7 +209,7 @@
                     <span class="hu-summary-value">×{{ opt.summary?.roundMultiplier ?? 1 }}</span>
                   </div>
                   <div class="hu-summary-item">
-                    <span class="hu-summary-key">结算倍数</span>
+                    <span class="hu-summary-key">房间结算倍数</span>
                     <span class="hu-summary-value">×{{ opt.summary?.settlementMultiplier ?? 1 }}</span>
                   </div>
                 </div>
@@ -504,6 +504,7 @@
             <!-- Top player -->
             <div class="seat seat-top" :class="{ 'seat-active': activePosition !== null && topPlayer?.position === activePosition }">
               <PlayerOtherArea
+                v-memo="[northAreaMemoKey, northJustDrawnTileId, northIsWinner, tileBackScheme]"
                 position="top"
                 :hand="northHand"
                 :melds="northMelds"
@@ -520,6 +521,7 @@
             <!-- Left player -->
             <div class="seat seat-left" :class="{ 'seat-active': activePosition !== null && leftPlayer?.position === activePosition }">
               <PlayerOtherArea
+                v-memo="[westAreaMemoKey, westJustDrawnTileId, westIsWinner, tileBackScheme]"
                 position="left"
                 :hand="westHand"
                 :melds="westMelds"
@@ -536,6 +538,7 @@
             <!-- Right player -->
             <div class="seat seat-right" :class="{ 'seat-active': activePosition !== null && rightPlayer?.position === activePosition }">
               <PlayerOtherArea
+                v-memo="[eastAreaMemoKey, eastJustDrawnTileId, eastIsWinner, tileBackScheme]"
                 position="right"
                 :hand="eastHand"
                 :melds="eastMelds"
@@ -1310,6 +1313,18 @@ const getStablePlayerMelds = (player?: Player | null): Meld[] => {
   const melds = player.hand?.exposedMelds || []
   return reuseStableArray(`melds:${player.id}`, meldSignature(melds), () => melds)
 }
+const getOpponentAreaMemoKey = (player?: Player | null): string => {
+  if (!player) return 'none'
+  const hand = player.hand?.concealedTiles || []
+  const handKey = isOpponentHandRevealed(player)
+    ? `revealed:${tileIdSignature(hand)}`
+    : `hidden:${hand.length}`
+  return [
+    player.id,
+    handKey,
+    meldSignature(player.hand?.exposedMelds || [])
+  ].join('|')
+}
 const getVisiblePlayerDiscards = (player?: Player | null) => {
   if (!player) return []
   const visible = filterVisibleDiscards(player.hand?.discardedTiles, claimedDiscardIds.value)
@@ -1704,11 +1719,15 @@ const myTingText = computed(() => {
   }
   return '您已听牌'
 })
-const huWinnerCount = computed(() => Math.max(1, gameState.value?.players?.filter(player => player.status === 'won').length || 0))
 const getHuOptionBasePoints = (opt: any) => Number(opt?.summary?.finalPoints ?? opt?.score ?? 0)
-// 总赢 = finalPoints（已包含完整赔付结构，无需乘以赢家人数）
-// finalPoints = 自摸时一个人应付的点数，或捉冲时放冲者独自应付的点数
-const getHuOptionTotalWin = (opt: any) => getHuOptionBasePoints(opt)
+// finalPoints = 自摸时单个输家应付的点数，或捉冲时放冲者独自应付的点数
+const getHuOptionPayerCount = (opt: any) => {
+  if (opt?.type !== 'self_draw') return 1
+  const players = Array.isArray(gameState.value?.players) ? gameState.value.players : []
+  const losers = players.filter(player => player.id !== playerId.value && player.status !== 'won')
+  return Math.max(1, losers.length)
+}
+const getHuOptionTotalWin = (opt: any) => getHuOptionBasePoints(opt) * getHuOptionPayerCount(opt)
 const getHuOptionFormula = (opt: any) => {
   const summary = opt?.summary || {}
   const baseFan = Number(summary.baseFan ?? 0)
@@ -1717,10 +1736,16 @@ const getHuOptionFormula = (opt: any) => {
   const globalMultiplier = Number(summary.globalMultiplier ?? 1)
   const settlementMultiplier = Number(summary.settlementMultiplier ?? 1)
   const finalPoints = getHuOptionBasePoints(opt)
+  const payerCount = getHuOptionPayerCount(opt)
+  const totalWin = getHuOptionTotalWin(opt)
   // 正确顺序：baseFan × extraMultipliers × roundMultiplier × globalMultiplier × settlementMultiplier
   // extraMultipliers = 门清×2 × 无百搭×2
   // globalMultiplier = 骰子倍数 × 继承倍数
-  return `${baseFan} × ${extraMultipliers} × ${roundMultiplier} × ${globalMultiplier} × ${settlementMultiplier} = ${finalPoints}`
+  const baseFormula = `基础${baseFan} × 额外${extraMultipliers} × 骰子${roundMultiplier} × 全局${globalMultiplier} × 结算${settlementMultiplier} = 单家${finalPoints}`
+  if (opt?.type === 'self_draw') {
+    return `${baseFormula}；自摸 ${finalPoints} × ${payerCount}家 = ${totalWin}`
+  }
+  return `${baseFormula}；捉冲总赢 = ${totalWin}`
 }
 const getHuGroupKind = (type: string) => {
   // type 是 HandType 字符串，如 ALL_TRIPLETS / HALF_FLUSH / FULL_FLUSH 等
@@ -1852,6 +1877,7 @@ const playerResults = computed(() => {
 // ---- Other Players State ----
 const northHand = computed(() => getStableOpponentHand(topPlayer.value))
 const northMelds = computed(() => getStablePlayerMelds(topPlayer.value))
+const northAreaMemoKey = computed(() => getOpponentAreaMemoKey(topPlayer.value))
 const northDiscards = computed(() => getVisiblePlayerDiscards(topPlayer.value))
 const northIsWinner = computed(() => topPlayer.value?.status === 'won')
 
@@ -1902,11 +1928,13 @@ const turnMessage = computed(() => {
 
 const westHand = computed(() => getStableOpponentHand(leftPlayer.value))
 const westMelds = computed(() => getStablePlayerMelds(leftPlayer.value))
+const westAreaMemoKey = computed(() => getOpponentAreaMemoKey(leftPlayer.value))
 const westDiscards = computed(() => getVisiblePlayerDiscards(leftPlayer.value))
 const westIsWinner = computed(() => leftPlayer.value?.status === 'won')
 
 const eastHand = computed(() => getStableOpponentHand(rightPlayer.value))
 const eastMelds = computed(() => getStablePlayerMelds(rightPlayer.value))
+const eastAreaMemoKey = computed(() => getOpponentAreaMemoKey(rightPlayer.value))
 const eastDiscards = computed(() => getVisiblePlayerDiscards(rightPlayer.value))
 const eastIsWinner = computed(() => rightPlayer.value?.status === 'won')
 const isWinner = computed(() => currentPlayer.value?.status === 'won')
@@ -3139,6 +3167,7 @@ const getReplacedFlowerMelds = (player: any) =>
   })
 const checkOtherPlayerSounds = (newState: any) => {
   if (!newState?.players) return
+  const pendingMeldVoices: Array<'kong' | 'pong' | 'chow'> = []
   for (const player of newState.players) {
     const prev = prevOtherPlayerState.get(player.id)
     const meldCount = getOtherMeldCount(player)
@@ -3150,25 +3179,6 @@ const checkOtherPlayerSounds = (newState: any) => {
         playSound('tile-draw')
         playVoiceAction('flowerReplace')
       }
-      if (player.id !== playerId.value && meldCount > prev.meldCount) {
-        const newMelds = (player.hand?.exposedMelds || []).slice(prev.meldCount)
-        for (const m of newMelds) {
-          const firstTile = m.tiles?.[0]
-          const isFlowerReplacementMeld = m.tiles?.length === 1 && firstTile?.suit === 'hua'
-          if (isFlowerReplacementMeld) {
-            continue
-          } else if (m.type === 'kong' || m.tiles?.length === 4) {
-            playSound('tile-kong')
-            playVoiceAction('kong')
-          } else if (m.type === 'triplet') {
-            playSound('tile-pong')
-            playVoiceAction('pong')
-          } else {
-            playSound('tile-chow')
-            playVoiceAction('chow')
-          }
-        }
-      }
       if (player.id !== playerId.value && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
         const newDiscards = (player.hand?.discardedTiles || []).slice(prev.discardCount)
         const lastNew = newDiscards[newDiscards.length - 1]
@@ -3178,12 +3188,35 @@ const checkOtherPlayerSounds = (newState: any) => {
           markDiscardAudioPlayed(lastNew)
         }
       }
+      if (player.id !== playerId.value && meldCount > prev.meldCount) {
+        const newMelds = (player.hand?.exposedMelds || []).slice(prev.meldCount)
+        for (const m of newMelds) {
+          const firstTile = m.tiles?.[0]
+          const isFlowerReplacementMeld = m.tiles?.length === 1 && firstTile?.suit === 'hua'
+          if (isFlowerReplacementMeld) continue
+          if (m.type === 'kong' || m.tiles?.length === 4) pendingMeldVoices.push('kong')
+          else if (m.type === 'triplet') pendingMeldVoices.push('pong')
+          else pendingMeldVoices.push('chow')
+        }
+      }
     }
     prevOtherPlayerState.set(player.id, { meldCount, discardCount, replacedFlowerCount })
   }
   const currentIds = new Set(newState.players.map((p: any) => p.id))
   for (const id of prevOtherPlayerState.keys()) {
     if (!currentIds.has(id)) prevOtherPlayerState.delete(id)
+  }
+  for (const action of pendingMeldVoices) {
+    if (action === 'kong') {
+      playSound('tile-kong')
+      playVoiceAction('kong')
+    } else if (action === 'pong') {
+      playSound('tile-pong')
+      playVoiceAction('pong')
+    } else {
+      playSound('tile-chow')
+      playVoiceAction('chow')
+    }
   }
 }
 const activePlayerCount = (state: any) => (state?.players || []).filter((p: any) => p.status === 'playing').length
@@ -5189,6 +5222,69 @@ const forceDiscard = async (p: Player) => {
 
 .hu-cancel-btn:hover {
   background: rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .hu-panel {
+    width: min(92vw, 760px);
+    max-height: 88vh;
+    padding: 16px;
+  }
+
+  .hu-panel-title {
+    font-size: 1.08rem;
+    margin-bottom: 10px;
+  }
+
+  .hu-combos {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .hu-combo {
+    padding: 10px 12px;
+  }
+
+  .hu-combo-header {
+    gap: 10px;
+  }
+
+  .hu-combo-rank,
+  .hu-combo-method,
+  .hu-group-kind,
+  .hu-summary-key {
+    font-size: 0.68rem;
+  }
+
+  .hu-combo-score {
+    font-size: 0.92rem;
+  }
+
+  .hu-combo-label,
+  .hu-summary-value {
+    font-size: 0.84rem;
+  }
+
+  .hu-combo-formula {
+    font-size: 0.74rem;
+    line-height: 1.4;
+    margin-bottom: 8px;
+  }
+
+  .hu-group {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .hu-panel-actions {
+    gap: 8px;
+  }
+
+  .hu-confirm-btn,
+  .hu-cancel-btn {
+    padding: 10px 16px;
+    font-size: 0.92rem;
+  }
 }
 
 /* ===== 游戏结束浮层 ===== */

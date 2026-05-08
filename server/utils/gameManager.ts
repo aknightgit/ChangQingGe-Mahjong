@@ -4481,6 +4481,12 @@ class GameManager {
         }
         const refreshedPlayer = refreshedGame.players[refreshedGame.currentPlayerIndex];
         if (!refreshedPlayer || refreshedPlayer.id !== playerId) return;
+        const availableActions = await this.getAvailableActions(gameId, playerId);
+        if (availableActions.includes(ActionType.HU)) {
+          console.log(`[bot-discard] ${refreshedPlayer.name} found self-draw HU before discard`);
+          await this.executeAction(gameId, playerId, ActionType.HU);
+          return;
+        }
         if (!this.isConcealedDiscardState(refreshedPlayer)) {
           console.warn(
             `[bot-discard] ${refreshedPlayer.name} is not in discard state: concealed=${refreshedPlayer.hand.concealedTiles.length}, drawn=${refreshedGame.drawnThisTurn}`
@@ -4612,7 +4618,6 @@ class GameManager {
         finalScores[p.id] = 0;
       }
 
-      const activePlayerIndices = game.players.map((p, i) => i);
       const mutualBailoutRelations = this.getMutualBailoutRelations(game.gameId);
       // 构建 mutualBailout Map<playerIndex, {partnerIndex, type}>
       const mutualBailout = new Map<number, { partnerIndex: number; type: '三口' | '四口' }>();
@@ -4628,6 +4633,14 @@ class GameManager {
       for (const winner of winners) {
         const winnerIdx = game.players.findIndex(p => p.id === winner.id);
         if (winnerIdx < 0) continue;
+        const currentWinOrder = winner.winOrder ?? Number.MAX_SAFE_INTEGER;
+        const eligiblePlayerIndices = game.players
+          .map((player, index) => ({ player, index }))
+          .filter(({ player, index }) => {
+            if (index === winnerIdx) return true;
+            return player.winOrder == null || player.winOrder > currentWinOrder;
+          })
+          .map(({ index }) => index);
 
         // 捉冲时找放冲者index
         let discarderIdx: number | undefined;
@@ -4641,7 +4654,7 @@ class GameManager {
           winner.wonFan,        // 最终点数（已含全局倍数，用于正常结算和互包赔付）
           winner.isSelfDrawn ?? false,
           winnerIdx,
-          activePlayerIndices,
+          eligiblePlayerIndices,
           mutualBailout,
           discarderIdx
         );

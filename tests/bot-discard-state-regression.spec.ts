@@ -341,18 +341,57 @@ ok(
   const originalPersistGame2 = anyManager.persistGame;
   const originalBroadcastGameState2 = anyManager.broadcastGameState;
   const originalGetCachedWinCheck = anyManager.getCachedWinCheck;
-  try {
-    anyManager.persistGame = async () => {};
-    anyManager.broadcastGameState = () => {};
-    anyManager.getCachedWinCheck = () => ({ canWin: true, types: ['all_triplets'] });
-    await anyManager.executeAction(huGame.gameId, winner.id, ActionType.HU);
-    ok('self-draw hu advances turn away from winner when round continues', huGame.currentPlayerIndex !== 0, `current=${huGame.currentPlayerIndex}`);
+try {
+  anyManager.persistGame = async () => {};
+  anyManager.broadcastGameState = () => {};
+  anyManager.getCachedWinCheck = () => ({ canWin: true, types: ['all_triplets'] });
+  await anyManager.executeAction(huGame.gameId, winner.id, ActionType.HU);
+  ok('self-draw hu advances turn away from winner when round continues', huGame.currentPlayerIndex !== 0, `current=${huGame.currentPlayerIndex}`);
   } finally {
     anyManager.persistGame = originalPersistGame2;
     anyManager.broadcastGameState = originalBroadcastGameState2;
     anyManager.getCachedWinCheck = originalGetCachedWinCheck;
     anyManager.clearPendingActionTimer(huGame.gameId);
     anyManager.games.delete(huGame.gameId);
+  }
+}
+
+{
+  const huBot = makePlayer('AI-hu-bot', 14);
+  const p2 = makePlayer('hu-bot-p2', 13);
+  const p3 = makePlayer('hu-bot-p3', 13);
+  const p4 = makePlayer('hu-bot-p4', 13);
+  const huBotGame = makeGame([huBot, p2, p3, p4]);
+  huBotGame.currentPlayerIndex = 0;
+  huBotGame.drawnThisTurn = true;
+  huBotGame.hesitationWindow = 0;
+  (huBotGame as any).allClaimMode = true;
+  anyManager.games.set(huBotGame.gameId, huBotGame);
+
+  const originalGetAvailableActions5 = anyManager.getAvailableActions;
+  const originalExecuteAction5 = anyManager.executeAction;
+  const actionsSeen: ActionType[] = [];
+  try {
+    anyManager.getAvailableActions = async () => [ActionType.HU, ActionType.DISCARD];
+    anyManager.executeAction = async (_gameId: string, _playerId: string, action: ActionType) => {
+      actionsSeen.push(action);
+    };
+    anyManager.scheduleBotDiscard(huBotGame.gameId, huBot.id);
+    await new Promise(resolve => setTimeout(resolve, 60));
+    ok(
+      'bot discard scheduler prefers self-draw hu over discard when hu is available',
+      actionsSeen.length === 1 && actionsSeen[0] === ActionType.HU,
+      `actions=${actionsSeen.join(',')}`
+    );
+  } finally {
+    anyManager.getAvailableActions = originalGetAvailableActions5;
+    anyManager.executeAction = originalExecuteAction5;
+    const botTimer = anyManager.botTimers?.get?.(huBotGame.gameId);
+    if (botTimer) {
+      clearTimeout(botTimer);
+      anyManager.botTimers.delete(huBotGame.gameId);
+    }
+    anyManager.games.delete(huBotGame.gameId);
   }
 }
 

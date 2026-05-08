@@ -82,6 +82,7 @@ const _manifest = ref<Manifest | null>(null)
 const _audioMap = ref<Map<string, string>>(new Map())
 const _volume = ref(0.85)
 let _audioEl: HTMLAudioElement | null = null
+let _voiceQueue: Promise<void> = Promise.resolve()
 
 const getAudioEl = (): HTMLAudioElement => {
   if (!_audioEl) {
@@ -173,11 +174,37 @@ export const playVoiceTile = (suit: string, value: number): void => {
 }
 
 const playAudio = (url: string) => {
+  _voiceQueue = _voiceQueue
+    .catch(() => {})
+    .then(() => playAudioQueued(url))
+}
+
+const playAudioQueued = (url: string): Promise<void> => new Promise((resolve) => {
   const el = getAudioEl()
+  let settled = false
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+  const finish = () => {
+    if (settled) return
+    settled = true
+    el.onended = null
+    el.onerror = null
+    el.onabort = null
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+    resolve()
+  }
+
+  el.onended = finish
+  el.onerror = finish
+  el.onabort = finish
   el.src = url
   el.currentTime = 0
-  el.play().catch(() => {})
-}
+  timeoutId = setTimeout(finish, 5000)
+  el.play().catch(() => finish())
+})
 
 export const preloadAllTiles = async (): Promise<void> => {
   const urls = [..._audioMap.value.values()]
