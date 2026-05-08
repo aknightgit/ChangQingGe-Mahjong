@@ -661,6 +661,23 @@
             </button>
           </div>
 
+          <div
+            v-if="isMobileLandscapeMode && !isTopBarCollapsed"
+            class="ext-section mobile-inline-menu"
+          >
+            <div class="mobile-inline-menu__actions">
+              <button ref="settingsBtnEl" class="mahjong-button small secondary" @click="toggleSettingsPanel">
+                ⚙️ 设置
+              </button>
+              <button class="mahjong-button small secondary" @click="navigateTo('/rules')">
+                📖 规则
+              </button>
+              <button class="mahjong-button small" @click="backToLobby">
+                返回大厅
+              </button>
+            </div>
+          </div>
+
           <!-- 战绩统计 -->
           <RoomStats
             v-if="!isPreGameTransition"
@@ -4098,6 +4115,8 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .action-panel { padding: 4px; gap: 4px; }
 .layout--mobile-landscape .extended-info-panel .action-btn--small { width: 28px; height: 28px; font-size: 0.6rem; }
 .layout--mobile-landscape .extended-info-panel .action-btn--draw { width: 40px; height: 40px; font-size: 0.75rem; }
+.layout--mobile-landscape .extended-info-panel .mobile-inline-menu { padding: 4px 6px; }
+.layout--mobile-landscape .extended-info-panel .mobile-inline-menu__actions { display: flex; gap: 4px; flex-wrap: wrap; }
 
 /* 竖屏手机：右侧栏变底部横排 */
 @media (max-width: 900px) and (orientation: portrait) {
@@ -6391,8 +6410,8 @@ const forceDiscard = async (p: Player) => {
 
 /* 横屏手机：牌桌缩小，牌跟着缩 */
 .layout--mobile-landscape .mahjong-table {
-  --tile-w: 18px;
-  --tile-h: 26px;
+  --tile-w: 17px;
+  --tile-h: 24px;
   --tile-gap: 0px;
   border-width: 3px;
   --seat-side-inset: 2%;
@@ -6400,14 +6419,14 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-inset: 0.2%;
   --seat-top-width: 65%;
   --seat-bottom-width: 80%;
-  --seat-side-width: 82px;
+  --seat-side-width: 92px;
   --seat-side-height: 60%;
   --seat-side-player-offset: 0.6%;
 }
 .layout--mobile-landscape .seat-top { min-height: 42px; }
-.layout--mobile-landscape .seat-bottom { min-height: 58px; width: min(80%, calc(100% - 80px)); }
-.layout--mobile-landscape .seat-left { width: 94px; }
-.layout--mobile-landscape .seat-right { width: 100px; }
+.layout--mobile-landscape .seat-bottom { min-height: 54px; width: min(78%, calc(100% - 92px)); }
+.layout--mobile-landscape .seat-left { width: 114px; }
+.layout--mobile-landscape .seat-right { width: 120px; }
 
 @media (max-height: 450px) and (orientation: landscape) {
   .layout--mobile-landscape .mahjong-table {
@@ -6415,13 +6434,13 @@ const forceDiscard = async (p: Player) => {
     --tile-h: 20px;
     --tile-gap: 0px;
     border-width: 2px;
-    --seat-side-width: 62px;
+    --seat-side-width: 70px;
     --seat-side-height: 52%;
   }
   .layout--mobile-landscape .seat-top { min-height: 36px; }
-  .layout--mobile-landscape .seat-bottom { min-height: 48px; width: min(85%, calc(100% - 60px)); }
-  .layout--mobile-landscape .seat-left { width: 72px; }
-  .layout--mobile-landscape .seat-right { width: 78px; }
+  .layout--mobile-landscape .seat-bottom { min-height: 46px; width: min(82%, calc(100% - 72px)); }
+  .layout--mobile-landscape .seat-left { width: 84px; }
+  .layout--mobile-landscape .seat-right { width: 90px; }
 }
 
 /* 移动竖屏旋转模式 */
