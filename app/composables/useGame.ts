@@ -187,6 +187,7 @@ export const useGame = () => {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('mahjong-realtime-state', { detail: data }))
         }
+        requestRefreshState()
       })
 
       // Listen for server's broadcastGameState events (different name from action-triggered events)
