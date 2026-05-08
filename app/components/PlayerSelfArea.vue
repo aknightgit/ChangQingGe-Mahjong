@@ -136,7 +136,6 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   if (meld.sourcePosition === undefined) return {}
   return {
     '--claim-source-color': colors.value[meld.sourcePosition] || '#757575',
-    '--claim-arrow-rotation': `${getClaimArrowRotation(meld.sourcePosition)}deg`,
   }
 }
 
@@ -341,15 +340,15 @@ const onPointerCancel = () => {
 :deep(.claimed-tile)::after {
   content: '';
   position: absolute;
-  top: -4px;
+  top: -6px;
   left: 50%;
-  transform: translateX(-50%) rotate(var(--claim-arrow-rotation, 0deg));
-  width: 0;
-  height: 0;
-  border-left: 10px solid transparent;
-  border-right: 10px solid transparent;
-  border-top: 20px solid var(--claim-source-color, rgba(255,255,255,0.95));
-  filter: drop-shadow(0 0 3px rgba(0,0,0,0.42));
+  transform: translateX(-50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--claim-source-color, rgba(255,255,255,0.95));
+  border: 2px solid rgba(255,255,255,0.92);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.28), 0 1px 4px rgba(0,0,0,0.42);
   z-index: 4;
 }
 
@@ -368,5 +367,14 @@ const onPointerCancel = () => {
   font-size: 0.7rem;
   color: #ffb74d;
   margin-left: 4px;
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  :deep(.claimed-tile)::after {
+    top: -5px;
+    width: 8px;
+    height: 8px;
+    border-width: 1.5px;
+  }
 }
 </style>

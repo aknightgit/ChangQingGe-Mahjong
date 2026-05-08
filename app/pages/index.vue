@@ -268,7 +268,7 @@ const createParams = reactive({
 })
 
 // AI玩家选择
-const showAISelection = ref(true)
+const showAISelection = ref(false)
 const allAIBots = [
   { id: 'AI-小胖', name: 'AI-小胖', desc: '稳健型' },
   { id: 'AI-老赵', name: 'AI-老赵', desc: '进攻型' },

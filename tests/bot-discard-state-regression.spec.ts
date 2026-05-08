@@ -238,6 +238,47 @@ try {
   anyManager.games.delete(stuckGame.gameId);
 }
 
+const stalePassBot = makePlayer('AI-stale-pass-bot', 13);
+stalePassBot.name = 'AI-阿水';
+const skippedPlayer = makePlayer('skip-target', 13);
+skippedPlayer.name = 'AI-老赵';
+const stalePassGame = makeGame([makePlayer('discarder-stale', 13), skippedPlayer, stalePassBot, makePlayer('filler-stale', 13)]);
+stalePassGame.currentPlayerIndex = 1;
+stalePassGame.drawnThisTurn = false;
+stalePassGame.wall = [tile(TileSuit.DOTS, 9, 'stale-draw-1')];
+stalePassGame.pendingActions = [{
+  playerId: stalePassBot.id,
+  availableActions: [ActionType.PENG, ActionType.KONG, ActionType.PASS],
+  tile: tile(TileSuit.DOTS, 6, 'stale-discard-6'),
+  expiresAt: Date.now() + 60000,
+}];
+anyManager.games.set(stalePassGame.gameId, stalePassGame);
+const originalPersistGame4 = anyManager.persistGame;
+const originalBroadcastGameState4 = anyManager.broadcastGameState;
+const originalScheduleBotDiscard4 = anyManager.scheduleBotDiscard;
+try {
+  anyManager.persistGame = async () => {};
+  anyManager.broadcastGameState = () => {};
+  anyManager.scheduleBotDiscard = () => {};
+  await anyManager.handleBotPendingActions(stalePassGame.gameId);
+  ok(
+    'stale bot priority pass does not skip the newly advanced player turn',
+    stalePassGame.currentPlayerIndex === 1,
+    `current=${stalePassGame.currentPlayerIndex}`
+  );
+  ok(
+    'newly advanced player still retains draw opportunity after stale bot priority pass',
+    anyManager.canPlayerDrawOnCurrentTurn(stalePassGame, skippedPlayer) === true,
+    `drawn=${stalePassGame.drawnThisTurn}, wall=${stalePassGame.wall.length}, concealed=${skippedPlayer.hand.concealedTiles.length}`
+  );
+} finally {
+  anyManager.persistGame = originalPersistGame4;
+  anyManager.broadcastGameState = originalBroadcastGameState4;
+  anyManager.scheduleBotDiscard = originalScheduleBotDiscard4;
+  anyManager.clearPendingActionTimer(stalePassGame.gameId);
+  anyManager.games.delete(stalePassGame.gameId);
+}
+
 const aiAk = makePlayer('ai-ak', 13);
 aiAk.name = 'AI-AK';
 aiAk.hand.concealedTiles = [

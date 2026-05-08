@@ -149,7 +149,7 @@ const userName = useCookie('user_name')
 const router = useRouter()
 const isCreatingGame = ref(false)
 const activeHelp = ref<string | null>(null)
-const showAISelection = ref(true)
+const showAISelection = ref(false)
 
 const toggleHelp = (key: string) => {
   activeHelp.value = activeHelp.value === key ? null : key

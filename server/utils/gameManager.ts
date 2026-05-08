@@ -127,6 +127,12 @@ class GameManager {
     return this.canPlayerDrawOnCurrentTurn(game, player);
   }
 
+  private shouldAdvanceTurnAfterPass(game: GameState): boolean {
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (!currentPlayer || currentPlayer.status !== PlayerStatus.PLAYING) return false;
+    return !this.isConcealedDiscardState(currentPlayer) && !this.canPlayerDrawOnCurrentTurn(game, currentPlayer);
+  }
+
   private shouldRetainCurrentPlayerChowPending(game: GameState, pendingAction: PendingAction): boolean {
     const currentPlayer = game.players[game.currentPlayerIndex];
     if (!currentPlayer || pendingAction.playerId !== currentPlayer.id) return false;
@@ -976,7 +982,7 @@ class GameManager {
         if (claimingPlayer && this.isPlayerBotControlled(claimingPlayer)) {
           this.scheduleBotDiscard(gameId, claimingPlayer.id);
         }
-      } else if (game.pendingActions.length === 0) {
+      } else if (game.pendingActions.length === 0 && this.shouldAdvanceTurnAfterPass(game)) {
         // 所有 bot 都 PASS 且没有人类 pending 残留时，必须继续推进回合。
         // 否则会停在弃牌者身上，出现 "Skipped: pending cleared but turn not advanced" 卡死。
         await this.moveToNextPlayer(game);
@@ -2185,13 +2191,7 @@ class GameManager {
       }
       if (action === ActionType.HU && game.phase === GamePhase.PLAYING) {
         await this.moveToNextPlayer(game);
-      } else if (
-        action === ActionType.PASS &&
-        currentP &&
-        currentP.status === PlayerStatus.PLAYING &&
-        !this.isConcealedDiscardState(currentP) &&
-        !this.canPlayerDrawOnCurrentTurn(game, currentP)
-      ) {
+      } else if (action === ActionType.PASS && this.shouldAdvanceTurnAfterPass(game)) {
         await this.moveToNextPlayer(game);
       } else {
         this.schedulePendingActionTimeout(gameId);
