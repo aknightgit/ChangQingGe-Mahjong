@@ -138,6 +138,29 @@ class GameManager {
     return this.canPlayerDrawOnCurrentTurn(game, player);
   }
 
+  private canExposeCurrentTurnPlayerDrawDuringPending(game: GameState, playerId: string): boolean {
+    const player = game.players.find(p => p.id === playerId);
+    if (!player) return false;
+    if (this.isDaDiaoReadyState(game, player)) return false;
+    if (game.players[game.currentPlayerIndex]?.id !== playerId) return false;
+    if (game.pendingActions.length === 0) return false;
+    if (game.pendingActions.some(pa => pa.playerId !== playerId)) return false;
+    return this.canPlayerDrawOnCurrentTurn(game, player);
+  }
+
+  private canExecuteCurrentTurnPlayerDrawDuringPending(game: GameState, playerId: string, now = Date.now()): boolean {
+    if (!this.canExposeCurrentTurnPlayerDrawDuringPending(game, playerId)) return false;
+    return game.pendingActions
+      .filter(pa => pa.playerId === playerId)
+      .every(pa => {
+        const onlyChowActions = pa.availableActions.length > 0 &&
+          pa.availableActions.every(action => action === ActionType.CHOW || action === ActionType.PASS);
+        if (onlyChowActions) return true;
+        const expiresAt = typeof pa.expiresAt === 'number' ? pa.expiresAt : 0;
+        return expiresAt > 0 && expiresAt <= now;
+      });
+  }
+
   private shouldAdvanceTurnAfterPass(game: GameState): boolean {
     const currentPlayer = game.players[game.currentPlayerIndex];
     if (!currentPlayer || currentPlayer.status !== PlayerStatus.PLAYING) return false;
@@ -168,6 +191,17 @@ class GameManager {
       const expiresAt = typeof pendingAction.expiresAt === 'number' ? pendingAction.expiresAt : 0;
       return expiresAt > now;
     });
+    if (before !== game.pendingActions.length) {
+      game.pengChowConflict = null;
+      this.clearPendingActionTimer(game.gameId);
+      return true;
+    }
+    return false;
+  }
+
+  private clearCurrentPlayerChowPending(game: GameState): boolean {
+    const before = game.pendingActions.length;
+    game.pendingActions = game.pendingActions.filter(pendingAction => !this.shouldRetainCurrentPlayerChowPending(game, pendingAction));
     if (before !== game.pendingActions.length) {
       game.pengChowConflict = null;
       this.clearPendingActionTimer(game.gameId);
@@ -1814,10 +1848,14 @@ class GameManager {
         const maxChances = game.thinkChances ?? 3;
         const used = game.thinkUsage?.[playerId] ?? 0;
         if (used < maxChances) {
-          return [...pendingAction.availableActions, ActionType.THINK];
+          const pendingActions = [...pendingAction.availableActions, ActionType.THINK];
+          if (this.canExposeCurrentTurnPlayerDrawDuringPending(game, playerId) && !pendingActions.includes(ActionType.DRAW)) {
+            pendingActions.push(ActionType.DRAW);
+          }
+          return pendingActions;
         }
       }
-      if (this.canCurrentTurnPlayerDrawDuringPending(game, playerId)) {
+      if (this.canExposeCurrentTurnPlayerDrawDuringPending(game, playerId)) {
         const actionsWithDraw = [...pendingAction.availableActions];
         if (
           this.canPlayerDrawOnCurrentTurn(game, player) &&
@@ -2071,6 +2109,15 @@ class GameManager {
         break;
 
       case ActionType.DRAW:
+        {
+          const hasOwnPending = game.pendingActions.some(pa => pa.playerId === player.id);
+          if (hasOwnPending && !this.canExecuteCurrentTurnPlayerDrawDuringPending(game, player.id)) {
+            console.warn(
+              `[DRAW] Deferred: ${player.name} must wait for pending window to end before drawing`
+            );
+            throw new Error('Draw is not available until the current response window ends');
+          }
+        }
         game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
         {
           const currentTurnPlayer = game.players[game.currentPlayerIndex];
@@ -4287,7 +4334,8 @@ class GameManager {
           const livePlayer = freshGame.players[freshGame.currentPlayerIndex];
           if (!livePlayer || livePlayer.id !== nextPlayer.id || livePlayer.status !== PlayerStatus.PLAYING) return;
           if (freshGame.pendingActions.length > 0) {
-            console.log(`[bot-freeze] Pending actions expired for ${livePlayer.name}, clearing claims and retaining local chow if present`);
+            console.log(`[bot-freeze] Freeze expired for ${livePlayer.name}, clearing pending claims before draw`);
+            this.clearCurrentPlayerChowPending(freshGame);
             this.clearExpiredClaimsButKeepCurrentPlayerChow(freshGame);
           }
           console.log(`[bot-freeze] Freeze expired for ${livePlayer.name}, drawing...`);
@@ -4470,7 +4518,7 @@ class GameManager {
           return;
         }
         if (game.pendingActions.length > 0 && game.pendingActions.every(pa => this.shouldRetainCurrentPlayerChowPending(game, pa))) {
-          this.clearExpiredClaimsButKeepCurrentPlayerChow(game);
+          this.clearCurrentPlayerChowPending(game);
           await this.persistGame(game);
         }
         if (game.pendingActions.length > 0) {

@@ -136,7 +136,7 @@ export const loadVoiceScheme = async (scheme: VoiceScheme): Promise<void> => {
 
     const map = new Map<string, string>()
     for (const tile of manifest.tiles) {
-      map.set(tile.key, tile.opus)
+      map.set(tile.key, tile.mp3 || tile.opus)
     }
     _audioMap.value = map
     console.info(`[VoiceTile] Loaded scheme="${scheme}" voice="${manifest.voice}" tiles=${manifest.tiles.length}`)

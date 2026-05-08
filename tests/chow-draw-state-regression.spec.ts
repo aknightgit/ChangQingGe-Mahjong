@@ -174,6 +174,59 @@ test('manual draw after chow timeout consumes wall tile', (afterTimeoutDrawGame?
 ;(gameManager as any).games.delete(timeoutGame.gameId)
 ;(gameManager as any).clearPendingActionTimer?.(timeoutGame.gameId)
 
+const pengPendingGame = {
+  ...game,
+  gameId: 'peng-draw-state-regression',
+  wall: [tile('draw-peng-1', TileSuit.DOTS, 6)],
+  discardPile: [tile('discard-peng-1', TileSuit.DOTS, 6)],
+  pendingActions: [
+    {
+      playerId: player.id,
+      availableActions: [ActionType.PENG, ActionType.PASS],
+      tile: tile('discard-peng-1', TileSuit.DOTS, 6),
+      expiresAt: Date.now() + 2000,
+    }
+  ],
+  drawnThisTurn: false,
+  actionHistory: []
+} as any
+
+pengPendingGame.players = [
+  createPlayer('p1')
+]
+
+;(gameManager as any).games.set(pengPendingGame.gameId, pengPendingGame)
+
+const pengPendingActions = await gameManager.getAvailableActions(pengPendingGame.gameId, player.id)
+test('peng window also exposes draw immediately for countdown UI', pengPendingActions.includes(ActionType.DRAW), `actions=${pengPendingActions.join(',')}`)
+
+let earlyPengDrawThrew = false
+try {
+  await gameManager.executeAction(pengPendingGame.gameId, player.id, ActionType.DRAW)
+} catch {
+  earlyPengDrawThrew = true
+}
+test('draw remains blocked before peng window expires', earlyPengDrawThrew)
+
+pengPendingGame.pendingActions[0].expiresAt = Date.now() - 10
+const expiredPengActions = await gameManager.getAvailableActions(pengPendingGame.gameId, player.id)
+test('expired peng window still keeps draw visible until manual action', expiredPengActions.includes(ActionType.DRAW), `actions=${expiredPengActions.join(',')}`)
+
+let latePengDrawThrew = false
+try {
+  await gameManager.executeAction(pengPendingGame.gameId, player.id, ActionType.DRAW)
+} catch {
+  latePengDrawThrew = true
+}
+
+const afterPengDrawGame = await gameManager.getGame(pengPendingGame.gameId)
+test('draw is accepted once peng window expires', !latePengDrawThrew)
+test('expired peng window draw clears pending', (afterPengDrawGame?.pendingActions?.length ?? -1) === 0, `pending=${afterPengDrawGame?.pendingActions?.length ?? -1}`)
+test('expired peng window draw marks drawnThisTurn true', afterPengDrawGame?.drawnThisTurn === true, `drawn=${String(afterPengDrawGame?.drawnThisTurn)}`)
+
+;(gameManager as any).games.delete(pengPendingGame.gameId)
+;(gameManager as any).clearPendingActionTimer?.(pengPendingGame.gameId)
+
 const botPassShouldNotSkipHumanGame = {
   ...game,
   gameId: 'stale-bot-pass-should-not-skip-human',

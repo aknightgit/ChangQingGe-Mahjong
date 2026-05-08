@@ -1001,8 +1001,13 @@ const {
 
 const showAllCards = ref(false)
 const shouldRevealOpponents = computed(() => showAllCards.value || !!currentPlayer.value?.isSpectator)
-const isMobilePortrait = ref(false)
-const isMobileLandscape = ref(false)
+const initialViewport = process.client
+  ? { width: window.innerWidth, height: window.innerHeight }
+  : { width: 1024, height: 768 }
+const initialSmallestSide = Math.min(initialViewport.width, initialViewport.height)
+const initialIsPortrait = initialViewport.height >= initialViewport.width
+const isMobilePortrait = ref(initialIsPortrait && initialSmallestSide <= 768)
+const isMobileLandscape = ref(!initialIsPortrait && initialViewport.width <= 900)
 const shouldRotateView = computed(() => isMobilePortrait.value)
 const isMobileLandscapeMode = computed(() => isMobileLandscape.value && !shouldRotateView.value)
 const layoutMode = computed<'desktop' | 'mobile-landscape' | 'mobile-portrait'>(() => {
@@ -1595,6 +1600,7 @@ const hasDealtCards = computed(() => {
 })
 
 const isPreGameTransition = computed(() => {
+  if (isMobileLandscapeMode.value || shouldRotateView.value) return false
   if (!gameState.value) return true
   if (hasDealtCards.value) return false
 
@@ -2372,6 +2378,13 @@ const shouldExposeSharedDraw = computed(() => {
   return true
 })
 
+const hasDeferredDrawWindow = computed(() => {
+  if (!isMyTurn.value) return false
+  if (!availableActions.value.includes(ActionType.DRAW)) return false
+  if (!myPendingAction.value || myPendingExpiresAt.value <= nowTs.value) return false
+  return !isSharedDrawClaimWindow.value
+})
+
 const hasSharedDrawWindow = computed(() => {
   return (availableActions.value.includes(ActionType.DRAW) || shouldExposeSharedDraw.value) && myPendingExpiresAt.value > nowTs.value
 })
@@ -2381,7 +2394,7 @@ const actionVisualFreezeUntil = computed(() => {
   const freezeFromPending = currentFreezeUntil.value
   if (freezeFromPending > nowTs.value) return freezeFromPending
 
-  if (hasSharedDrawWindow.value) {
+  if (hasDeferredDrawWindow.value) {
     return Number((myPendingAction.value as any)?.expiresAt ?? 0)
   }
 
@@ -3980,7 +3993,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .room-header-toggle--inline {
-  display: none;
+  display: inline-flex;
 }
 
 .layout--mobile-landscape .mahjong-title {
@@ -4010,20 +4023,23 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .table-wrapper {
-  flex: 1 1 70%;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   padding: 0;
   overflow: hidden;
+  align-items: stretch;
+  justify-content: flex-start;
 }
 
 .layout--mobile-landscape .mahjong-table {
-  width: min(100%, calc(85vh * 4/3), 1320px);
-  height: 100%;
+  width: 100%;
+  height: auto;
   max-height: none;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 9;
   border-width: 3px;
   border-radius: 0;
+  margin: 0;
   --seat-side-inset: 3%;
   --seat-top-inset: 1%;
   --seat-bottom-inset: 0.5%;

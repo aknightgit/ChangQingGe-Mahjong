@@ -2,6 +2,7 @@ import { gameManager } from '../../utils/gameManager';
 import { ActionType } from '../../types/game';
 import { emitToRoom } from '../../utils/socket';
 import { requireGamePlayerAccess } from '../../utils/session';
+import { TileSuit } from '../../types/game';
 
 function getEffectiveGlobalMultiplier(game: any): number {
   const inherit = game.inheritMultiplier ?? game.inheritedGlobalMultiplier ?? 1;
@@ -87,7 +88,13 @@ export default defineEventHandler(async (event) => {
             ...p,
             hand: {
               ...p.hand,
-              concealedTiles: p.id === playerId ? p.hand.concealedTiles : []
+              concealedTiles: p.id === playerId
+                ? p.hand.concealedTiles
+                : p.hand.concealedTiles.map((_, index) => ({
+                    id: `hidden-${p.id}-${index}`,
+                    suit: TileSuit.CHARACTERS,
+                    value: 0
+                  }))
             }
           }))
         },
