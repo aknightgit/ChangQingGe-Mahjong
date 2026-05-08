@@ -473,8 +473,22 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
 
 @media (max-width: 900px) and (orientation: landscape) {
   .player-other :deep(.tile--small) {
-    width: 18px;
-    height: 26px;
+    width: 15px;
+    height: 22px;
+  }
+
+  .seat-line--left,
+  .seat-line--right {
+    gap: 4px;
+  }
+
+  .hand-lane--left,
+  .hand-lane--right,
+  .meld-lane--left,
+  .meld-lane--right,
+  .flower-lane--left,
+  .flower-lane--right {
+    gap: 1px;
   }
 
   .player-other :deep(.claimed-tile)::after {

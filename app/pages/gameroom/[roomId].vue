@@ -205,8 +205,8 @@
                     <span class="hu-summary-value">×{{ opt.summary?.extraMultipliers ?? 1 }}</span>
                   </div>
                   <div class="hu-summary-item">
-                    <span class="hu-summary-key">骰子倍数</span>
-                    <span class="hu-summary-value">×{{ opt.summary?.roundMultiplier ?? 1 }}</span>
+                    <span class="hu-summary-key">全局倍数</span>
+                    <span class="hu-summary-value">×{{ opt.summary?.globalMultiplier ?? 1 }}</span>
                   </div>
                   <div class="hu-summary-item">
                     <span class="hu-summary-key">房间结算倍数</span>
@@ -271,6 +271,7 @@
               <thead>
                 <tr>
                   <th>玩家</th>
+                  <th>胡序</th>
                   <th>胡牌牌面</th>
                   <th>花</th>
                   <th>番数</th>
@@ -287,6 +288,7 @@
                   :class="{ 'settle-round-table-row--winner': row.isWinner }"
                 >
                   <td>{{ row.playerName }}</td>
+                  <td>{{ row.winSequence }}</td>
                   <td class="settle-round-tiles">{{ row.tiles }}</td>
                   <td>{{ row.flowerCount }}</td>
                   <td>{{ row.baseFan }}</td>
@@ -993,6 +995,7 @@ const {
   preloadAllTiles,
   playVoiceTile,
   playVoiceAction,
+  primeVoiceAudio,
   setVoiceVolume
 } = useVoiceTile()
 
@@ -1175,6 +1178,7 @@ const isOpponentHandRevealed = (player?: Player | null) => {
 }
 
 const hiddenHandCache = new Map<string, Tile[]>()
+const hiddenHandLengthCache = new Map<string, number>()
 const stableArrayCache = new Map<string, { signature: string; value: any[] }>()
 
 const reuseStableArray = <T>(cacheKey: string, signature: string, createValue: () => T[]): T[] => {
@@ -1200,13 +1204,19 @@ const meldSignature = (melds: Meld[] | undefined | null): string => (melds || []
 const getStableOpponentHand = (player?: Player | null): Tile[] => {
   if (!player) return []
   const hand = player.hand?.concealedTiles || []
+  const cachedLength = hiddenHandLengthCache.get(player.id) ?? 0
   if (isOpponentHandRevealed(player)) {
+    hiddenHandLengthCache.set(player.id, hand.length)
     return reuseStableArray(`revealed-hand:${player.id}`, tileIdSignature(hand), () => hand)
   }
-  const cacheKey = `${player.id}:${hand.length}`
+  const effectiveLength = hand.length > 0 ? hand.length : cachedLength
+  if (effectiveLength > 0) {
+    hiddenHandLengthCache.set(player.id, effectiveLength)
+  }
+  const cacheKey = `${player.id}:${effectiveLength}`
   const cached = hiddenHandCache.get(cacheKey)
   if (cached) return cached
-  const stableHiddenHand = hand.map((_, index) => ({
+  const stableHiddenHand = Array.from({ length: effectiveLength }, (_, index) => ({
     id: `stable-hidden-${player.id}-${index}`,
     suit: 'wan' as Tile['suit'],
     value: 0
@@ -1216,6 +1226,7 @@ const getStableOpponentHand = (player?: Player | null): Tile[] => {
 }
 
 const handleGlobalPointerDown = (event: MouseEvent) => {
+  primeVoiceAudio()
   if (!showSettings.value) return
   const target = event.target as Node | null
   if (settingsPanelEl.value?.contains(target)) return
@@ -1252,9 +1263,6 @@ onMounted(async () => {
     // 根据广播内容播放音效和语音
     const text = detail.text || ''
     if (text.includes('补花')) { playSound('tile-draw'); playVoiceAction('flowerReplace') }
-    else if (text.includes('补杠') || text.includes('杠后补牌')) { playSound('kong-draw'); playVoiceAction('kong') }
-    else if (text.includes('碰')) playVoiceAction('pong')
-    else if (text.includes('吃')) playVoiceAction('chow')
     else if (text.includes('自摸')) playVoiceAction('selfHu')
     else if (text.includes('胡')) playVoiceAction('hu')
   }) as EventListener)
@@ -1316,9 +1324,10 @@ const getStablePlayerMelds = (player?: Player | null): Meld[] => {
 const getOpponentAreaMemoKey = (player?: Player | null): string => {
   if (!player) return 'none'
   const hand = player.hand?.concealedTiles || []
+  const cachedLength = hiddenHandLengthCache.get(player.id) ?? 0
   const handKey = isOpponentHandRevealed(player)
     ? `revealed:${tileIdSignature(hand)}`
-    : `hidden:${hand.length}`
+    : `hidden:${hand.length > 0 ? hand.length : cachedLength}`
   return [
     player.id,
     handKey,
@@ -1732,16 +1741,12 @@ const getHuOptionFormula = (opt: any) => {
   const summary = opt?.summary || {}
   const baseFan = Number(summary.baseFan ?? 0)
   const extraMultipliers = Number(summary.extraMultipliers ?? 1)
-  const roundMultiplier = Number(summary.roundMultiplier ?? 1)
   const globalMultiplier = Number(summary.globalMultiplier ?? 1)
   const settlementMultiplier = Number(summary.settlementMultiplier ?? 1)
   const finalPoints = getHuOptionBasePoints(opt)
   const payerCount = getHuOptionPayerCount(opt)
   const totalWin = getHuOptionTotalWin(opt)
-  // 正确顺序：baseFan × extraMultipliers × roundMultiplier × globalMultiplier × settlementMultiplier
-  // extraMultipliers = 门清×2 × 无百搭×2
-  // globalMultiplier = 骰子倍数 × 继承倍数
-  const baseFormula = `基础${baseFan} × 额外${extraMultipliers} × 骰子${roundMultiplier} × 全局${globalMultiplier} × 结算${settlementMultiplier} = 单家${finalPoints}`
+  const baseFormula = `基础${baseFan} × 额外${extraMultipliers} × 全局${globalMultiplier} × 结算${settlementMultiplier} = 单家${finalPoints}`
   if (opt?.type === 'self_draw') {
     return `${baseFormula}；自摸 ${finalPoints} × ${payerCount}家 = ${totalWin}`
   }
@@ -1796,6 +1801,10 @@ const overlayMessage = computed(() => {
 
 const isDrawOverlay = computed(() => overlayReason.value === GameEndReason.WALL_EXHAUSTED)
 const showApprovalOverlay = computed(() => false)
+const dealerPlayer = computed(() => {
+  const players = gameState.value?.players || []
+  return players.find(player => player.isDealer) || null
+})
 
 const enterStartingPhaseWithDiceOverlay = async () => {
   try {
@@ -1820,9 +1829,20 @@ const enterStartingPhaseWithDiceOverlay = async () => {
   }
 }
 
+const maybeAutoDealForBotDealer = () => {
+  const dealer = dealerPlayer.value
+  if (!dealer || !isBotPlayer(dealer)) return
+  onRerollDice()
+  window.setTimeout(() => {
+    void onDealTiles()
+  }, 420)
+}
+
 const startNextRound = async () => {
   showSettlement.value = false
   await enterStartingPhaseWithDiceOverlay()
+  await forceRefreshState()
+  maybeAutoDealForBotDealer()
 }
 const isInteractionLocked = computed(() => isOverlayVisible.value)
 
@@ -2334,12 +2354,22 @@ const myPendingAction = computed(() => {
   return gameState.value.pendingActions.find(pa => pa.playerId === currentPlayer.value!.id) || null
 })
 const myPendingExpiresAt = computed(() => Number((myPendingAction.value as any)?.expiresAt ?? 0))
+const isSharedDrawClaimWindow = computed(() => {
+  if (!isMyTurn.value || !currentPlayer.value || !gameState.value) return false
+  const pending = gameState.value.pendingActions || []
+  if (!pending.length) return false
+  if (pending.some(pa => pa.playerId !== currentPlayer.value!.id)) return false
+  return pending.every(pa =>
+    Array.isArray(pa.availableActions) &&
+    pa.availableActions.length > 0 &&
+    pa.availableActions.every(action => action === ActionType.CHOW || action === ActionType.PASS)
+  )
+})
 const shouldExposeSharedDraw = computed(() => {
-  if (!isMyTurn.value) return false
+  if (!isSharedDrawClaimWindow.value) return false
   const pending = myPendingAction.value
   if (!pending || myPendingExpiresAt.value <= nowTs.value) return false
-  const actions = pending.availableActions || []
-  return actions.length > 0 && actions.every(action => action === ActionType.CHOW || action === ActionType.PASS)
+  return true
 })
 
 const hasSharedDrawWindow = computed(() => {
@@ -2624,6 +2654,22 @@ const formatWinnerTiles = (winner: any): string => {
   return '-'
 }
 
+const getSettlementWinnerSequence = (round: any, playerId: string) => {
+  const winners = Array.isArray(round?.winners) ? round.winners : []
+  const index = winners.findIndex((winnerId: string) => winnerId === playerId)
+  return index >= 0 ? String(index + 1) : ''
+}
+
+const getSettlementPayerCount = (round: any, winner: any) => {
+  const transfers = Array.isArray(round?.transfers) ? round.transfers : []
+  const payers = new Set(
+    transfers
+      .filter((transfer: any) => transfer?.toPlayerId === winner?.playerId && transfer?.fromPlayerId)
+      .map((transfer: any) => transfer.fromPlayerId)
+  )
+  return Math.max(1, payers.size)
+}
+
 const getRoundSettlementRows = (round: any) => {
   const winners = Array.isArray(round?.winnerDetails) ? round.winnerDetails : []
   const winnerByPlayer = new Map(winners.map((winner: any) => [winner.playerId, winner]))
@@ -2634,6 +2680,7 @@ const getRoundSettlementRows = (round: any) => {
       playerId: player.id,
       playerName: player.name,
       isWinner: !!winner,
+      winSequence: winner ? getSettlementWinnerSequence(round, player.id) : '',
       handType: winner?.handTypeName || '-',
       tiles: winner ? formatWinnerTiles(winner) : '-',
       flowerCount: winner?.flowerCount ?? 0,
@@ -2641,7 +2688,11 @@ const getRoundSettlementRows = (round: any) => {
       wild: winner ? (typeof winner.hasWild === 'boolean' ? (winner.hasWild ? '有' : '无') : '-') : '-',
       baseFan: winner?.baseFan ?? '-',
       finalPoints: winner?.finalPoints ?? '-',
-      winMode: winner ? (winner.discarderId ? `捉冲-${winner.discarderName || '未知'}` : '自摸') : '-',
+      winMode: winner
+        ? (winner.discarderId
+          ? (winner.discarderName || '未知')
+          : `自摸 ${getSettlementPayerCount(round, winner)}家`)
+        : '-',
       score,
       scoreLabel: formatSignedScore(score)
     }
@@ -3638,6 +3689,10 @@ const forceDiscard = async (p: Player) => {
     align-items: stretch;
     gap: 12px;
   }
+
+  .table-wrapper {
+    flex: 0 1 70%;
+  }
 }
 
 .table-wrapper {
@@ -3651,7 +3706,6 @@ const forceDiscard = async (p: Player) => {
 .mahjong-table {
   position: relative;
   z-index: 1;
-  /* 4:3 比例，56em×42em ≈ 896×672px，保证零隐藏 */
   width: min(100vw, calc(80vh * 4/3), 1200px);
   aspect-ratio: 4 / 3;
   --tile-w: 28px;
@@ -3772,8 +3826,10 @@ const forceDiscard = async (p: Player) => {
 
 /* ===== 扩展信息区 ===== */
 .extended-info-panel {
-  flex: 0 0 354px;
-  max-width: 354px;
+  flex: 0 0 30%;
+  width: 30%;
+  min-width: 280px;
+  max-width: 420px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -3848,17 +3904,19 @@ const forceDiscard = async (p: Player) => {
 /* 桌面端严格 1/4 宽 */
 @media (min-width: 1101px) {
   .extended-info-panel {
-    /* 牌桌宽度约 75vw (table-wrapper flex), 1/4 ≈ 25vw; 但受 max-width 约束 */
-    flex: 0 0 25%;
-    max-width: 370px;
+    flex: 0 0 30%;
+    width: 30%;
+    max-width: 420px;
   }
 }
 
 /* 窄屏降级 */
 @media (max-width: 1100px) {
   .extended-info-panel {
-    flex: 0 0 276px;
-    max-width: 276px;
+    flex: 0 0 30%;
+    width: 30%;
+    min-width: 240px;
+    max-width: 340px;
   }
 }
 
@@ -3889,18 +3947,40 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .room-header {
   top: max(4px, env(safe-area-inset-top));
   gap: 2px;
-  max-width: min(96%, 520px);
+  left: 0;
+  right: 0;
+  width: 100%;
+  max-width: none;
+  padding: 0 8px;
+  align-items: flex-start;
 }
 
 .layout--mobile-landscape .room-header-content {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 8px;
+  right: 8px;
   padding: 4px 6px;
   gap: 3px;
+  border-radius: 0 0 12px 12px;
+  background: rgba(7, 19, 14, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(10px);
 }
 
 .layout--mobile-landscape .room-header-toggle {
   min-height: 18px;
   padding: 2px 8px;
   font-size: 0.58rem;
+}
+
+.layout--mobile-landscape .room-header > .room-header-toggle {
+  display: inline-flex;
+}
+
+.layout--mobile-landscape .room-header-toggle--inline {
+  display: none;
 }
 
 .layout--mobile-landscape .mahjong-title {
@@ -3938,10 +4018,10 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .mahjong-table {
-  width: min(100%, calc(85vh * 16/9), 1600px);
+  width: min(100%, calc(85vh * 4/3), 1320px);
   height: 100%;
   max-height: none;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 4 / 3;
   border-width: 3px;
   border-radius: 0;
   --seat-side-inset: 3%;
@@ -3960,7 +4040,7 @@ const forceDiscard = async (p: Player) => {
   flex: 0 1 30%;
   width: 30%;
   min-width: 140px;
-  max-width: 280px;
+  max-width: 300px;
   max-height: 100%;
   font-size: 0.62rem;
   gap: 3px;
@@ -5569,19 +5649,19 @@ const forceDiscard = async (p: Player) => {
 .settle-table-wrap {
   width: fit-content;
   max-width: min(1040px, 92vw);
-  overflow: visible;
+  overflow: auto;
 }
 
 .settle-round-table {
   width: 100%;
-  min-width: 760px;
+  min-width: 860px;
   border-collapse: collapse;
   font-size: 0.78rem;
   color: #f3f3f3;
 }
 
 .settle-round-table--compact {
-  min-width: 820px;
+  min-width: 900px;
   table-layout: fixed;
 }
 
@@ -5593,16 +5673,19 @@ const forceDiscard = async (p: Player) => {
 
 .settle-round-table--compact th:nth-child(1),
 .settle-round-table--compact td:nth-child(1) {
-  width: 96px;
+  width: 88px;
 }
 
 .settle-round-table--compact th:nth-child(2),
 .settle-round-table--compact td:nth-child(2) {
-  width: 290px;
+  width: 56px;
 }
 
 .settle-round-table--compact th:nth-child(3),
-.settle-round-table--compact td:nth-child(3),
+.settle-round-table--compact td:nth-child(3) {
+  width: 290px;
+}
+
 .settle-round-table--compact th:nth-child(4),
 .settle-round-table--compact td:nth-child(4),
 .settle-round-table--compact th:nth-child(5),
@@ -5611,7 +5694,17 @@ const forceDiscard = async (p: Player) => {
 .settle-round-table--compact td:nth-child(6),
 .settle-round-table--compact th:nth-child(7),
 .settle-round-table--compact td:nth-child(7) {
-  width: 86px;
+  width: 64px;
+}
+
+.settle-round-table--compact th:nth-child(8),
+.settle-round-table--compact td:nth-child(8) {
+  width: 116px;
+}
+
+.settle-round-table--compact th:nth-child(9),
+.settle-round-table--compact td:nth-child(9) {
+  width: 88px;
 }
 
 .settle-round-table th,
@@ -5672,6 +5765,73 @@ const forceDiscard = async (p: Player) => {
 
 .settle-round-negative {
   color: #ef5350;
+}
+
+@media (max-width: 768px) {
+  .settle-panel {
+    width: min(96vw, 820px);
+    padding: 14px 12px 12px;
+    border-radius: 14px;
+  }
+
+  .settle-round-header {
+    gap: 4px;
+    font-size: 0.66rem;
+  }
+
+  .settle-table-wrap {
+    max-width: calc(96vw - 24px);
+  }
+
+  .settle-round-table {
+    font-size: 0.62rem;
+    min-width: 700px;
+  }
+
+  .settle-round-table--compact {
+    min-width: 700px;
+  }
+
+  .settle-round-table--compact th,
+  .settle-round-table--compact td {
+    padding: 5px 4px;
+  }
+
+  .settle-round-table--compact th:nth-child(1),
+  .settle-round-table--compact td:nth-child(1) {
+    width: 72px;
+  }
+
+  .settle-round-table--compact th:nth-child(2),
+  .settle-round-table--compact td:nth-child(2) {
+    width: 40px;
+  }
+
+  .settle-round-table--compact th:nth-child(3),
+  .settle-round-table--compact td:nth-child(3) {
+    width: 212px;
+  }
+
+  .settle-round-table--compact th:nth-child(4),
+  .settle-round-table--compact td:nth-child(4),
+  .settle-round-table--compact th:nth-child(5),
+  .settle-round-table--compact td:nth-child(5),
+  .settle-round-table--compact th:nth-child(6),
+  .settle-round-table--compact td:nth-child(6),
+  .settle-round-table--compact th:nth-child(7),
+  .settle-round-table--compact td:nth-child(7) {
+    width: 52px;
+  }
+
+  .settle-round-table--compact th:nth-child(8),
+  .settle-round-table--compact td:nth-child(8) {
+    width: 86px;
+  }
+
+  .settle-round-table--compact th:nth-child(9),
+  .settle-round-table--compact td:nth-child(9) {
+    width: 70px;
+  }
 }
 
 .settle-detail-header {
@@ -6217,14 +6377,14 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-inset: 0.2%;
   --seat-top-width: 65%;
   --seat-bottom-width: 80%;
-  --seat-side-width: 60px;
-  --seat-side-height: 45%;
+  --seat-side-width: 82px;
+  --seat-side-height: 60%;
   --seat-side-player-offset: 0.6%;
 }
 .layout--mobile-landscape .seat-top { min-height: 42px; }
 .layout--mobile-landscape .seat-bottom { min-height: 58px; width: min(80%, calc(100% - 80px)); }
-.layout--mobile-landscape .seat-left { width: 60px; }
-.layout--mobile-landscape .seat-right { width: 70px; }
+.layout--mobile-landscape .seat-left { width: 94px; }
+.layout--mobile-landscape .seat-right { width: 100px; }
 
 @media (max-height: 450px) and (orientation: landscape) {
   .layout--mobile-landscape .mahjong-table {
@@ -6232,11 +6392,13 @@ const forceDiscard = async (p: Player) => {
     --tile-h: 20px;
     --tile-gap: 0px;
     border-width: 2px;
-    --seat-side-width: 50px;
-    --seat-side-height: 40%;
+    --seat-side-width: 62px;
+    --seat-side-height: 52%;
   }
   .layout--mobile-landscape .seat-top { min-height: 36px; }
   .layout--mobile-landscape .seat-bottom { min-height: 48px; width: min(85%, calc(100% - 60px)); }
+  .layout--mobile-landscape .seat-left { width: 72px; }
+  .layout--mobile-landscape .seat-right { width: 78px; }
 }
 
 /* 移动竖屏旋转模式 */

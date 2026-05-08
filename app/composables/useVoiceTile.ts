@@ -83,6 +83,7 @@ const _audioMap = ref<Map<string, string>>(new Map())
 const _volume = ref(0.85)
 let _audioEl: HTMLAudioElement | null = null
 let _voiceQueue: Promise<void> = Promise.resolve()
+let _voicePrimed = false
 
 const getAudioEl = (): HTMLAudioElement => {
   if (!_audioEl) {
@@ -90,6 +91,28 @@ const getAudioEl = (): HTMLAudioElement => {
     _audioEl.volume = _volume.value
   }
   return _audioEl
+}
+
+export const primeVoiceAudio = (): void => {
+  if (!process.client || _voicePrimed) return
+  const el = getAudioEl()
+  const prevMuted = el.muted
+  const prevVolume = el.volume
+  _voicePrimed = true
+  el.muted = true
+  el.volume = 0
+  const restore = () => {
+    el.pause()
+    el.currentTime = 0
+    el.muted = prevMuted
+    el.volume = prevVolume
+  }
+  el.play()
+    .then(() => restore())
+    .catch(() => {
+      _voicePrimed = false
+      restore()
+    })
 }
 
 export const setVoiceVolume = (volume: number): void => {
@@ -239,6 +262,7 @@ export const useVoiceTile = () => {
     playVoiceTile,
     playVoiceAction,
     preloadAllTiles,
+    primeVoiceAudio,
     setVoiceVolume,
   }
 }

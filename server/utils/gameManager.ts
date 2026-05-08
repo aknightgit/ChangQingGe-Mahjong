@@ -109,6 +109,18 @@ class GameManager {
       && game.wall.length > 0;
   }
 
+  private isSharedDrawClaimWindow(game: GameState, playerId: string): boolean {
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (!currentPlayer || currentPlayer.id !== playerId) return false;
+    if (game.pendingActions.length === 0) return false;
+    const playerPending = game.pendingActions.filter(pa => pa.playerId === playerId);
+    if (playerPending.length === 0) return false;
+    return playerPending.every(pa =>
+      pa.availableActions.length > 0 &&
+      pa.availableActions.every(action => action === ActionType.CHOW || action === ActionType.PASS)
+    );
+  }
+
   private isChowOnlyPendingTurn(game: GameState, playerId: string): boolean {
     if (game.players[game.currentPlayerIndex]?.id !== playerId) return false;
     if (game.pendingActions.length === 0) return false;
@@ -119,11 +131,10 @@ class GameManager {
   }
 
   private canCurrentTurnPlayerDrawDuringPending(game: GameState, playerId: string): boolean {
-    const currentPlayer = game.players[game.currentPlayerIndex];
-    if (!currentPlayer || currentPlayer.id !== playerId) return false;
     const player = game.players.find(p => p.id === playerId);
     if (!player) return false;
     if (this.isDaDiaoReadyState(game, player)) return false;
+    if (!this.isSharedDrawClaimWindow(game, playerId)) return false;
     return this.canPlayerDrawOnCurrentTurn(game, player);
   }
 
@@ -136,7 +147,8 @@ class GameManager {
   private shouldRetainCurrentPlayerChowPending(game: GameState, pendingAction: PendingAction): boolean {
     const currentPlayer = game.players[game.currentPlayerIndex];
     if (!currentPlayer || pendingAction.playerId !== currentPlayer.id) return false;
-    return pendingAction.availableActions.includes(ActionType.CHOW);
+    return this.isSharedDrawClaimWindow(game, currentPlayer.id)
+      && pendingAction.availableActions.every(action => action === ActionType.CHOW || action === ActionType.PASS);
   }
 
   private clearExpiredClaimsButKeepCurrentPlayerChow(game: GameState, now = Date.now()): void {
@@ -2288,7 +2300,6 @@ class GameManager {
         clearTimeout(existingBotTimer);
         this.botTimers.delete(game.gameId);
       }
-      this.handleBotPendingActions(game.gameId);
       this.schedulePendingActionTimeout(game.gameId);
     }
   }
