@@ -98,14 +98,14 @@ const TILES_PER_SIDE = 18
 .tile-wall {
   --wall-tile-w: clamp(14px, calc(var(--tile-w, 28px) * 0.98), 28px);
   --wall-tile-h: clamp(21px, calc(var(--tile-h, 40px) * 0.98), 39px);
-  --wall-seam-overlap: clamp(0px, calc(var(--wall-tile-w) * 0.08), 2px);
+  --wall-seam-gap: clamp(0.5px, calc(var(--wall-tile-w) * 0.03), 1.4px);
   --wall-layer-shift: 0px;
   --wall-side-depth: clamp(2px, calc(var(--wall-tile-h) * 0.14), 5px);
   --wall-top-inset: 12.2%;
-  --wall-bottom-inset: 11.2%;
-  --wall-side-inset: 10.2%;
-  --wall-horizontal-span: calc(var(--wall-tile-w) * 18 - var(--wall-seam-overlap) * 17);
-  --wall-vertical-span: calc(var(--wall-tile-w) * 18 - var(--wall-seam-overlap) * 17);
+  --wall-bottom-inset: 14.4%;
+  --wall-side-inset: 11.6%;
+  --wall-horizontal-span: calc(var(--wall-tile-w) * 18 + var(--wall-seam-gap) * 17);
+  --wall-vertical-span: calc(var(--wall-tile-w) * 18 + var(--wall-seam-gap) * 17);
   --wall-horizontal-depth: calc(var(--wall-tile-h) + var(--wall-layer-shift) + var(--wall-side-depth));
   --wall-vertical-depth: calc(var(--wall-tile-h) + var(--wall-layer-shift) + var(--wall-side-depth));
   position: absolute;
@@ -210,11 +210,11 @@ const TILES_PER_SIDE = 18
 }
 
 .wall-track--horizontal .tile-slot + .tile-slot {
-  margin-left: calc(var(--wall-seam-overlap) * -1);
+  margin-left: var(--wall-seam-gap);
 }
 
 .wall-track--vertical .tile-slot + .tile-slot {
-  margin-top: calc(var(--wall-seam-overlap) * -1);
+  margin-top: var(--wall-seam-gap);
 }
 
 .wall-side--top .wall-track--inner,

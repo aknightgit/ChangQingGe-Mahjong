@@ -264,6 +264,8 @@ export interface GameState {
   currentPlayerIndex: number;
   dealerIndex: number;
   discardPile: Tile[];
+  lastDiscardPlayerId?: string;
+  lastDiscardPosition?: number;
   actionHistory: GameAction[];
   winnersCount: number;
   roundNumber: number;

@@ -118,13 +118,13 @@ function getViewerRelativeSource(sourcePosition: number): number {
 
 function getClaimArrowRotation(sourcePosition: number): number {
   const relativePos = getViewerRelativeSource(sourcePosition)
-  const screenAngles: Record<number, number> = {
-    0: 0,
+  // rel=1: 右家, rel=2: 对家, rel=3: 左家
+  const rotationByRelative: Record<number, number> = {
     1: -90,
     2: 180,
     3: 90,
   }
-  return screenAngles[relativePos] ?? 0
+  return rotationByRelative[relativePos] ?? 0
 }
 
 function getClaimMarkerClass(meld: Meld, tile: Tile): string[] {

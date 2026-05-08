@@ -194,6 +194,50 @@ try {
   anyManager.games.delete(chowGame.gameId);
 }
 
+const stuckBot = makePlayer('AI-stuck-bot', 14);
+const stuckOtherA = makePlayer('stuck-a', 13);
+const stuckOtherB = makePlayer('stuck-b', 13);
+const stuckOtherC = makePlayer('stuck-c', 13);
+const stuckGame = makeGame([stuckBot, stuckOtherA, stuckOtherB, stuckOtherC]);
+stuckGame.currentPlayerIndex = 0;
+stuckGame.drawnThisTurn = true;
+(stuckGame as any).allClaimMode = true;
+stuckGame.pendingActions = [{
+  playerId: stuckBot.id,
+  availableActions: [ActionType.CHOW, ActionType.PASS],
+  tile: tile(TileSuit.CHARACTERS, 6, 'stuck-discard-6'),
+  expiresAt: Date.now() - 10,
+}];
+anyManager.games.set(stuckGame.gameId, stuckGame);
+const originalPersistGame3 = anyManager.persistGame;
+const originalBroadcastGameState3 = anyManager.broadcastGameState;
+try {
+  anyManager.persistGame = async () => {};
+  anyManager.broadcastGameState = () => {};
+  anyManager.scheduleBotDiscard(stuckGame.gameId, stuckBot.id);
+  await new Promise(resolve => setTimeout(resolve, 80));
+  ok(
+    'bot discard clears expired local chow-only pending instead of freezing',
+    stuckGame.pendingActions.length === 0,
+    `pending=${JSON.stringify(stuckGame.pendingActions)}`
+  );
+  ok(
+    'bot discard consumes one tile after clearing local chow-only pending',
+    stuckBot.hand.concealedTiles.length === 13,
+    `concealed=${stuckBot.hand.concealedTiles.length}`
+  );
+} finally {
+  anyManager.persistGame = originalPersistGame3;
+  anyManager.broadcastGameState = originalBroadcastGameState3;
+  anyManager.clearPendingActionTimer(stuckGame.gameId);
+  const botTimer = anyManager.botTimers?.get?.(stuckGame.gameId);
+  if (botTimer) {
+    clearTimeout(botTimer);
+    anyManager.botTimers.delete(stuckGame.gameId);
+  }
+  anyManager.games.delete(stuckGame.gameId);
+}
+
 const aiAk = makePlayer('ai-ak', 13);
 aiAk.name = 'AI-AK';
 aiAk.hand.concealedTiles = [

@@ -123,9 +123,39 @@ class GameManager {
     if (!currentPlayer || currentPlayer.id !== playerId) return false;
     const player = game.players.find(p => p.id === playerId);
     if (!player) return false;
-    if (!game.pendingActions.some(pa => pa.playerId === playerId)) return false;
     if (this.isDaDiaoReadyState(game, player)) return false;
     return this.canPlayerDrawOnCurrentTurn(game, player);
+  }
+
+  private shouldRetainCurrentPlayerChowPending(game: GameState, pendingAction: PendingAction): boolean {
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (!currentPlayer || pendingAction.playerId !== currentPlayer.id) return false;
+    return pendingAction.availableActions.includes(ActionType.CHOW);
+  }
+
+  private clearExpiredClaimsButKeepCurrentPlayerChow(game: GameState, now = Date.now()): void {
+    game.pendingActions = game.pendingActions.filter(pendingAction => {
+      if (!this.shouldRetainCurrentPlayerChowPending(game, pendingAction)) return false;
+      const expiresAt = typeof pendingAction.expiresAt === 'number' ? pendingAction.expiresAt : 0;
+      return expiresAt > now;
+    });
+    game.pengChowConflict = null;
+    this.clearPendingActionTimer(game.gameId);
+  }
+
+  private clearExpiredCurrentPlayerChowPending(game: GameState, now = Date.now()): boolean {
+    const before = game.pendingActions.length;
+    game.pendingActions = game.pendingActions.filter(pendingAction => {
+      if (!this.shouldRetainCurrentPlayerChowPending(game, pendingAction)) return true;
+      const expiresAt = typeof pendingAction.expiresAt === 'number' ? pendingAction.expiresAt : 0;
+      return expiresAt > now;
+    });
+    if (before !== game.pendingActions.length) {
+      game.pengChowConflict = null;
+      this.clearPendingActionTimer(game.gameId);
+      return true;
+    }
+    return false;
   }
 
   private autoDrawForCurrentPlayer(game: GameState): boolean {
@@ -684,8 +714,16 @@ class GameManager {
         // 实战模式: bot和人类共享同一个hesitationWindow
         const allClaimMode = (game as any).allClaimMode;
         const now = Date.now();
-        const pending = game.pendingActions.filter(pa => !pa.expiresAt || pa.expiresAt <= now);
+        const pending = game.pendingActions.filter(pa =>
+          (!pa.expiresAt || pa.expiresAt <= now) &&
+          !this.shouldRetainCurrentPlayerChowPending(game, pa)
+        );
         if (pending.length === 0) {
+          if (this.clearExpiredCurrentPlayerChowPending(game, now)) {
+            await this.persistGame(game);
+            this.broadcastGameState(gameId);
+            return;
+          }
           this.schedulePendingActionTimeout(gameId);
           return;
         }
@@ -728,6 +766,11 @@ class GameManager {
         await this.persistGame(game);
         this.broadcastGameState(gameId);
         if (game.pendingActions.length > 0) {
+          if (game.pendingActions.every(pa => this.shouldRetainCurrentPlayerChowPending(game, pa))) {
+            await this.persistGame(game);
+            this.broadcastGameState(gameId);
+            return;
+          }
           this.schedulePendingActionTimeout(gameId);
           return;
         }
@@ -1077,6 +1120,9 @@ class GameManager {
    * 获取最后一张弃牌的玩家ID
    */
   private getLastDiscardPlayerId(game: GameState): string | undefined {
+    if (game.lastDiscardPlayerId) {
+      return game.lastDiscardPlayerId;
+    }
     for (let i = game.actionHistory.length - 1; i >= 0; i--) {
       if (game.actionHistory[i].type === ActionType.DISCARD) {
         return game.actionHistory[i].playerId;
@@ -1096,6 +1142,9 @@ class GameManager {
   }
 
   private getLastDiscardPosition(game: GameState): number | undefined {
+    if (typeof game.lastDiscardPosition === 'number') {
+      return game.lastDiscardPosition;
+    }
     const id = this.getLastDiscardPlayerId(game);
     if (!id) return undefined;
     return this.getPlayerPosition(game, id);
@@ -2005,6 +2054,25 @@ class GameManager {
 
       case ActionType.DRAW:
         game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
+        {
+          const currentTurnPlayer = game.players[game.currentPlayerIndex];
+          if (!currentTurnPlayer || currentTurnPlayer.id !== player.id) {
+            console.warn(
+              `[DRAW] Blocked: ${player.name} is not current player (current=${currentTurnPlayer?.name ?? 'none'} index=${game.currentPlayerIndex})`
+            );
+            throw new Error('Not your turn to draw');
+          }
+          const unreplacedFlowers = player.hand.exposedMelds.filter(
+            m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]) && !(m as any).replacementDone
+          );
+          const hasPendingDrawWork = unreplacedFlowers.length > 0 || this.canPlayerDrawOnCurrentTurn(game, player);
+          if (!hasPendingDrawWork) {
+            console.warn(
+              `[DRAW] Blocked: ${player.name} is not eligible to draw (drawn=${game.drawnThisTurn}, playable=${this.getPlayableTileCount(player)}, wall=${game.wall.length})`
+            );
+            throw new Error('Cannot draw in current state');
+          }
+        }
         // 【状态机修复】每回合最多摸一次，防同回合连续摸牌
         if (game.drawnThisTurn) {
           console.warn(`[DRAW] Blocked: ${player.name} already drew this turn (double-draw attempt)`);
@@ -2117,7 +2185,13 @@ class GameManager {
       }
       if (action === ActionType.HU && game.phase === GamePhase.PLAYING) {
         await this.moveToNextPlayer(game);
-      } else if (action === ActionType.PASS && currentP && currentP.status === PlayerStatus.PLAYING && !this.isConcealedDiscardState(currentP)) {
+      } else if (
+        action === ActionType.PASS &&
+        currentP &&
+        currentP.status === PlayerStatus.PLAYING &&
+        !this.isConcealedDiscardState(currentP) &&
+        !this.canPlayerDrawOnCurrentTurn(game, currentP)
+      ) {
         await this.moveToNextPlayer(game);
       } else {
         this.schedulePendingActionTimeout(gameId);
@@ -2153,25 +2227,23 @@ class GameManager {
   private async handleDiscard(game: GameState, player: Player, tileId: string): Promise<void> {
     const tile = findTileById(player.hand.concealedTiles, tileId);
     if (!tile) throw new Error('Tile not found');
+    const discarderIndex = game.currentPlayerIndex;
+    game.lastDiscardPlayerId = player.id;
+    game.lastDiscardPosition = player.position;
 
-    // Remove from hand
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tileId);
     (player as any).lastDrawnTile = null;
     player.hand.discardedTiles.push(tile);
     game.discardPile.push(tile);
 
-    // 谢谢带头大哥:检测连续出同一张牌
     this.checkLeadingBrother(game, tile, player);
-
     this.updateRoundNumber(game);
 
-    // Check if player is missing one suit after discard
     const missing = isMissingOneSuit(player.hand.concealedTiles);
     if (missing.missing) {
       player.missingSuit = missing.missingSuit;
     }
 
-    // Check for ting status
     player.isTing = isTing(
       player.hand.concealedTiles,
       player.hand.exposedMelds.length,
@@ -2179,13 +2251,10 @@ class GameManager {
       game.wildTileGroup
     );
 
-    // 百搭打出 → 触发冷冻(一圈内不能吃/碰/捉冲)
-    // 冷冻规则：打出百搭的玩家，下家/对家/上家各出一张牌后（即该玩家再次轮到）解除冷冻
     if (this.isWildTile(game, tile)) {
       game.freezePlayerId = player.id;
       game.freezeComplete = false;
       game.pendingActions = [];
-      // 广播百搭打出
       if (this.wsManager) {
         this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
           id: Date.now(),
@@ -2201,23 +2270,27 @@ class GameManager {
       return;
     }
 
-    // 检查其他玩家是否可以碰/杠/胡/吃
     this.checkPendingActions(game, tile);
 
-    // 有 pending action 时,先等待 claim/超时处理完成,再统一推进到下家。
-    // 否则 currentPlayerIndex 可能停留在弃牌者,前端会误以为仍轮到玩家继续出牌。
-    await this.persistGame(game);
-    this.broadcastGameState(game.gameId);
-
-    if (game.pendingActions.length > 0) {
-      // bot 高优先级动作（碰/杠/胡）立即执行，不破坏人类决策窗口
-      this.handleBotPendingActions(game.gameId);
-      // 启动 hesitationWindow 超时计时器，处理剩余 pending（人类超时=PASS）
-      this.schedulePendingActionTimeout(game.gameId);
-      return;
+    const nextPlayer = this.getNextActivePlayer(game, discarderIndex);
+    if (nextPlayer) {
+      const nextPlayerIndex = game.players.findIndex(p => p.id === nextPlayer.id);
+      if (nextPlayerIndex >= 0) {
+        game.currentPlayerIndex = nextPlayerIndex;
+      }
     }
 
-    await this.moveToNextPlayer(game);
+    await this.beginCurrentPlayerTurn(game);
+
+    if (game.pendingActions.length > 0) {
+      const existingBotTimer = this.botTimers.get(game.gameId);
+      if (existingBotTimer) {
+        clearTimeout(existingBotTimer);
+        this.botTimers.delete(game.gameId);
+      }
+      this.handleBotPendingActions(game.gameId);
+      this.schedulePendingActionTimeout(game.gameId);
+    }
   }
 
   /**
@@ -4151,7 +4224,15 @@ class GameManager {
       }
     } while (game.players[game.currentPlayerIndex].status !== PlayerStatus.PLAYING);
 
+    await this.beginCurrentPlayerTurn(game);
+  }
+
+  private async beginCurrentPlayerTurn(game: GameState): Promise<void> {
     const nextPlayer = game.players[game.currentPlayerIndex];
+    if (!nextPlayer) {
+      throw new Error('No current player available');
+    }
+
     const freezeMs = this.getHesitationWindow(game);  // 决策犹豫期同时控制人类和AI
 
     console.log(`[moveToNextPlayer] → ${nextPlayer.name} (${this.isPlayerBotControlled(nextPlayer) ? 'BOT' : 'HUMAN'}), freeze: ${freezeMs}ms`);
@@ -4195,8 +4276,8 @@ class GameManager {
           const livePlayer = freshGame.players[freshGame.currentPlayerIndex];
           if (!livePlayer || livePlayer.id !== nextPlayer.id || livePlayer.status !== PlayerStatus.PLAYING) return;
           if (freshGame.pendingActions.length > 0) {
-            console.log(`[bot-freeze] Pending actions exist, skipping auto-draw for bot ${livePlayer.name}`);
-            return;
+            console.log(`[bot-freeze] Pending actions expired for ${livePlayer.name}, clearing claims and retaining local chow if present`);
+            this.clearExpiredClaimsButKeepCurrentPlayerChow(freshGame);
           }
           console.log(`[bot-freeze] Freeze expired for ${livePlayer.name}, drawing...`);
           // 牌墙已空 → 流局
@@ -4239,10 +4320,10 @@ class GameManager {
           delete (freshGame as any)._freezeUntil;
 
           if (freshGame.pendingActions.length > 0) {
-            console.log(`[freeze] Pending actions exist, skipping for ${freshGame.players[freezeCurrentIndex]?.name}`);
+            console.log(`[freeze] Pending actions expired for ${freshGame.players[freezeCurrentIndex]?.name}, clearing claims and retaining local chow if present`);
+            this.clearExpiredClaimsButKeepCurrentPlayerChow(freshGame);
             await this.persistGame(freshGame);
             this.broadcastGameState(game.gameId);
-            return;
           }
 
           // 冻结窗口结束 → 人类玩家手动摸牌,AI自动摸牌
@@ -4377,6 +4458,14 @@ class GameManager {
           console.log(`[bot-discard] Not ${playerId}'s turn (current: ${currentP.id}), skipping`);
           return;
         }
+        if (game.pendingActions.length > 0 && game.pendingActions.every(pa => this.shouldRetainCurrentPlayerChowPending(game, pa))) {
+          this.clearExpiredClaimsButKeepCurrentPlayerChow(game);
+          await this.persistGame(game);
+        }
+        if (game.pendingActions.length > 0) {
+          console.log(`[bot-discard] Pending actions still unresolved for ${currentP.name}, skipping discard`);
+          return;
+        }
 
         // 【Bug修复】机器人托管后，若未摸牌则先摸牌再出牌
         if (!game.drawnThisTurn) {
@@ -4386,6 +4475,10 @@ class GameManager {
 
         const refreshedGame = await this.getGame(gameId);
         if (!refreshedGame || refreshedGame.phase !== GamePhase.PLAYING) return;
+        if (refreshedGame.pendingActions.length > 0) {
+          console.log(`[bot-discard] Pending actions reappeared for ${playerId}, aborting discard`);
+          return;
+        }
         const refreshedPlayer = refreshedGame.players[refreshedGame.currentPlayerIndex];
         if (!refreshedPlayer || refreshedPlayer.id !== playerId) return;
         if (!this.isConcealedDiscardState(refreshedPlayer)) {

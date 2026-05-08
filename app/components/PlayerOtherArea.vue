@@ -7,19 +7,14 @@
     <template v-if="position === 'top'">
       <div class="player-other-stack player-other-stack--top">
         <div class="seat-line seat-line--top">
-          <div v-if="hand.length" v-memo="[hand, showHand, justDrawnTileId, isWinner, tileBackScheme]" class="hand-lane hand-lane--top top-slot top-slot--hand">
-            <MahjongTile
-              v-for="tile in hand"
-              :key="tile.id"
-              :tile="tile"
-              :small="true"
-              :back="!showHand"
-              :back-scheme="showHand ? -1 : (tileBackScheme ?? 0)"
-              :just-drawn="justDrawnTileId === tile.id"
-              class="top-seat-tile"
-              :dimmed="isWinner"
-            />
-          </div>
+          <OpponentHandLane
+            position="top"
+            :hand="hand"
+            :tile-back-scheme="tileBackScheme"
+            :show-hand="showHand"
+            :is-winner="isWinner"
+            :just-drawn-tile-id="justDrawnTileId"
+          />
           <div v-if="mainMelds.length" class="meld-lane meld-lane--top top-slot top-slot--meld">
             <div
               v-for="(m, i) in mainMelds"
@@ -102,17 +97,14 @@
               />
             </div>
           </div>
-          <div v-if="hand.length" v-memo="[hand, showHand, justDrawnTileId, isWinner, tileBackScheme]" class="hand-lane hand-lane--left">
-            <MahjongTile
-              v-for="tile in hand"
-              :key="tile.id"
-              :tile="tile"
-              :small="true"
-              :back="!showHand"
-              :back-scheme="showHand ? -1 : (tileBackScheme ?? 0)"
-              :dimmed="isWinner"
-            />
-          </div>
+          <OpponentHandLane
+            position="left"
+            :hand="hand"
+            :tile-back-scheme="tileBackScheme"
+            :show-hand="showHand"
+            :is-winner="isWinner"
+            :just-drawn-tile-id="justDrawnTileId"
+          />
         </div>
       </div>
     </template>
@@ -157,17 +149,14 @@
               />
             </div>
           </div>
-          <div v-if="hand.length" v-memo="[hand, showHand, justDrawnTileId, isWinner, tileBackScheme]" class="hand-lane hand-lane--right">
-            <MahjongTile
-              v-for="tile in hand"
-              :key="tile.id"
-              :tile="tile"
-              :small="true"
-              :back="!showHand"
-              :back-scheme="showHand ? -1 : (tileBackScheme ?? 0)"
-              :dimmed="isWinner"
-            />
-          </div>
+          <OpponentHandLane
+            position="right"
+            :hand="hand"
+            :tile-back-scheme="tileBackScheme"
+            :show-hand="showHand"
+            :is-winner="isWinner"
+            :just-drawn-tile-id="justDrawnTileId"
+          />
         </div>
       </div>
     </template>
@@ -177,6 +166,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import MahjongTile from './MahjongTile.vue'
+import OpponentHandLane from './OpponentHandLane.vue'
 import type { Meld } from '~/types/game'
 
 const props = defineProps<{
@@ -209,27 +199,20 @@ const mainMelds = computed(() => props.melds.filter(meld => !isFlowerMeld(meld))
 
 const isConcealedMeld = (meld: Meld): boolean => meld.type === 'concealed_kong' || !!(meld as any).isConcealed
 
-const SEAT_ROTATION_BY_POSITION: Record<'top' | 'left' | 'right', number> = {
-  top: 180,
-  left: 90,
-  right: -90,
-}
-
-function getViewerRelativeSource(sourcePosition: number): number {
+function getOwnerRelativeSource(sourcePosition: number): number {
   const ownerPosition = props.ownerPosition ?? props.viewerPosition ?? 0
   return (sourcePosition - ownerPosition + 4) % 4
 }
 
 function getClaimArrowRotation(sourcePosition: number): number {
-  const rel = getViewerRelativeSource(sourcePosition)
-  const screenAngles: Record<number, number> = {
-    0: 0,
-    1: -90,
-    2: 180,
-    3: 90,
+  const rel = getOwnerRelativeSource(sourcePosition)
+  const rotationBySeat: Record<'top' | 'left' | 'right', Record<number, number>> = {
+    // rel=1: 右家, rel=2: 对家, rel=3: 左家
+    top: { 1: 90, 2: 0, 3: -90 },
+    left: { 1: 180, 2: -90, 3: 0 },
+    right: { 1: 0, 2: 90, 3: 180 },
   }
-  const seatRotation = SEAT_ROTATION_BY_POSITION[props.position] || 0
-  return (screenAngles[rel] ?? 0) - seatRotation
+  return rotationBySeat[props.position]?.[rel] ?? 0
 }
 
 function getClaimMarkerClass(meld: Meld, tile: any): string[] {

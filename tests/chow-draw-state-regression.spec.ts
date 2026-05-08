@@ -158,8 +158,63 @@ test('human chow timeout clears pending instead of auto-drawing', (afterTimeoutG
 test('human chow timeout keeps drawnThisTurn false', afterTimeoutGame?.drawnThisTurn === false, `drawn=${String(afterTimeoutGame?.drawnThisTurn)}`)
 test('human chow timeout exposes draw action for manual click', timeoutActions.includes(ActionType.DRAW), `actions=${timeoutActions.join(',')}`)
 
+let timeoutDrawThrew = false
+try {
+  await gameManager.executeAction(timeoutGame.gameId, player.id, ActionType.DRAW)
+} catch (error) {
+  timeoutDrawThrew = true
+}
+
+const afterTimeoutDrawGame = await gameManager.getGame(timeoutGame.gameId)
+
+test('human chow timeout still accepts manual draw click', !timeoutDrawThrew)
+test('manual draw after chow timeout marks drawnThisTurn true', afterTimeoutDrawGame?.drawnThisTurn === true, `drawn=${String(afterTimeoutDrawGame?.drawnThisTurn)}`)
+test('manual draw after chow timeout consumes wall tile', (afterTimeoutDrawGame?.wall?.length ?? -1) === 0, `wall=${afterTimeoutDrawGame?.wall?.length ?? -1}`)
+
 ;(gameManager as any).games.delete(timeoutGame.gameId)
 ;(gameManager as any).clearPendingActionTimer?.(timeoutGame.gameId)
+
+const botPassShouldNotSkipHumanGame = {
+  ...game,
+  gameId: 'stale-bot-pass-should-not-skip-human',
+  wall: [tile('draw-stale-pass-1', TileSuit.DOTS, 7)],
+  discardPile: [tile('discard-stale-pass-1', TileSuit.DOTS, 6)],
+  currentPlayerIndex: 0,
+  drawnThisTurn: false,
+  actionHistory: [],
+  pendingActions: [
+    {
+      playerId: 'bot-p2',
+      availableActions: [ActionType.PENG, ActionType.PASS],
+      tile: tile('discard-stale-pass-1', TileSuit.DOTS, 6),
+      expiresAt: Date.now() + 5000,
+    }
+  ],
+} as any
+
+botPassShouldNotSkipHumanGame.players = [
+  createPlayer('p1'),
+  { ...createPlayer('bot-p2'), isBot: true, name: 'AI-bot-p2' }
+]
+
+;(gameManager as any).games.set(botPassShouldNotSkipHumanGame.gameId, botPassShouldNotSkipHumanGame)
+
+let stalePassThrew = false
+try {
+  await gameManager.executeAction(botPassShouldNotSkipHumanGame.gameId, 'bot-p2', ActionType.PASS)
+} catch {
+  stalePassThrew = true
+}
+
+const afterStalePassGame = await gameManager.getGame(botPassShouldNotSkipHumanGame.gameId)
+const afterStalePassActions = await gameManager.getAvailableActions(botPassShouldNotSkipHumanGame.gameId, 'p1')
+
+test('stale bot pass is accepted', !stalePassThrew)
+test('stale bot pass does not advance away from current human turn', afterStalePassGame?.currentPlayerIndex === 0, `current=${afterStalePassGame?.currentPlayerIndex}`)
+test('human still retains draw action after stale bot pass', afterStalePassActions.includes(ActionType.DRAW), `actions=${afterStalePassActions.join(',')}`)
+
+;(gameManager as any).games.delete(botPassShouldNotSkipHumanGame.gameId)
+;(gameManager as any).clearPendingActionTimer?.(botPassShouldNotSkipHumanGame.gameId)
 
 console.log(`\nResult: ${passed} passed, ${failed} failed`)
 process.exit(failed > 0 ? 1 : 0)

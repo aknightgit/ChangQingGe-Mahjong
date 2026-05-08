@@ -2,6 +2,20 @@ import { Tile, Meld, MeldType, WinType, TileSuit } from '../types/game';
 import { groupTiles, isFlower, isWind, isDragon,
          getSuits } from './tiles';
 
+function meldSignature(melds: Meld[]): string {
+  if (!melds.length) return 'none'
+  return melds
+    .map(meld => {
+      const tileSig = meld.tiles
+        .map(tile => `${tile.suit[0]}${tile.value}`)
+        .sort()
+        .join(',')
+      return `${meld.type}:${meld.isConcealed ? 1 : 0}:${tileSig}`
+    })
+    .sort()
+    .join('|')
+}
+
 // ============================================================
 // 牌型枚举（按优先级排序）
 // ============================================================
@@ -548,8 +562,10 @@ function detectTypes(
   // 允许1张手牌：大吊等待状态（与8花一样，不需要常规手牌数校验）
   if (types.length === 0 && !isValidHandSize(concealedNonFlower.length) && concealedNonFlower.length !== 1) return [];
 
-  const allWind = concealedNonFlower.length > 0 &&
-    concealedNonFlower.every(t => isWind(t) || isDragon(t));
+  const exposedNonFlower = exposed.flatMap(m => m.tiles).filter(t => !isFlower(t));
+  const allTilesNonFlower = [...concealedNonFlower, ...exposedNonFlower];
+  const allWind = allTilesNonFlower.length > 0 &&
+    allTilesNonFlower.every(t => isWind(t) || isDragon(t));
   if (allWind) types.push(HandType.ALL_WIND);
 
   // ---- 从手牌张数推导需要的面子数 ----
@@ -595,7 +611,7 @@ function detectTypes(
   }
 
   // ---- 花色构成 ----
-  const allExposedNonFlower = exposed.flatMap(m => m.tiles).filter(t => !isFlower(t));
+  const allExposedNonFlower = exposedNonFlower;
   const allNonFlower = [...concealedNonFlower, ...allExposedNonFlower];
   const suits = getSuits(allNonFlower);
   const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
@@ -1313,9 +1329,9 @@ export function canWin(
 
   // canWin 结果缓存（同时缓存 boolean 和 types，避免重复计算）
   const handSig = handSignature(handTiles)
-  const meldCount = exposed.length
+  const exposedSig = meldSignature(exposed)
   const wildCacheKey = typeof wildTileIdOrChecker === 'function' ? '__wild_fn__' : (wildTileId || '')
-  const cacheKey = `${handSig}|${meldCount}|${wildCacheKey}`
+  const cacheKey = `${handSig}|${exposedSig}|${wildCacheKey}`
   if (canWinResultCache.has(cacheKey)) {
     _canWinHits++
     const cached = canWinResultCache.get(cacheKey)!
@@ -1375,8 +1391,10 @@ export function canWin(
     return { canWin: true, types: [HandType.EIGHT_FLOWERS] };
   }
 
-  const allWind = concealedNonFlower.length > 0 &&
-    concealedNonFlower.every(t => isWind(t) || isDragon(t) || isWildTileFn(t));
+  const exposedNonFlower = exposed.flatMap(m => m.tiles).filter(t => !isFlower(t) || isWildTileFn(t));
+  const combinedNonFlower = [...concealedNonFlower, ...exposedNonFlower];
+  const allWind = combinedNonFlower.length > 0 &&
+    combinedNonFlower.every(t => isWind(t) || isDragon(t) || isWildTileFn(t));
   if (allWind) {
     return { canWin: true, types: [HandType.ALL_WIND] };
   }
@@ -1456,7 +1474,7 @@ export function detectHandTypes(
 // 听牌检测（带缓存优化）
 // ============================================================
 // canWin 结果缓存（同时缓存 boolean 和 types）
-// key = handSignature + meldCount + wildId
+// key = handSignature + meldSignature + wildId
 const canWinResultCache = new Map<string, { canWin: boolean; types: HandType[] }>()
 const CAN_WIN_CACHE_MAX = 100000
 let _canWinHits = 0

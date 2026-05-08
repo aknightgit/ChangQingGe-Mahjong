@@ -635,6 +635,15 @@
 
           <!-- 房间号 + 退房结算 -->
           <div v-if="gameState" class="room-header-row panel-room-header-row">
+            <button
+              class="room-header-toggle room-header-toggle--inline"
+              :class="{ 'room-header-toggle--collapsed': isTopBarCollapsed }"
+              @click="toggleTopBar"
+              :aria-expanded="String(!isTopBarCollapsed)"
+              :title="isTopBarCollapsed ? '展开菜单' : '收起菜单'"
+            >
+              <span class="room-header-toggle__icon">{{ isTopBarCollapsed ? '▼' : '▲' }}</span>
+            </button>
             <p class="mahjong-subtitle panel-room-number">
               房间 #{{ gameState?.roomNumber || '????' }}
             </p>
@@ -3484,6 +3493,20 @@ const forceDiscard = async (p: Player) => {
   pointer-events: auto;
 }
 
+.room-header > .room-header-toggle {
+  display: none;
+}
+
+.room-header-toggle--inline {
+  gap: 0;
+  min-width: 28px;
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
 .room-header-toggle:hover {
   color: #fff;
   background: rgba(13, 31, 22, 0.92);
@@ -3619,8 +3642,8 @@ const forceDiscard = async (p: Player) => {
   --seat-side-width: 96px;
   --seat-side-height: 70%;
   --seat-side-player-offset: 1.4%;
-  --discard-center-rect-half-w: 16.2%;
-  --discard-center-rect-half-h: 12.8%;
+  --discard-center-rect-half-w: 17%;
+  --discard-center-rect-half-h: 13.4%;
 }
 
 /* 绿色麻将桌布内层 */
@@ -3896,8 +3919,8 @@ const forceDiscard = async (p: Player) => {
   --seat-side-width: 100px;
   --seat-side-height: 50%;
   --seat-side-player-offset: 0.9%;
-  --discard-center-rect-half-w: 14%;
-  --discard-center-rect-half-h: 10.6%;
+  --discard-center-rect-half-w: 14.3%;
+  --discard-center-rect-half-h: 11%;
 }
 
 .layout--mobile-landscape .extended-info-panel {
@@ -4408,7 +4431,7 @@ const forceDiscard = async (p: Player) => {
 .panel-room-header-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   padding: 6px 10px;
   border-radius: 12px;
@@ -4418,6 +4441,7 @@ const forceDiscard = async (p: Player) => {
   font-size: 1rem;
   font-weight: 700;
   margin: 0;
+  flex: 1 1 auto;
 }
 
 .round-info-header {
