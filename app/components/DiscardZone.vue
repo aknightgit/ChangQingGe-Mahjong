@@ -95,8 +95,8 @@ function slotStyle(index: number) {
 
 <style scoped>
 .discard-zone {
-  --discard-tile-w: calc(var(--tile-w, 28px) * 1.12);
-  --discard-tile-h: calc(var(--tile-h, 40px) * 1.12);
+  --discard-tile-w: calc(var(--tile-w, 28px) * 1.45);
+  --discard-tile-h: calc(var(--tile-h, 40px) * 1.45);
   --discard-gap-x: clamp(0.5px, calc(var(--discard-tile-w) * 0.03), 1.5px);
   --discard-gap-y: clamp(0.5px, calc(var(--discard-tile-h) * 0.03), 1.5px);
   --discard-step-x: calc(var(--discard-tile-w) + var(--discard-gap-x));
@@ -151,30 +151,23 @@ function slotStyle(index: number) {
 }
 
 .discard-tile-shell :deep(.latest-tile) {
-  outline: 3px solid rgba(255, 58, 58, 0.82) !important;
-  outline-offset: 3px;
-  border-radius: 6px;
+  border-radius: 4px;
   box-shadow:
-    0 0 10px rgba(255, 58, 58, 0.48),
-    0 0 20px rgba(255, 58, 58, 0.28),
-    0 0 36px rgba(255, 58, 58, 0.14);
+    0 0 6px 2px rgba(255, 50, 50, 0.55),
+    0 0 14px 4px rgba(255, 50, 50, 0.25);
   animation: latest-pulse 2s ease-in-out infinite;
 }
 
 @keyframes latest-pulse {
   0%, 100% {
     box-shadow:
-      0 0 10px rgba(255, 58, 58, 0.48),
-      0 0 20px rgba(255, 58, 58, 0.28),
-      0 0 36px rgba(255, 58, 58, 0.14);
-    outline-color: rgba(255, 58, 58, 0.82);
+      0 0 6px 2px rgba(255, 50, 50, 0.55),
+      0 0 14px 4px rgba(255, 50, 50, 0.25);
   }
   50% {
     box-shadow:
-      0 0 14px rgba(255, 72, 72, 0.68),
-      0 0 28px rgba(255, 72, 72, 0.36),
-      0 0 52px rgba(255, 72, 72, 0.18);
-    outline-color: rgba(255, 96, 96, 0.95);
+      0 0 8px 3px rgba(255, 70, 70, 0.7),
+      0 0 20px 6px rgba(255, 70, 70, 0.3);
   }
 }
 </style>
