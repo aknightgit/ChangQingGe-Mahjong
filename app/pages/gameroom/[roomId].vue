@@ -2954,8 +2954,12 @@ const updateSwapInfo = async () => {
   }
 }
 
-// 梁山聚义
-const canLiangShan = computed(() => availableActions.value.includes(ActionType.LIANG_SHAN))
+// 梁山聚义：前三巡常亮，之后由 availableActions 决定
+const canLiangShan = computed(() => {
+  const round = currentRound.value || 1
+  if (round <= 3 && gameState.value?.phase === 'playing') return true
+  return availableActions.value.includes(ActionType.LIANG_SHAN)
+})
 const hasVotedLiangShan = computed(() => {
   const votes = (gameState.value as any)?.liangShanVotes || []
   return votes.includes(currentPlayer.value?.id)
@@ -3920,13 +3924,13 @@ const forceDiscard = async (p: Player) => {
 }
 
 .extra-action-btn {
-  padding: 4px 10px;
+  padding: 5px 12px;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(20, 40, 28, 0.8);
   color: rgba(255, 255, 255, 0.6);
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
@@ -4119,7 +4123,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .ext-title { font-size: 0.62rem; margin-bottom: 1px; }
 .layout--mobile-landscape .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
 .layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.6rem; }
-.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: 2px 4px; font-size: 0.52rem; }
+.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: 3px 6px; font-size: 0.62rem; }
 .layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: 2px 4px; gap: 3px; flex-wrap: wrap; }
 .layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
 .layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
