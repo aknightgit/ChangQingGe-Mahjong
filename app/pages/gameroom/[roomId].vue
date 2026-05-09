@@ -887,6 +887,7 @@ import DiscardZone from '~/components/DiscardZone.vue'
 import LayoutDebugPanel from '~/components/LayoutDebugPanel.vue'
 import { useGame } from '~/composables/useGame'
 import { useSound } from '~/composables/useSound'
+import { primeSoundSynthAudio } from '~/composables/useSoundSynth'
 import { useBackgroundMusic } from '~/composables/useBackgroundMusic'
 import { useVoiceTile } from '~/composables/useVoiceTile'
 import { buildDiscardGuardSnapshot, shouldReleasePendingDiscardGuard, type DiscardGuardSnapshot } from '~/utils/discardGuard'
@@ -1253,6 +1254,7 @@ const getStableOpponentHand = (player?: Player | null): Tile[] => {
 }
 
 const handleGlobalPointerDown = (event: MouseEvent) => {
+  primeSoundSynthAudio()
   primeVoiceAudio()
   if (!showSettings.value) return
   const target = event.target as Node | null
@@ -2154,9 +2156,13 @@ const hasBlockingPendingClaim = computed(() => {
     action === ActionType.EXTENDED_KONG
   )
 })
-const showDraw = computed(() => availableActions.value.includes(ActionType.DRAW) || shouldExposeSharedDraw.value)
+const showDraw = computed(() =>
+  availableActions.value.includes(ActionType.DRAW) ||
+  shouldExposeSharedDraw.value ||
+  shouldPreviewDeferredDraw.value
+)
 const filteredCircularAvailableActions = computed(() => {
-  if (shouldExposeSharedDraw.value && !availableActions.value.includes(ActionType.DRAW)) {
+  if ((shouldExposeSharedDraw.value || shouldPreviewDeferredDraw.value) && !availableActions.value.includes(ActionType.DRAW)) {
     return [...availableActions.value, ActionType.DRAW]
   }
   return availableActions.value
@@ -2400,11 +2406,23 @@ const shouldExposeSharedDraw = computed(() => {
   return true
 })
 
-const hasDeferredDrawWindow = computed(() => {
+const shouldPreviewDeferredDraw = computed(() => {
   if (!isMyTurn.value) return false
-  if (!availableActions.value.includes(ActionType.DRAW)) return false
-  if (!myPendingAction.value || myPendingExpiresAt.value <= nowTs.value) return false
-  return !isSharedDrawClaimWindow.value
+  const pending = myPendingAction.value
+  if (!pending || myPendingExpiresAt.value <= nowTs.value) return false
+  const actions = Array.isArray((pending as any)?.availableActions) ? (pending as any).availableActions : []
+  return actions.some((action: ActionType) =>
+    action === ActionType.CHOW ||
+    action === ActionType.PENG ||
+    action === ActionType.KONG ||
+    action === ActionType.HU ||
+    action === ActionType.CONCEALED_KONG ||
+    action === ActionType.EXTENDED_KONG
+  )
+})
+
+const hasDeferredDrawWindow = computed(() => {
+  return shouldPreviewDeferredDraw.value && !isSharedDrawClaimWindow.value
 })
 
 const hasSharedDrawWindow = computed(() => {

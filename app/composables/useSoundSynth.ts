@@ -24,6 +24,14 @@ const getCtx = (): AudioContext | null => {
   return _audioContext
 }
 
+export const primeSoundSynthAudio = (): void => {
+  const ctx = getCtx()
+  if (!ctx) return
+  if (ctx.state === 'suspended') {
+    void ctx.resume().catch(() => {})
+  }
+}
+
 /** 创建噪音源（白噪音） */
 const createNoise = (ctx: AudioContext, duration: number): AudioBufferSourceNode => {
   const bufferSize = Math.floor(ctx.sampleRate * duration)

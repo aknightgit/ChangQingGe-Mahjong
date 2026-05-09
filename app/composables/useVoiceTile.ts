@@ -1,9 +1,4 @@
-﻿/**
- * 麻将牌面语音播放
- * 资源统一放在 assets/voice 下，不依赖 public 目录
- */
-
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
 
 export type VoiceScheme = 'bingtang'
 
@@ -11,7 +6,7 @@ interface TileVoiceEntry {
   key: string
   text: string
   mp3?: string
-  opus: string
+  opus?: string
 }
 
 interface Manifest {
@@ -33,15 +28,26 @@ const VOICE_TEXT_MAP: Record<string, string> = {
   tiao_1: '一条', tiao_2: '二条', tiao_3: '三条', tiao_4: '四条', tiao_5: '五条', tiao_6: '六条', tiao_7: '七条', tiao_8: '八条', tiao_9: '九条',
 }
 
-// 动作语音（补花、吃、碰、杠、胡、自摸）
-const VOICE_ACTION_MAP: Record<string, string> = {
+const VOICE_ACTION_MAP = {
   flowerReplace: 'buhua',
   chow: 'wochi',
   pong: 'peng',
   kong: 'gang',
   hu: 'hule',
   selfHu: 'zimo',
+} as const
+
+const VOICE_ACTION_TEXT_MAP: Record<keyof typeof VOICE_ACTION_MAP, string> = {
+  flowerReplace: '补花',
+  chow: '吃',
+  pong: '碰',
+  kong: '杠',
+  hu: '胡',
+  selfHu: '自摸',
 }
+
+const SILENT_WAV_DATA_URI =
+  'data:audio/wav;base64,UklGRlQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YTAAAAAA'
 
 const audioModules = import.meta.glob('../../assets/voice/**/*.{mp3,opus}', {
   eager: true,
@@ -53,9 +59,9 @@ const schemeEntries = Object.entries(audioModules)
     const match = path.match(/\.\.\/\.\.\/assets\/voice\/([^/]+)\/([^/.]+)\.(mp3|opus)$/)
     if (!match) return null
     const [, scheme, key, ext] = match
-    return { scheme, key, ext, url }
+    return { scheme, key, ext: ext as 'mp3' | 'opus', url }
   })
-  .filter(Boolean) as Array<{ scheme: string, key: string, ext: 'mp3' | 'opus', url: string }>
+  .filter(Boolean) as Array<{ scheme: string; key: string; ext: 'mp3' | 'opus'; url: string }>
 
 const buildManifest = (scheme: VoiceScheme): Manifest => {
   const grouped = new Map<string, Partial<TileVoiceEntry>>()
@@ -68,7 +74,7 @@ const buildManifest = (scheme: VoiceScheme): Manifest => {
   }
 
   const tiles = [...grouped.values()]
-    .filter((item): item is TileVoiceEntry => !!item.opus)
+    .filter((item): item is TileVoiceEntry => !!(item.mp3 || item.opus))
     .sort((a, b) => a.key.localeCompare(b.key, 'zh-CN'))
 
   return {
@@ -84,13 +90,90 @@ const _volume = ref(0.85)
 let _audioEl: HTMLAudioElement | null = null
 let _voiceQueue: Promise<void> = Promise.resolve()
 let _voicePrimed = false
+let _lastSpokenAt = 0
 
 const getAudioEl = (): HTMLAudioElement => {
   if (!_audioEl) {
     _audioEl = new Audio()
+    _audioEl.preload = 'auto'
     _audioEl.volume = _volume.value
   }
   return _audioEl
+}
+
+const speakTextFallback = (text?: string) => {
+  if (!process.client || !text || !('speechSynthesis' in window)) return
+  const now = Date.now()
+  if (now - _lastSpokenAt < 120) return
+  _lastSpokenAt = now
+  try {
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = 'zh-CN'
+    utterance.rate = 1
+    utterance.pitch = 1
+    utterance.volume = _volume.value
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(utterance)
+  } catch {}
+}
+
+const playAudioQueued = (url: string, fallbackText?: string): Promise<void> => new Promise((resolve) => {
+  const el = getAudioEl()
+  let settled = false
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  let fallbackTriggered = false
+
+  const finish = () => {
+    if (settled) return
+    settled = true
+    el.onended = null
+    el.onerror = null
+    el.onabort = null
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+      timeoutId = null
+    }
+    resolve()
+  }
+
+  const fallback = () => {
+    if (fallbackTriggered) return
+    fallbackTriggered = true
+    speakTextFallback(fallbackText)
+  }
+
+  el.onended = finish
+  el.onerror = () => {
+    fallback()
+    finish()
+  }
+  el.onabort = finish
+  el.src = url
+  el.currentTime = 0
+  timeoutId = setTimeout(() => {
+    fallback()
+    finish()
+  }, 5000)
+  el.play().catch(() => {
+    fallback()
+    finish()
+  })
+})
+
+const playAudio = (url: string, fallbackText?: string) => {
+  _voiceQueue = _voiceQueue
+    .catch(() => {})
+    .then(() => playAudioQueued(url, fallbackText))
+}
+
+const playVoiceKey = (key: string, fallbackText: string) => {
+  const url = _audioMap.value.get(key)
+  if (!url) {
+    console.warn(`[VoiceTile] No audio for key="${key}" scheme="${_currentScheme.value}"`)
+    speakTextFallback(fallbackText)
+    return
+  }
+  playAudio(url, fallbackText)
 }
 
 export const primeVoiceAudio = (): void => {
@@ -98,14 +181,17 @@ export const primeVoiceAudio = (): void => {
   const el = getAudioEl()
   const prevMuted = el.muted
   const prevVolume = el.volume
+  const prevSrc = el.src
   _voicePrimed = true
   el.muted = true
   el.volume = 0
+  el.src = SILENT_WAV_DATA_URI
   const restore = () => {
     el.pause()
     el.currentTime = 0
     el.muted = prevMuted
     el.volume = prevVolume
+    el.src = prevSrc
   }
   el.play()
     .then(() => restore())
@@ -136,7 +222,8 @@ export const loadVoiceScheme = async (scheme: VoiceScheme): Promise<void> => {
 
     const map = new Map<string, string>()
     for (const tile of manifest.tiles) {
-      map.set(tile.key, tile.mp3 || tile.opus)
+      if (tile.mp3) map.set(tile.key, tile.mp3)
+      else if (tile.opus) map.set(tile.key, tile.opus)
     }
     _audioMap.value = map
     console.info(`[VoiceTile] Loaded scheme="${scheme}" voice="${manifest.voice}" tiles=${manifest.tiles.length}`)
@@ -176,58 +263,14 @@ export const playVoiceAction = (action: keyof typeof VOICE_ACTION_MAP): void => 
   if (!process.client) return
   const key = VOICE_ACTION_MAP[action]
   if (!key) return
-  // 动作语音放在 bingtang/ 目录，key 即文件名
-  const url = _audioMap.value.get(key)
-  if (url) {
-    playAudio(url)
-  } else {
-    console.warn(`[VoiceTile] No action audio for action="${action}" key="${key}"`)
-  }
+  playVoiceKey(key, VOICE_ACTION_TEXT_MAP[action] || action)
 }
 
 export const playVoiceTile = (suit: string, value: number): void => {
   if (!process.client) return
   const key = resolveTileKey(suit, value)
-  const url = _audioMap.value.get(key)
-  if (!url) {
-    console.warn(`[VoiceTile] No audio for key="${key}" scheme="${_currentScheme.value}"`)
-    return
-  }
-  playAudio(url)
+  playVoiceKey(key, VOICE_TEXT_MAP[key] || key)
 }
-
-const playAudio = (url: string) => {
-  _voiceQueue = _voiceQueue
-    .catch(() => {})
-    .then(() => playAudioQueued(url))
-}
-
-const playAudioQueued = (url: string): Promise<void> => new Promise((resolve) => {
-  const el = getAudioEl()
-  let settled = false
-  let timeoutId: ReturnType<typeof setTimeout> | null = null
-
-  const finish = () => {
-    if (settled) return
-    settled = true
-    el.onended = null
-    el.onerror = null
-    el.onabort = null
-    if (timeoutId) {
-      clearTimeout(timeoutId)
-      timeoutId = null
-    }
-    resolve()
-  }
-
-  el.onended = finish
-  el.onerror = finish
-  el.onabort = finish
-  el.src = url
-  el.currentTime = 0
-  timeoutId = setTimeout(finish, 5000)
-  el.play().catch(() => finish())
-})
 
 export const preloadAllTiles = async (): Promise<void> => {
   const urls = [..._audioMap.value.values()]
