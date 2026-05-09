@@ -4278,32 +4278,31 @@ const forceDiscard = async (p: Player) => {
   height: auto;
 }
 .seat-bottom :deep(.tile) {
-  width: 12px !important;
-  height: 17px !important;
+  width: 20px !important;
+  height: 28px !important;
 }
 
 /* 对家名字反向旋转，保持正向可读 */
 .seat-left {
-  left: var(--seat-side-inset);
-  top: var(--seat-top-inset);
-  transform: none;
-  height: auto;
+  left: calc(var(--seat-side-inset) - var(--seat-side-player-offset) - var(--tile-w));
+  top: 50%;
+  transform: translateY(-50%);
+  height: calc(var(--seat-side-height) + 4%);
   width: calc(var(--seat-side-width) + 30px);
-  flex-direction: row;
-  align-items: flex-start;
-  justify-content: flex-start;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
   overflow: visible;
 }
 
 .seat-right {
-  right: var(--seat-side-inset);
-  top: var(--seat-top-inset);
-  transform: none;
-  height: auto;
+  right: calc(var(--seat-side-inset) - var(--seat-side-player-offset) - var(--tile-w) - 0.35 * var(--tile-w));
+  top: 50%;
+  transform: translateY(-50%);
+  height: calc(var(--seat-side-height) + 4%);
   width: calc(var(--seat-side-width) + 48px);
-  flex-direction: row;
+  flex-direction: column;
   align-items: flex-start;
-  justify-content: flex-end;
   justify-content: center;
   overflow: visible;
 }
