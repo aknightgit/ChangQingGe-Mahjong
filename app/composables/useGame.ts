@@ -29,6 +29,24 @@ export const useGame = () => {
   const lastStateChangeAt = ref<number>(0)
   let lastRefreshTriggerAt = 0
 
+  // 🔧 轮询兜底：socket 不可靠时（Capacitor/移动网络），定时刷新确保牌局推进
+  let pollingTimer: ReturnType<typeof setInterval> | null = null
+  const POLLING_MS = 3000
+
+  const startPolling = () => {
+    if (pollingTimer) return
+    pollingTimer = setInterval(() => {
+      const gs = gameState.value
+      if (gameId.value && playerId.value && gs && (gs.phase === 'playing' || gs.phase === 'waiting')) {
+        void refreshState()
+      }
+    }, POLLING_MS)
+  }
+
+  const stopPolling = () => {
+    if (pollingTimer) { clearInterval(pollingTimer); pollingTimer = null }
+  }
+
   const playerId = ref<string | null>(null)
   const gameId = ref<string | null>(null)
 
@@ -79,6 +97,7 @@ export const useGame = () => {
     try {
       // Fetch initial state (optional, but good for immediate render)
       await fetchGameState(gId, pId)
+      startPolling() // 无论 socket 状态，都启动轮询兜底
 
       if (debugAccessToken) {
         isConnected.value = true
@@ -233,6 +252,7 @@ export const useGame = () => {
   }
 
   const disconnect = () => {
+    stopPolling()
     if (socket.value) {
       socket.value.disconnect()
       socket.value = null
