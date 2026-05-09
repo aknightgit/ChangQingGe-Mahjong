@@ -3776,7 +3776,7 @@ const forceDiscard = async (p: Player) => {
   overflow: hidden;
   --seat-side-inset: 4.8%;
   --seat-top-inset: 2.8%;
-  --seat-bottom-inset: 1.4%;
+  --seat-bottom-inset: 0.4%;
   --seat-top-width: 58%;
   --seat-bottom-width: 72%;
   --seat-side-width: 96px;
@@ -4084,7 +4084,7 @@ const forceDiscard = async (p: Player) => {
   margin: 0;
   --seat-side-inset: 3%;
   --seat-top-inset: 1%;
-  --seat-bottom-inset: 0.5%;
+  --seat-bottom-inset: 0.15%;
   --seat-top-width: 55%;
   --seat-bottom-width: 75%;
   --seat-side-width: 100px;
@@ -6434,7 +6434,7 @@ const forceDiscard = async (p: Player) => {
   border-width: 3px;
   --seat-side-inset: 2%;
   --seat-top-inset: 0.5%;
-  --seat-bottom-inset: 0.2%;
+  --seat-bottom-inset: 0.05%;
   --seat-top-width: 65%;
   --seat-bottom-width: 80%;
   --seat-side-width: 92px;
