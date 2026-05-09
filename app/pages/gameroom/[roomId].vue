@@ -4282,25 +4282,26 @@ const forceDiscard = async (p: Player) => {
 
 /* 对家名字反向旋转，保持正向可读 */
 .seat-left {
-  left: calc(var(--seat-side-inset) - var(--seat-side-player-offset) - var(--tile-w));
-  top: 50%;
-  transform: translateY(-50%);
-  height: calc(var(--seat-side-height) + 4%);
+  left: var(--seat-side-inset);
+  top: var(--seat-top-inset);
+  transform: none;
+  height: auto;
   width: calc(var(--seat-side-width) + 30px);
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: flex-start;
   overflow: visible;
 }
 
 .seat-right {
-  right: calc(var(--seat-side-inset) - var(--seat-side-player-offset) - var(--tile-w) - 0.35 * var(--tile-w));
-  top: 50%;
-  transform: translateY(-50%);
-  height: calc(var(--seat-side-height) + 4%);
+  right: var(--seat-side-inset);
+  top: var(--seat-top-inset);
+  transform: none;
+  height: auto;
   width: calc(var(--seat-side-width) + 48px);
-  flex-direction: column;
+  flex-direction: row;
   align-items: flex-start;
+  justify-content: flex-end;
   justify-content: center;
   overflow: visible;
 }
