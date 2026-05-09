@@ -210,6 +210,7 @@ export interface RoundStat {
     details: string[];
     handTiles?: Tile[];
     exposedTiles?: Tile[];
+    exposedMeldGroups?: Tile[][];
     tileFaces?: string[];
     isMenQing?: boolean;
     hasWild?: boolean;

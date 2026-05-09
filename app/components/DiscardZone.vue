@@ -95,10 +95,10 @@ function slotStyle(index: number) {
 
 <style scoped>
 .discard-zone {
-  --discard-tile-w: calc(var(--tile-w, 28px) * 1.2);
-  --discard-tile-h: calc(var(--tile-h, 40px) * 1.2);
-  --discard-gap-x: clamp(0.5px, calc(var(--discard-tile-w) * 0.03), 1.5px);
-  --discard-gap-y: clamp(0.5px, calc(var(--discard-tile-h) * 0.03), 1.5px);
+  --discard-tile-w: calc(var(--tile-w, 28px) * var(--discard-scale, 1.2));
+  --discard-tile-h: calc(var(--tile-h, 40px) * var(--discard-scale, 1.2));
+  --discard-gap-x: var(--discard-gap-x-override, clamp(0.35px, calc(var(--discard-tile-w) * 0.02), 1.1px));
+  --discard-gap-y: var(--discard-gap-y-override, clamp(0.35px, calc(var(--discard-tile-h) * 0.02), 1.1px));
   --discard-step-x: calc(var(--discard-tile-w) + var(--discard-gap-x));
   --discard-step-y: calc(var(--discard-tile-h) + var(--discard-gap-y));
   position: absolute;
@@ -154,7 +154,8 @@ function slotStyle(index: number) {
   border-radius: 4px;
   box-shadow:
     0 0 6px 2px rgba(255, 50, 50, 0.55),
-    0 0 14px 4px rgba(255, 50, 50, 0.25);
+    0 0 14px 4px rgba(255, 50, 50, 0.25) !important;
+  filter: drop-shadow(0 0 4px rgba(255, 60, 60, 0.42));
   animation: latest-pulse 2s ease-in-out infinite;
 }
 
@@ -162,12 +163,14 @@ function slotStyle(index: number) {
   0%, 100% {
     box-shadow:
       0 0 6px 2px rgba(255, 50, 50, 0.55),
-      0 0 14px 4px rgba(255, 50, 50, 0.25);
+      0 0 14px 4px rgba(255, 50, 50, 0.25) !important;
+    filter: drop-shadow(0 0 4px rgba(255, 60, 60, 0.42));
   }
   50% {
     box-shadow:
       0 0 8px 3px rgba(255, 70, 70, 0.7),
-      0 0 20px 6px rgba(255, 70, 70, 0.3);
+      0 0 20px 6px rgba(255, 70, 70, 0.3) !important;
+    filter: drop-shadow(0 0 6px rgba(255, 80, 80, 0.56));
   }
 }
 </style>

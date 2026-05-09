@@ -115,6 +115,7 @@ class GameManager {
     if (game.pendingActions.length === 0) return false;
     const playerPending = game.pendingActions.filter(pa => pa.playerId === playerId);
     if (playerPending.length === 0) return false;
+    if (game.pendingActions.some(pa => pa.playerId !== playerId)) return false;
     return playerPending.every(pa =>
       pa.availableActions.length > 0 &&
       pa.availableActions.every(action => action === ActionType.CHOW || action === ActionType.PASS)
@@ -540,9 +541,6 @@ class GameManager {
     }
 
     for (const { suit, value } of candidates) {
-      const remainingCount = this.getVisibleRemainingCount(game, player, suit, value);
-      if (remainingCount <= 0) continue;
-
       const testTile: Tile = {
         id: `ting-preview-${suit}-${value}`,
         suit,
@@ -568,7 +566,7 @@ class GameManager {
 
       winningTileMap.set(`${suit}-${value}`, {
         tile: testTile,
-        remainingCount,
+        remainingCount: 0,
         bestDiscardOption,
         bestSelfDrawOption,
         bestOverallOption
@@ -590,7 +588,7 @@ class GameManager {
         if (suitDelta !== 0) return suitDelta;
         const valueDelta = a.tile.value - b.tile.value;
         if (valueDelta !== 0) return valueDelta;
-        return b.remainingCount - a.remainingCount;
+        return 0;
       });
 
     const result = {
@@ -1680,17 +1678,12 @@ class GameManager {
     }
     game.inheritedGlobalMultiplier = undefined;
 
-    // 所有玩家开局自动补花(门口花牌常驻显示,仅对未补过的花执行一次补牌)
-    for (const p of game.players) {
-      this.replaceInitialFlowers(game, p);
-    }
-
     game.currentPlayerIndex = game.dealerIndex;
     game.phase = GamePhase.PLAYING;
     game.lastActionTime = Date.now();
     TrainingRecordService.captureRoundStart(game);
 
-    console.log(`[WallDebug] after flower replacement: wall=${game.wall.length} tiles, PLAYING phase`);
+    console.log(`[WallDebug] after dealing: wall=${game.wall.length} tiles, PLAYING phase`);
     await this.persistGame(game);
     this.broadcastGameState(gameId);
 
@@ -2965,6 +2958,7 @@ class GameManager {
     game.pendingActions = [];
     game.pengChowConflict = null;
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+    this.replaceInitialFlowers(game, player);
     game.drawnThisTurn = true;
     // 吃后手牌排序(百搭置顶)
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
@@ -3018,6 +3012,7 @@ class GameManager {
     game.pendingActions = [];
     game.pengChowConflict = null;
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+    this.replaceInitialFlowers(game, player);
     game.drawnThisTurn = true;
     // 碰后手牌排序(百搭置顶)
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
@@ -4899,6 +4894,7 @@ class GameManager {
           flowerCount: this.getPlayerFlowerTiles(winner).length,
           handTiles: concealedTiles,
           exposedTiles,
+          exposedMeldGroups: winner.hand.exposedMelds.map(meld => meld.tiles.map(tile => ({ ...tile }))),
           tileFaces: allWinnerTiles.map(tile => this.tileLabel(tile)),
           isMenQing: this.isPlayerMenQing(winner),
           hasWild: allWinnerTiles.some(tile => isWildTile(tile))

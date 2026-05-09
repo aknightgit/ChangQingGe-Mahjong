@@ -372,6 +372,14 @@
                     <div class="glass-toggle-knob"></div>
                   </div>
                 </div>
+                <div class="glass-settings-theme-block">
+                  <div class="glass-settings-theme-title">🀄 出牌方式</div>
+                  <div class="glass-theme-options">
+                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': discardMode === 'double_tap' }" @click="setDiscardMode('double_tap')">双击</button>
+                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': discardMode === 'tap_confirm' }" @click="setDiscardMode('tap_confirm')">点选确认</button>
+                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': discardMode === 'drag' }" @click="setDiscardMode('drag')">拖拽出牌</button>
+                  </div>
+                </div>
                 <div class="glass-settings-row" @click="cycleVoiceScheme">
                   <span class="glass-settings-icon">🗣️</span>
                   <span class="glass-settings-label">出牌音色</span>
@@ -573,12 +581,21 @@
                   :viewer-position="currentPlayer?.position"
                   :owner-position="currentPlayer?.position"
                   :selected-tile-id="selectedTileId"
+                  :discard-mode="discardMode"
+                  :drag-discard-threshold-px="dragDiscardThresholdPx"
+                  :show-discard-confirm="discardMode === 'tap_confirm' && !!selectedTileId"
                   :is-winner="isWinner"
                   @tileClick="handleTileClick"
                   @tileDblclick="handleTileDblclick"
                   @tileDiscard="handleTileDiscard"
                 />
                 <!-- 动作按钮放在手牌右侧 -->
+                <div v-if="canReviewLatestHuSelection && !isAIControlled" class="inline-action-buttons inline-action-buttons--review">
+                  <button
+                    class="inline-action-btn inline-action-btn--review"
+                    @click="openHuReviewPanel"
+                  >回看胡牌选项</button>
+                </div>
                 <div v-if="isAIControlled" class="inline-action-buttons">
                   <div class="ai-controlled-notice">
                     🤖 已由AI自动出牌
@@ -622,13 +639,13 @@
                     @click="onRebel"
                   >🚨造反</button>
                   <button
-                    v-if="canLiangShan"
+                    v-if="showLiangShanButton"
                     class="inline-action-btn inline-action-btn--liangshan"
                     :class="{ 'inline-action-btn--liangshan-voted': hasVotedLiangShan, 'inline-action-btn--frozen': thinkFreezeActive }"
                     :disabled="!canLiangShan || isInteractionLocked || hasVotedLiangShan || thinkFreezeActive"
                     @click="onLiangShan"
                   >🔥{{ hasVotedLiangShan ? '已聚义' : '梁山聚义' }}</button>
-                  <div v-if="!showDraw && !showChow && !showPeng && !showKong && !showHu && !showConcealedKong && !showExtendedKong && !showRebel && !canLiangShan" class="inline-action-waiting">
+                  <div v-if="!showDraw && !showChow && !showPeng && !showKong && !showHu && !showConcealedKong && !showExtendedKong && !showRebel && !showLiangShanButton" class="inline-action-waiting">
                     等待中…
                   </div>
                 </div>
@@ -1082,6 +1099,9 @@ const showHintEnabled = ref(true)
 const tileAnimationEnabled = ref(true)
 const actionSoundEnabled = ref(true)
 const timerWarningEnabled = ref(true)
+type DiscardMode = 'double_tap' | 'tap_confirm' | 'drag'
+const discardMode = ref<DiscardMode>('double_tap')
+const dragDiscardThresholdPx = 56
 
 const playWhoosh = () => {
   try {
@@ -1139,6 +1159,11 @@ const toggleTopBar = () => {
 
 const setTileBackScheme = (scheme: number) => {
   tileBackScheme.value = scheme
+}
+
+const setDiscardMode = (mode: DiscardMode) => {
+  discardMode.value = mode
+  selectedTileId.value = null
 }
 
 const cycleVoiceScheme = async () => {
@@ -1278,8 +1303,24 @@ watch(showSettings, (open) => {
   else playWhoosh()
 })
 
+watch(discardMode, (mode) => {
+  if (!process.client) return
+  try {
+    localStorage.setItem('mahjong.discardMode', mode)
+  } catch {}
+})
+
 onMounted(async () => {
   await lockLandscapeForGameRoom()
+
+  if (process.client) {
+    try {
+      const savedDiscardMode = localStorage.getItem('mahjong.discardMode')
+      if (savedDiscardMode === 'double_tap' || savedDiscardMode === 'tap_confirm' || savedDiscardMode === 'drag') {
+        discardMode.value = savedDiscardMode
+      }
+    } catch {}
+  }
 
   if (roomId.value && playerId.value) {
     await connect(roomId.value, playerId.value)
@@ -1875,9 +1916,15 @@ const maybeAutoDealForBotDealer = () => {
 
 const startNextRound = async () => {
   showSettlement.value = false
+  settlementData.value = null
+  isHuReviewMode.value = false
   await enterStartingPhaseWithDiceOverlay()
   await forceRefreshState()
-  maybeAutoDealForBotDealer()
+  window.setTimeout(() => {
+    if (gameState.value?.phase === GamePhase.STARTING && showDiceOverlay.value) {
+      void onDealTiles()
+    }
+  }, 1700)
 }
 const isInteractionLocked = computed(() => isOverlayVisible.value)
 
@@ -2102,12 +2149,14 @@ const commitDiscard = (tile: Tile) => {
 // 拖拽超出阈值 → 直接出牌
 const handleTileDiscard = (tile: Tile) => {
   if (!canSubmitDiscard(tile)) return
+  if (discardMode.value !== 'drag' && discardMode.value !== 'tap_confirm') return
   commitDiscard(tile)
 }
 
 // ===== 双击出牌 =====
 const handleTileDblclick = (tile: Tile) => {
   if (!canSubmitDiscard(tile)) return
+  if (discardMode.value !== 'double_tap') return
   commitDiscard(tile)
 }
 
@@ -2124,7 +2173,7 @@ const handleTileClick = (tile: Tile) => {
   if (!canDiscard) return
 
   if (selectedTileId.value === tile.id) {
-    commitDiscard(tile)
+    selectedTileId.value = null
   } else {
     selectedTileId.value = tile.id
   }
@@ -2329,6 +2378,9 @@ const lastSelectedHuCombo = ref<number | null>(null)
 const isHuReviewMode = ref(false)
 const displayWinOptions = computed(() => [...winOptions.value].sort((a, b) => (b.summary?.finalPoints ?? b.score ?? 0) - (a.summary?.finalPoints ?? a.score ?? 0)).slice(0, 3))
 const activeHuOptions = computed(() => (isHuReviewMode.value ? lastHuReviewOptions.value : displayWinOptions.value))
+const canReviewLatestHuSelection = computed(() => {
+  return currentPlayer.value?.status === 'won' && lastHuReviewOptions.value.length > 0
+})
 const canReviewHuSelection = computed(() => {
   if (!showSettlement.value || !currentPlayer.value?.id) return false
   const winners = Array.isArray(currentSettlementRound.value?.winnerDetails) ? currentSettlementRound.value.winnerDetails : []
@@ -2439,7 +2491,7 @@ const actionVisualFreezeUntil = computed(() => {
   const freezeFromPending = currentFreezeUntil.value
   if (freezeFromPending > nowTs.value) return freezeFromPending
 
-  if (hasDeferredDrawWindow.value) {
+  if (hasSharedDrawWindow.value || hasDeferredDrawWindow.value) {
     return Number((myPendingAction.value as any)?.expiresAt ?? 0)
   }
 
@@ -2704,11 +2756,67 @@ const formatSignedScore = (score: any): string => {
   return n > 0 ? `+${n}` : String(n)
 }
 
+const FIXED_SETTLEMENT_FAN: Record<string, number> = {
+  '风碰': 40,
+  '风一色': 20,
+  '清碰': 20,
+  '混碰': 10,
+  '大吊碰碰胡': 10,
+  '大吊混一色': 10,
+  '大吊清一色': 10,
+  '大吊清碰': 20,
+  '大吊风一色': 20,
+  '大吊风碰': 40,
+  '大吊': 10,
+  '清一色': 10,
+  '无花自摸': 10,
+  '杠开': 10,
+  '八花自摸': 10,
+  '四百搭': 10
+}
+
+const parseFixedFanFromDetails = (details: any): number | null => {
+  if (!Array.isArray(details)) return null
+  for (const entry of details) {
+    if (typeof entry !== 'string') continue
+    const match = entry.match(/=\s*(\d+)番$/)
+    if (match) return Number(match[1])
+  }
+  return null
+}
+
+const getSettlementBaseFanDisplay = (winner: any): string | number => {
+  if (!winner) return '-'
+  const parsedFixedFan = parseFixedFanFromDetails(winner.details)
+  if (parsedFixedFan != null) return parsedFixedFan
+  const fixedFan = FIXED_SETTLEMENT_FAN[winner.handTypeName || '']
+  if (typeof fixedFan === 'number') return fixedFan
+  return winner.baseFan ?? '-'
+}
+
+const formatMeldTiles = (tiles: any[]): string =>
+  tiles.map(tile => tileLabel(tile)).filter(Boolean).join('')
+
 const formatWinnerTiles = (winner: any): string => {
-  const handTiles = Array.isArray(winner?.handTiles) ? winner.handTiles : []
+  const handTiles = Array.isArray(winner?.handTiles)
+    ? winner.handTiles.filter((tile: any) => tile?.suit !== 'hua' && tile?.suit !== 'flower')
+    : []
+  const exposedMeldGroups = Array.isArray(winner?.exposedMeldGroups)
+    ? winner.exposedMeldGroups
+      .map((group: any) => Array.isArray(group) ? group.filter((tile: any) => tile?.suit !== 'hua' && tile?.suit !== 'flower') : [])
+      .filter((group: any[]) => group.length > 0)
+    : []
+  const concealedCombos = arrangeWinningHand(handTiles, [])
+  const concealedGroups = Array.isArray(concealedCombos?.[0]?.groups) ? concealedCombos[0].groups : []
+  const concealedMelds = concealedGroups
+    .map((group: any) => Array.isArray(group?.tiles) ? formatMeldTiles(group.tiles) : '')
+    .filter(Boolean)
+  const exposedMelds = exposedMeldGroups.map(group => formatMeldTiles(group)).filter(Boolean)
+  const allMelds = [...concealedMelds, ...exposedMelds]
+  if (allMelds.length) return allMelds.join('/')
   const exposedTiles = Array.isArray(winner?.exposedTiles) ? winner.exposedTiles : []
   const tiles = [...handTiles, ...exposedTiles].filter((tile: any) => tile?.suit !== 'hua' && tile?.suit !== 'flower')
-  if (tiles.length) return tiles.map(tileLabel).filter(Boolean).join(' ')
+  if (tiles.length) return tiles.map(tileLabel).filter(Boolean).join('')
   return '-'
 }
 
@@ -2731,7 +2839,7 @@ const getSettlementPayerCount = (round: any, winner: any) => {
 const getRoundSettlementRows = (round: any) => {
   const winners = Array.isArray(round?.winnerDetails) ? round.winnerDetails : []
   const winnerByPlayer = new Map(winners.map((winner: any) => [winner.playerId, winner]))
-  return (settlementData.value?.playerStats || []).map((player: any) => {
+  const rows = (settlementData.value?.playerStats || []).map((player: any) => {
     const winner: any = winnerByPlayer.get(player.id)
     const score = Number(round?.scores?.[player.id] ?? 0)
     return {
@@ -2744,7 +2852,7 @@ const getRoundSettlementRows = (round: any) => {
       flowerCount: winner?.flowerCount ?? 0,
       menQing: winner ? (typeof winner.isMenQing === 'boolean' ? (winner.isMenQing ? '门清' : '非门清') : '-') : '-',
       wild: winner ? (typeof winner.hasWild === 'boolean' ? (winner.hasWild ? '有' : '无') : '-') : '-',
-      baseFan: winner?.baseFan ?? '-',
+      baseFan: getSettlementBaseFanDisplay(winner),
       finalPoints: winner?.finalPoints ?? '-',
       winMode: winner
         ? (winner.discarderId
@@ -2754,6 +2862,16 @@ const getRoundSettlementRows = (round: any) => {
       score,
       scoreLabel: formatSignedScore(score)
     }
+  })
+  return rows.sort((a, b) => {
+    if (a.isWinner && b.isWinner) {
+      const seqA = Number(a.winSequence || Number.MAX_SAFE_INTEGER)
+      const seqB = Number(b.winSequence || Number.MAX_SAFE_INTEGER)
+      return seqA - seqB
+    }
+    if (a.isWinner) return -1
+    if (b.isWinner) return 1
+    return 0
   })
 }
 
@@ -2959,11 +3077,12 @@ const updateSwapInfo = async () => {
   }
 }
 
-// 梁山聚义：前三巡常亮，之后由 availableActions 决定
+const showLiangShanButton = computed(() => gameState.value?.phase === 'playing')
+
+// 梁山聚义：只在前三巡（庄家打第四张牌前）高亮可点，之后置灰禁用
 const canLiangShan = computed(() => {
   const round = currentRound.value || 1
-  if (round <= 3 && gameState.value?.phase === 'playing') return true
-  return availableActions.value.includes(ActionType.LIANG_SHAN)
+  return gameState.value?.phase === 'playing' && round <= 3
 })
 const hasVotedLiangShan = computed(() => {
   const votes = (gameState.value as any)?.liangShanVotes || []
@@ -3464,6 +3583,10 @@ watch(
   () => gameState.value?.phase,
   (phase) => {
     if (phase === GamePhase.STARTING) {
+      showSettlement.value = false
+      settlementData.value = null
+      isHuReviewMode.value = false
+      showHuPanel.value = false
       if (!hasDicePreview.value) {
         diceValues.value = [1, 1]
       }
@@ -3784,6 +3907,7 @@ const forceDiscard = async (p: Player) => {
   aspect-ratio: 4 / 3;
   --tile-w: 28px;
   --tile-h: 40px;
+  --discard-scale: 1.08;
   --tile-gap: 2px;
   border-radius: 20px;
   /* 深木色外框 */
@@ -3800,8 +3924,8 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-inset: 0.1%;
   --seat-top-width: 58%;
   --seat-bottom-width: 72%;
-  --seat-side-width: 96px;
-  --seat-side-height: 70%;
+  --seat-side-width: 112px;
+  --seat-side-height: 76%;
   --seat-side-player-offset: 1.4%;
   --discard-center-rect-half-w: 17%;
   --discard-center-rect-half-h: 13.4%;
@@ -4135,8 +4259,8 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-inset: 0.02%;
   --seat-top-width: 55%;
   --seat-bottom-width: 75%;
-  --seat-side-width: 100px;
-  --seat-side-height: 50%;
+  --seat-side-width: 116px;
+  --seat-side-height: 56%;
   --seat-side-player-offset: 0.9%;
   --discard-center-rect-half-w: 14.3%;
   --discard-center-rect-half-h: 11%;
@@ -4322,8 +4446,8 @@ const forceDiscard = async (p: Player) => {
   height: auto;
 }
 .seat-bottom :deep(.tile) {
-  width: 24px !important;
-  height: 34px !important;
+  width: 29px !important;
+  height: 41px !important;
 }
 
 /* 对家名字反向旋转，保持正向可读 */
@@ -4331,8 +4455,8 @@ const forceDiscard = async (p: Player) => {
   left: calc(var(--seat-side-inset) - var(--seat-side-player-offset) - var(--tile-w));
   top: 50%;
   transform: translateY(-50%);
-  height: calc(var(--seat-side-height) + 4%);
-  width: calc(var(--seat-side-width) + 30px);
+  height: calc(var(--seat-side-height) + 8%);
+  width: calc(var(--seat-side-width) + 52px);
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
@@ -4343,8 +4467,8 @@ const forceDiscard = async (p: Player) => {
   right: calc(var(--seat-side-inset) - var(--seat-side-player-offset) - var(--tile-w) - 0.35 * var(--tile-w));
   top: 50%;
   transform: translateY(-50%);
-  height: calc(var(--seat-side-height) + 4%);
-  width: calc(var(--seat-side-width) + 48px);
+  height: calc(var(--seat-side-height) + 8%);
+  width: calc(var(--seat-side-width) + 56px);
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
@@ -4394,6 +4518,11 @@ const forceDiscard = async (p: Player) => {
   min-width: 56px;
 }
 
+.inline-action-buttons--review {
+  right: 0;
+  bottom: 0;
+}
+
 .inline-action-btn {
   padding: 6px 12px;
   border-radius: 8px;
@@ -4418,6 +4547,11 @@ const forceDiscard = async (p: Player) => {
 .inline-action-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.inline-action-btn--review {
+  background: rgba(33, 58, 44, 0.92);
+  border-color: rgba(255, 215, 0, 0.22);
 }
 
 .inline-action-btn--draw {
@@ -6482,6 +6616,9 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .mahjong-table {
   --tile-w: 17px;
   --tile-h: 24px;
+  --discard-scale: 1.2;
+  --discard-gap-x-override: 0.35px;
+  --discard-gap-y-override: 0.35px;
   --tile-gap: 0px;
   border-width: 3px;
   --seat-side-inset: 2%;
@@ -6489,28 +6626,36 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-inset: 0;
   --seat-top-width: 65%;
   --seat-bottom-width: 80%;
-  --seat-side-width: 92px;
-  --seat-side-height: 60%;
+  --seat-side-width: 118px;
+  --seat-side-height: 66%;
   --seat-side-player-offset: 0.6%;
+}
+.layout--mobile-landscape :deep(.discard-zone--top) {
+  transform: translate(-50%, -100%) rotate(180deg) !important;
+}
+.layout--mobile-landscape :deep(.discard-zone--right) {
+  transform: translate(6px, -50%);
 }
 .layout--mobile-landscape .seat-top { min-height: 42px; }
 .layout--mobile-landscape .seat-bottom { min-height: 54px; width: min(78%, calc(100% - 92px)); }
-.layout--mobile-landscape .seat-left { width: 114px; }
-.layout--mobile-landscape .seat-right { width: 120px; }
+.layout--mobile-landscape .seat-left { width: 136px; }
+.layout--mobile-landscape .seat-right { width: 144px; }
 
 @media (max-height: 450px) and (orientation: landscape) {
   .layout--mobile-landscape .mahjong-table {
     --tile-w: 14px;
     --tile-h: 20px;
+    --discard-gap-x-override: 0.3px;
+    --discard-gap-y-override: 0.3px;
     --tile-gap: 0px;
     border-width: 2px;
-    --seat-side-width: 70px;
-    --seat-side-height: 52%;
+    --seat-side-width: 90px;
+    --seat-side-height: 58%;
   }
   .layout--mobile-landscape .seat-top { min-height: 36px; }
   .layout--mobile-landscape .seat-bottom { min-height: 46px; width: min(82%, calc(100% - 72px)); }
-  .layout--mobile-landscape .seat-left { width: 84px; }
-  .layout--mobile-landscape .seat-right { width: 90px; }
+  .layout--mobile-landscape .seat-left { width: 102px; }
+  .layout--mobile-landscape .seat-right { width: 112px; }
 }
 
 /* 移动竖屏旋转模式 */

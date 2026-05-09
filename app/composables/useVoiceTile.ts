@@ -249,7 +249,7 @@ function resolveTileKey(suit: string, value: number): string {
     hua: 'hua',
     flower: 'hua',
   }
-  const windMap: Record<number, string> = { 1: 'east', 2: 'west', 3: 'south', 4: 'north' }
+  const windMap: Record<number, string> = { 1: 'east', 2: 'south', 3: 'west', 4: 'north' }
   const jianMap: Record<number, string> = { 1: 'zhong', 2: 'fa', 3: 'bai' }
   const prefix = suitMap[normalizedSuit] || normalizedSuit
 

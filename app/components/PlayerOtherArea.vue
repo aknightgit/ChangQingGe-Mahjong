@@ -290,6 +290,8 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   flex-direction: column;
   gap: 6px;
   height: 100%;
+  width: max-content;
+  min-width: max-content;
 }
 
 .seat-line {
@@ -317,6 +319,7 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   justify-content: flex-start;
   gap: 4px;
   width: max-content;
+  min-width: max-content;
   height: auto;
 }
 .meld-lane--left,
@@ -324,7 +327,7 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   position: absolute;
   top: 0;
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
   gap: 2px;
   z-index: 10;
@@ -336,7 +339,7 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   left: 100%;
   margin-left: 4px;
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 2px;
   z-index: 10;
 }
@@ -398,6 +401,11 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   align-items: center;
   justify-content: center;
   gap: 2px;
+}
+
+.meld-lane--right,
+.flower-lane--right {
+  justify-content: flex-start;
 }
 
 .flower-lane--left,

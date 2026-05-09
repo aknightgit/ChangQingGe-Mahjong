@@ -59,20 +59,36 @@
 
       <div class="player-hand-wrapper">
         <div class="player-hand">
-          <MahjongTile
+          <div
             v-for="tile in sortedHand"
             :key="tile.id"
-            :tile="tile"
-            :selected="selectedTileId === tile.id"
-            :just-drawn="justDrawnTileId === tile.id"
-            :claim-highlight="claimCandidateIds?.includes(tile.id)"
-            :dimmed="isWinner"
-            @click="onTileClick(tile)"
-            @dblclick="onTileDblclick(tile)"
-            @pointerdown="onPointerDown($event, tile)"
-            @pointerup="onPointerUp($event)"
-            @pointercancel="onPointerCancel"
-          />
+            class="player-hand-tile"
+            :class="{
+              'player-hand-tile--selected': selectedTileId === tile.id,
+              'player-hand-tile--dragging': dragState?.tile.id === tile.id
+            }"
+            :style="getTileWrapperStyle(tile)"
+          >
+            <button
+              v-if="showDiscardConfirm && selectedTileId === tile.id"
+              type="button"
+              class="tile-discard-confirm"
+              @click.stop="onTileConfirmDiscard(tile)"
+            >出牌</button>
+            <MahjongTile
+              :tile="tile"
+              :selected="selectedTileId === tile.id"
+              :just-drawn="justDrawnTileId === tile.id"
+              :claim-highlight="claimCandidateIds?.includes(tile.id)"
+              :dimmed="isWinner"
+              @click="onTileClick(tile)"
+              @dblclick="onTileDblclick(tile)"
+              @pointerdown="onPointerDown($event, tile)"
+              @pointermove="onPointerMove($event)"
+              @pointerup="onPointerUp($event)"
+              @pointercancel="onPointerCancel"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -80,10 +96,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import MahjongTile from './MahjongTile.vue'
 import PlayerAvatar from './PlayerAvatar.vue'
 import type { Tile, Meld } from '~/types/game'
+
+type DiscardMode = 'double_tap' | 'tap_confirm' | 'drag'
 
 const props = defineProps<{
   name?: string
@@ -98,6 +116,9 @@ const props = defineProps<{
   playerColors?: string[]
   viewerPosition?: number
   ownerPosition?: number
+  discardMode?: DiscardMode
+  dragDiscardThresholdPx?: number
+  showDiscardConfirm?: boolean
 }>()
 
 const sortedHand = computed(() => props.hand)
@@ -155,30 +176,73 @@ const emit = defineEmits<{
 
 const onTileClick = (tile: Tile) => emit('tileClick', tile)
 const onTileDblclick = (tile: Tile) => emit('tileDblclick', tile)
+const onTileConfirmDiscard = (tile: Tile) => emit('tileDiscard', tile)
 
-const DRAG_THRESHOLD = 15
-let pointerStart: { x: number; y: number; tile: Tile } | null = null
+const dragThreshold = computed(() => {
+  const threshold = Number(props.dragDiscardThresholdPx)
+  return Number.isFinite(threshold) && threshold > 0 ? threshold : 56
+})
+
+const dragState = ref<{ pointerId: number; startX: number; startY: number; x: number; y: number; tile: Tile } | null>(null)
 
 const onPointerDown = (event: PointerEvent, tile: Tile) => {
   if (props.isWinner) return
-  pointerStart = { x: event.clientX, y: event.clientY, tile }
+  if (props.discardMode !== 'drag') return
+  try {
+    const target = event.currentTarget as Element | null
+    target?.setPointerCapture?.(event.pointerId)
+  } catch {}
+  dragState.value = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    x: 0,
+    y: 0,
+    tile
+  }
+}
+
+const onPointerMove = (event: PointerEvent) => {
+  if (!dragState.value || props.discardMode !== 'drag') return
+  if (dragState.value.pointerId !== event.pointerId) return
+  dragState.value = {
+    ...dragState.value,
+    x: event.clientX - dragState.value.startX,
+    y: event.clientY - dragState.value.startY,
+  }
 }
 
 const onPointerUp = (event: PointerEvent) => {
-  if (!pointerStart) return
-  const dx = event.clientX - pointerStart.x
-  const dy = event.clientY - pointerStart.y
-  const dist = Math.sqrt(dx * dx + dy * dy)
-  const tile = pointerStart.tile
-  pointerStart = null
+  if (!dragState.value || props.discardMode !== 'drag') return
+  if (dragState.value.pointerId !== event.pointerId) return
+  try {
+    const target = event.currentTarget as Element | null
+    target?.releasePointerCapture?.(event.pointerId)
+  } catch {}
+  const { x, y, tile } = dragState.value
+  const dist = Math.sqrt(x * x + y * y)
+  const towardsCenter = y <= -dragThreshold.value
+  dragState.value = null
 
-  if (dist >= DRAG_THRESHOLD) {
+  if (dist >= dragThreshold.value && towardsCenter) {
     emit('tileDiscard', tile)
   }
 }
 
 const onPointerCancel = () => {
-  pointerStart = null
+  dragState.value = null
+}
+
+const getTileWrapperStyle = (tile: Tile): Record<string, string> => {
+  if (!dragState.value || dragState.value.tile.id !== tile.id || props.discardMode !== 'drag') {
+    return {}
+  }
+  const limitedX = Math.max(-28, Math.min(28, dragState.value.x))
+  const limitedY = Math.min(0, Math.max(-96, dragState.value.y))
+  return {
+    transform: `translate(${limitedX}px, ${limitedY}px)`,
+    zIndex: '8'
+  }
 }
 </script>
 
@@ -308,6 +372,36 @@ const onPointerCancel = () => {
   width: fit-content;
   margin: 0 auto;
   gap: 2px;
+}
+
+.player-hand-tile {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  transition: transform 0.12s ease;
+  touch-action: none;
+}
+
+.player-hand-tile--dragging {
+  transition: none;
+}
+
+.tile-discard-confirm {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -22px;
+  height: 18px;
+  border: 0;
+  border-radius: 6px 6px 4px 4px;
+  background: linear-gradient(135deg, #c62828, #ef5350);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: 0 2px 8px rgba(198, 40, 40, 0.35);
+  z-index: 9;
 }
 
 .player-hand :deep(.tile) {

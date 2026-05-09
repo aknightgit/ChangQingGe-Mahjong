@@ -198,6 +198,75 @@ test(
   `tiles=${doubleMeldWildPreview.winningTiles.map(item => `${item.tile.suit}-${item.tile.value}`).join(',')}`
 );
 
+const hiddenInfoPlayer = {
+  ...player,
+  id: 'hidden-info-player',
+  userId: 'hidden-info-player',
+  name: 'hidden-info-player',
+  status: PlayerStatus.PLAYING,
+  isTing: true,
+  hand: {
+    concealedTiles: [
+      tile('hi1', TileSuit.WIND, 2),
+      tile('hi2', TileSuit.WIND, 2),
+      tile('hi3', TileSuit.WIND, 2),
+      tile('hi4', TileSuit.DOTS, 2),
+      tile('hi5', TileSuit.DOTS, 2),
+      tile('hi6', TileSuit.DOTS, 2),
+      tile('hi7', TileSuit.DOTS, 3),
+      tile('hi8', TileSuit.DOTS, 4),
+      tile('hi9', TileSuit.DOTS, 6),
+      tile('hi10', TileSuit.DOTS, 7),
+      tile('hi11', TileSuit.DOTS, 9),
+      tile('hi12', TileSuit.DRAGON, 2),
+      tile('hi13', TileSuit.DRAGON, 2),
+    ],
+    exposedMelds: [],
+    discardedTiles: []
+  }
+} as any;
+const hiddenInfoOpponent = {
+  ...player,
+  id: 'hidden-info-opponent',
+  userId: 'hidden-info-opponent',
+  name: 'hidden-info-opponent',
+  position: 1,
+  isDealer: false,
+  status: PlayerStatus.PLAYING,
+  isTing: false,
+  hand: {
+    concealedTiles: [
+      tile('hop1', TileSuit.DOTS, 5),
+      tile('hop2', TileSuit.DOTS, 5),
+      tile('hop3', TileSuit.DOTS, 5),
+      tile('hop4', TileSuit.DOTS, 5),
+      ...Array.from({ length: 9 }, (_, i) => tile(`hopx${i}`, TileSuit.CHARACTERS, (i % 9) + 1))
+    ],
+    exposedMelds: [],
+    discardedTiles: []
+  }
+} as any;
+const hiddenInfoGame = {
+  ...currentGame,
+  gameId: 'ting-preview-hidden-info',
+  players: [hiddenInfoPlayer, hiddenInfoOpponent],
+  discardPile: [
+    tile('hid1', TileSuit.DOTS, 5),
+    tile('hid2', TileSuit.DOTS, 5),
+    tile('hid3', TileSuit.DOTS, 5),
+    tile('hid4', TileSuit.DOTS, 5),
+  ],
+  actionHistory: []
+} as any;
+(gameManager as any).games.set(hiddenInfoGame.gameId, hiddenInfoGame);
+(gameManager as any).invalidateWinEvaluationCache(hiddenInfoGame.gameId, [hiddenInfoPlayer.id]);
+const hiddenInfoPreview = await gameManager.getTingPreviewForPlayer(hiddenInfoGame.gameId, hiddenInfoPlayer.id);
+test(
+  'ting preview ignores visible discards and opponent concealed tiles',
+  hiddenInfoPreview.winningTiles.some(item => item.tile.suit === TileSuit.DOTS && item.tile.value === 5),
+  `tiles=${hiddenInfoPreview.winningTiles.map(item => `${item.tile.suit}-${item.tile.value}`).join(',')}`
+);
+
 console.log('\n==================================================');
 console.log(`测试结果: ${passed} 通过, ${failed} 失败`);
 if (failed > 0) {

@@ -749,7 +749,7 @@ onUnmounted(() => {
   .action-btn--draw { width: 48px; height: 48px; font-size: 0.9rem; }
   .draw-action-group { gap: 4px; }
   .action-grid { gap: 4px; }
-  .action-btn--small.action-btn--highlight { animation: none; }
+  .freeze-progress-ring { width: 52px; height: 52px; }
   .delay-indicator { font-size: 0.55rem; top: -18px; }
 }
 </style>

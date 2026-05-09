@@ -164,6 +164,33 @@ ok(
   `concealed=${claimer.hand.concealedTiles.length}, drawn=${pengGame.drawnThisTurn}`
 );
 
+const flowerPengGame = makeGame([makePlayer('flower-discarder', 13), makePlayer('flower-claimer', 13), makePlayer('flower-watch', 13), makePlayer('flower-fill', 13)]);
+const flowerPengTile = tile(TileSuit.DOTS, 3, 'flower-peng-discard');
+const flowerClaimer = flowerPengGame.players[1];
+flowerClaimer.hand.concealedTiles = [
+  flowerPengTile,
+  tile(TileSuit.DOTS, 3, 'flower-peng-match'),
+  ...makeTiles('flower-claimer-fill', 11),
+].slice(0, 13);
+flowerClaimer.hand.exposedMelds.push({
+  type: MeldType.TRIPLET,
+  tiles: [{ suit: TileSuit.FLOWER, value: 8, id: 'flower-door-8', isFlower: true }],
+  isConcealed: false,
+  replacementDone: false as any,
+} as any);
+flowerPengGame.wall = [tile(TileSuit.BAMBOOS, 9, 'flower-replacement-1')];
+flowerPengGame.discardPile = [flowerPengTile];
+flowerPengGame.actionHistory = [{ playerId: flowerPengGame.players[0].id, type: ActionType.DISCARD, tile: flowerPengTile, timestamp: Date.now() }];
+
+anyManager.executePengDirectly(flowerPengGame, flowerClaimer);
+
+ok(
+  'executePengDirectly replaces doorway flowers when claim turn starts',
+  flowerClaimer.hand.exposedMelds.some((meld: any) => meld.tiles?.[0]?.id === 'flower-door-8' && meld.replacementDone === true)
+    && flowerClaimer.hand.concealedTiles.some(tile => tile.id === 'flower-replacement-1'),
+  `melds=${JSON.stringify(flowerClaimer.hand.exposedMelds)}, concealed=${flowerClaimer.hand.concealedTiles.map(tile => tile.id).join(',')}`
+);
+
 const chowDiscarder = makePlayer('chow-discarder', 13);
 const chowBot = makePlayer('AI-chow-bot', 13);
 const chowGame = makeGame([chowDiscarder, chowBot, makePlayer('chow-filler-a', 13), makePlayer('chow-filler-b', 13)]);
@@ -236,6 +263,54 @@ try {
     anyManager.botTimers.delete(stuckGame.gameId);
   }
   anyManager.games.delete(stuckGame.gameId);
+}
+
+const freezeBot = makePlayer('AI-freeze-bot', 13);
+const freezeOtherA = makePlayer('freeze-a', 13);
+const freezeOtherB = makePlayer('freeze-b', 13);
+const freezeOtherC = makePlayer('freeze-c', 13);
+const freezeGame = makeGame([freezeOtherA, freezeBot, freezeOtherB, freezeOtherC]);
+freezeGame.currentPlayerIndex = 1;
+freezeGame.drawnThisTurn = false;
+freezeGame.hesitationWindow = 0;
+freezeGame.wall = [tile(TileSuit.BAMBOOS, 9, 'freeze-draw-1')];
+freezeGame.pendingActions = [{
+  playerId: freezeBot.id,
+  availableActions: [ActionType.CHOW, ActionType.PASS],
+  tile: tile(TileSuit.CHARACTERS, 6, 'freeze-discard-6'),
+  expiresAt: Date.now() + 60000,
+}];
+anyManager.games.set(freezeGame.gameId, freezeGame);
+const originalPersistGame5 = anyManager.persistGame;
+const originalBroadcastGameState5 = anyManager.broadcastGameState;
+const originalGetBotDiscardDelayMs5 = anyManager.getBotDiscardDelayMs;
+try {
+  anyManager.persistGame = async () => {};
+  anyManager.broadcastGameState = () => {};
+  anyManager.getBotDiscardDelayMs = () => 0;
+  anyManager.scheduleBotDiscard(freezeGame.gameId, freezeBot.id);
+  await new Promise(resolve => setTimeout(resolve, 80));
+  ok(
+    'bot discard clears unexpired local chow-only pending before drawing',
+    freezeGame.pendingActions.length === 0,
+    `pending=${JSON.stringify(freezeGame.pendingActions)}`
+  );
+  ok(
+    'bot discard draws and discards instead of freezing behind local chow-only pending',
+    freezeBot.hand.concealedTiles.length === 13 && freezeGame.currentPlayerIndex !== 1,
+    `concealed=${freezeBot.hand.concealedTiles.length}, current=${freezeGame.currentPlayerIndex}, drawn=${freezeGame.drawnThisTurn}`
+  );
+} finally {
+  anyManager.persistGame = originalPersistGame5;
+  anyManager.broadcastGameState = originalBroadcastGameState5;
+  anyManager.getBotDiscardDelayMs = originalGetBotDiscardDelayMs5;
+  anyManager.clearPendingActionTimer(freezeGame.gameId);
+  const botTimer = anyManager.botTimers?.get?.(freezeGame.gameId);
+  if (botTimer) {
+    clearTimeout(botTimer);
+    anyManager.botTimers.delete(freezeGame.gameId);
+  }
+  anyManager.games.delete(freezeGame.gameId);
 }
 
 const stalePassBot = makePlayer('AI-stale-pass-bot', 13);
