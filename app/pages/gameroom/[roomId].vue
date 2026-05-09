@@ -2965,6 +2965,11 @@ const hasVotedLiangShan = computed(() => {
   return votes.includes(currentPlayer.value?.id)
 })
 const onLiangShan = () => {
+  const round = currentRound.value || 1
+  if (round > 3) {
+    addBroadcast('⚠️ 已过三巡，不允许聚义', 'warn')
+    return
+  }
   resetAutoCount()
   playSound('tile-rebel')
   executeAction(ActionType.LIANG_SHAN)

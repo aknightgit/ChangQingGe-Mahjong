@@ -393,6 +393,7 @@ onUnmounted(() => {
   height: 72px;
   font-size: 1.2rem;
   flex-shrink: 0;
+  position: relative;
 }
 
 /* 激活态 */
@@ -572,7 +573,6 @@ onUnmounted(() => {
   background: rgba(10, 25, 18, 0.95);
   cursor: default;
   overflow: hidden;
-  position: relative;
 }
 
 .freeze-progress-ring {
