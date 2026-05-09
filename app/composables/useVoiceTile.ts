@@ -86,7 +86,7 @@ const buildManifest = (scheme: VoiceScheme): Manifest => {
 const _currentScheme = ref<VoiceScheme>('bingtang')
 const _manifest = ref<Manifest | null>(null)
 const _audioMap = ref<Map<string, string>>(new Map())
-const _volume = ref(0.85)
+const _volume = ref(0.50)
 let _audioEl: HTMLAudioElement | null = null
 let _voiceQueue: Promise<void> = Promise.resolve()
 let _voicePrimed = false

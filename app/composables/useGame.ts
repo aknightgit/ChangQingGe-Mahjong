@@ -29,26 +29,6 @@ export const useGame = () => {
   const lastStateChangeAt = ref<number>(0)
   let lastRefreshTriggerAt = 0
 
-  // 🔧 轮询兜底：socket 断连时定时刷新，确保牌局能推进
-  let pollingTimer: ReturnType<typeof setInterval> | null = null
-  const POLLING_INTERVAL_MS = 2000 // 2秒轮询
-
-  const startPolling = () => {
-    if (pollingTimer) return
-    pollingTimer = setInterval(() => {
-      if (gameId.value && playerId.value && gameState.value?.phase === GamePhase.PLAYING) {
-        void refreshState()
-      }
-    }, POLLING_INTERVAL_MS)
-  }
-
-  const stopPolling = () => {
-    if (pollingTimer) {
-      clearInterval(pollingTimer)
-      pollingTimer = null
-    }
-  }
-
   const playerId = ref<string | null>(null)
   const gameId = ref<string | null>(null)
 
@@ -99,7 +79,6 @@ export const useGame = () => {
     try {
       // Fetch initial state (optional, but good for immediate render)
       await fetchGameState(gId, pId)
-      startPolling() // 无论 socket 是否连上，都启动轮询兜底
 
       if (debugAccessToken) {
         isConnected.value = true
@@ -113,6 +92,7 @@ export const useGame = () => {
       const wsUrl = window.location.origin
       const transports = isLocalDevHost ? ['polling'] : ['websocket', 'polling']
       socket.value = io(wsUrl, {
+        path: '/mahjong/socket.io',
         auth: {
           debugAccessToken,
           roomId: gId,
@@ -131,7 +111,6 @@ export const useGame = () => {
         console.log('Socket.IO connected:', socket.value?.id, 'transport=', socket.value?.io.engine.transport.name)
         isConnected.value = true
         error.value = null
-        startPolling() // socket 连上也开轮询，双保险
 
         // Authenticate
         socket.value?.emit('auth:login', {
@@ -165,7 +144,6 @@ export const useGame = () => {
         if (!gameState.value) {
           isConnected.value = false
         }
-        // socket 断了，轮询继续兜底
       })
 
       // Room Events
@@ -255,7 +233,6 @@ export const useGame = () => {
   }
 
   const disconnect = () => {
-    stopPolling()
     if (socket.value) {
       socket.value.disconnect()
       socket.value = null

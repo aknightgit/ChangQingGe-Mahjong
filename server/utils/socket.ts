@@ -113,6 +113,7 @@ export async function initializeSocketIO(server: HTTPServer) {
       : ['websocket', 'polling']
 
   io = new SocketIOServer(server, {
+    path: '/mahjong/socket.io',
     cors: {
       origin: (origin, callback) => {
         // Allow all origins in development/testing
