@@ -169,34 +169,97 @@ node .output/server/index.mjs
 
 ## 部署到服务器
 
-### 方式一：Git Pull（推荐）
-```bash
-# 在 NAS Ubuntu 虚拟机上
-cd /path/to/ChangQingGe-Mahjong
-git pull
-npm install
-npm run build
-pm2 restart <app-name>
+> ⚠️ **关键约束**：麻将服务运行路径是 `/home/.output/`（不是 `/home/ak/`）
+> ⚠️ **只允许一个部署实例**，不允许在多个目录部署多个进程
+
+### 正确的 PM2 进程配置
+```
+进程名称：mahjong
+运行路径：/home/.output/server/index.mjs
+工作目录：/home
+环境变量：
+  - PORT=8899
+  - NUXT_APP_BASE_URL=/mahjong/
+  - MONGODB_URI=mongodb://admin:%24%249myHome@192.168.3.241:27017/changqingge?authSource=admin
+  - MONGODB_DB=changqingge
 ```
 
-### 方式二：手动上传
-```bash
-# 在沙盒内打包
-cd /home/node/.openclaw/workspace/ChangQingGe-Mahjong
-tar --exclude='node_modules' --exclude='.git' -czvf /tmp/mahjong-deploy.tar.gz .
+### 部署步骤（手动上传模式）
 
-# 传到服务器
+**第一步：在沙盒内打包（排除 android、node_modules、.output 等）**
+```bash
+cd /home/node/.openclaw/workspace/ChangQingGe-Mahjong
+tar \
+  --exclude='node_modules' \
+  --exclude='.git' \
+  --exclude='.nuxt' \
+  --exclude='.output' \
+  --exclude='android' \
+  --exclude='artifacts' \
+  --exclude='training-output' \
+  -czvf /tmp/mahjong-deploy.tar.gz .
+```
+
+**第二步：上传到服务器用户目录**
+```bash
 sshpass -p 'ak' scp -o StrictHostKeyChecking=no -P 2222 \
   /tmp/mahjong-deploy.tar.gz \
   ak@192.168.3.241:/home/ak/
-
-# 在服务器解压部署
-ssh -p 2222 ak@192.168.3.241
-tar -xzvf mahjong-deploy.tar.gz
-cd ChangQingGe-Mahjong
-npm install && npm run build
-pm2 restart <app-name>
 ```
+
+**第三步：在服务器解压、构建**
+```bash
+sshpass -p 'ak' ssh -o StrictHostKeyChecking=no -p 2222 ak@192.168.3.241
+
+# 解压到用户目录（不是 /home/.output/）
+cd /home/ak
+tar -xzvf mahjong-deploy.tar.gz
+
+# 安装依赖
+npm install
+
+# 构建
+npm run build
+
+# 第四步：把构建产物复制到运行目录 /home/.output/
+# ⚠️ 必须先删后复制！cp -r 不会删除旧文件，旧的 hash 文件名会残留导致 500 错误
+rm -rf /home/.output
+cp -r /home/ak/.output /home/.output
+
+# 第五步：重启 PM2
+pm2 restart mahjong
+
+# 验证
+curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8899/mahjong/
+# 期望输出：302
+
+# 清理垃圾
+rm -rf /home/ak/.output /home/ak/mahjong-deploy.tar.gz
+```
+
+### Git Pull 模式（服务器已有代码）
+```bash
+sshpass -p 'ak' ssh -o StrictHostKeyChecking=no -p 2222 ak@192.168.3.241
+
+cd /home/ak
+git pull origin master
+npm install
+npm run build
+
+# ⚠️ 必须先删后复制！cp -r 不会删除旧文件
+rm -rf /home/.output
+cp -r /home/ak/.output /home/.output
+
+pm2 restart mahjong
+```
+
+### ⚠️ 禁止事项
+- ❌ 不要在 `/home/ak/` 下运行 PM2 进程
+- ❌ 不要创建多个 mahjong PM2 进程
+- ❌ 不要用 `mv` 备份旧 .output 再 `cp -r` 覆盖——cp -r 不删旧文件，旧的 hash 文件名会残留导致 500 错误
+- ✅ 必须 `rm -rf /home/.output && cp -r /home/ak/.output /home/.output`
+- ❌ 不要把 tar 包解压到 `/home/`（会导致目录结构混乱）
+- ❌ 不要手动 `node /home/ak/.output/...` 启动
 
 ---
 
