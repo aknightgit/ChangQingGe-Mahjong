@@ -31,7 +31,7 @@ export const useGame = () => {
 
   // 🔧 轮询兜底：socket 不可靠时（Capacitor/移动网络），定时刷新确保牌局推进
   let pollingTimer: ReturnType<typeof setInterval> | null = null
-  const POLLING_MS = 3000
+  const POLLING_MS = 1000
 
   const startPolling = () => {
     if (pollingTimer) return
