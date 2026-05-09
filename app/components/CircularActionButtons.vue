@@ -577,7 +577,11 @@ onUnmounted(() => {
 
 .freeze-progress-ring {
   position: absolute;
-  inset: -2px;
+  top: 50%;
+  left: 50%;
+  width: 76px;
+  height: 76px;
+  transform: translate(-50%, -50%);
   border-radius: 50%;
   background: conic-gradient(
     rgba(33, 150, 243, 0.6) calc(var(--freeze-progress, 0) * 360deg),
@@ -586,7 +590,6 @@ onUnmounted(() => {
   mask: radial-gradient(circle, transparent 55%, black 58%);
   -webkit-mask: radial-gradient(circle, transparent 55%, black 58%);
   pointer-events: none;
-  /* 扇形进度由 JS RAF 驱动，不依赖 CSS transition。 */
   transition: none;
   clip-path: circle(50%);
 }
