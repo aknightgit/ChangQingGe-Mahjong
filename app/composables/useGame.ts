@@ -77,10 +77,10 @@ export const useGame = () => {
         error.value = null
       }
     } catch (e: any) {
-      // 404 = 刚创建房间服务端还没就绪，重试即可
+      // 404 = 刚创建房间服务端还没就绪，静默重试，不抛出
       if (e?.statusCode === 404 || e?.status === 404) {
-        console.warn('[fetchGameState] 404, retrying in 500ms...')
-        await new Promise(r => setTimeout(r, 500))
+        console.warn('[fetchGameState] 404, retrying in 800ms...')
+        await new Promise(r => setTimeout(r, 800))
         return fetchGameState(gId, pId)
       }
       console.error('Failed to fetch game state:', e)

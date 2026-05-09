@@ -40,6 +40,11 @@
       </header>
 
       <main class="room-main">
+        <!-- 加载遮罩：游戏状态未就绪时隐藏牌桌 -->
+        <div v-if="!gameState" class="loading-overlay">
+          <div class="loading-spinner"></div>
+          <p class="loading-text">正在进入牌桌...</p>
+        </div>
         <!-- 梁山聚义成功弹窗 -->
         <div v-if="showLiangShanOverlay" class="liang-shan-overlay">
           <div class="liang-shan-card">
@@ -2970,6 +2975,13 @@ const onLiangShan = () => {
     addBroadcast('⚠️ 已过三巡，不允许聚义', 'warn')
     return
   }
+  const myName = currentPlayer.value?.name || '玩家'
+  const votes = (gameState.value as any)?.liangShanVotes || []
+  if (votes.length === 0) {
+    addBroadcast(`🔥 ${myName} 发起了梁山聚义！`, 'special')
+  } else {
+    addBroadcast(`🔥 ${myName} 响应了梁山聚义！`, 'special')
+  }
   resetAutoCount()
   playSound('tile-rebel')
   executeAction(ActionType.LIANG_SHAN)
@@ -3926,6 +3938,33 @@ const forceDiscard = async (p: Player) => {
   color: rgba(255, 255, 255, 0.35);
   margin-right: 2px;
   flex-shrink: 0;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #07130e;
+  gap: 12px;
+}
+.loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: rgba(255, 215, 0, 0.8);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.loading-text {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.8rem;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .extra-action-btn {
