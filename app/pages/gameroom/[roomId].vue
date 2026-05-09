@@ -2,7 +2,7 @@
   <div class="mahjong-page" :class="[
     { 'layout-debug': showDebugPanel, 'mobile-portrait': shouldRotateView },
     `layout--${layoutMode}`
-  ]">
+  ]" :style="mobileLayoutStyle">
     <div class="room-viewport" :class="{ 'room-viewport--rotated': shouldRotateView }">
       <div class="room-container" :class="{ 'room-container--rotated': shouldRotateView, 'room-container--mobile-landscape': isMobileLandscapeMode }">
       <header class="room-header" :class="{ 'room-header--collapsed': isTopBarCollapsed }">
@@ -336,110 +336,115 @@
             >
               <!-- 三角指示箭头 -->
               <div class="glass-settings-arrow"></div>
-              <div class="glass-settings-body" @wheel.stop @touchmove.stop>
-                <div class="glass-settings-row" @click="toggleSound">
-                  <span class="glass-settings-icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
-                  <span class="glass-settings-label">音效</span>
-                  <div class="glass-toggle" :class="{ 'glass-toggle--on': soundEnabled }">
-                    <div class="glass-toggle-knob"></div>
+                            <div class="glass-settings-body" @wheel.stop @touchmove.stop>
+                <div class="glass-settings-section">
+                  <div class="glass-settings-section-header">
+                    <div class="glass-settings-section-title">对局操作</div>
+                    <div class="glass-settings-section-subtitle">只保留正在生效的出牌与音效控制</div>
                   </div>
-                </div>
-                <div class="glass-settings-row" @click="showHintEnabled = !showHintEnabled">
-                  <span class="glass-settings-icon">💡</span>
-                  <span class="glass-settings-label">出牌提示</span>
-                  <div class="glass-toggle" :class="{ 'glass-toggle--on': showHintEnabled }">
-                    <div class="glass-toggle-knob"></div>
-                  </div>
-                </div>
-                <div class="glass-settings-row" @click="tileAnimationEnabled = !tileAnimationEnabled">
-                  <span class="glass-settings-icon">✨</span>
-                  <span class="glass-settings-label">牌面动画</span>
-                  <div class="glass-toggle" :class="{ 'glass-toggle--on': tileAnimationEnabled }">
-                    <div class="glass-toggle-knob"></div>
-                  </div>
-                </div>
-                <div class="glass-settings-row" @click="actionSoundEnabled = !actionSoundEnabled">
-                  <span class="glass-settings-icon">🎵</span>
-                  <span class="glass-settings-label">操作音效</span>
-                  <div class="glass-toggle" :class="{ 'glass-toggle--on': actionSoundEnabled }">
-                    <div class="glass-toggle-knob"></div>
-                  </div>
-                </div>
-                <div class="glass-settings-row" @click="timerWarningEnabled = !timerWarningEnabled">
-                  <span class="glass-settings-icon">⏱</span>
-                  <span class="glass-settings-label">倒计时警告</span>
-                  <div class="glass-toggle" :class="{ 'glass-toggle--on': timerWarningEnabled }">
-                    <div class="glass-toggle-knob"></div>
-                  </div>
-                </div>
-                <div class="glass-settings-theme-block">
-                  <div class="glass-settings-theme-title">🀄 出牌方式</div>
-                  <div class="glass-theme-options">
-                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': discardMode === 'double_tap' }" @click="setDiscardMode('double_tap')">双击</button>
-                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': discardMode === 'tap_confirm' }" @click="setDiscardMode('tap_confirm')">点选确认</button>
-                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': discardMode === 'drag' }" @click="setDiscardMode('drag')">拖拽出牌</button>
-                  </div>
-                </div>
-                <div class="glass-settings-row" @click="cycleVoiceScheme">
-                  <span class="glass-settings-icon">🗣️</span>
-                  <span class="glass-settings-label">出牌音色</span>
-                  <span class="glass-voice-name">{{ currentVoiceName }}</span>
-                </div>
-                <div class="glass-settings-select-wrap">
-                  <div class="glass-settings-select-label">出牌音量 {{ voiceVolumePercent }}%</div>
-                  <input class="glass-settings-range" type="range" min="0" max="100" step="1" :value="voiceVolumePercent" @input="onChangeVoiceVolume" />
-                </div>
-                <div class="glass-settings-theme-block">
-                  <div class="glass-settings-theme-title">🎵 背景音乐</div>
-                  <div class="glass-settings-row" @click="setBackgroundMusicEnabled(!bgmEnabled)">
-                    <span class="glass-settings-icon">{{ bgmEnabled ? '🎶' : '🔇' }}</span>
-                    <span class="glass-settings-label">背景音乐</span>
-                    <div class="glass-toggle" :class="{ 'glass-toggle--on': bgmEnabled }">
-                      <div class="glass-toggle-knob"></div>
+                  <div class="glass-settings-stack">
+                    <div class="glass-settings-row glass-settings-row--panel" @click="toggleSound">
+                      <div class="glass-settings-row-main">
+                        <span class="glass-settings-icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
+                        <div class="glass-settings-copy">
+                          <span class="glass-settings-label">总音效</span>
+                          <span class="glass-settings-help">控制摸牌、碰杠胡、广播提示等音效播放</span>
+                        </div>
+                      </div>
+                      <div class="glass-toggle" :class="{ 'glass-toggle--on': soundEnabled }">
+                        <div class="glass-toggle-knob"></div>
+                      </div>
+                    </div>
+                    <div class="glass-settings-card">
+                      <div class="glass-settings-card-title">出牌方式</div>
+                      <div class="glass-settings-card-subtitle">移动端支持双击、点选确认、拖拽出牌</div>
+                      <div class="glass-theme-options">
+                        <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': discardMode === 'double_tap' }" @click="setDiscardMode('double_tap')">双击</button>
+                        <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': discardMode === 'tap_confirm' }" @click="setDiscardMode('tap_confirm')">点选确认</button>
+                        <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': discardMode === 'drag' }" @click="setDiscardMode('drag')">拖拽出牌</button>
+                      </div>
                     </div>
                   </div>
-                  <div class="glass-settings-select-wrap">
-                    <div class="glass-settings-select-label">曲目</div>
-                    <select class="glass-settings-select" :value="bgmCurrentTrackId || ''" @change="onChangeBgmTrack">
-                      <option value="" disabled>选择背景音乐</option>
-                      <option v-for="track in bgmTracks" :key="track.id" :value="track.id">{{ track.label }}</option>
-                    </select>
+                </div>
+                <div class="glass-settings-section">
+                  <div class="glass-settings-section-header">
+                    <div class="glass-settings-section-title">语音与音乐</div>
+                    <div class="glass-settings-section-subtitle">语音音量和背景音乐在同一区块内集中管理</div>
                   </div>
-                  <div class="glass-settings-select-wrap">
-                    <div class="glass-settings-select-label">循环方式</div>
-                    <select class="glass-settings-select" :value="bgmLoopMode" @change="onChangeBgmLoopMode">
-                      <option value="single">单曲循环</option>
-                      <option value="all">列表循环</option>
-                      <option value="shuffle">随机循环</option>
-                    </select>
-                  </div>
-                  <div class="glass-settings-select-wrap">
-                    <div class="glass-settings-select-label">音量 {{ bgmVolumePercent }}%</div>
-                    <input class="glass-settings-range" type="range" min="0" max="100" step="1" :value="bgmVolumePercent" @input="onChangeBgmVolume" />
-                  </div>
-                  <div class="glass-settings-music-actions">
-                    <button class="glass-theme-chip" type="button" @click="toggleBgmPlayback">{{ bgmIsPlaying ? '暂停' : '播放' }}</button>
-                    <button class="glass-theme-chip" type="button" @click="playNextBackgroundTrack">下一首</button>
+                  <div class="glass-settings-stack">
+                    <div class="glass-settings-card">
+                      <div class="glass-settings-card-title">出牌语音</div>
+                      <div class="glass-settings-select-wrap glass-settings-select-wrap--compact">
+                        <div class="glass-settings-select-label">语音音量 {{ voiceVolumePercent }}%</div>
+                        <input class="glass-settings-range" type="range" min="0" max="100" step="1" :value="voiceVolumePercent" @input="onChangeVoiceVolume" />
+                      </div>
+                    </div>
+                    <div class="glass-settings-card">
+                      <div class="glass-settings-card-title">背景音乐</div>
+                      <div class="glass-settings-row glass-settings-row--panel" @click="setBackgroundMusicEnabled(!bgmEnabled)">
+                        <div class="glass-settings-row-main">
+                          <span class="glass-settings-icon">{{ bgmEnabled ? '🎶' : '🔇' }}</span>
+                          <div class="glass-settings-copy">
+                            <span class="glass-settings-label">背景音乐开关</span>
+                            <span class="glass-settings-help">控制牌桌内循环播放的曲目</span>
+                          </div>
+                        </div>
+                        <div class="glass-toggle" :class="{ 'glass-toggle--on': bgmEnabled }">
+                          <div class="glass-toggle-knob"></div>
+                        </div>
+                      </div>
+                      <div class="glass-settings-select-wrap glass-settings-select-wrap--compact">
+                        <div class="glass-settings-select-label">曲目</div>
+                        <select class="glass-settings-select" :value="bgmCurrentTrackId || ''" @change="onChangeBgmTrack">
+                          <option value="" disabled>选择背景音乐</option>
+                          <option v-for="track in bgmTracks" :key="track.id" :value="track.id">{{ track.label }}</option>
+                        </select>
+                      </div>
+                      <div class="glass-settings-select-wrap glass-settings-select-wrap--compact">
+                        <div class="glass-settings-select-label">循环方式</div>
+                        <select class="glass-settings-select" :value="bgmLoopMode" @change="onChangeBgmLoopMode">
+                          <option value="single">单曲循环</option>
+                          <option value="all">列表循环</option>
+                          <option value="shuffle">随机循环</option>
+                        </select>
+                      </div>
+                      <div class="glass-settings-select-wrap glass-settings-select-wrap--compact">
+                        <div class="glass-settings-select-label">音乐音量 {{ bgmVolumePercent }}%</div>
+                        <input class="glass-settings-range" type="range" min="0" max="100" step="1" :value="bgmVolumePercent" @input="onChangeBgmVolume" />
+                      </div>
+                      <div class="glass-settings-music-actions">
+                        <button class="glass-theme-chip" type="button" @click="toggleBgmPlayback">{{ bgmIsPlaying ? '暂停' : '播放' }}</button>
+                        <button class="glass-theme-chip" type="button" @click="playNextBackgroundTrack">下一首</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div class="glass-settings-theme-block">
-                  <div class="glass-settings-theme-title">🎨 桌布方案</div>
-                  <div class="glass-theme-options">
-                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tableTheme === 'classic-green' }" @click="setTableTheme('classic-green')">经典绿</button>
-                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tableTheme === 'jade-green' }" @click="setTableTheme('jade-green')">翡翠青</button>
-                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tableTheme === 'royal-red' }" @click="setTableTheme('royal-red')">赤金红</button>
+                <div class="glass-settings-section">
+                  <div class="glass-settings-section-header">
+                    <div class="glass-settings-section-title">牌桌外观</div>
+                    <div class="glass-settings-section-subtitle">桌布与牌背分开归类，层次更清楚</div>
                   </div>
-                </div>
-                <div class="glass-settings-theme-block">
-                  <div class="glass-settings-theme-title">🀄 牌背颜色</div>
-                  <div class="glass-theme-options">
-                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tileBackScheme === 0 }" @click="setTileBackScheme(0)">原版绿</button>
-                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tileBackScheme === 1 }" @click="setTileBackScheme(1)">象牙白</button>
-                    <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tileBackScheme === 2 }" @click="setTileBackScheme(2)">卡布里蓝</button>
+                  <div class="glass-settings-stack">
+                    <div class="glass-settings-card">
+                      <div class="glass-settings-card-title">桌布方案</div>
+                      <div class="glass-theme-options">
+                        <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tableTheme === 'classic-green' }" @click="setTableTheme('classic-green')">经典绿</button>
+                        <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tableTheme === 'jade-green' }" @click="setTableTheme('jade-green')">翡翠青</button>
+                        <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tableTheme === 'royal-red' }" @click="setTableTheme('royal-red')">赤金红</button>
+                      </div>
+                    </div>
+                    <div class="glass-settings-card">
+                      <div class="glass-settings-card-title">牌背颜色</div>
+                      <div class="glass-theme-options">
+                        <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tileBackScheme === 0 }" @click="setTileBackScheme(0)">原版绿</button>
+                        <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tileBackScheme === 1 }" @click="setTileBackScheme(1)">象牙白</button>
+                        <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': tileBackScheme === 2 }" @click="setTileBackScheme(2)">卡布里蓝</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div class="glass-settings-footer">
-                  <span>长清阁麻将 v2.2</span>
+                  <span>长青阁麻将 v2.2</span>
                 </div>
               </div>
             </div>
@@ -570,7 +575,6 @@
             <!-- Bottom (self) player -->
             <div class="seat seat-bottom">
               <div class="self-area-with-actions">
-                <div v-if="myTingText" class="self-ting-banner">{{ myTingText }}</div>
                 <PlayerSelfArea
                   name=""
                   :hand="playerHand"
@@ -684,6 +688,41 @@
           </div>
 
           <div
+            v-if="gameState?.phase === GamePhase.WAITING"
+            class="ext-section waiting-room-panel"
+          >
+            <div class="waiting-room-panel__header">
+              <div>
+                <h3 class="ext-title">等待开局</h3>
+                <p class="ext-meta waiting-room-panel__meta">房间号 #{{ gameState?.roomNumber || '----' }} · {{ waitingPlayers.length }}/4 人</p>
+              </div>
+              <button
+                v-if="canManualStartWaitingGame"
+                class="mahjong-button primary waiting-room-panel__start"
+                @click="onStartGame"
+              >
+                开始牌局
+              </button>
+            </div>
+            <p class="waiting-room-panel__hint">
+              {{ waitingRoomHint }}
+            </p>
+            <div class="waiting-room-panel__chips">
+              <span
+                v-for="player in waitingPlayers"
+                :key="player.id"
+                class="waiting-room-panel__chip"
+                :class="{
+                  'waiting-room-panel__chip--dealer': player.isDealer,
+                  'waiting-room-panel__chip--bot': player.isBot
+                }"
+              >
+                {{ player.name }}<span v-if="player.isDealer"> · 房主</span>
+              </span>
+            </div>
+          </div>
+
+          <div
             v-if="isMobileLandscapeMode && !isTopBarCollapsed"
             class="ext-section mobile-inline-menu"
           >
@@ -710,6 +749,22 @@
 
           <!-- 牌局快讯 -->
           <GameBroadcast :messages="displayBroadcastMessages" />
+
+          <div v-if="tingPreviewItems.length" class="ext-section ting-preview-panel">
+            <h3 class="ext-title">听牌提示</h3>
+            <div class="ting-preview-panel__tiles">
+              <span
+                v-for="item in tingPreviewItems"
+                :key="item.key"
+                class="ting-preview-panel__tile"
+                :class="{
+                  'ting-preview-panel__tile--exhausted': item.isExhausted
+                }"
+              >
+                {{ item.label }}
+              </span>
+            </div>
+          </div>
 
 
 
@@ -1029,7 +1084,6 @@ const toggleBgmPlayback = () => {
   else playBackgroundMusic()
 }
 const {
-  currentVoiceName,
   currentVoiceVolume,
   loadVoiceScheme,
   preloadAllTiles,
@@ -1046,6 +1100,8 @@ const initialViewport = process.client
   : { width: 1024, height: 768 }
 const initialSmallestSide = Math.min(initialViewport.width, initialViewport.height)
 const initialIsPortrait = initialViewport.height >= initialViewport.width
+const viewportWidth = ref(initialViewport.width)
+const viewportHeight = ref(initialViewport.height)
 const isCompactMobileViewport = (width: number, height: number) => {
   const smallestSide = Math.min(width, height)
   const isPortrait = height >= width
@@ -1060,6 +1116,44 @@ const layoutMode = computed<'desktop' | 'mobile-landscape' | 'mobile-portrait'>(
   if (isMobileLandscapeMode.value) return 'mobile-landscape'
   return 'desktop'
 })
+const clampNumber = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+const mobileLandscapeMetrics = computed(() => {
+  const longSide = Math.max(viewportWidth.value, viewportHeight.value)
+  const shortSide = Math.min(viewportWidth.value, viewportHeight.value)
+  const tableScale = clampNumber(Math.min(longSide / 980, shortSide / 440), 0.82, 1)
+  const uiScale = clampNumber(Math.min(longSide / 980, shortSide / 460), 0.78, 1)
+  const panelWidth = clampNumber(28 + (1 - tableScale) * 6, 28, 31)
+  return {
+    tableScale,
+    uiScale,
+    panelWidth,
+    panelFont: 0.62 * uiScale,
+    titleFont: 0.8 * uiScale,
+    metaFont: 0.68 * uiScale,
+    roomFont: 0.78 * uiScale,
+    labelFont: 0.5 * uiScale,
+    broadcastHeight: Math.round(52 * uiScale),
+    actionGap: Math.max(3, Math.round(6 * uiScale)),
+    sideShift: +(6 * tableScale).toFixed(1)
+  }
+})
+const mobileLayoutStyle = computed(() => {
+  if (!isMobileLandscapeMode.value) return {}
+  const metrics = mobileLandscapeMetrics.value
+  return {
+    '--ml-table-scale': metrics.tableScale.toFixed(3),
+    '--ml-ui-scale': metrics.uiScale.toFixed(3),
+    '--ml-panel-width': `${metrics.panelWidth.toFixed(2)}%`,
+    '--ml-panel-font': `${metrics.panelFont.toFixed(3)}rem`,
+    '--ml-title-font': `${metrics.titleFont.toFixed(3)}rem`,
+    '--ml-meta-font': `${metrics.metaFont.toFixed(3)}rem`,
+    '--ml-room-font': `${metrics.roomFont.toFixed(3)}rem`,
+    '--ml-label-font': `${metrics.labelFont.toFixed(3)}rem`,
+    '--ml-broadcast-height': `${metrics.broadcastHeight}px`,
+    '--ml-action-gap': `${metrics.actionGap}px`,
+    '--ml-side-shift': `${metrics.sideShift}px`
+  }
+})
 const nowTs = ref(Date.now())
 let actionWindowTimer: ReturnType<typeof setInterval> | null = null
 
@@ -1070,7 +1164,6 @@ const diceValues = ref<[number, number]>([1, 1])
 const hasDicePreview = ref(false)
 const showDoubleReminder = ref(false)
 const flowerReplacementNotice = ref<Tile | null>(null)
-const autoStartRequested = ref(false)
 const showLiangShanOverlay = ref(false)
 let doubleReminderTimer: ReturnType<typeof setTimeout> | null = null
 const getActionWindowMs = (state: any) => {
@@ -1095,10 +1188,6 @@ const settingsPanelLeft = ref(0)
 const showDebugPanel = ref(false)
 const tableTheme = ref<'classic-green' | 'jade-green' | 'royal-red'>('classic-green')
 const tileBackScheme = ref(0)
-const showHintEnabled = ref(true)
-const tileAnimationEnabled = ref(true)
-const actionSoundEnabled = ref(true)
-const timerWarningEnabled = ref(true)
 type DiscardMode = 'double_tap' | 'tap_confirm' | 'drag'
 const discardMode = ref<DiscardMode>('double_tap')
 const dragDiscardThresholdPx = 56
@@ -1166,10 +1255,6 @@ const setDiscardMode = (mode: DiscardMode) => {
   selectedTileId.value = null
 }
 
-const cycleVoiceScheme = async () => {
-  await loadVoiceScheme('bingtang')
-}
-
 const resetAutoCount = () => {
   consecutiveAutoCount = 0
   lastWarnAt = 0
@@ -1222,6 +1307,8 @@ const toggleShowAllCards = () => {
 const evaluateViewport = () => {
   if (!process.client) return
   const { innerWidth: width, innerHeight: height } = window
+  viewportWidth.value = width
+  viewportHeight.value = height
   const smallestSide = Math.min(width, height)
   const isPortrait = height >= width
   isMobilePortrait.value = isPortrait && smallestSide <= 768
@@ -1716,6 +1803,23 @@ const waitingPlayers = computed(() => {
     isDealer: p.isDealer
   }))
 })
+const canManualStartWaitingGame = computed(() =>
+  gameState.value?.phase === GamePhase.WAITING &&
+  waitingPlayers.value.length === 4 &&
+  !!currentPlayer.value?.isDealer &&
+  !currentPlayer.value?.isSpectator &&
+  isConnected.value
+)
+const waitingRoomHint = computed(() => {
+  if (!gameState.value) return '正在同步房间状态'
+  if (waitingPlayers.value.length < 4) {
+    return `其他玩家可通过 4 位房间号 #${gameState.value.roomNumber || '----'} 搜索并加入。`
+  }
+  if (canManualStartWaitingGame.value) {
+    return '四人已到齐，由房主点击“开始牌局”后进入第一局掷骰。'
+  }
+  return '四人已到齐，等待房主开始本局。'
+})
 const overlayReason = computed(() => roomDismissedReason.value || gameState.value?.endReason || null)
 const isOverlayVisible = computed(() => {
   if (roomDismissedReason.value) return true
@@ -1753,6 +1857,10 @@ const compareTilesForDisplay = (a: Partial<Tile>, b: Partial<Tile>): number => {
   if (suitDelta !== 0) return suitDelta
   return Number(a.value ?? 0) - Number(b.value ?? 0)
 }
+const tileCountKey = (tile: Partial<Tile> | null | undefined) => {
+  if (!tile?.suit) return ''
+  return `${tile.suit}-${Number(tile.value ?? 0)}`
+}
 const isWildPreviewTile = (tile: Partial<Tile> | null | undefined): boolean => {
   if (!tile || !wildTile.value) return false
   if (wildTile.value.suit === 'hua') {
@@ -1761,48 +1869,47 @@ const isWildPreviewTile = (tile: Partial<Tile> | null | undefined): boolean => {
   return tile.suit === wildTile.value.suit && Number(tile.value) === Number(wildTile.value.value)
 }
 
-const myTingText = computed(() => {
+const knownVisibleTileCounts = computed(() => {
+  const counts = new Map<string, number>()
+  const pushTile = (tile: Partial<Tile> | null | undefined) => {
+    if (!tile || !tile.suit || isWildPreviewTile(tile)) return
+    const key = tileCountKey(tile)
+    if (!key) return
+    counts.set(key, (counts.get(key) || 0) + 1)
+  }
+
+  for (const tile of currentPlayer.value?.hand?.concealedTiles || []) pushTile(tile)
+  for (const player of gameState.value?.players || []) {
+    for (const meld of player.hand?.exposedMelds || []) {
+      for (const tile of meld.tiles || []) pushTile(tile)
+    }
+  }
+  for (const tile of gameState.value?.discardPile || []) pushTile(tile)
+
+  return counts
+})
+
+const tingPreviewItems = computed(() => {
   const winningTiles = tingPreview.value?.winningTiles || []
   const isTing = !!currentPlayer.value?.isTing || !!tingPreview.value?.isTing || winningTiles.length > 0
-  if (!isTing) return ''
-  const visibleWinningTiles = winningTiles
-    .map((entry: any) => entry.tile)
-    .filter((tile: Tile) => !!tile && !isWildPreviewTile(tile))
-    .sort(compareTilesForDisplay)
-    .map((tile: Tile) => tileLabel(tile))
-    .filter(Boolean)
-  const discardHuTiles = winningTiles
-    .filter((entry: any) => !!entry?.bestDiscardOption)
-    .map((entry: any) => entry.tile)
-    .filter((tile: Tile) => !!tile && !isWildPreviewTile(tile))
-    .sort(compareTilesForDisplay)
-    .map((tile: Tile) => tileLabel(tile))
-    .filter(Boolean)
-  const selfDrawOnlyTiles = winningTiles
-    .filter((entry: any) => !entry?.bestDiscardOption && !!entry?.bestSelfDrawOption)
-    .map((entry: any) => entry.tile)
-    .filter((tile: Tile) => !!tile && !isWildPreviewTile(tile))
-    .sort(compareTilesForDisplay)
-    .map((tile: Tile) => tileLabel(tile))
-    .filter(Boolean)
+  if (!isTing) return []
 
-  const uniqueDiscardHuTiles = Array.from(new Set(discardHuTiles))
-  const uniqueSelfDrawOnlyTiles = Array.from(new Set(selfDrawOnlyTiles))
-  const uniqueVisibleWinningTiles = Array.from(new Set(visibleWinningTiles))
+  const deduped = new Map<string, { key: string; label: string; tile: Tile; isExhausted: boolean }>()
+  for (const entry of winningTiles) {
+    const tile = entry?.tile as Tile | undefined
+    if (!tile || isWildPreviewTile(tile)) continue
+    const key = tileCountKey(tile)
+    if (!key || deduped.has(key)) continue
+    const knownCount = knownVisibleTileCounts.value.get(key) || 0
+    deduped.set(key, {
+      key,
+      label: tileLabel(tile),
+      tile,
+      isExhausted: knownCount >= 4
+    })
+  }
 
-  if (uniqueDiscardHuTiles.length && uniqueSelfDrawOnlyTiles.length) {
-    return `您已听牌：${uniqueDiscardHuTiles.join(',')}；仅自摸：${uniqueSelfDrawOnlyTiles.join(',')}`
-  }
-  if (uniqueDiscardHuTiles.length) {
-    return `您已听牌：${uniqueDiscardHuTiles.join(',')}`
-  }
-  if (uniqueSelfDrawOnlyTiles.length) {
-    return `您已听牌（仅自摸）：${uniqueSelfDrawOnlyTiles.join(',')}`
-  }
-  if (uniqueVisibleWinningTiles.length) {
-    return `您已听牌：${uniqueVisibleWinningTiles.join(',')}`
-  }
-  return '您已听牌'
+  return Array.from(deduped.values()).sort((a, b) => compareTilesForDisplay(a.tile, b.tile))
 })
 const getHuOptionBasePoints = (opt: any) => Number(opt?.summary?.finalPoints ?? opt?.score ?? 0)
 // finalPoints = 自摸时单个输家应付的点数，或捉冲时放冲者独自应付的点数
@@ -3249,7 +3356,6 @@ const onStartGame = async () => {
     await enterStartingPhaseWithDiceOverlay()
   } catch (err) {
     console.error('[onStartGame] Failed:', err)
-    autoStartRequested.value = false
   } finally {
     isGameStarting.value = false
   }
@@ -3302,8 +3408,8 @@ const displayBroadcastMessages = computed(() => {
   if (!isPreGameTransition.value) return broadcastMessages.value
   const waitingText = !gameState.value
     ? '⏳ 正在连接牌桌…'
-    : waitingPlayers.value.length >= 2 && isDealerUser.value
-      ? '⏳ 人数已满足，等待系统自动开局'
+    : waitingPlayers.value.length >= 4 && isDealerUser.value
+      ? '⏳ 四人已到齐，等待房主点击开始牌局'
       : `⏳ 当前 ${waitingPlayers.value.length}/4 人，牌桌准备中`
   return [{ id: -1, text: waitingText, type: 'info', timestamp: Date.now(), timeLabel: 'NOW' } as BroadcastMsg, ...broadcastMessages.value].slice(0, 5)
 })
@@ -3601,27 +3707,6 @@ watch(
   { immediate: true }
 )
 
-watch(
-  () => ({
-    phase: gameState.value?.phase,
-    playerCount: gameState.value?.players.length || 0,
-    isDealer: !!currentPlayer.value?.isDealer,
-    isSpectator: !!currentPlayer.value?.isSpectator
-  }),
-  (state) => {
-    if (state.phase !== 'waiting') {
-      autoStartRequested.value = false
-      return
-    }
-    if (state.playerCount < 2 || !state.isDealer || state.isSpectator) return
-    if (autoStartRequested.value || isGameStarting.value || showDiceOverlay.value) return
-
-    autoStartRequested.value = true
-    onStartGame()
-  },
-  { deep: true, immediate: true }
-)
-
 // AI 接管检测（通过轮询检查 botModePlayers）
 const checkAITakeover = () => {
   if (!gameState.value?.players) return
@@ -3654,8 +3739,6 @@ const setupTestGame = async () => {
   
   await refreshState()
   
-  // 进入骰子流程
-  onStartGame()
 }
 
 const forceDiscard = async (p: Player) => {
@@ -3954,25 +4037,89 @@ const forceDiscard = async (p: Player) => {
     radial-gradient(ellipse at 50% 50%, rgba(130,43,43,0.96) 0%, rgba(96,24,24,0.98) 45%, rgba(54,10,10,1) 100%);
 }
 
-:global(.glass-settings-theme-block) {
-  margin-top: 8px;
-  padding-top: 8px;
+:global(.glass-settings-section) {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+}
+:global(.glass-settings-section + .glass-settings-section) {
   border-top: 1px solid rgba(255,255,255,0.08);
 }
-
-:global(.glass-settings-theme-title) {
-  color: rgba(255,255,255,0.8);
-  font-size: 12px;
-  margin: 0 6px 8px;
+:global(.glass-settings-section-header) {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 6px;
 }
-
+:global(.glass-settings-section-title) {
+  color: rgba(255,255,255,0.96);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+:global(.glass-settings-section-subtitle) {
+  color: rgba(255,255,255,0.58);
+  font-size: 11px;
+  line-height: 1.45;
+}
+:global(.glass-settings-stack) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+:global(.glass-settings-card) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+:global(.glass-settings-card-title) {
+  color: rgba(255,255,255,0.9);
+  font-size: 12px;
+  font-weight: 700;
+}
+:global(.glass-settings-card-subtitle) {
+  color: rgba(255,255,255,0.58);
+  font-size: 11px;
+  line-height: 1.45;
+}
+:global(.glass-settings-row--panel) {
+  margin: 0 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+:global(.glass-settings-row-main) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+:global(.glass-settings-copy) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+:global(.glass-settings-help) {
+  color: rgba(255,255,255,0.56);
+  font-size: 11px;
+  line-height: 1.4;
+}
 :global(.glass-theme-options) {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  padding: 0 6px;
+  padding: 0;
 }
-
 :global(.glass-theme-chip) {
   border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.08);
@@ -3981,12 +4128,18 @@ const forceDiscard = async (p: Player) => {
   font-size: 12px;
   padding: 5px 10px;
   cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
-
+:global(.glass-theme-chip:hover) {
+  transform: translateY(-1px);
+}
 :global(.glass-theme-chip--active) {
   background: rgba(56, 189, 248, 0.24);
   border-color: rgba(56, 189, 248, 0.55);
   color: #fff;
+}
+:global(.glass-settings-select-wrap--compact) {
+  padding: 0;
 }
 
 /* 操作按钮：固定在桌面正中央 */
@@ -4146,6 +4299,17 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape {
+  --ml-table-scale: 1;
+  --ml-ui-scale: 1;
+  --ml-panel-width: 30%;
+  --ml-panel-font: 0.62rem;
+  --ml-title-font: 0.8rem;
+  --ml-meta-font: 0.68rem;
+  --ml-room-font: 0.78rem;
+  --ml-label-font: 0.5rem;
+  --ml-broadcast-height: 52px;
+  --ml-action-gap: 6px;
+  --ml-side-shift: 6px;
   padding: 0;
   min-height: 100vh;
   height: 100vh;
@@ -4235,9 +4399,9 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .table-wrapper {
-  flex: 0 0 70%;
-  width: 70%;
-  max-width: 70%;
+  flex: 0 0 calc(100% - var(--ml-panel-width));
+  width: calc(100% - var(--ml-panel-width));
+  max-width: calc(100% - var(--ml-panel-width));
   min-width: 0;
   min-height: 0;
   padding: 0;
@@ -4259,7 +4423,7 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-inset: 0.02%;
   --seat-top-width: 55%;
   --seat-bottom-width: 75%;
-  --seat-side-width: 116px;
+  --seat-side-width: calc(116px * var(--ml-table-scale));
   --seat-side-height: 56%;
   --seat-side-player-offset: 0.9%;
   --discard-center-rect-half-w: 14.3%;
@@ -4267,12 +4431,12 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .extended-info-panel {
-  flex: 0 0 30%;
-  width: 30%;
+  flex: 0 0 var(--ml-panel-width);
+  width: var(--ml-panel-width);
   min-width: 0;
-  max-width: 30%;
+  max-width: var(--ml-panel-width);
   max-height: 100%;
-  font-size: 0.62rem;
+  font-size: var(--ml-panel-font);
   gap: 3px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -4287,26 +4451,27 @@ const forceDiscard = async (p: Player) => {
   overflow-wrap: break-word;
 }
 
-.layout--mobile-landscape .extended-info-panel .ext-section { padding: 3px 4px 4px; border-radius: 6px; margin: 0; }
-.layout--mobile-landscape .extended-info-panel .ext-title { font-size: 0.62rem; margin-bottom: 1px; }
-.layout--mobile-landscape .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
-.layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.6rem; }
-.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: 3px 6px; font-size: 0.62rem; }
-.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: 2px 4px; gap: 3px; flex-wrap: wrap; }
-.layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
-.layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
-.layout--mobile-landscape .extended-info-panel .action-buttons-panel { gap: 3px; }
-.layout--mobile-landscape .extended-info-panel .turn-status-text { font-size: 0.54rem; }
+.layout--mobile-landscape .extended-info-panel .ext-section { padding: calc(4px * var(--ml-ui-scale)) calc(5px * var(--ml-ui-scale)) calc(5px * var(--ml-ui-scale)); border-radius: 6px; margin: 0; }
+.layout--mobile-landscape .extended-info-panel .ext-title { font-size: var(--ml-title-font); margin-bottom: 1px; }
+.layout--mobile-landscape .extended-info-panel .ext-meta { font-size: calc(0.54rem * var(--ml-ui-scale)); margin-bottom: 1px; line-height: 1.25; }
+.layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: var(--ml-room-font); }
+.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(3px * var(--ml-ui-scale)) calc(6px * var(--ml-ui-scale)); font-size: var(--ml-meta-font); }
+.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(2px * var(--ml-ui-scale)) calc(4px * var(--ml-ui-scale)); gap: var(--ml-action-gap); flex-wrap: wrap; }
+.layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: calc(0.48rem * var(--ml-ui-scale)); }
+.layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: calc(2px * var(--ml-ui-scale)) calc(4px * var(--ml-ui-scale)); font-size: calc(0.52rem * var(--ml-ui-scale)); min-width: auto; }
+.layout--mobile-landscape .extended-info-panel .action-buttons-panel { gap: var(--ml-action-gap); }
+.layout--mobile-landscape .extended-info-panel .turn-status-text { font-size: calc(0.54rem * var(--ml-ui-scale)); }
 .layout--mobile-landscape .extended-info-panel .room-header-row { gap: 3px; margin: 0; }
-.layout--mobile-landscape .extended-info-panel .room-stats { padding: 2px 3px; }
-.layout--mobile-landscape .extended-info-panel .player-row { padding: 2px 3px; font-size: 0.52rem; gap: 3px; }
-.layout--mobile-landscape .extended-info-panel .broadcast-container { max-height: 50px; padding: 2px 3px; }
-.layout--mobile-landscape .extended-info-panel .broadcast-message { font-size: 0.48rem; padding: 1px 0; }
-.layout--mobile-landscape .extended-info-panel .action-panel { padding: 4px; gap: 4px; }
-.layout--mobile-landscape .extended-info-panel .action-btn--small { width: 28px; height: 28px; font-size: 0.6rem; }
-.layout--mobile-landscape .extended-info-panel .action-btn--draw { width: 40px; height: 40px; font-size: 0.75rem; }
-.layout--mobile-landscape .extended-info-panel .mobile-inline-menu { padding: 4px 6px; }
-.layout--mobile-landscape .extended-info-panel .mobile-inline-menu__actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.layout--mobile-landscape .extended-info-panel .room-stats { padding: calc(2px * var(--ml-ui-scale)) calc(3px * var(--ml-ui-scale)); }
+.layout--mobile-landscape .extended-info-panel .player-row { padding: calc(2px * var(--ml-ui-scale)) calc(3px * var(--ml-ui-scale)); font-size: calc(0.52rem * var(--ml-ui-scale)); gap: calc(3px * var(--ml-ui-scale)); }
+.layout--mobile-landscape .extended-info-panel .broadcast-container { max-height: var(--ml-broadcast-height); padding: calc(2px * var(--ml-ui-scale)) calc(3px * var(--ml-ui-scale)); }
+.layout--mobile-landscape .extended-info-panel .broadcast-message { font-size: var(--ml-label-font); padding: 1px 0; }
+.layout--mobile-landscape .extended-info-panel .ting-preview-panel__tile { font-size: var(--ml-label-font); }
+.layout--mobile-landscape .extended-info-panel .action-panel { padding: calc(4px * var(--ml-ui-scale)); gap: calc(4px * var(--ml-ui-scale)); }
+.layout--mobile-landscape .extended-info-panel .action-btn--small { width: calc(28px * var(--ml-ui-scale)); height: calc(28px * var(--ml-ui-scale)); font-size: calc(0.6rem * var(--ml-ui-scale)); }
+.layout--mobile-landscape .extended-info-panel .action-btn--draw { width: calc(40px * var(--ml-ui-scale)); height: calc(40px * var(--ml-ui-scale)); font-size: calc(0.75rem * var(--ml-ui-scale)); }
+.layout--mobile-landscape .extended-info-panel .mobile-inline-menu { padding: calc(4px * var(--ml-ui-scale)) calc(6px * var(--ml-ui-scale)); }
+.layout--mobile-landscape .extended-info-panel .mobile-inline-menu__actions { display: flex; gap: calc(4px * var(--ml-ui-scale)); flex-wrap: wrap; }
 
 /* 竖屏手机：右侧栏变底部横排 */
 @media (max-width: 900px) and (orientation: portrait) {
@@ -4485,25 +4650,27 @@ const forceDiscard = async (p: Player) => {
   position: relative;
 }
 
-.self-ting-banner {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  transform: translateX(-50%);
-  max-width: min(80vw, 520px);
-  padding: 8px 14px;
-  border-radius: 999px;
-  background: rgba(6, 18, 12, 0.7);
-  border: 1px solid rgba(255, 215, 0, 0.28);
-  color: rgba(255, 247, 209, 0.96);
-  font-size: 0.82rem;
-  font-weight: 700;
-  line-height: 1.35;
-  text-align: center;
-  backdrop-filter: blur(4px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24);
-  pointer-events: none;
-  z-index: 6;
+.ting-preview-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ting-preview-panel__tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.ting-preview-panel__tile {
+  color: #ff6b6b;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+.ting-preview-panel__tile--exhausted {
+  color: rgba(255, 255, 255, 0.38);
 }
 
 /* 内联动作按钮组 — 放在手牌右侧 */
@@ -4945,6 +5112,65 @@ const forceDiscard = async (p: Player) => {
   color: #ffd700;
   font-weight: 700;
   text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+}
+
+.waiting-room-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.waiting-room-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.waiting-room-panel__meta {
+  margin-top: 2px;
+}
+
+.waiting-room-panel__start {
+  flex-shrink: 0;
+}
+
+.waiting-room-panel__hint {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.waiting-room-panel__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.waiting-room-panel__chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.74rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.waiting-room-panel__chip--dealer {
+  border-color: rgba(255, 215, 64, 0.42);
+  background: rgba(255, 215, 64, 0.12);
+  color: #ffe082;
+}
+
+.waiting-room-panel__chip--bot {
+  border-color: rgba(79, 195, 247, 0.3);
+  background: rgba(79, 195, 247, 0.1);
 }
 
 /* 胜者观战栏 */
@@ -6614,8 +6840,8 @@ const forceDiscard = async (p: Player) => {
 
 /* 横屏手机：牌桌缩小，牌跟着缩 */
 .layout--mobile-landscape .mahjong-table {
-  --tile-w: 17px;
-  --tile-h: 24px;
+  --tile-w: calc(17px * var(--ml-table-scale));
+  --tile-h: calc(24px * var(--ml-table-scale));
   --discard-scale: 1.2;
   --discard-gap-x-override: 0.35px;
   --discard-gap-y-override: 0.35px;
@@ -6626,37 +6852,20 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-inset: 0;
   --seat-top-width: 65%;
   --seat-bottom-width: 80%;
-  --seat-side-width: 118px;
-  --seat-side-height: 66%;
+  --seat-side-width: calc(118px * var(--ml-table-scale));
+  --seat-side-height: calc(58% + (8% * var(--ml-table-scale)));
   --seat-side-player-offset: 0.6%;
 }
 .layout--mobile-landscape :deep(.discard-zone--top) {
   transform: translate(-50%, -100%) rotate(180deg) !important;
 }
 .layout--mobile-landscape :deep(.discard-zone--right) {
-  transform: translate(6px, -50%);
+  transform: translate(var(--ml-side-shift), -50%);
 }
-.layout--mobile-landscape .seat-top { min-height: 42px; }
-.layout--mobile-landscape .seat-bottom { min-height: 54px; width: min(78%, calc(100% - 92px)); }
-.layout--mobile-landscape .seat-left { width: 136px; }
-.layout--mobile-landscape .seat-right { width: 144px; }
-
-@media (max-height: 450px) and (orientation: landscape) {
-  .layout--mobile-landscape .mahjong-table {
-    --tile-w: 14px;
-    --tile-h: 20px;
-    --discard-gap-x-override: 0.3px;
-    --discard-gap-y-override: 0.3px;
-    --tile-gap: 0px;
-    border-width: 2px;
-    --seat-side-width: 90px;
-    --seat-side-height: 58%;
-  }
-  .layout--mobile-landscape .seat-top { min-height: 36px; }
-  .layout--mobile-landscape .seat-bottom { min-height: 46px; width: min(82%, calc(100% - 72px)); }
-  .layout--mobile-landscape .seat-left { width: 102px; }
-  .layout--mobile-landscape .seat-right { width: 112px; }
-}
+.layout--mobile-landscape .seat-top { min-height: calc(42px * var(--ml-table-scale)); }
+.layout--mobile-landscape .seat-bottom { min-height: calc(54px * var(--ml-table-scale)); width: min(78%, calc(100% - (92px * var(--ml-table-scale)))); }
+.layout--mobile-landscape .seat-left { width: calc(136px * var(--ml-table-scale)); }
+.layout--mobile-landscape .seat-right { width: calc(144px * var(--ml-table-scale)); }
 
 /* 移动竖屏旋转模式 */
 @media (max-width: 768px) and (orientation: portrait) {
@@ -6720,16 +6929,16 @@ const forceDiscard = async (p: Player) => {
 
 .layout--mobile-landscape .panel-room-number,
 .layout--mobile-landscape .mahjong-subtitle {
-  font-size: 0.78rem;
+  font-size: var(--ml-room-font);
 }
 
 .layout--mobile-landscape .ext-section {
-  padding: 6px 8px 8px;
+  padding: calc(6px * var(--ml-ui-scale)) calc(8px * var(--ml-ui-scale)) calc(8px * var(--ml-ui-scale));
   border-radius: 10px;
 }
 
 .layout--mobile-landscape .ext-title {
-  font-size: 0.8rem;
+  font-size: var(--ml-title-font);
   margin-bottom: 4px;
 }
 
@@ -6739,16 +6948,42 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extra-action-btn,
 .layout--mobile-landscape .mahjong-button.small,
 .layout--mobile-landscape .panel-button.small {
-  font-size: 0.68rem;
+  font-size: var(--ml-meta-font);
 }
 
 .layout--mobile-landscape .action-buttons-panel {
-  gap: 6px;
+  gap: var(--ml-action-gap);
 }
 
 .layout--mobile-landscape .extra-actions-bar {
-  gap: 6px;
-  padding: 4px 8px;
+  gap: var(--ml-action-gap);
+  padding: calc(4px * var(--ml-ui-scale)) calc(8px * var(--ml-ui-scale));
+}
+
+.layout--mobile-landscape :deep(.center-info) {
+  padding: calc(6px * var(--ml-ui-scale)) calc(10px * var(--ml-ui-scale));
+  gap: calc(3px * var(--ml-ui-scale));
+  min-width: calc(62px * var(--ml-ui-scale));
+}
+
+.layout--mobile-landscape :deep(.multiplier-badge),
+.layout--mobile-landscape :deep(.remaining-badge) {
+  padding: calc(2px * var(--ml-ui-scale)) calc(5px * var(--ml-ui-scale));
+  font-size: calc(0.48rem * var(--ml-ui-scale));
+}
+
+.layout--mobile-landscape :deep(.multiplier-badge .badge-icon),
+.layout--mobile-landscape :deep(.remaining-badge .badge-icon) {
+  font-size: calc(0.5rem * var(--ml-ui-scale));
+}
+
+.layout--mobile-landscape :deep(.multiplier-badge .badge-value),
+.layout--mobile-landscape :deep(.remaining-badge .badge-value) {
+  font-size: calc(0.56rem * var(--ml-ui-scale));
+}
+
+.layout--mobile-landscape :deep(.wild-tile-row) {
+  padding: calc(1px * var(--ml-ui-scale)) calc(4px * var(--ml-ui-scale));
 }
 /* ===== Layout debug borders ===== */
 .layout-debug {
@@ -6838,15 +7073,5 @@ const forceDiscard = async (p: Player) => {
 
 
 
-/* 语音名称标签（设置面板） */
-.glass-voice-name {
-  font-size: 12px;
-  color: #a8d8ea;
-  margin-left: auto;
-  font-weight: 500;
-  padding: 2px 8px;
-  background: rgba(168, 216, 234, 0.12);
-  border-radius: 10px;
-}
-
 </style>
+

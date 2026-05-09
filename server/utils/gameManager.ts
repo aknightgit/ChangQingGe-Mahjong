@@ -101,6 +101,18 @@ class GameManager {
     });
   }
 
+  private broadcastRoomJoin(game: GameState, player: Player): void {
+    if (!this.wsManager) return;
+    this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      text: `👤 ${player.name}加入了房间`,
+      actionKind: 'roomJoin',
+      type: 'info',
+      timestamp: Date.now(),
+      timeLabel: formatBeijingTime()
+    });
+  }
+
   private canPlayerDrawOnCurrentTurn(game: GameState, player: Player): boolean {
     return game.phase === GamePhase.PLAYING
       && game.players[game.currentPlayerIndex]?.id === player.id
@@ -1458,6 +1470,9 @@ class GameManager {
 
     // Broadcast update so lobby sees new player
     await this.persistGame(game);
+    if (!isBotJoin) {
+      this.broadcastRoomJoin(game, player);
+    }
     this.broadcastGameState(gameId);
 
     return { playerId, position };
@@ -1472,7 +1487,7 @@ class GameManager {
     const game = await this.ensureGameLoaded(gameId);
     if (!game) throw new Error('Game not found');
     if (game.phase !== GamePhase.WAITING && game.phase !== GamePhase.ENDED && game.phase !== GamePhase.CHA_JIAO) return;
-    if (game.players.length < 2) throw new Error('Need at least 2 players');
+    if (game.players.length < 4) throw new Error('Need 4 players to start');
 
     game.endReason = null;
     game.endedAt = undefined;
@@ -1491,8 +1506,8 @@ class GameManager {
     const game = await this.ensureGameLoaded(gameId);
     if (!game) return;
 
-    if (game.players.length < 2) {
-      throw new Error('Need at least 2 players to start');
+    if (game.players.length < 4) {
+      throw new Error('Need 4 players to start');
     }
 
     game.endReason = null;

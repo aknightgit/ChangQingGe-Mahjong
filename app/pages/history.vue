@@ -2,120 +2,192 @@
   <div class="history-page">
     <div class="history-shell">
       <header class="history-header">
-        <button class="ghost-button" @click="goBack">← 返回</button>
+        <button class="ghost-button" @click="goBack">返回大厅</button>
         <div>
           <h1>对局记录</h1>
-          <p class="subtitle">所有房间的近期对局</p>
+          <p class="subtitle">支持按局次回顾，也支持按玩家查看战绩与对局</p>
         </div>
-        <button class="ghost-button" @click="loadAll" :disabled="isLoading">
+        <button class="ghost-button" @click="loadAll" :disabled="isLoading || statsLoading || roundsLoading">
           刷新
         </button>
       </header>
 
-      <!-- 战绩统计表格 -->
-      <section class="stats-section">
-        <h2 class="section-title">📊 战绩统计</h2>
-        <p v-if="statsLoading" class="loading">加载统计中…</p>
-        <p v-else-if="!playerStats.length" class="empty">暂无统计数据。</p>
-        <div v-else class="stats-table-wrap">
-          <table class="stats-table">
-            <thead>
-              <tr>
-                <th>玩家</th>
-                <th>总输赢</th>
-                <th class="highlight-col">有效战绩</th>
-                <th>与AI战绩</th>
-                <th>自摸</th>
-                <th>捉冲</th>
-                <th>最大赢</th>
-                <th>最大输</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="stat in playerStats"
-                :key="stat.playerId"
-                :class="{ 'ai-row': stat.isAI, 'me-row': stat.playerId === userIdCookie }"
-              >
-                <td class="player-cell">
-                  <span v-if="stat.isAI" class="ai-badge">AI</span>
-                  <span class="name">{{ stat.name }}</span>
-                </td>
-                <td :class="scoreClass(stat.totalScore)">{{ formatSigned(stat.totalScore) }}</td>
-                <td class="highlight-col" :class="scoreClass(stat.effectiveScore)">
-                  <strong>{{ formatSigned(stat.effectiveScore) }}</strong>
-                </td>
-                <td :class="scoreClass(stat.vsAINet)">
-                  {{ formatSigned(stat.vsAINet) }}
-                  <span class="vs-ai-detail">赢{{ stat.vsAIWin }} 输{{ stat.vsAILose }}</span>
-                </td>
-                <td class="center">{{ stat.selfDrawCount }}</td>
-                <td class="center">{{ stat.catchDiscardCount }}</td>
-                <td class="score-positive">{{ stat.maxWin > 0 ? '+' + stat.maxWin : '-' }}</td>
-                <td class="score-negative">{{ stat.maxLoss < 0 ? stat.maxLoss : '-' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+      <section class="view-tabs">
+        <button
+          class="tab-chip"
+          :class="{ 'tab-chip--active': viewMode === 'rounds' }"
+          @click="viewMode = 'rounds'"
+        >按局次回顾</button>
+        <button
+          class="tab-chip"
+          :class="{ 'tab-chip--active': viewMode === 'players' }"
+          @click="viewMode = 'players'"
+        >按玩家查看</button>
       </section>
 
-      <section class="filter-bar">
-        <label class="toggle">
-          <input type="checkbox" v-model="showOnlyMine" :disabled="!userIdCookie" />
-          <span>只看我的对局</span>
-        </label>
-        <span v-if="!userIdCookie" class="filter-hint">登录后可按玩家筛选。</span>
-      </section>
+      <template v-if="viewMode === 'rounds'">
+        <section class="filter-bar">
+          <label class="toggle">
+            <input type="checkbox" v-model="showOnlyMineRounds" :disabled="!userIdCookie" />
+            <span>只看我参与的局次</span>
+          </label>
+          <span v-if="!userIdCookie" class="filter-hint">当前未识别登录玩家，无法按本人过滤。</span>
+        </section>
 
-      <section class="history-content">
-        <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
-        <p v-else-if="isLoading" class="loading">加载对局记录中…</p>
-        <p v-else-if="!histories.length" class="empty">暂无对局记录。</p>
+        <section class="history-content">
+          <p v-if="roundsError" class="error">{{ roundsError }}</p>
+          <p v-else-if="roundsLoading" class="loading">加载局次回顾中…</p>
+          <p v-else-if="!roundReviews.length" class="empty">暂无局次记录。</p>
 
-        <div v-else class="history-list">
-          <article v-for="match in histories" :key="match.gameId" class="history-card">
-            <div class="card-header">
-              <div>
-                <p class="room-label">房间 {{ match.roomId.slice(0, 8) }}</p>
-                <h2>{{ formatDate(match.completedAt) }}</h2>
-              </div>
-              <div class="meta">
-                <span class="badge">{{ match.winnersCount }} 位赢家</span>
-                <span class="badge subtle">第 {{ match.roundNumber }} 局</span>
-              </div>
-            </div>
-
-            <ul class="player-list">
-              <li
-                v-for="player in match.results"
-                :key="player.playerId"
-                :class="['player-row', { winner: player.status === 'won', me: player.playerId === userIdCookie }]"
-              >
+          <div v-else class="round-list">
+            <article v-for="round in roundReviews" :key="`${round.gameId}-${round.roundNumber}`" class="round-card">
+              <div class="card-header">
                 <div>
-                  <p class="player-name">
-                    {{ player.name }}
-                    <span v-if="player.winType === 'self_draw'" class="win-tag self-draw">自摸</span>
-                    <span v-else-if="player.winType === 'catch_discard'" class="win-tag catch">捉冲</span>
-                    <span v-else-if="player.winType === 'rob_kong'" class="win-tag rob">抢杠</span>
-                  </p>
-                  <p class="player-meta">
-                    {{ player.status === 'won' ? '赢家' : '参与者' }} · 第 {{ player.position + 1 }} 位
-                  </p>
+                  <p class="room-label">{{ formatDate(round.recordedAt) }}</p>
+                  <h2>房间 {{ round.roomNumber }} · 第 {{ round.roundNumber }} 局</h2>
                 </div>
-                <div class="player-score" :class="scoreClass(player.finalScore ?? match.finalScores?.[player.playerId] ?? 0)">
-                  {{ formatSigned(player.finalScore ?? match.finalScores?.[player.playerId] ?? 0) }}
+                <div class="meta">
+                  <span class="badge">{{ round.winnerNames.length ? round.winnerNames.join(' / ') : '流局' }}</span>
+                  <span class="badge subtle">{{ formatEndReason(round.endReason) }}</span>
                 </div>
-              </li>
-            </ul>
-          </article>
-        </div>
-      </section>
+              </div>
+
+              <div class="round-table-wrap">
+                <table class="round-table">
+                  <thead>
+                    <tr>
+                      <th>玩家</th>
+                      <th>结果</th>
+                      <th>分数</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="player in round.players"
+                      :key="player.playerId"
+                      :class="{ 'winner-row': player.isWinner, 'me-row': player.playerId === userIdCookie }"
+                    >
+                      <td>{{ player.name }}</td>
+                      <td>{{ player.isWinner ? '胡牌' : formatPlayerStatus(player.status) }}</td>
+                      <td :class="scoreClass(player.score)">{{ formatSigned(player.score) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+        </section>
+      </template>
+
+      <template v-else>
+        <section class="stats-section">
+          <div class="stats-section-header">
+            <h2 class="section-title">玩家战绩</h2>
+            <div class="player-picker">
+              <label for="player-record-filter">查看玩家</label>
+              <select id="player-record-filter" v-model="selectedPlayerId">
+                <option value="">全部玩家</option>
+                <option v-for="stat in playerStats" :key="stat.playerId" :value="stat.playerId">
+                  {{ stat.name }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <p v-if="statsLoading" class="loading">加载玩家战绩中…</p>
+          <p v-else-if="!playerStats.length" class="empty">暂无玩家战绩。</p>
+          <div v-else class="stats-table-wrap">
+            <table class="stats-table">
+              <thead>
+                <tr>
+                  <th>玩家</th>
+                  <th>总局数</th>
+                  <th>总分</th>
+                  <th class="highlight-col">有效分</th>
+                  <th>自摸</th>
+                  <th>接炮</th>
+                  <th>单局最高</th>
+                  <th>单局最低</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="stat in playerStats"
+                  :key="stat.playerId"
+                  :class="{
+                    'ai-row': stat.isAI,
+                    'me-row': stat.playerId === userIdCookie,
+                    'selected-row': stat.playerId === selectedPlayerId
+                  }"
+                  @click="selectedPlayerId = stat.playerId"
+                >
+                  <td class="player-cell">
+                    <span v-if="stat.isAI" class="ai-badge">AI</span>
+                    <span class="name">{{ stat.name }}</span>
+                  </td>
+                  <td>{{ stat.totalGames }}</td>
+                  <td :class="scoreClass(stat.totalScore)">{{ formatSigned(stat.totalScore) }}</td>
+                  <td class="highlight-col" :class="scoreClass(stat.effectiveScore)">{{ formatSigned(stat.effectiveScore) }}</td>
+                  <td>{{ stat.selfDrawCount }}</td>
+                  <td>{{ stat.catchDiscardCount }}</td>
+                  <td class="score-positive">{{ stat.maxWin > 0 ? `+${stat.maxWin}` : '-' }}</td>
+                  <td class="score-negative">{{ stat.maxLoss < 0 ? stat.maxLoss : '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="history-content">
+          <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
+          <p v-else-if="isLoading" class="loading">加载玩家对局中…</p>
+          <p v-else-if="!histories.length" class="empty">暂无该玩家的对局记录。</p>
+
+          <div v-else class="history-list">
+            <article v-for="match in histories" :key="match.gameId" class="history-card">
+              <div class="card-header">
+                <div>
+                  <p class="room-label">房间 {{ match.roomNumber || match.roomId }}</p>
+                  <h2>{{ formatDate(match.completedAt) }}</h2>
+                </div>
+                <div class="meta">
+                  <span class="badge">{{ match.winnersCount }} 人胡牌</span>
+                  <span class="badge subtle">第 {{ match.roundNumber }} 巡结束</span>
+                </div>
+              </div>
+
+              <ul class="player-list">
+                <li
+                  v-for="player in match.results"
+                  :key="player.playerId"
+                  :class="['player-row', { winner: player.status === 'won', me: player.playerId === userIdCookie, focus: player.playerId === selectedPlayerId }]"
+                >
+                  <div>
+                    <p class="player-name">
+                      {{ player.name }}
+                      <span v-if="player.winType === 'self_draw'" class="win-tag self-draw">自摸</span>
+                      <span v-else-if="player.winType === 'catch_discard'" class="win-tag catch">接炮</span>
+                      <span v-else-if="player.winType === 'rob_kong'" class="win-tag rob">抢杠</span>
+                    </p>
+                    <p class="player-meta">
+                      {{ player.status === 'won' ? '胡牌' : '未胡牌' }} · 座位 {{ player.position + 1 }}
+                    </p>
+                  </div>
+                  <div class="player-score" :class="scoreClass(player.finalScore ?? match.finalScores?.[player.playerId] ?? 0)">
+                    {{ formatSigned(player.finalScore ?? match.finalScores?.[player.playerId] ?? 0) }}
+                  </div>
+                </li>
+              </ul>
+            </article>
+          </div>
+        </section>
+      </template>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { formatBeijingDateTime } from '~/utils/beijingTime'
 
 interface MatchHistoryResult {
@@ -136,6 +208,7 @@ interface MatchHistoryResult {
 interface MatchHistoryItem {
   gameId: string
   roomId: string
+  roomNumber?: string
   endReason: string | null
   winnersCount: number
   roundNumber: number
@@ -161,16 +234,41 @@ interface PlayerStat {
   maxLoss: number
 }
 
+interface RoundReviewPlayer {
+  playerId: string
+  name: string
+  status: string
+  isWinner: boolean
+  score: number
+}
+
+interface RoundReviewItem {
+  gameId: string
+  roomId: string
+  roomNumber: string
+  roundNumber: number
+  recordedAt: string | Date
+  endReason: string | null
+  winnerNames: string[]
+  players: RoundReviewPlayer[]
+}
+
 const histories = ref<MatchHistoryItem[]>([])
+const roundReviews = ref<RoundReviewItem[]>([])
 const playerStats = ref<PlayerStat[]>([])
 const isLoading = ref(false)
+const roundsLoading = ref(false)
 const statsLoading = ref(false)
 const errorMessage = ref<string | null>(null)
-const showOnlyMine = ref(false)
+const roundsError = ref<string | null>(null)
+const viewMode = ref<'rounds' | 'players'>('rounds')
+const selectedPlayerId = ref('')
+const showOnlyMineRounds = ref(false)
 const userIdCookie = useCookie<string | null>('user_id')
 
-const queryUserId = computed(() => {
-  if (!showOnlyMine.value) return undefined
+const queryPlayerId = computed(() => selectedPlayerId.value || undefined)
+const roundQueryPlayerId = computed(() => {
+  if (!showOnlyMineRounds.value) return undefined
   return userIdCookie.value || undefined
 })
 
@@ -180,21 +278,35 @@ const loadHistory = async () => {
   try {
     const response = await $fetch<{ success: boolean; data: MatchHistoryItem[] }>('/api/history/list', {
       query: {
-        limit: 20,
-        ...(queryUserId.value ? { userId: queryUserId.value } : {})
+        limit: 40,
+        ...(queryPlayerId.value ? { playerId: queryPlayerId.value } : {})
       },
       cache: 'no-cache'
     })
-
-    if (response?.success) {
-      histories.value = response.data || []
-    } else {
-      throw new Error('Unable to fetch match history')
-    }
+    histories.value = response?.success ? (response.data || []) : []
   } catch (err: any) {
-    errorMessage.value = err?.message || '加载失败，请重试'
+    errorMessage.value = err?.message || '加载对局记录失败'
   } finally {
     isLoading.value = false
+  }
+}
+
+const loadRoundReviews = async () => {
+  roundsLoading.value = true
+  roundsError.value = null
+  try {
+    const response = await $fetch<{ success: boolean; data: RoundReviewItem[] }>('/api/history/rounds', {
+      query: {
+        limit: 80,
+        ...(roundQueryPlayerId.value ? { playerId: roundQueryPlayerId.value } : {})
+      },
+      cache: 'no-cache'
+    })
+    roundReviews.value = response?.success ? (response.data || []) : []
+  } catch (err: any) {
+    roundsError.value = err?.message || '加载局次记录失败'
+  } finally {
+    roundsLoading.value = false
   }
 }
 
@@ -205,23 +317,36 @@ const loadStats = async () => {
       query: { limit: 100 },
       cache: 'no-cache'
     })
-    if (response?.success) {
-      playerStats.value = response.data || []
+    playerStats.value = response?.success ? (response.data || []) : []
+    if (!selectedPlayerId.value && userIdCookie.value && playerStats.value.some(stat => stat.playerId === userIdCookie.value)) {
+      selectedPlayerId.value = userIdCookie.value
     }
-  } catch (err) {
-    console.warn('Failed to load stats:', err)
   } finally {
     statsLoading.value = false
   }
 }
 
 const loadAll = () => {
-  loadHistory()
+  loadRoundReviews()
   loadStats()
+  loadHistory()
 }
 
-watch(queryUserId, () => {
-  loadHistory()
+watch(queryPlayerId, () => {
+  if (viewMode.value === 'players') loadHistory()
+})
+
+watch(roundQueryPlayerId, () => {
+  if (viewMode.value === 'rounds') loadRoundReviews()
+})
+
+watch(viewMode, (mode) => {
+  if (mode === 'players' && !histories.value.length && !isLoading.value) {
+    loadHistory()
+  }
+  if (mode === 'rounds' && !roundReviews.value.length && !roundsLoading.value) {
+    loadRoundReviews()
+  }
 })
 
 onMounted(() => {
@@ -230,20 +355,29 @@ onMounted(() => {
 
 const goBack = () => navigateTo('/')
 
-const formatDate = (value: string | Date) => {
-  return formatBeijingDateTime(value)
-}
+const formatDate = (value: string | Date) => formatBeijingDateTime(value)
 
 const formatSigned = (value: number) => {
   if (value === 0) return '0'
-  const sign = value > 0 ? '+' : ''
-  return `${sign}${value}`
+  return `${value > 0 ? '+' : ''}${value}`
 }
 
 const scoreClass = (value: number) => {
   if (value > 0) return 'score-positive'
   if (value < 0) return 'score-negative'
   return 'score-neutral'
+}
+
+const formatEndReason = (reason: string | null) => {
+  if (reason === 'wall_exhausted') return '流局'
+  if (reason === 'last_player') return '正常结算'
+  return reason || '结束'
+}
+
+const formatPlayerStatus = (status: string) => {
+  if (status === 'lost') return '未胡牌'
+  if (status === 'won') return '胡牌'
+  return status
 }
 </script>
 
@@ -257,7 +391,7 @@ const scoreClass = (value: number) => {
 }
 
 .history-shell {
-  width: min(960px, 100%);
+  width: min(1120px, 100%);
   background: rgba(7, 19, 14, 0.95);
   border-radius: 18px;
   padding: 24px 28px;
@@ -282,7 +416,7 @@ const scoreClass = (value: number) => {
 .subtitle {
   margin: 0;
   opacity: 0.75;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
 }
 
 .ghost-button {
@@ -300,290 +434,316 @@ const scoreClass = (value: number) => {
   cursor: not-allowed;
 }
 
-/* === Stats Section === */
-.stats-section {
-  margin-bottom: 24px;
+.view-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.tab-chip {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.78);
+  border-radius: 999px;
+  padding: 9px 16px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.tab-chip--active {
+  background: rgba(255, 215, 0, 0.16);
+  border-color: rgba(255, 215, 0, 0.38);
+  color: #ffe082;
+}
+
+.filter-bar,
+.stats-section,
+.history-content {
+  margin-bottom: 22px;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-hint {
+  margin-left: 12px;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 0.85rem;
+}
+
+.stats-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
 }
 
 .section-title {
-  font-size: 1.1rem;
-  margin: 0 0 12px;
-  font-weight: 600;
+  font-size: 1.08rem;
+  margin: 0;
+  font-weight: 700;
 }
 
-.stats-table-wrap {
+.player-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+}
+
+.player-picker select {
+  min-width: 180px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f5f5f5;
+  padding: 8px 10px;
+}
+
+.stats-table-wrap,
+.round-table-wrap {
   overflow-x: auto;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.stats-table {
+.stats-table,
+.round-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
 }
 
 .stats-table th,
-.stats-table td {
+.stats-table td,
+.round-table th,
+.round-table td {
   padding: 10px 12px;
-  text-align: right;
   white-space: nowrap;
 }
 
-.stats-table th {
+.stats-table th,
+.round-table th {
   background: rgba(255, 255, 255, 0.06);
-  font-weight: 600;
+  font-weight: 700;
   text-align: right;
-  position: sticky;
-  top: 0;
 }
 
 .stats-table th:first-child,
-.stats-table td:first-child {
+.stats-table td:first-child,
+.round-table th:first-child,
+.round-table td:first-child {
   text-align: left;
 }
 
-.stats-table tbody tr {
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+.stats-table tbody tr,
+.round-table tbody tr {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.stats-table tbody tr:hover {
+.stats-table tbody tr:hover,
+.round-table tbody tr:hover,
+.player-row:hover {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.selected-row {
+  background: rgba(255, 215, 0, 0.07);
+}
+
 .highlight-col {
-  background: rgba(255, 226, 122, 0.08) !important;
-  border-left: 2px solid rgba(255, 226, 122, 0.3);
-  border-right: 2px solid rgba(255, 226, 122, 0.3);
-}
-
-.stats-table thead .highlight-col {
-  background: rgba(255, 226, 122, 0.15) !important;
-  color: #ffe27a;
-}
-
-.ai-row {
-  opacity: 0.7;
-}
-
-.me-row {
-  box-shadow: inset 0 0 0 1px rgba(95, 255, 176, 0.3);
+  background: rgba(255, 226, 122, 0.08);
 }
 
 .player-cell {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .ai-badge {
-  background: rgba(255, 157, 157, 0.2);
-  color: #ff9d9d;
-  font-size: 0.7rem;
-  padding: 1px 6px;
-  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(33, 150, 243, 0.18);
+  color: #90caf9;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
-.vs-ai-detail {
-  display: block;
-  font-size: 0.7rem;
-  opacity: 0.7;
-  margin-top: 2px;
-}
-
-.name {
-  font-weight: 600;
-}
-
-.center {
-  text-align: center !important;
-}
-
-/* === Filter Bar === */
-.filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  margin-bottom: 16px;
-  font-size: 0.9rem;
-}
-
-.toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.filter-hint {
-  opacity: 0.6;
-}
-
-.history-content {
-  min-height: 200px;
-}
-
-.error,
-.loading,
-.empty {
-  text-align: center;
-  opacity: 0.8;
-  margin: 40px 0;
-}
-
+.round-list,
 .history-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  display: grid;
+  gap: 14px;
 }
 
+.round-card,
 .history-card {
-  background: rgba(255, 255, 255, 0.04);
   border-radius: 16px;
   padding: 16px 18px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
+  gap: 16px;
   margin-bottom: 12px;
 }
 
-.room-label {
-  font-size: 0.8rem;
-  opacity: 0.8;
-  margin: 0;
+.card-header h2 {
+  margin: 4px 0 0;
+  font-size: 1.02rem;
 }
 
-.card-header h2 {
-  margin: 2px 0 0;
-  font-size: 1.1rem;
+.room-label {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.82rem;
 }
 
 .meta {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .badge {
-  background: rgba(255, 255, 255, 0.08);
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
   border-radius: 999px;
-  padding: 4px 12px;
-  font-size: 0.85rem;
-  font-weight: 600;
+  background: rgba(255, 215, 0, 0.12);
+  color: #ffe082;
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 .badge.subtle {
-  opacity: 0.8;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.76);
 }
 
 .player-list {
   list-style: none;
-  margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
+  margin: 0;
+  display: grid;
   gap: 8px;
 }
 
 .player-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 12px;
+  justify-content: space-between;
+  gap: 12px;
   padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
 }
 
-.player-row.winner {
-  border: 1px solid rgba(255, 226, 122, 0.4);
+.player-row.winner,
+.winner-row {
+  background: rgba(255, 215, 0, 0.08);
 }
 
-.player-row.me {
-  box-shadow: 0 0 0 1px rgba(95, 255, 176, 0.35);
+.player-row.focus {
+  outline: 1px solid rgba(255, 215, 0, 0.28);
+}
+
+.me-row {
+  box-shadow: inset 0 0 0 1px rgba(102, 187, 106, 0.3);
 }
 
 .player-name {
+  margin: 0 0 4px;
+  font-weight: 700;
+}
+
+.player-meta {
   margin: 0;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.84rem;
+}
+
+.player-score {
+  font-size: 1rem;
+  font-weight: 800;
 }
 
 .win-tag {
-  font-size: 0.7rem;
+  display: inline-flex;
+  margin-left: 8px;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: 999px;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
 .win-tag.self-draw {
-  background: rgba(95, 255, 176, 0.2);
-  color: #5fffb0;
+  background: rgba(102, 187, 106, 0.18);
+  color: #81c784;
 }
 
-.win-tag.catch {
-  background: rgba(255, 226, 122, 0.2);
-  color: #ffe27a;
-}
-
+.win-tag.catch,
 .win-tag.rob {
-  background: rgba(255, 157, 157, 0.2);
-  color: #ff9d9d;
-}
-
-.player-meta {
-  margin: 2px 0 0;
-  font-size: 0.8rem;
-  opacity: 0.75;
-}
-
-.player-score {
-  font-weight: 600;
-  padding: 4px 12px;
-  border-radius: 999px;
+  background: rgba(255, 167, 38, 0.18);
+  color: #ffcc80;
 }
 
 .score-positive {
-  color: #5fffb0;
-  background: rgba(95, 255, 176, 0.1);
+  color: #66bb6a;
 }
 
 .score-negative {
-  color: #ff9d9d;
-  background: rgba(255, 157, 157, 0.1);
+  color: #ef5350;
 }
 
 .score-neutral {
-  color: #f5f5f5;
-  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
 }
 
-@media (max-width: 640px) {
-  .history-shell {
-    padding: 20px;
+.loading,
+.empty,
+.error {
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.error {
+  color: #ef9a9a;
+}
+
+@media (max-width: 900px) {
+  .history-page {
+    padding: 12px;
   }
 
+  .history-shell {
+    padding: 18px;
+  }
+
+  .history-header,
+  .stats-section-header,
   .card-header {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .meta {
-    flex-direction: row;
+  .player-picker {
+    width: 100%;
   }
 
-  .stats-table th,
-  .stats-table td {
-    padding: 8px 6px;
-    font-size: 0.8rem;
+  .player-picker select {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 }
 </style>

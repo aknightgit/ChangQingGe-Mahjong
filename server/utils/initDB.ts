@@ -62,12 +62,21 @@ export async function initializeDatabase() {
     const trainingCollection = db.collection('mahjongTrainingRounds');
     await trainingCollection.createIndex({ gameId: 1, roundNumber: 1 }, { unique: true });
     await trainingCollection.createIndex({ roomId: 1, roundNumber: 1 });
+    await trainingCollection.createIndex({ roomNumber: 1, roundNumber: 1 });
     await trainingCollection.createIndex({ 'initialSnapshot.players.id': 1 });
     await trainingCollection.createIndex({ 'initialSnapshot.players.name': 1 });
     await trainingCollection.createIndex({ recordedAt: -1 });
     await trainingCollection.createIndex({ 'actionStats.byType.chow': -1 });
     await trainingCollection.createIndex({ 'actionStats.byType.peng': -1 });
     console.log('✓ Created indexes for mahjongTrainingRounds collection');
+
+    const matchHistoryCollection = db.collection('matchHistory');
+    await matchHistoryCollection.createIndex({ gameId: 1 }, { unique: true });
+    await matchHistoryCollection.createIndex({ roomId: 1 });
+    await matchHistoryCollection.createIndex({ roomNumber: 1 });
+    await matchHistoryCollection.createIndex({ 'results.playerId': 1 });
+    await matchHistoryCollection.createIndex({ completedAt: -1 });
+    console.log('é‰?Created indexes for matchHistory collection');
 
     // Create indexes for sessions collection
     const sessionsCollection = db.collection('sessions');

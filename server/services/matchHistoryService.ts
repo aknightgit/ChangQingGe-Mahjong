@@ -66,7 +66,8 @@ export class MatchHistoryService {
 
     const history: MatchHistory = {
       gameId: game.gameId,
-      roomId: game.gameId,
+      roomId: game.roomNumber || game.gameId,
+      roomNumber: game.roomNumber,
       endReason: reason,
       winnersCount: game.winnersCount,
       roundNumber: game.roundNumber,
@@ -99,12 +100,13 @@ export class MatchHistoryService {
     );
   }
 
-  static async listMatches(options?: { userId?: string; limit?: number }): Promise<MatchHistory[]> {
+  static async listMatches(options?: { userId?: string; playerId?: string; limit?: number }): Promise<MatchHistory[]> {
     const collection = await getCollection<MatchHistory>(this.COLLECTION_NAME);
-    const { userId, limit = 20 } = options || {};
+    const { userId, playerId, limit = 20 } = options || {};
+    const targetPlayerId = playerId || userId;
 
-    const query = userId
-      ? { 'results.playerId': userId }
+    const query = targetPlayerId
+      ? { 'results.playerId': targetPlayerId }
       : {};
 
     return collection

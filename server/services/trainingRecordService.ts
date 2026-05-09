@@ -28,6 +28,7 @@ type TrainingRoundSnapshot = {
 type TrainingRoundRecord = {
   gameId: string;
   roomId: string;
+  roomNumber?: string;
   roundNumber: number;
   turnRoundNumber: number;
   recordedAt: Date;
@@ -131,7 +132,8 @@ export class TrainingRecordService {
 
     const record: TrainingRoundRecord = {
       gameId: game.gameId,
-      roomId: game.gameId,
+      roomId: game.roomNumber || game.gameId,
+      roomNumber: game.roomNumber,
       roundNumber: handNumber,
       turnRoundNumber: game.roundNumber,
       recordedAt: new Date(),

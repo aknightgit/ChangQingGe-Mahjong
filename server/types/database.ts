@@ -167,6 +167,7 @@ export interface MatchHistory {
   _id?: ObjectId;
   gameId: string;
   roomId: string;
+  roomNumber?: string;
   endReason: string | null;
   winnersCount: number;
   roundNumber: number;

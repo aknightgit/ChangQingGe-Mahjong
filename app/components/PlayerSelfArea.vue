@@ -326,7 +326,7 @@ const getTileWrapperStyle = (tile: Tile): Record<string, string> => {
   padding-top: 16px;
   border-radius: 8px;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid transparent;
 }
 
 .meld--flower {
@@ -341,8 +341,8 @@ const getTileWrapperStyle = (tile: Tile): Record<string, string> => {
 }
 
 .meld--concealed {
-  border-color: rgba(171, 71, 188, 0.45) !important;
-  background: rgba(171, 71, 188, 0.08) !important;
+  border-color: transparent !important;
+  background: transparent !important;
 }
 
 .meld--kong {
