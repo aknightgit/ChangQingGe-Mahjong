@@ -4278,8 +4278,8 @@ const forceDiscard = async (p: Player) => {
   height: auto;
 }
 .seat-bottom :deep(.tile) {
-  width: 14px !important;
-  height: 20px !important;
+  width: 12px !important;
+  height: 17px !important;
 }
 
 /* 对家名字反向旋转，保持正向可读 */
