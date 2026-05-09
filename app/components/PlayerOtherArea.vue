@@ -312,12 +312,33 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
 
 .seat-line--left,
 .seat-line--right {
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 4px;
   width: max-content;
   height: auto;
+}
+.meld-lane--left,
+.meld-lane--right {
+  position: absolute;
+  top: 0;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+  z-index: 10;
+}
+.flower-lane--left,
+.flower-lane--right {
+  position: absolute;
+  top: 0;
+  left: 100%;
+  margin-left: 4px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 2px;
+  z-index: 10;
 }
 
 .seat-line--right {
