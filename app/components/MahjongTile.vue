@@ -506,22 +506,10 @@ const chineseNum = computed(() => {
   line-height: 1; margin-top: 1px;
 }
 
-/* ==================== 百搭（真实牌面 + 金色高亮） ==================== */
+/* ==================== 百搭（金色边框 + 柔和光晕） ==================== */
 .tile--wild {
   border: 2px solid #ffd700 !important;
-  box-shadow: 2px 3px 0 #8a7a5a, 3px 4px 0 #6a5a3a, 0 0 10px rgba(255, 215, 0, 0.5) !important;
-  position: relative;
-}
-.tile--wild::after {
-  content: '百搭';
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  font-size: 0.4rem;
-  color: #d4a017;
-  font-weight: 700;
-  line-height: 1;
-  opacity: 0.8;
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.6) !important;
 }
 
 /* ==================== 交互状态 ==================== */

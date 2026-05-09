@@ -15,7 +15,6 @@
       <!-- 百搭牌 -->
       <div v-if="wildTile" class="info-item wild-tile-row">
         <MahjongTile :tile="wildTile" :size="7" />
-        <span class="wild-name">{{ wildTileName }}</span>
       </div>
     </div>
 
