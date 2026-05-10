@@ -95,8 +95,8 @@ function slotStyle(index: number) {
 
 <style scoped>
 .discard-zone {
-  --discard-tile-w: calc(var(--tile-w, 28px) * var(--discard-scale, 1.2));
-  --discard-tile-h: calc(var(--tile-h, 40px) * var(--discard-scale, 1.2));
+  --discard-tile-w: calc(var(--tile-w, 28px) * var(--discard-scale, 1.0));
+  --discard-tile-h: calc(var(--tile-h, 40px) * var(--discard-scale, 1.0));
   --discard-gap-x: var(--discard-gap-x-override, clamp(0.35px, calc(var(--discard-tile-w) * 0.02), 1.1px));
   --discard-gap-y: var(--discard-gap-y-override, clamp(0.35px, calc(var(--discard-tile-h) * 0.02), 1.1px));
   --discard-step-x: calc(var(--discard-tile-w) + var(--discard-gap-x));

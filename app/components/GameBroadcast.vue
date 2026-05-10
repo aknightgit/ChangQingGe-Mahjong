@@ -171,7 +171,7 @@ watch(() => props.messages.length, () => {
   .broadcast-header { padding: 3px 6px; gap: 4px; }
   .broadcast-icon { font-size: 0.6rem; }
   .broadcast-title { font-size: 0.58rem; }
-  .broadcast-scroll { padding: 2px 4px; gap: 2px; max-height: 60px; }
+  .broadcast-scroll { padding: 2px 4px; gap: 2px; max-height: 120px; }
   .broadcast-msg { font-size: 0.5rem; padding: 2px 4px; gap: 4px; }
   .broadcast-time { font-size: 0.45rem; }
   .broadcast-empty { font-size: 0.5rem; padding: 6px 4px; }
