@@ -22,7 +22,6 @@ import { TrainingRecordService } from '../services/trainingRecordService';
 import { isBotPlayer, selectBotChowTileIds, selectDiscardTile, shouldClaimPendingAction } from '../services/botService';
 import { formatBeijingTime } from './beijingTime';
 
-const CHOW_CHOICE_TIMEOUT_MS = 60000;
 
 /**
  * In-memory game state manager
@@ -662,14 +661,11 @@ class GameManager {
   }
 
   private getPendingActionExpiresAt(game: GameState, actions: ActionType[]): number {
-    return Date.now() + (this.isChowChoiceOnlyActions(actions) ? CHOW_CHOICE_TIMEOUT_MS : this.getHesitationWindow(game));
+    return Date.now() + this.getHesitationWindow(game);
   }
 
   private getHumanClaimDecisionTimeoutMs(game: GameState, player: Player, actions: ActionType[]): number {
-    if (this.isPlayerBotControlled(player)) {
-      return this.isChowChoiceOnlyActions(actions) ? CHOW_CHOICE_TIMEOUT_MS : this.getHesitationWindow(game);
-    }
-    return 60_000;
+    return this.getHesitationWindow(game);
   }
 
   private getPendingActionWaitMs(gameId: string): number {

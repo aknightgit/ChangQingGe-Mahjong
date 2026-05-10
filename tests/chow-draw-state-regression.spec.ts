@@ -105,6 +105,13 @@ const game = {
 
 ;(gameManager as any).games.set(game.gameId, game)
 
+const claimTimeoutMs = (gameManager as any).getHumanClaimDecisionTimeoutMs(game, player, [ActionType.CHOW, ActionType.PASS])
+test('human chow-only claim window uses hesitationWindow instead of 60s fallback', claimTimeoutMs === 5000, `timeout=${claimTimeoutMs}`)
+
+const pendingExpiresAt = (gameManager as any).getPendingActionExpiresAt(game, [ActionType.CHOW, ActionType.PASS])
+const pendingWindowMs = pendingExpiresAt - Date.now()
+test('pending chow-only expiry also tracks hesitationWindow', pendingWindowMs <= 5000 && pendingWindowMs > 4500, `pendingWindowMs=${pendingWindowMs}`)
+
 const actions = await gameManager.getAvailableActions(game.gameId, player.id)
 
 test('available actions still include chow', actions.includes(ActionType.CHOW), `actions=${actions.join(',')}`)
