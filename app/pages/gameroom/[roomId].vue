@@ -2013,6 +2013,7 @@ const enterStartingPhaseWithDiceOverlay = async () => {
     ]
     hasDicePreview.value = true
     playSound('dice-roll')
+    playVoiceAction('diceRoll')
     showDiceOverlay.value = true
   } catch (e: any) {
     console.error('[enterStartingPhaseWithDiceOverlay] Failed:', e)
@@ -2903,7 +2904,7 @@ const onKong = () => {
   playSound('tile-kong')
   executeAction(ActionType.KONG)
 }
-const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); executeAction(ActionType.REBEL) }
+const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); playVoiceAction('rebel'); executeAction(ActionType.REBEL) }
 const onThink = () => { resetAutoCount(); executeAction(ActionType.THINK) }
 const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); executeAction(ActionType.CHEAT_HU) }
 
@@ -3264,6 +3265,7 @@ const onLiangShan = () => {
   }
   resetAutoCount()
   playSound('tile-rebel')
+  playVoiceAction('liangShan')
   executeAction(ActionType.LIANG_SHAN)
 }
 
@@ -3422,6 +3424,7 @@ const onRerollDice = () => {
   ]
   hasDicePreview.value = true
   playSound('dice-roll')
+  playVoiceAction('diceRoll')
 }
 
 const onDealTiles = async () => {
