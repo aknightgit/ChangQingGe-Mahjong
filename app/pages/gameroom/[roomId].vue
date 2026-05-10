@@ -4603,7 +4603,6 @@ const forceDiscard = async (p: Player) => {
   min-width: auto;
   font-size: 0.55rem;
 }
-}
 
 .layout--mobile-landscape .extended-info-panel * {
   max-width: 100%;
