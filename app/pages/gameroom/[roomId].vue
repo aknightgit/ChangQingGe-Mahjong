@@ -2,7 +2,7 @@
   <div class="mahjong-page" :class="[
     { 'layout-debug': showDebugPanel, 'mobile-portrait': shouldRotateView },
     { 'layout--mobile-landscape': isMobileLandscapeMode || shouldRotateView },
-    { 'layout--desktop': isLandscapeTablet }
+    { 'layout--desktop': !isMobileViewport }
   ]" :style="mobileLayoutStyle">
     <div class="room-viewport" :class="{ 'room-viewport--rotated': shouldRotateView }">
       <div class="room-container" :class="{ 'room-container--rotated': shouldRotateView, 'room-container--mobile-landscape': isMobileLandscapeMode }">
@@ -1072,22 +1072,26 @@ const viewportWidth = ref(initialViewport.width)
 const viewportHeight = ref(initialViewport.height)
 const isPortrait = ref(initialViewport.height >= initialViewport.width)
 
-// 统一缩放因子：所有手机同一套比例，以短边为基准
+// 统一缩放因子：所有手机使用短边为基准计算
 const shortSide = computed(() => Math.min(viewportWidth.value, viewportHeight.value))
 const mobileScale = computed(() => {
+  // 短边 > 1000px（如平板/桌面）不缩放
+  if (shortSide.value > 1000) return 1
+  // 手机：以 400px 为基准，clamp(0.65, shortSide/400, 1)
   const raw = shortSide.value / 400
-  return Math.min(1, Math.max(0.68, raw))
+  return Math.min(1, Math.max(0.65, raw))
 })
 
-const isLandscapeTablet = computed(() => shortSide.value > 768)
+// 手机模式判定：短边 <= 1000px（覆盖所有手机，包括高分屏）
+const isMobileViewport = computed(() => shortSide.value <= 1000)
 
 // 布局模式：竖屏旋转 / 横屏手机 / 平板桌面
-const shouldRotateView = computed(() => isPortrait.value && shortSide.value <= 768)
-const isMobileLandscapeMode = computed(() => !isPortrait.value && shortSide.value <= 768)
+const shouldRotateView = computed(() => isPortrait.value && isMobileViewport.value && shortSide.value <= 768)
+const isMobileLandscapeMode = computed(() => !isPortrait.value && isMobileViewport.value)
 
 // 横屏手机竖屏旋转模式下的 CSS 缩放变量
 const mobileLayoutStyle = computed(() => {
-  if (isLandscapeTablet.value) return {}
+  if (!isMobileViewport) return {}
   const s = mobileScale.value
   return {
     '--mobile-scale': s.toFixed(3),
