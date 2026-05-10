@@ -1,7 +1,8 @@
 ﻿<template>
   <div class="mahjong-page" :class="[
     { 'layout-debug': showDebugPanel, 'mobile-portrait': shouldRotateView },
-    `layout--${layoutMode}`
+    { 'layout--mobile-landscape': isMobileLandscapeMode || shouldRotateView },
+    { 'layout--desktop': isLandscapeTablet }
   ]" :style="mobileLayoutStyle">
     <div class="room-viewport" :class="{ 'room-viewport--rotated': shouldRotateView }">
       <div class="room-container" :class="{ 'room-container--rotated': shouldRotateView, 'room-container--mobile-landscape': isMobileLandscapeMode }">
@@ -1067,60 +1068,29 @@ const shouldRevealOpponents = computed(() => showAllCards.value || !!currentPlay
 const initialViewport = process.client
   ? { width: window.innerWidth, height: window.innerHeight }
   : { width: 1024, height: 768 }
-const initialSmallestSide = Math.min(initialViewport.width, initialViewport.height)
-const initialIsPortrait = initialViewport.height >= initialViewport.width
 const viewportWidth = ref(initialViewport.width)
 const viewportHeight = ref(initialViewport.height)
-const isCompactMobileViewport = (width: number, height: number) => {
-  const smallestSide = Math.min(width, height)
-  const isPortrait = height >= width
-  return isPortrait ? smallestSide <= 768 : smallestSide <= 768 || height <= 768
-}
-const isMobilePortrait = ref(initialIsPortrait && initialSmallestSide <= 768)
-const isMobileLandscape = ref(!initialIsPortrait && isCompactMobileViewport(initialViewport.width, initialViewport.height))
-const shouldRotateView = computed(() => isMobilePortrait.value)
-const isMobileLandscapeMode = computed(() => isMobileLandscape.value && !shouldRotateView.value)
-const layoutMode = computed<'desktop' | 'mobile-landscape' | 'mobile-portrait'>(() => {
-  if (shouldRotateView.value) return 'mobile-portrait'
-  if (isMobileLandscapeMode.value) return 'mobile-landscape'
-  return 'desktop'
+const isPortrait = ref(initialViewport.height >= initialViewport.width)
+
+// 统一缩放因子：所有手机同一套比例，以短边为基准
+const shortSide = computed(() => Math.min(viewportWidth.value, viewportHeight.value))
+const mobileScale = computed(() => {
+  const raw = shortSide.value / 400
+  return Math.min(1, Math.max(0.68, raw))
 })
-const clampNumber = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
-const mobileLandscapeMetrics = computed(() => {
-  const longSide = Math.max(viewportWidth.value, viewportHeight.value)
-  const shortSide = Math.min(viewportWidth.value, viewportHeight.value)
-  const tableScale = clampNumber(Math.min(longSide / 980, shortSide / 440), 0.82, 1)
-  const uiScale = clampNumber(Math.min(longSide / 980, shortSide / 460), 0.78, 1)
-  const panelWidth = clampNumber(28 + (1 - tableScale) * 6, 28, 31)
-  return {
-    tableScale,
-    uiScale,
-    panelWidth,
-    panelFont: 0.62 * uiScale,
-    titleFont: 0.8 * uiScale,
-    metaFont: 0.68 * uiScale,
-    roomFont: 0.78 * uiScale,
-    labelFont: 0.5 * uiScale,
-    broadcastHeight: Math.round(52 * uiScale),
-    actionGap: Math.max(3, Math.round(6 * uiScale)),
-    sideShift: +(6 * tableScale).toFixed(1)
-  }
-})
+
+const isLandscapeTablet = computed(() => shortSide.value > 768)
+
+// 布局模式：竖屏旋转 / 横屏手机 / 平板桌面
+const shouldRotateView = computed(() => isPortrait.value && shortSide.value <= 768)
+const isMobileLandscapeMode = computed(() => !isPortrait.value && shortSide.value <= 768)
+
+// 横屏手机竖屏旋转模式下的 CSS 缩放变量
 const mobileLayoutStyle = computed(() => {
-  if (!isMobileLandscapeMode.value) return {}
-  const metrics = mobileLandscapeMetrics.value
+  if (isLandscapeTablet.value) return {}
+  const s = mobileScale.value
   return {
-    '--ml-table-scale': metrics.tableScale.toFixed(3),
-    '--ml-ui-scale': metrics.uiScale.toFixed(3),
-    '--ml-panel-width': `${metrics.panelWidth.toFixed(2)}%`,
-    '--ml-panel-font': `${metrics.panelFont.toFixed(3)}rem`,
-    '--ml-title-font': `${metrics.titleFont.toFixed(3)}rem`,
-    '--ml-meta-font': `${metrics.metaFont.toFixed(3)}rem`,
-    '--ml-room-font': `${metrics.roomFont.toFixed(3)}rem`,
-    '--ml-label-font': `${metrics.labelFont.toFixed(3)}rem`,
-    '--ml-broadcast-height': `${metrics.broadcastHeight}px`,
-    '--ml-action-gap': `${metrics.actionGap}px`,
-    '--ml-side-shift': `${metrics.sideShift}px`
+    '--mobile-scale': s.toFixed(3),
   }
 })
 const nowTs = ref(Date.now())
@@ -4505,9 +4475,9 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .table-wrapper {
-  flex: 0 0 calc(100% - var(--ml-panel-width));
-  width: calc(100% - var(--ml-panel-width));
-  max-width: calc(100% - var(--ml-panel-width));
+  flex: 0 0 calc(100% - min(354px, 30%));
+  width: calc(100% - min(354px, 30%));
+  max-width: calc(100% - min(354px, 30%));
   min-width: 0;
   min-height: 0;
   padding: 0;
@@ -4529,7 +4499,7 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-inset: 0.02%;
   --seat-top-width: 55%;
   --seat-bottom-width: 75%;
-  --seat-side-width: calc(116px * var(--ml-table-scale));
+  --seat-side-width: calc(116px * var(--mobile-scale));
   --seat-side-height: 56%;
   --seat-side-player-offset: 0.9%;
   --discard-center-rect-half-w: 14.3%;
@@ -4537,12 +4507,12 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .extended-info-panel {
-  flex: 0 0 var(--ml-panel-width);
-  width: var(--ml-panel-width);
+  flex: 0 0 min(354px, 30%);
+  width: min(354px, 30%);
   min-width: 0;
-  max-width: var(--ml-panel-width);
+  max-width: min(354px, 30%);
   max-height: 100%;
-  font-size: var(--ml-panel-font);
+  font-size: 0.62rem;
   gap: 3px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -4557,27 +4527,27 @@ const forceDiscard = async (p: Player) => {
   overflow-wrap: break-word;
 }
 
-.layout--mobile-landscape .extended-info-panel .ext-section { padding: calc(4px * var(--ml-ui-scale)) calc(5px * var(--ml-ui-scale)) calc(5px * var(--ml-ui-scale)); border-radius: 6px; margin: 0; }
-.layout--mobile-landscape .extended-info-panel .ext-title { font-size: var(--ml-title-font); margin-bottom: 1px; }
-.layout--mobile-landscape .extended-info-panel .ext-meta { font-size: calc(0.54rem * var(--ml-ui-scale)); margin-bottom: 1px; line-height: 1.25; }
-.layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: var(--ml-room-font); }
-.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(3px * var(--ml-ui-scale)) calc(6px * var(--ml-ui-scale)); font-size: var(--ml-meta-font); }
-.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(2px * var(--ml-ui-scale)) calc(4px * var(--ml-ui-scale)); gap: var(--ml-action-gap); flex-wrap: wrap; }
-.layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: calc(0.48rem * var(--ml-ui-scale)); }
-.layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: calc(2px * var(--ml-ui-scale)) calc(4px * var(--ml-ui-scale)); font-size: calc(0.52rem * var(--ml-ui-scale)); min-width: auto; }
-.layout--mobile-landscape .extended-info-panel .action-buttons-panel { gap: var(--ml-action-gap); }
-.layout--mobile-landscape .extended-info-panel .turn-status-text { font-size: calc(0.54rem * var(--ml-ui-scale)); }
+.layout--mobile-landscape .extended-info-panel .ext-section { padding: calc(4px * var(--mobile-scale)) calc(5px * var(--mobile-scale)) calc(5px * var(--mobile-scale)); border-radius: 6px; margin: 0; }
+.layout--mobile-landscape .extended-info-panel .ext-title { font-size: 0.8rem; margin-bottom: 1px; }
+.layout--mobile-landscape .extended-info-panel .ext-meta { font-size: calc(0.54rem * var(--mobile-scale)); margin-bottom: 1px; line-height: 1.25; }
+.layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.78rem; }
+.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(3px * var(--mobile-scale)) calc(6px * var(--mobile-scale)); font-size: 0.68rem; }
+.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(2px * var(--mobile-scale)) calc(4px * var(--mobile-scale)); gap: 6px; flex-wrap: wrap; }
+.layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: calc(0.48rem * var(--mobile-scale)); }
+.layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: calc(2px * var(--mobile-scale)) calc(4px * var(--mobile-scale)); font-size: calc(0.52rem * var(--mobile-scale)); min-width: auto; }
+.layout--mobile-landscape .extended-info-panel .action-buttons-panel { gap: 6px; }
+.layout--mobile-landscape .extended-info-panel .turn-status-text { font-size: calc(0.54rem * var(--mobile-scale)); }
 .layout--mobile-landscape .extended-info-panel .room-header-row { gap: 3px; margin: 0; }
-.layout--mobile-landscape .extended-info-panel .room-stats { padding: calc(2px * var(--ml-ui-scale)) calc(3px * var(--ml-ui-scale)); }
-.layout--mobile-landscape .extended-info-panel .player-row { padding: calc(2px * var(--ml-ui-scale)) calc(3px * var(--ml-ui-scale)); font-size: calc(0.52rem * var(--ml-ui-scale)); gap: calc(3px * var(--ml-ui-scale)); }
-.layout--mobile-landscape .extended-info-panel .broadcast-container { max-height: var(--ml-broadcast-height); padding: calc(2px * var(--ml-ui-scale)) calc(3px * var(--ml-ui-scale)); }
-.layout--mobile-landscape .extended-info-panel .broadcast-message { font-size: var(--ml-label-font); padding: 1px 0; }
-.layout--mobile-landscape .extended-info-panel .ting-preview-panel__tile { font-size: var(--ml-label-font); }
-.layout--mobile-landscape .extended-info-panel .action-panel { padding: calc(4px * var(--ml-ui-scale)); gap: calc(4px * var(--ml-ui-scale)); }
-.layout--mobile-landscape .extended-info-panel .action-btn--small { width: calc(28px * var(--ml-ui-scale)); height: calc(28px * var(--ml-ui-scale)); font-size: calc(0.6rem * var(--ml-ui-scale)); }
-.layout--mobile-landscape .extended-info-panel .action-btn--draw { width: calc(40px * var(--ml-ui-scale)); height: calc(40px * var(--ml-ui-scale)); font-size: calc(0.75rem * var(--ml-ui-scale)); }
-.layout--mobile-landscape .extended-info-panel .mobile-inline-menu { padding: calc(4px * var(--ml-ui-scale)) calc(6px * var(--ml-ui-scale)); }
-.layout--mobile-landscape .extended-info-panel .mobile-inline-menu__actions { display: flex; gap: calc(4px * var(--ml-ui-scale)); flex-wrap: wrap; }
+.layout--mobile-landscape .extended-info-panel .room-stats { padding: calc(2px * var(--mobile-scale)) calc(3px * var(--mobile-scale)); }
+.layout--mobile-landscape .extended-info-panel .player-row { padding: calc(2px * var(--mobile-scale)) calc(3px * var(--mobile-scale)); font-size: calc(0.52rem * var(--mobile-scale)); gap: calc(3px * var(--mobile-scale)); }
+.layout--mobile-landscape .extended-info-panel .broadcast-container { max-height: 52px; padding: calc(2px * var(--mobile-scale)) calc(3px * var(--mobile-scale)); }
+.layout--mobile-landscape .extended-info-panel .broadcast-message { font-size: 0.5rem; padding: 1px 0; }
+.layout--mobile-landscape .extended-info-panel .ting-preview-panel__tile { font-size: 0.5rem; }
+.layout--mobile-landscape .extended-info-panel .action-panel { padding: calc(4px * var(--mobile-scale)); gap: calc(4px * var(--mobile-scale)); }
+.layout--mobile-landscape .extended-info-panel .action-btn--small { width: calc(28px * var(--mobile-scale)); height: calc(28px * var(--mobile-scale)); font-size: calc(0.6rem * var(--mobile-scale)); }
+.layout--mobile-landscape .extended-info-panel .action-btn--draw { width: calc(40px * var(--mobile-scale)); height: calc(40px * var(--mobile-scale)); font-size: calc(0.75rem * var(--mobile-scale)); }
+.layout--mobile-landscape .extended-info-panel .mobile-inline-menu { padding: calc(4px * var(--mobile-scale)) calc(6px * var(--mobile-scale)); }
+.layout--mobile-landscape .extended-info-panel .mobile-inline-menu__actions { display: flex; gap: calc(4px * var(--mobile-scale)); flex-wrap: wrap; }
 
 /* 竖屏手机：右侧栏变底部横排 */
 @media (max-width: 900px) and (orientation: portrait) {
@@ -6912,8 +6882,8 @@ const forceDiscard = async (p: Player) => {
 
 /* 横屏手机：牌桌缩小，牌跟着缩 */
 .layout--mobile-landscape .mahjong-table {
-  --tile-w: calc(17px * var(--ml-table-scale));
-  --tile-h: calc(24px * var(--ml-table-scale));
+  --tile-w: calc(17px * var(--mobile-scale));
+  --tile-h: calc(24px * var(--mobile-scale));
   --discard-scale: 1.2;
   --discard-gap-x-override: 0.35px;
   --discard-gap-y-override: 0.35px;
@@ -6924,20 +6894,20 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-inset: 0;
   --seat-top-width: 65%;
   --seat-bottom-width: 80%;
-  --seat-side-width: calc(118px * var(--ml-table-scale));
-  --seat-side-height: calc(58% + (8% * var(--ml-table-scale)));
+  --seat-side-width: calc(118px * var(--mobile-scale));
+  --seat-side-height: calc(58% + (8% * var(--mobile-scale)));
   --seat-side-player-offset: 0.6%;
 }
 .layout--mobile-landscape :deep(.discard-zone--top) {
   transform: translate(-50%, -100%) rotate(180deg) !important;
 }
 .layout--mobile-landscape :deep(.discard-zone--right) {
-  transform: translate(var(--ml-side-shift), -50%);
+  transform: translate(6px, -50%);
 }
-.layout--mobile-landscape .seat-top { min-height: calc(42px * var(--ml-table-scale)); }
-.layout--mobile-landscape .seat-bottom { min-height: calc(54px * var(--ml-table-scale)); width: min(78%, calc(100% - (92px * var(--ml-table-scale)))); }
-.layout--mobile-landscape .seat-left { width: calc(136px * var(--ml-table-scale)); }
-.layout--mobile-landscape .seat-right { width: calc(144px * var(--ml-table-scale)); }
+.layout--mobile-landscape .seat-top { min-height: calc(42px * var(--mobile-scale)); }
+.layout--mobile-landscape .seat-bottom { min-height: calc(54px * var(--mobile-scale)); width: min(78%, calc(100% - (92px * var(--mobile-scale)))); }
+.layout--mobile-landscape .seat-left { width: calc(136px * var(--mobile-scale)); }
+.layout--mobile-landscape .seat-right { width: calc(144px * var(--mobile-scale)); }
 
 /* 移动竖屏旋转模式 */
 @media (max-width: 768px) and (orientation: portrait) {
@@ -6955,10 +6925,10 @@ const forceDiscard = async (p: Player) => {
   .room-container--rotated {
     display: flex;
     flex-direction: row;
-    gap: 10px;
+    gap: calc(8px * var(--mobile-scale));
     transform: rotate(90deg);
     transform-origin: center;
-    width: min(900px, 90vh);
+    width: min(90vh, 100vw);
     max-height: calc(100vw - 24px);
   }
 
@@ -6984,8 +6954,8 @@ const forceDiscard = async (p: Player) => {
 
   .room-container--rotated .extended-info-panel {
     order: 2;
-    flex: 0 0 min(354px, 30%);
-    max-width: min(354px, 30%);
+    flex: 0 0 min(calc(354px * var(--mobile-scale)), 30%);
+    max-width: min(calc(354px * var(--mobile-scale)), 30%);
     max-height: none;
     overflow-y: auto;
   }
@@ -7001,16 +6971,16 @@ const forceDiscard = async (p: Player) => {
 
 .layout--mobile-landscape .panel-room-number,
 .layout--mobile-landscape .mahjong-subtitle {
-  font-size: var(--ml-room-font);
+  font-size: 0.78rem;
 }
 
 .layout--mobile-landscape .ext-section {
-  padding: calc(6px * var(--ml-ui-scale)) calc(8px * var(--ml-ui-scale)) calc(8px * var(--ml-ui-scale));
+  padding: calc(6px * var(--mobile-scale)) calc(8px * var(--mobile-scale)) calc(8px * var(--mobile-scale));
   border-radius: 10px;
 }
 
 .layout--mobile-landscape .ext-title {
-  font-size: var(--ml-title-font);
+  font-size: 0.8rem;
   margin-bottom: 4px;
 }
 
@@ -7020,42 +6990,42 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extra-action-btn,
 .layout--mobile-landscape .mahjong-button.small,
 .layout--mobile-landscape .panel-button.small {
-  font-size: var(--ml-meta-font);
+  font-size: 0.68rem;
 }
 
 .layout--mobile-landscape .action-buttons-panel {
-  gap: var(--ml-action-gap);
+  gap: 6px;
 }
 
 .layout--mobile-landscape .extra-actions-bar {
-  gap: var(--ml-action-gap);
-  padding: calc(4px * var(--ml-ui-scale)) calc(8px * var(--ml-ui-scale));
+  gap: 6px;
+  padding: calc(4px * var(--mobile-scale)) calc(8px * var(--mobile-scale));
 }
 
 .layout--mobile-landscape :deep(.center-info) {
-  padding: calc(6px * var(--ml-ui-scale)) calc(10px * var(--ml-ui-scale));
-  gap: calc(3px * var(--ml-ui-scale));
-  min-width: calc(62px * var(--ml-ui-scale));
+  padding: calc(6px * var(--mobile-scale)) calc(10px * var(--mobile-scale));
+  gap: calc(3px * var(--mobile-scale));
+  min-width: calc(62px * var(--mobile-scale));
 }
 
 .layout--mobile-landscape :deep(.multiplier-badge),
 .layout--mobile-landscape :deep(.remaining-badge) {
-  padding: calc(2px * var(--ml-ui-scale)) calc(5px * var(--ml-ui-scale));
-  font-size: calc(0.48rem * var(--ml-ui-scale));
+  padding: calc(2px * var(--mobile-scale)) calc(5px * var(--mobile-scale));
+  font-size: calc(0.48rem * var(--mobile-scale));
 }
 
 .layout--mobile-landscape :deep(.multiplier-badge .badge-icon),
 .layout--mobile-landscape :deep(.remaining-badge .badge-icon) {
-  font-size: calc(0.5rem * var(--ml-ui-scale));
+  font-size: calc(0.5rem * var(--mobile-scale));
 }
 
 .layout--mobile-landscape :deep(.multiplier-badge .badge-value),
 .layout--mobile-landscape :deep(.remaining-badge .badge-value) {
-  font-size: calc(0.56rem * var(--ml-ui-scale));
+  font-size: calc(0.56rem * var(--mobile-scale));
 }
 
 .layout--mobile-landscape :deep(.wild-tile-row) {
-  padding: calc(1px * var(--ml-ui-scale)) calc(4px * var(--ml-ui-scale));
+  padding: calc(1px * var(--mobile-scale)) calc(4px * var(--mobile-scale));
 }
 /* ===== Layout debug borders ===== */
 .layout-debug {
