@@ -1,4 +1,4 @@
-<!-- error.vue (Nuxt global error page) — 仅作为兜底，自动跳回首页 -->
+<!-- error.vue (Nuxt global error page) — 仅作为兜底，gameroom 路径自动刷新，其他路径回首页 -->
 <template>
   <div class="error-page">
     <div class="error-card">
@@ -18,20 +18,20 @@ const props = defineProps({
 })
 
 const baseURL = runtimeConfig.app.baseURL || '/'
-const isGameroom404 = props.error?.statusCode === 404 &&
-  typeof window !== 'undefined' &&
-  window.location.pathname.startsWith(baseURL.replace(/\/$/, '') + '/gameroom/')
 
 onMounted(() => {
-  // gameroom 404：延迟后刷新页面（可能是建房后数据未就绪）
-  if (isGameroom404) {
+  const path = window.location.pathname
+  const isGameroom = path.startsWith(baseURL.replace(/\/$/, '') + '/gameroom/')
+
+  if (isGameroom) {
+    // gameroom 出错：可能是数据未就绪，自动刷新页面重试
     setTimeout(() => {
       window.location.reload()
     }, 1200)
     return
   }
 
-  // 其他 404/错误：直接跳回首页
+  // 其他错误：跳回首页
   setTimeout(() => {
     window.location.href = baseURL
   }, 800)

@@ -4000,13 +4000,14 @@ const forceDiscard = async (p: Player) => {
   font-size: 0.7rem;
   border-radius: 6px;
   background: rgba(33, 150, 243, 0.8);  /* 蓝色，20%透明度 */
-  color: #000;
+  color: #fff;
+  font-weight: 700;
   border: 1px solid rgba(255, 255, 255, 0.2);
   cursor: pointer;
   white-space: nowrap;
   min-width: 108px;
 }
-.settle-btn-header:hover { background: rgba(25, 118, 210, 0.8); color: #000; }
+.settle-btn-header:hover { background: rgba(25, 118, 210, 0.8); color: #fff; }
 
 .mahjong-title {
   font-size: 1.4rem;
