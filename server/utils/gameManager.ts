@@ -1448,7 +1448,12 @@ class GameManager {
     if (options?.userId) {
       const existingPlayer = game.players.find((player) => player.userId === options.userId);
       if (existingPlayer) {
-        return { playerId: existingPlayer.id, position: existingPlayer.position };
+        // 玩家已在房间中 — 用 userId 作为 playerId 返回
+        // 同时确保 player 有 id 字段（防止后续其他地方用 entry.id 匹配失败）
+        if (!existingPlayer.id) {
+          existingPlayer.id = existingPlayer.userId!
+        }
+        return { playerId: existingPlayer.id!, position: existingPlayer.position };
       }
     }
 

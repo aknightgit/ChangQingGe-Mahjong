@@ -74,7 +74,7 @@ export default defineEventHandler(async (event) => {
   try {
     access = isDebugBypass
       ? {
-          player: game.players.find((entry) => entry.id === normalizedPlayerId),
+          player: game.players.find((entry) => entry.id === normalizedPlayerId || entry.userId === normalizedPlayerId),
           isAdmin: true
         }
       : await requireGamePlayerAccess(event, game, normalizedPlayerId, { allowAdmin: true });

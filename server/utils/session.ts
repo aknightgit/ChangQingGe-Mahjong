@@ -67,7 +67,8 @@ export async function requireGamePlayerAccess(
   options?: { allowAdmin?: boolean }
 ): Promise<{ user: Awaited<ReturnType<typeof resolveUserFromEvent>>; player: Player; isAdmin: boolean }> {
   const user = await resolveUserFromEvent(event)
-  const player = game.players.find((entry) => entry.id === playerId)
+  // 优先用 id 匹配，若没有 id 字段则用 userId 匹配
+  const player = game.players.find((entry) => entry.id === playerId || entry.userId === playerId)
 
   if (!player) {
     throw createError({
