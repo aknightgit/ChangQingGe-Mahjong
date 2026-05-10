@@ -45,7 +45,7 @@ export default defineEventHandler(async (event) => {
 
       return {
         success: true,
-        data: result
+        data: { ...result, gameId }
       };
     }
 
@@ -53,7 +53,7 @@ export default defineEventHandler(async (event) => {
     
     return {
       success: true,
-      data: result
+      data: { ...result, gameId }
     };
   } catch (error: any) {
     throw createError({

@@ -698,7 +698,7 @@
             <div class="waiting-room-panel__header">
               <div>
                 <h3 class="ext-title">等待开局</h3>
-                <p class="ext-meta waiting-room-panel__meta">房间号 #{{ gameState?.roomNumber || '----' }} · {{ waitingPlayers.length }}/4 人</p>
+                <p class="ext-meta waiting-room-panel__meta"><strong>房间号 #{{ gameState?.roomNumber || '----' }}</strong> · {{ waitingPlayers.length }}/4 人</p>
               </div>
               <button
                 v-if="canManualStartWaitingGame"
@@ -1821,7 +1821,7 @@ const canManualStartWaitingGame = computed(() =>
 const waitingRoomHint = computed(() => {
   if (!gameState.value) return '正在同步房间状态'
   if (waitingPlayers.value.length < 4) {
-    return `其他玩家可通过 4 位房间号 #${gameState.value.roomNumber || '----'} 搜索并加入。`
+    return '等待其他玩家加入。'
   }
   if (canManualStartWaitingGame.value) {
     return '四人已到齐，由房主点击“开始牌局”后进入第一局掷骰。'

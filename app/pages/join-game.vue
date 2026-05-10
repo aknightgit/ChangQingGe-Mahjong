@@ -211,9 +211,10 @@ const joinGame = async (gameId: string) => {
       body: { gameId, playerName: userName.value || 'Player ' + Math.floor(Math.random() * 1000) }
     })
     if (data?.success) {
-      const { playerId } = data.data
-      console.log('[Join] Joined game:', gameId, 'playerId:', playerId)
-      await navigateTo(`${appBaseURL}/gameroom/${gameId}?playerId=${playerId}`)
+      const { playerId, gameId: realGameId } = data.data
+      const targetGameId = realGameId || gameId
+      console.log('[Join] Joined game:', targetGameId, 'playerId:', playerId)
+      await navigateTo(`${appBaseURL}/gameroom/${targetGameId}?playerId=${playerId}`)
     } else {
       joinError.value = '无法加入牌局，请重试。'
     }

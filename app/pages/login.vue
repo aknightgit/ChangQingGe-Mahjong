@@ -4,7 +4,7 @@
       <div class="login-shell">
         <section class="login-main">
           <h1 class="mahjong-title">长清阁麻将</h1>
-          <p class="mahjong-subtitle">海派麻将 × 四川麻将</p>
+          <p class="mahjong-subtitle">上海麻将 × 四川麻将</p>
 
           <div class="tab-bar">
             <button
