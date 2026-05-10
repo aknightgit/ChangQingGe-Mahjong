@@ -4524,6 +4524,85 @@ const forceDiscard = async (p: Player) => {
   padding: 3px;
   border-radius: 0;
   scrollbar-width: thin;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 移动端横屏：结算弹窗表格缩小 */
+.layout--mobile-landscape .settle-panel {
+  max-width: min(1000px, 96vw);
+  max-height: 90vh;
+  padding: 16px 12px;
+}
+
+.layout--mobile-landscape .settle-title-center {
+  font-size: 1rem;
+  margin-bottom: 10px;
+}
+
+.layout--mobile-landscape .settle-table-wrap {
+  max-width: calc(96vw - 24px);
+}
+
+.layout--mobile-landscape .settle-round-table {
+  min-width: auto;
+  font-size: 0.62rem;
+}
+
+.layout--mobile-landscape .settle-round-table th,
+.layout--mobile-landscape .settle-round-table td {
+  padding: 3px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layout--mobile-landscape .settle-round-table--compact th:nth-child(1),
+.layout--mobile-landscape .settle-round-table--compact td:nth-child(1) {
+  width: auto;
+  max-width: 60px;
+}
+
+.layout--mobile-landscape .settle-round-table--compact th:nth-child(2) {
+  width: auto;
+  max-width: 36px;
+}
+
+.layout--mobile-landscape .settle-round-table--compact th:nth-child(3),
+.layout--mobile-landscape .settle-round-table--compact td:nth-child(3) {
+  width: auto;
+  max-width: 120px;
+  min-width: auto;
+}
+
+.layout--mobile-landscape .settle-round-table--compact th:nth-child(4),
+.layout--mobile-landscape .settle-round-table--compact td:nth-child(4),
+.layout--mobile-landscape .settle-round-table--compact th:nth-child(5),
+.layout--mobile-landscape .settle-round-table--compact td:nth-child(5),
+.layout--mobile-landscape .settle-round-table--compact th:nth-child(6),
+.layout--mobile-landscape .settle-round-table--compact td:nth-child(6),
+.layout--mobile-landscape .settle-round-table--compact th:nth-child(7),
+.layout--mobile-landscape .settle-round-table--compact td:nth-child(7) {
+  width: auto;
+  max-width: 44px;
+}
+
+.layout--mobile-landscape .settle-round-table--compact th:nth-child(8),
+.layout--mobile-landscape .settle-round-table--compact td:nth-child(8) {
+  width: auto;
+  max-width: 68px;
+}
+
+.layout--mobile-landscape .settle-round-table--compact th:nth-child(9),
+.layout--mobile-landscape .settle-round-table--compact td:nth-child(9) {
+  width: auto;
+  max-width: 60px;
+}
+
+.layout--mobile-landscape .settle-round-tiles {
+  min-width: auto;
+  font-size: 0.55rem;
+}
 }
 
 .layout--mobile-landscape .extended-info-panel * {

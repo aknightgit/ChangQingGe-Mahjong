@@ -188,10 +188,11 @@ const rankedPlayers = computed(() =>
   .stats-header { padding-bottom: 3px; gap: 4px; }
   .stats-title { font-size: 0.65rem; }
   .stats-round { font-size: 0.55rem; }
-  .stats-table th { font-size: 0.5rem; padding: 2px 2px; }
-  .stats-table td { font-size: 0.52rem; padding: 2px 2px; }
-  .td-name { gap: 3px; }
-  .rank-dot { width: 5px; height: 5px; }
-  .rank-qj-icon { font-size: 0.6rem; }
+  .stats-table { font-size: 0.65rem; table-layout: fixed; }
+  .stats-table th { font-size: 0.45rem; padding: 1px 1px; }
+  .stats-table td { font-size: 0.48rem; padding: 1px 1px; }
+  .td-name { gap: 2px; overflow: hidden; text-overflow: ellipsis; max-width: 50px; }
+  .rank-dot { width: 4px; height: 4px; flex-shrink: 0; }
+  .rank-qj-icon { font-size: 0.5rem; }
 }
 </style>
