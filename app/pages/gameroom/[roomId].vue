@@ -683,47 +683,12 @@
               房间 #{{ gameState?.roomNumber || '????' }}
             </p>
             <button
-              v-if="gameState?.phase === 'playing' || gameState?.phase === 'ended'"
+              v-if="gameState?.phase === GamePhase.WAITING ? canManualStartWaitingGame : (gameState?.phase === 'playing' || gameState?.phase === 'ended')"
               class="settle-btn-header"
-              @click="onRequestSettle"
+              @click="gameState?.phase === GamePhase.WAITING ? onStartGame() : onRequestSettle()"
             >
-              📊 退房结算
+              {{ gameState?.phase === GamePhase.WAITING ? '🀄 开始牌局' : '📊 退房结算' }}
             </button>
-          </div>
-
-          <div
-            v-if="gameState?.phase === GamePhase.WAITING"
-            class="ext-section waiting-room-panel"
-          >
-            <div class="waiting-room-panel__header">
-              <div>
-                <h3 class="ext-title">等待开局</h3>
-                <p class="ext-meta waiting-room-panel__meta"><strong>房间号 #{{ gameState?.roomNumber || '----' }}</strong> · {{ waitingPlayers.length }}/4 人</p>
-              </div>
-              <button
-                v-if="canManualStartWaitingGame"
-                class="mahjong-button primary waiting-room-panel__start"
-                @click="onStartGame"
-              >
-                开始牌局
-              </button>
-            </div>
-            <p class="waiting-room-panel__hint">
-              {{ waitingRoomHint }}
-            </p>
-            <div class="waiting-room-panel__chips">
-              <span
-                v-for="player in waitingPlayers"
-                :key="player.id"
-                class="waiting-room-panel__chip"
-                :class="{
-                  'waiting-room-panel__chip--dealer': player.isDealer,
-                  'waiting-room-panel__chip--bot': player.isBot
-                }"
-              >
-                {{ player.name }}<span v-if="player.isDealer"> · 房主</span>
-              </span>
-            </div>
           </div>
 
           <div
@@ -1818,16 +1783,6 @@ const canManualStartWaitingGame = computed(() =>
   !currentPlayer.value?.isSpectator &&
   isConnected.value
 )
-const waitingRoomHint = computed(() => {
-  if (!gameState.value) return '正在同步房间状态'
-  if (waitingPlayers.value.length < 4) {
-    return '等待其他玩家加入。'
-  }
-  if (canManualStartWaitingGame.value) {
-    return '四人已到齐，由房主点击“开始牌局”后进入第一局掷骰。'
-  }
-  return '四人已到齐，等待房主开始本局。'
-})
 const overlayReason = computed(() => roomDismissedReason.value || gameState.value?.endReason || null)
 const isOverlayVisible = computed(() => {
   if (roomDismissedReason.value) return true
@@ -3469,12 +3424,59 @@ interface BroadcastMsg {
 const broadcastMessages = ref<BroadcastMsg[]>([])
 const displayBroadcastMessages = computed(() => {
   if (!isPreGameTransition.value) return broadcastMessages.value
-  const waitingText = !gameState.value
-    ? '⏳ 正在连接牌桌…'
-    : waitingPlayers.value.length >= 4 && isDealerUser.value
-      ? '⏳ 四人已到齐，等待房主点击开始牌局'
-      : `⏳ 当前 ${waitingPlayers.value.length}/4 人，牌桌准备中`
-  return [{ id: -1, text: waitingText, type: 'info', timestamp: Date.now(), timeLabel: 'NOW' } as BroadcastMsg, ...broadcastMessages.value].slice(0, 5)
+
+  const msgs: BroadcastMsg[] = []
+
+  if (!gameState.value) {
+    msgs.push({ id: -1, text: '⏳ 正在连接牌桌…', type: 'info', timestamp: Date.now(), timeLabel: 'NOW' })
+  } else {
+    const room = gameState.value.roomNumber || '----'
+    const count = waitingPlayers.value.length
+
+    // 房间号 + 人数
+    msgs.push({
+      id: -2,
+      text: `🏠 房间号 #${room} · ${count}/4 人`,
+      type: 'info',
+      timestamp: Date.now(),
+      timeLabel: 'NOW'
+    })
+
+    if (count >= 4 && isDealerUser.value) {
+      msgs.push({
+        id: -3,
+        text: '✅ 四人已到齐，点击下方按钮开始牌局',
+        type: 'info',
+        timestamp: Date.now(),
+        timeLabel: 'NOW'
+      })
+    } else {
+      msgs.push({
+        id: -3,
+        text: count >= 4 ? '✅ 四人已到齐，等待房主开始牌局' : '💬 等待其他玩家加入',
+        type: 'info',
+        timestamp: Date.now(),
+        timeLabel: 'NOW'
+      })
+    }
+
+    // 每位玩家一条
+    waitingPlayers.value.forEach((p, i) => {
+      const isDealer = p.isDealer ? ' · 房主' : ''
+      const isBot = p.isBot ? ' 🤖' : ''
+      msgs.push({
+        id: -4 - i,
+        text: `👤 ${p.name}${isDealer}${isBot} 已就位`,
+        type: 'info',
+        timestamp: Date.now(),
+        timeLabel: 'NOW'
+      })
+    })
+  }
+
+  // 合并真实广播消息（最多保留3条，让路）
+  const realMsgs = broadcastMessages.value.slice(-3)
+  return [...msgs, ...realMsgs].slice(0, 8)
 })
 let broadcastId = 0
 const addBroadcast = (text: string, type: BroadcastMsg['type'] = 'info') => {
@@ -5175,65 +5177,6 @@ const forceDiscard = async (p: Player) => {
   color: #ffd700;
   font-weight: 700;
   text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
-}
-
-.waiting-room-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.waiting-room-panel__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.waiting-room-panel__meta {
-  margin-top: 2px;
-}
-
-.waiting-room-panel__start {
-  flex-shrink: 0;
-}
-
-.waiting-room-panel__hint {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 0.76rem;
-  line-height: 1.45;
-}
-
-.waiting-room-panel__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.waiting-room-panel__chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 0.74rem;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.waiting-room-panel__chip--dealer {
-  border-color: rgba(255, 215, 64, 0.42);
-  background: rgba(255, 215, 64, 0.12);
-  color: #ffe082;
-}
-
-.waiting-room-panel__chip--bot {
-  border-color: rgba(79, 195, 247, 0.3);
-  background: rgba(79, 195, 247, 0.1);
 }
 
 /* 胜者观战栏 */
