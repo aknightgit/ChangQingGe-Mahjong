@@ -59,6 +59,7 @@ export interface MahjongGame {
   _id?: ObjectId;
   gameId: string; // Unique game identifier
   roomId: string; // Reference to room
+  roomNumber?: string; // 4-digit display room number
   phase: 'waiting' | 'starting' | 'playing' | 'cha_jiao' | 'ended';
   endReason?: string | null;
   players: GamePlayer[];

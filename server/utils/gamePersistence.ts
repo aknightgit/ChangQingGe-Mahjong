@@ -121,6 +121,7 @@ const storedToAction = (action: StoredGameAction): GameAction => ({
 const gameStateToDocument = (game: GameState): PersistedMahjongGame => ({
   gameId: game.gameId,
   roomId: game.gameId,
+  roomNumber: game.roomNumber,
   phase: game.phase as PersistedMahjongGame['phase'],
   endReason: game.endReason,
   players: game.players.map(playerToStored),
@@ -150,6 +151,7 @@ const gameStateToDocument = (game: GameState): PersistedMahjongGame => ({
 
 const documentToGameState = (doc: PersistedMahjongGame): GameState => ({
   gameId: doc.gameId,
+  roomNumber: doc.roomNumber,
   phase: doc.phase as GameState['phase'],
   endReason: (doc.endReason ?? null) as GameState['endReason'],
   players: doc.players.map(storedToPlayer),
