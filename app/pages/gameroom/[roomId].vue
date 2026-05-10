@@ -2572,6 +2572,12 @@ const onConfirmHu = async (index: number) => {
   hideActionButtonsNow()
   resetAutoCount()
   playSound('tile-hu')
+  const selectedOption: any = displayWinOptions.value[index]
+  if (selectedOption?.type === 'self_draw') {
+    playVoiceAction('selfHu')
+  } else {
+    playVoiceAction('hu')
+  }
   lastHuReviewOptions.value = displayWinOptions.value.map((option: any) => ({ ...option }))
   lastSelectedHuCombo.value = index
   isHuReviewMode.value = false
@@ -2906,7 +2912,7 @@ const onKong = () => {
 }
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); playVoiceAction('rebel'); executeAction(ActionType.REBEL) }
 const onThink = () => { resetAutoCount(); executeAction(ActionType.THINK) }
-const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); executeAction(ActionType.CHEAT_HU) }
+const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); playVoiceAction('hu'); executeAction(ActionType.CHEAT_HU) }
 
 // 退房结算
 const showSettlement = ref(false)
