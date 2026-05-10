@@ -1537,6 +1537,10 @@ class GameManager {
     game.endedAt = undefined;
     game.finalScores = undefined;
     game.customScoringMode = null;
+    // 清空上一局残留状态
+    game.discardPile = [];
+    game.pendingActions = [];
+    game.drawnThisTurn = false;
     // 统一使用 hesitationWindow（决策犹豫期），所有冻结/等待时间都基于此参数
     if (typeof options?.hesitationWindow === 'number') {
       const fastMode = this.isTrainingFastMode(game);
