@@ -2,6 +2,7 @@
  * API Log Service — 全链路API请求日志，写入MongoDB
  * 记录每个请求的: endpoint, user, gameId, playerId, status, duration, error
  * 
+ * 开关：环境变量 ENABLE_API_LOG=true 时启用，默认关闭。
  * 用法:
  *   import { apiLog, ApiLogLevel } from '../../utils/apiLogService'
  *   await apiLog(event, { endpoint: 'join', gameId, playerId, ... })
@@ -9,9 +10,12 @@
 
 import { MongoClient } from 'mongodb'
 
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://admin:%24%249myHome@192.168.3.241:27017/changqingge?authSource=admin'
+const MONGO_URI = process.env.MONGODB_URI || 'mongodb://admin:***@192.168.3.241:27017/changqingge?authSource=admin'
 const MONGO_DB = process.env.MONGODB_DB || 'changqingge'
 const LOG_COLLECTION = 'apiLogs'
+
+// 开关：默认关闭。设置 ENABLE_API_LOG=true 启用
+const IS_ENABLED = (process.env.ENABLE_API_LOG || '').toLowerCase() === 'true'
 
 let _client: MongoClient | null = null
 let _connected = false
@@ -69,6 +73,8 @@ export async function apiLog(
     error?: string
   }
 ): Promise<void> {
+  // 开关关闭时直接跳过，零开销（无 try/catch）
+  if (!IS_ENABLED) return
   try {
     const col = await getCollection()
     if (!col) return
