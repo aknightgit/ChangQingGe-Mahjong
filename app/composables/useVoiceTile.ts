@@ -49,7 +49,7 @@ const VOICE_ACTION_TEXT_MAP: Record<keyof typeof VOICE_ACTION_MAP, string> = {
   selfHu: '自摸',
   rebel: '逐造',
   liangShan: '聚义',
-  diceRoll: '骾子',
+  diceRoll: '骰子',
 }
 
 const SILENT_WAV_DATA_URI =
