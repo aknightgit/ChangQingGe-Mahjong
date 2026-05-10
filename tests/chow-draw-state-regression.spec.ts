@@ -234,6 +234,92 @@ test('expired peng window draw marks drawnThisTurn true', afterPengDrawGame?.dra
 ;(gameManager as any).games.delete(pengPendingGame.gameId)
 ;(gameManager as any).clearPendingActionTimer?.(pengPendingGame.gameId)
 
+const sharedPendingDrawGame = {
+  ...game,
+  gameId: 'shared-pending-draw-unlock',
+  wall: [tile('draw-shared-1', TileSuit.DOTS, 7)],
+  discardPile: [tile('discard-shared-1', TileSuit.DOTS, 3)],
+  currentPlayerIndex: 0,
+  drawnThisTurn: false,
+  actionHistory: [],
+  pendingActions: [
+    {
+      playerId: 'p2',
+      availableActions: [ActionType.PENG, ActionType.PASS],
+      tile: tile('discard-shared-1', TileSuit.DOTS, 3),
+      expiresAt: Date.now() + 5000,
+    }
+  ],
+} as any
+
+sharedPendingDrawGame.players = [
+  createPlayer('p1'),
+  createPlayer('p2')
+]
+sharedPendingDrawGame.players[1].position = 1
+
+;(gameManager as any).games.set(sharedPendingDrawGame.gameId, sharedPendingDrawGame)
+
+const sharedPendingActions = await gameManager.getAvailableActions(sharedPendingDrawGame.gameId, 'p1')
+test('current player draw stays available even when other players still have pending non-hu claims', sharedPendingActions.includes(ActionType.DRAW), `actions=${sharedPendingActions.join(',')}`)
+
+let sharedPendingDrawThrew = false
+try {
+  await gameManager.executeAction(sharedPendingDrawGame.gameId, 'p1', ActionType.DRAW)
+} catch {
+  sharedPendingDrawThrew = true
+}
+
+const sharedPendingAfterDraw = await gameManager.getGame(sharedPendingDrawGame.gameId)
+test('current player can draw while non-hu claims are still pending', !sharedPendingDrawThrew)
+test('drawing clears stale non-hu pending claims from others', (sharedPendingAfterDraw?.pendingActions?.length ?? -1) === 0, `pending=${sharedPendingAfterDraw?.pendingActions?.length ?? -1}`)
+
+;(gameManager as any).games.delete(sharedPendingDrawGame.gameId)
+;(gameManager as any).clearPendingActionTimer?.(sharedPendingDrawGame.gameId)
+
+const huLockGame = {
+  ...game,
+  gameId: 'hu-selection-lock-blocks-draw',
+  wall: [tile('draw-lock-1', TileSuit.DOTS, 8)],
+  discardPile: [tile('discard-lock-1', TileSuit.DOTS, 2)],
+  currentPlayerIndex: 0,
+  drawnThisTurn: false,
+  actionHistory: [],
+  pendingActions: [
+    {
+      playerId: 'p2',
+      availableActions: [ActionType.HU, ActionType.PASS],
+      tile: tile('discard-lock-1', TileSuit.DOTS, 2),
+      expiresAt: Date.now() + 5000,
+    }
+  ],
+  huSelectionLocks: {
+    p2: Date.now()
+  }
+} as any
+
+huLockGame.players = [
+  createPlayer('p1'),
+  createPlayer('p2')
+]
+huLockGame.players[1].position = 1
+
+;(gameManager as any).games.set(huLockGame.gameId, huLockGame)
+
+const huLockedActions = await gameManager.getAvailableActions(huLockGame.gameId, 'p1')
+test('draw stays hidden while another player is actively selecting a hu option', !huLockedActions.includes(ActionType.DRAW), `actions=${huLockedActions.join(',')}`)
+
+let huLockedDrawThrew = false
+try {
+  await gameManager.executeAction(huLockGame.gameId, 'p1', ActionType.DRAW)
+} catch {
+  huLockedDrawThrew = true
+}
+test('draw is blocked while another player holds a hu selection lock', huLockedDrawThrew)
+
+;(gameManager as any).games.delete(huLockGame.gameId)
+;(gameManager as any).clearPendingActionTimer?.(huLockGame.gameId)
+
 const botPassShouldNotSkipHumanGame = {
   ...game,
   gameId: 'stale-bot-pass-should-not-skip-human',

@@ -336,6 +336,7 @@ export interface GameState {
   spectatorMode?: { playerId: string; viewingPlayerId: string } | null;
   spectatorViews?: Record<string, SpectatorViewState>;
   spectatorApprovalRequests?: SpectatorApprovalRequest[];
+  huSelectionLocks?: Record<string, number>;
   trainingRoundStartSnapshot?: any;
   // 吃碰排斥规则状态（每局重置）
   chowPongExclusion?: Record<string, { firstActionSuit: string | null; firstActionType: 'chow' | 'pong' | null }>;

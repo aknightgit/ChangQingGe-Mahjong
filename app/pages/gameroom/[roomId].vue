@@ -2505,6 +2505,22 @@ const fetchWinOptions = async () => {
   }
 }
 
+const syncHuSelectionLock = async (locked: boolean) => {
+  if (!roomId.value || !currentPlayer.value?.id) return
+  try {
+    await $fetch('/api/game/hu-selection', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: currentPlayer.value.id,
+        locked
+      }
+    })
+  } catch (error) {
+    console.error('[hu-selection] Failed to sync lock:', error)
+  }
+}
+
 // 自摸时自动弹面板
 let autoHuShown = false
 watch(() => [showHu.value, isMyTurn.value], ([canHu, myTurn]) => {
@@ -2521,10 +2537,11 @@ const onHu = async () => {
   // 不管自摸还是捉冲，都弹面板
   isHuReviewMode.value = false
   await fetchWinOptions()
+  await syncHuSelectionLock(true)
   showHuPanel.value = true
   selectedHuCombo.value = 0
 }
-const onConfirmHu = (index: number) => {
+const onConfirmHu = async (index: number) => {
   hideActionButtonsNow()
   resetAutoCount()
   playSound('tile-hu')
@@ -2532,12 +2549,16 @@ const onConfirmHu = (index: number) => {
   lastSelectedHuCombo.value = index
   isHuReviewMode.value = false
   showHuPanel.value = false
-  executeAction(ActionType.HU, undefined, undefined, displayWinOptions.value[index]?.internalLabel || displayWinOptions.value[index]?.label)
+  const success = await executeAction(ActionType.HU, undefined, undefined, displayWinOptions.value[index]?.internalLabel || displayWinOptions.value[index]?.label)
+  if (!success) {
+    await syncHuSelectionLock(false)
+  }
 }
-const onCancelHu = () => {
+const onCancelHu = async () => {
   showHuPanel.value = false
   selectedHuCombo.value = isHuReviewMode.value ? lastSelectedHuCombo.value : null
   isHuReviewMode.value = false
+  await syncHuSelectionLock(false)
 }
 const openHuReviewPanel = () => {
   if (!lastHuReviewOptions.value.length) return
@@ -2597,10 +2618,6 @@ const actionVisualFreezeUntil = computed(() => {
   // 服务端显式 freeze 优先；若当前轮到自己且共享 claim 窗口里允许 DRAW，则直接跟 pending.expiresAt 对齐。
   const freezeFromPending = currentFreezeUntil.value
   if (freezeFromPending > nowTs.value) return freezeFromPending
-
-  if (hasSharedDrawWindow.value || hasDeferredDrawWindow.value) {
-    return Number((myPendingAction.value as any)?.expiresAt ?? 0)
-  }
 
   return 0
 })

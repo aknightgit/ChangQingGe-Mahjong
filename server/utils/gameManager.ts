@@ -120,6 +120,29 @@ class GameManager {
       && game.wall.length > 0;
   }
 
+  private hasActiveHuSelectionLock(game: GameState, excludePlayerId?: string): boolean {
+    const locks = game.huSelectionLocks || {};
+    return Object.keys(locks).some(playerId => playerId !== excludePlayerId && Number(locks[playerId]) > 0);
+  }
+
+  async setHuSelectionLock(gameId: string, playerId: string, locked: boolean): Promise<void> {
+    await this.hydrateFromDatabase();
+    const game = this.games.get(gameId) || await this.ensureGameLoaded(gameId);
+    if (!game) throw new Error('Game not found');
+    const player = game.players.find(p => p.id === playerId);
+    if (!player) throw new Error('Player not found');
+
+    const nextLocks = { ...(game.huSelectionLocks || {}) };
+    if (locked) {
+      nextLocks[playerId] = Date.now();
+    } else {
+      delete nextLocks[playerId];
+    }
+    game.huSelectionLocks = Object.keys(nextLocks).length ? nextLocks : undefined;
+    await this.persistGame(game);
+    this.broadcastGameState(gameId);
+  }
+
   private isSharedDrawClaimWindow(game: GameState, playerId: string): boolean {
     const currentPlayer = game.players[game.currentPlayerIndex];
     if (!currentPlayer || currentPlayer.id !== playerId) return false;
@@ -146,7 +169,7 @@ class GameManager {
     const player = game.players.find(p => p.id === playerId);
     if (!player) return false;
     if (this.isDaDiaoReadyState(game, player)) return false;
-    if (!this.isSharedDrawClaimWindow(game, playerId)) return false;
+    if (this.hasActiveHuSelectionLock(game, playerId)) return false;
     return this.canPlayerDrawOnCurrentTurn(game, player);
   }
 
@@ -156,7 +179,7 @@ class GameManager {
     if (this.isDaDiaoReadyState(game, player)) return false;
     if (game.players[game.currentPlayerIndex]?.id !== playerId) return false;
     if (game.pendingActions.length === 0) return false;
-    if (game.pendingActions.some(pa => pa.playerId !== playerId)) return false;
+    if (this.hasActiveHuSelectionLock(game, playerId)) return false;
     return this.canPlayerDrawOnCurrentTurn(game, player);
   }
 
@@ -2076,6 +2099,12 @@ class GameManager {
       timestamp: Date.now()
     };
 
+    if (game.huSelectionLocks?.[playerId]) {
+      const nextLocks = { ...game.huSelectionLocks };
+      delete nextLocks[playerId];
+      game.huSelectionLocks = Object.keys(nextLocks).length ? nextLocks : undefined;
+    }
+
     switch (action) {
       case ActionType.DISCARD:
         {
@@ -2114,6 +2143,10 @@ class GameManager {
 
       case ActionType.DRAW:
         {
+          if (this.hasActiveHuSelectionLock(game, player.id)) {
+            console.warn(`[DRAW] Blocked: ${player.name} is waiting for another player's HU selection lock`);
+            throw new Error('Draw is locked while another player is selecting a HU option');
+          }
           const hasOwnPending = game.pendingActions.some(pa => pa.playerId === player.id);
           if (hasOwnPending && !this.canExecuteCurrentTurnPlayerDrawDuringPending(game, player.id)) {
             console.warn(
@@ -2121,6 +2154,10 @@ class GameManager {
             );
             throw new Error('Draw is not available until the current response window ends');
           }
+        }
+        if (game.pendingActions.length > 0) {
+          game.pendingActions = [];
+          game.pengChowConflict = null;
         }
         game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
         {
@@ -4305,6 +4342,7 @@ class GameManager {
     // 每次轮到新玩家时重置drawnThisTurn，让该玩家能正常摸牌。
     // 这修复了"在别人回合中声称PENG/KONG后该玩家无法摸牌"的bug。
     game.drawnThisTurn = false;
+    game.huSelectionLocks = undefined;
 
     // 百搭冷冻一圈完成检查：当再次轮到打出百搭的玩家时，解除冷冻
     // 冷冻从打出百搭开始，经过上家、对家、下家各一出牌后（即该玩家再次轮到）解除
