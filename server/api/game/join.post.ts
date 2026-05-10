@@ -1,64 +1,109 @@
 import { gameManager } from '../../utils/gameManager';
 import { requireGamePlayerAccess, resolveUserFromEvent } from '../../utils/session';
+import { apiLog } from '../../utils/apiLogService';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
   let { gameId, playerName } = body;
-  const user = await resolveUserFromEvent(event);
-
-  if (!gameId || !playerName) {
-    throw createError({
-      statusCode: 400,
-      message: 'Game ID and player name are required'
-    });
-  }
-
-  // 如果输入的是4位数字，尝试通过房间号查找
-  if (/^\d{4}$/.test(gameId)) {
-    const foundGameId = await gameManager.findGameByRoomNumber(gameId);
-    if (foundGameId) {
-      gameId = foundGameId;
-    } else {
-      throw createError({
-        statusCode: 404,
-        message: `房间号 ${gameId} 不存在或已结束`
-      });
-    }
-  }
+  const startTime = Date.now();
+  let statusCode = 200;
+  let errorMsg: string | undefined;
 
   try {
-    const isBotJoin = typeof playerName === 'string' && (playerName.startsWith('AI-') || playerName.startsWith('电脑'));
+    const user = await resolveUserFromEvent(event);
 
-    if (isBotJoin) {
-      const game = await gameManager.getGame(gameId);
-      if (!game) {
-        throw createError({ statusCode: 404, message: 'Game not found' });
+    if (!gameId || !playerName) {
+      statusCode = 400;
+      errorMsg = 'Game ID and player name are required';
+      throw createError({ statusCode: 400, message: errorMsg });
+    }
+
+    // 如果输入的是4位数字，尝试通过房间号查找
+    if (/^\d{4}$/.test(gameId)) {
+      const foundGameId = await gameManager.findGameByRoomNumber(gameId);
+      if (foundGameId) {
+        gameId = foundGameId;
+      } else {
+        statusCode = 404;
+        errorMsg = `房间号 ${gameId} 不存在或已结束`;
+        throw createError({ statusCode: 404, message: errorMsg });
+      }
+    }
+
+    try {
+      const isBotJoin = typeof playerName === 'string' && (playerName.startsWith('AI-') || playerName.startsWith('电脑'));
+
+      if (isBotJoin) {
+        const game = await gameManager.getGame(gameId);
+        if (!game) {
+          statusCode = 404;
+          errorMsg = 'Game not found';
+          throw createError({ statusCode: 404, message: errorMsg });
+        }
+
+        const ownerPlayerId = body.ownerPlayerId || game.players.find((entry) => entry.userId === user.userId)?.id;
+        if (!ownerPlayerId) {
+          statusCode = 403;
+          errorMsg = 'Only game participants can add bots';
+          throw createError({ statusCode: 403, message: errorMsg });
+        }
+
+        await requireGamePlayerAccess(event, game, ownerPlayerId);
+        const result = await gameManager.joinGame(gameId, playerName);
+
+        await apiLog(event, {
+          endpoint: 'join-bot',
+          gameId,
+          playerId: result.playerId,
+          statusCode: 200,
+          durationMs: Date.now() - startTime,
+        });
+
+        return {
+          success: true,
+          data: { ...result, gameId }
+        };
       }
 
-      const ownerPlayerId = body.ownerPlayerId || game.players.find((entry) => entry.userId === user.userId)?.id;
-      if (!ownerPlayerId) {
-        throw createError({ statusCode: 403, message: 'Only game participants can add bots' });
-      }
+      const result = await gameManager.joinGame(gameId, user.name, { userId: user.userId });
 
-      await requireGamePlayerAccess(event, game, ownerPlayerId);
-      const result = await gameManager.joinGame(gameId, playerName);
+      await apiLog(event, {
+        endpoint: 'join',
+        gameId,
+        playerId: result.playerId,
+        statusCode: 200,
+        durationMs: Date.now() - startTime,
+      });
 
       return {
         success: true,
         data: { ...result, gameId }
       };
-    }
+    } catch (error: any) {
+      statusCode = 400;
+      errorMsg = error.message || 'Failed to join game';
 
-    const result = await gameManager.joinGame(gameId, user.name, { userId: user.userId });
-    
-    return {
-      success: true,
-      data: { ...result, gameId }
-    };
+      // 把传入的房间号一起记下
+      const rawGameId = body?.gameId || gameId;
+      await apiLog(event, {
+        endpoint: 'join',
+        gameId: rawGameId,
+        statusCode,
+        durationMs: Date.now() - startTime,
+        error: errorMsg,
+      });
+
+      throw createError({ statusCode: 400, message: errorMsg });
+    }
   } catch (error: any) {
-    throw createError({
-      statusCode: 400,
-      message: error.message || 'Failed to join game'
+    // 外层 catch — 如果是已经记过日志的 createError，就不要再记了
+    await apiLog(event, {
+      endpoint: 'join',
+      gameId: body?.gameId || gameId,
+      statusCode: error.statusCode || 500,
+      durationMs: Date.now() - startTime,
+      error: error.message || errorMsg,
     });
+    throw error;
   }
 });

@@ -1,6 +1,7 @@
 import { gameManager } from '../../utils/gameManager';
 import { TileSuit } from '../../types/game';
 import { requireGamePlayerAccess } from '../../utils/session';
+import { apiLog } from '../../utils/apiLogService';
 import { canRevealSpectatorTarget, canUseDebugBotSpectator } from '../../utils/spectatorView';
 
 function getEffectiveGlobalMultiplier(game: any): number {
@@ -22,8 +23,15 @@ function getSpectatorScope(game: any): number {
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
   const { gameId, playerId, debugAccessToken } = query;
+  const startTime = Date.now();
 
   if (!gameId || !playerId) {
+    await apiLog(event, {
+      endpoint: 'state',
+      statusCode: 400,
+      durationMs: Date.now() - startTime,
+      error: 'Game ID and player ID are required',
+    });
     throw createError({
       statusCode: 400,
       message: 'Game ID and player ID are required'
@@ -42,6 +50,14 @@ export default defineEventHandler(async (event) => {
   }
 
   if (!game) {
+    await apiLog(event, {
+      endpoint: 'state',
+      gameId: normalizedGameId,
+      playerId: normalizedPlayerId,
+      statusCode: 404,
+      durationMs: Date.now() - startTime,
+      error: 'Game not found',
+    });
     throw createError({
       statusCode: 404,
       message: 'Game not found'
@@ -54,14 +70,35 @@ export default defineEventHandler(async (event) => {
     typeof debugAccessToken === 'string' &&
     (game as any).debugAccessToken === debugAccessToken;
 
-  const access = isDebugBypass
-    ? {
-        player: game.players.find((entry) => entry.id === normalizedPlayerId),
-        isAdmin: true
-      }
-    : await requireGamePlayerAccess(event, game, normalizedPlayerId, { allowAdmin: true });
+  let access;
+  try {
+    access = isDebugBypass
+      ? {
+          player: game.players.find((entry) => entry.id === normalizedPlayerId),
+          isAdmin: true
+        }
+      : await requireGamePlayerAccess(event, game, normalizedPlayerId, { allowAdmin: true });
+  } catch (err: any) {
+    await apiLog(event, {
+      endpoint: 'state',
+      gameId: normalizedGameId,
+      playerId: normalizedPlayerId,
+      statusCode: err.statusCode || 403,
+      durationMs: Date.now() - startTime,
+      error: err.message || 'Access denied',
+    });
+    throw err;
+  }
 
   if (!access.player) {
+    await apiLog(event, {
+      endpoint: 'state',
+      gameId: normalizedGameId,
+      playerId: normalizedPlayerId,
+      statusCode: 404,
+      durationMs: Date.now() - startTime,
+      error: 'Player not found',
+    });
     throw createError({
       statusCode: 404,
       message: 'Player not found'
@@ -119,6 +156,14 @@ export default defineEventHandler(async (event) => {
 
   // Ensure isDealer is correctly passed
   const isDealer = player.isDealer;
+
+  await apiLog(event, {
+    endpoint: 'state',
+    gameId: normalizedGameId,
+    playerId: normalizedPlayerId,
+    statusCode: 200,
+    durationMs: Date.now() - startTime,
+  });
 
   return {
     success: true,
