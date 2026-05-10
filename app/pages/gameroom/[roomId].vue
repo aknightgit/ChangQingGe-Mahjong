@@ -1366,26 +1366,66 @@ watch(discardMode, (mode) => {
   } catch {}
 })
 
+// 临时: 收集 onMounted 内的关键状态，辅助排查B跳首页问题
+const mountDebugLog = ref<string[]>([])
+const addMountLog = (msg: string) => {
+  mountDebugLog.value.push(`[${new Date().toISOString().slice(11,19)}] ${msg}`)
+  if (mountDebugLog.value.length > 50) mountDebugLog.value.shift()
+  console.log('[MountDebug]', msg)
+}
+
 onMounted(async () => {
-  await lockLandscapeForGameRoom()
+  try {
+    addMountLog(`onMounted start: roomId=${roomId.value} playerId=${playerId.value}`)
 
-  if (process.client) {
-    try {
-      const savedDiscardMode = localStorage.getItem('mahjong.discardMode')
-      if (savedDiscardMode === 'double_tap' || savedDiscardMode === 'tap_confirm' || savedDiscardMode === 'drag') {
-        discardMode.value = savedDiscardMode
-      }
-    } catch {}
-  }
+    await lockLandscapeForGameRoom()
+    addMountLog('lockLandscape done')
 
-  if (roomId.value && playerId.value) {
-    await connect(roomId.value, playerId.value)
-    clearPendingRoomTarget()
+    if (process.client) {
+      try {
+        const savedDiscardMode = localStorage.getItem('mahjong.discardMode')
+        if (savedDiscardMode === 'double_tap' || savedDiscardMode === 'tap_confirm' || savedDiscardMode === 'drag') {
+          discardMode.value = savedDiscardMode
+        }
+      } catch {}
+    }
+
+    if (roomId.value && playerId.value) {
+      addMountLog('calling connect...')
+      await connect(roomId.value, playerId.value)
+      addMountLog('connect done')
+      clearPendingRoomTarget()
+    } else {
+      addMountLog(`SKIP connect: roomId=${roomId.value} playerId=${playerId.value}`)
+    }
+    await loadVoiceScheme('bingtang')
+    addMountLog('loadVoiceScheme done')
+    ensureBackgroundMusicInitialized()
+    // 首次进入自动播放BGM（需要用户已开启）
+    playBackgroundMusic()
+    addMountLog('playBackgroundMusic done')
+
+    // 监听全局错误
+    window.addEventListener('error', (evt) => {
+      addMountLog(`GLOBAL ERROR: ${evt.message} at ${evt.filename}:${evt.lineno}`)
+    })
+    window.addEventListener('unhandledrejection', (evt) => {
+      addMountLog(`UNHANDLED REJECTION: ${evt.reason?.message || evt.reason}`)
+    })
+  } catch (err: any) {
+    addMountLog(`MOUNT FATAL ERROR: ${err?.message || err}`)
+    console.error('[MountDebug] Fatal onMounted error:', err)
+    // 给用户一个反馈，但不要触发 error.vue
+    // 直接显示在页面上
+    const toast = document.createElement('div')
+    toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#e74c3c;color:#fff;padding:12px 24px;border-radius:10px;z-index:99999;font-size:14px;max-width:90%;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.4)'
+    toast.textContent = `加载出错: ${err?.message || '未知错误'}，页面将自动重试`
+    document.body.appendChild(toast)
+    setTimeout(() => {
+      toast.remove()
+      window.location.reload()
+    }, 3000)
   }
-  await loadVoiceScheme('bingtang')
-  ensureBackgroundMusicInitialized()
-  // 首次进入自动播放BGM（需要用户已开启）
-  playBackgroundMusic()
 
   // 监听广播消息播放对应音效
   window.addEventListener('mahjong-broadcast', ((event: CustomEvent) => {
