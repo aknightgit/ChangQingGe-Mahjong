@@ -125,6 +125,13 @@ class GameManager {
     return Object.keys(locks).some(playerId => playerId !== excludePlayerId && Number(locks[playerId]) > 0);
   }
 
+  private hasBlockingDecisionLock(game: GameState, playerId: string): boolean {
+    if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now() && game.thinkFreezePlayerId !== playerId) {
+      return true;
+    }
+    return this.hasActiveHuSelectionLock(game, playerId);
+  }
+
   async setHuSelectionLock(gameId: string, playerId: string, locked: boolean): Promise<void> {
     await this.hydrateFromDatabase();
     const game = this.games.get(gameId) || await this.ensureGameLoaded(gameId);
@@ -169,7 +176,7 @@ class GameManager {
     const player = game.players.find(p => p.id === playerId);
     if (!player) return false;
     if (this.isDaDiaoReadyState(game, player)) return false;
-    if (this.hasActiveHuSelectionLock(game, playerId)) return false;
+    if (this.hasBlockingDecisionLock(game, playerId)) return false;
     return this.canPlayerDrawOnCurrentTurn(game, player);
   }
 
@@ -179,7 +186,7 @@ class GameManager {
     if (this.isDaDiaoReadyState(game, player)) return false;
     if (game.players[game.currentPlayerIndex]?.id !== playerId) return false;
     if (game.pendingActions.length === 0) return false;
-    if (this.hasActiveHuSelectionLock(game, playerId)) return false;
+    if (this.hasBlockingDecisionLock(game, playerId)) return false;
     return this.canPlayerDrawOnCurrentTurn(game, player);
   }
 
@@ -1830,6 +1837,10 @@ class GameManager {
     // 不再返回空数组,避免按钮消失
     if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now()) {
       if (game.thinkFreezePlayerId !== playerId) {
+        const currentTurnPlayer = game.players[game.currentPlayerIndex];
+        if (currentTurnPlayer?.id === playerId && this.canPlayerDrawOnCurrentTurn(game, player)) {
+          return [ActionType.DRAW];
+        }
         // 冻结期间:返回 pending actions(如果有的话)让前端显示但禁用
         // 不返回 turn actions(摸牌/出牌),因为这些在冻结期间不应该操作
         const pendingAction = game.pendingActions.find(pa => pa.playerId === playerId);
@@ -1928,6 +1939,9 @@ class GameManager {
     if (currentPlayer.id === playerId) {
       // 有其他玩家在抢牌(pending claim),当前玩家等待决策窗口
       if (game.pendingActions.length > 0 && !this.canCurrentTurnPlayerDrawDuringPending(game, playerId)) {
+        if (this.canPlayerDrawOnCurrentTurn(game, player)) {
+          return [ActionType.DRAW];
+        }
         return [];
       }
 
@@ -2143,6 +2157,10 @@ class GameManager {
 
       case ActionType.DRAW:
         {
+          if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now() && game.thinkFreezePlayerId !== player.id) {
+            console.warn(`[DRAW] Blocked: ${player.name} is waiting for ${game.thinkFreezePlayerId} think freeze to end`);
+            throw new Error('Draw is locked while another player is thinking');
+          }
           if (this.hasActiveHuSelectionLock(game, player.id)) {
             console.warn(`[DRAW] Blocked: ${player.name} is waiting for another player's HU selection lock`);
             throw new Error('Draw is locked while another player is selecting a HU option');

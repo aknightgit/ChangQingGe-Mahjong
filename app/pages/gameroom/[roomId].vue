@@ -260,6 +260,10 @@
 
 
         <!-- 结算面板 -->
+        <div v-if="drawBlockedNoticeVisible" class="draw-blocked-notice">
+          {{ drawBlockedNoticeText }}
+        </div>
+
         <div v-if="showSettlement" class="settle-overlay">
   <div class="settle-panel">
     <h2 class="settle-title-center">本局输赢</h2>
@@ -1456,6 +1460,10 @@ onUnmounted(() => {
       clearInterval(actionWindowTimer)
       actionWindowTimer = null
     }
+    if (drawBlockedNoticeTimer) {
+      clearTimeout(drawBlockedNoticeTimer)
+      drawBlockedNoticeTimer = null
+    }
     stopTurnTimer()
   }
 })
@@ -2359,6 +2367,24 @@ const thinkFreezePlayerName = computed(() => {
   if (!pid || !gameState.value) return ''
   return gameState.value.players.find(p => p.id === pid)?.name || ''
 })
+const hasOtherPlayerThinkLock = computed(() => thinkFreezeActive.value && !isMyThinkFreezeOwner.value)
+const hasOtherPlayerHuSelectionLock = computed(() => {
+  const locks = ((gameState.value as any)?.huSelectionLocks || {}) as Record<string, number>
+  return Object.keys(locks).some(playerId => playerId !== currentPlayer.value?.id)
+})
+const isDrawBlockedByDecisionLock = computed(() => hasOtherPlayerThinkLock.value || hasOtherPlayerHuSelectionLock.value)
+const drawBlockedNoticeVisible = ref(false)
+const drawBlockedNoticeText = ref('等其他玩家决策')
+let drawBlockedNoticeTimer: ReturnType<typeof setTimeout> | null = null
+const showDrawBlockedNotice = (text = '等其他玩家决策') => {
+  drawBlockedNoticeText.value = text
+  drawBlockedNoticeVisible.value = true
+  if (drawBlockedNoticeTimer) clearTimeout(drawBlockedNoticeTimer)
+  drawBlockedNoticeTimer = setTimeout(() => {
+    drawBlockedNoticeVisible.value = false
+    drawBlockedNoticeTimer = null
+  }, 1400)
+}
 const isMyThinkFreezeOwner = computed(() => {
   const pid = (gameState.value as any)?.thinkFreezePlayerId
   return !!pid && pid === currentPlayer.value?.id
@@ -2828,7 +2854,18 @@ const canCheatHu = computed(
   () => isAdminUser.value && isMyTurn.value && gameState.value?.phase === GamePhase.PLAYING
 )
 
-const onDraw = () => { resetAutoCount(); playSound('tile-draw'); executeAction(ActionType.DRAW) }
+const onDraw = async () => {
+  if (isDrawBlockedByDecisionLock.value) {
+    showDrawBlockedNotice()
+    return
+  }
+  resetAutoCount()
+  playSound('tile-draw')
+  const success = await executeAction(ActionType.DRAW)
+  if (!success && isDrawBlockedByDecisionLock.value) {
+    showDrawBlockedNotice()
+  }
+}
 const hideActionButtonsNow = () => {
   actionButtonsVisibleUntil.value = 0
 }
@@ -3235,7 +3272,7 @@ const handleCircularAction = (type: string) => {
   switch (type) {
     case 'draw':
       // 摸牌通常由服务端自动触发，这里尝试执行 draw action
-      executeAction(ActionType.DRAW)
+      void onDraw()
       break
     case 'chow':
       onChow()
@@ -5903,6 +5940,31 @@ const forceDiscard = async (p: Player) => {
   font-size: 1rem;
   opacity: 0.9;
   margin-bottom: 20px;
+}
+
+.draw-blocked-notice {
+  position: fixed;
+  left: 50%;
+  top: 18%;
+  transform: translateX(-50%);
+  z-index: 2600;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(12, 22, 18, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff4cf;
+  font-size: 0.88rem;
+  line-height: 1;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  animation: draw-blocked-notice-pop 1.4s ease forwards;
+  pointer-events: none;
+}
+
+@keyframes draw-blocked-notice-pop {
+  0% { opacity: 0; transform: translate(-50%, -8px) scale(0.96); }
+  16% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  78% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -6px) scale(0.98); }
 }
 
 /* 翻倍局骰子提醒 */

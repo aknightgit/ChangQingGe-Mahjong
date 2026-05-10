@@ -307,7 +307,7 @@ huLockGame.players[1].position = 1
 ;(gameManager as any).games.set(huLockGame.gameId, huLockGame)
 
 const huLockedActions = await gameManager.getAvailableActions(huLockGame.gameId, 'p1')
-test('draw stays hidden while another player is actively selecting a hu option', !huLockedActions.includes(ActionType.DRAW), `actions=${huLockedActions.join(',')}`)
+test('draw remains visible while another player is actively selecting a hu option', huLockedActions.includes(ActionType.DRAW), `actions=${huLockedActions.join(',')}`)
 
 let huLockedDrawThrew = false
 try {
@@ -319,6 +319,48 @@ test('draw is blocked while another player holds a hu selection lock', huLockedD
 
 ;(gameManager as any).games.delete(huLockGame.gameId)
 ;(gameManager as any).clearPendingActionTimer?.(huLockGame.gameId)
+
+const thinkLockGame = {
+  ...game,
+  gameId: 'think-lock-blocks-draw',
+  wall: [tile('draw-think-1', TileSuit.DOTS, 8)],
+  discardPile: [tile('discard-think-1', TileSuit.DOTS, 2)],
+  currentPlayerIndex: 0,
+  drawnThisTurn: false,
+  actionHistory: [],
+  pendingActions: [
+    {
+      playerId: 'p2',
+      availableActions: [ActionType.PENG, ActionType.PASS],
+      tile: tile('discard-think-1', TileSuit.DOTS, 2),
+      expiresAt: Date.now() + 5000,
+    }
+  ],
+  thinkFreezePlayerId: 'p2',
+  thinkFreezeUntil: Date.now() + 4000,
+} as any
+
+thinkLockGame.players = [
+  createPlayer('p1'),
+  createPlayer('p2')
+]
+thinkLockGame.players[1].position = 1
+
+;(gameManager as any).games.set(thinkLockGame.gameId, thinkLockGame)
+
+const thinkLockedActions = await gameManager.getAvailableActions(thinkLockGame.gameId, 'p1')
+test('draw remains visible while another player is using think', thinkLockedActions.includes(ActionType.DRAW), `actions=${thinkLockedActions.join(',')}`)
+
+let thinkLockedDrawThrew = false
+try {
+  await gameManager.executeAction(thinkLockGame.gameId, 'p1', ActionType.DRAW)
+} catch {
+  thinkLockedDrawThrew = true
+}
+test('draw is blocked while another player is thinking', thinkLockedDrawThrew)
+
+;(gameManager as any).games.delete(thinkLockGame.gameId)
+;(gameManager as any).clearPendingActionTimer?.(thinkLockGame.gameId)
 
 const botPassShouldNotSkipHumanGame = {
   ...game,
