@@ -191,16 +191,8 @@ class GameManager {
   }
 
   private canExecuteCurrentTurnPlayerDrawDuringPending(game: GameState, playerId: string, now = Date.now()): boolean {
-    if (!this.canExposeCurrentTurnPlayerDrawDuringPending(game, playerId)) return false;
-    return game.pendingActions
-      .filter(pa => pa.playerId === playerId)
-      .every(pa => {
-        const onlyChowActions = pa.availableActions.length > 0 &&
-          pa.availableActions.every(action => action === ActionType.CHOW || action === ActionType.PASS);
-        if (onlyChowActions) return true;
-        const expiresAt = typeof pa.expiresAt === 'number' ? pa.expiresAt : 0;
-        return expiresAt > 0 && expiresAt <= now;
-      });
+    void now;
+    return this.canExposeCurrentTurnPlayerDrawDuringPending(game, playerId);
   }
 
   private shouldAdvanceTurnAfterPass(game: GameState): boolean {
