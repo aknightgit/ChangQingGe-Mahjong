@@ -846,14 +846,15 @@ class GameManager {
         this.clearExpiredClaimsButKeepCurrentPlayerChow(game, now);
         this.clearExpiredCurrentPlayerChowPending(game, now);
         if (game.pendingActions.length === 0) {
+          if (currentPlayer && this.isPlayerBotControlled(currentPlayer) && this.autoDrawForCurrentPlayer(game)) {
+            await this.persistGame(game);
+            this.broadcastGameState(gameId);
+            this.scheduleBotDiscard(gameId, currentPlayer.id);
+            return;
+          }
           await this.persistGame(game);
           this.broadcastGameState(gameId);
           return;
-        }
-        if (this.currentTurnPlayerHasPendingClaims(game)) {
-          this.refreshPendingActionExpirations(game, now, pendingAction =>
-            pendingAction.playerId === currentPlayer?.id
-          );
         }
         await this.persistGame(game);
         this.broadcastGameState(gameId);
@@ -4407,16 +4408,12 @@ class GameManager {
             console.log(`[bot-freeze] Freeze expired for ${livePlayer.name}, ${botLogMsg}`);
             this.clearExpiredClaimsButKeepCurrentPlayerChow(freshGame);
             this.clearExpiredCurrentPlayerChowPending(freshGame);
+            if (freshGame.pendingActions.length > 0 && freshGame.pendingActions.every(pa =>
+              this.shouldRetainCurrentPlayerChowPending(freshGame, pa)
+            )) {
+              this.clearCurrentPlayerChowPending(freshGame);
+            }
             if (freshGame.pendingActions.length > 0) {
-              if (this.currentTurnPlayerHasPendingClaims(freshGame)) {
-                this.refreshPendingActionExpirations(
-                  freshGame,
-                  Date.now(),
-                  pendingAction => pendingAction.playerId === livePlayer.id
-                );
-              } else {
-                this.refreshPendingActionExpirations(freshGame);
-              }
               await this.persistGame(freshGame);
               this.broadcastGameState(game.gameId);
               this.schedulePendingActionTimeout(game.gameId);
