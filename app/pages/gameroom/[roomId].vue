@@ -2526,6 +2526,9 @@ watch(() => [showHu.value, isMyTurn.value], ([canHu, myTurn]) => {
 const selectedHuCombo = ref<number | null>(null)
 const onHu = async () => {
   // 不管自摸还是捉冲，都弹面板
+  // 先发THINK锁定决策状态（设hasTriggeredAction，不扣次数）
+  // 防止用户在HuPanel选方案期间pending被清除
+  await executeAction(ActionType.THINK)
   isHuReviewMode.value = false
   await fetchWinOptions()
   await syncHuSelectionLock(true)

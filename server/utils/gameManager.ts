@@ -879,7 +879,7 @@ class GameManager {
             resolvedPlayerIds.add(player.id);
           }
         } else {
-          // 实战模式: bot AI决策, 人类超时=PASS
+          // 实战模式: bot AI决策, 人类超时=PASS(但保留HU claim-用户可能正在HuPanel选方案)
           for (const pa of pending) {
             const player = game.players.find(p => p.id === pa.playerId);
             if (!player || player.status !== PlayerStatus.PLAYING) continue;
@@ -888,9 +888,14 @@ class GameManager {
               await this.resolvePendingAction(game, player, pa);
               resolvedPlayerIds.add(player.id);
             } else {
-              // 人类玩家超时没响应 = PASS
-              this.handlePass(game, player);
-              resolvedPlayerIds.add(player.id);
+              // 人类玩家超时没响应 = PASS, 但如果claim包含HU则保留(用户可能在HuPanel选方案)
+              if (pa.availableActions.includes(ActionType.HU)) {
+                // HU claim 不解散 - 用户可能在HuPanel选方案中
+                pa.expiresAt = Date.now() + 5000;
+              } else {
+                this.handlePass(game, player);
+                resolvedPlayerIds.add(player.id);
+              }
             }
           }
         }
@@ -1967,8 +1972,10 @@ class GameManager {
       return pendingAction.availableActions;
     }
 
-    // 梁山聚义:前三回合可投票(仅4人全是真人时才开启,只要没投过,且是活跃玩家,且全局倍数未达8倍上限)
-    if (game.phase === GamePhase.PLAYING && player.status === PlayerStatus.PLAYING && game.roundNumber <= 3) {
+    // 梁山聚义:前三巡(出牌轮次)可投票,仅4人全真人+没投过+活跃+倍数未达8倍上限
+    // 巡数 = 出牌次数(DISCARD action)，三巡以内(=0,1,2)可投
+    const discardCount = game.actionHistory.filter(a => a.type === ActionType.DISCARD).length;
+    if (game.phase === GamePhase.PLAYING && player.status === PlayerStatus.PLAYING && discardCount < 3) {
       // 只有4人全是真人玩家时才开启梁山聚义
       const allHuman = game.players.length >= 4 && game.players.every(p => !this.isPlayerBotControlled(p));
       // 全局倍数已达8倍上限时,禁止梁山聚义
@@ -2020,17 +2027,24 @@ class GameManager {
         actions.push(ActionType.DISCARD);
         return actions;
       }
-      // 检查造反(五毒散)- 仅第一圈有效
-      const wildParts = game.customScoringMode?.split('-');
-      const wildSuit = wildParts ? wildParts[0] as TileSuit : undefined;
-      const wildValue = wildParts && wildParts[1] ? parseInt(wildParts[1]) : undefined;
-      if (game.roundNumber <= 1 && isFivePoison(
-        player.hand.concealedTiles,
-        wildSuit,
-        wildValue,
-        player.hand.exposedMelds.flatMap(meld => meld.tiles || [])
-      )) {
-        actions.push(ActionType.REBEL);
+      // 检查造反(五毒散) - 条件：庄家(player.position === dealerIndex) + 首巡(尚未打出过牌)
+      //       + 没有吃过牌(exposedMelds无CHOW) + 仅第一局 + 五毒散牌型
+      const rebellionTurns = game.actionHistory.filter(a => a.type === ActionType.DISCARD).length;
+      const isDealer = player.position === game.dealerIndex;
+      const isFirstTurn = rebellionTurns === 0;
+      const hasEatenBefore = player.hand.exposedMelds.some(m => m.type === MeldType.SEQUENCE);
+      if (game.roundNumber <= 1 && isDealer && isFirstTurn && !hasEatenBefore) {
+        const wildParts = game.customScoringMode?.split('-');
+        const wildSuit = wildParts ? wildParts[0] as TileSuit : undefined;
+        const wildValue = wildParts && wildParts[1] ? parseInt(wildParts[1]) : undefined;
+        if (isFivePoison(
+          player.hand.concealedTiles,
+          wildSuit,
+          wildValue,
+          player.hand.exposedMelds.flatMap(meld => meld.tiles || [])
+        )) {
+          actions.push(ActionType.REBEL);
+        }
       }
 
       // 【状态机修复】出牌:必须先摸牌
@@ -3094,6 +3108,18 @@ class GameManager {
     game.drawnThisTurn = true;
     // 吃后手牌排序(百搭置顶)
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
+
+    // 广播吃牌到牌局快讯
+    if (this.wsManager) {
+      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        text: `🍜 ${player.name}吃牌`,
+        actionKind: 'chow',
+        type: 'info',
+        timestamp: Date.now(),
+        timeLabel: formatBeijingTime()
+      });
+    }
   }
 
   /**
@@ -3804,11 +3830,21 @@ class GameManager {
     const maxChances = game.thinkChances ?? 3;
     if (!game.thinkUsage) game.thinkUsage = {};
     const used = game.thinkUsage[player.id] ?? 0;
-    if (used >= maxChances) return;
 
-    // 扣减次数
-    game.thinkUsage[player.id] = used + 1;
-    const remaining = maxChances - used - 1;
+    // 如果玩家可胡（有HU的pending），视为HuPanel弹出锁定，不消耗次数
+    const hasHuClaim = game.pendingActions.some(pa =>
+      pa.playerId === player.id && pa.availableActions.includes(ActionType.HU)
+    );
+
+    if (!hasHuClaim) {
+      // 只有主动点击"想一想"才扣减次数
+      if (used >= maxChances) return;
+      game.thinkUsage[player.id] = used + 1;
+      const remaining = maxChances - used - 1;
+      console.log(`[Think] ${player.name} used think chance (${used + 1}/${maxChances})`);
+    } else {
+      console.log(`[Think] ${player.name} opened HuPanel (auto-lock, no chance consumed)`);
+    }
 
     // 冻结8秒
     game.thinkFreezeUntil = Date.now() + 8000;
