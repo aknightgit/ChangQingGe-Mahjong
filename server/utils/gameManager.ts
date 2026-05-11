@@ -21,6 +21,7 @@ import { MatchHistoryService } from '../services/matchHistoryService';
 import { TrainingRecordService } from '../services/trainingRecordService';
 import { isBotPlayer, selectBotChowTileIds, selectDiscardTile, shouldClaimPendingAction } from '../services/botService';
 import { formatBeijingTime } from './beijingTime';
+import { isConcealedDiscardState, tileLabel } from './gameHelpers';
 
 
 /**
@@ -47,33 +48,9 @@ class GameManager {
     return timer;
   }
 
-  private isConcealedDiscardState(player: Player): boolean {
-    const concealedCount = player.hand.concealedTiles.length;
-    return concealedCount >= 2 && concealedCount % 3 === 2;
-  }
+  private isConcealedDiscardState = isConcealedDiscardState;
 
-  private tileLabel(tile: Tile | undefined): string {
-    if (!tile) return '未知牌';
-    if (tile.suit === TileSuit.FLOWER) {
-      const names = ['春', '夏', '秋', '冬', '梅', '兰', '竹', '菊'];
-      return names[tile.value - 1] || `花${tile.value}`;
-    }
-    if (tile.suit === TileSuit.WIND) {
-      const names = ['东', '南', '西', '北'];
-      return names[tile.value - 1] || `风${tile.value}`;
-    }
-    if (tile.suit === TileSuit.DRAGON) {
-      const names = ['中', '发', '白'];
-      return names[tile.value - 1] || `箭${tile.value}`;
-    }
-    const suitLabel =
-      tile.suit === TileSuit.CHARACTERS ? '万' :
-      tile.suit === TileSuit.DOTS ? '筒' :
-      tile.suit === TileSuit.BAMBOOS ? '条' :
-      '';
-    const digit = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'][tile.value] || String(tile.value);
-    return `${digit}${suitLabel}`;
-  }
+  private tileLabel = tileLabel;
 
   private broadcastFlowerReplacement(game: GameState, player: Player): void {
     if (!this.wsManager) {

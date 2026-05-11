@@ -61,7 +61,8 @@
     <template v-else-if="position === 'left'">
       <div class="player-other-stack player-other-stack--left">
         <div class="seat-line seat-line--left">
-          <div v-if="flowerMelds.length" class="flower-lane flower-lane--left">
+          <div class="meld-row meld-row--left">
+            <div v-if="flowerMelds.length" class="flower-lane flower-lane--left">
             <div
               v-for="(m, i) in flowerMelds"
               :key="`flower-left-${i}`"
@@ -98,7 +99,8 @@
               />
             </div>
           </div>
-          <OpponentHandLane
+        </div>
+        <OpponentHandLane
             position="left"
             :hand="hand"
             :tile-back-scheme="tileBackScheme"
@@ -113,7 +115,8 @@
     <template v-else>
       <div class="player-other-stack player-other-stack--right">
         <div class="seat-line seat-line--right">
-          <div v-if="flowerMelds.length" class="flower-lane flower-lane--right">
+          <div class="meld-row meld-row--right">
+            <div v-if="flowerMelds.length" class="flower-lane flower-lane--right">
             <div
               v-for="(m, i) in flowerMelds"
               :key="`flower-right-${i}`"
@@ -150,7 +153,8 @@
               />
             </div>
           </div>
-          <OpponentHandLane
+        </div>
+        <OpponentHandLane
             position="right"
             :hand="hand"
             :tile-back-scheme="tileBackScheme"
@@ -255,10 +259,8 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   display: flex;
   align-items: center;
   justify-content: center;
-  contain: layout paint;
-  transform: translateZ(0);
-  backface-visibility: hidden;
 }
+/* player-other 的 z-index 由容器控制即可 */
 
 .player-other--top {
   width: 100%;
@@ -298,7 +300,6 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   display: flex;
   flex-shrink: 0;
   overflow: visible;
-  contain: layout paint;
 }
 
 .seat-line--top {
@@ -324,7 +325,7 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
 }
 .meld-lane--left,
 .meld-lane--right {
-  position: absolute;
+  position: relative;
   top: 0;
   flex-direction: row;
   flex-wrap: nowrap;
@@ -334,10 +335,7 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
 }
 .flower-lane--left,
 .flower-lane--right {
-  position: absolute;
-  top: 0;
-  left: 100%;
-  margin-left: 4px;
+  position: relative;
   flex-direction: row;
   flex-wrap: nowrap;
   gap: 2px;
@@ -406,6 +404,15 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
 .meld-lane--right,
 .flower-lane--right {
   justify-content: flex-start;
+}
+
+.meld-row--left,
+.meld-row--right {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .flower-lane--left,

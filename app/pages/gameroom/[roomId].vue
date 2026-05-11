@@ -4076,7 +4076,7 @@ const forceDiscard = async (p: Player) => {
   aspect-ratio: 4 / 3;
   --tile-w: 28px;
   --tile-h: 40px;
-  --discard-scale: 1.08;
+  --discard-scale: 0.95;
   --tile-gap: 2px;
   border-radius: 20px;
   /* 深木色外框 */
@@ -4660,7 +4660,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .ext-title {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   margin-bottom: 6px;
   opacity: 0.8;
   font-weight: 700;
@@ -6971,7 +6971,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .mahjong-table {
   --tile-w: calc(17px * var(--mobile-scale));
   --tile-h: calc(24px * var(--mobile-scale));
-  --discard-scale: 1.2;
+  --discard-scale: 1.1;
   --discard-gap-x-override: 0.35px;
   --discard-gap-y-override: 0.35px;
   --tile-gap: 0px;

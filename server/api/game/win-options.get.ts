@@ -6,6 +6,7 @@ function buildDisplayLabel(option: any, winningTileName: string): string {
   const summary = option?.summary || {};
   const baseFan = Number(summary.baseFan ?? 0);
   const roundMultiplier = Number(summary.roundMultiplier ?? 1);
+  const globalMultiplier = Number(summary.globalMultiplier ?? 1);
   const settlementMultiplier = Number(summary.settlementMultiplier ?? 1);
   const finalPoints = Number(summary.finalPoints ?? option?.score ?? 0);
   const details = Array.isArray(option?.details) ? option.details as string[] : [];
@@ -23,7 +24,7 @@ function buildDisplayLabel(option: any, winningTileName: string): string {
   if (details.some(detail => detail.includes('无百搭'))) {
     factors.push('无百搭*2');
   }
-  factors.push(`全局倍数${roundMultiplier}`);
+  factors.push(`全局倍数${globalMultiplier}`);
   factors.push(`结算系数${settlementMultiplier}`);
   return `[${label}：${method}（${factors.join('*')}）=${finalPoints}]`;
 }
