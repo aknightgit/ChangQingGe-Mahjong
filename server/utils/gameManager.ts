@@ -154,21 +154,15 @@ class GameManager {
   }
 
   private canCurrentTurnPlayerDrawDuringPending(game: GameState, playerId: string): boolean {
-    const player = game.players.find(p => p.id === playerId);
-    if (!player) return false;
-    if (this.isDaDiaoReadyState(game, player)) return false;
-    if (this.hasBlockingDecisionLock(game, playerId)) return false;
-    return this.canPlayerDrawOnCurrentTurn(game, player);
+    void game;
+    void playerId;
+    return false;
   }
 
   private canExposeCurrentTurnPlayerDrawDuringPending(game: GameState, playerId: string): boolean {
-    const player = game.players.find(p => p.id === playerId);
-    if (!player) return false;
-    if (this.isDaDiaoReadyState(game, player)) return false;
-    if (game.players[game.currentPlayerIndex]?.id !== playerId) return false;
-    if (game.pendingActions.length === 0) return false;
-    if (this.hasBlockingDecisionLock(game, playerId)) return false;
-    return this.canPlayerDrawOnCurrentTurn(game, player);
+    void game;
+    void playerId;
+    return false;
   }
 
   private canExecuteCurrentTurnPlayerDrawDuringPending(game: GameState, playerId: string, now = Date.now()): boolean {
@@ -850,6 +844,7 @@ class GameManager {
         }
 
         this.clearExpiredClaimsButKeepCurrentPlayerChow(game, now);
+        this.clearExpiredCurrentPlayerChowPending(game, now);
         if (game.pendingActions.length === 0) {
           await this.persistGame(game);
           this.broadcastGameState(gameId);
@@ -1877,23 +1872,8 @@ class GameManager {
         const maxChances = game.thinkChances ?? 3;
         const used = game.thinkUsage?.[playerId] ?? 0;
         if (used < maxChances) {
-          const pendingActions = [...pendingAction.availableActions, ActionType.THINK];
-          if (this.canExposeCurrentTurnPlayerDrawDuringPending(game, playerId) && !pendingActions.includes(ActionType.DRAW)) {
-            pendingActions.push(ActionType.DRAW);
-          }
-          return pendingActions;
+          return [...pendingAction.availableActions, ActionType.THINK];
         }
-      }
-      if (this.canExposeCurrentTurnPlayerDrawDuringPending(game, playerId)) {
-        const actionsWithDraw = [...pendingAction.availableActions];
-        if (
-          this.canPlayerDrawOnCurrentTurn(game, player) &&
-          !this.isDaDiaoReadyState(game, player) &&
-          !actionsWithDraw.includes(ActionType.DRAW)
-        ) {
-          actionsWithDraw.push(ActionType.DRAW);
-        }
-        return actionsWithDraw;
       }
       return pendingAction.availableActions;
     }
@@ -1932,10 +1912,7 @@ class GameManager {
     if (currentPlayer.id === playerId) {
       // 有其他玩家在抢牌(pending claim),当前玩家等待决策窗口
       if (game.pendingActions.length > 0 && !this.canCurrentTurnPlayerDrawDuringPending(game, playerId)) {
-        if (this.canPlayerDrawOnCurrentTurn(game, player)) {
-          return [ActionType.DRAW];
-        }
-        return [];
+        return actions;
       }
 
       // 自动补花:如果门口有未替换的花牌,先补花
@@ -2176,20 +2153,13 @@ class GameManager {
             console.warn(`[DRAW] Blocked: ${player.name} is waiting for another player's HU selection lock`);
             throw new Error('Draw is locked while another player is selecting a HU option');
           }
-          const hasOwnPending = game.pendingActions.some(pa => pa.playerId === player.id);
-          if (hasOwnPending && !this.canExecuteCurrentTurnPlayerDrawDuringPending(game, player.id)) {
+          if (game.pendingActions.length > 0 && !this.canExecuteCurrentTurnPlayerDrawDuringPending(game, player.id)) {
             console.warn(
               `[DRAW] Deferred: ${player.name} must wait for pending window to end before drawing`
             );
             throw new Error('Draw is not available until the current response window ends');
           }
         }
-        if (game.pendingActions.length > 0) {
-          game.pendingActions = [];
-          game.pengChowConflict = null;
-          delete (game as any).hasTriggeredAction;
-        }
-        game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
         {
           const currentTurnPlayer = game.players[game.currentPlayerIndex];
           if (!currentTurnPlayer || currentTurnPlayer.id !== player.id) {
@@ -4436,8 +4406,17 @@ class GameManager {
               : '[bot-freeze] No action triggered, clearing CD claims (B preserved)';
             console.log(`[bot-freeze] Freeze expired for ${livePlayer.name}, ${botLogMsg}`);
             this.clearExpiredClaimsButKeepCurrentPlayerChow(freshGame);
+            this.clearExpiredCurrentPlayerChowPending(freshGame);
             if (freshGame.pendingActions.length > 0) {
-              this.refreshPendingActionExpirations(freshGame);
+              if (this.currentTurnPlayerHasPendingClaims(freshGame)) {
+                this.refreshPendingActionExpirations(
+                  freshGame,
+                  Date.now(),
+                  pendingAction => pendingAction.playerId === livePlayer.id
+                );
+              } else {
+                this.refreshPendingActionExpirations(freshGame);
+              }
               await this.persistGame(freshGame);
               this.broadcastGameState(game.gameId);
               this.schedulePendingActionTimeout(game.gameId);
