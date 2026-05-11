@@ -224,9 +224,9 @@ const navigateToCreatedRoom = async (targetUrl: string) => {
   savePendingRoomTarget(targetUrl)
 
   try {
-    await router.push(targetUrl)
+    await navigateTo(targetUrl, { external: false })
   } catch (error) {
-    console.warn('[Create] router.push failed, falling back to location.assign:', error)
+    console.warn('[Create] navigateTo failed, falling back to location.assign:', error)
   }
 
   if (!process.client) return

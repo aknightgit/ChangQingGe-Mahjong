@@ -407,7 +407,9 @@ export function generateWinOptions(params: {
   }
 
   // ===== 百搭归位（无百搭翻倍） =====
-  if (params.wildTileSuit !== undefined && params.wildTileValue !== undefined) {
+  // 注：花牌做百搭时不做无百搭归位——花牌本身有原始数值，
+  // 禁用百搭后用花牌原值检测胡牌会产生误判（花牌可能正好凑成面子）
+  if (params.wildTileSuit !== undefined && params.wildTileValue !== undefined && params.wildTileSuit !== TileSuit.FLOWER) {
     const wildCount = countWildTiles(params.handTiles, params.wildTileSuit, params.wildTileValue, params.wildTileGroup);
     if (wildCount > 0) {
       const noWildCheck = canWin(params.handTiles, params.exposedMelds.length, () => false);
@@ -738,7 +740,7 @@ function calculateFormulaFan(
 
 function getHandTypeDisplayName(type: HandType): string {
   const names: Record<HandType, string> = {
-    [HandType.STANDARD]: '普通胡',
+    [HandType.STANDARD]: '',
     [HandType.FENG_PENG]: '风碰',
     [HandType.ALL_WIND]: '风一色',
     [HandType.QING_PENG]: '清碰',

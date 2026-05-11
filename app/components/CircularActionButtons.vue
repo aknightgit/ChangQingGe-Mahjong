@@ -193,6 +193,11 @@ const claimPromptTone = computed(() => {
 
 const isDelaying = computed(() => {
   if (props.lastStateChangeAt === 0) return false
+  // 冻结圆环未结束时，继续延迟高亮
+  if (isFreezing.value) return true
+  // 如果只剩下摸牌（没有吃碰胡杠等优先级操作），立即高亮不用等
+  const priorityActions = [ActionType.CHOW, ActionType.PENG, ActionType.KONG, ActionType.CONCEALED_KONG, ActionType.EXTENDED_KONG, ActionType.HU]
+  if (canDraw.value && !props.availableActions.some(a => priorityActions.includes(a))) return false
   return props.nowTs - props.lastStateChangeAt < props.highlightDelayMs
 })
 

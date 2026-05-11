@@ -1325,11 +1325,6 @@ const handleGlobalPointerDown = (event: MouseEvent) => {
 }
 
 watch(showSettings, (open) => {
-  if (process.client) {
-    document.body.style.overflow = open ? 'hidden' : ''
-    document.documentElement.style.overflow = open ? 'hidden' : ''
-  }
-
   if (open) nextTick(updateSettingsPosition)
   else playWhoosh()
 })
@@ -1825,8 +1820,7 @@ const tileLabel = (tile: Partial<Tile> | null | undefined): string => {
   if (suit === 'feng' || suit === 'wind') return ['东', '南', '西', '北'][Number(tile.value) - 1] || `风${tile.value}`
   if (suit === 'jian' || suit === 'dragon') return ['中', '发', '白'][Number(tile.value) - 1] || `箭${tile.value}`
   const suitLabel = suit === 'wan' ? '万' : suit === 'dots' ? '筒' : suit === 'tiao' ? '条' : ''
-  const digit = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'][Number(tile.value)] || String(tile.value)
-  return `${digit}${suitLabel}`
+  return `${tile.value}${suitLabel}`
 }
 
 const tileSuitOrder: Record<string, number> = { wan: 0, tiao: 1, dots: 2, feng: 3, jian: 4, hua: 5 }
@@ -1919,7 +1913,7 @@ const getHuGroupKind = (type: string) => {
 }
 // 用 scoring.ts 枚举的真实牌型分解（handTypes），而非 arrangeWinningHand 的随意排列
 const HAND_TYPE_DISPLAY: Record<string, string> = {
-  STANDARD: '普通胡',
+  STANDARD: '',
   FENG_PENG: '风碰',
   ALL_WIND: '风一色',
   QING_PENG: '清碰',
@@ -2932,8 +2926,16 @@ const getSettlementBaseFanDisplay = (winner: any): string | number => {
   return winner.baseFan ?? '-'
 }
 
-const formatMeldTiles = (tiles: any[]): string =>
-  tiles.map(tile => tileLabel(tile)).filter(Boolean).join('')
+const formatMeldTiles = (tiles: any[]): string => {
+  const sorted = [...tiles].sort((a, b) => {
+    const suitOrder: Record<string, number> = { wan: 0, tiao: 1, dots: 2, feng: 3, jian: 4 }
+    const sa = suitOrder[a.suit] ?? 99
+    const sb = suitOrder[b.suit] ?? 99
+    if (sa !== sb) return sa - sb
+    return (Number(a.value) || 0) - (Number(b.value) || 0)
+  })
+  return sorted.map(tile => tileLabel(tile)).filter(Boolean).join('')
+}
 
 const formatWinnerTiles = (winner: any): string => {
   const handTiles = Array.isArray(winner?.handTiles)
@@ -4090,7 +4092,7 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-width: 72%;
   --seat-side-width: 112px;
   --seat-side-height: 76%;
-  --seat-side-player-offset: 1.4%;
+  --seat-side-player-offset: 0.8%;
   --discard-center-rect-half-w: 17%;
   --discard-center-rect-half-h: 13.4%;
 }
@@ -4236,9 +4238,9 @@ const forceDiscard = async (p: Player) => {
 /* 上家：靠近牌桌中心，旋转180° */
 /* 四个弃牌区居中对齐牌桌十字 */
 :deep(.discard-zone--top) {
-  top: calc(50% - var(--discard-center-rect-half-h));
+  top: calc(50% - var(--discard-center-rect-half-h) + 8px);
   left: 50%;
-  transform: translate(-50%, -100%);
+  transform: translate(-50%, -50%);
 }
 :deep(.discard-zone--bottom) {
   top: calc(50% + var(--discard-center-rect-half-h));
@@ -4506,7 +4508,7 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-width: 75%;
   --seat-side-width: calc(116px * var(--mobile-scale));
   --seat-side-height: 56%;
-  --seat-side-player-offset: 0.9%;
+  --seat-side-player-offset: 1.2%;
   --discard-center-rect-half-w: 14.3%;
   --discard-center-rect-half-h: 11%;
 }
@@ -4571,7 +4573,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .settle-round-table--compact th:nth-child(3),
 .layout--mobile-landscape .settle-round-table--compact td:nth-child(3) {
   width: auto;
-  max-width: 120px;
+  max-width: 180px;
   min-width: auto;
 }
 
@@ -4584,7 +4586,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .settle-round-table--compact th:nth-child(7),
 .layout--mobile-landscape .settle-round-table--compact td:nth-child(7) {
   width: auto;
-  max-width: 44px;
+  max-width: 36px;
 }
 
 .layout--mobile-landscape .settle-round-table--compact th:nth-child(8),
@@ -4657,8 +4659,8 @@ const forceDiscard = async (p: Player) => {
 .ext-title {
   font-size: 0.9rem;
   margin-bottom: 6px;
-  opacity: 0.9;
-  font-weight: 600;
+  opacity: 0.8;
+  font-weight: 700;
 }
 
 .ext-meta {
@@ -4825,7 +4827,6 @@ const forceDiscard = async (p: Player) => {
   color: #ff6b6b;
   font-size: 0.75rem;
   line-height: 1.4;
-  font-weight: 500;
 }
 
 .ting-preview-panel__tile--exhausted {
@@ -6270,17 +6271,17 @@ const forceDiscard = async (p: Player) => {
 
 .settle-round-table--compact th:nth-child(1),
 .settle-round-table--compact td:nth-child(1) {
-  width: 88px;
+  width: 72px;
 }
 
 .settle-round-table--compact th:nth-child(2),
 .settle-round-table--compact td:nth-child(2) {
-  width: 56px;
+  width: 40px;
 }
 
 .settle-round-table--compact th:nth-child(3),
 .settle-round-table--compact td:nth-child(3) {
-  width: 290px;
+  width: 340px;
 }
 
 .settle-round-table--compact th:nth-child(4),
@@ -6291,17 +6292,17 @@ const forceDiscard = async (p: Player) => {
 .settle-round-table--compact td:nth-child(6),
 .settle-round-table--compact th:nth-child(7),
 .settle-round-table--compact td:nth-child(7) {
-  width: 64px;
+  width: 48px;
 }
 
 .settle-round-table--compact th:nth-child(8),
 .settle-round-table--compact td:nth-child(8) {
-  width: 116px;
+  width: 88px;
 }
 
 .settle-round-table--compact th:nth-child(9),
 .settle-round-table--compact td:nth-child(9) {
-  width: 88px;
+  width: 78px;
 }
 
 .settle-round-table th,
@@ -6979,9 +6980,10 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-width: 80%;
   --seat-side-width: calc(118px * var(--mobile-scale));
   --seat-side-height: calc(58% + (8% * var(--mobile-scale)));
-  --seat-side-player-offset: 0.6%;
+  --seat-side-player-offset: 1%;
 }
 .layout--mobile-landscape :deep(.discard-zone--top) {
+  top: calc(50% - var(--discard-center-rect-half-h) + 8px);
   transform: translate(-50%, -100%) rotate(180deg) !important;
 }
 .layout--mobile-landscape :deep(.discard-zone--right) {
