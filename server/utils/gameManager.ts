@@ -81,7 +81,7 @@ class GameManager {
       id: Date.now() + Math.floor(Math.random() * 1000),
       text: `🌸 ${player.name}补花`,
       actionKind: 'flowerReplace',
-      type: 'info',
+      type: 'special',
       timestamp: Date.now(),
       timeLabel: formatBeijingTime()
     });

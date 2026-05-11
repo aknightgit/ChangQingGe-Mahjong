@@ -233,7 +233,19 @@ const navigateToCreatedRoom = async (targetUrl: string) => {
 
   const currentPath = window.location.pathname
   if (currentPath === targetUrl.split('?')[0]) {
-    clearPendingRoomTarget()
+    // Path 已匹配，但 Nuxt SPA 路由可能渲染失败（页面仍显示欢迎页内容）
+    // 等待 nextTick 确认页面内容已正确渲染为游戏房间
+    await new Promise(resolve => setTimeout(resolve, 100))
+    const hasGameRoomContent = !!document.querySelector('.game-room, .game-table, .player-hand')
+    if (hasGameRoomContent) {
+      clearPendingRoomTarget()
+      return
+    }
+    console.warn('[Create] Route path matched but content not game-room, forcing assign:', {
+      currentHref: window.location.href,
+      targetUrl
+    })
+    window.location.assign(targetUrl)
     return
   }
 
