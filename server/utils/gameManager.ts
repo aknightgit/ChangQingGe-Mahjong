@@ -915,7 +915,6 @@ class GameManager {
           return;
         }
         // 如果所有pending清除后还有当前玩家需要出牌,调度bot出牌
-        const currentPlayer = game.players[game.currentPlayerIndex];
         if (currentPlayer && this.isPlayerBotControlled(currentPlayer) && (currentPlayer.hand.concealedTiles.length % 3 === 2 || this.canPlayerDrawOnCurrentTurn(game, currentPlayer))) {
           this.scheduleBotDiscard(gameId, currentPlayer.id);
         }
