@@ -212,14 +212,27 @@ class GameManager {
       && pendingAction.availableActions.every(action => action === ActionType.CHOW || action === ActionType.PASS);
   }
 
+  /**
+   * 按第5条规则清除过期claim：
+   * - 当前摸牌方（下家B）的所有claim永远不清除
+   * - 其他玩家（C/D）的过期claim清除
+   * - 如果决策期内有动作触发（hasTriggeredAction），不清除任何claim
+   */
   private clearExpiredClaimsButKeepCurrentPlayerChow(game: GameState, now = Date.now()): void {
+    if ((game as any).hasTriggeredAction) {
+      // 决策期内有动作 → 不清除任何claim
+      return;
+    }
+    const currentPlayerId = game.players[game.currentPlayerIndex]?.id;
     game.pendingActions = game.pendingActions.filter(pendingAction => {
-      if (!this.shouldRetainCurrentPlayerChowPending(game, pendingAction)) return false;
-      const expiresAt = typeof pendingAction.expiresAt === 'number' ? pendingAction.expiresAt : 0;
-      return expiresAt > now;
+      if (!pendingAction.expiresAt || pendingAction.expiresAt > now) return true; // 未过期保留
+      if (pendingAction.playerId === currentPlayerId) return true; // 下家B永远保留
+      return false; // 其他玩家（CD）清除
     });
     game.pengChowConflict = null;
-    this.clearPendingActionTimer(game.gameId);
+    if (game.pendingActions.length === 0) {
+      this.clearPendingActionTimer(game.gameId);
+    }
   }
 
   private clearExpiredCurrentPlayerChowPending(game: GameState, now = Date.now()): boolean {
@@ -794,37 +807,66 @@ class GameManager {
           return;
         }
 
-        // 训练模式(allClaimMode): 等所有pending玩家响应(含bot决策)
-        // 实战模式: bot和人类共享同一个hesitationWindow
+        // 第5条规则：决策期内过期处理
+        // - 检查是否有 DRAW 过期 → 有则处理 AI 的 DRAW（自动摸牌），保留人类 DRAW
+        // - 其他过期 claim 通过 clearExpiredClaimsButKeepCurrentPlayerChow 统一处理
+        //   该方法已经实现：有 hasTriggeredAction 保留全部，无则清除CD保留B
         const allClaimMode = (game as any).allClaimMode;
         const now = Date.now();
-        // 对当前玩家的吃 pending（共享摸牌窗口中的CHOW），给予更长的决策时间
-        // 因为玩家需要选择吃哪组牌，不应受摸牌倒计时限制
-        const adjustedPending = game.pendingActions.map(pa => {
-          if (this.shouldRetainCurrentPlayerChowPending(game, pa) && pa.expiresAt && pa.expiresAt <= now) {
-            return { ...pa, expiresAt: now + 5000 };
-          }
-          return pa;
-        });
-        // 写回调整后的 expiresAt（只调整CHOW pending）
-        for (let i = 0; i < adjustedPending.length; i++) {
-          if (adjustedPending[i] !== game.pendingActions[i]) {
-            game.pendingActions[i] = adjustedPending[i];
-          }
-        }
-        const pending = game.pendingActions.filter(pa =>
-          (!pa.expiresAt || pa.expiresAt <= now) &&
-          !this.shouldRetainCurrentPlayerChowPending(game, pa)
+        const currentPlayer = game.players[game.currentPlayerIndex];
+        // 处理 DRAW 超时（AI自动摸牌，人类保留）
+        const expired = game.pendingActions.filter(pa =>
+          (!pa.expiresAt || pa.expiresAt <= now)
         );
-        if (pending.length === 0) {
-          if (this.clearExpiredCurrentPlayerChowPending(game, now)) {
-            await this.persistGame(game);
-            this.broadcastGameState(gameId);
-            return;
+        const hasExpiredDraw = expired.some(pa =>
+          pa.availableActions.includes(ActionType.DRAW)
+        );
+        if (hasExpiredDraw) {
+          const drawPas = expired.filter(pa => pa.availableActions.includes(ActionType.DRAW));
+          const drawResolvedIds = new Set<string>();
+          for (const pa of drawPas) {
+            const drawPlayer = game.players.find(p => p.id === pa.playerId);
+            if (!drawPlayer) continue;
+            if (!this.isPlayerBotControlled(drawPlayer)) continue; // 人类 DRAW 保留
+            this.autoDrawForCurrentPlayer(game);
+            drawResolvedIds.add(drawPlayer.id);
           }
-          this.schedulePendingActionTimeout(gameId);
+          game.pendingActions = game.pendingActions.filter(pa => !drawResolvedIds.has(pa.playerId));
+          if (game.pendingActions.length > 0) {
+            // 还有剩余 pending → 用清除逻辑处理过期 claim
+            this.clearExpiredClaimsButKeepCurrentPlayerChow(game, now);
+            delete (game as any).hasTriggeredAction;
+            if (game.pendingActions.length > 0) {
+              // 保留的 claim 赋予新超时
+              for (const pa of game.pendingActions) {
+                if (!pa.expiresAt || pa.expiresAt <= now) {
+                  pa.expiresAt = now + 5000;
+                }
+              }
+              await this.persistGame(game);
+              this.broadcastGameState(gameId);
+              this.schedulePendingActionTimeout(gameId);
+              return;
+            }
+          }
+          // 没剩余 pending → 推进游戏
+          await this.persistGame(game);
+          this.broadcastGameState(gameId);
+          if (currentPlayer && this.isPlayerBotControlled(currentPlayer) && (currentPlayer.hand.concealedTiles.length % 3 === 2 || game.drawnThisTurn)) {
+            this.scheduleBotDiscard(gameId, currentPlayer.id);
+          }
           return;
         }
+        // 没有 DRAW 过期 → 标准过期处理
+        this.clearExpiredClaimsButKeepCurrentPlayerChow(game, now);
+        delete (game as any).hasTriggeredAction;
+        if (game.pendingActions.length === 0) {
+          await this.persistGame(game);
+          this.broadcastGameState(gameId);
+          return;
+        }
+        // 剩余 pending（B的claim）→ 重新调度
+        const pending = game.pendingActions;
 
         const resolvedPlayerIds = new Set<string>();
 
@@ -2136,6 +2178,12 @@ class GameManager {
       const nextLocks = { ...game.huSelectionLocks };
       delete nextLocks[playerId];
       game.huSelectionLocks = Object.keys(nextLocks).length ? nextLocks : undefined;
+    }
+
+    // 标记决策期内有动作触发（第5d条：有动作时不清除任何claim）
+    // PASS 和 DRAW 不触发此标记
+    if (action !== ActionType.PASS && action !== ActionType.DRAW) {
+      (game as any).hasTriggeredAction = true;
     }
 
     switch (action) {
@@ -4030,6 +4078,7 @@ class GameManager {
 
   private checkPendingActions(game: GameState, discardedTile: Tile): void {
     game.pendingActions = [];
+    delete (game as any).hasTriggeredAction;
     const discarderIndex = game.currentPlayerIndex;
 
     const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
@@ -4415,9 +4464,13 @@ class GameManager {
           const livePlayer = freshGame.players[freshGame.currentPlayerIndex];
           if (!livePlayer || livePlayer.id !== nextPlayer.id || livePlayer.status !== PlayerStatus.PLAYING) return;
           if (freshGame.pendingActions.length > 0) {
-            console.log(`[bot-freeze] Freeze expired for ${livePlayer.name}, clearing pending claims before draw`);
-            this.clearCurrentPlayerChowPending(freshGame);
+            const botLogMsg = (freshGame as any).hasTriggeredAction
+              ? '[bot-freeze] hasTriggeredAction=true, retaining all claims'
+              : '[bot-freeze] No action triggered, clearing CD claims (B preserved)';
+            console.log(`[bot-freeze] Freeze expired for ${livePlayer.name}, ${botLogMsg}`);
             this.clearExpiredClaimsButKeepCurrentPlayerChow(freshGame);
+            // 决策期结束，清除标记
+            delete (freshGame as any).hasTriggeredAction;
           }
           console.log(`[bot-freeze] Freeze expired for ${livePlayer.name}, drawing...`);
           // 牌墙已空 → 流局
@@ -4460,8 +4513,13 @@ class GameManager {
           delete (freshGame as any)._freezeUntil;
 
           if (freshGame.pendingActions.length > 0) {
-            console.log(`[freeze] Pending actions expired for ${freshGame.players[freezeCurrentIndex]?.name}, clearing claims and retaining local chow if present`);
+            const logMsg = (freshGame as any).hasTriggeredAction
+              ? '[freeze] hasTriggeredAction=true, retaining all claims'
+              : '[freeze] No action triggered, clearing CD claims (B preserved)';
+            console.log(`[freeze] Pending actions expired for ${freshGame.players[freezeCurrentIndex]?.name}, ${logMsg}`);
             this.clearExpiredClaimsButKeepCurrentPlayerChow(freshGame);
+            // 决策期结束，清除标记
+            delete (freshGame as any).hasTriggeredAction;
             await this.persistGame(freshGame);
             this.broadcastGameState(game.gameId);
           }
