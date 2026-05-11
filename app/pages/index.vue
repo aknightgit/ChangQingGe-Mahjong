@@ -231,29 +231,23 @@ const navigateToCreatedRoom = async (targetUrl: string) => {
 
   if (!process.client) return
 
+  // 等待页面组件渲染完成，检查是否真的是游戏房间
+  // Nuxt SPA 路由可能渲染失败，页面仍显示欢迎页内容
+  await new Promise(resolve => setTimeout(resolve, 500))
   const currentPath = window.location.pathname
-  if (currentPath === targetUrl.split('?')[0]) {
-    // Path 已匹配，但 Nuxt SPA 路由可能渲染失败（页面仍显示欢迎页内容）
-    // 等待 nextTick 确认页面内容已正确渲染为游戏房间
-    await new Promise(resolve => setTimeout(resolve, 100))
-    const hasGameRoomContent = !!document.querySelector('.game-room, .game-table, .player-hand')
-    if (hasGameRoomContent) {
-      clearPendingRoomTarget()
-      return
-    }
-    console.warn('[Create] Route path matched but content not game-room, forcing assign:', {
-      currentHref: window.location.href,
-      targetUrl
+  const hasGameRoomContent = !!document.querySelector('.game-room, .game-table, .player-hand, .game-board')
+  if (currentPath !== targetUrl.split('?')[0] || !hasGameRoomContent) {
+    console.warn('[Create] Route failed to navigate, forcing window.location.assign:', {
+      currentPath,
+      targetPath: targetUrl.split('?')[0],
+      hasContent: hasGameRoomContent
     })
+    clearPendingRoomTarget()
     window.location.assign(targetUrl)
     return
   }
 
-  console.warn('[Create] Route did not leave lobby, forcing location.assign:', {
-    currentHref: window.location.href,
-    targetUrl
-  })
-  window.location.assign(targetUrl)
+  clearPendingRoomTarget()
 }
 
 const userName = useCookie('user_name')

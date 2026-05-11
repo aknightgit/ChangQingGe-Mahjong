@@ -76,7 +76,11 @@ class GameManager {
   }
 
   private broadcastFlowerReplacement(game: GameState, player: Player): void {
-    if (!this.wsManager) return;
+    if (!this.wsManager) {
+      console.log(`[broadcast] SKIP flowerReplace for ${player.name}: wsManager not set`);
+      return;
+    }
+    console.log(`[broadcast] flowerReplace: ${player.name} 补花`);
     this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
       id: Date.now() + Math.floor(Math.random() * 1000),
       text: `🌸 ${player.name}补花`,
