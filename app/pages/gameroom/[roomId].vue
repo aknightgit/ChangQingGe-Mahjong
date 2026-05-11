@@ -203,20 +203,20 @@
                 </div>
                 <div class="hu-summary-grid">
                   <div class="hu-summary-item">
-                    <span class="hu-summary-key">基础番数</span>
-                    <span class="hu-summary-value">{{ opt.summary?.baseFan ?? '--' }}</span>
+                    <span class="hu-summary-key">基础番数/固定点数</span>
+                    <span class="hu-summary-value">{{ getHuOptionDisplaySummary(opt).base }}</span>
                   </div>
                   <div class="hu-summary-item">
                     <span class="hu-summary-key">额外倍数</span>
-                    <span class="hu-summary-value">×{{ opt.summary?.extraMultipliers ?? 1 }}</span>
+                    <span class="hu-summary-value">×{{ getHuOptionDisplaySummary(opt).extra }}</span>
                   </div>
                   <div class="hu-summary-item">
                     <span class="hu-summary-key">全局倍数</span>
-                    <span class="hu-summary-value">×{{ opt.summary?.globalMultiplier ?? 1 }}</span>
+                    <span class="hu-summary-value">×{{ getHuOptionDisplaySummary(opt).global }}</span>
                   </div>
                   <div class="hu-summary-item">
                     <span class="hu-summary-key">房间结算倍数</span>
-                    <span class="hu-summary-value">×{{ opt.summary?.settlementMultiplier ?? 1 }}</span>
+                    <span class="hu-summary-value">×{{ getHuOptionDisplaySummary(opt).settlement }}</span>
                   </div>
                 </div>
               </div>
@@ -1892,20 +1892,25 @@ const getHuOptionPayerCount = (opt: any) => {
   return Math.max(1, losers.length)
 }
 const getHuOptionTotalWin = (opt: any) => getHuOptionBasePoints(opt) * getHuOptionPayerCount(opt)
-const getHuOptionFormula = (opt: any) => {
+const getHuOptionDisplaySummary = (opt: any) => {
   const summary = opt?.summary || {}
-  const baseFan = Number(summary.baseFan ?? 0)
-  const extraMultipliers = Number(summary.extraMultipliers ?? 1)
-  const globalMultiplier = Number(summary.globalMultiplier ?? 1)
-  const settlementMultiplier = Number(summary.settlementMultiplier ?? 1)
-  const finalPoints = getHuOptionBasePoints(opt)
-  const payerCount = getHuOptionPayerCount(opt)
-  const totalWin = getHuOptionTotalWin(opt)
-  const baseFormula = `基础${baseFan} × 额外${extraMultipliers} × 全局${globalMultiplier} × 结算${settlementMultiplier} = 单家${finalPoints}`
-  if (opt?.type === 'self_draw') {
-    return `${baseFormula}；自摸 ${finalPoints} × ${payerCount}家 = ${totalWin}`
+  return {
+    base: Number(summary.baseFan ?? 0),
+    extra: Number(summary.extraMultipliers ?? 1),
+    global: Number(summary.globalMultiplier ?? 1),
+    settlement: Number(summary.settlementMultiplier ?? 1),
+    finalPoints: getHuOptionBasePoints(opt),
+    payerCount: getHuOptionPayerCount(opt),
+    totalWin: getHuOptionTotalWin(opt)
   }
-  return `${baseFormula}；捉冲总赢 = ${totalWin}`
+}
+const getHuOptionFormula = (opt: any) => {
+  const display = getHuOptionDisplaySummary(opt)
+  const baseFormula = `基础/固定${display.base} × 额外${display.extra} × 全局${display.global} × 结算${display.settlement} = 单家${display.finalPoints}`
+  if (opt?.type === 'self_draw') {
+    return `${baseFormula}；自摸 ${display.finalPoints} × ${display.payerCount}家 = ${display.totalWin}`
+  }
+  return `${baseFormula}；捉冲总赢 = ${display.totalWin}`
 }
 const getHuGroupKind = (type: string) => {
   // type 是 HandType 字符串，如 ALL_TRIPLETS / HALF_FLUSH / FULL_FLUSH 等
@@ -2292,11 +2297,10 @@ const hasBlockingPendingClaim = computed(() => {
 })
 const showDraw = computed(() =>
   availableActions.value.includes(ActionType.DRAW) ||
-  shouldExposeSharedDraw.value ||
-  shouldPreviewDeferredDraw.value
+  shouldExposeSharedDraw.value
 )
 const filteredCircularAvailableActions = computed(() => {
-  if ((shouldExposeSharedDraw.value || shouldPreviewDeferredDraw.value) && !availableActions.value.includes(ActionType.DRAW)) {
+  if (shouldExposeSharedDraw.value && !availableActions.value.includes(ActionType.DRAW)) {
     return [...availableActions.value, ActionType.DRAW]
   }
   return availableActions.value
@@ -2589,25 +2593,6 @@ const shouldExposeSharedDraw = computed(() => {
   const pending = myPendingAction.value
   if (!pending || myPendingExpiresAt.value <= nowTs.value) return false
   return true
-})
-
-const shouldPreviewDeferredDraw = computed(() => {
-  if (!isMyTurn.value) return false
-  const pending = myPendingAction.value
-  if (!pending || myPendingExpiresAt.value <= nowTs.value) return false
-  const actions = Array.isArray((pending as any)?.availableActions) ? (pending as any).availableActions : []
-  return actions.some((action: ActionType) =>
-    action === ActionType.CHOW ||
-    action === ActionType.PENG ||
-    action === ActionType.KONG ||
-    action === ActionType.HU ||
-    action === ActionType.CONCEALED_KONG ||
-    action === ActionType.EXTENDED_KONG
-  )
-})
-
-const hasDeferredDrawWindow = computed(() => {
-  return shouldPreviewDeferredDraw.value && !isSharedDrawClaimWindow.value
 })
 
 const hasSharedDrawWindow = computed(() => {
@@ -3222,18 +3207,24 @@ const updateSwapInfo = async () => {
 
 const showLiangShanButton = computed(() => gameState.value?.phase === 'playing')
 
-// 梁山聚义：只在前三巡（庄家打第四张牌前）高亮可点，之后置灰禁用
+const dealerDiscardCount = computed(() => {
+  const history = Array.isArray((gameState.value as any)?.actionHistory) ? (gameState.value as any).actionHistory : []
+  const dealerIndex = Number((gameState.value as any)?.dealerIndex ?? -1)
+  const dealerId = dealerIndex >= 0 ? gameState.value?.players?.[dealerIndex]?.id : ''
+  if (!dealerId) return 0
+  return history.filter((action: any) => action?.type === ActionType.DISCARD && action?.playerId === dealerId).length
+})
+
+// 梁山聚义：只在庄家打出前3张牌前可点，第4张前开始置灰
 const canLiangShan = computed(() => {
-  const round = currentRound.value || 1
-  return gameState.value?.phase === 'playing' && round <= 3
+  return gameState.value?.phase === 'playing' && dealerDiscardCount.value < 3
 })
 const hasVotedLiangShan = computed(() => {
   const votes = (gameState.value as any)?.liangShanVotes || []
   return votes.includes(currentPlayer.value?.id)
 })
 const onLiangShan = () => {
-  const round = currentRound.value || 1
-  if (round > 3) {
+  if (dealerDiscardCount.value >= 3) {
     addBroadcast('⚠️ 已过三巡，不允许聚义', 'warn')
     return
   }
@@ -3499,16 +3490,24 @@ const displayBroadcastMessages = computed(() => {
   return [...msgs, ...realMsgs].slice(0, 8)
 })
 let broadcastId = 0
+const recentBroadcastTexts = new Map<string, number>()
 const addBroadcast = (text: string, type: BroadcastMsg['type'] = 'info') => {
   const now = Date.now()
   const timeLabel = formatBeijingTime(now)
   const sanitizedText = type === 'win'
     ? text.replace(/(胡牌)\s*[·•･][^·•･()（）\s]+/u, '$1')
     : text
+  const lastAt = recentBroadcastTexts.get(sanitizedText) ?? 0
+  if (now - lastAt < 1500) {
+    return
+  }
+  recentBroadcastTexts.set(sanitizedText, now)
+  for (const [message, ts] of recentBroadcastTexts) {
+    if (now - ts > 10000) recentBroadcastTexts.delete(message)
+  }
   broadcastMessages.value.push({ id: ++broadcastId, text: sanitizedText, type, timestamp: now, timeLabel })
-  // 最多保留 20 条
-  if (broadcastMessages.value.length > 5) {
-    broadcastMessages.value = broadcastMessages.value.slice(-5)
+  if (broadcastMessages.value.length > 20) {
+    broadcastMessages.value = broadcastMessages.value.slice(-20)
   }
 }
 
@@ -3613,6 +3612,7 @@ const checkOtherPlayerSounds = (newState: any) => {
       if (player.id !== playerId.value && replacedFlowerCount > prev.replacedFlowerCount) {
         playSound('tile-draw')
         playVoiceAction('flowerReplace')
+        addBroadcast(`🌸 ${player.name}补花`, 'special')
       }
       if (player.id !== playerId.value && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
         const newDiscards = (player.hand?.discardedTiles || []).slice(prev.discardCount)
@@ -3629,9 +3629,16 @@ const checkOtherPlayerSounds = (newState: any) => {
           const firstTile = m.tiles?.[0]
           const isFlowerReplacementMeld = m.tiles?.length === 1 && firstTile?.suit === 'hua'
           if (isFlowerReplacementMeld) continue
-          if (m.type === 'kong' || m.tiles?.length === 4) pendingMeldVoices.push('kong')
-          else if (m.type === 'triplet') pendingMeldVoices.push('pong')
-          else pendingMeldVoices.push('chow')
+          if (m.type === 'kong' || m.tiles?.length === 4) {
+            pendingMeldVoices.push('kong')
+            addBroadcast(`🀄 ${player.name}杠牌`, 'info')
+          } else if (m.type === 'triplet') {
+            pendingMeldVoices.push('pong')
+            addBroadcast(`👊 ${player.name}碰牌`, 'info')
+          } else {
+            pendingMeldVoices.push('chow')
+            addBroadcast(`🍜 ${player.name}吃牌`, 'info')
+          }
         }
       }
     }
@@ -4076,7 +4083,9 @@ const forceDiscard = async (p: Player) => {
   aspect-ratio: 4 / 3;
   --tile-w: 28px;
   --tile-h: 40px;
-  --discard-scale: 0.95;
+  --discard-scale: 1.08;
+  --discard-gap-x-override: clamp(0.35px, calc(var(--tile-w) * var(--discard-scale) * 0.02), 1.1px);
+  --discard-gap-y-override: clamp(0.35px, calc(var(--tile-h) * var(--discard-scale) * 0.02), 1.1px);
   --tile-gap: 2px;
   border-radius: 20px;
   /* 深木色外框 */
@@ -4095,7 +4104,7 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-width: 72%;
   --seat-side-width: 112px;
   --seat-side-height: 76%;
-  --seat-side-player-offset: 2.8%;
+  --seat-side-player-offset: 1.4%;
   --discard-center-rect-half-w: 17%;
   --discard-center-rect-half-h: 13.4%;
 }
@@ -4241,9 +4250,9 @@ const forceDiscard = async (p: Player) => {
 /* 上家：靠近牌桌中心，旋转180° */
 /* 四个弃牌区居中对齐牌桌十字 */
 :deep(.discard-zone--top) {
-  top: calc(50% - var(--discard-center-rect-half-h) + 8px);
+  top: calc(50% - var(--discard-center-rect-half-h));
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -100%);
 }
 :deep(.discard-zone--bottom) {
   top: calc(50% + var(--discard-center-rect-half-h));
@@ -4252,12 +4261,12 @@ const forceDiscard = async (p: Player) => {
 }
 :deep(.discard-zone--left) {
   top: 50%;
-  left: calc(50% - var(--discard-center-rect-half-w) - 10px);
+  left: calc(50% - var(--discard-center-rect-half-w));
   transform: translate(-100%, -50%);
 }
 :deep(.discard-zone--right) {
   top: 50%;
-  left: calc(50% + var(--discard-center-rect-half-w) + 10px);
+  left: calc(50% + var(--discard-center-rect-half-w));
   transform: translate(0, -50%);
 }
 
