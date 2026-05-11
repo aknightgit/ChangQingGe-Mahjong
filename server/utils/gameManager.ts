@@ -862,6 +862,7 @@ class GameManager {
         }
         await this.persistGame(game);
         this.broadcastGameState(gameId);
+        this.schedulePendingActionTimeout(gameId);
       } catch (err) {
         console.error('Failed to auto-resolve pending actions:', err);
       } finally {
@@ -4439,6 +4440,7 @@ class GameManager {
               this.refreshPendingActionExpirations(freshGame);
               await this.persistGame(freshGame);
               this.broadcastGameState(game.gameId);
+              this.schedulePendingActionTimeout(game.gameId);
               return;
             }
           }
@@ -4494,6 +4496,7 @@ class GameManager {
             await this.persistGame(freshGame);
             this.broadcastGameState(game.gameId);
             if (freshGame.pendingActions.length > 0) {
+              this.schedulePendingActionTimeout(game.gameId);
               return;
             }
           }
