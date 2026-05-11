@@ -798,6 +798,20 @@ class GameManager {
         // 实战模式: bot和人类共享同一个hesitationWindow
         const allClaimMode = (game as any).allClaimMode;
         const now = Date.now();
+        // 对当前玩家的吃 pending（共享摸牌窗口中的CHOW），给予更长的决策时间
+        // 因为玩家需要选择吃哪组牌，不应受摸牌倒计时限制
+        const adjustedPending = game.pendingActions.map(pa => {
+          if (this.shouldRetainCurrentPlayerChowPending(game, pa) && pa.expiresAt && pa.expiresAt <= now) {
+            return { ...pa, expiresAt: now + 5000 };
+          }
+          return pa;
+        });
+        // 写回调整后的 expiresAt（只调整CHOW pending）
+        for (let i = 0; i < adjustedPending.length; i++) {
+          if (adjustedPending[i] !== game.pendingActions[i]) {
+            game.pendingActions[i] = adjustedPending[i];
+          }
+        }
         const pending = game.pendingActions.filter(pa =>
           (!pa.expiresAt || pa.expiresAt <= now) &&
           !this.shouldRetainCurrentPlayerChowPending(game, pa)

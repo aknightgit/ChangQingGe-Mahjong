@@ -4092,7 +4092,7 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-width: 72%;
   --seat-side-width: 112px;
   --seat-side-height: 76%;
-  --seat-side-player-offset: 0.8%;
+  --seat-side-player-offset: 1.6%;
   --discard-center-rect-half-w: 17%;
   --discard-center-rect-half-h: 13.4%;
 }
@@ -4508,7 +4508,7 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-width: 75%;
   --seat-side-width: calc(116px * var(--mobile-scale));
   --seat-side-height: 56%;
-  --seat-side-player-offset: 1.2%;
+  --seat-side-player-offset: 2%;
   --discard-center-rect-half-w: 14.3%;
   --discard-center-rect-half-h: 11%;
 }
@@ -6980,7 +6980,7 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-width: 80%;
   --seat-side-width: calc(118px * var(--mobile-scale));
   --seat-side-height: calc(58% + (8% * var(--mobile-scale)));
-  --seat-side-player-offset: 1%;
+  --seat-side-player-offset: 2%;
 }
 .layout--mobile-landscape :deep(.discard-zone--top) {
   top: calc(50% - var(--discard-center-rect-half-h) + 8px);
