@@ -2297,10 +2297,11 @@ const hasBlockingPendingClaim = computed(() => {
 })
 const showDraw = computed(() =>
   availableActions.value.includes(ActionType.DRAW) ||
-  shouldExposeSharedDraw.value
+  shouldExposeSharedDraw.value ||
+  shouldPreviewDeferredDraw.value
 )
 const filteredCircularAvailableActions = computed(() => {
-  if (shouldExposeSharedDraw.value && !availableActions.value.includes(ActionType.DRAW)) {
+  if ((shouldExposeSharedDraw.value || shouldPreviewDeferredDraw.value) && !availableActions.value.includes(ActionType.DRAW)) {
     return [...availableActions.value, ActionType.DRAW]
   }
   return availableActions.value
@@ -2593,6 +2594,25 @@ const shouldExposeSharedDraw = computed(() => {
   const pending = myPendingAction.value
   if (!pending || myPendingExpiresAt.value <= nowTs.value) return false
   return true
+})
+
+const shouldPreviewDeferredDraw = computed(() => {
+  if (!isMyTurn.value) return false
+  const pending = myPendingAction.value
+  if (!pending || myPendingExpiresAt.value <= nowTs.value) return false
+  const actions = Array.isArray((pending as any)?.availableActions) ? (pending as any).availableActions : []
+  return actions.some((action: ActionType) =>
+    action === ActionType.CHOW ||
+    action === ActionType.PENG ||
+    action === ActionType.KONG ||
+    action === ActionType.HU ||
+    action === ActionType.CONCEALED_KONG ||
+    action === ActionType.EXTENDED_KONG
+  )
+})
+
+const hasDeferredDrawWindow = computed(() => {
+  return shouldPreviewDeferredDraw.value && !isSharedDrawClaimWindow.value
 })
 
 const hasSharedDrawWindow = computed(() => {
@@ -4083,9 +4103,7 @@ const forceDiscard = async (p: Player) => {
   aspect-ratio: 4 / 3;
   --tile-w: 28px;
   --tile-h: 40px;
-  --discard-scale: 1.08;
-  --discard-gap-x-override: clamp(0.35px, calc(var(--tile-w) * var(--discard-scale) * 0.02), 1.1px);
-  --discard-gap-y-override: clamp(0.35px, calc(var(--tile-h) * var(--discard-scale) * 0.02), 1.1px);
+  --discard-scale: 0.95;
   --tile-gap: 2px;
   border-radius: 20px;
   /* 深木色外框 */
@@ -4104,7 +4122,7 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-width: 72%;
   --seat-side-width: 112px;
   --seat-side-height: 76%;
-  --seat-side-player-offset: 1.4%;
+  --seat-side-player-offset: 2.8%;
   --discard-center-rect-half-w: 17%;
   --discard-center-rect-half-h: 13.4%;
 }
@@ -4250,9 +4268,9 @@ const forceDiscard = async (p: Player) => {
 /* 上家：靠近牌桌中心，旋转180° */
 /* 四个弃牌区居中对齐牌桌十字 */
 :deep(.discard-zone--top) {
-  top: calc(50% - var(--discard-center-rect-half-h));
+  top: calc(50% - var(--discard-center-rect-half-h) + 8px);
   left: 50%;
-  transform: translate(-50%, -100%);
+  transform: translate(-50%, -50%);
 }
 :deep(.discard-zone--bottom) {
   top: calc(50% + var(--discard-center-rect-half-h));
@@ -4261,12 +4279,12 @@ const forceDiscard = async (p: Player) => {
 }
 :deep(.discard-zone--left) {
   top: 50%;
-  left: calc(50% - var(--discard-center-rect-half-w));
+  left: calc(50% - var(--discard-center-rect-half-w) - 10px);
   transform: translate(-100%, -50%);
 }
 :deep(.discard-zone--right) {
   top: 50%;
-  left: calc(50% + var(--discard-center-rect-half-w));
+  left: calc(50% + var(--discard-center-rect-half-w) + 10px);
   transform: translate(0, -50%);
 }
 
