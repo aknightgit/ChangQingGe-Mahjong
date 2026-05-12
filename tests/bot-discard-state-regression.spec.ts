@@ -313,6 +313,106 @@ try {
   anyManager.games.delete(freezeGame.gameId);
 }
 
+const freezeTimerBot = makePlayer('AI-freeze-timer-bot', 13);
+const freezeTimerGame = makeGame([makePlayer('freeze-timer-a', 13), freezeTimerBot, makePlayer('freeze-timer-c', 13)]);
+freezeTimerGame.currentPlayerIndex = 1;
+freezeTimerGame.drawnThisTurn = false;
+freezeTimerGame.hesitationWindow = 0;
+freezeTimerGame.wall = [tile(TileSuit.DOTS, 5, 'freeze-timer-draw-1')];
+freezeTimerGame.pendingActions = [{
+  playerId: freezeTimerBot.id,
+  availableActions: [ActionType.CHOW, ActionType.PASS],
+  tile: tile(TileSuit.CHARACTERS, 7, 'freeze-timer-discard-7'),
+  expiresAt: Date.now() - 10,
+}];
+anyManager.games.set(freezeTimerGame.gameId, freezeTimerGame);
+const originalPersistGame6 = anyManager.persistGame;
+const originalBroadcastGameState6 = anyManager.broadcastGameState;
+const originalGetBotDiscardDelayMs6 = anyManager.getBotDiscardDelayMs;
+try {
+  anyManager.persistGame = async () => {};
+  anyManager.broadcastGameState = () => {};
+  anyManager.getBotDiscardDelayMs = () => 0;
+  await anyManager.beginCurrentPlayerTurn(freezeTimerGame);
+  await new Promise(resolve => setTimeout(resolve, 80));
+  ok(
+    'bot freeze timeout clears expired local chow-only pending',
+    freezeTimerGame.pendingActions.length === 0,
+    `pending=${JSON.stringify(freezeTimerGame.pendingActions)}`
+  );
+  ok(
+    'bot freeze timeout advances past draw state instead of deadlocking on stale chow pending',
+    freezeTimerBot.hand.concealedTiles.length === 13 && freezeTimerGame.currentPlayerIndex !== 1,
+    `concealed=${freezeTimerBot.hand.concealedTiles.length}, current=${freezeTimerGame.currentPlayerIndex}, drawn=${freezeTimerGame.drawnThisTurn}`
+  );
+} finally {
+  anyManager.persistGame = originalPersistGame6;
+  anyManager.broadcastGameState = originalBroadcastGameState6;
+  anyManager.getBotDiscardDelayMs = originalGetBotDiscardDelayMs6;
+  anyManager.clearPendingActionTimer(freezeTimerGame.gameId);
+  const freezeTimer = anyManager.freezeTimers?.get?.(freezeTimerGame.gameId);
+  if (freezeTimer) {
+    clearTimeout(freezeTimer);
+    anyManager.freezeTimers.delete(freezeTimerGame.gameId);
+  }
+  const botTimer = anyManager.botTimers?.get?.(freezeTimerGame.gameId);
+  if (botTimer) {
+    clearTimeout(botTimer);
+    anyManager.botTimers.delete(freezeTimerGame.gameId);
+  }
+  anyManager.games.delete(freezeTimerGame.gameId);
+}
+
+const freezeNaturalExpiryBot = makePlayer('AI-freeze-natural-expiry-bot', 13);
+const freezeNaturalExpiryGame = makeGame([makePlayer('freeze-natural-a', 13), freezeNaturalExpiryBot, makePlayer('freeze-natural-c', 13)]);
+freezeNaturalExpiryGame.currentPlayerIndex = 1;
+freezeNaturalExpiryGame.drawnThisTurn = false;
+freezeNaturalExpiryGame.hesitationWindow = 10;
+freezeNaturalExpiryGame.wall = [tile(TileSuit.DOTS, 6, 'freeze-natural-draw-1')];
+freezeNaturalExpiryGame.pendingActions = [{
+  playerId: freezeNaturalExpiryBot.id,
+  availableActions: [ActionType.CHOW, ActionType.PASS],
+  tile: tile(TileSuit.CHARACTERS, 8, 'freeze-natural-discard-8'),
+  expiresAt: Date.now() + 25,
+}];
+anyManager.games.set(freezeNaturalExpiryGame.gameId, freezeNaturalExpiryGame);
+const originalPersistGame7 = anyManager.persistGame;
+const originalBroadcastGameState7 = anyManager.broadcastGameState;
+const originalGetBotDiscardDelayMs7 = anyManager.getBotDiscardDelayMs;
+try {
+  anyManager.persistGame = async () => {};
+  anyManager.broadcastGameState = () => {};
+  anyManager.getBotDiscardDelayMs = () => 0;
+  await anyManager.beginCurrentPlayerTurn(freezeNaturalExpiryGame);
+  await new Promise(resolve => setTimeout(resolve, 120));
+  ok(
+    'bot freeze timeout clears preserved current-player chow pending instead of extending it forever',
+    freezeNaturalExpiryGame.pendingActions.length === 0,
+    `pending=${JSON.stringify(freezeNaturalExpiryGame.pendingActions)}`
+  );
+  ok(
+    'bot freeze timeout advances immediately after clearing preserved bot chow pending',
+    freezeNaturalExpiryBot.hand.concealedTiles.length === 13 && freezeNaturalExpiryGame.currentPlayerIndex !== 1,
+    `concealed=${freezeNaturalExpiryBot.hand.concealedTiles.length}, current=${freezeNaturalExpiryGame.currentPlayerIndex}, drawn=${freezeNaturalExpiryGame.drawnThisTurn}`
+  );
+} finally {
+  anyManager.persistGame = originalPersistGame7;
+  anyManager.broadcastGameState = originalBroadcastGameState7;
+  anyManager.getBotDiscardDelayMs = originalGetBotDiscardDelayMs7;
+  anyManager.clearPendingActionTimer(freezeNaturalExpiryGame.gameId);
+  const freezeTimer = anyManager.freezeTimers?.get?.(freezeNaturalExpiryGame.gameId);
+  if (freezeTimer) {
+    clearTimeout(freezeTimer);
+    anyManager.freezeTimers.delete(freezeNaturalExpiryGame.gameId);
+  }
+  const botTimer = anyManager.botTimers?.get?.(freezeNaturalExpiryGame.gameId);
+  if (botTimer) {
+    clearTimeout(botTimer);
+    anyManager.botTimers.delete(freezeNaturalExpiryGame.gameId);
+  }
+  anyManager.games.delete(freezeNaturalExpiryGame.gameId);
+}
+
 const stalePassBot = makePlayer('AI-stale-pass-bot', 13);
 stalePassBot.name = 'AI-阿水';
 const skippedPlayer = makePlayer('skip-target', 13);

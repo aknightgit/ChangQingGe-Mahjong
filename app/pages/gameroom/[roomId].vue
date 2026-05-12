@@ -720,24 +720,6 @@
           <!-- 牌局快讯 -->
           <GameBroadcast :messages="displayBroadcastMessages" />
 
-          <div v-if="tingPreviewItems.length" class="ext-section ting-preview-panel">
-            <h3 class="ext-title">听牌提示</h3>
-            <div class="ting-preview-panel__tiles">
-              <span
-                v-for="item in tingPreviewItems"
-                :key="item.key"
-                class="ting-preview-panel__tile"
-                :class="{
-                  'ting-preview-panel__tile--exhausted': item.isExhausted
-                }"
-              >
-                {{ item.label }}
-              </span>
-            </div>
-          </div>
-
-
-
           <div class="ext-section" v-if="isAdminUser">
             <h3 class="ext-title">调试</h3>
             <p class="ext-meta">阶段: {{ gameState?.phase }} · {{ gameState?.players.length }}人</p>
@@ -770,6 +752,24 @@
 
           <!-- 操作按钮区：等待态隐藏，避免空壳感 -->
           <div v-if="!isPreGameTransition" class="action-buttons-panel">
+
+              <!-- 听牌提示（紧贴功能按钮菜单上方） -->
+              <div v-if="tingPreviewItems.length" class="ting-preview-panel">
+                <h3 class="ting-preview-title">听牌提示</h3>
+                <div class="ting-preview-panel__tiles">
+                  <span
+                    v-for="item in tingPreviewItems"
+                    :key="item.key"
+                    class="ting-preview-panel__tile"
+                    :class="{
+                      'ting-preview-panel__tile--exhausted': item.isExhausted
+                    }"
+                  >
+                    {{ item.label }}
+                  </span>
+                </div>
+              </div>
+
               <!-- 状态提示 -->
               <div class="turn-status-text">
                 <template v-if="thinkFreezeActive">
@@ -782,9 +782,6 @@
                   🤖 AI托管中
                 </template>
                 <template v-else-if="showMobileActionNotice">{{ mobileActionNoticeText }}</template>
-                <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
-                  ⏱ {{ turnTimer }}s
-                </span>
               </div>
               <CircularActionButtons
                 :available-actions="filteredCircularAvailableActions"
@@ -801,7 +798,7 @@
                 :has-voted-liangshan="hasVotedLiangShan"
                 @action="handleCircularAction"
               />
-              <!-- 更多特殊操作：常驻显示聚义/造反 -->
+              <!-- 更多特殊操作：常驻显示聚义/造反/倒计时 -->
               <div class="extra-actions-bar">
                 <span class="extra-actions-label">更多操作</span>
                 <button
@@ -814,6 +811,9 @@
                   :disabled="showRebel === false || isInteractionLocked || !isConnected || thinkFreezeActive"
                   @click="onRebel"
                 >🚨 造反</button>
+                <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
+                  ⏱ {{ turnTimer }}s
+                </span>
               </div>
           </div>
         </aside>
@@ -2297,10 +2297,11 @@ const hasBlockingPendingClaim = computed(() => {
 })
 const showDraw = computed(() =>
   availableActions.value.includes(ActionType.DRAW) ||
-  shouldExposeSharedDraw.value
+  shouldExposeSharedDraw.value ||
+  shouldPreviewDeferredDraw.value
 )
 const filteredCircularAvailableActions = computed(() => {
-  if (shouldExposeSharedDraw.value && !availableActions.value.includes(ActionType.DRAW)) {
+  if ((shouldExposeSharedDraw.value || shouldPreviewDeferredDraw.value) && !availableActions.value.includes(ActionType.DRAW)) {
     return [...availableActions.value, ActionType.DRAW]
   }
   return availableActions.value
@@ -2593,6 +2594,25 @@ const shouldExposeSharedDraw = computed(() => {
   const pending = myPendingAction.value
   if (!pending || myPendingExpiresAt.value <= nowTs.value) return false
   return true
+})
+
+const shouldPreviewDeferredDraw = computed(() => {
+  if (!isMyTurn.value) return false
+  const pending = myPendingAction.value
+  if (!pending || myPendingExpiresAt.value <= nowTs.value) return false
+  const actions = Array.isArray((pending as any)?.availableActions) ? (pending as any).availableActions : []
+  return actions.some((action: ActionType) =>
+    action === ActionType.CHOW ||
+    action === ActionType.PENG ||
+    action === ActionType.KONG ||
+    action === ActionType.HU ||
+    action === ActionType.CONCEALED_KONG ||
+    action === ActionType.EXTENDED_KONG
+  )
+})
+
+const hasDeferredDrawWindow = computed(() => {
+  return shouldPreviewDeferredDraw.value && !isSharedDrawClaimWindow.value
 })
 
 const hasSharedDrawWindow = computed(() => {
@@ -4083,9 +4103,7 @@ const forceDiscard = async (p: Player) => {
   aspect-ratio: 4 / 3;
   --tile-w: 28px;
   --tile-h: 40px;
-  --discard-scale: 1.08;
-  --discard-gap-x-override: clamp(0.35px, calc(var(--tile-w) * var(--discard-scale) * 0.02), 1.1px);
-  --discard-gap-y-override: clamp(0.35px, calc(var(--tile-h) * var(--discard-scale) * 0.02), 1.1px);
+  --discard-scale: 0.95;
   --tile-gap: 2px;
   border-radius: 20px;
   /* 深木色外框 */
@@ -4104,7 +4122,7 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-width: 72%;
   --seat-side-width: 112px;
   --seat-side-height: 76%;
-  --seat-side-player-offset: 1.4%;
+  --seat-side-player-offset: 2.8%;
   --discard-center-rect-half-w: 17%;
   --discard-center-rect-half-h: 13.4%;
 }
@@ -4250,9 +4268,9 @@ const forceDiscard = async (p: Player) => {
 /* 上家：靠近牌桌中心，旋转180° */
 /* 四个弃牌区居中对齐牌桌十字 */
 :deep(.discard-zone--top) {
-  top: calc(50% - var(--discard-center-rect-half-h));
+  top: calc(50% - var(--discard-center-rect-half-h) + 8px);
   left: 50%;
-  transform: translate(-50%, -100%);
+  transform: translate(-50%, -50%);
 }
 :deep(.discard-zone--bottom) {
   top: calc(50% + var(--discard-center-rect-half-h));
@@ -4261,12 +4279,12 @@ const forceDiscard = async (p: Player) => {
 }
 :deep(.discard-zone--left) {
   top: 50%;
-  left: calc(50% - var(--discard-center-rect-half-w));
+  left: calc(50% - var(--discard-center-rect-half-w) - 10px);
   transform: translate(-100%, -50%);
 }
 :deep(.discard-zone--right) {
   top: 50%;
-  left: calc(50% + var(--discard-center-rect-half-w));
+  left: calc(50% + var(--discard-center-rect-half-w) + 10px);
   transform: translate(0, -50%);
 }
 
@@ -4826,7 +4844,14 @@ const forceDiscard = async (p: Player) => {
 .ting-preview-panel {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.ting-preview-title {
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.5);
+  margin: 0;
 }
 
 .ting-preview-panel__tiles {
