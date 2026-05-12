@@ -3273,7 +3273,7 @@ class GameManager {
     this.handleApprovalChoice(gameId, pengPlayerId, choice === 'peng' ? 'confirm' : 'pass');
   }
 
-  private handlePeng(game: GameState, player: Player): void {
+  private async handlePeng(game: GameState, player: Player): Promise<void> {
     const lastDiscard = game.discardPile[game.discardPile.length - 1];
     if (!lastDiscard) return;
 
@@ -3288,7 +3288,7 @@ class GameManager {
     this.executePengDirectly(game, player);
   }
 
-  private handleKong(game: GameState, player: Player, tileId: string): void {
+  private async handleKong(game: GameState, player: Player, tileId: string): Promise<void> {
     const lastDiscard = game.discardPile[game.discardPile.length - 1];
     if (!lastDiscard) return;
 
