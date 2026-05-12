@@ -233,18 +233,26 @@ const navigateToCreatedRoom = async (targetUrl: string) => {
 
   // 等待页面组件渲染完成，检查是否真的是游戏房间
   // Nuxt SPA 路由可能渲染失败，页面仍显示欢迎页内容
-  await new Promise(resolve => setTimeout(resolve, 500))
+  await new Promise(resolve => setTimeout(resolve, 2000))
   const currentPath = window.location.pathname
   const hasGameRoomContent = !!document.querySelector('.game-room, .game-table, .player-hand, .game-board')
   if (currentPath !== targetUrl.split('?')[0] || !hasGameRoomContent) {
-    console.warn('[Create] Route failed to navigate, forcing window.location.assign:', {
+    console.warn('[Create] Route may have failed to navigate, check:', {
       currentPath,
       targetPath: targetUrl.split('?')[0],
       hasContent: hasGameRoomContent
     })
-    clearPendingRoomTarget()
-    window.location.assign(targetUrl)
-    return
+    // 再多等一秒再决定
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    const contentAfterWait = !!document.querySelector('.game-room, .game-table, .player-hand, .game-board')
+    if (contentAfterWait) {
+      console.warn('[Create] Content appeared after longer wait, navigation was fine')
+    } else {
+      console.warn('[Create] Route still has no game content, forcing window.location.assign')
+      clearPendingRoomTarget()
+      window.location.assign(targetUrl)
+      return
+    }
   }
 
   clearPendingRoomTarget()

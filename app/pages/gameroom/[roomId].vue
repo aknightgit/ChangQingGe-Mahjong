@@ -720,24 +720,6 @@
           <!-- 牌局快讯 -->
           <GameBroadcast :messages="displayBroadcastMessages" />
 
-          <div v-if="tingPreviewItems.length" class="ext-section ting-preview-panel">
-            <h3 class="ext-title">听牌提示</h3>
-            <div class="ting-preview-panel__tiles">
-              <span
-                v-for="item in tingPreviewItems"
-                :key="item.key"
-                class="ting-preview-panel__tile"
-                :class="{
-                  'ting-preview-panel__tile--exhausted': item.isExhausted
-                }"
-              >
-                {{ item.label }}
-              </span>
-            </div>
-          </div>
-
-
-
           <div class="ext-section" v-if="isAdminUser">
             <h3 class="ext-title">调试</h3>
             <p class="ext-meta">阶段: {{ gameState?.phase }} · {{ gameState?.players.length }}人</p>
@@ -770,6 +752,24 @@
 
           <!-- 操作按钮区：等待态隐藏，避免空壳感 -->
           <div v-if="!isPreGameTransition" class="action-buttons-panel">
+
+              <!-- 听牌提示（紧贴功能按钮菜单上方） -->
+              <div v-if="tingPreviewItems.length" class="ting-preview-panel">
+                <h3 class="ting-preview-title">听牌提示</h3>
+                <div class="ting-preview-panel__tiles">
+                  <span
+                    v-for="item in tingPreviewItems"
+                    :key="item.key"
+                    class="ting-preview-panel__tile"
+                    :class="{
+                      'ting-preview-panel__tile--exhausted': item.isExhausted
+                    }"
+                  >
+                    {{ item.label }}
+                  </span>
+                </div>
+              </div>
+
               <!-- 状态提示 -->
               <div class="turn-status-text">
                 <template v-if="thinkFreezeActive">
@@ -782,9 +782,6 @@
                   🤖 AI托管中
                 </template>
                 <template v-else-if="showMobileActionNotice">{{ mobileActionNoticeText }}</template>
-                <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
-                  ⏱ {{ turnTimer }}s
-                </span>
               </div>
               <CircularActionButtons
                 :available-actions="filteredCircularAvailableActions"
@@ -801,7 +798,7 @@
                 :has-voted-liangshan="hasVotedLiangShan"
                 @action="handleCircularAction"
               />
-              <!-- 更多特殊操作：常驻显示聚义/造反 -->
+              <!-- 更多特殊操作：常驻显示聚义/造反/倒计时 -->
               <div class="extra-actions-bar">
                 <span class="extra-actions-label">更多操作</span>
                 <button
@@ -814,6 +811,9 @@
                   :disabled="showRebel === false || isInteractionLocked || !isConnected || thinkFreezeActive"
                   @click="onRebel"
                 >🚨 造反</button>
+                <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
+                  ⏱ {{ turnTimer }}s
+                </span>
               </div>
           </div>
         </aside>
@@ -4844,7 +4844,14 @@ const forceDiscard = async (p: Player) => {
 .ting-preview-panel {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.ting-preview-title {
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.5);
+  margin: 0;
 }
 
 .ting-preview-panel__tiles {
