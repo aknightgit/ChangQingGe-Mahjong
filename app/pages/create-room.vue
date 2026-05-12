@@ -188,24 +188,10 @@ const navigateToCreatedRoom = async (targetUrl: string) => {
   try {
     await router.push(targetUrl)
   } catch (error) {
-    console.warn('[CreatePage] router.push failed, fallback to location.assign', error)
+    console.warn('[CreatePage] router.push failed:', error)
   }
-  if (!process.client) return
-  // 给页面渲染一些缓冲时间
-  await new Promise(resolve => setTimeout(resolve, 2000))
-  const currentPath = window.location.pathname
-  if (currentPath === targetUrl.split('?')[0]) {
-    clearPendingRoomTarget()
-    return
-  }
-  // 路径没变但可能还在渲染中，再等一秒
-  await new Promise(resolve => setTimeout(resolve, 1000))
-  if (window.location.pathname === targetUrl.split('?')[0]) {
-    clearPendingRoomTarget()
-    return
-  }
-  console.warn('[CreatePage] SPA navigation failed to change path, hard redirect')
-  window.location.assign(targetUrl)
+  // 导航无论成功与否都不做硬跳转，避免全量刷新破坏SPA认证状态
+  clearPendingRoomTarget()
 }
 
 const confirmCreateGame = async () => {
