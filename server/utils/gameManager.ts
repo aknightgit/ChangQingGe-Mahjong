@@ -4492,11 +4492,12 @@ class GameManager {
             console.log(`[bot-freeze] Freeze expired for ${livePlayer.name}, ${botLogMsg}`);
             this.clearExpiredClaimsButKeepCurrentPlayerChow(freshGame);
             if (freshGame.pendingActions.length > 0) {
-              this.refreshPendingActionExpirations(freshGame);
+              // 🔴 修复：bot freeze到期后还有pending残留 → 视为bot没反应 → auto-pass
+              // 直接清除pending继续推进，而不是renew超时导致死循环
+              console.log(`[bot-freeze] ${livePlayer.name} no response, clearing pending actions`);
+              freshGame.pendingActions = [];
               await this.persistGame(freshGame);
               this.broadcastGameState(game.gameId);
-              this.schedulePendingActionTimeout(game.gameId);
-              return;
             }
           }
           console.log(`[bot-freeze] Freeze expired for ${livePlayer.name}, drawing...`);
