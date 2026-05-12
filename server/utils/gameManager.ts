@@ -4021,7 +4021,7 @@ class GameManager {
     this.endRound(game, GameEndReason.LAST_PLAYER);
   }
 
-  private handlePass(game: GameState, player: Player): void {
+  private async handlePass(game: GameState, player: Player): Promise<void> {
     // Remove player's pending action
     game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
 
