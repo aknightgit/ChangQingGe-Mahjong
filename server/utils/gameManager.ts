@@ -2696,75 +2696,6 @@ class GameManager {
       return;
     }
 
-    // 处理AI候选人：
-    // 1. 纯AI候选人(无人类) → AI直接按优先级决策，不需要审批等待
-    // 2. 混合候选人(有AI有人类) → AI加入stage但用hesitationWindow(短超时)，超时后自动PASS
-    const aiCandidates = queue.filter(c => {
-      const p = game.players.find(pl => pl.id === c.playerId);
-      return p && this.isPlayerBotControlled(p);
-    });
-    const humanCandidates = queue.filter(c => {
-      const p = game.players.find(pl => pl.id === c.playerId);
-      return !p || !this.isPlayerBotControlled(p);
-    });
-
-    if (aiCandidates.length > 0 && humanCandidates.length === 0) {
-      // 纯AI候选人：按优先级排序，直接决策，不需要等待
-      const sortedAi = [...aiCandidates].sort((a, b) => {
-        const aPriority = Math.max(...a.availableActions.map(action => this.getApprovalActionPriority(action)));
-        const bPriority = Math.max(...b.availableActions.map(action => this.getApprovalActionPriority(action)));
-        return bPriority - aPriority; // 高优先级优先
-      });
-      for (const aiCand of sortedAi) {
-        const aiPlayer = game.players.find(p => p.id === aiCand.playerId);
-        if (!aiPlayer || aiPlayer.status !== PlayerStatus.PLAYING) continue;
-
-        const aiActions = aiCand.availableActions as ActionType[];
-        if (aiActions.includes(ActionType.HU)) {
-          try {
-            await this.executeWinDirectly(game, aiPlayer, conflict.tile);
-            game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== conflict.requesterId);
-            this.clearPendingActionTimer(game.gameId);
-            game.pengChowConflict = null;
-            return;
-          } catch (e) {
-            console.warn('[Approval] AI HU failed:', e);
-          }
-        }
-
-        // AI按优先级决策：KONG > PENG，直接执行
-        if (aiActions.includes(ActionType.KONG)) {
-          this.executeKongDirectly(game, aiPlayer, conflict.tile.id);
-          game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== conflict.requesterId);
-          this.clearPendingActionTimer(game.gameId);
-          game.pengChowConflict = null;
-          return;
-        }
-        if (aiActions.includes(ActionType.PENG)) {
-          this.executePengDirectly(game, aiPlayer);
-          game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== conflict.requesterId);
-          this.clearPendingActionTimer(game.gameId);
-          game.pengChowConflict = null;
-          return;
-        }
-        // AI只有CHOW → PASS，让请求者执行
-      }
-      // AI都PASS → 执行请求者动作
-      game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== conflict.requesterId);
-      this.clearPendingActionTimer(game.gameId);
-      this.executeRequesterApprovalAction(game);
-      game.pengChowConflict = null;
-      return;
-    }
-
-    if (aiCandidates.length > 0 && humanCandidates.length > 0) {
-      // 混合候选人：AI放回queue，和人类一起走通用stage逻辑
-      // AI的expiresAt用hesitationWindow(短超时)，超时后自动PASS
-      // (通用stage逻辑在处理时判断isPlayerBotControlled来设置expiresAt)
-      conflict.approvalQueue = [...aiCandidates, ...humanCandidates];
-      // 不return，继续走到下面的通用stage逻辑
-    }
-
     const highestPriority = Math.max(
       ...queue.map(candidate => Math.max(...candidate.availableActions.map(action => this.getApprovalActionPriority(action))))
     );
@@ -2786,14 +2717,10 @@ class GameManager {
     for (const candidate of stage) {
       const candidatePlayer = game.players.find(p => p.id === candidate.playerId);
       if (!candidatePlayer) continue;
-      const isAi = this.isPlayerBotControlled(candidatePlayer);
-      const expiresAt = Date.now() + (isAi
-        ? this.getHesitationWindow(game)
-        : this.getHumanClaimDecisionTimeoutMs(
-            game,
-            candidatePlayer,
-            candidate.availableActions as ActionType[]
-          )
+      const expiresAt = Date.now() + this.getHumanClaimDecisionTimeoutMs(
+        game,
+        candidatePlayer,
+        candidate.availableActions as ActionType[]
       );
       const existingPending = game.pendingActions.find(pa => pa.playerId === candidate.playerId);
       if (existingPending) {
@@ -2856,14 +2783,66 @@ class GameManager {
     candidates: Array<{ playerId: string; availableActions: string[] }>,
     tile: Tile,
     requesterTileIds?: string[]
-  ): void {
+  ): Promise<void> {
+    // AI不参与审批：AI候选人直接按优先级决策(HU > KONG > PENG > PASS)
+    // 只把纯人类候选人送进advanceApprovalConflict
+    const aiCandidates = candidates.filter(c => {
+      const p = game.players.find(pl => pl.id === c.playerId);
+      return p && this.isPlayerBotControlled(p);
+    });
+    const humanCandidates = candidates.filter(c => {
+      const p = game.players.find(pl => pl.id === c.playerId);
+      return !p || !this.isPlayerBotControlled(p);
+    });
+
+    // 先处理AI候选人：按优先级排序，AI之间直接竞争
+    if (aiCandidates.length > 0) {
+      const sortedAi = [...aiCandidates].sort((a, b) => {
+        const aPriority = Math.max(...a.availableActions.map(action => this.getApprovalActionPriority(action)));
+        const bPriority = Math.max(...b.availableActions.map(action => this.getApprovalActionPriority(action)));
+        return bPriority - aPriority;
+      });
+      for (const aiCand of sortedAi) {
+        const aiPlayer = game.players.find(p => p.id === aiCand.playerId);
+        if (!aiPlayer || aiPlayer.status !== PlayerStatus.PLAYING) continue;
+
+        const aiActions = aiCand.availableActions as ActionType[];
+        if (aiActions.includes(ActionType.HU)) {
+          try {
+            await this.executeWinDirectly(game, aiPlayer, tile);
+            return; // 胡牌后游戏状态已结束
+          } catch (e) {
+            console.warn('[Approval] AI HU failed:', e);
+          }
+        }
+        if (aiActions.includes(ActionType.KONG)) {
+          this.executeKongDirectly(game, aiPlayer, tile.id);
+          return;
+        }
+        if (aiActions.includes(ActionType.PENG)) {
+          this.executePengDirectly(game, aiPlayer);
+          return;
+        }
+        // AI只有CHOW → PASS，继续看下一个AI
+      }
+    }
+
+    // 如果没有人类候选人，AI都已决策完毕或PASS，直接执行请求者动作
+    if (humanCandidates.length === 0) {
+      if (requesterAction === 'chow') this.executeChowDirectly(game, game.players.find(p => p.id === requesterPlayerId)!, requesterTileIds);
+      else if (requesterAction === 'peng') this.executePengDirectly(game, game.players.find(p => p.id === requesterPlayerId)!);
+      else if (requesterAction === 'kong') this.executeKongDirectly(game, game.players.find(p => p.id === requesterPlayerId)!, tile.id);
+      return;
+    }
+
+    // 只有人类候选人需要审批流程
     game.pengChowConflict = {
       requesterId: requesterPlayerId,
       requesterAction,
       tile,
       requesterTileIds,
       timestamp: Date.now(),
-      approvalQueue: candidates.map(candidate => ({
+      approvalQueue: humanCandidates.map(candidate => ({
         playerId: candidate.playerId,
         availableActions: candidate.availableActions as ActionType[]
       })),
