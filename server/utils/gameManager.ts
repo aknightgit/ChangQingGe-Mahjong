@@ -1032,6 +1032,9 @@ class GameManager {
         if (claimingPlayer && this.isPlayerBotControlled(claimingPlayer)) {
           this.scheduleBotDiscard(gameId, claimingPlayer.id);
         }
+        // 备份调度: 如果 scheduleBotDiscard 因pending残留无法出牌,
+        // schedulePendingActionTimeout 提供退路
+        this.schedulePendingActionTimeout(gameId);
       } else if (game.pendingActions.length === 0 && this.shouldAdvanceTurnAfterPass(game)) {
         // 所有 bot 都 PASS 且没有人类 pending 残留时，必须继续推进回合。
         // 否则会停在弃牌者身上，出现 "Skipped: pending cleared but turn not advanced" 卡死。
@@ -4596,7 +4599,12 @@ class GameManager {
         }
         const currentP = game.players[game.currentPlayerIndex];
         if (currentP.id !== playerId) {
-          console.log(`[bot-discard] Not ${playerId}'s turn (current: ${currentP.id}), skipping`);
+          // 当前玩家已更换——可能是审批流执行后 currentPlayerIndex 已更新为碰牌bot
+          // 如果当前玩家是另一个bot且没有出牌定时器在跑，重新调度
+          if (this.isPlayerBotControlled(currentP) && !this.botTimers.has(gameId)) {
+            console.log(`[bot-discard] Current player changed to bot ${currentP.name}, rescheduling`);
+            this.scheduleBotDiscard(gameId, currentP.id);
+          }
           return;
         }
         if (game.pendingActions.length > 0 && game.pendingActions.every(pa => this.shouldRetainCurrentPlayerChowPending(game, pa))) {
@@ -4604,7 +4612,8 @@ class GameManager {
           await this.persistGame(game);
         }
         if (game.pendingActions.length > 0) {
-          console.log(`[bot-discard] Pending actions still unresolved for ${currentP.name}, skipping discard`);
+          console.log(`[bot-discard] Pending actions still unresolved for ${currentP.name}, delegating to timeout`);
+          this.schedulePendingActionTimeout(gameId);
           return;
         }
 
@@ -4617,7 +4626,8 @@ class GameManager {
         const refreshedGame = await this.getGame(gameId);
         if (!refreshedGame || refreshedGame.phase !== GamePhase.PLAYING) return;
         if (refreshedGame.pendingActions.length > 0) {
-          console.log(`[bot-discard] Pending actions reappeared for ${playerId}, aborting discard`);
+          console.log(`[bot-discard] Pending actions reappeared for ${playerId}, delegating to timeout`);
+          this.schedulePendingActionTimeout(gameId);
           return;
         }
         const refreshedPlayer = refreshedGame.players[refreshedGame.currentPlayerIndex];
