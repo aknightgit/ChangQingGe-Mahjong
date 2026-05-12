@@ -391,14 +391,8 @@ class GameManager {
     ].join('|');
   }
 
-  private getWinWildArg(game: GameState): string | null | ((tile: Tile) => boolean) {
-    const usesFlowerWildGroup =
-      game.customScoringMode?.startsWith(`${TileSuit.FLOWER}-`) &&
-      Array.isArray(game.wildTileGroup) &&
-      game.wildTileGroup.length > 0;
-    return usesFlowerWildGroup
-      ? buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup)
-      : (game.customScoringMode || null);
+  private getWinWildArg(game: GameState): string | null {
+    return (game.customScoringMode || null);
   }
 
   private getCachedWinCheck(game: GameState, player: Player): { canWin: boolean; types: HandType[] } {
@@ -536,11 +530,7 @@ class GameManager {
 
     const candidates = this.getTingPreviewCandidates(game);
     const wildChecker = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
-    const useFunctionWildCheck =
-      game.customScoringMode?.startsWith(`${TileSuit.FLOWER}-`) &&
-      Array.isArray(game.wildTileGroup) &&
-      game.wildTileGroup.length > 0;
-    const winWildArg = useFunctionWildCheck ? wildChecker : (game.customScoringMode || null);
+    const winWildArg = (game.customScoringMode || null);
     const winningTileMap = new Map<string, {
       tile: Tile;
       remainingCount: number;

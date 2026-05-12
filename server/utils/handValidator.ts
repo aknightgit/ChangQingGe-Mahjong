@@ -1103,7 +1103,8 @@ function findBestAssignmentByPriority(
       const tile = alloc[i];
       virtualHand.push({ suit: tile.suit as TileSuit, value: tile.value, id: `vhp-${i}`, isFlower: false });
     }
-    return detectTypes(virtualHand, exposed);
+    const result = detectTypes(virtualHand, exposed);
+    return result;
   };
 
   // 0-3 张百搭是主流业务场景，直接做精确枚举，先保真再谈启发式提速。
