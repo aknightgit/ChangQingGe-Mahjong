@@ -249,13 +249,11 @@
               </li>
             </ul>
             <p v-else-if="!isDrawOverlay" class="overlay-empty">游戏结果将在服务端结算后显示。</p>
-            <!-- 流局时：任意点击进入下一局；非流局时：退出大厅 -->
-            <button v-if="canStartNextRoundOverlay" class="mahjong-button primary overlay-button" @click="startNextRound">
-              下一局
-            </button>
-            <button v-else class="mahjong-button primary overlay-button" @click="backToLobby">
-              退出到大厅
-            </button>
+            <!-- 自动进入下一局，无需手动点击 -->
+            <div class="overlay-auto-next-hint">
+              <span class="auto-next-spinner"></span>
+              <span>即将进入下一局...</span>
+            </div>
           </div>
         </div>
 
@@ -1997,6 +1995,21 @@ const maybeAutoDealForBotDealer = () => {
   window.setTimeout(() => {
     void onDealTiles()
   }, 420)
+}
+
+/** 自动掷骰子+发牌（AI庄家） */
+const autoRollAndDeal = () => {
+  onRerollDice()
+  // 等掷骰子动画完成（约850ms）+ 结果展示（500ms）+ 过渡
+  window.setTimeout(() => {
+    void onDealTiles()
+  }, 1800)
+}
+
+/** 仅自动掷骰子（人类庄家） */
+const autoRollOnly = () => {
+  onRerollDice()
+  // 骰子掷完，等人发牌
 }
 
 const startNextRound = async () => {
@@ -3799,8 +3812,9 @@ watch(() => gameState.value, (newState, oldState) => {
 
 watch(
   () => gameState.value?.phase,
-  (phase) => {
-    if (phase === GamePhase.STARTING) {
+  (newPhase, oldPhase) => {
+    if (newPhase === GamePhase.STARTING) {
+      const prevPhase = oldPhase || gameState.value?.phase;
       showSettlement.value = false
       settlementData.value = null
       isHuReviewMode.value = false
@@ -3809,9 +3823,27 @@ watch(
         diceValues.value = [1, 1]
       }
       showDiceOverlay.value = true
+
+      // 🔄 自动下一局：来自结算/流局后，自动走掷骰子+发牌
+      // STARTING时立即 refresh state，然后等骰子组件就绪后自动操作
+      if (prevPhase === GamePhase.ENDED) {
+        window.setTimeout(() => {
+          const dealer = dealerPlayer.value
+          if (dealer && isBotPlayer(dealer)) {
+            // AI庄家：自动掷骰子+发牌
+            autoRollAndDeal()
+          } else if (dealer && !isBotPlayer(dealer)) {
+            // 人类头胡庄家：自动掷骰子，等他手动发牌
+            // 或者直接自动掷骰子+等发牌（当前先自动掷骰子）
+            autoRollOnly()
+          } else {
+            // 没有庄家——不可能
+          }
+        }, 500)
+      }
       return
     }
-    if (phase !== GamePhase.STARTING) {
+    if (newPhase !== GamePhase.STARTING) {
       showDiceOverlay.value = false
       hasDicePreview.value = false
     }

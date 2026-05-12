@@ -5108,6 +5108,28 @@ class GameManager {
 
     // 处理下局移除/替换请求
     this.applyPendingChanges(game);
+
+    // 🔄 自动进入下一局（正常结束/流局）
+    // 延迟一小段时间让客户端展示结算画面，然后自动进入掷骰子阶段
+    if (
+      finalReason === GameEndReason.WALL_EXHAUSTED ||
+      finalReason === GameEndReason.LAST_PLAYER
+    ) {
+      this.autoStartNextRound(game.gameId, 2000);
+    }
+  }
+
+  /**
+   * 自动进入下一局（延时后设置STARTING阶段）
+   */
+  private autoStartNextRound(gameId: string, delayMs: number = 2000): void {
+    const timer = this.detachTimer(setTimeout(async () => {
+      try {
+        await this.setStartingPhase(gameId);
+      } catch (err) {
+        console.error('[autoStartNextRound] Error:', err);
+      }
+    }, delayMs));
   }
 
   /**
