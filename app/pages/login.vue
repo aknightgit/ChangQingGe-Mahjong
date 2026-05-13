@@ -171,7 +171,7 @@ const handlePhoneLogin = async () => {
       body: { phone: loginForm.phone, password: loginForm.password }
     })
     saveSession(res.data)
-    await navigateTo('/mahjong/')
+    await navigateTo('/')
   } catch (err) {
     loginError.value = err?.data?.message || err?.message || '登录失败'
   } finally {
@@ -207,7 +207,7 @@ const handleRegister = async () => {
       }
     })
     saveSession(res.data)
-    await navigateTo('/mahjong/')
+    await navigateTo('/')
   } catch (err) {
     registerError.value = err?.data?.message || err?.message || '注册失败'
   } finally {
@@ -229,7 +229,7 @@ const handleQuickLogin = async (user) => {
       userId: res.user.userId,
       phone: ''
     })
-    await navigateTo('/mahjong/')
+    await navigateTo('/')
   } catch (err) {
     console.error('Quick login failed:', err)
   } finally {

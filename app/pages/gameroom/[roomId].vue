@@ -30,7 +30,7 @@
             <button ref="settingsBtnEl" class="mahjong-button small secondary" @click="toggleSettingsPanel">
               ⚙️ 设置
             </button>
-            <button class="mahjong-button small secondary" @click="navigateTo('/mahjong/rules')">
+            <button class="mahjong-button small secondary" @click="navigateTo('/rules')">
               📖 规则
             </button>
             <button class="mahjong-button small" @click="backToLobby">
@@ -720,7 +720,7 @@
               <button ref="settingsBtnEl" class="mahjong-button small secondary" @click="toggleSettingsPanel">
                 ⚙️ 设置
               </button>
-              <button class="mahjong-button small secondary" @click="navigateTo('/mahjong/rules')">
+              <button class="mahjong-button small secondary" @click="navigateTo('/rules')">
                 📖 规则
               </button>
               <button class="mahjong-button small" @click="backToLobby">
@@ -1048,7 +1048,7 @@ const {
 
 const backToLobby = () => {
   clearPendingRoomTarget()
-  return navigateTo('/mahjong/')
+  return navigateTo('/')
 }
 
 const { play: playSound, isEnabled: soundEnabled, setEnabled: setSoundEnabled } = useSound()

@@ -193,7 +193,7 @@ const eastDiscards = ref<Tile[]>([])
 const eastIsWinner = ref(false)
 
 // Navigation
-const backToLobby = () => navigateTo('/mahjong/')
+const backToLobby = () => navigateTo('/')
 
 // Logic
 const generateTile = (idPrefix: string, index: number): Tile => {

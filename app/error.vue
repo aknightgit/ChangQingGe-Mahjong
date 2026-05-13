@@ -27,7 +27,7 @@ const errorMessage = computed(() => {
 
 const goHome = () => {
   clearError()
-  navigateTo('/mahjong/')
+  navigateTo('/')
 }
 </script>
 

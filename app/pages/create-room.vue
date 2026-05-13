@@ -238,6 +238,7 @@ const confirmCreateGame = async () => {
         thinkChances: createParams.thinkChances,
         settlementMultiplier: createParams.settlementMultiplier,
         maxBots: createParams.maxBots,
+        selectedBots: selectedBots.value.slice(0, createParams.maxBots),
         minPlayers: createParams.minPlayers,
         hesitationWindow: Math.round(createParams.hesitationSeconds * 1000)
       },
@@ -257,27 +258,13 @@ const confirmCreateGame = async () => {
     }
 
     const targetUrl = buildRoomUrl(gameId, playerId, createParams.maxDiceRolls)
-    const botsToJoin = selectedBots.value.slice(0, createParams.maxBots)
-
     await navigateToCreatedRoom(targetUrl)
-
-    if (botsToJoin.length) {
-      Promise.allSettled(
-        botsToJoin.map(botId =>
-          $fetch('/mahjong/api/game/join', {
-            method: 'POST',
-            body: { gameId, playerName: botId },
-            headers: { 'Cache-Control': 'no-cache' }
-          })
-        )
-      )
-    }
   } catch (e: any) {
     if (e?.status === 401 || e?.statusCode === 401 || e?.data?.statusCode === 401) {
       useCookie('auth_token').value = null
       useCookie('user_id').value = null
       useCookie('user_name').value = null
-      await navigateTo('/mahjong/login')
+      await navigateTo('/login')
       return
     }
     alert('创建房间失败：' + (e?.message || '未知错误'))
@@ -286,7 +273,7 @@ const confirmCreateGame = async () => {
   }
 }
 
-const goBack = () => navigateTo('/mahjong/')
+const goBack = () => navigateTo('/')
 </script>
 
 <style scoped>

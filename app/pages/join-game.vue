@@ -128,7 +128,7 @@ const myGames = ref<any[]>([])
 const isLoadingMy = ref(false)
 const isComingBack = ref(false)
 
-const backToLobby = () => navigateTo('/mahjong/')
+const backToLobby = () => navigateTo('/')
 
 // 获取我的活跃牌局
 const fetchMyGames = async () => {

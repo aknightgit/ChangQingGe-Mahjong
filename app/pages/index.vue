@@ -12,7 +12,7 @@
         <button
           type="button"
           class="mahjong-button primary"
-          @click="navigateTo('/mahjong/create-room')"
+          @click="navigateTo('/create-room')"
         >
           创建新局
         </button>
@@ -33,7 +33,7 @@
           对局记录
         </button>
 
-        <button class="mahjong-button secondary" @click="navigateTo('/mahjong/rules')">
+        <button class="mahjong-button secondary" @click="navigateTo('/rules')">
           📖 规则说明
         </button>
 
@@ -391,7 +391,7 @@ const confirmCreateGame = async () => {
       useCookie('auth_token').value = null
       useCookie('user_id').value = null
       useCookie('user_name').value = null
-      await navigateTo('/mahjong/login')
+      await navigateTo('/login')
       return
     }
     alert('创建房间失败：' + (e?.message || '未知错误'))
@@ -526,15 +526,15 @@ const saveProfile = async () => {
 
 // old startNewGame and startPvEGame removed - replaced by openCreateModal + confirmCreateGame
 
-const onJoinGame = () => navigateTo('/mahjong/join-game')
+const onJoinGame = () => navigateTo('/join-game')
 const onMatchHistory = () => router.push('/history')
-const goToAdminSandbox = () => navigateTo('/mahjong/admin-test')
+const goToAdminSandbox = () => navigateTo('/admin-test')
 
 const logout = () => {
   useCookie('auth_token').value = null
   useCookie('user_id').value = null
   useCookie('user_name').value = null
-  return navigateTo('/mahjong/login')
+  return navigateTo('/login')
 }
 </script>
 

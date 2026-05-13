@@ -1304,7 +1304,7 @@ class GameManager {
     return String(Date.now()).slice(-4);
   }
 
-  async createGame(playerName: string, options?: { userId?: string; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number; maxBots?: number; minPlayers?: number; hesitationWindow?: number; allClaimMode?: boolean }): Promise<{ gameId: string; playerId: string }> {
+  async createGame(playerName: string, options?: { userId?: string; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number; maxBots?: number; minPlayers?: number; hesitationWindow?: number; allClaimMode?: boolean; selectedBots?: string[] }): Promise<{ gameId: string; playerId: string }> {
     await this.hydrateFromDatabase();
 
     const gameId = randomUUID();
@@ -1377,6 +1377,32 @@ class GameManager {
 
     this.games.set(gameId, game);
     this.playerToGame.set(playerId, gameId);
+
+    // 立即添加选定的AI玩家
+    const aiBots = options?.selectedBots ?? [];
+    for (const botName of aiBots) {
+      if (game.players.length >= 4) break;
+      const botId = randomUUID();
+      const botPlayer = {
+        id: botId,
+        name: botName,
+        position: game.players.length,
+        hand: { concealedTiles: [], exposedMelds: [], discardedTiles: [] },
+        status: PlayerStatus.WAITING,
+        isDealer: false,
+        isTing: false,
+        missingSuit: null,
+        windScore: 0,
+        rainScore: 0,
+        wonFan: 0,
+        winOrder: null,
+        winRound: null,
+        winTimestamp: null,
+        score: 0,
+      };
+      game.players.push(botPlayer);
+      this.playerToGame.set(botId, gameId);
+    }
 
     await this.persistGame(game);
 

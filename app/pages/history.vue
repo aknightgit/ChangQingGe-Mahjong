@@ -353,7 +353,7 @@ onMounted(() => {
   loadAll()
 })
 
-const goBack = () => navigateTo('/mahjong/')
+const goBack = () => navigateTo('/')
 
 const formatDate = (value: string | Date) => formatBeijingDateTime(value)
 
