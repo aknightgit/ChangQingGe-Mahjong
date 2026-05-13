@@ -1304,7 +1304,7 @@ class GameManager {
     return String(Date.now()).slice(-4);
   }
 
-  async createGame(playerName: string, options?: { userId?: string; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number; maxBots?: number; hesitationWindow?: number; allClaimMode?: boolean }): Promise<{ gameId: string; playerId: string }> {
+  async createGame(playerName: string, options?: { userId?: string; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number; maxBots?: number; minPlayers?: number; hesitationWindow?: number; allClaimMode?: boolean }): Promise<{ gameId: string; playerId: string }> {
     await this.hydrateFromDatabase();
 
     const gameId = randomUUID();
@@ -1364,6 +1364,7 @@ class GameManager {
       thinkChances: options?.thinkChances ?? 3,
       settlementMultiplier: options?.settlementMultiplier ?? 10,
       maxBots: options?.maxBots ?? 3,  // 默认允许最多3个AI
+      minPlayers: options?.minPlayers ?? 4,  // 默认最少4人开局
       hesitationWindow: (() => {
         const raw = options?.hesitationWindow ?? 5000;
         const fastByEnv = String(process.env.TRAINING_FAST_MODE || '').toLowerCase() === 'true';
@@ -1398,7 +1399,7 @@ class GameManager {
     return null;
   }
 
-  async joinGame(gameId: string, playerName: string, options?: { userId?: string }): Promise<{ playerId: string; position: number }> {
+  async joinGame(gameId: string, playerName: string, options?: { userId?: string }): Promise<{ playerId: string; position: number; isSpectator?: boolean }> {
     await this.hydrateFromDatabase();
 
     const game = await this.ensureGameLoaded(gameId);
@@ -1406,12 +1407,34 @@ class GameManager {
       throw new Error('Game not found');
     }
 
-    if (game.phase !== GamePhase.WAITING) {
-      throw new Error('Game already started');
-    }
-
-    if (game.players.length >= 4) {
-      throw new Error('Game is full');
+    // 满员或已开局 → 以观赛者身份加入
+    const isFullOrStarted = game.players.length >= 4 || game.phase !== GamePhase.WAITING;
+    if (isFullOrStarted) {
+      const spectatorId = 'spectator-' + randomUUID();
+      const spectator: Player = {
+        id: spectatorId,
+        userId: options?.userId,
+        name: playerName + '(观赛)',
+        position: -1,
+        status: PlayerStatus.SPECTATING,
+        hand: { concealedTiles: [], exposedMelds: [], discardedTiles: [] },
+        score: 0
+      };
+      game.players.push(spectator);
+      if (!game.spectatorViews) game.spectatorViews = {};
+      const scope = (() => {
+        const completedRounds = Array.isArray(game.roundStats) ? game.roundStats.length : 0;
+        return game.phase === 'ended' ? completedRounds : completedRounds + 1;
+      })();
+      game.spectatorViews[spectatorId] = {
+        viewingPlayerId: null,
+        approvedHumanPlayerId: null,
+        pendingHumanPlayerId: null,
+        roundNumber: scope,
+        updatedAt: Date.now()
+      };
+      await this.persistGame(game);
+      return { playerId: spectatorId, position: -1, isSpectator: true };
     }
 
     // Bot上限检查:建房时的AI玩家上限全程有效
@@ -1552,6 +1575,9 @@ class GameManager {
 
     // 🔄 换位置请求:每局都可以生效
     this.applySwapRequests(game);
+
+    // 🔄 观赛者替换AI请求:每局生效
+    this.applyBotReplacement(game);
 
     // 🎲 随机选位置:仅首次开局时随机,后续座位固定(除非换位置)
     const isFirstRound = (game.roundStats || []).length === 0;
@@ -3830,12 +3856,37 @@ class GameManager {
         if (freshGame.thinkFreezePlayerId === expectedPlayerId) {
           freshGame.thinkFreezeUntil = undefined;
           freshGame.thinkFreezePlayerId = undefined;
+
+          // 【修复】等我想一想超时后:清除触发者自己已过期的pending(胡/碰/杠/过)
+          // 让下家(或当前玩家)能正常摸牌,不会因为pending残留而卡住
+          const triggerPending = freshGame.pendingActions.find(pa => pa.playerId === expectedPlayerId);
+          if (triggerPending && triggerPending.expiresAt && triggerPending.expiresAt < Date.now()) {
+            const triggerPlayer = freshGame.players.find(p => p.id === expectedPlayerId);
+            if (triggerPlayer) {
+              console.log(`[Think] ${triggerPlayer.name} 的思考时间结束,自动过(PASS)过期pending`);
+              this.handlePass(freshGame, triggerPlayer);
+            }
+          }
+
           if (freshGame.pendingActions.length > 0 || freshGame.pengChowConflict) {
             this.schedulePendingActionTimeout(gameId);
           } else {
             const currentPlayer = freshGame.players[freshGame.currentPlayerIndex];
-            if (currentPlayer && currentPlayer.status === PlayerStatus.PLAYING && this.isPlayerBotControlled(currentPlayer)) {
-              this.scheduleBotDiscard(gameId, currentPlayer.id);
+            if (currentPlayer && currentPlayer.status === PlayerStatus.PLAYING) {
+              if (this.isPlayerBotControlled(currentPlayer)) {
+                this.scheduleBotDiscard(gameId, currentPlayer.id);
+              } else {
+                // 【修复】人类玩家冻结结束后:主动触发moveToNextPlayer让下家摸牌
+                // 否则人类玩家丢牌等待永远没人帮TA"过"
+                if (currentPlayer.id === expectedPlayerId) {
+                  // 触发者(自己)已经pass了pending,此时无pending → 移到下家摸牌
+                  if (!freshGame.pendingActions.length) {
+                    await this.moveToNextPlayer(freshGame);
+                    await this.persistGame(freshGame);
+                    this.broadcastGameState(gameId);
+                  }
+                }
+              }
             }
           }
           await this.persistGame(freshGame);
@@ -3987,6 +4038,89 @@ class GameManager {
 
     // 清空已生效的请求
     game.swapRequests = [];
+  }
+
+  /**
+   * 观赛者请求下局替换某个AI
+   */
+  public requestBotReplacement(gameId: string, spectatorId: string, targetBotId: string, playerName: string, userId?: string): void {
+    const game = this.games.get(gameId);
+    if (!game) throw new Error('Game not found');
+
+    // 验证观赛者在房间中
+    const spectator = game.players.find(p => p.id === spectatorId && p.status === PlayerStatus.SPECTATING);
+    if (!spectator) throw new Error('Spectator not found');
+
+    // 验证目标玩家是AI且在房间中
+    const bot = game.players.find(p => p.id === targetBotId && (p.name.startsWith('AI-') || p.name.startsWith('电脑')));
+    if (!bot) throw new Error('Target bot not found');
+
+    if (!game.botReplacementQueue) game.botReplacementQueue = [];
+    // 移除该观赛者之前的替换请求(防止重复)
+    game.botReplacementQueue = game.botReplacementQueue.filter(r => r.spectatorId !== spectatorId);
+    game.botReplacementQueue.push({
+      spectatorId,
+      spectatorName: playerName,
+      targetBotId,
+      userId,
+      requestedAt: Date.now()
+    });
+
+    console.log(`[BotReplace] ${playerName}(观赛) 请求下局替换 ${bot.name}`);
+  }
+
+  /**
+   * 应用待生效的替换AI请求(在startGame中调用)
+   */
+  private applyBotReplacement(game: GameState): void {
+    if (!game.botReplacementQueue || game.botReplacementQueue.length === 0) return;
+
+    for (const req of game.botReplacementQueue) {
+      const botIdx = game.players.findIndex(p => p.id === req.targetBotId);
+      if (botIdx < 0) {
+        console.warn(`[BotReplace] 目标AI ${req.targetBotId} 已不在房间,跳过`);
+        continue;
+      }
+
+      const spectatorIdx = game.players.findIndex(p => p.id === req.spectatorId);
+      if (spectatorIdx < 0) {
+        console.warn(`[BotReplace] 观赛者 ${req.spectatorId} 已不在房间,跳过`);
+        continue;
+      }
+
+      const bot = game.players[botIdx];
+      const oldSpectator = game.players[spectatorIdx];
+
+      // 生成新playerId替换AI
+      const newPlayerId = randomUUID();
+      const newPlayer: Player = {
+        id: newPlayerId,
+        userId: req.userId,
+        name: req.spectatorName,
+        position: bot.position,
+        hand: { concealedTiles: [], exposedMelds: [], discardedTiles: [] },
+        status: PlayerStatus.WAITING,
+        isDealer: false,
+        isTing: false,
+        missingSuit: null,
+        windScore: 0,
+        rainScore: 0,
+        wonFan: 0,
+      };
+
+      game.players[botIdx] = newPlayer;
+      // 移除观赛者记录
+      game.players.splice(spectatorIdx, 1);
+
+      // 清理观赛者的 spectatorView
+      if (game.spectatorViews) {
+        delete game.spectatorViews[req.spectatorId];
+      }
+
+      console.log(`[BotReplace] ${oldSpectator.name} → 替换 ${bot.name} 成功, 新玩家ID: ${newPlayerId}`);
+    }
+
+    game.botReplacementQueue = [];
   }
 
   /**
@@ -4459,10 +4593,12 @@ class GameManager {
               this.clearCurrentPlayerChowPending(freshGame);
             }
             if (freshGame.pendingActions.length > 0) {
+              // 🔴 修复：bot freeze到期后还有pending残留 → 视为bot没反应 → auto-pass
+              // 直接清除pending继续推进，而不是renew超时导致死循环
+              console.log(`[bot-freeze] ${livePlayer.name} no response, clearing pending actions`);
+              freshGame.pendingActions = [];
               await this.persistGame(freshGame);
               this.broadcastGameState(game.gameId);
-              this.schedulePendingActionTimeout(game.gameId);
-              return;
             }
           }
           console.log(`[bot-freeze] Freeze expired for ${livePlayer.name}, drawing...`);
@@ -5073,6 +5209,28 @@ class GameManager {
 
     // 处理下局移除/替换请求
     this.applyPendingChanges(game);
+
+    // 🔄 自动进入下一局（正常结束/流局）
+    // 延迟一小段时间让客户端展示结算画面，然后自动进入掷骰子阶段
+    if (
+      finalReason === GameEndReason.WALL_EXHAUSTED ||
+      finalReason === GameEndReason.LAST_PLAYER
+    ) {
+      this.autoStartNextRound(game.gameId, 2000);
+    }
+  }
+
+  /**
+   * 自动进入下一局（延时后设置STARTING阶段）
+   */
+  private autoStartNextRound(gameId: string, delayMs: number = 2000): void {
+    const timer = this.detachTimer(setTimeout(async () => {
+      try {
+        await this.setStartingPhase(gameId);
+      } catch (err) {
+        console.error('[autoStartNextRound] Error:', err);
+      }
+    }, delayMs));
   }
 
   /**

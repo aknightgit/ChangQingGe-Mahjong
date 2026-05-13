@@ -179,26 +179,13 @@
                   <span class="hu-combo-score">总赢 {{ getHuOptionTotalWin(opt) }}</span>
                 </div>
                 <div class="hu-combo-main">
-                  <span class="hu-combo-label">{{ opt.label.replace(/·自摸|·捉冲|\(无百搭×2\)/g, '') }}</span>
+                  <span class="hu-combo-label">{{ opt.label.replace(/·自摸|·捉冲|\\(无百搭×2\\)/g, '') }}</span>
                   <span class="hu-combo-method">{{ opt.type === 'self_draw' ? '自摸' : '捉冲' }}</span>
                 </div>
                 <div class="hu-combo-formula">{{ getHuOptionFormula(opt) }}</div>
-                <div v-if="getHuOptionGroups(opt).length" class="hu-group-list">
-                  <div
-                    v-for="(group, groupIndex) in getHuOptionGroups(opt)"
-                    :key="`group-${idx}-${groupIndex}`"
-                    class="hu-group"
-                  >
-                    <span class="hu-group-kind">{{ getHuGroupKind(group.type) }}</span>
-                    <div class="hu-group-tiles">
-                      <MahjongTile
-                        v-for="tile in group.tiles"
-                        :key="tile.id"
-                        :tile="tile"
-                        :size="28"
-                        :small="true"
-                      />
-                    </div>
+                <div v-if="formatHuOptionGroups(opt)" class="hu-group-list">
+                  <div class="hu-group">
+                    <span class="hu-group-tiles-text">{{ formatHuOptionGroups(opt) }}</span>
                   </div>
                 </div>
                 <div class="hu-summary-grid">
@@ -249,13 +236,11 @@
               </li>
             </ul>
             <p v-else-if="!isDrawOverlay" class="overlay-empty">游戏结果将在服务端结算后显示。</p>
-            <!-- 流局时：任意点击进入下一局；非流局时：退出大厅 -->
-            <button v-if="canStartNextRoundOverlay" class="mahjong-button primary overlay-button" @click="startNextRound">
-              下一局
-            </button>
-            <button v-else class="mahjong-button primary overlay-button" @click="backToLobby">
-              退出到大厅
-            </button>
+            <!-- 自动进入下一局，无需手动点击 -->
+            <div class="overlay-auto-next-hint">
+              <span class="auto-next-spinner"></span>
+              <span>即将进入下一局...</span>
+            </div>
           </div>
         </div>
 
@@ -272,7 +257,7 @@
     <div class="settle-rounds settle-rounds--single">
       <div class="settle-round-card">
         <div v-if="currentSettlementRound" class="settle-round-header">
-          <span>第 {{ currentSettlementRound.roundNumber }} 局</span>
+          <span>第 {{ settlementRoundIndex }} 局</span>
           <span>全局倍数 ×{{ currentSettlementRound.effectiveMultiplier }} / 结算倍数 ×{{ currentSettlementRound.settlementMultiplier }}</span>
         </div>
         <div class="settle-round-block">
@@ -314,6 +299,34 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- 总结算统计（退房结算时显示） -->
+    <div v-if="isSettleRequested && settlementData?.playerStats" class="settle-details" style="border-top:1px solid rgba(255,215,0,0.15);padding-top:16px;margin-top:10px">
+      <h3 class="settle-title-center" style="font-size:1.1rem;margin-bottom:14px">📊 总成绩单</h3>
+      <div class="settle-detail-header">
+        <span class="settle-detail-name"></span>
+        <span class="settle-detail-stat settle-detail-stat--record">总输赢</span>
+        <span class="settle-detail-stat settle-detail-stat--record">有效输赢</span>
+        <span class="settle-detail-stat">🤖 vs AI</span>
+        <span class="settle-detail-stat">🀄 自摸</span>
+        <span class="settle-detail-stat">🎯 捉冲</span>
+        <span class="settle-detail-stat settle-detail-stat--win">最大赢</span>
+        <span class="settle-detail-stat settle-detail-stat--loss">最大输</span>
+      </div>
+      <div class="settle-detail-grid">
+        <div v-for="stat in sortedSettleStats" :key="stat.id" class="settle-detail-row">
+          <span class="settle-detail-name">{{ stat.name }}</span>
+          <span class="settle-detail-stat settle-detail-stat--record">{{ (stat.totalScore ?? 0) > 0 ? '+' : '' }}{{ stat.totalScore ?? 0 }}</span>
+          <span class="settle-detail-stat settle-detail-stat--record">{{ stat.effectiveScore ?? stat.totalScore ?? 0 }}</span>
+          <span class="settle-detail-stat">{{ stat.vsAiScore ?? 0 }}</span>
+          <span class="settle-detail-stat">{{ stat.selfDraws ?? 0 }}</span>
+          <span class="settle-detail-stat">{{ stat.discards ?? 0 }}</span>
+          <span class="settle-detail-stat settle-detail-stat--win">+{{ stat.maxWin ?? 0 }}</span>
+          <span class="settle-detail-stat settle-detail-stat--loss">{{ stat.maxLoss ?? 0 }}</span>
+        </div>
+      </div>
+      <p style="text-align:center;font-size:0.72rem;opacity:0.5;margin-top:10px">有效输赢 = 仅统计纯真人局的输赢，排除与AI对战的部分</p>
     </div>
 
     <div class="settle-actions">
@@ -599,13 +612,17 @@
                   @tileDiscard="handleTileDiscard"
                 />
                 <!-- 动作按钮放在手牌右侧 -->
-                <div v-if="canReviewLatestHuSelection && !isAIControlled" class="inline-action-buttons inline-action-buttons--review">
+                <!-- 观赛模式不显示任何操作按钮 -->
+                <div v-if="isSpectator" class="inline-action-buttons inline-action-buttons--spectator">
+                  <div class="spectator-badge">📺 观赛中</div>
+                </div>
+                <div v-else-if="canReviewLatestHuSelection && !isAIControlled" class="inline-action-buttons inline-action-buttons--review">
                   <button
                     class="inline-action-btn inline-action-btn--review"
                     @click="openHuReviewPanel"
                   >回看胡牌选项</button>
                 </div>
-                <div v-if="isAIControlled" class="inline-action-buttons">
+                <div v-else-if="isAIControlled" class="inline-action-buttons">
                   <div class="ai-controlled-notice">
                     🤖 已由AI自动出牌
                   </div>
@@ -684,8 +701,11 @@
               房间 #{{ gameState?.roomNumber || '????' }}
             </p>
             <button
-              v-if="gameState?.phase === GamePhase.WAITING ? canManualStartWaitingGame : (gameState?.phase === 'playing' || gameState?.phase === 'ended')"
+              v-if="gameState?.phase === GamePhase.WAITING
+                ? canManualStartWaitingGame
+                : (gameState?.phase === 'playing' && !!currentPlayer?.isDealer) || gameState?.phase === 'ended'"
               class="settle-btn-header"
+              :class="{ 'start-game-glow': canManualStartWaitingGame }"
               @click="gameState?.phase === GamePhase.WAITING ? onStartGame() : onRequestSettle()"
             >
               {{ gameState?.phase === GamePhase.WAITING ? '🀄 开始牌局' : '📊 退房结算' }}
@@ -750,8 +770,8 @@
             </button>
           </div>
 
-          <!-- 操作按钮区：等待态隐藏，避免空壳感 -->
-          <div v-if="!isPreGameTransition" class="action-buttons-panel">
+          <!-- 操作按钮区：等待态隐藏，避免空壳感；观赛模式隐藏 -->
+          <div v-if="!isPreGameTransition && !isSpectator" class="action-buttons-panel">
 
               <!-- 听牌提示（紧贴功能按钮菜单上方） -->
               <div v-if="tingPreviewItems.length" class="ting-preview-panel">
@@ -880,11 +900,20 @@
                   👁️ {{ spectatingId === playerCardPlayer?.id ? '取消观赛' : '观赛TA' }}
                   <span class="ai-card-hint">{{ canUseSpectatorView ? '查看对方手牌' : '当前条件下不可观赛' }}</span>
                 </button>
+                <button
+                  v-if="isSpectator"
+                  class="ai-card-btn ai-card-btn--replace"
+                  :disabled="isReplacingBot"
+                  @click="onRequestBotReplace(playerCardPlayer)"
+                >
+                  🙋 下局替换TA
+                  <span class="ai-card-hint">此AI下局退出，你上位</span>
+                </button>
                 <button class="ai-card-btn ai-card-btn--leave" @click="onAILeave">
                   🚪 出局
                   <span class="ai-card-hint">下局移除该AI</span>
                 </button>
-                <button v-if="isSpectator" class="ai-card-btn ai-card-btn--replace" @click="onAIReplace">
+                <button v-if="isSpectatorGamePlayer" class="ai-card-btn ai-card-btn--replace" @click="onAIReplace">
                   🙋 换我上
                   <span class="ai-card-hint">下局由你接替</span>
                 </button>
@@ -914,6 +943,9 @@
   </div>
   <!-- 布局热调面板 -->
   <LayoutDebugPanel v-if="showDebugPanel" @close="showDebugPanel = false" />
+  <div v-if="showDebugPanel" style="position:fixed;top:4px;left:4px;z-index:99999;background:rgba(0,0,0,0.85);color:#0f0;font-size:10px;font-family:monospace;padding:3px 6px;border-radius:4px;pointer-events:none;white-space:pre;">
+    {{ debugViewport }}
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -986,6 +1018,11 @@ const playerId = computed(() => {
 const userName = useCookie<string | null>('user_name')
 const isAdmin = useCookie<string | boolean | null>('is_admin')
 const isAdminUser = computed(() => isAdmin.value === 'true' || isAdmin.value === true)
+
+/** 观赛模式：URL带spectator=1 */
+const isSpectator = computed(() => {
+  return route.query.spectator === '1' || route.query.spectator === 'true'
+})
 
 const {
   gameState,
@@ -1072,15 +1109,19 @@ const viewportWidth = ref(initialViewport.width)
 const viewportHeight = ref(initialViewport.height)
 const isPortrait = ref(initialViewport.height >= initialViewport.width)
 
-// 缩放因子：1200px以下保持100%不缩放（保护17Ultra等现有布局），
-// 1200~1600px之间线性缩小到0.85，1600px以上固定0.85。
-// 这样小米14Pro(短边1440px)会缩到与17Ultra(1200px)相近的大小。
+// 缩放因子：以17Ultra(短边1200px)为基准1.0，其他设备按比例缩放
+// 公式: Math.min(1, 1200 / shortSide)，避免比1200大的设备放大
+// shortSide小于1200意味着设备CSS像素更少，元素自然更小，不需要缩
+// shortSide大于1200意味着设备更"宽"，需缩小保持物理一致
+// 限制最小值0.65，保护小屏设备
 const shortSide = computed(() => Math.min(viewportWidth.value, viewportHeight.value))
 const mobileScale = computed(() => {
-  if (shortSide.value <= 1200) return 1
-  if (shortSide.value >= 1600) return 0.85
-  // 1200~1600: 线性插值 1→0.85
-  return 1 - (shortSide.value - 1200) / (1600 - 1200) * 0.15
+  if (shortSide.value <= 0) return 1
+  const ratio = 1200 / shortSide.value
+  // shortSide < 1200: ratio>1, 取min(1,ratio)=1 → 不放大
+  // shortSide > 1200: ratio<1, 正常缩小
+  // 例如 17Ultra(1200)→1.0, 14Pro横屏(1400)→0.857, iPhone(930)→1.0
+  return Math.min(1, Math.max(0.65, ratio))
 })
 
 // 手机模式判定：短边 <= 1600px 覆盖所有手机
@@ -1097,6 +1138,10 @@ const mobileLayoutStyle = computed(() => {
   return {
     '--mobile-scale': s.toFixed(3),
   }
+})
+// 调试:在页面显示当前CSS参数（仅debug模式）
+const debugViewport = computed(() => {
+  return `W:${viewportWidth.value} H:${viewportHeight.value} short:${shortSide.value} scale:${mobileScale.value.toFixed(4)} mobile:${isMobileViewport.value} mode:${isMobileLandscapeMode.value ? 'landscape' : shouldRotateView.value ? 'rotate' : 'desktop'} dpr:${typeof window !== 'undefined' ? window.devicePixelRatio.toFixed(2) : '?'}`
 })
 const nowTs = ref(Date.now())
 let actionWindowTimer: ReturnType<typeof setInterval> | null = null
@@ -1338,6 +1383,7 @@ watch(discardMode, (mode) => {
 
 // 临时: 收集 onMounted 内的关键状态，辅助排查B跳首页问题
 const mountDebugLog = ref<string[]>([])
+const connectRetryTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 const addMountLog = (msg: string) => {
   mountDebugLog.value.push(`[${new Date().toISOString().slice(11,19)}] ${msg}`)
   if (mountDebugLog.value.length > 50) mountDebugLog.value.shift()
@@ -1383,18 +1429,18 @@ onMounted(async () => {
       addMountLog(`UNHANDLED REJECTION: ${evt.reason?.message || evt.reason}`)
     })
   } catch (err: any) {
-    addMountLog(`MOUNT FATAL ERROR: ${err?.message || err}`)
+    addMountLog(`MOUNT FATAL ERROR: ${err?.message || err}, will retry connect`)
     console.error('[MountDebug] Fatal onMounted error:', err)
-    // 给用户一个反馈，但不要触发 error.vue
-    // 直接显示在页面上
-    const toast = document.createElement('div')
-    toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#e74c3c;color:#fff;padding:12px 24px;border-radius:10px;z-index:99999;font-size:14px;max-width:90%;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.4)'
-    toast.textContent = `加载出错: ${err?.message || '未知错误'}，页面将自动重试`
-    document.body.appendChild(toast)
-    setTimeout(() => {
-      toast.remove()
-      window.location.reload()
-    }, 3000)
+      // 不reload，已经有polling在connect里启动，2秒后主动重试connect
+      if (connectRetryTimer.value) clearTimeout(connectRetryTimer.value)
+      connectRetryTimer.value = setTimeout(() => {
+      addMountLog('automatic connect retry...')
+      if (!isSpectator.value && roomId.value && playerId.value) {
+        void connect(roomId.value, playerId.value)
+      } else if (isSpectator.value) {
+        void fetchSpectatorState(roomId.value)
+      }
+    }, 2000)
   }
 
   // 监听广播消息播放对应音效
@@ -1512,8 +1558,8 @@ const getDiceRoundMultiplier = (dice1: number, dice2: number) => {
   return 1
 }
 const effectiveMaxRolls = computed(() => {
-  const raw = Number(gameState.value?.diceRollCount ?? route.query.dice ?? 1)
-  return Number.isFinite(raw) ? Math.max(1, Math.floor(raw)) : 1
+  const raw = Number(gameState.value?.diceRollCount ?? route.query.dice ?? 2)
+  return Number.isFinite(raw) && raw > 0 ? Math.max(1, Math.floor(raw)) : 2
 })
 const roundMultiplier = computed(() => {
   const actualRound = Number(gameState.value?.roundMultiplier ?? 0)
@@ -1684,7 +1730,7 @@ const spectatorApprovalRequest = computed(() => {
 const canUseSpectatorView = computed(() => {
   if (!currentPlayer.value || !gameState.value) return false
   if (gameState.value.phase !== GamePhase.PLAYING && gameState.value.phase !== GamePhase.ENDED) return false
-  return currentPlayer.value.status === 'won' || hasDebugSpectateBot.value
+  return currentPlayer.value.status === 'won' || currentPlayer.value.status === 'spectating' || hasDebugSpectateBot.value
 })
 
 const handleSpectate = async (id: string) => {
@@ -1788,7 +1834,7 @@ const waitingPlayers = computed(() => {
 })
 const canManualStartWaitingGame = computed(() =>
   gameState.value?.phase === GamePhase.WAITING &&
-  waitingPlayers.value.length === 4 &&
+  waitingPlayers.value.length >= (gameState.value?.minPlayers ?? 4) &&
   !!currentPlayer.value?.isDealer &&
   !currentPlayer.value?.isSpectator &&
   isConnected.value
@@ -1941,6 +1987,27 @@ const getHuOptionGroups = (opt: any) => {
     tiles: [] // 牌面已在上方 hu-combo-label 展示，这里不重复显示
   }))
 }
+
+/** 格式化胡牌选项的组牌明细为斜杠分隔文本，复用结算面板的 arrangeWinningHand */
+const formatHuOptionGroups = (opt: any): string => {
+  const handTiles = Array.isArray(opt?.tiles) ? opt.tiles : []
+  const melds = Array.isArray(opt?.melds) ? opt.melds : []
+  if (!handTiles.length && !melds.length) return ''
+  const allHandTiles = handTiles.filter((t: any) => t?.suit !== 'hua' && t?.suit !== 'flower')
+  const allExposedMelds = melds
+    .map((group: any) => Array.isArray(group)
+      ? group.filter((t: any) => t?.suit !== 'hua' && t?.suit !== 'flower')
+      : group?.tiles?.filter?.((t: any) => t?.suit !== 'hua' && t?.suit !== 'flower') || [])
+    .filter((g: any[]) => g.length > 0)
+  const concealedCombos = arrangeWinningHand(allHandTiles, [])
+  const concealedGroups = Array.isArray(concealedCombos?.[0]?.groups) ? concealedCombos[0].groups : []
+  const concealedMelds = concealedGroups
+    .map((group: any) => Array.isArray(group?.tiles) ? formatMeldTiles(group.tiles) : '')
+    .filter(Boolean)
+  const exposedMelds = allExposedMelds.map((group: any) => formatMeldTiles(group)).filter(Boolean)
+  const allParts = [...concealedMelds, ...exposedMelds]
+  return allParts.length ? allParts.join(' / ') : ''
+}
 const overlayMessage = computed(() => {
   const reason = overlayReason.value
   switch (reason) {
@@ -1999,7 +2066,27 @@ const maybeAutoDealForBotDealer = () => {
   }, 420)
 }
 
+/** 自动掷骰子+发牌（AI庄家） */
+const autoRollAndDeal = () => {
+  onRerollDice()
+  // 等掷骰子动画完成（约850ms）+ 结果展示（500ms）+ 过渡
+  window.setTimeout(() => {
+    void onDealTiles()
+  }, 1800)
+}
+
+/** 仅自动掷骰子（人类庄家） */
+const autoRollOnly = () => {
+  onRerollDice()
+  // 骰子掷完，等人发牌
+}
+
 const startNextRound = async () => {
+  if (isSettleRequested.value) {
+    // 退房结算已申请：直接显示总结算面板
+    showSettlement.value = true
+    return
+  }
   showSettlement.value = false
   settlementData.value = null
   isHuReviewMode.value = false
@@ -3028,9 +3115,29 @@ const currentSettlementRound = computed(() => {
   return rounds.length > 0 ? rounds[rounds.length - 1] : null
 })
 
+/** 计算真正第几局：用 gameState 的 roundStats 长度或 roundNumber */
+const settlementRoundIndex = computed(() => {
+  if (gameState.value?.roundStats && Array.isArray(gameState.value.roundStats)) {
+    return gameState.value.roundStats.length
+  }
+  if (currentSettlementRound.value?.roundNumber) {
+    return currentSettlementRound.value.roundNumber
+  }
+  return 1
+})
+
 const currentSettlementRows = computed(() => {
   return currentSettlementRound.value ? getRoundSettlementRows(currentSettlementRound.value) : []
 })
+
+const isSettleRequested = ref(false)
+
+const sortedSettleStats = computed(() => {
+  const stats = settlementData.value?.playerStats || []
+  return [...stats].sort((a: any, b: any) => (b.totalScore ?? 0) - (a.totalScore ?? 0))
+})
+
+const formatScoreSigned = (score: number) => score > 0 ? `+${score}` : `${score}`
 
 const onRequestSettle = async () => {
   try {
@@ -3045,7 +3152,9 @@ const onRequestSettle = async () => {
     })
     if ((res as any)?.success) {
       settlementData.value = (res as any).data
-      showSettlement.value = true
+      isSettleRequested.value = true
+      // 不显示结算面板，改为发广播消息
+      addBroadcast('🏠 房主已申请本局结束后退房，本局结束将自动结算', 'warn')
     }
   } catch (e) {
     console.error('[Settle] Failed:', e)
@@ -3073,7 +3182,7 @@ const onSaveSettle = async () => {
 const showPlayerCard = ref(false)
 const playerCardPlayer = ref<any>(null)
 const isBotPlayer = (p: any) => p?.name?.startsWith('AI-') || p?.name?.startsWith('电脑') || false
-const isSpectator = computed(() => {
+const isSpectatorGamePlayer = computed(() => {
   if (!gameState.value?.players || !currentPlayer.value) return true
   return !gameState.value.players.some((p: any) => p.id === currentPlayer.value?.id)
 })
@@ -3132,6 +3241,31 @@ const onAIReplace = async () => {
     await refreshState()
   } catch (e) {
     console.error('[AI Replace] Failed:', e)
+  }
+}
+const isReplacingBot = ref(false)
+const onRequestBotReplace = async (botPlayer: any) => {
+  if (isReplacingBot.value) return
+  isReplacingBot.value = true
+  showPlayerCard.value = false
+  const myName = userName.value || currentPlayer.value?.name || '观赛者'
+  try {
+    await $fetch('/api/game/replace-bot', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        spectatorId: currentPlayer.value?.id,
+        targetBotId: botPlayer.id,
+        playerName: myName
+      }
+    })
+    addBroadcast(`🙋 ${myName} 已申请下局替换 ${botPlayer.name}，掷骰时生效！`, 'info')
+    await refreshState()
+  } catch (e: any) {
+    addBroadcast(e?.data?.message || e?.message || '替换申请失败', 'warn')
+    console.error('[BotReplace] Failed:', e)
+  } finally {
+    isReplacingBot.value = false
   }
 }
 
@@ -3416,7 +3550,6 @@ const onRerollDice = () => {
   ]
   hasDicePreview.value = true
   playSound('dice-roll')
-  playVoiceAction('diceRoll')
 }
 
 const onDealTiles = async () => {
@@ -3799,8 +3932,9 @@ watch(() => gameState.value, (newState, oldState) => {
 
 watch(
   () => gameState.value?.phase,
-  (phase) => {
-    if (phase === GamePhase.STARTING) {
+  (newPhase, oldPhase) => {
+    if (newPhase === GamePhase.STARTING) {
+      const prevPhase = oldPhase || gameState.value?.phase;
       showSettlement.value = false
       settlementData.value = null
       isHuReviewMode.value = false
@@ -3809,9 +3943,33 @@ watch(
         diceValues.value = [1, 1]
       }
       showDiceOverlay.value = true
+
+      // 🔄 自动下一局：来自结算/流局后，自动走掷骰子+发牌
+      // STARTING时立即 refresh state，然后等骰子组件就绪后自动操作
+      if (prevPhase === GamePhase.ENDED) {
+        if (isSettleRequested.value) {
+          // 房主已申请退房结算：跳过下一局，直接显示总结算
+          showDiceOverlay.value = false
+          showSettlement.value = true
+          return
+        }
+        window.setTimeout(() => {
+          const dealer = dealerPlayer.value
+          if (dealer && isBotPlayer(dealer)) {
+            // AI庄家：自动掷骰子+发牌
+            autoRollAndDeal()
+          } else if (dealer && !isBotPlayer(dealer)) {
+            // 人类头胡庄家：自动掷骰子，等他手动发牌
+            // 或者直接自动掷骰子+等发牌（当前先自动掷骰子）
+            autoRollOnly()
+          } else {
+            // 没有庄家——不可能
+          }
+        }, 500)
+      }
       return
     }
-    if (phase !== GamePhase.STARTING) {
+    if (newPhase !== GamePhase.STARTING) {
       showDiceOverlay.value = false
       hasDicePreview.value = false
     }
@@ -4055,6 +4213,31 @@ const forceDiscard = async (p: Player) => {
   min-width: 108px;
 }
 .settle-btn-header:hover { background: rgba(25, 118, 210, 0.8); color: #fff; }
+
+/* 开始牌局按钮金色呼吸光晕 — 4人到齐时亮起 */
+.start-game-glow {
+  animation: breatheGold 1.8s ease-in-out infinite;
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.4), 0 0 24px rgba(255, 215, 0, 0.2);
+  border-color: rgba(255, 215, 0, 0.6);
+  background: linear-gradient(135deg, rgba(255, 193, 7, 0.85), rgba(255, 152, 0, 0.85)) !important;
+  color: #fff !important;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.start-game-glow:hover {
+  background: linear-gradient(135deg, rgba(255, 193, 7, 1), rgba(255, 152, 0, 1)) !important;
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.6), 0 0 40px rgba(255, 215, 0, 0.3);
+}
+
+@keyframes breatheGold {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(255, 215, 0, 0.4), 0 0 24px rgba(255, 215, 0, 0.2);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(255, 215, 0, 0.8), 0 0 48px rgba(255, 215, 0, 0.4), 0 0 72px rgba(255, 215, 0, 0.15);
+    transform: scale(1.04);
+  }
+}
 
 .mahjong-title {
   font-size: 1.4rem;
@@ -4849,9 +5032,10 @@ const forceDiscard = async (p: Player) => {
 }
 
 .ting-preview-title {
-  font-size: 0.7rem;
-  color: rgba(255,255,255,0.5);
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.45);
   margin: 0;
+  font-weight: 400;
 }
 
 .ting-preview-panel__tiles {
@@ -4884,7 +5068,8 @@ const forceDiscard = async (p: Player) => {
 
 .inline-action-buttons--review {
   right: 0;
-  bottom: 0;
+  bottom: auto;
+  top: -20px;
 }
 
 .inline-action-btn {
@@ -5234,7 +5419,7 @@ const forceDiscard = async (p: Player) => {
 .player-name-label {
   position: absolute;
   z-index: 5;
-  font-size: 0.75rem;
+  font-size: clamp(0.5rem, 1.4vw, 0.85rem);
   font-weight: 700;
   color: rgba(255, 255, 255, 0.55);
   background: rgba(0, 0, 0, 0.3);
@@ -5255,7 +5440,7 @@ const forceDiscard = async (p: Player) => {
 .player-name-label--right  { right: 0.6%; top: 50%; transform: translateY(-50%); }
 
 .winner-tag {
-  font-size: 0.65rem;
+  font-size: clamp(0.45rem, 1.2vw, 0.7rem);
   background: #f5c518;
   color: #1a1a1a;
   border-radius: 3px;
@@ -6318,7 +6503,9 @@ const forceDiscard = async (p: Player) => {
 
 .settle-round-table--compact th:nth-child(3),
 .settle-round-table--compact td:nth-child(3) {
-  width: 340px;
+  width: auto;
+  min-width: 200px;
+  max-width: 400px;
 }
 
 .settle-round-table--compact th:nth-child(4),
@@ -6364,6 +6551,8 @@ const forceDiscard = async (p: Player) => {
 .settle-round-tiles {
   min-width: 180px;
   line-height: 1.5;
+  word-break: break-all;
+  white-space: normal;
 }
 
 .settle-round-winner {
@@ -6411,7 +6600,7 @@ const forceDiscard = async (p: Player) => {
 
   .settle-round-header {
     gap: 4px;
-    font-size: 0.66rem;
+    font-size: clamp(0.5rem, 1.8vw, 0.75rem);
   }
 
   .settle-table-wrap {
@@ -6419,7 +6608,7 @@ const forceDiscard = async (p: Player) => {
   }
 
   .settle-round-table {
-    font-size: 0.62rem;
+    font-size: clamp(0.5rem, 1.6vw, 0.7rem);
     min-width: 700px;
   }
 
@@ -6474,7 +6663,7 @@ const forceDiscard = async (p: Player) => {
   align-items: center;
   gap: 8px;
   padding: 4px 10px;
-  font-size: 0.7rem;
+  font-size: clamp(0.5rem, 1.2vw, 0.75rem);
   opacity: 0.5;
   font-weight: 600;
   text-align: center;
@@ -6496,7 +6685,7 @@ const forceDiscard = async (p: Player) => {
   padding: 6px 10px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.02);
-  font-size: 0.75rem;
+  font-size: clamp(0.55rem, 1.3vw, 0.8rem);
   flex-wrap: wrap;
 }
 
@@ -7233,6 +7422,23 @@ const forceDiscard = async (p: Player) => {
 .layout-debug .action-buttons,
 .layout-debug .inline-action-buttons {
   outline: 2px solid #ff0000 !important;
+}
+
+/* 观赛模式标识 */
+.inline-action-buttons--spectator {
+  right: 0;
+  bottom: auto;
+  top: 0;
+  min-width: auto;
+}
+.spectator-badge {
+  font-size: 0.7rem;
+  color: #4fc3f7;
+  background: rgba(79,195,247,0.12);
+  border: 1px solid rgba(79,195,247,0.25);
+  border-radius: 6px;
+  padding: 4px 10px;
+  white-space: nowrap;
 }
 
 

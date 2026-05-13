@@ -1,6 +1,7 @@
 import { gameManager } from '../../utils/gameManager';
 import { requireGamePlayerAccess, resolveUserFromEvent } from '../../utils/session';
 import { apiLog } from '../../utils/apiLogService';
+import { createError } from 'h3';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -9,9 +10,19 @@ export default defineEventHandler(async (event) => {
   let statusCode = 200;
   let errorMsg: string | undefined;
 
+  // 降级解析用户：允许访客（无 session）通过前端传的 playerName 加入
+  let user: { name: string; userId?: string } | null = null;
   try {
-    const user = await resolveUserFromEvent(event);
+    user = await resolveUserFromEvent(event);
+  } catch {
+    // 访客模式：使用前端提供的名字
+    user = {
+      name: playerName || 'Guest',
+      userId: undefined
+    };
+  }
 
+  try {
     if (!gameId || !playerName) {
       statusCode = 400;
       errorMsg = 'Game ID and player name are required';

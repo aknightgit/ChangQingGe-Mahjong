@@ -33,12 +33,20 @@ export default defineEventHandler(async (event) => {
       game.players.filter((p: any) => p.name?.startsWith('AI-')).map((p: any) => p.id)
     );
 
+    // 收集所有在roundStats中出现过的玩家ID(包括已离场的AI/真人)
+    const allPlayerIds = new Set(game.players.map((p: any) => p.id));
+    for (const round of (game.roundStats || [])) {
+      for (const pid of Object.keys(round.scores)) allPlayerIds.add(pid);
+    }
+
     // 计算累计统计数据
+    const nameMap: Record<string, string> = {};
+    for (const p of game.players) nameMap[p.id] = p.name;
     const playerStats: Record<string, any> = {};
-    for (const p of game.players) {
-      playerStats[p.id] = {
-        id: p.id,
-        name: p.name,
+    for (const pid of allPlayerIds) {
+      playerStats[pid] = {
+        id: pid,
+        name: nameMap[pid] || pid.slice(0, 8),
         totalScore: 0,
         effectiveScore: 0,   // 有效战绩（排除与AI对战的局）
         vsAiScore: 0,        // 与AI战绩

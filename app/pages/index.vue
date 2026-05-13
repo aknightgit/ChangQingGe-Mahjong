@@ -296,6 +296,7 @@ const confirmCreateGame = async () => {
         thinkChances: createParams.thinkChances,
         settlementMultiplier: createParams.settlementMultiplier,
         maxBots: createParams.maxBots,
+        minPlayers: createParams.minPlayers ?? 4,
         hesitationWindow: Math.round(createParams.hesitationSeconds * 1000) // 秒→毫秒
       },
       headers: { 'Cache-Control': 'no-cache' }
