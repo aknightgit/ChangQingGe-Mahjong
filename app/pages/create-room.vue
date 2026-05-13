@@ -228,7 +228,7 @@ const confirmCreateGame = async () => {
   if (isCreatingGame.value) return
   isCreatingGame.value = true
   try {
-    const response = await $fetch('/api/game/create', {
+    const response = await $fetch('/mahjong/api/game/create', {
       method: 'POST',
       body: {
         playerName: userName.value || 'Player 1',
@@ -264,7 +264,7 @@ const confirmCreateGame = async () => {
     if (botsToJoin.length) {
       Promise.allSettled(
         botsToJoin.map(botId =>
-          $fetch('/api/game/join', {
+          $fetch('/mahjong/api/game/join', {
             method: 'POST',
             body: { gameId, playerName: botId },
             headers: { 'Cache-Control': 'no-cache' }
@@ -277,7 +277,7 @@ const confirmCreateGame = async () => {
       useCookie('auth_token').value = null
       useCookie('user_id').value = null
       useCookie('user_name').value = null
-      await navigateTo('/login')
+      await navigateTo('/mahjong/login')
       return
     }
     alert('创建房间失败：' + (e?.message || '未知错误'))
@@ -286,7 +286,7 @@ const confirmCreateGame = async () => {
   }
 }
 
-const goBack = () => navigateTo('/')
+const goBack = () => navigateTo('/mahjong/')
 </script>
 
 <style scoped>

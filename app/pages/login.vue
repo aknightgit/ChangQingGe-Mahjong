@@ -123,7 +123,7 @@
 </template>
 
 <script setup>
-const { data: usersData, pending: usersPending } = await useFetch('/api/auth/users')
+const { data: usersData, pending: usersPending } = await useFetch('/mahjong/api/auth/users')
 const playerUsers = computed(() => (usersData.value?.users || []).filter((u) => !u.isAdmin))
 
 const activeTab = ref('login')
@@ -166,12 +166,12 @@ const handlePhoneLogin = async () => {
 
   isSubmitting.value = true
   try {
-    const res = await $fetch('/api/auth/login', {
+    const res = await $fetch('/mahjong/api/auth/login', {
       method: 'POST',
       body: { phone: loginForm.phone, password: loginForm.password }
     })
     saveSession(res.data)
-    await navigateTo('/')
+    await navigateTo('/mahjong/')
   } catch (err) {
     loginError.value = err?.data?.message || err?.message || '登录失败'
   } finally {
@@ -198,7 +198,7 @@ const handleRegister = async () => {
 
   isSubmitting.value = true
   try {
-    const res = await $fetch('/api/auth/register', {
+    const res = await $fetch('/mahjong/api/auth/register', {
       method: 'POST',
       body: {
         name: registerForm.name.trim(),
@@ -207,7 +207,7 @@ const handleRegister = async () => {
       }
     })
     saveSession(res.data)
-    await navigateTo('/')
+    await navigateTo('/mahjong/')
   } catch (err) {
     registerError.value = err?.data?.message || err?.message || '注册失败'
   } finally {
@@ -219,7 +219,7 @@ const handleQuickLogin = async (user) => {
   if (isSubmitting.value) return
   isSubmitting.value = true
   try {
-    const res = await $fetch('/api/auth/debug-login', {
+    const res = await $fetch('/mahjong/api/auth/debug-login', {
       method: 'POST',
       body: { userId: user.userId }
     })
@@ -229,7 +229,7 @@ const handleQuickLogin = async (user) => {
       userId: res.user.userId,
       phone: ''
     })
-    await navigateTo('/')
+    await navigateTo('/mahjong/')
   } catch (err) {
     console.error('Quick login failed:', err)
   } finally {

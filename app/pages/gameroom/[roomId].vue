@@ -30,7 +30,7 @@
             <button ref="settingsBtnEl" class="mahjong-button small secondary" @click="toggleSettingsPanel">
               ⚙️ 设置
             </button>
-            <button class="mahjong-button small secondary" @click="navigateTo('/rules')">
+            <button class="mahjong-button small secondary" @click="navigateTo('/mahjong/rules')">
               📖 规则
             </button>
             <button class="mahjong-button small" @click="backToLobby">
@@ -720,7 +720,7 @@
               <button ref="settingsBtnEl" class="mahjong-button small secondary" @click="toggleSettingsPanel">
                 ⚙️ 设置
               </button>
-              <button class="mahjong-button small secondary" @click="navigateTo('/rules')">
+              <button class="mahjong-button small secondary" @click="navigateTo('/mahjong/rules')">
                 📖 规则
               </button>
               <button class="mahjong-button small" @click="backToLobby">
@@ -1048,7 +1048,7 @@ const {
 
 const backToLobby = () => {
   clearPendingRoomTarget()
-  return navigateTo('/')
+  return navigateTo('/mahjong/')
 }
 
 const { play: playSound, isEnabled: soundEnabled, setEnabled: setSoundEnabled } = useSound()
@@ -1741,7 +1741,7 @@ const handleSpectate = async (id: string) => {
   if (!gameState.value || !currentPlayer.value || !canUseSpectatorView.value) return
   const nextTargetId = spectatingId.value === id ? null : id
   try {
-    const resp = await $fetch('/api/game/spectate', {
+    const resp = await $fetch('/mahjong/api/game/spectate', {
       method: 'POST',
       body: {
         gameId: gameState.value.gameId,
@@ -1766,7 +1766,7 @@ const onSpectateFromCard = () => {
 const onSpectatorApprovalChoice = async (choice: 'approve' | 'reject') => {
   if (!gameState.value || !currentPlayer.value || !spectatorApprovalRequest.value) return
   try {
-    await $fetch('/api/game/spectate-approval', {
+    await $fetch('/mahjong/api/game/spectate-approval', {
       method: 'POST',
       body: {
         gameId: gameState.value.gameId,
@@ -2039,7 +2039,7 @@ const dealerPlayer = computed(() => {
 
 const enterStartingPhaseWithDiceOverlay = async () => {
   try {
-    await $fetch('/api/game/start', {
+    await $fetch('/mahjong/api/game/start', {
       method: 'POST',
       body: {
         gameId: roomId.value,
@@ -2595,7 +2595,7 @@ const fetchWinOptions = async () => {
 const syncHuSelectionLock = async (locked: boolean) => {
   if (!roomId.value || !currentPlayer.value?.id) return
   try {
-    await $fetch('/api/game/hu-selection', {
+    await $fetch('/mahjong/api/game/hu-selection', {
       method: 'POST',
       body: {
         gameId: roomId.value,
@@ -2871,7 +2871,7 @@ watch(
 
 const onApprovalChoice = async (choice: string) => {
   try {
-    await $fetch('/api/game/approval-choice', {
+    await $fetch('/mahjong/api/game/approval-choice', {
       method: 'POST',
       body: {
         gameId: roomId.value,
@@ -3145,7 +3145,7 @@ const formatScoreSigned = (score: number) => score > 0 ? `+${score}` : `${score}
 
 const onRequestSettle = async () => {
   try {
-    const res = await $fetch('/api/game/settle', {
+    const res = await $fetch('/mahjong/api/game/settle', {
       method: 'POST',
       body: {
         gameId: roomId.value,
@@ -3166,7 +3166,7 @@ const onRequestSettle = async () => {
 }
 const onSaveSettle = async () => {
   try {
-    await $fetch('/api/game/settle', {
+    await $fetch('/mahjong/api/game/settle', {
       method: 'POST',
       body: {
         gameId: roomId.value,
@@ -3212,7 +3212,7 @@ const onAILeave = async () => {
   const aiName = playerCardPlayer.value.name
   showPlayerCard.value = false
   try {
-    await $fetch('/api/game/kick-player', {
+    await $fetch('/mahjong/api/game/kick-player', {
       method: 'POST',
       body: {
         gameId: roomId.value,
@@ -3232,7 +3232,7 @@ const onAIReplace = async () => {
   const myName = userName.value || currentPlayer.value?.name || '某玩家'
   showPlayerCard.value = false
   try {
-    await $fetch('/api/game/replace-player', {
+    await $fetch('/mahjong/api/game/replace-player', {
       method: 'POST',
       body: {
         gameId: roomId.value,
@@ -3254,7 +3254,7 @@ const onRequestBotReplace = async (botPlayer: any) => {
   showPlayerCard.value = false
   const myName = userName.value || currentPlayer.value?.name || '观赛者'
   try {
-    await $fetch('/api/game/replace-bot', {
+    await $fetch('/mahjong/api/game/replace-bot', {
       method: 'POST',
       body: {
         gameId: roomId.value,
@@ -3278,7 +3278,7 @@ const onTempLeave = async () => {
   if (!playerCardPlayer.value) return
   showPlayerCard.value = false
   try {
-    await $fetch('/api/game/kick-player', {
+    await $fetch('/mahjong/api/game/kick-player', {
       method: 'POST',
       body: {
         gameId: roomId.value,
@@ -3298,7 +3298,7 @@ const onBotMode = async () => {
   if (!playerCardPlayer.value) return
   showPlayerCard.value = false
   try {
-    await $fetch('/api/game/bot-mode', {
+    await $fetch('/mahjong/api/game/bot-mode', {
       method: 'POST',
       body: {
         gameId: roomId.value,
@@ -3320,7 +3320,7 @@ const onSwapPosition = async () => {
   const myName = currentPlayer.value.name
   showPlayerCard.value = false
   try {
-    const resp = await $fetch('/api/game/swap-position', {
+    const resp = await $fetch('/mahjong/api/game/swap-position', {
       method: 'POST',
       body: {
         gameId: roomId.value,
@@ -4018,7 +4018,7 @@ const setupTestGame = async () => {
   const currentCount = gameState.value?.players.length || 1
   
   for (let i = currentCount + 1; i <= 4; i++) {
-    await useFetch('/api/game/join', {
+    await useFetch('/mahjong/api/game/join', {
       method: 'POST',
       body: { gameId: roomId.value, playerName: `电脑${i}` }
     })
@@ -4041,7 +4041,7 @@ const forceDiscard = async (p: Player) => {
     return
   }
   
-  await useFetch('/api/game/action', {
+  await useFetch('/mahjong/api/game/action', {
     method: 'POST',
     body: {
       gameId: roomId.value,

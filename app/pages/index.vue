@@ -12,7 +12,7 @@
         <button
           type="button"
           class="mahjong-button primary"
-          @click="navigateTo('/create-room')"
+          @click="navigateTo('/mahjong/create-room')"
         >
           创建新局
         </button>
@@ -33,7 +33,7 @@
           对局记录
         </button>
 
-        <button class="mahjong-button secondary" @click="navigateTo('/rules')">
+        <button class="mahjong-button secondary" @click="navigateTo('/mahjong/rules')">
           📖 规则说明
         </button>
 
@@ -325,7 +325,7 @@ const confirmCreateGame = async () => {
   if (isCreatingGame.value) return
   isCreatingGame.value = true
   try {
-    const response = await $fetch('/api/game/create', {
+    const response = await $fetch('/mahjong/api/game/create', {
       method: 'POST',
       body: {
         playerName: userName.value || 'Player 1',
@@ -364,7 +364,7 @@ const confirmCreateGame = async () => {
     if (botsToJoin.length) {
       const results = await Promise.allSettled(
         botsToJoin.map(botId =>
-          $fetch('/api/game/join', {
+          $fetch('/mahjong/api/game/join', {
             method: 'POST',
             body: { gameId, playerName: botId, ownerPlayerId: playerId },
             headers: { 'Cache-Control': 'no-cache' }
@@ -391,7 +391,7 @@ const confirmCreateGame = async () => {
       useCookie('auth_token').value = null
       useCookie('user_id').value = null
       useCookie('user_name').value = null
-      await navigateTo('/login')
+      await navigateTo('/mahjong/login')
       return
     }
     alert('创建房间失败：' + (e?.message || '未知错误'))
@@ -411,7 +411,7 @@ onMounted(() => {
 })
 
 const { data: profileResponse, pending: profilePending, error: profileError, refresh: refreshProfile } =
-  useFetch('/api/profile', {
+  useFetch('/mahjong/api/profile', {
     method: 'GET',
     cache: 'no-cache'
   })
@@ -498,7 +498,7 @@ const saveProfile = async () => {
   setProfileStatus('', '')
 
   try {
-    const response = await $fetch('/api/profile', {
+    const response = await $fetch('/mahjong/api/profile', {
       method: 'PUT',
       body: {
         name: profileForm.name.trim(),
@@ -526,15 +526,15 @@ const saveProfile = async () => {
 
 // old startNewGame and startPvEGame removed - replaced by openCreateModal + confirmCreateGame
 
-const onJoinGame = () => navigateTo('/join-game')
+const onJoinGame = () => navigateTo('/mahjong/join-game')
 const onMatchHistory = () => router.push('/history')
-const goToAdminSandbox = () => navigateTo('/admin-test')
+const goToAdminSandbox = () => navigateTo('/mahjong/admin-test')
 
 const logout = () => {
   useCookie('auth_token').value = null
   useCookie('user_id').value = null
   useCookie('user_name').value = null
-  return navigateTo('/login')
+  return navigateTo('/mahjong/login')
 }
 </script>
 

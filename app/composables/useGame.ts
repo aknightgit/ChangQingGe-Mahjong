@@ -62,7 +62,7 @@ export const useGame = () => {
 
   const fetchGameState = async (gId: string, pId: string) => {
     try {
-      const response = await $fetch('/api/game/state', {
+      const response = await $fetch('/mahjong/api/game/state', {
         query: {
           gameId: gId,
           playerId: pId,
@@ -344,7 +344,7 @@ export const useGame = () => {
     isActionPending.value = true
 
     try {
-      const response = await $fetch('/api/game/action', {
+      const response = await $fetch('/mahjong/api/game/action', {
         method: 'POST',
         body: {
           gameId: gameId.value,
@@ -377,7 +377,7 @@ export const useGame = () => {
 
     console.log('[startGame] Starting game:', gameId.value)
     try {
-      const response = await $fetch('/api/game/start', {
+      const response = await $fetch('/mahjong/api/game/start', {
         method: 'POST',
         body: {
           gameId: gameId.value,

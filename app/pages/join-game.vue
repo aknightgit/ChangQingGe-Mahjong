@@ -128,7 +128,7 @@ const myGames = ref<any[]>([])
 const isLoadingMy = ref(false)
 const isComingBack = ref(false)
 
-const backToLobby = () => navigateTo('/')
+const backToLobby = () => navigateTo('/mahjong/')
 
 // 获取我的活跃牌局
 const fetchMyGames = async () => {
@@ -152,12 +152,12 @@ const handleComeback = async (game: any) => {
   if (isComingBack.value) return
   isComingBack.value = true
   try {
-    await $fetch('/api/game/comeback', {
+    await $fetch('/mahjong/api/game/comeback', {
       method: 'POST',
       body: { gameId: game.gameId, playerId: game.myPlayerId }
     })
     // 进入房间
-    await navigateTo(`/gameroom/${game.gameId}?playerId=${game.myPlayerId}`)
+    await navigateTo(`${appBaseURL}/gameroom/${game.gameId}?playerId=${game.myPlayerId}`)
   } catch (err) {
     console.error('Comeback failed:', err)
   } finally {
@@ -175,7 +175,7 @@ const fetchWaitingGames = async () => {
   isWaitingLoading.value = true
   waitingGamesError.value = null
   try {
-    const { data, error } = await useFetch('/api/game/waiting', {
+    const { data, error } = await useFetch('/mahjong/api/game/waiting', {
       method: 'GET',
       cache: 'no-cache'
     })
@@ -210,7 +210,7 @@ const joinGame = async (gameId: string) => {
   joinError.value = null
   isJoining.value = true
   try {
-    const data = await $fetch('/api/game/join', {
+    const data = await $fetch('/mahjong/api/game/join', {
       method: 'POST',
       body: { gameId, playerName: userName.value || 'Player ' + Math.floor(Math.random() * 1000) }
     })

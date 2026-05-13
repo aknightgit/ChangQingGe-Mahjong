@@ -47,7 +47,7 @@ const goBack = () => {
     router.back()
     return
   }
-  navigateTo('/')
+  navigateTo('/mahjong/')
 }
 
 function slugify(value: string) {
