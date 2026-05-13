@@ -194,9 +194,13 @@ watch(() => createParams.maxBots, (newMax) => {
   if (selectedBots.value.length > newMax) selectedBots.value = selectedBots.value.slice(0, newMax)
 })
 
-const appBaseURL = (useRuntimeConfig().app.baseURL as string || '/').replace(/\/$/, '')
-const buildRoomUrl = (gameId: string, playerId: string, dice: number) =>
-  `${appBaseURL}/gameroom/${gameId}?playerId=${playerId}&dice=${dice}`
+const buildRoomUrl = (gameId: string, playerId: string, dice: number) => {
+  const params = new URLSearchParams({
+    playerId,
+    dice: String(dice)
+  })
+  return `/gameroom/${gameId}?${params.toString()}`
+}
 
 const navigateToCreatedRoom = async (targetUrl: string) => {
   savePendingRoomTarget(targetUrl)

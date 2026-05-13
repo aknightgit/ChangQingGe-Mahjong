@@ -1446,7 +1446,9 @@ onMounted(async () => {
   // 监听广播消息播放对应音效
   window.addEventListener('mahjong-broadcast', ((event: CustomEvent) => {
     const detail = event.detail
-    addBroadcast(detail.text, detail.type as BroadcastMsg['type'])
+    addBroadcast(detail.text, detail.type as BroadcastMsg['type'], {
+      dedupeKey: detail?.id ? `broadcast:${detail.id}` : undefined
+    })
     // 根据广播内容播放音效和语音
     const text = detail.text || ''
     if (text.includes('补花')) { playSound('tile-draw'); playVoiceAction('flowerReplace') }
@@ -1457,6 +1459,8 @@ onMounted(async () => {
   if (process.client) {
     void preloadAllTiles()
     evaluateViewport()
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
     window.addEventListener('resize', evaluateViewport)
     window.addEventListener('orientationchange', evaluateViewport)
     window.addEventListener('pointerdown', handleGlobalPointerDown as EventListener)
@@ -3468,9 +3472,17 @@ const actionWindowText = computed(() => {
   return `响应窗口：${(leftMs / 1000).toFixed(1)}s（超时自动过）`
 })
 
-const showMobileActionNotice = computed(() => shouldRotateView.value && hasPriorityActions.value)
+const showMobileActionNotice = computed(() =>
+  shouldRotateView.value && (
+    hasPriorityActions.value ||
+    showDraw.value ||
+    availableActions.value.includes(ActionType.DISCARD)
+  )
+)
 const mobileActionNoticeText = computed(() => {
   const labels: string[] = []
+  if (showDraw.value) labels.push('摸')
+  if (availableActions.value.includes(ActionType.DISCARD)) labels.push('出')
   if (showHu.value) labels.push('胡')
   if (showKong.value || showConcealedKong.value || showExtendedKong.value) labels.push('杠')
   if (showPeng.value) labels.push('碰')
@@ -3644,19 +3656,24 @@ const displayBroadcastMessages = computed(() => {
 })
 let broadcastId = 0
 const recentBroadcastTexts = new Map<string, number>()
-const addBroadcast = (text: string, type: BroadcastMsg['type'] = 'info') => {
+const addBroadcast = (
+  text: string,
+  type: BroadcastMsg['type'] = 'info',
+  options?: { dedupeKey?: string }
+) => {
   const now = Date.now()
   const timeLabel = formatBeijingTime(now)
   const sanitizedText = type === 'win'
     ? text.replace(/(胡牌)\s*[·•･][^·•･()（）\s]+/u, '$1')
     : text
-  const lastAt = recentBroadcastTexts.get(sanitizedText) ?? 0
+  const dedupeKey = options?.dedupeKey || sanitizedText
+  const lastAt = recentBroadcastTexts.get(dedupeKey) ?? 0
   if (now - lastAt < 1500) {
     return
   }
-  recentBroadcastTexts.set(sanitizedText, now)
-  for (const [message, ts] of recentBroadcastTexts) {
-    if (now - ts > 10000) recentBroadcastTexts.delete(message)
+  recentBroadcastTexts.set(dedupeKey, now)
+  for (const [key, ts] of recentBroadcastTexts) {
+    if (now - ts > 10000) recentBroadcastTexts.delete(key)
   }
   broadcastMessages.value.push({ id: ++broadcastId, text: sanitizedText, type, timestamp: now, timeLabel })
   if (broadcastMessages.value.length > 20) {
@@ -4041,6 +4058,8 @@ const forceDiscard = async (p: Player) => {
 <style scoped>
 .mahjong-page {
   min-height: 100vh;
+  min-height: 100dvh;
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4054,6 +4073,7 @@ const forceDiscard = async (p: Player) => {
   width: 100%;
   display: flex;
   justify-content: center;
+  min-height: 100%;
 }
 
 .room-container--rotated {
@@ -4609,12 +4629,18 @@ const forceDiscard = async (p: Player) => {
   padding: 0;
   min-height: 100vh;
   height: 100vh;
-  overflow: hidden;
+  min-height: 100dvh;
+  height: 100dvh;
+  width: 100vw;
+  max-width: 100vw;
+  overflow: clip;
+  overscroll-behavior: none;
 }
 
 .layout--mobile-landscape .room-viewport {
   width: 100%;
   height: 100%;
+  min-height: 100dvh;
 }
 
 .layout--mobile-landscape .room-container {
@@ -4624,6 +4650,7 @@ const forceDiscard = async (p: Player) => {
   max-width: none;
   width: 100%;
   height: 100vh;
+  height: 100dvh;
   border: none;
   background: transparent;
   box-shadow: none;
@@ -4695,9 +4722,9 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .table-wrapper {
-  flex: 0 0 calc(100% - min(354px, 30%));
-  width: calc(100% - min(354px, 30%));
-  max-width: calc(100% - min(354px, 30%));
+  flex: 0 0 calc(100% - min(320px, 28%));
+  width: calc(100% - min(320px, 28%));
+  max-width: calc(100% - min(320px, 28%));
   min-width: 0;
   min-height: 0;
   padding: 0;
@@ -4727,20 +4754,26 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .extended-info-panel {
-  flex: 0 0 min(354px, 30%);
-  width: min(354px, 30%);
+  flex: 0 0 min(320px, 28%);
+  width: min(320px, 28%);
   min-width: 0;
-  max-width: min(354px, 30%);
+  max-width: min(320px, 28%);
   max-height: 100%;
   font-size: 0.62rem;
-  gap: 3px;
+  gap: 2px;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 3px;
+  padding: 2px max(2px, env(safe-area-inset-right)) 2px 2px;
   border-radius: 0;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   display: flex;
   flex-direction: column;
+  overscroll-behavior: contain;
+}
+
+.layout--mobile-landscape .extended-info-panel::-webkit-scrollbar {
+  display: none;
 }
 
 /* 移动端横屏：结算弹窗表格缩小 */
@@ -7224,13 +7257,16 @@ const forceDiscard = async (p: Player) => {
 @media (max-width: 768px) and (orientation: portrait) {
   .mobile-portrait {
     min-height: 100vw;
+    width: 100vw;
+    overflow: clip;
   }
 
   .room-viewport--rotated {
     width: 100vh;
+    width: 100dvh;
     height: 100vw;
     align-items: center;
-    overflow: hidden;
+    overflow: clip;
   }
 
   .room-container--rotated {
@@ -7239,8 +7275,10 @@ const forceDiscard = async (p: Player) => {
     gap: calc(8px * var(--mobile-scale));
     transform: rotate(90deg);
     transform-origin: center;
-    width: min(90vh, 100vw);
-    max-height: calc(100vw - 24px);
+    width: 100vh;
+    width: 100dvh;
+    height: 100vw;
+    max-height: none;
   }
 
   .room-container--rotated .room-header {
@@ -7269,6 +7307,12 @@ const forceDiscard = async (p: Player) => {
     max-width: min(calc(354px * var(--mobile-scale)), 30%);
     max-height: none;
     overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .room-container--rotated .extended-info-panel::-webkit-scrollbar {
+    display: none;
   }
 }
 

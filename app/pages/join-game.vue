@@ -108,7 +108,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 
-const appBaseURL = (useRuntimeConfig().app.baseURL as string || '/').replace(/\/$/, '')
+const buildGameRoomPath = (gameId: string, playerId: string, spectator = false) => {
+  const params = new URLSearchParams({ playerId })
+  if (spectator) params.set('spectator', '1')
+  return `/gameroom/${gameId}?${params.toString()}`
+}
 
 const userName = useCookie('user_name')
 const userId = useCookie('user_id')
@@ -163,7 +167,7 @@ const handleComeback = async (game: any) => {
 
 // 进入已有牌局
 const enterGame = (game: any) => {
-  navigateTo(`${appBaseURL}/gameroom/${game.gameId}?playerId=${game.myPlayerId}`)
+  navigateTo(buildGameRoomPath(game.gameId, game.myPlayerId))
 }
 
 // 获取空闲牌桌
@@ -214,7 +218,7 @@ const joinGame = async (gameId: string) => {
       const { playerId, gameId: realGameId, isSpectator } = data.data
       const targetGameId = realGameId || gameId
       console.log('[Join] Joined game:', targetGameId, 'playerId:', playerId, 'spectator:', isSpectator)
-      await navigateTo(`${appBaseURL}/gameroom/${targetGameId}?playerId=${playerId}${isSpectator ? '&spectator=1' : ''}`)
+      await navigateTo(buildGameRoomPath(targetGameId, playerId, !!isSpectator))
     } else {
       joinError.value = '无法加入牌局，请重试。'
     }

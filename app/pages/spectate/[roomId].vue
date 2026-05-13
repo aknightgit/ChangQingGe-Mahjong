@@ -14,7 +14,7 @@ const roomId = route.params.roomId as string
 
 onMounted(() => {
   // 直接跳转到gameroom页面，带spectator参数
-  navigateTo(`/mahjong/gameroom/${roomId}?spectator=1`)
+  navigateTo(`/gameroom/${roomId}?spectator=1`, { external: false })
 })
 </script>
 

@@ -184,11 +184,36 @@ definePageMeta({ ssr: false })
 const PENDING_ROOM_STORAGE_KEY = 'mahjong.pendingRoomTarget'
 const PENDING_ROOM_TTL_MS = 8000
 
+const normalizePendingRoomTarget = (targetUrl: string): string | null => {
+  const normalizePath = (path: string, search = '') => {
+    const trimmedPath = path.replace(/^\/mahjong(?=\/|$)/, '') || '/'
+    if (!trimmedPath.startsWith('/gameroom/')) return null
+    return `${trimmedPath}${search}`
+  }
+
+  if (!targetUrl) return null
+  if (targetUrl.startsWith('/')) {
+    const [path, search = ''] = targetUrl.split('?')
+    return normalizePath(path, search ? `?${search}` : '')
+  }
+
+  if (!process.client) return null
+
+  try {
+    const parsed = new URL(targetUrl, window.location.origin)
+    return normalizePath(parsed.pathname, parsed.search)
+  } catch {
+    return null
+  }
+}
+
 const savePendingRoomTarget = (targetUrl: string) => {
   if (!process.client) return
+  const normalizedTarget = normalizePendingRoomTarget(targetUrl)
+  if (!normalizedTarget) return
   try {
     sessionStorage.setItem(PENDING_ROOM_STORAGE_KEY, JSON.stringify({
-      targetUrl,
+      targetUrl: normalizedTarget,
       createdAt: Date.now()
     }))
   } catch {}
@@ -205,7 +230,12 @@ const getPendingRoomTarget = (): string | null => {
       sessionStorage.removeItem(PENDING_ROOM_STORAGE_KEY)
       return null
     }
-    return parsed.targetUrl
+    const normalizedTarget = normalizePendingRoomTarget(parsed.targetUrl)
+    if (!normalizedTarget) {
+      sessionStorage.removeItem(PENDING_ROOM_STORAGE_KEY)
+      return null
+    }
+    return normalizedTarget
   } catch {
     return null
   }
@@ -218,13 +248,22 @@ const clearPendingRoomTarget = () => {
   } catch {}
 }
 
-const appBaseURL = (useRuntimeConfig().app.baseURL as string || '/').replace(/\/$/, '')
+const buildGameRoomPath = (gameId: string, playerId: string, dice?: number) => {
+  const params = new URLSearchParams({ playerId })
+  if (typeof dice === 'number') params.set('dice', String(dice))
+  return `/gameroom/${gameId}?${params.toString()}`
+}
 
 const navigateToCreatedRoom = async (targetUrl: string) => {
-  savePendingRoomTarget(targetUrl)
+  const normalizedTarget = normalizePendingRoomTarget(targetUrl)
+  if (!normalizedTarget) {
+    clearPendingRoomTarget()
+    return
+  }
+  savePendingRoomTarget(normalizedTarget)
 
   try {
-    await navigateTo(targetUrl, { external: false })
+    await navigateTo(normalizedTarget, { external: false })
   } catch (error) {
     console.warn('[Create] navigateTo failed:', error)
   }
@@ -342,7 +381,7 @@ const confirmCreateGame = async () => {
       })
     }
 
-    const targetUrl = `${appBaseURL}/gameroom/${gameId}?playerId=${playerId}&dice=${createParams.maxDiceRolls}`
+    const targetUrl = buildGameRoomPath(gameId, playerId, createParams.maxDiceRolls)
     console.log('[Create] Navigating to:', targetUrl)
     showCreateModal.value = false
     await navigateToCreatedRoom(targetUrl)
