@@ -45,7 +45,8 @@ export enum PlayerStatus {
   WAITING = 'waiting',
   PLAYING = 'playing',
   WON = 'won',
-  LOST = 'lost'
+  LOST = 'lost',
+  SPECTATING = 'spectating'
 }
 
 export interface Player {

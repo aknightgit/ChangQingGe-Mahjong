@@ -57,7 +57,7 @@ export default defineEventHandler(async (event) => {
   if (!target) {
     throw createError({ statusCode: 404, message: 'Target player not found' });
   }
-  if (player.status !== PlayerStatus.WON && !canUseDebugBotSpectator(player, target)) {
+  if (player.status !== PlayerStatus.WON && player.status !== PlayerStatus.SPECTATING && !canUseDebugBotSpectator(player, target)) {
     throw createError({ statusCode: 400, message: 'Only players who have won can use spectator view' });
   }
   if (!isSpectatorTargetWatchable(target)) {

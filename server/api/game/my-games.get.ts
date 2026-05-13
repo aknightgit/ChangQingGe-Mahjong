@@ -10,6 +10,12 @@ export default defineEventHandler(async (event) => {
 
   for (const game of allGames) {
     if (game.phase === 'ended') continue;
+    // waiting 状态且超过30分钟不活跃的房间不展示
+    if (game.phase === 'waiting' && game.updatedAt) {
+      const staleThreshold = Date.now() - 30 * 60 * 1000
+      const updatedAt = typeof game.updatedAt === 'number' ? game.updatedAt : game.updatedAt.getTime?.()
+      if (updatedAt && updatedAt < staleThreshold) continue
+    }
     const playerInGame = game.players.find(p => p.userId === user.userId);
     if (!playerInGame) continue;
 

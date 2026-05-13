@@ -13,8 +13,14 @@ interface WaitingGameSummary {
 export default defineEventHandler(async () => {
   const gamesCollection = await getCollection<MahjongGame>('mahjongGames')
 
+  // 只返回 waiting 状态且 30 分钟内活跃的房间
+  const staleThreshold = new Date(Date.now() - 30 * 60 * 1000)
+
   const waitingGames = await gamesCollection
-    .find({ phase: 'waiting' })
+    .find({
+      phase: 'waiting',
+      updatedAt: { $gte: staleThreshold }
+    })
     .sort({ updatedAt: -1 })
     .limit(25)
     .toArray()

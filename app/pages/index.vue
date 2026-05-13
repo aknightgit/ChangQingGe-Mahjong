@@ -226,27 +226,10 @@ const navigateToCreatedRoom = async (targetUrl: string) => {
   try {
     await navigateTo(targetUrl, { external: false })
   } catch (error) {
-    console.warn('[Create] navigateTo failed, falling back to location.assign:', error)
+    console.warn('[Create] navigateTo failed:', error)
   }
 
-  if (!process.client) return
-
-  // 等待页面组件渲染完成，检查是否真的是游戏房间
-  // Nuxt SPA 路由可能渲染失败，页面仍显示欢迎页内容
-  await new Promise(resolve => setTimeout(resolve, 500))
-  const currentPath = window.location.pathname
-  const hasGameRoomContent = !!document.querySelector('.game-room, .game-table, .player-hand, .game-board')
-  if (currentPath !== targetUrl.split('?')[0] || !hasGameRoomContent) {
-    console.warn('[Create] Route failed to navigate, forcing window.location.assign:', {
-      currentPath,
-      targetPath: targetUrl.split('?')[0],
-      hasContent: hasGameRoomContent
-    })
-    clearPendingRoomTarget()
-    window.location.assign(targetUrl)
-    return
-  }
-
+  // 导航无论成功与否都不做硬跳转，避免全量刷新破坏SPA认证状态
   clearPendingRoomTarget()
 }
 
@@ -313,6 +296,7 @@ const confirmCreateGame = async () => {
         thinkChances: createParams.thinkChances,
         settlementMultiplier: createParams.settlementMultiplier,
         maxBots: createParams.maxBots,
+        minPlayers: createParams.minPlayers ?? 4,
         hesitationWindow: Math.round(createParams.hesitationSeconds * 1000) // 秒→毫秒
       },
       headers: { 'Cache-Control': 'no-cache' }

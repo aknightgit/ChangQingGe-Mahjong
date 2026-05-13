@@ -26,7 +26,7 @@
               <label>掷骰子次数</label>
               <button class="help-btn" @click="toggleHelp('dice')">?</button>
             </div>
-            <input type="number" v-model.number="createParams.maxDiceRolls" min="1" max="10" />
+            <input type="number" v-model.number="createParams.maxDiceRolls" min="1" max="10" placeholder="2" />
             <span v-if="activeHelp === 'dice'" class="help-bubble">决定发牌起始位置。默认2次。</span>
           </div>
 
@@ -72,7 +72,21 @@
         </section>
 
         <section class="param-group">
-          <h3 class="param-group-title">🤖 AI玩家</h3>
+          <h3 class="param-group-title">👥 玩家设置</h3>
+
+          <div class="create-field">
+            <div class="field-header">
+              <label>最少开局人数</label>
+              <button class="help-btn" @click="toggleHelp('minPlayers')">?</button>
+            </div>
+            <select v-model.number="createParams.minPlayers">
+              <option :value="2">2人</option>
+              <option :value="3">3人</option>
+              <option :value="4">4人（默认）</option>
+            </select>
+            <span v-if="activeHelp === 'minPlayers'" class="help-bubble">房间人数达到此值后房主可点击"开始牌局"。默认4人。</span>
+          </div>
+
           <div class="create-field">
             <label>AI玩家上限</label>
             <select v-model.number="createParams.maxBots">
@@ -162,7 +176,8 @@ const createParams = reactive({
   liangShanThreshold: 4000,
   thinkChances: 3,
   settlementMultiplier: 10,
-  maxBots: 3
+  maxBots: 3,
+  minPlayers: 4
 })
 
 const allAIBots = [
@@ -188,15 +203,21 @@ const navigateToCreatedRoom = async (targetUrl: string) => {
   try {
     await router.push(targetUrl)
   } catch (error) {
-    console.warn('[CreatePage] router.push failed, fallback to location.assign', error)
+    console.warn('[CreatePage] router.push failed:', error)
+    // push失败时尝试replace（SPA模式，不会全量刷新）
+    try {
+      await router.replace(targetUrl)
+    } catch {}
   }
-  if (!process.client) return
-  const currentPath = window.location.pathname
-  if (currentPath === targetUrl.split('?')[0]) {
-    clearPendingRoomTarget()
-    return
+  // 等一小段时间确认导航成功，否则重试replace
+  await new Promise(r => setTimeout(r, 500))
+  if (process.client && window.location.pathname !== targetUrl.split('?')[0]) {
+    console.warn('[CreatePage] SPA nav failed to update URL, retrying replace')
+    try {
+      await router.replace(targetUrl)
+    } catch {}
   }
-  window.location.assign(targetUrl)
+  clearPendingRoomTarget()
 }
 
 const confirmCreateGame = async () => {
@@ -213,6 +234,7 @@ const confirmCreateGame = async () => {
         thinkChances: createParams.thinkChances,
         settlementMultiplier: createParams.settlementMultiplier,
         maxBots: createParams.maxBots,
+        minPlayers: createParams.minPlayers,
         hesitationWindow: Math.round(createParams.hesitationSeconds * 1000)
       },
       headers: { 'Cache-Control': 'no-cache' }

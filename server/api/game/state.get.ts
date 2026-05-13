@@ -79,15 +79,24 @@ export default defineEventHandler(async (event) => {
         }
       : await requireGamePlayerAccess(event, game, normalizedPlayerId, { allowAdmin: true });
   } catch (err: any) {
-    await apiLog(event, {
-      endpoint: 'state',
-      gameId: normalizedGameId,
-      playerId: normalizedPlayerId,
-      statusCode: err.statusCode || 403,
-      durationMs: Date.now() - startTime,
-      error: err.message || 'Access denied',
-    });
-    throw err;
+    // 访客（未登录用户）降级：通过 playerId 直接匹配，不校验 userId
+    const fallbackPlayer = game.players.find(
+      (entry) => entry.id === normalizedPlayerId || entry.userId === normalizedPlayerId
+    );
+    if (fallbackPlayer && (err.statusCode === 401 || err.statusCode === 403)) {
+      access = { player: fallbackPlayer, isAdmin: false };
+      console.log('[state.get] Guest access granted for player:', fallbackPlayer.name);
+    } else {
+      await apiLog(event, {
+        endpoint: 'state',
+        gameId: normalizedGameId,
+        playerId: normalizedPlayerId,
+        statusCode: err.statusCode || 403,
+        durationMs: Date.now() - startTime,
+        error: err.message || 'Access denied',
+      });
+      throw err;
+    }
   }
 
   if (!access.player) {

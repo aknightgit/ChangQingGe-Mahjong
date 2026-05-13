@@ -72,7 +72,8 @@ export enum PlayerStatus {
   WAITING = 'waiting',
   PLAYING = 'playing',
   WON = 'won',
-  LOST = 'lost'
+  LOST = 'lost',
+  SPECTATING = 'spectating'
 }
 
 export interface Player {
@@ -306,6 +307,7 @@ export interface GameState {
   thinkChances?: number;      // 等我想一想机会次数，默认3
   settlementMultiplier?: number;  // 结算膨胀倍数，默认10
   maxBots?: number;             // 最大AI玩家数，默认3（0=禁止AI加入）
+  minPlayers?: number;          // 最少开局人数，默认4
   thinkUsage?: Record<string, number>;  // 每位玩家本局已使用「等」次数
   thinkFreezeUntil?: number;  // 等我想一想冻结结束时间戳
   thinkFreezePlayerId?: string;  // 触发等我想一想的玩家ID
@@ -336,6 +338,8 @@ export interface GameState {
   spectatorMode?: { playerId: string; viewingPlayerId: string } | null;
   spectatorViews?: Record<string, SpectatorViewState>;
   spectatorApprovalRequests?: SpectatorApprovalRequest[];
+  // 观赛者替换AI请求队列（每局 startGame 时处理）
+  botReplacementQueue?: { spectatorId: string; spectatorName: string; targetBotId: string; userId?: string; requestedAt: number }[];
   huSelectionLocks?: Record<string, number>;
   trainingRoundStartSnapshot?: any;
   // 吃碰排斥规则状态（每局重置）
