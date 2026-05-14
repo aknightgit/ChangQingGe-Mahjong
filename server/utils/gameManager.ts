@@ -520,12 +520,95 @@ class GameManager {
     return Math.max(0, this.getTileMaxCopies(suit) - visibleCount);
   }
 
+  private quickPrecheckTenpai(game: GameState, player: Player): boolean {
+    // 1) 巡目门槛：前 3 巡几乎不可能听牌，跳过计算
+    const discardCount = game.discardPile.length;
+    const playerCount = game.players.filter(p => p.status === PlayerStatus.PLAYING).length;
+    const calculatedRound = Math.max(1, Math.ceil(discardCount / Math.max(1, playerCount)));
+    if (calculatedRound < 3) {
+      return false;
+    }
+
+    // 2) 特殊牌型始终计算（不跳过）
+    const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
+    const concealed = player.hand.concealedTiles;
+    // 统计四百搭和八花
+    const wildCount = concealed.filter(t => isWildTile(t)).length;
+    const flowerCount = concealed.filter(t => isFlower(t)).length;
+    if (wildCount >= 4) return true;   // 四百搭，跳过粗筛
+    if (flowerCount >= 8) return true; // 八花，跳过粗筛
+
+    // 3) 孤牌检测——只针对非百搭非花牌的数字牌
+    // 先过滤出有效牌：不花牌且非百搭的数字牌、风牌、箭牌
+    const nonWildNonFlower = concealed.filter(t => !isFlower(t) && !isWildTile(t));
+
+    // 统计每张牌出现次数（找对子）
+    const valueCounts = new Map<string, number>();
+    for (const t of nonWildNonFlower) {
+      const key = `${t.suit}-${t.value}`;
+      valueCounts.set(key, (valueCounts.get(key) || 0) + 1);
+    }
+
+    // 统计有几门数字牌
+    const numberSuits = new Set<string>();
+    for (const t of nonWildNonFlower) {
+      if (t.suit !== TileSuit.WIND && t.suit !== TileSuit.DRAGON) {
+        numberSuits.add(t.suit);
+      }
+    }
+    const hasMultipleNumberSuits = numberSuits.size >= 2;
+
+    // 计算孤牌数
+    let orphanCount = 0;
+    for (const t of nonWildNonFlower) {
+      const key = `${t.suit}-${t.value}`;
+      if (valueCounts.get(key)! >= 2) continue; // 有对子 → 不是孤牌
+      if (t.suit === TileSuit.WIND || t.suit === TileSuit.DRAGON) {
+        orphanCount++; // 风牌/箭牌无对子即孤牌
+        continue;
+      }
+      // 数牌：检查 ±1 有无同花色邻牌
+      const prevKey = `${t.suit}-${t.value - 1}`;
+      const nextKey = `${t.suit}-${t.value + 1}`;
+      if (!valueCounts.has(prevKey) && !valueCounts.has(nextKey)) {
+        orphanCount++;
+      }
+    }
+
+    if (wildCount === 0) {
+      // 无百搭：任意 2+ 孤牌即可跳过
+      if (orphanCount >= 2) return false;
+      // 无百搭 + 两门数字牌 + 任一门有孤牌 → 跳过
+      if (hasMultipleNumberSuits && orphanCount >= 1) return false;
+      return true;
+    }
+
+    // wildCount 为 1 的情况（>=4 的已经在上面 return true 了）
+    // 1百搭 + 有两门数字牌 + 有 2+ 孤牌 → 跳过
+    if (hasMultipleNumberSuits && orphanCount >= 2) return false;
+
+    return true;
+  }
+
   private getCachedTingPreview(game: GameState, player: Player) {
     const playerCache = this.getPlayerWinCache(game.gameId, player.id);
     const cacheKey = `${this.getPlayerWinContextKey(game, player)}|ting-preview`;
     const cached = playerCache.ting.get(cacheKey);
     if (cached) {
       return cached;
+    }
+
+    // 快速粗筛：巡目门槛 + 孤牌检查
+    if (!this.quickPrecheckTenpai(game, player)) {
+      const emptyResult = { isTing: false, winningTiles: [] as Array<{
+        tile: Tile;
+        remainingCount: number;
+        bestDiscardOption: WinOption | null;
+        bestSelfDrawOption: WinOption | null;
+        bestOverallOption: WinOption | null;
+      }> };
+      playerCache.ting.set(cacheKey, emptyResult);
+      return emptyResult;
     }
 
     const candidates = this.getTingPreviewCandidates(game);
@@ -1436,9 +1519,10 @@ class GameManager {
       throw new Error('Game not found');
     }
 
-    // 满员或已开局 → 以观赛者身份加入
-    const isFullOrStarted = game.players.length >= 4 || game.phase !== GamePhase.WAITING;
-    if (isFullOrStarted) {
+    // 满员 → 以观赛者身份加入
+    // 注意：未满员但已开局（如A+2个AI已开始），真人玩家仍作为正式玩家加入
+    const isFull = game.players.length >= 4;
+    if (isFull) {
       const spectatorId = 'spectator-' + randomUUID();
       const spectator: Player = {
         id: spectatorId,

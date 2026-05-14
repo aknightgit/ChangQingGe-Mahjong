@@ -171,10 +171,10 @@ const toggleHelp = (key: string) => {
 
 const createParams = reactive({
   maxDiceRolls: 2,
-  hesitationSeconds: 5,
+  hesitationSeconds: 4,
   firstRoundDouble: true,
   liangShanThreshold: 4000,
-  thinkChances: 3,
+  thinkChances: 4,
   settlementMultiplier: 10,
   maxBots: 3,
   minPlayers: 4
@@ -204,25 +204,14 @@ const buildRoomUrl = (gameId: string, playerId: string, dice: number) => {
 
 const navigateToCreatedRoom = async (targetUrl: string) => {
   savePendingRoomTarget(targetUrl)
+  // 去除 baseURL 前缀后再 navigateTo，让 SPA router 能正确匹配
+  const normalizedPath = targetUrl.replace(/^\/mahjong(?=\/|$)/, '') || '/'
   try {
-    await router.push(targetUrl)
+    await navigateTo(normalizedPath, { external: false })
   } catch (error) {
-    console.warn('[CreatePage] router.push failed:', error)
+    console.warn('[CreatePage] navigateTo failed:', error)
   }
-  // 等一小段时间确认导航成功
-  await new Promise(r => setTimeout(r, 800))
-  if (process.client && window.location.pathname !== targetUrl.split('?')[0]) {
-    console.warn('[CreatePage] SPA nav failed, trying hard navigation fallback')
-    try {
-      // First try replace
-      await router.replace(targetUrl)
-      await new Promise(r => setTimeout(r, 300))
-    } catch {}
-    // If still not navigated, hard reload
-    if (window.location.pathname !== targetUrl.split('?')[0]) {
-      window.location.href = targetUrl
-    }
-  }
+  // 不做硬跳转，避免全量刷新破坏 SPA 状态
   clearPendingRoomTarget()
 }
 

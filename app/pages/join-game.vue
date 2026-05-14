@@ -111,7 +111,7 @@ import { onMounted, ref } from 'vue'
 const buildGameRoomPath = (gameId: string, playerId: string, spectator = false) => {
   const params = new URLSearchParams({ playerId })
   if (spectator) params.set('spectator', '1')
-  return `/mahjong/gameroom/${gameId}?${params.toString()}`
+  return `/gameroom/${gameId}?${params.toString()}`
 }
 
 const userName = useCookie('user_name')
@@ -157,7 +157,7 @@ const handleComeback = async (game: any) => {
       body: { gameId: game.gameId, playerId: game.myPlayerId }
     })
     // 进入房间
-    await navigateTo(`/mahjong/gameroom/${game.gameId}?playerId=${game.myPlayerId}`)
+    await navigateTo(`/gameroom/${game.gameId}?playerId=${game.myPlayerId}`)
   } catch (err) {
     console.error('Comeback failed:', err)
   } finally {

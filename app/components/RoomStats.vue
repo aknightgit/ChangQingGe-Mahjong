@@ -27,14 +27,16 @@
               @click="player._raw ? $emit('nameClick', player._raw) : $emit('nameClick', player)"
               :class="{ 'name-clickable': true }"
             >
-              <span class="rank-dot" :class="`dot--${player.color}`"></span>
-              <span :class="{ 'name-me': player.isMe }">{{ player.name }}</span>
-              <span
-                v-if="player.isQJCrossed"
-                class="rank-qj-icon"
-                :class="{ 'rank-qj-icon--glow': player.qjGlow }"
-                title="已突破被聚义QJ线"
-              >🤑</span>
+              <span class="td-name-inner">
+                <span class="rank-dot" :class="`dot--${player.color}`"></span>
+                <span :class="{ 'name-me': player.isMe }">{{ player.name }}</span>
+                <span
+                  v-if="player.isQJCrossed"
+                  class="rank-qj-icon"
+                  :class="{ 'rank-qj-icon--glow': player.qjGlow }"
+                  title="已突破被聚义QJ线"
+                >🤑</span>
+              </span>
             </td>
             <td>{{ player.winCount ?? player.wins ?? 0 }}</td>
             <td>{{ player.discardCount ?? player.losses ?? 0 }}</td>
@@ -90,6 +92,7 @@ const rankedPlayers = computed(() =>
   margin: 0 auto;
   background: linear-gradient(180deg, #1a0a2e 0%, #0d1b3e 50%, #0a2020 100%);
   border-radius: 16px;
+  /* reset: 256 */
   border: 2px solid rgba(255, 215, 0, 0.2);
   box-shadow: 0 0 20px rgba(255, 215, 0, 0.1), inset 0 0 30px rgba(0, 0, 0, 0.3);
   padding: 12px;
@@ -97,7 +100,7 @@ const rankedPlayers = computed(() =>
   flex-direction: column;
   gap: 10px;
   color: #e0e0e0;
-  font-size: 0.75rem;
+  font-size: calc(0.88rem * var(--other-tile-scale, 1));
 }
 
 .stats-header {
@@ -109,14 +112,14 @@ const rankedPlayers = computed(() =>
 }
 
 .stats-title {
-  font-size: 1rem;
+  font-size: calc(1.3rem * var(--other-tile-scale, 1));
   font-weight: 700;
   color: #ffd700;
   text-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
 }
 
 .stats-round {
-  font-size: 0.75rem;
+  font-size: calc(0.9rem * var(--other-tile-scale, 1));
   color: rgba(255, 255, 255, 0.5);
 }
 
@@ -127,21 +130,22 @@ const rankedPlayers = computed(() =>
 .stats-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.72rem;
+  font-size: calc(0.86rem * var(--other-tile-scale, 1));
 }
 
 .stats-table th {
   text-align: center;
   color: rgba(255, 255, 255, 0.55);
   font-weight: 600;
-  padding: 6px 4px;
+  padding: calc(6px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1));
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   white-space: nowrap;
 }
 
 .stats-table td {
   text-align: center;
-  padding: 6px 4px;
+  padding: calc(6px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1));
+  line-height: calc(1.1 * var(--other-tile-scale, 1));
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -149,10 +153,12 @@ const rankedPlayers = computed(() =>
 
 .td-name {
   text-align: left !important;
-  display: flex;
+  white-space: nowrap;
+}
+.td-name-inner {
+  display: inline-flex;
   align-items: center;
   gap: 5px;
-  white-space: nowrap;
 }
 .name-clickable { cursor: pointer; }
 .name-clickable:hover .name-me { color: #fff; }

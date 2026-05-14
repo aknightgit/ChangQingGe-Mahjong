@@ -639,3 +639,93 @@ export async function getRoomUserCount(roomId: string): Promise<number> {
     return 0
   }
 }
+
+
+/**
+ * 强制断开用户的所有socket连接并清理房间状态（用于退出APP）
+ * 这是 logout API 使用的完整清理函数
+ */
+export async function forceDisconnectUser(userId: string): Promise<void> {
+  try {
+    const connections = await getSocketConnectionsCollection();
+    const roomStates = await getRoomStatesCollection();
+
+    const userConnections = await connections.find({ userId }).toArray();
+    if (userConnections.length === 0) {
+      console.log(`[forceDisconnect] No connections found for user ${userId}`);
+      return;
+    }
+
+    for (const conn of userConnections) {
+      const socketId = conn.socketId;
+      const roomId = conn.roomId;
+
+      if (roomId && io) {
+        const room = await roomStates.findOne({ roomId });
+
+        if (room) {
+          const isOwner = room.ownerId === userId;
+
+          if (isOwner) {
+            io.to(roomId).emit('room:dismissed', {
+              reason: GameEndReason.OWNER_LEFT,
+              message: '房主已退出游戏'
+            });
+
+            const remainingSocketIds = room.socketIds || [];
+            if (remainingSocketIds.length > 0) {
+              await connections.updateMany(
+                { socketId: { $in: remainingSocketIds } },
+                { $unset: { roomId: '' }, $set: { lastSeenAt: new Date() } }
+              );
+              for (const sid of remainingSocketIds) {
+                const peer = io.sockets.sockets.get(sid);
+                peer?.leave(roomId);
+              }
+            }
+
+            try {
+              await gameManager.endGameForEmptyRoom(roomId, GameEndReason.OWNER_LEFT);
+            } catch (err) {
+              console.error('[forceDisconnect] Failed to end game:', err);
+            }
+            await roomStates.deleteOne({ roomId });
+          } else {
+            io.to(roomId).emit('room:player-left', {
+              userId,
+              userName: conn.userName || '未知玩家',
+              isOwner: false
+            });
+
+            await roomStates.updateOne(
+              { roomId },
+              {
+                $pull: { socketIds: socketId, playerIds: userId },
+                $set: { updatedAt: new Date() }
+              }
+            );
+
+            const sock = io.sockets.sockets.get(socketId);
+            sock?.leave(roomId);
+
+            try {
+              await gameManager.handlePlayerLeave(roomId, userId);
+            } catch (err) {
+              console.error('[forceDisconnect] Failed to handle player leave:', err);
+            }
+          }
+        }
+      }
+
+      if (io) {
+        const sock = io.sockets.sockets.get(socketId);
+        sock?.disconnect(true);
+      }
+    }
+
+    await connections.deleteMany({ userId });
+    console.log(`[forceDisconnect] User ${userId} fully disconnected (${userConnections.length} connections cleaned)`);
+  } catch (error) {
+    console.error('[forceDisconnect] Error:', error);
+  }
+}

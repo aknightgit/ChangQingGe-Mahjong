@@ -779,19 +779,28 @@
           <!-- 操作按钮区：等待态隐藏，避免空壳感；观赛模式隐藏 -->
           <div v-if="!isPreGameTransition && !isSpectator" class="action-buttons-panel">
 
-              <!-- 听牌提示（紧贴功能按钮菜单上方） -->
-              <div v-if="tingPreviewItems.length" class="ting-preview-panel">
-                <div class="ting-preview-panel__tiles">
-                  <span
-                    v-for="item in tingPreviewItems"
-                    :key="item.key"
-                    class="ting-preview-panel__tile"
-                    :class="{
-                      'ting-preview-panel__tile--exhausted': item.isExhausted
-                    }"
-                  >
-                    {{ item.label }}
-                  </span>
+              <!-- 听牌提示（左对齐紧贴操作按钮上方） -->
+              <div class="ting-preview-section">
+                <button
+                  class="ting-preview-toggle"
+                  :class="{ 'ting-preview-toggle--active': tingPreviewEnabled }"
+                  @click="onToggleTingPreview"
+                >
+                  听牌提示{{ tingPreviewEnabled ? `（${tingPreviewText}）` : '（未启用）' }}
+                </button>
+                <div v-if="tingPreviewEnabled && tingPreviewItems.length" class="ting-preview-panel">
+                  <div class="ting-preview-panel__tiles">
+                    <span
+                      v-for="item in tingPreviewItems"
+                      :key="item.key"
+                      class="ting-preview-panel__tile"
+                      :class="{
+                        'ting-preview-panel__tile--exhausted': item.isExhausted
+                      }"
+                    >
+                      {{ item.label }}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -898,6 +907,7 @@
               <!-- AI的操作（任何人可点） -->
               <template v-else-if="isBotPlayer(playerCardPlayer)">
                 <button
+                  v-if="!isSpectator"
                   class="ai-card-btn ai-card-btn--spectate"
                   :disabled="!canUseSpectatorView"
                   @click="onSpectateFromCard"
@@ -926,6 +936,7 @@
               <!-- 其他真人玩家的操作 -->
               <template v-else-if="playerCardPlayer?.id !== currentPlayer?.id">
                 <button
+                  v-if="!isSpectator"
                   class="ai-card-btn ai-card-btn--spectate"
                   :disabled="!canUseSpectatorView"
                   @click="onSpectateFromCard"
@@ -1029,27 +1040,49 @@ const isSpectator = computed(() => {
   return route.query.spectator === '1' || route.query.spectator === 'true'
 })
 
+/** 听牌提示功能：默认关闭，点击后启用 */
+const tingPreviewEnabled = ref(false)
+const tingPreviewText = computed(() => {
+  if (!tingPreviewEnabled.value) return '未启用'
+  if (!tingPreview.value) return '...'
+  const winningTiles = tingPreview.value.winningTiles || []
+  if (winningTiles.length > 0) return '已听牌'
+  return '未听牌'
+})
+const onToggleTingPreview = async () => {
+  if (!tingPreviewEnabled.value) {
+    // 开启：请求听牌数据
+    tingPreviewEnabled.value = true
+    await refreshTingPreview()
+  } else {
+    // 关闭：清除听牌数据，后续刷新不再请求
+    tingPreviewEnabled.value = false
+    tingPreview.value = { isTing: false, winningTiles: [] }
+  }
+}
+
 const {
-  gameState,
-  currentPlayer,
-  currentRound,
-  tingPreview,
-  availableActions,
-  isConnected,
-  error,
-  connect,
-  disconnect,
-  executeAction,
-  startGame,
-  refreshState,
-  forceRefreshState,
-  replacePendingAction,
-  isActionPending,
-  roomDismissedReason,
-  lastStateChangeAt,
-  leadingBrotherEvent,
-  actionApprovalEvent
-} = useGame()
+    gameState,
+    currentPlayer,
+    currentRound,
+    tingPreview,
+    availableActions,
+    isConnected,
+    error,
+    connect,
+    disconnect,
+    executeAction,
+    startGame,
+    refreshState,
+    forceRefreshState,
+    refreshTingPreview,
+    replacePendingAction,
+    isActionPending,
+    roomDismissedReason,
+    lastStateChangeAt,
+    leadingBrotherEvent,
+    actionApprovalEvent
+  } = useGame()
 
 const backToLobby = () => {
   clearPendingRoomTarget()
@@ -1136,11 +1169,16 @@ const shouldRotateView = computed(() => isPortrait.value && isMobileViewport.val
 const isMobileLandscapeMode = computed(() => !isPortrait.value && isMobileViewport.value)
 
 // 横屏手机竖屏旋转模式下的 CSS 缩放变量
+// 其他家手牌/门口牌/花牌：以1200px短边为基准，shortSide越小牌越小
+// 直接用比例因子，CSS 里 var(--other-tile-scale) * 基准尺寸
 const mobileLayoutStyle = computed(() => {
   if (!isMobileViewport) return {}
   const s = mobileScale.value
+  const ratio = shortSide.value / 1200
+  const clamped = Math.max(0.65, Math.min(1, ratio))
   return {
     '--mobile-scale': s.toFixed(3),
+    '--other-tile-scale': clamped.toFixed(3),
   }
 })
 // 调试:在页面显示当前CSS参数（仅debug模式）
@@ -1803,7 +1841,10 @@ const isDealerUser = computed(() => isDealer.value)
 const isGameEnded = computed(() => gameState.value?.phase === GamePhase.ENDED)
 const hasDealtCards = computed(() => {
   if (!gameState.value?.players?.length) return false
-  return gameState.value.players.some((p: any) => (p.hand?.concealedTiles?.length || 0) > 0)
+  // 观赛者自己没有手牌，但其他玩家可能有——检查非观赛玩家
+  const activePlayers = gameState.value.players.filter((p: any) => p.status !== 'spectating' && p.status !== 'left')
+  if (activePlayers.length === 0) return false
+  return activePlayers.some((p: any) => (p.hand?.concealedTiles?.length || 0) > 0)
 })
 
 const isPreGameTransition = computed(() => {
@@ -3967,6 +4008,7 @@ watch(() => gameState.value, (newState, oldState) => {
 watch(
   () => gameState.value?.phase,
   (newPhase, oldPhase) => {
+    console.log('[DiceOverlay] phase changed:', oldPhase, '->', newPhase, 'showDiceOverlay was:', showDiceOverlay.value)
     if (newPhase === GamePhase.STARTING) {
       const prevPhase = oldPhase || gameState.value?.phase;
       showSettlement.value = false
@@ -3977,6 +4019,7 @@ watch(
         diceValues.value = [1, 1]
       }
       showDiceOverlay.value = true
+      console.log('[DiceOverlay] SET to true (STARTING)')
 
       // 🔄 自动下一局：来自结算/流局后，自动走掷骰子+发牌
       // STARTING时立即 refresh state，然后等骰子组件就绪后自动操作
@@ -4006,10 +4049,44 @@ watch(
     if (newPhase !== GamePhase.STARTING) {
       showDiceOverlay.value = false
       hasDicePreview.value = false
+      console.log('[DiceOverlay] SET to false (phase=', newPhase, ')')
     }
   },
   { immediate: true }
 )
+
+// 🔧 强力兜底：不管 phase watch 是否触发，每次 gameState 更新都检查
+watch(gameState, (newVal) => {
+  if (newVal && newVal.phase !== GamePhase.STARTING && showDiceOverlay.value) {
+    console.log('[DiceOverlay] FALLBACK: closing dice overlay (phase=', newVal.phase, ')')
+    showDiceOverlay.value = false
+    hasDicePreview.value = false
+  }
+}, { deep: false })
+
+// 🔧 超时强制关闭：如果 showDiceOverlay 为 true 超过8秒（给足STARTING时间），强制关闭
+watch(showDiceOverlay, (val) => {
+  if (!val) return
+  const timer = setTimeout(() => {
+    if (showDiceOverlay.value && gameState.value?.phase !== GamePhase.STARTING) {
+      console.log('[DiceOverlay] TIMEOUT: forced close after 8s')
+      showDiceOverlay.value = false
+      hasDicePreview.value = false
+    }
+  }, 8000)
+})
+
+// 🔧 最终保险：从useGame的fetchGameState接收phase-check事件（每次API刷新都检查）
+if (typeof window !== 'undefined') {
+  window.addEventListener('mahjong-phase-check', ((e: CustomEvent) => {
+    const phase = e.detail?.phase
+    if (phase && phase !== 'starting' && showDiceOverlay.value) {
+      console.log('[DiceOverlay] PHASE-CHECK: closing (phase=', phase, ')')
+      showDiceOverlay.value = false
+      hasDicePreview.value = false
+    }
+  }) as EventListener)
+}
 
 // AI 接管检测（通过轮询检查 botModePlayers）
 const checkAITakeover = () => {
@@ -4519,6 +4596,8 @@ const forceDiscard = async (p: Player) => {
   gap: 10px;
   overflow-y: auto;
   max-height: 80vh;
+  /* 移动端按 --other-tile-scale 整体缩放扩展区 */
+  font-size: calc(1rem * var(--other-tile-scale, 1));
 }
 
 /* 操作按钮区：与战绩榜同宽，底部对齐牌桌 */
@@ -4528,7 +4607,7 @@ const forceDiscard = async (p: Player) => {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 /* 更多特殊操作横条 */
@@ -4914,6 +4993,8 @@ const forceDiscard = async (p: Player) => {
   padding: 8px 10px 10px;
   border-radius: 14px;
   background: rgba(5, 14, 10, 0.9);
+  /* 移动端按 --other-tile-scale 缩放 */
+  font-size: calc(1rem * var(--other-tile-scale, 1));
 }
 
 .ext-section--actions {
@@ -4921,14 +5002,14 @@ const forceDiscard = async (p: Player) => {
 }
 
 .ext-title {
-  font-size: 0.8rem;
+  font-size: calc(0.8rem * var(--other-tile-scale, 1));
   margin-bottom: 6px;
   opacity: 0.8;
   font-weight: 700;
 }
 
 .ext-meta {
-  font-size: 0.8rem;
+  font-size: calc(0.8rem * var(--other-tile-scale, 1));
   margin-bottom: 4px;
   opacity: 0.85;
 }
@@ -5096,6 +5177,37 @@ const forceDiscard = async (p: Player) => {
 
 .ting-preview-panel__tile--exhausted {
   color: rgba(255, 255, 255, 0.38);
+}
+
+/* 听牌提示切换按钮 */
+.ting-preview-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+}
+.ting-preview-toggle {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 0.68rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.ting-preview-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
+}
+.ting-preview-toggle--active {
+  border-color: #ff6b6b;
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.08);
 }
 
 /* 内联动作按钮组 — 放在手牌右侧 */
@@ -5498,7 +5610,7 @@ const forceDiscard = async (p: Player) => {
   text-align: center;
   font-size: 0.82rem;
   color: rgba(255, 255, 255, 0.85);
-  padding: 8px 0 4px;
+  padding: 4px 0;
   font-weight: 600;
   white-space: nowrap;
 }

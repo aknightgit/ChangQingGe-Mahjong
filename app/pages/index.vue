@@ -37,12 +37,8 @@
           📖 规则说明
         </button>
 
-        <button class="mahjong-button secondary" @click="openProfileModal">
-          个人资料
-        </button>
-
-        <button class="mahjong-button danger" @click="logout">
-          退出登录
+        <button class="mahjong-button danger" @click="exitGame">
+          退出游戏
         </button>
       </div>
 
@@ -530,11 +526,34 @@ const onJoinGame = () => navigateTo('/join-game')
 const onMatchHistory = () => router.push('/history')
 const goToAdminSandbox = () => navigateTo('/admin-test')
 
-const logout = () => {
+const exitGame = async () => {
+  try {
+    // 先通知服务端断开所有连接+清理
+    await $fetch('/mahjong/api/auth/logout', {
+      method: 'POST',
+      headers: { 'Cache-Control': 'no-cache' }
+    })
+  } catch (e) {
+    console.error('[Exit] logout API error:', e)
+  }
+
+  // 清理cookies
   useCookie('auth_token').value = null
   useCookie('user_id').value = null
   useCookie('user_name').value = null
-  return navigateTo('/login')
+  useCookie('is_admin').value = null
+  useCookie('mahjong_session').value = null
+
+  // 通过 Capacitor 退出APP
+  if (process.client && typeof window !== 'undefined') {
+    try {
+      const { App } = await import('@capacitor/app')
+      await App.exitApp()
+    } catch {
+      // 非Capacitor环境（浏览器调试）则跳转登录页
+      await navigateTo('/login')
+    }
+  }
 }
 </script>
 

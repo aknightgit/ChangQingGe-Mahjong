@@ -57,36 +57,64 @@ watch(() => props.messages.length, () => {
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 12px;
   overflow: hidden;
+  font-size: calc(1rem * var(--other-tile-scale, 1));
 }
 
 .broadcast-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: calc(6px * var(--other-tile-scale, 1));
+  padding: calc(8px * var(--other-tile-scale, 1)) calc(12px * var(--other-tile-scale, 1));
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.03);
 }
 
 .broadcast-icon {
-  font-size: 0.85rem;
+  font-size: calc(0.85rem * var(--other-tile-scale, 1));
 }
 
 .broadcast-title {
-  font-size: 0.8rem;
+  font-size: calc(0.8rem * var(--other-tile-scale, 1));
   font-weight: 700;
   opacity: 0.8;
 }
 
 .broadcast-scroll {
-  padding: 6px 8px;
+  padding: calc(6px * var(--other-tile-scale, 1)) calc(8px * var(--other-tile-scale, 1));
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-height: 250px;
+  gap: calc(4px * var(--other-tile-scale, 1));
+  max-height: calc(250px * var(--other-tile-scale, 1));
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.broadcast-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(6px * var(--other-tile-scale, 1));
+  padding: calc(5px * var(--other-tile-scale, 1)) calc(8px * var(--other-tile-scale, 1));
+  border-radius: calc(8px * var(--other-tile-scale, 1));
+  font-size: calc(0.75rem * var(--other-tile-scale, 1));
+  line-height: 1.4;
+  background: rgba(255, 255, 255, 0.03);
+  animation: msg-in 0.3s ease;
+}
+
+.broadcast-empty {
+  text-align: center;
+  padding: calc(16px * var(--other-tile-scale, 1)) calc(8px * var(--other-tile-scale, 1));
+  font-size: calc(0.75rem * var(--other-tile-scale, 1));
+  opacity: 0.35;
+  color: rgba(255,255,255,0.5);
+}
+
+.broadcast-time {
+  opacity: 0.4;
+  font-size: calc(0.65rem * var(--other-tile-scale, 1));
+  flex-shrink: 0;
+  margin-top: calc(1px * var(--other-tile-scale, 1));
 }
 
 .broadcast-scroll::-webkit-scrollbar {
@@ -100,18 +128,6 @@ watch(() => props.messages.length, () => {
 .broadcast-scroll::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
-}
-
-.broadcast-msg {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 5px 8px;
-  border-radius: 8px;
-  font-size: 0.75rem;
-  line-height: 1.4;
-  background: rgba(255, 255, 255, 0.03);
-  animation: msg-in 0.3s ease;
 }
 
 .broadcast-msg--warn {
@@ -131,21 +147,6 @@ watch(() => props.messages.length, () => {
 
 .broadcast-msg--info {
   border-left: 2px solid rgba(33, 150, 243, 0.4);
-}
-
-.broadcast-empty {
-  text-align: center;
-  padding: 16px 8px;
-  font-size: 0.75rem;
-  opacity: 0.35;
-  color: rgba(255,255,255,0.5);
-}
-
-.broadcast-time {
-  opacity: 0.4;
-  font-size: 0.65rem;
-  flex-shrink: 0;
-  margin-top: 1px;
 }
 
 .broadcast-text {
@@ -168,12 +169,12 @@ watch(() => props.messages.length, () => {
 
 @media (max-width: 900px) and (orientation: landscape) {
   .broadcast-panel { border-radius: 6px; }
-  .broadcast-header { padding: 3px 6px; gap: 4px; }
-  .broadcast-icon { font-size: 0.6rem; }
-  .broadcast-title { font-size: 0.58rem; }
-  .broadcast-scroll { padding: 2px 4px; gap: 2px; max-height: 120px; }
-  .broadcast-msg { font-size: 0.5rem; padding: 2px 4px; gap: 4px; }
-  .broadcast-time { font-size: 0.45rem; }
-  .broadcast-empty { font-size: 0.5rem; padding: 6px 4px; }
+  .broadcast-header { padding: calc(3px * var(--other-tile-scale, 1)) calc(6px * var(--other-tile-scale, 1)); gap: calc(4px * var(--other-tile-scale, 1)); }
+  .broadcast-icon { font-size: calc(0.6rem * var(--other-tile-scale, 1)); }
+  .broadcast-title { font-size: calc(0.58rem * var(--other-tile-scale, 1)); }
+  .broadcast-scroll { padding: calc(2px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); gap: calc(2px * var(--other-tile-scale, 1)); max-height: calc(120px * var(--other-tile-scale, 1)); }
+  .broadcast-msg { font-size: calc(0.5rem * var(--other-tile-scale, 1)); padding: calc(2px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); gap: calc(4px * var(--other-tile-scale, 1)); }
+  .broadcast-time { font-size: calc(0.45rem * var(--other-tile-scale, 1)); }
+  .broadcast-empty { font-size: calc(0.5rem * var(--other-tile-scale, 1)); padding: calc(6px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); }
 }
 </style>

@@ -156,11 +156,14 @@ export default defineEventHandler(async (event) => {
     };
   });
 
+  // 听牌提示：只有客户端明确请求（?tingPreview=true）才计算
   let tingPreview = { isTing: false, winningTiles: [] as any[] };
-  try {
-    tingPreview = await gameManager.getTingPreviewForPlayer(normalizedGameId, normalizedPlayerId);
-  } catch (err: any) {
-    console.warn('getTingPreviewForPlayer failed:', err.message);
+  if (query.tingPreview === 'true') {
+    try {
+      tingPreview = await gameManager.getTingPreviewForPlayer(normalizedGameId, normalizedPlayerId);
+    } catch (err: any) {
+      console.warn('getTingPreviewForPlayer failed:', err.message);
+    }
   }
 
   // Ensure isDealer is correctly passed

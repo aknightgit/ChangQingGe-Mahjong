@@ -37,7 +37,7 @@ export const useGame = () => {
     if (pollingTimer) return
     pollingTimer = setInterval(() => {
       const gs = gameState.value
-      if (gameId.value && playerId.value && gs && (gs.phase === 'playing' || gs.phase === 'waiting')) {
+      if (gameId.value && playerId.value && gs && (gs.phase === 'playing' || gs.phase === 'waiting' || gs.phase === 'starting')) {
         void refreshState()
       }
     }, POLLING_MS)
@@ -75,11 +75,25 @@ export const useGame = () => {
         updateState((response as any).data)
         isConnected.value = true
         error.value = null
+
+        // 🔧 关键保险：每次fetchGameState拿到状态后，如果phase不是STARTING，发出事件让页面关掉骰子覆盖层
+        const stateData = (response as any).data
+        if (stateData?.game?.phase && stateData.game.phase !== 'starting') {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('mahjong-phase-check', { detail: { phase: stateData.game.phase } }))
+          }
+        }
       }
     } catch (e: any) {
       // 404 = 刚创建房间服务端还没就绪，静默重试，不抛出
       if (e?.statusCode === 404 || e?.status === 404) {
         console.warn('[fetchGameState] 404, retrying in 800ms...')
+        await new Promise(r => setTimeout(r, 800))
+        return fetchGameState(gId, pId)
+      }
+      // 403 = 鉴权问题，观赛者/访客可能遇到，也自动重试
+      if (e?.statusCode === 403 || e?.status === 403) {
+        console.warn('[fetchGameState] 403, retrying in 800ms...')
         await new Promise(r => setTimeout(r, 800))
         return fetchGameState(gId, pId)
       }
@@ -407,6 +421,31 @@ export const useGame = () => {
     lastRefreshAt = 0 // 重置debounce
     isRefreshing = false
     await refreshState()
+    // 🔧 forceRefresh后也发出phase-check事件
+    if (gameState.value?.phase && gameState.value.phase !== 'starting' && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('mahjong-phase-check', { detail: { phase: gameState.value.phase } }))
+    }
+  }
+
+  // 请求听牌提示：带 tingPreview=true 参数刷新 state，后端才执行听牌计算
+  const refreshTingPreview = async () => {
+    if (!gameId.value || !playerId.value) return
+    try {
+      const response = await $fetch('/mahjong/api/game/state', {
+        query: {
+          gameId: gameId.value,
+          playerId: playerId.value,
+          tingPreview: 'true',
+          debugAccessToken: typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
+        },
+        cache: 'no-cache'
+      })
+      if ((response as any)?.success) {
+        updateState((response as any).data)
+      }
+    } catch (e: any) {
+      console.warn('refreshTingPreview failed:', e?.message || e)
+    }
   }
 
   return {
@@ -423,6 +462,7 @@ export const useGame = () => {
     startGame,
     refreshState,
     forceRefreshState,
+    refreshTingPreview,
     replacePendingAction,
     isActionPending,
     roomDismissedReason,
