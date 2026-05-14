@@ -1372,7 +1372,10 @@ class GameManager {
         return fastMode ? Math.min(30, Math.max(0, raw)) : raw;
       })(), // 决策犹豫期:训练模式0~30ms,实战默认5秒
       thinkUsage: {},
-      allClaimMode: options?.allClaimMode
+      allClaimMode: options?.allClaimMode,
+      spectatorMode: null,
+      spectatorViews: {},
+      spectatorApprovalRequests: []
     };
 
     this.games.set(gameId, game);
@@ -1452,8 +1455,10 @@ class GameManager {
         const completedRounds = Array.isArray(game.roundStats) ? game.roundStats.length : 0;
         return game.phase === 'ended' ? completedRounds : completedRounds + 1;
       })();
+      // 默认指向庄家或第一个非观赛玩家，让观赛者进来就能看到牌背
+      const defaultTarget = game.players.find(p => p.status !== 'spectating' && p.status !== 'left');
       game.spectatorViews[spectatorId] = {
-        viewingPlayerId: null,
+        viewingPlayerId: defaultTarget ? defaultTarget.id : null,
         approvedHumanPlayerId: null,
         pendingHumanPlayerId: null,
         roundNumber: scope,
@@ -3143,6 +3148,17 @@ class GameManager {
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
     this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.TRIPLET);
     this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
+    // 广播碰牌到牌局快讯
+    if (this.wsManager) {
+      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        text: `ⓘ ${player.name}碰牌`,
+        actionKind: 'pong',
+        type: 'info',
+        timestamp: Date.now(),
+        timeLabel: formatBeijingTime()
+      });
+    }
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[0].id);
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[1].id);
     const sourcePos = this.getLastDiscardPosition(game);
@@ -3223,6 +3239,18 @@ class GameManager {
     // Bug6: 用findIndex找并移除被杠牌
     const kgIdx = game.discardPile.findIndex(t => t.id === lastDiscard.id);
     if (kgIdx >= 0) game.discardPile.splice(kgIdx, 1);
+    // 广播杠牌到牌局快讯
+    if (this.wsManager) {
+      const label = pendingAction.type === 'kong_an' ? '暗杠' : pendingAction.type === 'kong_bu' ? '补杠' : '明杠';
+      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        text: `ⓘ ${player.name}${label}`,
+        actionKind: 'kong',
+        type: 'info',
+        timestamp: Date.now(),
+        timeLabel: formatBeijingTime()
+      });
+    }
     const discarder = game.players.find(p => p.id === sourcePlayerId);
     if (discarder) {
       discarder.hand.discardedTiles = discarder.hand.discardedTiles.filter(t => t.id !== lastDiscard.id);

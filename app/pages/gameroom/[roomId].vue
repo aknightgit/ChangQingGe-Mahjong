@@ -593,7 +593,7 @@
             <!-- Bottom (self) player -->
             <div class="seat seat-bottom">
               <div class="self-area-with-actions">
-                <PlayerSelfArea
+                <PlayerSelfArea v-if="!isSpectator"
                   name=""
                   :hand="playerHand"
                   :melds="playerMelds"
@@ -611,6 +611,12 @@
                   @tileDblclick="handleTileDblclick"
                   @tileDiscard="handleTileDiscard"
                 />
+                <!-- Spectator hint -->
+                <div v-if="isSpectator" class="spectating-hint">
+                  <span class="spectating-hint-icon">📺</span>
+                  <span class="spectating-hint-text">正在观看 <strong>{{ watchingPlayerName }}</strong> 的手牌</span>
+                  <button class="mahjong-button small" @click="backToLobby">退出观赛</button>
+                </div>
                 <!-- 动作按钮放在手牌右侧 -->
                 <!-- 观赛模式不显示任何操作按钮 -->
                 <div v-if="isSpectator" class="inline-action-buttons inline-action-buttons--spectator">
@@ -775,7 +781,6 @@
 
               <!-- 听牌提示（紧贴功能按钮菜单上方） -->
               <div v-if="tingPreviewItems.length" class="ting-preview-panel">
-                <h3 class="ting-preview-title">听牌提示</h3>
                 <div class="ting-preview-panel__tiles">
                   <span
                     v-for="item in tingPreviewItems"
@@ -1101,7 +1106,8 @@ const {
 } = useVoiceTile()
 
 const showAllCards = ref(false)
-const shouldRevealOpponents = computed(() => showAllCards.value || !!currentPlayer.value?.isSpectator)
+// 观赛者默认只看到牌背，除非点了显示手牌开关
+const shouldRevealOpponents = computed(() => showAllCards.value)
 const initialViewport = process.client
   ? { width: window.innerWidth, height: window.innerHeight }
   : { width: 1024, height: 768 }
@@ -1117,11 +1123,9 @@ const isPortrait = ref(initialViewport.height >= initialViewport.width)
 const shortSide = computed(() => Math.min(viewportWidth.value, viewportHeight.value))
 const mobileScale = computed(() => {
   if (shortSide.value <= 0) return 1
+  // 设计基准宽度1200px，scale = 设计短边 / 实际短边，只缩小不放大
   const ratio = 1200 / shortSide.value
-  // shortSide < 1200: ratio>1, 取min(1,ratio)=1 → 不放大
-  // shortSide > 1200: ratio<1, 正常缩小
-  // 例如 17Ultra(1200)→1.0, 14Pro横屏(1400)→0.857, iPhone(930)→1.0
-  return Math.min(1, Math.max(0.65, ratio))
+  return Math.min(1, ratio)
 })
 
 // 手机模式判定：短边 <= 1600px 覆盖所有手机
@@ -1548,7 +1552,14 @@ const selfLatestDiscardId = computed(() => getPlayerLatestHighlightedDiscardId(c
 const northLatestDiscardId = computed(() => getPlayerLatestHighlightedDiscardId(topPlayer.value))
 const westLatestDiscardId = computed(() => getPlayerLatestHighlightedDiscardId(leftPlayer.value))
 const eastLatestDiscardId = computed(() => getPlayerLatestHighlightedDiscardId(rightPlayer.value))
-const playerDiscards = computed(() => getVisiblePlayerDiscards(currentPlayer.value))
+// 观赛者：显示被观看玩家的弃牌
+const playerDiscards = computed(() => {
+  if (isSpectator.value && spectatingId.value) {
+    const targetPlayer = gameState.value?.players?.find(p => p.id === spectatingId.value)
+    if (targetPlayer) return getVisiblePlayerDiscards(targetPlayer)
+  }
+  return getVisiblePlayerDiscards(currentPlayer.value)
+})
 const roundDisplay = computed(() => `第${currentRound.value}局`)
 const getDiceRoundMultiplier = (dice1: number, dice2: number) => {
   const isDouble = dice1 === dice2
@@ -1720,6 +1731,12 @@ const spectatorViewState = computed(() => {
   return gameState.value.spectatorViews?.[currentPlayer.value.id] || null
 })
 const spectatingId = computed(() => spectatorViewState.value?.viewingPlayerId || null)
+/** 被观赛玩家的名称 */
+const watchingPlayerName = computed(() => {
+  if (!spectatingId.value || !gameState.value?.players) return '未知'
+  const p = gameState.value.players.find(p => p.id === spectatingId.value)
+  return p?.name || '未知'
+})
 const pendingSpectateId = computed(() => spectatorViewState.value?.pendingHumanPlayerId || null)
 const approvedHumanSpectateId = computed(() => spectatorViewState.value?.approvedHumanPlayerId || null)
 const hasDebugSpectateBot = computed(() => {
@@ -4641,6 +4658,7 @@ const forceDiscard = async (p: Player) => {
   width: 100%;
   height: 100%;
   min-height: 100dvh;
+  zoom: var(--mobile-scale);
 }
 
 .layout--mobile-landscape .room-container {
@@ -4746,7 +4764,7 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-inset: 0.02%;
   --seat-top-width: 55%;
   --seat-bottom-width: 75%;
-  --seat-side-width: calc(116px * var(--mobile-scale));
+  --seat-side-width: 116px;
   --seat-side-height: 56%;
   --seat-side-player-offset: 3.4%;
   --discard-center-rect-half-w: 14.3%;
@@ -4858,27 +4876,27 @@ const forceDiscard = async (p: Player) => {
   overflow-wrap: break-word;
 }
 
-.layout--mobile-landscape .extended-info-panel .ext-section { padding: calc(4px * var(--mobile-scale)) calc(5px * var(--mobile-scale)) calc(5px * var(--mobile-scale)); border-radius: 6px; margin: 0; }
+.layout--mobile-landscape .extended-info-panel .ext-section { padding: 4px 5px 5px; border-radius: 6px; margin: 0; }
 .layout--mobile-landscape .extended-info-panel .ext-title { font-size: 0.8rem; margin-bottom: 1px; }
-.layout--mobile-landscape .extended-info-panel .ext-meta { font-size: calc(0.54rem * var(--mobile-scale)); margin-bottom: 1px; line-height: 1.25; }
+.layout--mobile-landscape .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
 .layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.78rem; }
-.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(3px * var(--mobile-scale)) calc(6px * var(--mobile-scale)); font-size: 0.68rem; }
-.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(2px * var(--mobile-scale)) calc(4px * var(--mobile-scale)); gap: 6px; flex-wrap: wrap; }
-.layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: calc(0.48rem * var(--mobile-scale)); }
-.layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: calc(2px * var(--mobile-scale)) calc(4px * var(--mobile-scale)); font-size: calc(0.52rem * var(--mobile-scale)); min-width: auto; }
+.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: 3px 6px; font-size: 0.68rem; }
+.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: 2px 4px; gap: 6px; flex-wrap: wrap; }
+.layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
+.layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
 .layout--mobile-landscape .extended-info-panel .action-buttons-panel { gap: 6px; }
-.layout--mobile-landscape .extended-info-panel .turn-status-text { font-size: calc(0.54rem * var(--mobile-scale)); }
+.layout--mobile-landscape .extended-info-panel .turn-status-text { font-size: 0.54rem; }
 .layout--mobile-landscape .extended-info-panel .room-header-row { gap: 3px; margin: 0; }
-.layout--mobile-landscape .extended-info-panel .room-stats { padding: calc(2px * var(--mobile-scale)) calc(3px * var(--mobile-scale)); }
-.layout--mobile-landscape .extended-info-panel .player-row { padding: calc(2px * var(--mobile-scale)) calc(3px * var(--mobile-scale)); font-size: calc(0.52rem * var(--mobile-scale)); gap: calc(3px * var(--mobile-scale)); }
-.layout--mobile-landscape .extended-info-panel .broadcast-container { max-height: 52px; padding: calc(2px * var(--mobile-scale)) calc(3px * var(--mobile-scale)); }
+.layout--mobile-landscape .extended-info-panel .room-stats { padding: 2px 3px; }
+.layout--mobile-landscape .extended-info-panel .player-row { padding: 2px 3px; font-size: 0.52rem; gap: 3px; }
+.layout--mobile-landscape .extended-info-panel .broadcast-container { max-height: 52px; padding: 2px 3px; }
 .layout--mobile-landscape .extended-info-panel .broadcast-message { font-size: 0.5rem; padding: 1px 0; }
-.layout--mobile-landscape .extended-info-panel .ting-preview-panel__tile { font-size: 0.5rem; }
-.layout--mobile-landscape .extended-info-panel .action-panel { padding: calc(4px * var(--mobile-scale)); gap: calc(4px * var(--mobile-scale)); }
-.layout--mobile-landscape .extended-info-panel .action-btn--small { width: calc(28px * var(--mobile-scale)); height: calc(28px * var(--mobile-scale)); font-size: calc(0.6rem * var(--mobile-scale)); }
-.layout--mobile-landscape .extended-info-panel .action-btn--draw { width: calc(40px * var(--mobile-scale)); height: calc(40px * var(--mobile-scale)); font-size: calc(0.75rem * var(--mobile-scale)); }
-.layout--mobile-landscape .extended-info-panel .mobile-inline-menu { padding: calc(4px * var(--mobile-scale)) calc(6px * var(--mobile-scale)); }
-.layout--mobile-landscape .extended-info-panel .mobile-inline-menu__actions { display: flex; gap: calc(4px * var(--mobile-scale)); flex-wrap: wrap; }
+
+.layout--mobile-landscape .extended-info-panel .action-panel { padding: 4px; gap: 4px; }
+.layout--mobile-landscape .extended-info-panel .action-btn--small { width: 28px; height: 28px; font-size: 0.6rem; }
+.layout--mobile-landscape .extended-info-panel .action-btn--draw { width: 40px; height: 40px; font-size: 0.75rem; }
+.layout--mobile-landscape .extended-info-panel .mobile-inline-menu { padding: 4px 6px; }
+.layout--mobile-landscape .extended-info-panel .mobile-inline-menu__actions { display: flex; gap: 4px; flex-wrap: wrap; }
 
 /* 竖屏手机：右侧栏变底部横排 */
 @media (max-width: 900px) and (orientation: portrait) {
@@ -5058,29 +5076,22 @@ const forceDiscard = async (p: Player) => {
 }
 
 .ting-preview-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 4px 0;
-}
-
-.ting-preview-title {
-  font-size: 0.6rem;
-  color: rgba(255,255,255,0.45);
-  margin: 0;
-  font-weight: 400;
+  padding: 2px 0;
 }
 
 .ting-preview-panel__tiles {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 10px;
+  flex-wrap: nowrap;
+  gap: 4px 6px;
+  overflow-x: auto;
+  white-space: nowrap;
 }
 
 .ting-preview-panel__tile {
   color: #ff6b6b;
-  font-size: 0.75rem;
-  line-height: 1.4;
+  font-size: 0.68rem;
+  line-height: 1.2;
+  flex-shrink: 0;
 }
 
 .ting-preview-panel__tile--exhausted {
@@ -7225,8 +7236,8 @@ const forceDiscard = async (p: Player) => {
 
 /* 横屏手机：牌桌缩小，牌跟着缩 */
 .layout--mobile-landscape .mahjong-table {
-  --tile-w: calc(17px * var(--mobile-scale));
-  --tile-h: calc(24px * var(--mobile-scale));
+  --tile-w: 17px;
+  --tile-h: 24px;
   --discard-scale: 1.1;
   --discard-gap-x-override: 0.35px;
   --discard-gap-y-override: 0.35px;
@@ -7237,7 +7248,7 @@ const forceDiscard = async (p: Player) => {
   --seat-bottom-inset: 0;
   --seat-top-width: 65%;
   --seat-bottom-width: 80%;
-  --seat-side-width: calc(118px * var(--mobile-scale));
+  --seat-side-width: 118px;
   --seat-side-height: calc(58% + (8% * var(--mobile-scale)));
   --seat-side-player-offset: 3.4%;
 }
@@ -7248,10 +7259,10 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape :deep(.discard-zone--right) {
   transform: translate(6px, -50%);
 }
-.layout--mobile-landscape .seat-top { min-height: calc(42px * var(--mobile-scale)); }
-.layout--mobile-landscape .seat-bottom { min-height: calc(54px * var(--mobile-scale)); width: min(78%, calc(100% - (92px * var(--mobile-scale)))); }
-.layout--mobile-landscape .seat-left { width: calc(136px * var(--mobile-scale)); }
-.layout--mobile-landscape .seat-right { width: calc(144px * var(--mobile-scale)); }
+.layout--mobile-landscape .seat-top { min-height: 42px; }
+.layout--mobile-landscape .seat-bottom { min-height: 54px; width: min(78%, calc(100% - (92px * var(--mobile-scale)))); }
+.layout--mobile-landscape .seat-left { width: 136px; }
+.layout--mobile-landscape .seat-right { width: 144px; }
 
 /* 移动竖屏旋转模式 */
 @media (max-width: 768px) and (orientation: portrait) {
@@ -7272,7 +7283,7 @@ const forceDiscard = async (p: Player) => {
   .room-container--rotated {
     display: flex;
     flex-direction: row;
-    gap: calc(8px * var(--mobile-scale));
+    gap: 8px;
     transform: rotate(90deg);
     transform-origin: center;
     width: 100vh;
@@ -7303,8 +7314,8 @@ const forceDiscard = async (p: Player) => {
 
   .room-container--rotated .extended-info-panel {
     order: 2;
-    flex: 0 0 min(calc(354px * var(--mobile-scale)), 30%);
-    max-width: min(calc(354px * var(--mobile-scale)), 30%);
+    flex: 0 0 min(354px, 30%);
+    max-width: min(354px, 30%);
     max-height: none;
     overflow-y: auto;
     scrollbar-width: none;
@@ -7330,7 +7341,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .ext-section {
-  padding: calc(6px * var(--mobile-scale)) calc(8px * var(--mobile-scale)) calc(8px * var(--mobile-scale));
+  padding: 6px 8px 8px;
   border-radius: 10px;
 }
 
@@ -7354,33 +7365,33 @@ const forceDiscard = async (p: Player) => {
 
 .layout--mobile-landscape .extra-actions-bar {
   gap: 6px;
-  padding: calc(4px * var(--mobile-scale)) calc(8px * var(--mobile-scale));
+  padding: 4px 8px;
 }
 
 .layout--mobile-landscape :deep(.center-info) {
-  padding: calc(6px * var(--mobile-scale)) calc(10px * var(--mobile-scale));
-  gap: calc(3px * var(--mobile-scale));
-  min-width: calc(62px * var(--mobile-scale));
+  padding: 6px 10px;
+  gap: 3px;
+  min-width: 62px;
 }
 
 .layout--mobile-landscape :deep(.multiplier-badge),
 .layout--mobile-landscape :deep(.remaining-badge) {
-  padding: calc(2px * var(--mobile-scale)) calc(5px * var(--mobile-scale));
-  font-size: calc(0.48rem * var(--mobile-scale));
+  padding: 2px 5px;
+  font-size: 0.48rem;
 }
 
 .layout--mobile-landscape :deep(.multiplier-badge .badge-icon),
 .layout--mobile-landscape :deep(.remaining-badge .badge-icon) {
-  font-size: calc(0.5rem * var(--mobile-scale));
+  font-size: 0.5rem;
 }
 
 .layout--mobile-landscape :deep(.multiplier-badge .badge-value),
 .layout--mobile-landscape :deep(.remaining-badge .badge-value) {
-  font-size: calc(0.56rem * var(--mobile-scale));
+  font-size: 0.56rem;
 }
 
 .layout--mobile-landscape :deep(.wild-tile-row) {
-  padding: calc(1px * var(--mobile-scale)) calc(4px * var(--mobile-scale));
+  padding: 1px 4px;
 }
 /* ===== Layout debug borders ===== */
 .layout-debug {
@@ -7469,6 +7480,10 @@ const forceDiscard = async (p: Player) => {
 }
 
 /* 观赛模式标识 */
+.spectating-hint { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px; min-height: 56px; background: rgba(0,0,0,0.3); }
+.spectating-hint-icon { font-size: 1.4rem; }
+.spectating-hint-text { font-size: 0.95rem; color: rgba(255,255,255,0.8); }
+
 .inline-action-buttons--spectator {
   right: 0;
   bottom: auto;

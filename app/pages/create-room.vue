@@ -208,18 +208,20 @@ const navigateToCreatedRoom = async (targetUrl: string) => {
     await router.push(targetUrl)
   } catch (error) {
     console.warn('[CreatePage] router.push failed:', error)
-    // push失败时尝试replace（SPA模式，不会全量刷新）
-    try {
-      await router.replace(targetUrl)
-    } catch {}
   }
-  // 等一小段时间确认导航成功，否则重试replace
-  await new Promise(r => setTimeout(r, 500))
+  // 等一小段时间确认导航成功
+  await new Promise(r => setTimeout(r, 800))
   if (process.client && window.location.pathname !== targetUrl.split('?')[0]) {
-    console.warn('[CreatePage] SPA nav failed to update URL, retrying replace')
+    console.warn('[CreatePage] SPA nav failed, trying hard navigation fallback')
     try {
+      // First try replace
       await router.replace(targetUrl)
+      await new Promise(r => setTimeout(r, 300))
     } catch {}
+    // If still not navigated, hard reload
+    if (window.location.pathname !== targetUrl.split('?')[0]) {
+      window.location.href = targetUrl
+    }
   }
   clearPendingRoomTarget()
 }
@@ -267,7 +269,9 @@ const confirmCreateGame = async () => {
       await navigateTo('/login')
       return
     }
-    alert('创建房间失败：' + (e?.message || '未知错误'))
+    // If navigateToCreatedRoom itself failed, handle with window.location fallback inside that function
+    console.warn('[CreatePage] Game created but navigation may have failed:', e?.message || e)
+    // Don't alert here - navigateToCreatedRoom will try hard navigation fallback
   } finally {
     isCreatingGame.value = false
   }

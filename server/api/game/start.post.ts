@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
 
   // 等待房间开局仍要求庄家；流局/结算后下一局允许房间内任意玩家触发。
   const { player } = await requireGamePlayerAccess(event, game, playerId);
-  const canAnyPlayerRestart = game.phase === 'ended' || game.phase === 'cha_jiao';
+  const canAnyPlayerRestart = game.phase === 'ended' || game.phase === 'cha_jiao' || game.phase === 'starting';
 
   if (!canAnyPlayerRestart && !player.isDealer) {
     await apiLog(event, { endpoint: 'start', gameId, playerId, statusCode: 403, durationMs: Date.now() - startTime, error: 'Only the dealer can start the game' });

@@ -218,7 +218,13 @@ const joinGame = async (gameId: string) => {
       const { playerId, gameId: realGameId, isSpectator } = data.data
       const targetGameId = realGameId || gameId
       console.log('[Join] Joined game:', targetGameId, 'playerId:', playerId, 'spectator:', isSpectator)
-      await navigateTo(buildGameRoomPath(targetGameId, playerId, !!isSpectator))
+      const targetPath = buildGameRoomPath(targetGameId, playerId, !!isSpectator)
+      try {
+        await navigateTo(targetPath)
+      } catch {
+        // SPA navigate failed, fallback to hard navigation
+        if (process.client) window.location.href = targetPath
+      }
     } else {
       joinError.value = '无法加入牌局，请重试。'
     }
