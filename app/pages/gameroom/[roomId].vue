@@ -1175,7 +1175,7 @@ const mobileLayoutStyle = computed(() => {
   if (!isMobileViewport) return {}
   const s = mobileScale.value
   const ratio = shortSide.value / 1200
-  const clamped = Math.max(0.65, Math.min(1, ratio))
+  const clamped = Math.max(0.75, Math.min(1, ratio))
   return {
     '--mobile-scale': s.toFixed(3),
     '--other-tile-scale': clamped.toFixed(3),

@@ -92,7 +92,6 @@ const rankedPlayers = computed(() =>
   margin: 0 auto;
   background: linear-gradient(180deg, #1a0a2e 0%, #0d1b3e 50%, #0a2020 100%);
   border-radius: 16px;
-  /* reset: 256 */
   border: 2px solid rgba(255, 215, 0, 0.2);
   box-shadow: 0 0 20px rgba(255, 215, 0, 0.1), inset 0 0 30px rgba(0, 0, 0, 0.3);
   padding: 12px;
@@ -100,7 +99,7 @@ const rankedPlayers = computed(() =>
   flex-direction: column;
   gap: 10px;
   color: #e0e0e0;
-  font-size: calc(0.88rem * var(--other-tile-scale, 1));
+  font-size: 0.75rem;
 }
 
 .stats-header {
@@ -112,14 +111,14 @@ const rankedPlayers = computed(() =>
 }
 
 .stats-title {
-  font-size: calc(1.3rem * var(--other-tile-scale, 1));
+  font-size: 1rem;
   font-weight: 700;
   color: #ffd700;
   text-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
 }
 
 .stats-round {
-  font-size: calc(0.9rem * var(--other-tile-scale, 1));
+  font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.5);
 }
 
@@ -130,22 +129,21 @@ const rankedPlayers = computed(() =>
 .stats-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: calc(0.86rem * var(--other-tile-scale, 1));
+  font-size: 0.72rem;
 }
 
 .stats-table th {
   text-align: center;
   color: rgba(255, 255, 255, 0.55);
   font-weight: 600;
-  padding: calc(6px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1));
+  padding: 6px 4px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   white-space: nowrap;
 }
 
 .stats-table td {
   text-align: center;
-  padding: calc(6px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1));
-  line-height: calc(1.1 * var(--other-tile-scale, 1));
+  padding: 6px 4px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
