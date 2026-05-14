@@ -152,6 +152,21 @@ function setPlayerRouteMemory(player: Player, routeState: any): void {
   ;(player as any).__routeStateMemory = routeState
 }
 
+function getLiveRouteMetricPolicy(policy: any): {
+  menqingHoldTurns: number
+  forcedOpenRate: number
+  deadHandRate: number
+  tingQuality: number
+} {
+  const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
+  return {
+    menqingHoldTurns: clamp(Number(policy?.menqingHoldTurns ?? 4), 2, 8),
+    forcedOpenRate: clamp(Number(policy?.forcedOpenRate ?? 0.28), 0.05, 0.7),
+    deadHandRate: clamp(Number(policy?.deadHandRate ?? 0.2), 0.05, 0.7),
+    tingQuality: clamp(Number(policy?.tingQuality ?? 4), 1, 8),
+  }
+}
+
 function tuneLiveClaimPolicy(policy: any): any {
   const tuned = { ...(policy || {}) }
   const raise = (key: string, value: number) => {
@@ -171,6 +186,10 @@ function tuneLiveClaimPolicy(policy: any): any {
   raise('wild0Aggression', 0.55)
   raise('wild1Aggression', 0.62)
   raise('wild2Aggression', 0.75)
+  raise('menqingHoldTurns', 4)
+  raise('forcedOpenRate', 0.28)
+  raise('deadHandRate', 0.2)
+  raise('tingQuality', 4)
 
   lower('menqingKeepBonus', 0.35)
   lower('defenseRiskAversion', 0.16)
@@ -413,6 +432,14 @@ function hasWeakNumberWasteCandidate(hand: Tile[], excludeTileId?: string): bool
       Math.abs(other.value - candidate.value) <= 2
     )
   })
+}
+
+function countPairs(hand: Tile[]): number {
+  let pairs = 0
+  for (const tiles of groupTiles(hand).values()) {
+    if (tiles.length >= 2) pairs++
+  }
+  return pairs
 }
 
 function getCommittedOpenNumberSuit(player: Player): TileSuit | null {
@@ -985,6 +1012,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   const exposedCount = player.hand.exposedMelds.length
   const wildChecker = (tile: Tile) => isWildTile(tile, game)
   const wallRemaining = game.wall?.length || 0
+  const estimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
   const currentShanten = calculateShanten(hand, exposedCount, wildChecker)
   const currentEffective = countEffectiveTiles(hand, exposedCount, wildChecker)
   const tableThreat = estimateTableThreat(game, player.id)
@@ -1001,6 +1029,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
   const dominantTwoSuitGap = numberSuitCounts.length === 2
     ? numberSuitCounts[0].count - numberSuitCounts[1].count
     : 0
+  const routeMetricPolicy = getLiveRouteMetricPolicy(getPolicyForPlayer(player))
   const routeState = useRoutePlanner
     ? evaluateRouteState({
         game,
@@ -1134,10 +1163,33 @@ export function selectDiscardTile(player: Player, game: GameState): string {
       })
       score += routeScore
       composite += routeScore * 2
+      const visibleCopies = countVisibleCopies(tile, game)
+      const overdueMenqingHold =
+        exposedCount === 0 &&
+        estimatedRound > routeMetricPolicy.menqingHoldTurns &&
+        routeState.current === 'MENQING_SPEED'
+      const deadHandPressure =
+        routeState.current === 'MENQING_SPEED' &&
+        currentShanten >= 2 &&
+        routeState.features.isolatedCount >= 3
+      const weakObserveTile =
+        routeState.phase === 'OBSERVE' &&
+        (
+          (routeState.features.shortestSuit && tile.suit === routeState.features.shortestSuit && tilePairCount === 1) ||
+          (isHonor(tile) && tilePairCount === 1 && visibleCopies >= 2)
+        )
+      if (overdueMenqingHold && weakObserveTile) {
+        composite += 8 + routeMetricPolicy.forcedOpenRate * 18
+      }
+      if (deadHandPressure && weakObserveTile) {
+        composite += 6 + routeMetricPolicy.deadHandRate * 20
+      }
       if (shanten === 0) {
-        composite += timingValue * 4
+        composite += timingValue * (3.2 + routeMetricPolicy.tingQuality * 0.2)
       } else if (routeState.phase === 'OBSERVE' && routeState.current === 'MENQING_SPEED') {
         composite += (effective - currentEffective) * 0.4
+      } else if (shanten === 1) {
+        composite += effective * (routeMetricPolicy.tingQuality * 0.03)
       }
     }
 
@@ -1386,7 +1438,18 @@ function evaluateChowValue(
 ): number {
   const hand = player.hand.concealedTiles
   const policy = getPolicyForPlayer(player)
+  const routeMetricPolicy = getLiveRouteMetricPolicy(policy)
   const meldCount = player.hand.exposedMelds.length
+  const effectiveGlobalMultiplier = Math.min(
+    ((game as any).inheritMultiplier ?? (game as any).inheritedGlobalMultiplier ?? 1) *
+    ((game as any).roundMultiplier ?? 1),
+    8
+  )
+  const estimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
+  const wildCount = hand.filter(t => isWildTile(t, game)).length
+  const numberSuitCounts = getNumberSuitCounts(hand)
+  const longestSuitEntry = numberSuitCounts[0] || null
+  const shortestSuitEntry = numberSuitCounts[numberSuitCounts.length - 1] || null
 
   if (player.isTing) return 0
 
@@ -1398,7 +1461,10 @@ function evaluateChowValue(
   //    公式：惩罚 = menqingKeepBonus × 0.5，上限 0.6（留 0.4 最低分）
   if (meldCount === 0) {
     const menqingPenalty = Math.min(0.6, (policy.menqingKeepBonus || 0) * 0.5)
-    score -= menqingPenalty
+    const multiplierPush = effectiveGlobalMultiplier >= 4 ? 0.22 + (effectiveGlobalMultiplier - 4) * 0.04 : 0
+    const noWildPush = wildCount === 0 ? 0.18 : 0
+    const multiWildHold = wildCount >= 2 ? 0.16 : 0
+    score -= Math.max(0.12, menqingPenalty - multiplierPush - noWildPush + multiWildHold)
   }
 
   // === B. 面子数硬限制（已有面子数惩罚）===
@@ -1422,6 +1488,18 @@ function evaluateChowValue(
   const hasRight = groups.has(`${suit}-${v + 1}`)
   const hasLeftLeft = groups.has(`${suit}-${v - 2}`)
   const hasRightRight = groups.has(`${suit}-${v + 2}`)
+  const visibleCopies = countVisibleCopies(chowTile, game)
+  const remainingClaimCopies = Math.max(0, 4 - visibleCopies)
+  const isShortestSuit = shortestSuitEntry?.suit === suit
+  const suitGap = Math.max(0, (longestSuitEntry?.count || 0) - (shortestSuitEntry?.count || 0))
+  const shortSuitGapTrap = isShortestSuit && suitGap >= 4 && (longestSuitEntry?.count || 0) >= 6
+  const strongMenqingHold = meldCount === 0 && wildCount >= 2
+  const pairHeavyPungsHold = estimatedRound <= 5 && countPairs(hand) >= 4
+  const middleWaitShape = hasLeft && hasRight
+  const overdueMenqingHold =
+    meldCount === 0 &&
+    estimatedRound > routeMetricPolicy.menqingHoldTurns &&
+    wildCount <= 1
 
   if (hasLeft && hasRight) {
     score += 1.0 // 夹张：最有价值
@@ -1438,6 +1516,14 @@ function evaluateChowValue(
   }
 
   // === E. allPungsPursuit — 碰碰胡追求 → 吃顺子惩罚 ===
+  if (shortSuitGapTrap) {
+    score -= pairHeavyPungsHold ? 0.35 : 0.7
+    if (middleWaitShape) score -= 0.25
+  } else if (middleWaitShape && !strongMenqingHold) {
+    score += 0.28
+    if (remainingClaimCopies <= 1) score += 0.18
+  }
+
   if ((policy.allPungsPursuit || 0) > 0) {
     score -= (policy.allPungsPursuit || 0) * 0.8
   }
@@ -1468,6 +1554,11 @@ function evaluateChowValue(
     return null;
   })();
   const dominantCount = dominantSuit ? (suitCounts[dominantSuit] || 0) : 0
+  const upstream = game.players[(player.position + 3) % game.players.length]
+  const upstreamDiscards = (upstream?.hand.discardedTiles || []).filter(discard => discard.suit === suit)
+  const upstreamRejectedSuit = upstreamDiscards.some((discard, index) =>
+    discard.suit === suit && upstreamDiscards[index + 1]?.suit === suit
+  )
 
   if (dominantCount >= 6 && (policy.pureFlushPursuit || 0) > 0) {
     const isSameSuit = dominantSuit === suit
@@ -1484,6 +1575,34 @@ function evaluateChowValue(
     if (dominantCount >= 7) {
       score += (policy.flushChaseBonus || 0) * 0.5
     }
+  }
+
+  if (wildCount === 0) {
+    score += 0.18
+  } else if (wildCount >= 2) {
+    score -= 0.12
+  } else if (wildCount === 1 && dominantSuit === suit && dominantCount >= 6) {
+    score += 0.12
+  }
+
+  if (effectiveGlobalMultiplier >= 4) {
+    score += 0.18 + (effectiveGlobalMultiplier - 4) * 0.05
+  }
+
+  if (remainingClaimCopies <= 1 && !strongMenqingHold && !shortSuitGapTrap) {
+    score += 0.16
+  }
+
+  if (overdueMenqingHold && !shortSuitGapTrap) {
+    score += 0.12 + routeMetricPolicy.forcedOpenRate * 0.2
+  }
+
+  if (upstreamRejectedSuit && dominantCount >= 6) {
+    score += 0.22
+  }
+
+  if (estimatedRound <= 5 && countPairs(hand) >= 4) {
+    score -= 0.16
   }
 
   // === I. tripletComboBonus — 刻子组合奖励 ===
@@ -1557,6 +1676,7 @@ export async function shouldClaimPendingAction(
   game: GameState
 ): Promise<ActionType> {
   const policy = getPolicyForPlayer(player)
+  const routeMetricPolicy = getLiveRouteMetricPolicy(policy)
   const hand = player.hand.concealedTiles
   const exposedCount = player.hand.exposedMelds.length
   const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id)
@@ -1716,6 +1836,38 @@ export async function shouldClaimPendingAction(
       if (removed === 2 && candidateHand.length > 0) {
         const { shanten, effective } = evaluateResultingHand(candidateHand)
         let pengTune = policy.pengChance || 0
+        const pairCount = countPairs(hand)
+        const wildCount = hand.filter(t => isWildTile(t, game)).length
+        const effectiveGlobalMultiplier = Math.min(
+          ((game as any).inheritMultiplier ?? (game as any).inheritedGlobalMultiplier ?? 1) *
+          ((game as any).roundMultiplier ?? 1),
+          8
+        )
+        const estimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
+        const longestSuitEntry = getNumberSuitCounts(hand)[0] || null
+        const upstream = game.players[(player.position + 3) % game.players.length]
+        const upstreamDiscardedSameSuit = isNumberTile(claimTile)
+          ? (upstream?.hand.discardedTiles || []).filter(discard => discard.suit === claimTile.suit)
+          : []
+        const visibleCopies = countVisibleCopies(claimTile, game)
+        const remainingClaimCopies = Math.max(0, 4 - visibleCopies - sameTiles.length)
+        const upstreamRejectedSuit =
+          isNumberTile(claimTile) &&
+          upstreamDiscardedSameSuit.some((discard, index) => discard.suit === claimTile.suit && upstreamDiscardedSameSuit[index + 1]?.suit === claimTile.suit)
+        const pairHeavyOpenPush = estimatedRound <= 5 && pairCount >= 4
+        const strongMenqingHold =
+          exposedCount === 0 &&
+          wildCount >= 2 &&
+          passEval.shanten <= 2 &&
+          passEval.effective >= 14
+        const overdueMenqingHold =
+          exposedCount === 0 &&
+          estimatedRound > routeMetricPolicy.menqingHoldTurns &&
+          wildCount <= 1
+        const deadHandPressure =
+          passEval.shanten >= 2 &&
+          passEval.effective <= 10 &&
+          pairCount + (longestSuitEntry?.count || 0) <= 9
 
         // === 百搭碰牌奖励（pengWildBoost > 0 时更积极碰百搭）===
         if (isWildTile(claimTile, game) && (policy.pengWildBoost || 0) > 0) {
@@ -1731,6 +1883,41 @@ export async function shouldClaimPendingAction(
         const meldCount = exposedCount
         if (meldCount === 0 && (policy.menqingKeepBonus || 0) > 0) {
           pengTune -= (policy.menqingKeepBonus || 0) * 0.4
+        }
+
+        if (wildCount === 0) {
+          pengTune += 0.2
+        } else if (wildCount >= 2 && meldCount === 0) {
+          pengTune -= 0.08
+        }
+
+        if (effectiveGlobalMultiplier >= 4) {
+          pengTune += 0.18 + (effectiveGlobalMultiplier - 4) * 0.06
+        }
+
+        if (
+          upstreamRejectedSuit &&
+          longestSuitEntry &&
+          longestSuitEntry.suit === claimTile.suit &&
+          longestSuitEntry.count >= 6
+        ) {
+          pengTune += 0.24
+        }
+
+        if (pairHeavyOpenPush) {
+          pengTune += 0.55
+        }
+
+        if (remainingClaimCopies <= 1 && !strongMenqingHold) {
+          pengTune += 0.72 + (pairHeavyOpenPush ? 0.2 : 0)
+        }
+
+        if (overdueMenqingHold) {
+          pengTune += 0.16 + routeMetricPolicy.forcedOpenRate * 0.35
+        }
+
+        if (deadHandPressure) {
+          pengTune += 0.12 + routeMetricPolicy.deadHandRate * 0.3
         }
 
         // === 对手听牌检测（oppTingDetection > 0 → 减少碰牌）===

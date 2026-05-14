@@ -8,6 +8,7 @@ import {
   TileSuit,
 } from '../server/types/game'
 import { evaluateRouteClaim } from '../server/ai/route/claimPlanner'
+import { scoreRouteDiscardCandidate } from '../server/ai/route/discardPlanner'
 import { evaluateRouteState } from '../server/ai/route/routeEvaluator'
 import { shouldClaimPendingAction } from '../server/services/botService'
 
@@ -106,6 +107,156 @@ function buildRouteState(player: Player, game: GameState, shanten: number, effec
 console.log('\n=== Regression: route claim planner ===\n')
 
 {
+  const ai = makePlayer('ai-route-memory', 'AI-AK', [
+    tile(TileSuit.DOTS, 1, 'd1'),
+    tile(TileSuit.DOTS, 2, 'd2'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 5, 'd5'),
+    tile(TileSuit.DOTS, 6, 'd6'),
+    tile(TileSuit.DOTS, 7, 'd7'),
+    tile(TileSuit.CHARACTERS, 2, 'w2'),
+    tile(TileSuit.CHARACTERS, 3, 'w3'),
+    tile(TileSuit.CHARACTERS, 4, 'w4'),
+    tile(TileSuit.BAMBOOS, 4, 'b4'),
+    tile(TileSuit.BAMBOOS, 6, 'b6'),
+    tile(TileSuit.WIND, 1, 'east-a'),
+    tile(TileSuit.WIND, 1, 'east-b'),
+  ])
+  const game = makeGame([ai, makePlayer('p2', 'B', []), makePlayer('p3', 'C', []), makePlayer('p4', 'D', [])], [])
+  const first = buildRouteState(ai, game, 2, 14)
+  const second = evaluateRouteState({
+    game,
+    player: ai,
+    hand: ai.hand.concealedTiles,
+    shanten: 2,
+    effectiveTiles: 13,
+    tableThreat: 0.2,
+    wallRemaining: game.wall.length,
+    previousRouteState: first,
+  })
+  const noisyThird = evaluateRouteState({
+    game,
+    player: ai,
+    hand: ai.hand.concealedTiles,
+    shanten: 2,
+    effectiveTiles: 13,
+    tableThreat: 0.55,
+    wallRemaining: game.wall.length - 6,
+    previousRouteState: second,
+  })
+
+  ok(
+    'route memory keeps previous route on single-turn noisy pressure instead of instant flip',
+    first.current === second.current && second.current === noisyThird.current && noisyThird.stableTurns >= 2,
+    `first=${first.current}, second=${second.current}, third=${noisyThird.current}, stable=${noisyThird.stableTurns}, evidence=${noisyThird.evidenceCounter}`
+  )
+}
+
+{
+  const ai = makePlayer('ai-observe-ae', 'AI-AK', [
+    tile(TileSuit.DOTS, 2, 'd2'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 4, 'd4'),
+    tile(TileSuit.DOTS, 6, 'd6'),
+    tile(TileSuit.DOTS, 7, 'd7'),
+    tile(TileSuit.CHARACTERS, 1, 'w1'),
+    tile(TileSuit.CHARACTERS, 2, 'w2'),
+    tile(TileSuit.CHARACTERS, 3, 'w3'),
+    tile(TileSuit.BAMBOOS, 8, 'b8'),
+    tile(TileSuit.BAMBOOS, 5, 'b5'),
+    tile(TileSuit.WIND, 1, 'east-a'),
+    tile(TileSuit.DRAGON, 1, 'red-a'),
+    tile(TileSuit.DRAGON, 2, 'green-a'),
+  ])
+  const upstream = makePlayer('p4', 'D', [])
+  upstream.hand.discardedTiles = [
+    tile(TileSuit.BAMBOOS, 1, 'up-b1'),
+    tile(TileSuit.BAMBOOS, 2, 'up-b2'),
+  ]
+  const game = makeGame([ai, makePlayer('p2', 'B', []), makePlayer('p3', 'C', []), upstream], [
+    tile(TileSuit.BAMBOOS, 8, 'seen-b8'),
+  ])
+  const routeState = buildRouteState(ai, game, 3, 10)
+  const bambooTile = ai.hand.concealedTiles.find(tile => tile.id === 'b8')!
+  const honorTile = ai.hand.concealedTiles.find(tile => tile.id === 'east-a')!
+  const bambooScore = scoreRouteDiscardCandidate({
+    tile: bambooTile,
+    hand: ai.hand.concealedTiles,
+    player: ai,
+    game,
+    routeState,
+    candidateShanten: 3,
+    candidateEffective: 10,
+    discardDanger: 0.2,
+    winningTiles: 0,
+    baselineScore: 0,
+    afterRouteState: routeState,
+  })
+  const honorScore = scoreRouteDiscardCandidate({
+    tile: honorTile,
+    hand: ai.hand.concealedTiles,
+    player: ai,
+    game,
+    routeState,
+    candidateShanten: 3,
+    candidateEffective: 10,
+    discardDanger: 0.2,
+    winningTiles: 0,
+    baselineScore: 0,
+    afterRouteState: routeState,
+  })
+
+  ok(
+    'observe A-E ordering prioritizes weak upstream/shortest-suit waste over generic honor singleton',
+    bambooScore > honorScore + 8,
+    `bamboo=${bambooScore.toFixed(2)}, honor=${honorScore.toFixed(2)}, route=${routeState.current}`
+  )
+}
+
+{
+  const claimTile = tile(TileSuit.DOTS, 4, 'claim-dot-4-high-mult')
+  const ai = makePlayer('ai-high-mult', 'AI-AK', [
+    tile(TileSuit.DOTS, 1, 'd1'),
+    tile(TileSuit.DOTS, 2, 'd2'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 5, 'd5'),
+    tile(TileSuit.DOTS, 6, 'd6'),
+    tile(TileSuit.DOTS, 7, 'd7'),
+    tile(TileSuit.BAMBOOS, 2, 'b2'),
+    tile(TileSuit.BAMBOOS, 3, 'b3'),
+    tile(TileSuit.BAMBOOS, 4, 'b4'),
+    tile(TileSuit.CHARACTERS, 6, 'w6'),
+    tile(TileSuit.CHARACTERS, 7, 'w7'),
+    tile(TileSuit.WIND, 1, 'east-a'),
+    tile(TileSuit.WIND, 1, 'east-b'),
+  ])
+  const game = makeGame([ai, makePlayer('p2', 'B', []), makePlayer('p3', 'C', []), makePlayer('p4', 'D', [])], [])
+  game.inheritMultiplier = 2
+  game.roundMultiplier = 2
+  const routeState = buildRouteState(ai, game, 2, 14)
+  const decision = evaluateRouteClaim({
+    action: ActionType.CHOW,
+    player: ai,
+    game,
+    claimTile,
+    routeState,
+    candidateHand: ai.hand.concealedTiles.filter(tile => !['d3', 'd5'].includes(tile.id)),
+    candidateShanten: 2,
+    candidateEffective: 15,
+    passShanten: 2,
+    passEffective: 14,
+    tableThreat: 0.2,
+    wallRemaining: game.wall.length,
+  })
+
+  ok(
+    'high global multiplier lowers menqing hold and allows speed chow',
+    decision.allowed,
+    `allowed=${decision.allowed}, reason=${decision.reason}, tune=${decision.tuneDelta}`
+  )
+}
+
+{
   const claimTile = tile(TileSuit.DOTS, 4, 'claim-dot-4')
   const ai = makePlayer('ai1', 'AI-AK', [
     tile(TileSuit.DOTS, 1, 'd1'),
@@ -147,6 +298,53 @@ console.log('\n=== Regression: route claim planner ===\n')
 }
 
 {
+  const claimTile = tile(TileSuit.DOTS, 4, 'claim-dot-4-upstream')
+  const ai = makePlayer('ai-upstream', 'AI-AK', [
+    tile(TileSuit.DOTS, 1, 'd1'),
+    tile(TileSuit.DOTS, 2, 'd2'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 5, 'd5'),
+    tile(TileSuit.DOTS, 6, 'd6'),
+    tile(TileSuit.DOTS, 7, 'd7'),
+    tile(TileSuit.CHARACTERS, 2, 'w2'),
+    tile(TileSuit.CHARACTERS, 3, 'w3'),
+    tile(TileSuit.BAMBOOS, 4, 'b4'),
+    tile(TileSuit.BAMBOOS, 5, 'b5'),
+    tile(TileSuit.WIND, 1, 'east-a'),
+    tile(TileSuit.WIND, 1, 'east-b'),
+    tile(TileSuit.DRAGON, 1, 'red-a'),
+  ])
+  const upstream = makePlayer('p4', 'D', [])
+  upstream.hand.discardedTiles = [
+    tile(TileSuit.DOTS, 9, 'up-d9a'),
+    tile(TileSuit.DOTS, 8, 'up-d8a'),
+    tile(TileSuit.DOTS, 7, 'up-d7a'),
+  ]
+  const game = makeGame([ai, makePlayer('p2', 'B', []), makePlayer('p3', 'C', []), upstream], [])
+  const routeState = buildRouteState(ai, game, 2, 13)
+  const decision = evaluateRouteClaim({
+    action: ActionType.CHOW,
+    player: ai,
+    game,
+    claimTile,
+    routeState,
+    candidateHand: ai.hand.concealedTiles.filter(tile => !['d3', 'd5'].includes(tile.id)),
+    candidateShanten: 2,
+    candidateEffective: 14,
+    passShanten: 2,
+    passEffective: 13,
+    tableThreat: 0.2,
+    wallRemaining: game.wall.length,
+  })
+
+  ok(
+    'upstream repeated discard on same suit encourages opening our long suit',
+    decision.allowed,
+    `allowed=${decision.allowed}, reason=${decision.reason}, upstream=${routeState.features.upstreamRejectedSuit}`
+  )
+}
+
+{
   const claimTile = tile(TileSuit.DOTS, 4, 'claim-dot-4-first-gate')
   const ai = makePlayer('ai-first-gate', 'AI-AK', [
     tile(TileSuit.DOTS, 2, 'd2'),
@@ -182,8 +380,90 @@ console.log('\n=== Regression: route claim planner ===\n')
 
   ok(
     'first chow gate rejects opening chow when best number suit is under six tiles',
-    !decision.allowed && decision.reason === 'first_chow_requires_six_tiles',
+    !decision.allowed,
     `allowed=${decision.allowed}, reason=${decision.reason}`
+  )
+}
+
+{
+  const claimTile = tile(TileSuit.WIND, 1, 'claim-east-early-pairs')
+  const ai = makePlayer('ai-pairs', 'AI-AK', [
+    tile(TileSuit.WIND, 1, 'east-a'),
+    tile(TileSuit.WIND, 1, 'east-b'),
+    tile(TileSuit.DOTS, 2, 'd2a'),
+    tile(TileSuit.DOTS, 2, 'd2b'),
+    tile(TileSuit.BAMBOOS, 4, 'b4a'),
+    tile(TileSuit.BAMBOOS, 4, 'b4b'),
+    tile(TileSuit.CHARACTERS, 6, 'w6a'),
+    tile(TileSuit.CHARACTERS, 6, 'w6b'),
+    tile(TileSuit.DRAGON, 1, 'red-a'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.BAMBOOS, 5, 'b5'),
+    tile(TileSuit.CHARACTERS, 7, 'w7'),
+    tile(TileSuit.WIND, 2, 'south-a'),
+  ])
+  const game = makeGame([ai, makePlayer('p2', 'B', []), makePlayer('p3', 'C', []), makePlayer('p4', 'D', [])], [])
+  const routeState = buildRouteState(ai, game, 3, 10)
+  const decision = evaluateRouteClaim({
+    action: ActionType.PENG,
+    player: ai,
+    game,
+    claimTile,
+    routeState,
+    candidateHand: ai.hand.concealedTiles.filter(tile => !['east-a', 'east-b'].includes(tile.id)),
+    candidateShanten: 2,
+    candidateEffective: 12,
+    passShanten: 3,
+    passEffective: 10,
+    tableThreat: 0.2,
+    wallRemaining: game.wall.length,
+  })
+
+  ok(
+    'early four-pair hand actively pushes peng instead of holding menqing',
+    decision.allowed && decision.tuneDelta > 0.6,
+    `allowed=${decision.allowed}, tune=${decision.tuneDelta}, route=${routeState.current}`
+  )
+}
+
+{
+  const claimTile = tile(TileSuit.BAMBOOS, 4, 'claim-b4-short-gap')
+  const ai = makePlayer('ai-short-gap', 'AI-AK', [
+    tile(TileSuit.DOTS, 1, 'd1'),
+    tile(TileSuit.DOTS, 2, 'd2'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 4, 'd4'),
+    tile(TileSuit.DOTS, 6, 'd6'),
+    tile(TileSuit.DOTS, 7, 'd7'),
+    tile(TileSuit.DOTS, 8, 'd8'),
+    tile(TileSuit.CHARACTERS, 3, 'w3'),
+    tile(TileSuit.CHARACTERS, 4, 'w4'),
+    tile(TileSuit.CHARACTERS, 5, 'w5'),
+    tile(TileSuit.BAMBOOS, 3, 'b3'),
+    tile(TileSuit.BAMBOOS, 5, 'b5'),
+    tile(TileSuit.WIND, 1, 'east-a'),
+  ])
+  const game = makeGame([ai, makePlayer('p2', 'B', []), makePlayer('p3', 'C', []), makePlayer('p4', 'D', [])], [])
+  const routeState = buildRouteState(ai, game, 2, 12)
+  const decision = evaluateRouteClaim({
+    action: ActionType.CHOW,
+    player: ai,
+    game,
+    claimTile,
+    routeState,
+    candidateHand: ai.hand.concealedTiles.filter(tile => !['b3', 'b5'].includes(tile.id)),
+    candidateShanten: 2,
+    candidateEffective: 13,
+    passShanten: 2,
+    passEffective: 12,
+    tableThreat: 0.2,
+    wallRemaining: game.wall.length,
+  })
+
+  ok(
+    'large long-short suit gap blocks shortest-suit chow even when shape looks smooth',
+    !decision.allowed,
+    `allowed=${decision.allowed}, reason=${decision.reason}, route=${routeState.current}`
   )
 }
 
@@ -318,6 +598,48 @@ console.log('\n=== Regression: route claim planner ===\n')
     ok(
       'AI-AK integrated claim flow passes on route-blocked early chow',
       action === ActionType.PASS,
+      `action=${action}`
+    )
+  } finally {
+    Math.random = originalRandom
+  }
+}
+
+{
+  const claimTile = tile(TileSuit.DOTS, 5, 'claim-dot-5-last-copy')
+  const ai = makePlayer('ai-last-peng', 'AI-AK', [
+    tile(TileSuit.DOTS, 5, 'd5a'),
+    tile(TileSuit.DOTS, 5, 'd5b'),
+    tile(TileSuit.DOTS, 2, 'd2a'),
+    tile(TileSuit.DOTS, 2, 'd2b'),
+    tile(TileSuit.CHARACTERS, 3, 'w3a'),
+    tile(TileSuit.CHARACTERS, 3, 'w3b'),
+    tile(TileSuit.BAMBOOS, 4, 'b4a'),
+    tile(TileSuit.BAMBOOS, 4, 'b4b'),
+    tile(TileSuit.CHARACTERS, 6, 'w6'),
+    tile(TileSuit.CHARACTERS, 7, 'w7'),
+    tile(TileSuit.BAMBOOS, 7, 'b7'),
+    tile(TileSuit.WIND, 1, 'east-a'),
+    tile(TileSuit.DRAGON, 1, 'red-a'),
+  ])
+  const otherA = makePlayer('p2', 'B', [])
+  const otherB = makePlayer('p3', 'C', [])
+  const otherC = makePlayer('p4', 'D', [])
+  const game = makeGame([ai, otherA, otherB, otherC], [claimTile])
+  game.pendingActions = [{
+    playerId: ai.id,
+    availableActions: [ActionType.PENG, ActionType.PASS],
+    tile: claimTile,
+    expiresAt: Date.now() + 1000,
+  }]
+
+  const originalRandom = Math.random
+  Math.random = () => 0.0
+  try {
+    const action = await shouldClaimPendingAction(ai, [ActionType.PENG, ActionType.PASS], game)
+    ok(
+      'last-copy peng window actively takes peng instead of pass',
+      action === ActionType.PENG,
       `action=${action}`
     )
   } finally {

@@ -23,6 +23,7 @@ export interface RouteFeatureSummary {
   honorPairCount: number
   wildCount: number
   upstreamVoidSuit: TileSuit | null
+  upstreamRejectedSuit: TileSuit | null
   allOpponentsAvoidSuit: TileSuit | null
   liveHonorCount: number
   opponentOpenMelds: number
@@ -54,6 +55,9 @@ export interface RouteState {
   secondary: RouteKind | null
   confidence: number
   lockLevel: 0 | 1 | 2
+  stableTurns: number
+  switchCount: number
+  evidenceCounter: number
   targetSuit: TileSuit | null
   routeScores: RouteScore[]
   features: RouteFeatureSummary

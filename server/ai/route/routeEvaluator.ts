@@ -12,6 +12,12 @@ import type {
 const NUMBER_SUITS: TileSuit[] = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
 const ROUTES: RouteKind[] = ['MENQING_SPEED', 'OPEN_SPEED', 'HALF_FLUSH', 'ALL_PUNGS', 'HONOR_HEAVY']
 
+function getEffectiveGlobalMultiplier(game: any): number {
+  const inherit = game?.inheritMultiplier ?? game?.inheritedGlobalMultiplier ?? 1
+  const round = game?.roundMultiplier ?? 1
+  return Math.min(inherit * round, 8)
+}
+
 function countAdjacentPartners(tile: Tile, hand: Tile[]): number {
   if (!NUMBER_SUITS.includes(tile.suit)) return 0
   return hand.filter(candidate =>
@@ -69,8 +75,15 @@ function buildFeatureSummary(input: RouteEvaluationInput): RouteFeatureSummary {
   const downstream = game.players[(player.position + 1) % game.players.length]
   const upstreamDiscards = (upstream?.hand.discardedTiles || []).filter(discard => NUMBER_SUITS.includes(discard.suit))
   const upstreamSuitCounts: Record<string, number> = {}
+  const upstreamConsecutiveSuitCounts: Record<string, number> = {}
   for (const discard of upstreamDiscards) {
     upstreamSuitCounts[discard.suit] = (upstreamSuitCounts[discard.suit] || 0) + 1
+  }
+  for (let index = 0; index < upstreamDiscards.length - 1; index++) {
+    const current = upstreamDiscards[index]
+    const next = upstreamDiscards[index + 1]
+    if (!current || !next || current.suit !== next.suit) continue
+    upstreamConsecutiveSuitCounts[current.suit] = (upstreamConsecutiveSuitCounts[current.suit] || 0) + 1
   }
   const upstreamVoidSuit = NUMBER_SUITS
     .map(suit => ({
@@ -82,6 +95,13 @@ function buildFeatureSummary(input: RouteEvaluationInput): RouteFeatureSummary {
       )
     }))
     .sort((a, b) => (Number(b.consecutive) - Number(a.consecutive)) || (b.count - a.count))[0]
+  const upstreamRejectedSuit = NUMBER_SUITS
+    .map(suit => ({
+      suit,
+      runCount: upstreamConsecutiveSuitCounts[suit] || 0,
+      count: upstreamSuitCounts[suit] || 0,
+    }))
+    .sort((a, b) => b.runCount - a.runCount || b.count - a.count)[0]
   const allOpponentsAvoidSuit = NUMBER_SUITS.find(suit =>
     game.players
       .filter(candidate => candidate.id !== player.id)
@@ -132,6 +152,7 @@ function buildFeatureSummary(input: RouteEvaluationInput): RouteFeatureSummary {
     honorPairCount,
     wildCount,
     upstreamVoidSuit: upstreamVoidSuit && (upstreamVoidSuit.consecutive || upstreamVoidSuit.count >= 2) ? upstreamVoidSuit.suit : null,
+    upstreamRejectedSuit: upstreamRejectedSuit && upstreamRejectedSuit.runCount >= 1 ? upstreamRejectedSuit.suit : null,
     allOpponentsAvoidSuit,
     liveHonorCount,
     opponentOpenMelds,
@@ -144,6 +165,16 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
   const reasons: string[] = []
   let score = 0
   let targetSuit: TileSuit | null = null
+  const effectiveGlobalMultiplier = getEffectiveGlobalMultiplier(input.game)
+  const estimatedRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
+  const earlyPairHeavy = estimatedRound <= 5 && features.pairCount >= 4
+  const noWildOpenPush = features.wildCount === 0
+  const multiWildMenqingPush = features.wildCount >= 2
+  const oneWildLongSuitPivot = features.wildCount === 1 && features.longestSuitCount >= 6
+  const upstreamRejectedLongSuit =
+    !!features.upstreamRejectedSuit &&
+    features.longestSuit === features.upstreamRejectedSuit &&
+    features.longestSuitCount >= 6
 
   switch (route) {
     case 'MENQING_SPEED':
@@ -160,6 +191,12 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       score -= input.tableThreat * 4
       score -= features.opponentOpenMelds * 1.35
       score -= features.downstreamPressure * 2.2
+      score -= Math.max(0, effectiveGlobalMultiplier - 1) * 1.9
+      if (noWildOpenPush) score -= 2.6
+      if (oneWildLongSuitPivot) score -= 0.9
+      if (upstreamRejectedLongSuit) score -= 2.4
+      if (earlyPairHeavy) score -= 3.8
+      if (multiWildMenqingPush) score += 2.8
       if (input.player.hand.exposedMelds.length === 0) score += 3
       if (input.shanten <= 2 && features.isolatedCount <= 2) score += 2.5
       if (features.upstreamVoidSuit) {
@@ -179,6 +216,18 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       score += features.downstreamPressure * 4.2
       score += features.opponentOpenMelds * 1.4
       score += input.player.hand.exposedMelds.length * 1.6
+      score += Math.max(0, effectiveGlobalMultiplier - 1) * 2.1
+      if (noWildOpenPush) score += 2.4
+      if (oneWildLongSuitPivot) score += 1.2
+      if (upstreamRejectedLongSuit) {
+        reasons.push('upstream_rejected_long_suit')
+        score += 3.2
+      }
+      if (earlyPairHeavy) {
+        reasons.push('early_pair_heavy_open_push')
+        score += 2.1
+      }
+      if (multiWildMenqingPush) score -= 1.2
       score -= Math.max(0, features.isolatedCount - 1) * 0.8
       if (input.shanten <= 2) score += 2.4
       break
@@ -203,10 +252,15 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
         reasons.push('upstream_void_target')
         score += 3
       }
+      if (features.upstreamRejectedSuit && features.upstreamRejectedSuit === targetSuit && features.longestSuitCount >= 6) {
+        reasons.push('upstream_rejected_target')
+        score += 2.4
+      }
       if (features.allOpponentsAvoidSuit && features.allOpponentsAvoidSuit === targetSuit) {
         reasons.push('global_void_target')
         score += 2
       }
+      if (features.wildCount === 0) score += 1.1
       score += features.oneSuitOpponentCount * 0.8
       break
 
@@ -217,6 +271,12 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       score += features.wildCount * 2.8
       score -= features.sequenceLikeCount * 1.8
       score -= Math.max(0, features.secondSuitCount - 3) * 0.6
+      if (earlyPairHeavy) {
+        reasons.push('early_four_pairs_push')
+        score += 8.5
+      }
+      if (noWildOpenPush) score += 1.4
+      if (effectiveGlobalMultiplier >= 4) score += 1.6
       if (features.pairCount + features.tripletCount >= 4 && features.wildCount > 0) {
         reasons.push('pair_stack_with_wild')
         score += 10
@@ -282,20 +342,43 @@ export function evaluateRouteState(input: RouteEvaluationInput): RouteState {
   const previousCandidate = previousRouteState
     ? routeScores.find(candidate => candidate.route === previousRouteState.current) || null
     : null
+  const evidenceAgainstPrevious =
+    previousRouteState && previousRouteState.current !== topCandidate.route
+      ? (previousRouteState.evidenceCounter || 0) + 1
+      : 0
+  const softLockedPrevious =
+    !!previousRouteState &&
+    (previousRouteState.lockLevel > 0 || (previousRouteState.stableTurns || 0) >= 2)
+  const requiredEvidenceToFlip =
+    previousRouteState?.lockLevel === 2 ? 3 :
+    previousRouteState?.lockLevel === 1 ? 2 :
+    (previousRouteState?.stableTurns || 0) >= 2 ? 2 : 1
   const canHoldPreviousRoute =
     !!previousRouteState &&
     !!previousCandidate &&
-    previousRouteState.lockLevel > 0 &&
-    previousCandidate.score >= topCandidate.score - (previousRouteState.lockLevel === 2 ? 3.6 : 2.2)
+    softLockedPrevious &&
+    (
+      previousCandidate.score >= topCandidate.score - (previousRouteState.lockLevel === 2 ? 3.6 : previousRouteState.lockLevel === 1 ? 2.2 : 1.4) ||
+      evidenceAgainstPrevious < requiredEvidenceToFlip
+    )
 
   const current = canHoldPreviousRoute ? previousCandidate : topCandidate
   const secondary = routeScores.find(candidate => candidate.route !== current.route) || null
   const gap = current && secondary ? current.score - secondary.score : (current?.score || 0)
   const stableOnPrevious = previousRouteState?.current === current?.route
+  const stableTurns = stableOnPrevious ? (previousRouteState?.stableTurns || 1) + 1 : 1
+  const switchCount =
+    previousRouteState && previousRouteState.current !== current.route
+      ? (previousRouteState.switchCount || 0) + 1
+      : (previousRouteState?.switchCount || 0)
+  const evidenceCounter =
+    canHoldPreviousRoute && previousRouteState && previousRouteState.current !== topCandidate.route
+      ? evidenceAgainstPrevious
+      : 0
   const lockLevel: 0 | 1 | 2 =
-    stableOnPrevious && previousRouteState && previousRouteState.lockLevel === 2 && gap >= 1.8 ? 2 :
+    stableTurns >= 3 && stableOnPrevious && previousRouteState && previousRouteState.lockLevel === 2 && gap >= 1.4 ? 2 :
     phase === 'RUSH' && gap >= 4 ? 2 :
-    stableOnPrevious && previousRouteState && previousRouteState.lockLevel >= 1 && gap >= 1.2 ? 1 :
+    stableTurns >= 2 && stableOnPrevious && previousRouteState && previousRouteState.lockLevel >= 1 && gap >= 1.1 ? 1 :
     (phase === 'COMMIT' || phase === 'RUSH') && gap >= 2.5 ? 1 :
     0
 
@@ -305,6 +388,9 @@ export function evaluateRouteState(input: RouteEvaluationInput): RouteState {
     secondary: secondary?.route || null,
     confidence: gap,
     lockLevel,
+    stableTurns,
+    switchCount,
+    evidenceCounter,
     targetSuit: current?.targetSuit || null,
     routeScores,
     features,

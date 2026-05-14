@@ -28,6 +28,12 @@ function isNumberSuit(suit: TileSuit): boolean {
   return suit === TileSuit.DOTS || suit === TileSuit.CHARACTERS || suit === TileSuit.BAMBOOS
 }
 
+function getEffectiveGlobalMultiplier(game: any): number {
+  const inherit = game?.inheritMultiplier ?? game?.inheritedGlobalMultiplier ?? 1
+  const round = game?.roundMultiplier ?? 1
+  return Math.min(inherit * round, 8)
+}
+
 function getCommittedOpenNumberSuit(player: Player): TileSuit | null {
   const suits = new Set<TileSuit>()
   let numberedTileCount = 0
@@ -110,6 +116,20 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
   const phase = routeState.phase
   const openingMenqing = player.hand.exposedMelds.length === 0 && player.hand.concealedTiles.length >= 11
   const committedOpenSuit = getCommittedOpenNumberSuit(player)
+  const effectiveGlobalMultiplier = getEffectiveGlobalMultiplier(game)
+  const estimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
+  const wildCount = routeState.features.wildCount
+  const pairHeavyPungsPush = estimatedRound <= 5 && routeState.features.pairCount >= 4
+  const upstreamRejectedSuit = routeState.features.upstreamRejectedSuit
+  const upstreamSuitCount = upstreamRejectedSuit ? getNumberSuitCount(player.hand.concealedTiles, upstreamRejectedSuit) : 0
+  const upstreamRejectedOpenPush =
+    !!upstreamRejectedSuit &&
+    upstreamSuitCount >= 6 &&
+    isNumberSuit(claimTile.suit) &&
+    claimTile.suit === upstreamRejectedSuit
+  const noWildOpenPush = wildCount === 0
+  const multiWildMenqingPush = wildCount >= 2
+  const suitGap = Math.max(0, routeState.features.longestSuitCount - routeState.features.shortestSuitCount)
   const honorPengPush =
     action === ActionType.PENG &&
     isHonorTile &&
@@ -123,6 +143,21 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     action === ActionType.CHOW &&
     !!routeState.features.shortestSuit &&
     claimTile.suit === routeState.features.shortestSuit
+  const shortSuitGapTrap =
+    shortestSuitChow &&
+    suitGap >= 4 &&
+    routeState.features.longestSuitCount >= 6
+
+  if (
+    shortSuitGapTrap &&
+    (
+      candidateShanten >= passShanten ||
+      candidateEffective <= passEffective + 2 ||
+      (!noWildOpenPush && effectiveGlobalMultiplier < 4)
+    )
+  ) {
+    return { allowed: false, tuneDelta: -2.2, reason: 'shortest_suit_gap_chow_blocked' }
+  }
 
   if (
     shortestSuitChow &&
@@ -141,20 +176,26 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     const bestSuitCount = bestSuit ? getNumberSuitCount(player.hand.concealedTiles, bestSuit) : 0
     const claimSuitCount = isNumberSuit(claimTile.suit) ? getNumberSuitCount(player.hand.concealedTiles, claimTile.suit) : 0
     const pairCount = countPairs(player.hand.concealedTiles)
+    const canRelaxFirstChowGate =
+      noWildOpenPush ||
+      effectiveGlobalMultiplier >= 4 ||
+      upstreamRejectedOpenPush ||
+      (wildCount === 1 && bestSuit !== null && claimTile.suit === bestSuit && bestSuitCount >= 6)
+    const requiredBestSuitTiles = multiWildMenqingPush ? 6 : (canRelaxFirstChowGate ? 4 : 5)
 
-    if (!bestSuit || bestSuitCount < 5) {
+    if (!bestSuit || bestSuitCount < requiredBestSuitTiles) {
       return { allowed: false, tuneDelta: -1.3, reason: 'first_chow_requires_five_tiles' }
     }
     if (claimTile.suit !== bestSuit) {
       return { allowed: false, tuneDelta: -1.7, reason: 'first_chow_must_follow_best_suit' }
     }
-    if (pairCount >= 4 && candidateShanten >= passShanten && candidateEffective <= passEffective + 2) {
+    if (!pairHeavyPungsPush && pairCount >= 4 && candidateShanten >= passShanten && candidateEffective <= passEffective + 2) {
       return { allowed: false, tuneDelta: -2, reason: 'first_chow_breaks_pair_heavy_shape' }
     }
-    if (bestSuitCount >= claimSuitCount + 4 && candidateShanten >= passShanten && candidateEffective <= passEffective + 1) {
+    if (!upstreamRejectedOpenPush && bestSuitCount >= claimSuitCount + 4 && candidateShanten >= passShanten && candidateEffective <= passEffective + 1) {
       return { allowed: false, tuneDelta: -1.9, reason: 'first_chow_abandons_long_suit' }
     }
-    if (breaksCoreStructure(player.hand.concealedTiles, candidateHand)) {
+    if (!canRelaxFirstChowGate && breaksCoreStructure(player.hand.concealedTiles, candidateHand)) {
       return { allowed: false, tuneDelta: -1.9, reason: 'first_chow_breaks_core_structure' }
     }
   }
@@ -186,15 +227,25 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       const canBreakForSpeed =
         candidateShanten < passShanten ||
         (phase === 'RUSH' && candidateShanten <= passShanten && candidateEffective >= passEffective - 1) ||
-        (tableThreat >= 0.82 && candidateShanten <= passShanten && speedGain >= 0)
+        (tableThreat >= 0.82 && candidateShanten <= passShanten && speedGain >= 0) ||
+        (effectiveGlobalMultiplier >= 4 && candidateShanten <= passShanten && candidateEffective + 1 >= passEffective) ||
+        (noWildOpenPush && candidateShanten <= passShanten && candidateEffective + (action === ActionType.CHOW ? 1 : 0) >= passEffective) ||
+        (upstreamRejectedOpenPush && candidateShanten <= passShanten && candidateEffective + 1 >= passEffective) ||
+        (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG))
 
       const openingBreakNeeds =
         candidateShanten < passShanten ||
         candidateEffective >= passEffective + (action === ActionType.CHOW ? 3 : 6) ||
         speedGain >= (action === ActionType.CHOW ? 0.8 : 1.5) ||
-        routeGain >= (isHonorTile ? 1.0 : 0.65)
+        routeGain >= (isHonorTile ? 1.0 : 0.65) ||
+        effectiveGlobalMultiplier >= 4 ||
+        (noWildOpenPush && (action === ActionType.PENG || candidateEffective >= passEffective + 1)) ||
+        upstreamRejectedOpenPush ||
+        (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG))
 
-      const canBreakOpeningMenqing = openingMenqing ? openingBreakNeeds : canBreakForSpeed
+      const canBreakOpeningMenqing = openingMenqing
+        ? (multiWildMenqingPush ? openingBreakNeeds && effectiveGlobalMultiplier >= 4 : openingBreakNeeds)
+        : canBreakForSpeed
 
       if (action === ActionType.CHOW && player.hand.exposedMelds.length === 0 && !canBreakOpeningMenqing) {
         return { allowed: false, tuneDelta: -1.5, reason: 'menqing_hold_chow' }
@@ -202,7 +253,13 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       if ((action === ActionType.PENG || action === ActionType.KONG) && player.hand.exposedMelds.length === 0 && !canBreakOpeningMenqing) {
         return { allowed: false, tuneDelta: -1.2, reason: 'menqing_hold_pung' }
       }
-      return { allowed: true, tuneDelta: canBreakOpeningMenqing ? 0.35 + routeGain * 0.04 : -0.15, reason: 'menqing_speed' }
+      let tuneDelta = canBreakOpeningMenqing ? 0.35 + routeGain * 0.04 : -0.15
+      if (effectiveGlobalMultiplier >= 4) tuneDelta += 0.4 + (effectiveGlobalMultiplier - 4) * 0.08
+      if (noWildOpenPush) tuneDelta += 0.28
+      if (upstreamRejectedOpenPush) tuneDelta += 0.32
+      if (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG)) tuneDelta += 0.5
+      if (multiWildMenqingPush && openingMenqing) tuneDelta -= 0.18
+      return { allowed: true, tuneDelta, reason: 'menqing_speed' }
     }
 
     case 'OPEN_SPEED':
