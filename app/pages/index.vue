@@ -40,6 +40,10 @@
         <button class="mahjong-button danger" @click="exitGame">
           退出游戏
         </button>
+
+        <button class="mahjong-button secondary" @click="logoutAccount">
+          退出登录
+        </button>
       </div>
 
       <p class="mahjong-hint">
@@ -569,6 +573,23 @@ const exitGame = async () => {
       await navigateTo('/login')
     }
   }
+}
+
+const logoutAccount = async () => {
+  try {
+    await $fetch('/mahjong/api/auth/logout', {
+      method: 'POST',
+      headers: { 'Cache-Control': 'no-cache' }
+    })
+  } catch (e) {
+    console.error('[Logout] logout API error:', e)
+  }
+  useCookie('auth_token').value = null
+  useCookie('user_id').value = null
+  useCookie('user_name').value = null
+  useCookie('is_admin').value = null
+  useCookie('mahjong_session').value = null
+  await navigateTo('/login')
 }
 </script>
 
