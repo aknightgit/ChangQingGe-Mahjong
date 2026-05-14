@@ -111,7 +111,7 @@ import { onMounted, ref } from 'vue'
 const buildGameRoomPath = (gameId: string, playerId: string, spectator = false) => {
   const params = new URLSearchParams({ playerId })
   if (spectator) params.set('spectator', '1')
-  return `/gameroom/${gameId}?${params.toString()}`
+  return `/mahjong/gameroom/${gameId}?${params.toString()}`
 }
 
 const userName = useCookie('user_name')
@@ -157,7 +157,7 @@ const handleComeback = async (game: any) => {
       body: { gameId: game.gameId, playerId: game.myPlayerId }
     })
     // 进入房间
-    await navigateTo(`${appBaseURL}/gameroom/${game.gameId}?playerId=${game.myPlayerId}`)
+    await navigateTo(`/mahjong/gameroom/${game.gameId}?playerId=${game.myPlayerId}`)
   } catch (err) {
     console.error('Comeback failed:', err)
   } finally {
@@ -166,8 +166,12 @@ const handleComeback = async (game: any) => {
 }
 
 // 进入已有牌局
-const enterGame = (game: any) => {
-  navigateTo(buildGameRoomPath(game.gameId, game.myPlayerId))
+const enterGame = async (game: any) => {
+  try {
+    await navigateTo(buildGameRoomPath(game.gameId, game.myPlayerId))
+  } catch {
+    if (process.client) window.location.href = buildGameRoomPath(game.gameId, game.myPlayerId)
+  }
 }
 
 // 获取空闲牌桌

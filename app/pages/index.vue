@@ -251,7 +251,7 @@ const clearPendingRoomTarget = () => {
 const buildGameRoomPath = (gameId: string, playerId: string, dice?: number) => {
   const params = new URLSearchParams({ playerId })
   if (typeof dice === 'number') params.set('dice', String(dice))
-  return `/gameroom/${gameId}?${params.toString()}`
+  return `/mahjong/gameroom/${gameId}?${params.toString()}`
 }
 
 const navigateToCreatedRoom = async (targetUrl: string) => {

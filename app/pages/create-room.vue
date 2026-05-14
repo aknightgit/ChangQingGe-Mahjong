@@ -199,7 +199,7 @@ const buildRoomUrl = (gameId: string, playerId: string, dice: number) => {
     playerId,
     dice: String(dice)
   })
-  return `/gameroom/${gameId}?${params.toString()}`
+  return `/mahjong/gameroom/${gameId}?${params.toString()}`
 }
 
 const navigateToCreatedRoom = async (targetUrl: string) => {
