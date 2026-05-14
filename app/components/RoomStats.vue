@@ -99,7 +99,7 @@ const rankedPlayers = computed(() =>
   flex-direction: column;
   gap: 10px;
   color: #e0e0e0;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
 }
 
 .stats-header {
@@ -111,14 +111,14 @@ const rankedPlayers = computed(() =>
 }
 
 .stats-title {
-  font-size: 1.15rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: #ffd700;
   text-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
 }
 
 .stats-round {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   color: rgba(255, 255, 255, 0.5);
 }
 
@@ -129,21 +129,21 @@ const rankedPlayers = computed(() =>
 .stats-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.82rem;
+  font-size: 0.86rem;
 }
 
 .stats-table th {
   text-align: center;
   color: rgba(255, 255, 255, 0.55);
   font-weight: 600;
-  padding: 7px 5px;
+  padding: 8px 6px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   white-space: nowrap;
 }
 
 .stats-table td {
   text-align: center;
-  padding: 7px 5px;
+  padding: 8px 6px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
