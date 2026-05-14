@@ -2856,6 +2856,22 @@ function isTrainingBadOpen(
   return routeSignal.route === 'MENQING_SPEED' || routeSignal.confidence < 2.5
 }
 
+function isTrainingForcedOpenCausal(
+  routeSignal: TrainingRouteSignal | null,
+  passEval?: AkPostDiscardEvaluation | null,
+  claimEval?: AkPostDiscardEvaluation | null
+): boolean {
+  if (!routeSignal || !passEval || !claimEval) return false
+  const pressuredMenqing = routeSignal.route === 'MENQING_SPEED' || routeSignal.confidence < 2.5
+  if (!pressuredMenqing) return false
+  const lowersShanten = claimEval.shantenLike < passEval.shantenLike
+  const improvesWaits = claimEval.directWaits > passEval.directWaits
+  const improvesReadyDraws = claimEval.readyDraws > passEval.readyDraws
+  const improvesWinDraws = claimEval.winDraws > passEval.winDraws
+  const strongScoreGain = claimEval.score >= passEval.score + 8
+  return lowersShanten || improvesWaits || improvesReadyDraws || improvesWinDraws || strongScoreGain
+}
+
 function inferTrainingRouteSignal(
   handTiles: Tile[],
   exposedMelds: Meld[],
@@ -3751,7 +3767,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
             : null
           if (opp.name === 'AI-AK') {
             diagnosticsState.akOpenCount++
-            if (isForcedOpenPressure(otherIdx)) diagnosticsState.akForcedOpenCount++
+            if (isForcedOpenPressure(otherIdx) && isTrainingForcedOpenCausal(akRouteBeforeOpen, akPassEval, akPengEval)) diagnosticsState.akForcedOpenCount++
             if (akRouteBeforeOpen && isTrainingBadOpen(opp, discard, 'peng', akRouteBeforeOpen, akPassEval, akPengEval)) {
               diagnosticsState.akBadOpenCount++
             }
@@ -3840,7 +3856,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       : null
     if (nextP.name === 'AI-AK' && shouldChow) {
       diagnosticsState.akOpenCount++
-      if (isForcedOpenPressure(nextPlayer)) diagnosticsState.akForcedOpenCount++
+      if (isForcedOpenPressure(nextPlayer) && isTrainingForcedOpenCausal(akRouteBeforeChow, akPassEval, akChowEval)) diagnosticsState.akForcedOpenCount++
       if (akRouteBeforeChow && isTrainingBadOpen(nextP, discard, 'chow', akRouteBeforeChow, akPassEval, akChowEval)) {
         diagnosticsState.akBadOpenCount++
       }

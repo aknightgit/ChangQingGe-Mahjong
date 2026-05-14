@@ -214,6 +214,96 @@ console.log('\n=== Regression: route claim planner ===\n')
 }
 
 {
+  const ai = makePlayer('ai-observe-ah', 'AI-AK', [
+    tile(TileSuit.DOTS, 2, 'd2'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 4, 'd4'),
+    tile(TileSuit.DOTS, 6, 'd6'),
+    tile(TileSuit.DOTS, 7, 'd7'),
+    tile(TileSuit.CHARACTERS, 4, 'w4'),
+    tile(TileSuit.CHARACTERS, 5, 'w5'),
+    tile(TileSuit.CHARACTERS, 7, 'w7'),
+    tile(TileSuit.BAMBOOS, 1, 'b1'),
+    tile(TileSuit.BAMBOOS, 2, 'b2'),
+    tile(TileSuit.WIND, 1, 'east-a'),
+    tile(TileSuit.WIND, 1, 'east-b'),
+    tile(TileSuit.DRAGON, 1, 'red-a'),
+  ])
+  const upstream = makePlayer('p4', 'D', [])
+  upstream.hand.discardedTiles = [
+    tile(TileSuit.BAMBOOS, 8, 'up-b8'),
+    tile(TileSuit.BAMBOOS, 9, 'up-b9'),
+  ]
+  const game = makeGame([ai, makePlayer('p2', 'B', []), makePlayer('p3', 'C', []), upstream], [
+    tile(TileSuit.BAMBOOS, 1, 'seen-b1'),
+    tile(TileSuit.WIND, 1, 'seen-east-1'),
+    tile(TileSuit.WIND, 1, 'seen-east-2'),
+    tile(TileSuit.WIND, 1, 'seen-east-3'),
+    tile(TileSuit.DRAGON, 2, 'fill-1'),
+    tile(TileSuit.DRAGON, 3, 'fill-2'),
+    tile(TileSuit.WIND, 2, 'fill-3'),
+    tile(TileSuit.WIND, 3, 'fill-4'),
+    tile(TileSuit.WIND, 4, 'fill-5'),
+    tile(TileSuit.DOTS, 9, 'fill-6'),
+    tile(TileSuit.CHARACTERS, 9, 'fill-7'),
+    tile(TileSuit.BAMBOOS, 9, 'fill-8'),
+    tile(TileSuit.DOTS, 1, 'fill-9'),
+    tile(TileSuit.CHARACTERS, 1, 'fill-10'),
+    tile(TileSuit.BAMBOOS, 8, 'fill-11'),
+    tile(TileSuit.DOTS, 8, 'fill-12'),
+  ])
+  const routeState = buildRouteState(ai, game, 3, 9)
+  const eastTile = ai.hand.concealedTiles.find(tile => tile.id === 'east-a')!
+  const shortConnector = ai.hand.concealedTiles.find(tile => tile.id === 'b1')!
+  const coreTile = ai.hand.concealedTiles.find(tile => tile.id === 'd2')!
+  const eastScore = scoreRouteDiscardCandidate({
+    tile: eastTile,
+    hand: ai.hand.concealedTiles,
+    player: ai,
+    game,
+    routeState,
+    candidateShanten: 3,
+    candidateEffective: 9,
+    discardDanger: 0.25,
+    winningTiles: 0,
+    baselineScore: 0,
+    afterRouteState: routeState,
+  })
+  const shortConnectorScore = scoreRouteDiscardCandidate({
+    tile: shortConnector,
+    hand: ai.hand.concealedTiles,
+    player: ai,
+    game,
+    routeState,
+    candidateShanten: 3,
+    candidateEffective: 9,
+    discardDanger: 0.25,
+    winningTiles: 0,
+    baselineScore: 0,
+    afterRouteState: routeState,
+  })
+  const coreScore = scoreRouteDiscardCandidate({
+    tile: coreTile,
+    hand: ai.hand.concealedTiles,
+    player: ai,
+    game,
+    routeState,
+    candidateShanten: 3,
+    candidateEffective: 9,
+    discardDanger: 0.25,
+    winningTiles: 0,
+    baselineScore: 0,
+    afterRouteState: routeState,
+  })
+
+  ok(
+    'observe A-H ordering clears exhausted honor pair and dead short connector before core long-suit tile',
+    eastScore > coreScore + 8 && shortConnectorScore > coreScore + 6,
+    `east=${eastScore.toFixed(2)}, short=${shortConnectorScore.toFixed(2)}, core=${coreScore.toFixed(2)}, route=${routeState.current}`
+  )
+}
+
+{
   const claimTile = tile(TileSuit.DOTS, 4, 'claim-dot-4-high-mult')
   const ai = makePlayer('ai-high-mult', 'AI-AK', [
     tile(TileSuit.DOTS, 1, 'd1'),
@@ -640,6 +730,80 @@ console.log('\n=== Regression: route claim planner ===\n')
     ok(
       'last-copy peng window actively takes peng instead of pass',
       action === ActionType.PENG,
+      `action=${action}`
+    )
+  } finally {
+    Math.random = originalRandom
+  }
+}
+
+{
+  const huTile = tile(TileSuit.CHARACTERS, 4, 'low-value-hu-tile')
+  const ai = makePlayer('ai-low-value-hu', 'AI-AK', [
+    tile(TileSuit.DOTS, 2, 'd2'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 5, 'd5'),
+    tile(TileSuit.DOTS, 6, 'd6'),
+    tile(TileSuit.CHARACTERS, 2, 'w2'),
+    tile(TileSuit.CHARACTERS, 3, 'w3'),
+    tile(TileSuit.CHARACTERS, 5, 'w5'),
+    tile(TileSuit.BAMBOOS, 2, 'b2'),
+    tile(TileSuit.BAMBOOS, 3, 'b3'),
+    tile(TileSuit.BAMBOOS, 4, 'b4'),
+    tile(TileSuit.WIND, 1, 'east-a'),
+  ], 4200)
+  ai.hand.exposedMelds = [{
+    type: 'pong',
+    tile: tile(TileSuit.DRAGON, 1, 'meld-red'),
+    tiles: [
+      tile(TileSuit.DRAGON, 1, 'meld-red-a'),
+      tile(TileSuit.DRAGON, 1, 'meld-red-b'),
+      tile(TileSuit.DRAGON, 1, 'meld-red-c'),
+    ],
+    sourcePlayerId: 'p2',
+  } as any]
+  const threateningA = makePlayer('p2', 'B', [], 2600)
+  threateningA.isTing = true
+  threateningA.hand.exposedMelds = [{
+    type: 'pong',
+    tile: tile(TileSuit.DOTS, 9, 'threat-pong'),
+    tiles: [tile(TileSuit.DOTS, 9, 'tp1'), tile(TileSuit.DOTS, 9, 'tp2'), tile(TileSuit.DOTS, 9, 'tp3')],
+    sourcePlayerId: ai.id,
+  } as any, {
+    type: 'pong',
+    tile: tile(TileSuit.BAMBOOS, 9, 'threat-pong-2'),
+    tiles: [tile(TileSuit.BAMBOOS, 9, 'tb1'), tile(TileSuit.BAMBOOS, 9, 'tb2'), tile(TileSuit.BAMBOOS, 9, 'tb3')],
+    sourcePlayerId: ai.id,
+  } as any]
+  const threateningB = makePlayer('p3', 'C', [], 2500)
+  threateningB.hand.exposedMelds = [{
+    type: 'pong',
+    tile: tile(TileSuit.WIND, 2, 'threat-pong-3'),
+    tiles: [tile(TileSuit.WIND, 2, 'tw1'), tile(TileSuit.WIND, 2, 'tw2'), tile(TileSuit.WIND, 2, 'tw3')],
+    sourcePlayerId: ai.id,
+  } as any, {
+    type: 'pong',
+    tile: tile(TileSuit.CHARACTERS, 8, 'threat-pong-4'),
+    tiles: [tile(TileSuit.CHARACTERS, 8, 'tc1'), tile(TileSuit.CHARACTERS, 8, 'tc2'), tile(TileSuit.CHARACTERS, 8, 'tc3')],
+    sourcePlayerId: ai.id,
+  } as any]
+  const threateningC = makePlayer('p4', 'D', [], 2400)
+  const game = makeGame([ai, threateningA, threateningB, threateningC], [huTile])
+  game.pendingActions = [{
+    playerId: ai.id,
+    availableActions: [ActionType.HU, ActionType.PASS],
+    tile: huTile,
+    type: 'discard',
+    expiresAt: Date.now() + 1000,
+  } as any]
+
+  const originalRandom = Math.random
+  Math.random = () => 0.0
+  try {
+    const action = await shouldClaimPendingAction(ai, [ActionType.HU, ActionType.PASS], game)
+    ok(
+      'high-risk low-value discard hu is declined when leading under strong table pressure',
+      action === ActionType.PASS,
       `action=${action}`
     )
   } finally {

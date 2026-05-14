@@ -167,6 +167,37 @@ function getLiveRouteMetricPolicy(policy: any): {
   }
 }
 
+function getEffectiveGlobalMultiplier(game: any): number {
+  return Math.min(
+    ((game as any)?.inheritMultiplier ?? (game as any)?.inheritedGlobalMultiplier ?? 1) *
+    ((game as any)?.roundMultiplier ?? 1),
+    8
+  )
+}
+
+function shouldDeclineLowValueHu(game: GameState, player: Player): boolean {
+  const pendingDiscard =
+    game.pendingActions.find(pa => pa.type === 'discard' && pa.playerId === player.id) ||
+    game.pendingActions.find(pa => pa.type === 'discard' && pa.playerId !== player.id)
+  const discardTile = (pendingDiscard as any)?.tile as Tile | undefined
+  if (!discardTile) return false
+
+  const effectiveGlobalMultiplier = getEffectiveGlobalMultiplier(game)
+  const huTableThreat = estimateTableThreat(game, player.id)
+  const topOpponentScore = Math.max(...game.players.filter(p => p.id !== player.id).map(p => p.score ?? 0), 0)
+  const scoreLead = (player.score ?? 0) - topOpponentScore
+  const wildCount = player.hand.concealedTiles.filter(t => isWildTile(t, game)).length
+  const isWildDiscard = isWildTile(discardTile, game)
+  const isMenQing = player.hand.exposedMelds.length === 0
+  const likelyLowValueHu =
+    !isMenQing &&
+    !isWildDiscard &&
+    effectiveGlobalMultiplier <= 2 &&
+    wildCount <= 1
+
+  return huTableThreat >= 0.9 && scoreLead >= 800 && likelyLowValueHu
+}
+
 function tuneLiveClaimPolicy(policy: any): any {
   const tuned = { ...(policy || {}) }
   const raise = (key: string, value: number) => {
@@ -1690,7 +1721,9 @@ export async function shouldClaimPendingAction(
       try {
         const ctx = engine.buildActionContext(game, player.id, availableActions, game.turnIndex)
         const ranked = engine.rankActions(ctx)
-        if (ranked[0]?.action === ActionType.HU) return ActionType.HU
+        if (ranked[0]?.action === ActionType.HU) {
+          return shouldDeclineLowValueHu(game, player) ? ActionType.PASS : ActionType.HU
+        }
         const bestNonHu = ranked.find(r => r.action !== ActionType.HU)
         if (bestNonHu) return bestNonHu.action
         return ActionType.PASS
@@ -1722,13 +1755,17 @@ export async function shouldClaimPendingAction(
     }
 
     // 放冲（捉冲）
-    const pendingDiscard = game.pendingActions.find(
-      pa => pa.type === 'discard' && pa.playerId !== player.id
-    )
+    const pendingDiscard =
+      game.pendingActions.find(pa => pa.type === 'discard' && pa.playerId === player.id) ||
+      game.pendingActions.find(pa => pa.type === 'discard' && pa.playerId !== player.id)
     if (pendingDiscard) {
       const discardTile = (pendingDiscard as any).tile as Tile | undefined
       const isWildDiscard = discardTile ? isWildTile(discardTile, game) : false
       const isMenQing = exposedCount === 0
+      const wildCount = hand.filter(t => isWildTile(t, game)).length
+      if (shouldDeclineLowValueHu(game, player)) {
+        return ActionType.PASS
+      }
 
       // 百搭惩罚：放冲胡百搭降低概率
       if (isWildDiscard && (policy.discardHuWildPenalty ?? 0) > 0) {
@@ -1743,7 +1780,6 @@ export async function shouldClaimPendingAction(
       }
 
       // 宝牌惩罚：二宝捉冲降低意愿
-      const wildCount = hand.filter(t => isWildTile(t, game)).length
       if (wildCount >= 2 && (policy.bao2ClaimPenalty ?? 0) > 0) {
         const penalty = Math.max(0, 1.0 - (policy.bao2ClaimPenalty ?? 0))
         if (Math.random() >= penalty) return ActionType.PASS

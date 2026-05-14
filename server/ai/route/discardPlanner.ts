@@ -40,7 +40,9 @@ function getSecondSuit(input: RouteDiscardInput): TileSuit | null {
 }
 
 function getObserveBucketScore(input: RouteDiscardInput): number {
+  const estimatedRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
   const isSingleton = sameTypeCount(input) === 1
+  const isPair = sameTypeCount(input) >= 2
   const nearby = adjacentCount(input)
   const visibleCopies = countVisibleCopies(input)
   const shortestSuit = input.routeState.features.shortestSuit
@@ -70,6 +72,14 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
     nearby === 0
       ? 12 + Math.max(0, shortSuitGap - 1)
       : 0
+  const shortestSeenConnector =
+    shortestSuit &&
+    input.tile.suit === shortestSuit &&
+    nearby > 0 &&
+    visibleCopies >= 1 &&
+    shortSuitGap >= 4
+      ? 10 + Math.min(4, visibleCopies) + Math.max(0, shortSuitGap - 3)
+      : 0
   const seenHonorWaste =
     isHonor(input.tile) &&
     isSingleton &&
@@ -77,6 +87,15 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
     input.routeState.current !== 'HONOR_HEAVY' &&
     input.routeState.current !== 'HALF_FLUSH'
       ? 11 + visibleCopies
+      : 0
+  const exhaustedHonorPair =
+    isHonor(input.tile) &&
+    isPair &&
+    visibleCopies >= 2 &&
+    estimatedRound >= 5 &&
+    input.routeState.current !== 'HONOR_HEAVY' &&
+    input.routeState.current !== 'HALF_FLUSH'
+      ? 8 + visibleCopies
       : 0
   const secondSuitWaste =
     secondSuit &&
@@ -87,8 +106,27 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
     !isHonor(input.tile)
       ? 8
       : 0
+  const secondSuitSeenWaste =
+    secondSuit &&
+    input.tile.suit === secondSuit &&
+    input.tile.suit !== longestSuit &&
+    isSingleton &&
+    nearby <= 1 &&
+    !isHonor(input.tile) &&
+    visibleCopies >= 1
+      ? 9 + Math.min(3, visibleCopies)
+      : 0
 
-  return Math.max(weakUpstreamSuit || 0, shortestSeenSingleton || 0, shortestSingleton || 0, seenHonorWaste || 0, secondSuitWaste || 0)
+  return Math.max(
+    weakUpstreamSuit || 0,
+    shortestSeenSingleton || 0,
+    shortestSingleton || 0,
+    shortestSeenConnector || 0,
+    seenHonorWaste || 0,
+    exhaustedHonorPair || 0,
+    secondSuitWaste || 0,
+    secondSuitSeenWaste || 0
+  )
 }
 
 function scoreByRoute(input: RouteDiscardInput): number {
