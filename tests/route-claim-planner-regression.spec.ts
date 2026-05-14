@@ -9,6 +9,7 @@ import {
 } from '../server/types/game'
 import { evaluateRouteClaim } from '../server/ai/route/claimPlanner'
 import { scoreRouteDiscardCandidate } from '../server/ai/route/discardPlanner'
+import { detectDecisionPhase } from '../server/ai/route/phaseDetector'
 import { evaluateRouteState } from '../server/ai/route/routeEvaluator'
 import { shouldClaimPendingAction } from '../server/services/botService'
 
@@ -105,6 +106,46 @@ function buildRouteState(player: Player, game: GameState, shanten: number, effec
 }
 
 console.log('\n=== Regression: route claim planner ===\n')
+
+{
+  const phase = detectDecisionPhase({
+    estimatedRound: 4,
+    shanten: 2,
+    tableThreat: 0.42,
+    wallRemaining: 60,
+    meldCount: 0,
+    opponentOpenMelds: 2,
+    downstreamPressure: 0.45,
+    fastOpenOpponentCount: 1,
+    bigOpenOpponentCount: 0,
+  })
+
+  ok(
+    'phase detector leaves observe early when an opponent is already clearly opening fast',
+    phase === 'RUSH',
+    `phase=${phase}`
+  )
+}
+
+{
+  const phase = detectDecisionPhase({
+    estimatedRound: 8,
+    shanten: 3,
+    tableThreat: 0.66,
+    wallRemaining: 44,
+    meldCount: 0,
+    opponentOpenMelds: 4,
+    downstreamPressure: 0.8,
+    fastOpenOpponentCount: 2,
+    bigOpenOpponentCount: 1,
+  })
+
+  ok(
+    'phase detector enters defense when an opponent is clearly building a dangerous big open hand',
+    phase === 'DEFENSE',
+    `phase=${phase}`
+  )
+}
 
 {
   const ai = makePlayer('ai-route-memory', 'AI-AK', [
@@ -650,6 +691,103 @@ console.log('\n=== Regression: route claim planner ===\n')
     'honor heavy route rejects number chow',
     routeState.current === 'HONOR_HEAVY' && !decision.allowed,
     `route=${routeState.current}, allowed=${decision.allowed}, reason=${decision.reason}`
+  )
+}
+
+{
+  const ai = makePlayer('ai-pure-upgrade-discard', 'AI-AK', [
+    tile(TileSuit.DOTS, 1, 'd1'),
+    tile(TileSuit.DOTS, 1, 'd1b'),
+    tile(TileSuit.DOTS, 2, 'd2'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 4, 'd4'),
+    tile(TileSuit.DOTS, 5, 'd5'),
+    tile(TileSuit.DOTS, 6, 'd6'),
+    tile(TileSuit.DOTS, 6, 'd6b'),
+    tile(TileSuit.DOTS, 7, 'd7'),
+    tile(TileSuit.DOTS, 8, 'd8'),
+    tile(TileSuit.DOTS, 9, 'd9'),
+    tile(TileSuit.WIND, 1, 'east-a'),
+    tile(TileSuit.WIND, 1, 'east-b'),
+  ])
+  const game = makeGame([ai, makePlayer('p2', 'B', []), makePlayer('p3', 'C', []), makePlayer('p4', 'D', [])], [])
+  const routeState = buildRouteState(ai, game, 2, 11)
+  const eastTile = ai.hand.concealedTiles.find(tile => tile.id === 'east-a')!
+  const dotTile = ai.hand.concealedTiles.find(tile => tile.id === 'd6')!
+  const eastScore = scoreRouteDiscardCandidate({
+    tile: eastTile,
+    hand: ai.hand.concealedTiles,
+    player: ai,
+    game,
+    routeState,
+    candidateShanten: 2,
+    candidateEffective: 11,
+    discardDanger: 0.2,
+    winningTiles: 0,
+    baselineScore: 0,
+    afterRouteState: routeState,
+  })
+  const dotScore = scoreRouteDiscardCandidate({
+    tile: dotTile,
+    hand: ai.hand.concealedTiles,
+    player: ai,
+    game,
+    routeState,
+    candidateShanten: 2,
+    candidateEffective: 11,
+    discardDanger: 0.2,
+    winningTiles: 0,
+    baselineScore: 0,
+    afterRouteState: routeState,
+  })
+
+  ok(
+    'half flush pure-flush upgrade mode actively breaks weak honor pair before target suit tiles',
+    routeState.current === 'HALF_FLUSH' &&
+      routeState.features.pureFlushUpgradeReady &&
+      eastScore > dotScore + 10,
+    `route=${routeState.current}, upgrade=${routeState.features.pureFlushUpgradeReady}, east=${eastScore.toFixed(2)}, dot=${dotScore.toFixed(2)}`
+  )
+}
+
+{
+  const claimTile = tile(TileSuit.WIND, 1, 'claim-east-upgrade')
+  const ai = makePlayer('ai-pure-upgrade-claim', 'AI-AK', [
+    tile(TileSuit.DOTS, 1, 'd1'),
+    tile(TileSuit.DOTS, 1, 'd1b'),
+    tile(TileSuit.DOTS, 2, 'd2'),
+    tile(TileSuit.DOTS, 3, 'd3'),
+    tile(TileSuit.DOTS, 4, 'd4'),
+    tile(TileSuit.DOTS, 5, 'd5'),
+    tile(TileSuit.DOTS, 6, 'd6'),
+    tile(TileSuit.DOTS, 6, 'd6b'),
+    tile(TileSuit.DOTS, 7, 'd7'),
+    tile(TileSuit.DOTS, 8, 'd8'),
+    tile(TileSuit.DOTS, 9, 'd9'),
+    tile(TileSuit.WIND, 1, 'east-a'),
+    tile(TileSuit.WIND, 1, 'east-b'),
+  ])
+  const game = makeGame([ai, makePlayer('p2', 'B', []), makePlayer('p3', 'C', []), makePlayer('p4', 'D', [])], [])
+  const routeState = buildRouteState(ai, game, 2, 11)
+  const decision = evaluateRouteClaim({
+    action: ActionType.PENG,
+    player: ai,
+    game,
+    claimTile,
+    routeState,
+    candidateHand: ai.hand.concealedTiles.filter(tile => !['east-a', 'east-b'].includes(tile.id)),
+    candidateShanten: 2,
+    candidateEffective: 11,
+    passShanten: 2,
+    passEffective: 11,
+    tableThreat: 0.18,
+    wallRemaining: game.wall.length,
+  })
+
+  ok(
+    'half flush pure-flush upgrade mode blocks honor peng that would stop the upgrade',
+    routeState.features.pureFlushUpgradeReady && !decision.allowed,
+    `upgrade=${routeState.features.pureFlushUpgradeReady}, allowed=${decision.allowed}, reason=${decision.reason}`
   )
 }
 

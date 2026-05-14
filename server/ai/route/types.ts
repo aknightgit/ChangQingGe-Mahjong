@@ -29,6 +29,10 @@ export interface RouteFeatureSummary {
   opponentOpenMelds: number
   downstreamPressure: number
   oneSuitOpponentCount: number
+  fastOpenOpponentCount: number
+  bigOpenOpponentCount: number
+  pureFlushUpgradeReady: boolean
+  weakHonorPairCount: number
 }
 
 export interface RouteEvaluationInput {
@@ -40,6 +44,7 @@ export interface RouteEvaluationInput {
   tableThreat: number
   wallRemaining: number
   previousRouteState?: RouteState | null
+  policy?: any
 }
 
 export interface RouteScore {
@@ -50,6 +55,7 @@ export interface RouteScore {
 }
 
 export interface RouteState {
+  policy?: any
   phase: DecisionPhase
   current: RouteKind
   secondary: RouteKind | null

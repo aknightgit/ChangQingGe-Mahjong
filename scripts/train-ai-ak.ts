@@ -2859,7 +2859,8 @@ function isTrainingBadOpen(
 function isTrainingForcedOpenCausal(
   routeSignal: TrainingRouteSignal | null,
   passEval?: AkPostDiscardEvaluation | null,
-  claimEval?: AkPostDiscardEvaluation | null
+  claimEval?: AkPostDiscardEvaluation | null,
+  mode: 'peng' | 'chow' = 'peng'
 ): boolean {
   if (!routeSignal || !passEval || !claimEval) return false
   const pressuredMenqing = routeSignal.route === 'MENQING_SPEED' || routeSignal.confidence < 2.5
@@ -2868,8 +2869,27 @@ function isTrainingForcedOpenCausal(
   const improvesWaits = claimEval.directWaits > passEval.directWaits
   const improvesReadyDraws = claimEval.readyDraws > passEval.readyDraws
   const improvesWinDraws = claimEval.winDraws > passEval.winDraws
-  const strongScoreGain = claimEval.score >= passEval.score + 8
-  return lowersShanten || improvesWaits || improvesReadyDraws || improvesWinDraws || strongScoreGain
+  const improvesFutureDraws = claimEval.improvingDraws >= passEval.improvingDraws + (mode === 'peng' ? 4 : 5)
+  const strongScoreGain = claimEval.score >= passEval.score + (mode === 'peng' ? 10 : 8)
+  const passStalling =
+    passEval.shantenLike >= 2 &&
+    passEval.readyDraws === 0 &&
+    passEval.winDraws === 0 &&
+    passEval.improvingDraws <= 12
+  const passWeakTingQuality =
+    passEval.directWaits <= 1 &&
+    passEval.winDraws <= 1 &&
+    passEval.score <= claimEval.score - (mode === 'peng' ? 4 : 3)
+  const claimClearlyBetter =
+    lowersShanten ||
+    improvesWaits ||
+    improvesReadyDraws ||
+    improvesWinDraws ||
+    improvesFutureDraws ||
+    strongScoreGain
+
+  if (!claimClearlyBetter) return false
+  return passStalling || passWeakTingQuality || lowersShanten || improvesWinDraws || strongScoreGain
 }
 
 function inferTrainingRouteSignal(
@@ -3767,7 +3787,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
             : null
           if (opp.name === 'AI-AK') {
             diagnosticsState.akOpenCount++
-            if (isForcedOpenPressure(otherIdx) && isTrainingForcedOpenCausal(akRouteBeforeOpen, akPassEval, akPengEval)) diagnosticsState.akForcedOpenCount++
+            if (isForcedOpenPressure(otherIdx) && isTrainingForcedOpenCausal(akRouteBeforeOpen, akPassEval, akPengEval, 'peng')) diagnosticsState.akForcedOpenCount++
             if (akRouteBeforeOpen && isTrainingBadOpen(opp, discard, 'peng', akRouteBeforeOpen, akPassEval, akPengEval)) {
               diagnosticsState.akBadOpenCount++
             }
@@ -3856,7 +3876,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       : null
     if (nextP.name === 'AI-AK' && shouldChow) {
       diagnosticsState.akOpenCount++
-      if (isForcedOpenPressure(nextPlayer) && isTrainingForcedOpenCausal(akRouteBeforeChow, akPassEval, akChowEval)) diagnosticsState.akForcedOpenCount++
+      if (isForcedOpenPressure(nextPlayer) && isTrainingForcedOpenCausal(akRouteBeforeChow, akPassEval, akChowEval, 'chow')) diagnosticsState.akForcedOpenCount++
       if (akRouteBeforeChow && isTrainingBadOpen(nextP, discard, 'chow', akRouteBeforeChow, akPassEval, akChowEval)) {
         diagnosticsState.akBadOpenCount++
       }

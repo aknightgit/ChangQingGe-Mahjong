@@ -186,6 +186,9 @@ function scoreByRoute(input: RouteDiscardInput): number {
         return (count >= 2 ? -4.4 : -3.2) + (nearby > 0 ? -1.6 : -0.3)
       }
       if (isHonor(tile)) {
+        if (routeState.features.pureFlushUpgradeReady) {
+          return count >= 2 ? 5.6 : 3.4
+        }
         return count === 1 ? -0.1 : -1.8
       }
       return 5.8 + (tile.suit === shortestSuit ? 1.1 : 0)
@@ -243,6 +246,13 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
       : input.candidateShanten === 1
         ? input.candidateEffective * 0.04
         : 0
+  const pureFlushUpgradeBonus =
+    input.routeState.current === 'HALF_FLUSH' &&
+    input.routeState.features.pureFlushUpgradeReady &&
+    isHonor(input.tile) &&
+    sameTypeCount(input) >= 2
+      ? 7.5
+      : 0
 
-  return routeBias + preservePrimary + targetSuitBonus + observeOrdering + routeStrengthDelta * 0.18 + dangerAdjustment + tingBonus
+  return routeBias + preservePrimary + targetSuitBonus + observeOrdering + routeStrengthDelta * 0.18 + dangerAdjustment + tingBonus + pureFlushUpgradeBonus
 }

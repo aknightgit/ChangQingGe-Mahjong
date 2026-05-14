@@ -98,6 +98,7 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     tableThreat,
     wallRemaining,
   } = input
+  const policy = routeState.policy || null
 
   const afterRouteState = evaluateRouteState({
     game,
@@ -277,10 +278,26 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       if (!isHonorTile && routeState.targetSuit && claimTile.suit !== routeState.targetSuit) {
         return { allowed: false, tuneDelta: -1.6, reason: 'off_route_half_flush' }
       }
+      if (
+        isHonorTile &&
+        routeState.features.pureFlushUpgradeReady &&
+        routeState.features.weakHonorPairCount >= 1 &&
+        candidateShanten >= passShanten &&
+        candidateEffective <= passEffective + 1
+      ) {
+        return { allowed: false, tuneDelta: -1.5, reason: 'pure_flush_upgrade_blocks_honor_claim' }
+      }
       return {
         allowed: true,
-        tuneDelta: (isTargetSuit ? 0.72 : 0.28) + routeGain * 0.06,
-        reason: isTargetSuit ? 'target_suit_claim' : 'honor_support_claim',
+        tuneDelta:
+          (isTargetSuit ? 0.72 : 0.28) +
+          routeGain * 0.06 +
+          (routeState.features.pureFlushUpgradeReady && isTargetSuit ? 0.42 : 0) +
+          ((policy?.hunPengPursuit || 0) * (routeState.features.honorPairCount >= 1 && isTargetSuit ? 0.18 : 0)) +
+          ((policy?.qingPengPursuit || 0) * (routeState.features.secondSuitCount === 0 && isTargetSuit ? 0.12 : 0)),
+        reason: isTargetSuit
+          ? (routeState.features.pureFlushUpgradeReady ? 'pure_flush_upgrade_target_claim' : 'target_suit_claim')
+          : 'honor_support_claim',
       }
 
     case 'ALL_PUNGS':
@@ -289,7 +306,12 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       }
       return {
         allowed: true,
-        tuneDelta: 0.55 + (action === ActionType.KONG ? 0.18 : 0.12) + routeGain * 0.04,
+        tuneDelta:
+          0.55 +
+          (action === ActionType.KONG ? 0.18 : 0.12) +
+          routeGain * 0.04 +
+          ((policy?.qingPengPursuit || 0) * (routeState.features.secondSuitCount === 0 ? 0.14 : 0)) +
+          ((policy?.hunPengPursuit || 0) * (routeState.features.honorPairCount >= 1 ? 0.16 : 0)),
         reason: 'all_pungs_claim',
       }
 
@@ -302,7 +324,11 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       }
       return {
         allowed: true,
-        tuneDelta: 0.7 + routeGain * 0.05,
+        tuneDelta:
+          0.7 +
+          routeGain * 0.05 +
+          (policy?.allHonorsPursuit || 0) * 0.18 +
+          (policy?.allHonorsPungsPursuit || 0) * 0.12,
         reason: 'honor_claim_push',
       }
   }

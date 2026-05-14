@@ -198,6 +198,125 @@ function shouldDeclineLowValueHu(game: GameState, player: Player): boolean {
   return huTableThreat >= 0.9 && scoreLead >= 800 && likelyLowValueHu
 }
 
+function estimateRouteExpectedFan(routeState: any, player: Player, game: GameState, winningTiles: number): number {
+  const policy = routeState?.policy ?? getPolicyForPlayer(player)
+  const exposedCount = player.hand.exposedMelds.length
+  const effectiveGlobalMultiplier = getEffectiveGlobalMultiplier(game)
+  const longestSuitCount = routeState?.features?.longestSuitCount || 0
+  const secondSuitCount = routeState?.features?.secondSuitCount || 0
+  const honorCount = routeState?.features?.honorCount || 0
+  const honorPairCount = routeState?.features?.honorPairCount || 0
+  const tripletCount = routeState?.features?.tripletCount || 0
+  const wildCount = routeState?.features?.wildCount || 0
+  const handQuality = longestSuitCount >= 7 ? 7 : longestSuitCount >= 6 ? 6 : longestSuitCount >= 5 ? 5 : 0
+  const multPrefix = effectiveGlobalMultiplier >= 4 ? 'multHigh' : 'multLow'
+  const multPureFlushBoost = handQuality >= 6 ? Number(policy?.[`${multPrefix}Hand${handQuality}PureFlush`] ?? 0) : 0
+  const multHalfFlushBoost = handQuality >= 5 ? Number(policy?.[`${multPrefix}Hand${handQuality}HalfFlush`] ?? 0) : 0
+  const multAllPungsBoost = handQuality >= 5 ? Number(policy?.[`${multPrefix}Hand${handQuality}AllPungs`] ?? 0) : 0
+  const qingPengReady = longestSuitCount >= 8 && secondSuitCount === 0 && honorCount <= 2
+  const hunPengReady = longestSuitCount >= 6 && honorCount >= 2 && secondSuitCount <= 1
+  let fan = exposedCount === 0 ? 2.2 : 0.8
+
+  switch (routeState?.current) {
+    case 'HALF_FLUSH':
+      fan += routeState?.features?.pureFlushUpgradeReady ? 8.5 : 4.8
+      fan += (policy?.halfFlushWeight || 0) * 1.8
+      fan += (policy?.pureFlushPursuit || 0) * Math.max(0, longestSuitCount - 6) * 0.3
+      fan += multHalfFlushBoost * 2.2 + multPureFlushBoost * (routeState?.features?.pureFlushUpgradeReady ? 2.4 : 0.8)
+      fan += (policy?.hunPengPursuit || 0) * (hunPengReady ? 1.8 : 0)
+      fan += (policy?.qingPengPursuit || 0) * (qingPengReady ? 1.4 : 0)
+      break
+    case 'ALL_PUNGS':
+      fan += 4.2 + Math.max(0, (routeState?.features?.tripletCount || 0) - 1) * 0.35
+      fan += (policy?.allPungsPursuit || 0) * 1.8
+      fan += multAllPungsBoost * 2.4
+      fan += (policy?.qingPengPursuit || 0) * (qingPengReady ? 2.1 : 0)
+      fan += (policy?.hunPengPursuit || 0) * (hunPengReady ? 2.0 : 0)
+      break
+    case 'HONOR_HEAVY':
+      fan += 4.6 + Math.max(0, honorPairCount - 1) * 0.45
+      fan += (policy?.allHonorsPursuit || 0) * 2.8
+      fan += (policy?.allHonorsPungsPursuit || 0) * Math.max(1, honorPairCount + tripletCount * 0.6)
+      break
+    case 'OPEN_SPEED':
+      fan += 1.4
+      break
+    default:
+      fan += 1.8
+      break
+  }
+
+  if ((routeState?.features?.wildCount || 0) === 0) fan += 0.6
+  if (wildCount === 1) fan += (policy?.wild1RouteFlushBoost || 0) * (routeState?.current === 'HALF_FLUSH' ? 0.8 : 0.2)
+  if (wildCount === 2) fan += (policy?.wild2RouteFlushBoost || 0) * (routeState?.current === 'HALF_FLUSH' ? 1.1 : 0.2)
+  if (wildCount >= 3) fan += (policy?.wild3RouteFlushBoost || 0) * (routeState?.current === 'HALF_FLUSH' ? 1.2 : 0.25)
+  if (winningTiles >= 12) fan += 0.5
+  else if (winningTiles <= 5) fan -= 0.4
+  fan += Math.max(0, effectiveGlobalMultiplier - 1) * 0.45
+
+  return Math.max(1, fan)
+}
+
+function estimateTingDecisionValue(input: {
+  routeState: any
+  player: Player
+  game: GameState
+  winningTiles: number
+  discardDanger: number
+  tableThreat: number
+  scoreLead: number
+}): number {
+  const { routeState, player, game, winningTiles, discardDanger, tableThreat, scoreLead } = input
+  const policy = routeState?.policy ?? getPolicyForPlayer(player)
+  const expectedFan = estimateRouteExpectedFan(routeState, player, game, winningTiles)
+  const tsumoValue = expectedFan * (player.hand.exposedMelds.length === 0 ? 1.45 : 1.1) + winningTiles * 0.08
+  const ronValue = expectedFan * (routeState?.current === 'HALF_FLUSH' ? 1.3 : 1.05) + winningTiles * 0.04
+  const safetyPreference = (policy?.safeTilePriority || 0) + (policy?.wallLateDefense || 0) * 0.6
+  const defensePreference = (policy?.defenseRiskAversion || 0) + (policy?.oppTingDetection || 0) * 0.4
+  const riskCost =
+    discardDanger *
+    (
+      1.4 +
+      tableThreat * (scoreLead > 1000 ? 6.4 : 4.2) +
+      safetyPreference * 1.8 +
+      defensePreference * 2.1 +
+      (scoreLead < -800 ? 0.4 : 0)
+    )
+
+  return tsumoValue + ronValue - riskCost
+}
+
+function estimateNearTingDecisionValue(input: {
+  routeState: any
+  player: Player
+  game: GameState
+  shanten: number
+  effective: number
+  winningTiles: number
+  tableThreat: number
+  scoreLead: number
+}): number {
+  const { routeState, player, game, shanten, effective, winningTiles, tableThreat, scoreLead } = input
+  const policy = routeState?.policy ?? getPolicyForPlayer(player)
+  const expectedFan = estimateRouteExpectedFan(routeState, player, game, Math.max(winningTiles, Math.floor(effective / 2)))
+  if (shanten === 0) {
+    return estimateTingDecisionValue({
+      routeState,
+      player,
+      game,
+      winningTiles,
+      discardDanger: tableThreat * 0.35,
+      tableThreat,
+      scoreLead,
+    })
+  }
+  return (
+    expectedFan * (1.1 + (policy?.speedVsValueBalance || 0) * 0.12) +
+    effective * 0.08 -
+    tableThreat * ((scoreLead > 1000 ? 2.1 : 1.5) + (policy?.safeTilePriority || 0) * 0.7 + (policy?.defenseRiskAversion || 0) * 0.8)
+  )
+}
+
 function tuneLiveClaimPolicy(policy: any): any {
   const tuned = { ...(policy || {}) }
   const raise = (key: string, value: number) => {
@@ -1071,6 +1190,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         tableThreat,
         wallRemaining,
         previousRouteState: getPlayerRouteMemory(player),
+        policy: getPolicyForPlayer(player),
       })
     : null
 
@@ -1178,6 +1298,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         tableThreat,
         wallRemaining,
         previousRouteState: routeState,
+        policy: getPolicyForPlayer(player),
       })
       const routeScore = scoreRouteDiscardCandidate({
         tile,
@@ -1192,6 +1313,18 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         baselineScore: score,
         afterRouteState,
       })
+      const expectedFan = shanten === 0 ? estimateRouteExpectedFan(afterRouteState, player, game, winningTiles) : 0
+      const tingDecisionValue = shanten === 0
+        ? estimateTingDecisionValue({
+            routeState: afterRouteState,
+            player,
+            game,
+            winningTiles,
+            discardDanger,
+            tableThreat,
+            scoreLead,
+          })
+        : 0
       score += routeScore
       composite += routeScore * 2
       const visibleCopies = countVisibleCopies(tile, game)
@@ -1217,10 +1350,13 @@ export function selectDiscardTile(player: Player, game: GameState): string {
       }
       if (shanten === 0) {
         composite += timingValue * (3.2 + routeMetricPolicy.tingQuality * 0.2)
+        composite += tingDecisionValue * (1.15 + routeMetricPolicy.tingQuality * 0.08)
+        composite += expectedFan * 1.4
       } else if (routeState.phase === 'OBSERVE' && routeState.current === 'MENQING_SPEED') {
         composite += (effective - currentEffective) * 0.4
       } else if (shanten === 1) {
         composite += effective * (routeMetricPolicy.tingQuality * 0.03)
+        composite += estimateRouteExpectedFan(afterRouteState, player, game, Math.max(4, effective / 2)) * 0.9
       }
     }
 
@@ -1849,6 +1985,7 @@ export async function shouldClaimPendingAction(
         tableThreat,
         wallRemaining,
         previousRouteState: getPlayerRouteMemory(player),
+        policy,
       })
     : null
 
@@ -1871,6 +2008,19 @@ export async function shouldClaimPendingAction(
       }
       if (removed === 2 && candidateHand.length > 0) {
         const { shanten, effective } = evaluateResultingHand(candidateHand)
+        const candidateRouteState = useRoutePlanner
+          ? evaluateRouteState({
+              game,
+              player,
+              hand: candidateHand,
+              shanten,
+              effectiveTiles: effective,
+              tableThreat,
+              wallRemaining,
+              previousRouteState: routeState,
+              policy,
+            })
+          : routeState
         let pengTune = policy.pengChance || 0
         const pairCount = countPairs(hand)
         const wildCount = hand.filter(t => isWildTile(t, game)).length
@@ -1957,6 +2107,22 @@ export async function shouldClaimPendingAction(
         }
 
         // === 对手听牌检测（oppTingDetection > 0 → 减少碰牌）===
+        if (shanten <= 1 && candidateRouteState) {
+          const winningTilesAfterClaim = shanten === 0
+            ? countWinningTilesForHand(candidateHand, exposedCount + 1, game)
+            : 0
+          pengTune += estimateNearTingDecisionValue({
+            routeState: candidateRouteState,
+            player,
+            game,
+            shanten,
+            effective,
+            winningTiles: winningTilesAfterClaim,
+            tableThreat,
+            scoreLead,
+          }) * (0.06 + routeMetricPolicy.tingQuality * 0.006)
+        }
+
         if ((policy.oppTingDetection || 0) > 0 && (game as any).opponentTingIndicator) {
           pengTune *= Math.max(0, 1.0 - (policy.oppTingDetection || 0) * 0.8)
         }
@@ -2115,6 +2281,19 @@ export async function shouldClaimPendingAction(
     }
 
     if (bestChow) {
+      const candidateRouteState = useRoutePlanner
+        ? evaluateRouteState({
+            game,
+            player,
+            hand: bestChow.candidateHand,
+            shanten: bestChow.shanten,
+            effectiveTiles: bestChow.effective,
+            tableThreat,
+            wallRemaining,
+            previousRouteState: routeState,
+            policy,
+          })
+        : routeState
       // ==========================================================
       //  策略参数接入：用这些因子调整 CHOW 最终评分
       //  使用参数：
@@ -2163,6 +2342,21 @@ export async function shouldClaimPendingAction(
       }
 
       if (!chowBlockedByRoute) {
+        if (bestChow.shanten <= 1 && candidateRouteState) {
+          const winningTilesAfterClaim = bestChow.shanten === 0
+            ? countWinningTilesForHand(bestChow.candidateHand, exposedCount + 1, game)
+            : 0
+          bestChow.tune += estimateNearTingDecisionValue({
+            routeState: candidateRouteState,
+            player,
+            game,
+            shanten: bestChow.shanten,
+            effective: bestChow.effective,
+            winningTiles: winningTilesAfterClaim,
+            tableThreat,
+            scoreLead,
+          }) * (0.055 + routeMetricPolicy.tingQuality * 0.005)
+        }
         bestChow.tune = Math.max(0.05, bestChow.tune)
         actionScores.set(ActionType.CHOW, {
           shanten: bestChow.shanten,

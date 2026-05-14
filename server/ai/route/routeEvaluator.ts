@@ -12,6 +12,41 @@ import type {
 const NUMBER_SUITS: TileSuit[] = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
 const ROUTES: RouteKind[] = ['MENQING_SPEED', 'OPEN_SPEED', 'HALF_FLUSH', 'ALL_PUNGS', 'HONOR_HEAVY']
 
+function getPolicyValue(policy: any, key: string, fallback = 0): number {
+  const raw = Number(policy?.[key] ?? fallback)
+  return Number.isFinite(raw) ? raw : fallback
+}
+
+function getRouteBucketBoost(policy: any, handQuality: number, isHighMult: boolean, route: RouteKind): number {
+  if (handQuality < 5) return 0
+  const multPrefix = isHighMult ? 'multHigh' : 'multLow'
+  if (route === 'ALL_PUNGS') {
+    return getPolicyValue(policy, `${multPrefix}Hand${handQuality}AllPungs`)
+  }
+  if (route === 'HALF_FLUSH') {
+    return getPolicyValue(policy, `${multPrefix}Hand${handQuality}HalfFlush`)
+  }
+  if (route === 'HALF_FLUSH') return 0
+  return 0
+}
+
+function getPureFlushBucketBoost(policy: any, handQuality: number, isHighMult: boolean): number {
+  if (handQuality < 6) return 0
+  const multPrefix = isHighMult ? 'multHigh' : 'multLow'
+  return getPolicyValue(policy, `${multPrefix}Hand${handQuality}PureFlush`)
+}
+
+function getWildRouteBoost(policy: any, wildCount: number, route: 'meld' | 'flush' | 'honors' | 'allPungs'): number {
+  if (wildCount <= 0) return 0
+  const bucket = wildCount >= 3 ? 'wild3' : wildCount === 2 ? 'wild2' : 'wild1'
+  const suffix =
+    route === 'meld' ? 'RouteMeldPush' :
+    route === 'flush' ? 'RouteFlushBoost' :
+    route === 'honors' ? 'RouteHonorsBoost' :
+    'RouteAllPungsBoost'
+  return getPolicyValue(policy, `${bucket}${suffix}`)
+}
+
 function getEffectiveGlobalMultiplier(game: any): number {
   const inherit = game?.inheritMultiplier ?? game?.inheritedGlobalMultiplier ?? 1
   const round = game?.roundMultiplier ?? 1
@@ -37,6 +72,7 @@ function buildFeatureSummary(input: RouteEvaluationInput): RouteFeatureSummary {
   let isolatedCount = 0
   let honorCount = 0
   let honorPairCount = 0
+  let weakHonorPairCount = 0
   let wildCount = 0
 
   for (const tile of hand) {
@@ -52,6 +88,7 @@ function buildFeatureSummary(input: RouteEvaluationInput): RouteFeatureSummary {
     if (tiles.length >= 3) tripletCount++
     const sample = tiles[0]
     if (isHonor(sample) && tiles.length >= 2) honorPairCount++
+    if (isHonor(sample) && tiles.length === 2) weakHonorPairCount++
     if (tiles.length === 1 && countAdjacentPartners(sample, hand) === 0) isolatedCount++
   }
 
@@ -109,6 +146,22 @@ function buildFeatureSummary(input: RouteEvaluationInput): RouteFeatureSummary {
   ) || null
   const opponents = game.players.filter(candidate => candidate.id !== player.id)
   const opponentOpenMelds = opponents.reduce((sum, candidate) => sum + (candidate.hand.exposedMelds?.length || 0), 0)
+  const fastOpenOpponentCount = opponents.filter(candidate =>
+    (candidate.hand.exposedMelds?.length || 0) >= 2 || !!candidate.isTing
+  ).length
+  const bigOpenOpponentCount = opponents.filter(candidate => {
+    const melds = candidate.hand.exposedMelds || []
+    if (melds.length >= 3) return true
+    let honorMelds = 0
+    const suitSet = new Set<TileSuit>()
+    for (const meld of melds) {
+      for (const tile of meld.tiles || []) {
+        if (isHonor(tile)) honorMelds++
+        if (NUMBER_SUITS.includes(tile.suit)) suitSet.add(tile.suit)
+      }
+    }
+    return honorMelds >= 3 || (melds.length >= 2 && suitSet.size === 1)
+  }).length
   const downstreamPressure =
     (downstream?.hand.exposedMelds?.length || 0) * 0.45 +
     (downstream?.isTing ? 0.9 : 0)
@@ -138,6 +191,21 @@ function buildFeatureSummary(input: RouteEvaluationInput): RouteFeatureSummary {
     }
   }
 
+  const effectiveGlobalMultiplier = getEffectiveGlobalMultiplier(game)
+  const estimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
+  const pureFlushUpgradeReady =
+    longestSuitCount >= 10 &&
+    secondSuitCount === 0 &&
+    honorPairCount >= 1 &&
+    honorCount <= 2 &&
+    weakHonorPairCount >= 1 &&
+    estimatedRound <= 15 &&
+    input.tableThreat <= 0.58 &&
+    opponentOpenMelds <= 3 &&
+    downstreamPressure <= 0.75 &&
+    oneSuitOpponentCount === 0 &&
+    effectiveGlobalMultiplier <= 3
+
   return {
     longestSuit,
     longestSuitCount,
@@ -156,8 +224,12 @@ function buildFeatureSummary(input: RouteEvaluationInput): RouteFeatureSummary {
     allOpponentsAvoidSuit,
     liveHonorCount,
     opponentOpenMelds,
+    fastOpenOpponentCount,
+    bigOpenOpponentCount,
     downstreamPressure,
     oneSuitOpponentCount,
+    pureFlushUpgradeReady,
+    weakHonorPairCount,
   }
 }
 
@@ -165,12 +237,31 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
   const reasons: string[] = []
   let score = 0
   let targetSuit: TileSuit | null = null
+  const policy = input.policy ?? input.previousRouteState?.policy ?? null
   const effectiveGlobalMultiplier = getEffectiveGlobalMultiplier(input.game)
   const estimatedRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
+  const handQuality = features.longestSuitCount >= 7 ? 7 : features.longestSuitCount >= 6 ? 6 : features.longestSuitCount >= 5 ? 5 : 0
+  const handRouteBias =
+    handQuality >= 7 ? getPolicyValue(policy, 'hand7RouteBias') :
+    handQuality >= 6 ? getPolicyValue(policy, 'hand6RouteBias') :
+    handQuality >= 5 ? getPolicyValue(policy, 'hand5RouteBias') :
+    0
+  const isHighMult = effectiveGlobalMultiplier >= 4
+  const routeBucketBoost = getRouteBucketBoost(policy, handQuality, isHighMult, route)
+  const pureFlushBucketBoost = getPureFlushBucketBoost(policy, handQuality, isHighMult)
   const earlyPairHeavy = estimatedRound <= 5 && features.pairCount >= 4
   const noWildOpenPush = features.wildCount === 0
   const multiWildMenqingPush = features.wildCount >= 2
   const oneWildLongSuitPivot = features.wildCount === 1 && features.longestSuitCount >= 6
+  const suitedPairCount = Math.max(0, features.pairCount - features.honorPairCount)
+  const qingPengReady =
+    features.longestSuitCount >= 8 &&
+    features.secondSuitCount === 0 &&
+    features.honorCount <= 2
+  const hunPengReady =
+    features.longestSuitCount >= 6 &&
+    features.honorCount >= 2 &&
+    features.secondSuitCount <= 1
   const upstreamRejectedLongSuit =
     !!features.upstreamRejectedSuit &&
     features.longestSuit === features.upstreamRejectedSuit &&
@@ -203,6 +294,7 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
         reasons.push('upstream_void_suit')
         score += 1.5
       }
+      score += getPolicyValue(policy, 'wallEarlySpeedPush') * 0.8
       break
 
     case 'OPEN_SPEED':
@@ -216,6 +308,9 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       score += features.downstreamPressure * 4.2
       score += features.opponentOpenMelds * 1.4
       score += input.player.hand.exposedMelds.length * 1.6
+      score += getWildRouteBoost(policy, features.wildCount, 'meld') * 3.5
+      score += getPolicyValue(policy, 'wallEarlySpeedPush') * 1.1
+      score += getPolicyValue(policy, 'wallMidBalance') * 0.8
       score += Math.max(0, effectiveGlobalMultiplier - 1) * 2.1
       if (noWildOpenPush) score += 2.4
       if (oneWildLongSuitPivot) score += 1.2
@@ -238,7 +333,14 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       score += features.honorCount * 1.6
       score += features.honorPairCount * 1.5
       score += features.wildCount * 2.2
+      score += getPolicyValue(policy, 'halfFlushWeight') * 4.5
+      score += getWildRouteBoost(policy, features.wildCount, 'flush') * 4.2
+      score += routeBucketBoost * (2.6 + handRouteBias)
+      score += pureFlushBucketBoost * (features.secondSuitCount === 0 ? 2.2 : 1.1)
       score -= features.secondSuitCount * 2.5
+      if (hunPengReady) score += getPolicyValue(policy, 'hunPengPursuit') * (3.8 + suitedPairCount * 0.35)
+      if (qingPengReady) score += getPolicyValue(policy, 'qingPengPursuit') * (2.4 + pureFlushBucketBoost * 0.6)
+      score += getPolicyValue(policy, 'pureFlushPursuit') * Math.max(0, features.longestSuitCount - 6) * 0.8
       if (features.longestSuitCount >= 9) {
         reasons.push('half_flush_nine_tiles')
         score += 16
@@ -262,6 +364,10 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       }
       if (features.wildCount === 0) score += 1.1
       score += features.oneSuitOpponentCount * 0.8
+      if (features.pureFlushUpgradeReady) {
+        reasons.push('pure_flush_upgrade_ready')
+        score += 8.5
+      }
       break
 
     case 'ALL_PUNGS':
@@ -269,8 +375,16 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       score += features.tripletCount * 5.8
       score += features.honorPairCount * 2.5
       score += features.wildCount * 2.8
+      score += getPolicyValue(policy, 'allPungsPursuit') * 6.5
+      score += getWildRouteBoost(policy, features.wildCount, 'allPungs') * 4.8
+      score += routeBucketBoost * (3.0 + handRouteBias)
+      score += getPolicyValue(policy, 'sequenceVsTripletBias') * Math.max(0, features.tripletCount - features.sequenceLikeCount * 0.25) * 1.2
       score -= features.sequenceLikeCount * 1.8
       score -= Math.max(0, features.secondSuitCount - 3) * 0.6
+      if (qingPengReady) score += getPolicyValue(policy, 'qingPengPursuit') * (6.2 + pureFlushBucketBoost * 0.9)
+      if (hunPengReady) score += getPolicyValue(policy, 'hunPengPursuit') * (5.4 + features.honorPairCount * 0.8)
+      if (features.honorCount >= 6) score += getPolicyValue(policy, 'allHonorsPursuit') * 2.2
+      score += getPolicyValue(policy, 'flushVsPungsBalance') * ((qingPengReady ? 2.4 : 0) - (features.secondSuitCount > 0 ? 0.8 : 0))
       if (earlyPairHeavy) {
         reasons.push('early_four_pairs_push')
         score += 8.5
@@ -290,6 +404,10 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       score += features.honorPairCount * 3.5
       score += features.wildCount * 2.6
       score += features.liveHonorCount * 0.4
+      score += getPolicyValue(policy, 'allHonorsPursuit') * 8.2
+      score += getPolicyValue(policy, 'allHonorsPungsPursuit') * (features.tripletCount + features.honorPairCount) * 1.6
+      score += getWildRouteBoost(policy, features.wildCount, 'honors') * 4.6
+      score += getPolicyValue(policy, 'honorVsSuitedBalance') * 6.0
       score -= (features.longestSuitCount + features.secondSuitCount) * 0.7
       if (features.honorCount >= 9) {
         reasons.push('honor_stack_nine_plus')
@@ -324,6 +442,7 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
 export function evaluateRouteState(input: RouteEvaluationInput): RouteState {
   const estimatedRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
   const features = buildFeatureSummary(input)
+  const policy = input.policy ?? input.previousRouteState?.policy ?? null
   const phase = detectDecisionPhase({
     estimatedRound,
     shanten: input.shanten,
@@ -332,6 +451,14 @@ export function evaluateRouteState(input: RouteEvaluationInput): RouteState {
     meldCount: input.player.hand.exposedMelds.length,
     opponentOpenMelds: features.opponentOpenMelds,
     downstreamPressure: features.downstreamPressure,
+    fastOpenOpponentCount: features.fastOpenOpponentCount,
+    bigOpenOpponentCount: features.bigOpenOpponentCount,
+    wallEarlySpeedPush: getPolicyValue(policy, 'wallEarlySpeedPush'),
+    wallMidBalance: getPolicyValue(policy, 'wallMidBalance'),
+    wallLateDefense: getPolicyValue(policy, 'wallLateDefense'),
+    safeTilePriority: getPolicyValue(policy, 'safeTilePriority'),
+    defenseRiskAversion: getPolicyValue(policy, 'defenseRiskAversion'),
+    wallTilesImpact: getPolicyValue(policy, 'wallTilesImpact'),
   })
   const routeScores = ROUTES
     .map(route => evaluateSingleRoute(route, input, features))
@@ -383,6 +510,7 @@ export function evaluateRouteState(input: RouteEvaluationInput): RouteState {
     0
 
   return {
+    policy,
     phase,
     current: current?.route || 'MENQING_SPEED',
     secondary: secondary?.route || null,
