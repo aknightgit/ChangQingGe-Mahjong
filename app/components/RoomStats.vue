@@ -99,7 +99,7 @@ const rankedPlayers = computed(() =>
   flex-direction: column;
   gap: 10px;
   color: #e0e0e0;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
 }
 
 .stats-header {
@@ -111,7 +111,7 @@ const rankedPlayers = computed(() =>
 }
 
 .stats-title {
-  font-size: 1.2rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: #ffd700;
   text-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
@@ -129,7 +129,7 @@ const rankedPlayers = computed(() =>
 .stats-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.86rem;
+  font-size: 0.9rem;
 }
 
 .stats-table th {
