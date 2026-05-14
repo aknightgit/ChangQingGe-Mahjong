@@ -1452,7 +1452,11 @@ onMounted(async () => {
       addMountLog('calling connect...')
       await connect(roomId.value, playerId.value)
       addMountLog('connect done')
-      clearPendingRoomTarget()
+      // 连接成功后才清除pendingRoomTarget，确保万一连失败还能回退重试
+      if (gameState.value) {
+        clearPendingRoomTarget()
+        addMountLog('connect successful, cleared pending target')
+      }
     } else {
       addMountLog(`SKIP connect: roomId=${roomId.value} playerId=${playerId.value}`)
     }
@@ -1483,6 +1487,15 @@ onMounted(async () => {
         void fetchSpectatorState(roomId.value)
       }
     }, 2000)
+
+    // 如果10秒后还没连上，用location.href硬刷新（避免SPA死循环）
+    setTimeout(() => {
+      if (!gameState.value && roomId.value && playerId.value && process.client) {
+        addMountLog('connect retry timeout, hard reloading...')
+        const currentUrl = window.location.href
+        window.location.href = currentUrl
+      }
+    }, 12000)
   }
 
   // 监听广播消息播放对应音效

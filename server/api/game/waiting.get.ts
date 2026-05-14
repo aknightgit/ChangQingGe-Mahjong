@@ -1,43 +1,50 @@
-import { getCollection } from '../../utils/mongo'
-import type { MahjongGame } from '../../types/database'
+import { gameManager } from '../../utils/gameManager';
+import { apiLog } from '../../utils/apiLogService';
 
-interface WaitingGameSummary {
-  gameId: string
-  roomNumber?: string
-  playerCount: number
-  updatedAt: string
-  createdAt: string
-  dealerName: string | null
-}
+export default defineEventHandler(async (event) => {
+  const startTime = Date.now();
+  let statusCode = 200;
+  let errorMsg: string | undefined;
 
-export default defineEventHandler(async () => {
-  const gamesCollection = await getCollection<MahjongGame>('mahjongGames')
+  try {
+    const games = await gameManager.listWaitingGames();
+    const now = Date.now();
+    const INACTIVE_TIMEOUT_MS = 30 * 60 * 1000; // 30分钟
 
-  // 只返回 waiting 状态且 30 分钟内活跃的房间
-  const staleThreshold = new Date(Date.now() - 30 * 60 * 1000)
+    // 过滤：排除已开始、已结束、不活跃超过30分钟的房间
+    const activeGames = (games || []).filter((game: any) => {
+      const phase = game.phase || '';
+      if (phase === 'ended' || phase === 'playing') return false;
 
-  const waitingGames = await gamesCollection
-    .find({
-      phase: 'waiting',
-      updatedAt: { $gte: staleThreshold }
-    })
-    .sort({ updatedAt: -1 })
-    .limit(25)
-    .toArray()
+      // 检查不活跃：最后有玩家操作的时间
+      const lastActive = game.lastActionTime || game.createdAt || 0;
+      if (now - lastActive > INACTIVE_TIMEOUT_MS) {
+        console.log(`[waiting] Filtering out inactive room ${game.roomNumber || game.gameId}: lastActive ${new Date(lastActive).toISOString()}`);
+        return false;
+      }
 
-  const summaries: WaitingGameSummary[] = waitingGames.map((game) => ({
-    gameId: game.gameId,
-    roomNumber: (game as any).roomNumber,
-    playerCount: game.players.length,
-    createdAt: game.createdAt?.toISOString?.() ?? new Date(0).toISOString(),
-    updatedAt: game.updatedAt?.toISOString?.() ?? new Date(0).toISOString(),
-    dealerName: game.players.find((p) => p.isDealer)?.name ?? null
-  }))
+      return true;
+    });
 
-  return {
-    success: true,
-    data: {
-      games: summaries
-    }
+    await apiLog(event, {
+      endpoint: 'waiting',
+      statusCode: 200,
+      durationMs: Date.now() - startTime,
+    });
+
+    return {
+      success: true,
+      data: { games: activeGames }
+    };
+  } catch (error: any) {
+    statusCode = 500;
+    errorMsg = error.message || 'Internal server error';
+    await apiLog(event, {
+      endpoint: 'waiting',
+      statusCode,
+      durationMs: Date.now() - startTime,
+      error: errorMsg,
+    });
+    throw createError({ statusCode, message: errorMsg });
   }
-})
+});

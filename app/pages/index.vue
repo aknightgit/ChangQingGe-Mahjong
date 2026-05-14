@@ -271,6 +271,7 @@ const navigateToCreatedRoom = async (targetUrl: string) => {
 const userName = useCookie('user_name')
 const isAdmin = useCookie('is_admin')
 const router = useRouter()
+const route = useRoute()
 
 const isAdminUser = computed(() => isAdmin.value === 'true' || isAdmin.value === true)
 const isCreatingGame = ref(false)
@@ -396,14 +397,28 @@ const confirmCreateGame = async () => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 优先从pendingRoomTarget尝试恢复导航
   const pendingTarget = getPendingRoomTarget()
-  if (!pendingTarget) return
-  if (router.currentRoute.value.path !== '/') {
-    clearPendingRoomTarget()
+  if (pendingTarget) {
+    if (router.currentRoute.value.path !== '/') {
+      clearPendingRoomTarget()
+      return
+    }
+    await navigateToCreatedRoom(pendingTarget)
     return
   }
-  void navigateToCreatedRoom(pendingTarget)
+
+  // 如果URL有playerId和roomId参数（来自深度链接/硬刷新），直接导航过去
+  const urlRoomId = route.query.roomId as string
+  const urlPlayerId = route.query.playerId as string
+  if (urlRoomId && urlPlayerId) {
+    const targetUrl = buildGameRoomPath(urlRoomId, urlPlayerId)
+    await navigateToCreatedRoom(targetUrl)
+    return
+  }
+
+  // 静默完成
 })
 
 const { data: profileResponse, pending: profilePending, error: profileError, refresh: refreshProfile } =
