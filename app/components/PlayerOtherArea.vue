@@ -479,11 +479,6 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   z-index: 4;
 }
 
-.player-other {
-  --tile-w: clamp(12px, 3vw, 28px);
-  --tile-h: clamp(17px, 4.3vw, 40px);
-}
-
 .player-other :deep(.tile) {
   width: var(--tile-w) !important;
   height: var(--tile-h) !important;
