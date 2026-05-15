@@ -479,9 +479,14 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
   z-index: 4;
 }
 
+.player-other {
+  --tile-w: clamp(12px, 3vw, 28px);
+  --tile-h: clamp(17px, 4.3vw, 40px);
+}
+
 .player-other :deep(.tile) {
-  width: 28px !important;
-  height: 40px !important;
+  width: var(--tile-w) !important;
+  height: var(--tile-h) !important;
   margin: 0;
   border: 0;
   background: transparent;
@@ -489,8 +494,8 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
 }
 
 .player-other :deep(.tile--small) {
-  width: 28px !important;
-  height: 40px !important;
+  width: var(--tile-w) !important;
+  height: var(--tile-h) !important;
 }
 
 .player-other :deep(.tile-img) {
@@ -509,8 +514,8 @@ function getClaimMarkerStyle(meld: Meld): Record<string, string> {
 
 @media (max-width: 900px) and (orientation: landscape) {
   .player-other :deep(.tile--small) {
-    width: 28px !important;
-    height: 40px !important;
+    width: var(--tile-w) !important;
+    height: var(--tile-h) !important;
   }
 
   .seat-line--left,
