@@ -1282,24 +1282,31 @@ class GameManager {
     if (!player || !source) return;
 
     const currentCount = this.mutualBailout.get(game.gameId)?.get(playerId)?.get(sourcePlayerId) || 0;
-    if (currentCount === 2 || currentCount === 3) {
+    if ((currentCount === 2 || currentCount === 3) && this.wsManager) {
       const label = currentCount === 3 ? '三口' : '两口';
-      this.broadcastQuickMessage(
-        game.gameId,
-        `📣 ${player.name}已经搞了${source.name}${label}了！`,
-        'special'
-      );
+      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        text: `📣 ${player.name}已经搞了${source.name}${label}了！`,
+        type: 'special',
+        timestamp: Date.now(),
+        timeLabel: formatBeijingTime()
+      });
     }
 
     for (const rel of relations) {
       const pairIds = [rel.player1, rel.player2].sort().join('-');
       const checkIds = [playerId, sourcePlayerId].sort().join('-');
       if (pairIds === checkIds) {
-        this.broadcastQuickMessage(
-          game.gameId,
-          `${player.name}搞了${source.name}${rel.type}了!`,
-          'special'
-        );
+        const msg = `${player.name}搞了${source.name}${rel.type}了!`;
+        if (this.wsManager) {
+          this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            text: msg,
+            type: 'special',
+            timestamp: Date.now(),
+            timeLabel: formatBeijingTime()
+          });
+        }
       }
     }
   }
