@@ -1953,7 +1953,6 @@ const overlayReason = computed(() => roomDismissedReason.value || gameState.valu
 const isOverlayVisible = computed(() => {
   if (roomDismissedReason.value) return true
   if (!isGameEnded.value) return false
-  if (isWallExhaustedSettlement.value) return false
   return overlayReason.value !== GameEndReason.LAST_PLAYER
 })
 const canStartNextRoundOverlay = computed(() => ![
@@ -3830,7 +3829,6 @@ watch(
             totalScore: p.score ?? 0
           }))
         }
-        showSettlement.value = true
         startWallExhaustedCountdown()
       }
       return
