@@ -187,7 +187,7 @@ const rankedPlayers = computed(() =>
   .room-stats { width: 100%; }
 }
 
-@media (max-width: 900px) and (orientation: landscape) {
+@media (max-width: 1100px) and (orientation: landscape) {
   .room-stats { padding: 3px 4px; gap: 2px; border-radius: 6px; background: rgba(5,14,10,0.85); border: 1px solid rgba(255,215,0,0.12); }
   .stats-header { padding-bottom: 3px; gap: 4px; }
   .stats-title { font-size: 0.65rem; }
@@ -195,7 +195,8 @@ const rankedPlayers = computed(() =>
   .stats-table { font-size: 0.65rem; table-layout: fixed; }
   .stats-table th { font-size: 0.45rem; padding: 1px 1px; }
   .stats-table td { font-size: 0.48rem; padding: 1px 1px; }
-  .td-name { gap: 2px; overflow: hidden; text-overflow: ellipsis; max-width: 50px; }
+  .td-name { gap: 2px; max-width: 130px; font-size: 0.6rem; }
+  .td-name-inner { font-size: 0.58rem; }
   .rank-dot { width: 4px; height: 4px; flex-shrink: 0; }
   .rank-qj-icon { font-size: 0.5rem; }
 }

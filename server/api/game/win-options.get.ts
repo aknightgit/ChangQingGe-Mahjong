@@ -45,7 +45,11 @@ export default defineEventHandler(async (event) => {
 
     const pendingAction = game.pendingActions.find((entry) => entry.playerId === playerId);
     const currentPlayer = game.players.find((entry) => entry.id === playerId);
-    const winningTile = pendingAction?.tile || (currentPlayer as any)?.lastDrawnTile || null;
+    // 如果pending中找不到牌(碰/杠后pending被清),从actionHistory最后一条找弃牌
+    const lastDiscardAction = [...(game.actionHistory || [])].reverse().find(
+      a => a.type === 'discard' || a.type === 'peng' || a.type === 'kong'
+    );
+    const winningTile = pendingAction?.tile || (currentPlayer as any)?.lastDrawnTile || lastDiscardAction?.tile || null;
     const winningTileName = winningTile ? getTileDisplayName(winningTile) : '';
     const filteredWinOptions = await gameManager.getWinOptionsForPlayer(gameId, playerId);
     const decoratedWinOptions = filteredWinOptions.map((option: any) => ({

@@ -250,6 +250,11 @@ export const useGame = () => {
         window.dispatchEvent(new CustomEvent('mahjong-broadcast', { detail: data }))
       })
 
+      socket.value.on('diceRoll', (data: { dice1: number; dice2: number; timestamp: number }) => {
+        console.log('🎲 骰子广播:', data)
+        window.dispatchEvent(new CustomEvent('mahjong-dice-roll', { detail: data }))
+      })
+
       // 谢谢带头大哥事件
       socket.value.on('leadingBrother', (data: { firstPlayerName: string; tileKey: string }) => {
         console.log('🔥 谢谢带头大哥！', data)
@@ -323,7 +328,7 @@ export const useGame = () => {
   const updateState = (data: any) => {
     gameState.value = data.game
     playerView.value = data.playerView
-    tingPreview.value = data.tingPreview || { isTing: false, winningTiles: [] }
+    if (data.tingPreview !== undefined) { tingPreview.value = data.tingPreview }
     // 只在availableActions实际变化时才更新lastStateChangeAt
     const oldActions = availableActions.value
     const newActions = data.availableActions || []

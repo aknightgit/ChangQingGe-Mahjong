@@ -188,7 +188,9 @@ export default defineEventHandler(async (event) => {
       },
       playerView: player.hand,
       availableActions,
-      tingPreview
+      // [Fix] Only return tingPreview when explicitly requested, otherwise omit
+      // so the frontend can distinguish "not requested" from "not ting"
+      ...(query.tingPreview === 'true' ? { tingPreview } : {})
     }
   };
 });

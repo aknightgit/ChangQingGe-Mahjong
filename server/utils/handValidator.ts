@@ -53,7 +53,7 @@ export const HAND_TYPE_TIER = {
   // TIER_2: 次级固定番数牌型
   TIER_2: {
     [HandType.HUN_PENG]:       70,  // 混碰 = 10点
-    [HandType.EIGHT_FLOWERS]:  60,  // 八花自摸 = 10点
+      [HandType.EIGHT_FLOWERS]:  85,  // 八花自摸 = 20点
     [HandType.FOUR_WILD]:      55,  // 四百搭 = 10点
     [HandType.FULL_FLUSH]:     50,  // 清一色 = 10点
   },

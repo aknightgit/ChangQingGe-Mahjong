@@ -85,7 +85,7 @@ class GameManager {
     if (!this.wsManager) return;
     this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
       id: Date.now() + Math.floor(Math.random() * 1000),
-      text: `👤 ${player.name}加入了房间`,
+      text: `👤 ${player.name}进入到了房间`,
       actionKind: 'roomJoin',
       type: 'info',
       timestamp: Date.now(),
@@ -198,7 +198,10 @@ class GameManager {
     game.pendingActions = game.pendingActions.filter(pendingAction => {
       if (!pendingAction.expiresAt || pendingAction.expiresAt > now) return true; // 未过期保留
       if (pendingAction.playerId === currentPlayerId) return true; // 下家B永远保留
-      return false; // 其他玩家（CD）清除
+      // 【修复】人类玩家的过期claim也保留——玩家可能在犹豫或操作选择中
+      const player = game.players.find(p => p.id === pendingAction.playerId);
+      if (player && !this.isPlayerBotControlled(player)) return true;
+      return false; // bot玩家的过期claim清除
     });
     game.pengChowConflict = null;
     if (game.pendingActions.length === 0) {
@@ -206,12 +209,23 @@ class GameManager {
     }
   }
 
+  /**
+   * 清除当前玩家已过期的吃牌待处理动作。
+   * 【重要】对于人类玩家，即使过期也不清除——玩家可能正在吃牌选择器中做选择，
+   * 清除会导致前端丢失状态（玩家已点"吃"、选择中，却被摸倒计时清除了）。
+   * 人类玩家应通过自己摸牌、过牌或确认吃牌来自然清除。bot 的吃牌过期则正常清除。
+   */
   private clearExpiredCurrentPlayerChowPending(game: GameState, now = Date.now()): boolean {
     const before = game.pendingActions.length;
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    const isHumanPlayer = currentPlayer && !this.isPlayerBotControlled(currentPlayer);
     game.pendingActions = game.pendingActions.filter(pendingAction => {
       if (!this.shouldRetainCurrentPlayerChowPending(game, pendingAction)) return true;
       const expiresAt = typeof pendingAction.expiresAt === 'number' ? pendingAction.expiresAt : 0;
-      return expiresAt > now;
+      if (expiresAt > now) return true; // 未过期 -> 保留
+      // 【修复】人类玩家的过期吃牌不清除，让玩家自行操作
+      if (isHumanPlayer) return true;
+      return false; // bot 过期吃牌 -> 清除
     });
     if (before !== game.pendingActions.length) {
       game.pengChowConflict = null;
@@ -929,9 +943,16 @@ class GameManager {
           this.broadcastGameState(gameId);
           return;
         }
+        // 【优化】如果只剩当前人类玩家的吃牌待处理，不再重复调度定时器
+        // 玩家会通过主动摸牌/过牌/确认吃牌来触发下一步
+        const humanChowOnly = game.pendingActions.length > 0 &&
+          currentPlayer && !this.isPlayerBotControlled(currentPlayer) &&
+          game.pendingActions.every(pa => this.shouldRetainCurrentPlayerChowPending(game, pa));
+        if (!humanChowOnly) {
+          this.schedulePendingActionTimeout(gameId);
+        }
         await this.persistGame(game);
         this.broadcastGameState(gameId);
-        this.schedulePendingActionTimeout(gameId);
       } catch (err) {
         console.error('Failed to auto-resolve pending actions:', err);
       } finally {
@@ -1829,6 +1850,17 @@ class GameManager {
     const d1 = Math.min(6, Math.max(1, Math.round(options?.fixedDice?.[0] ?? (Math.floor(Math.random() * 6) + 1))));
     const d2 = Math.min(6, Math.max(1, Math.round(options?.fixedDice?.[1] ?? (Math.floor(Math.random() * 6) + 1))));
     game.dice = [d1, d2];
+
+    // [Fix] broadcast dice roll to all players so non-dealers see the animation
+    if (this.wsManager) {
+      this.wsManager.broadcast(game.gameId, diceRoll, {
+        dice1: d1,
+        dice2: d2,
+        timestamp: Date.now()
+      });
+    }
+    // Wait for dice animation on all clients
+    await new Promise(resolve => setTimeout(resolve, 800));
     game.roundMultiplier = calculateRoundMultiplier(d1, d2);
     // 继承上局全局倍数(或从造反事件继承)
     const prevGlobal = game.inheritedGlobalMultiplier ?? 1;
@@ -2160,7 +2192,13 @@ class GameManager {
     }
 
     const pendingAction = game.pendingActions.find(pa => pa.playerId === playerId);
-    const context: 'self_draw' | 'discard' = pendingAction?.tile ? 'discard' : 'self_draw';
+    // 碰/杠后pending被清但仍是捉冲,从actionHistory确认
+    const hadPengOrKongOnDiscard = (game.actionHistory || []).some(a =>
+      a.type === 'peng' || a.type === 'kong'
+    );
+    const context: 'self_draw' | 'discard' = pendingAction?.tile
+      ? 'discard'
+      : hadPengOrKongOnDiscard ? 'discard' : 'self_draw';
     return this.getCachedWinOptions(game, player, context, {
       isKongFlower: false,
       isRobbingKong: !!pendingAction?.tile && !!game.pendingKongClaim,
@@ -4780,20 +4818,13 @@ class GameManager {
           delete (freshGame as any)._freezeUntil;
 
           if (freshGame.pendingActions.length > 0) {
-            const logMsg = (freshGame as any).hasTriggeredAction
-              ? '[freeze] hasTriggeredAction=true, retaining all claims'
-              : '[freeze] No action triggered, clearing CD claims (B preserved)';
-            console.log(`[freeze] Pending actions expired for ${freshGame.players[freezeCurrentIndex]?.name}, ${logMsg}`);
-            this.clearExpiredClaimsButKeepCurrentPlayerChow(freshGame);
-            if (freshGame.pendingActions.length > 0) {
-              this.refreshPendingActionExpirations(freshGame);
-            }
+            // [Fix] hesitation/freeze expiry should not clear any player's claim options
+            console.log(`[freeze] Pending actions active for ${freshGame.players[freezeCurrentIndex]?.name}, keeping all claims`);
+            this.refreshPendingActionExpirations(freshGame);
             await this.persistGame(freshGame);
             this.broadcastGameState(game.gameId);
-            if (freshGame.pendingActions.length > 0) {
-              this.schedulePendingActionTimeout(game.gameId);
-              return;
-            }
+            this.schedulePendingActionTimeout(game.gameId);
+            return;
           }
 
           // 冻结窗口结束 → 人类玩家手动摸牌,AI自动摸牌
@@ -5351,7 +5382,6 @@ class GameManager {
     // 🔄 自动进入下一局（正常结束/流局）
     // 延迟一小段时间让客户端展示结算画面，然后自动进入掷骰子阶段
     if (
-      finalReason === GameEndReason.WALL_EXHAUSTED ||
       finalReason === GameEndReason.LAST_PLAYER
     ) {
       this.autoStartNextRound(game.gameId, 2000);

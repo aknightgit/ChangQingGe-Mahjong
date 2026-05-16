@@ -91,6 +91,8 @@ const props = defineProps<{
   dealerName: string
   maxRolls?: number
   isDealer?: boolean
+  /** 服务器广播的骰子结果 - 非庄家玩家通过此prop接收并自动播放动画 */
+  rollTriggerKey?: number
 }>()
 
 const emit = defineEmits<{
@@ -193,6 +195,20 @@ const onRollAndDeal = () => {
 onMounted(() => {
   currentRoll.value = 0
   phase.value = 'idle'
+})
+
+// 监听服务器广播的骰子事件 - 自动播放动画（非庄家玩家）
+watch(() => props.rollTriggerKey, (key) => {
+  if (!key || key === 0) return
+  currentRoll.value++
+  rollingSeed.value = Date.now() % 100000
+  phase.value = 'rolling'
+  showResultBurst.value = false
+  clearBurstTimer()
+  setTimeout(() => {
+    phase.value = 'result'
+    flashResultBurst()
+  }, 850)
 })
 
 onBeforeUnmount(() => {
