@@ -261,15 +261,15 @@ onUnmounted(() => {
 <style scoped>
 /* ===== 尺寸变量（以17 Ultra为基准 1200px shortSide） ===== */
 .action-panel {
-  --btn-small: calc(44px * var(--mobile-scale, 1));
-  --btn-draw: calc(72px * var(--mobile-scale, 1));
-  --btn-font-small: calc(0.85rem * var(--mobile-scale, 1));
-  --btn-font-draw: calc(1.2rem * var(--mobile-scale, 1));
-  --btn-font-think: calc(1.05rem * var(--mobile-scale, 1));
-  --panel-padding: calc(12px * var(--mobile-scale, 1));
-  --panel-gap: calc(12px * var(--mobile-scale, 1));
-  --grid-gap: calc(6px * var(--mobile-scale, 1));
-  --ring-size: calc(76px * var(--mobile-scale, 1));
+  --btn-small: calc(30px * var(--mobile-scale, 1));
+  --btn-draw: calc(48px * var(--mobile-scale, 1));
+  --btn-font-small: calc(0.7rem * var(--mobile-scale, 1));
+  --btn-font-draw: calc(0.95rem * var(--mobile-scale, 1));
+  --btn-font-think: calc(0.8rem * var(--mobile-scale, 1));
+  --panel-padding: calc(8px * var(--mobile-scale, 1));
+  --panel-gap: calc(8px * var(--mobile-scale, 1));
+  --grid-gap: calc(4px * var(--mobile-scale, 1));
+  --ring-size: calc(50px * var(--mobile-scale, 1));
 }
 
 .action-panel {

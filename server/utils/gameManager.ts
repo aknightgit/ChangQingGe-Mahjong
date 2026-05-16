@@ -1279,9 +1279,14 @@ class GameManager {
     const relations = this.getMutualBailoutRelations(game.gameId);
     const player = game.players.find(p => p.id === playerId);
     const source = game.players.find(p => p.id === sourcePlayerId);
-    if (!player || !source) return;
+    if (!player || !source) {
+      console.log(`[BAILOUT] SKIP: player=${!!player} source=${!!source} playerId=${playerId} sourcePlayerId=${sourcePlayerId}`);
+      return;
+    }
 
-    const currentCount = this.mutualBailout.get(game.gameId)?.get(playerId)?.get(sourcePlayerId) || 0;
+    const rawCount = this.mutualBailout.get(game.gameId)?.get(playerId)?.get(sourcePlayerId);
+    const currentCount = rawCount || 0;
+    console.log(`[BAILOUT] game=${game.gameId} player=${player.name} source=${source.name} count=${currentCount} wsManager=${!!this.wsManager}`);
     if ((currentCount === 2 || currentCount === 3) && this.wsManager) {
       const label = currentCount === 3 ? '三口' : '两口';
       this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
