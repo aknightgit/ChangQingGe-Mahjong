@@ -129,6 +129,43 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
   )
 }
 
+function getMinorSuitResiduePressure(input: RouteDiscardInput): number {
+  const targetSuit = input.routeState.targetSuit || input.afterRouteState.targetSuit || input.routeState.features.longestSuit
+  if (!targetSuit) return 0
+  if (isHonor(input.tile) || input.tile.suit === targetSuit) return 0
+  if (![TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS].includes(input.tile.suit)) return 0
+
+  const longestSuitCount = input.routeState.features.longestSuitCount
+  const secondSuitCount = input.routeState.features.secondSuitCount
+  const honorCount = input.routeState.features.honorCount
+  const routeIsSuitConcentrating =
+    input.routeState.current === 'HALF_FLUSH' ||
+    input.afterRouteState.current === 'HALF_FLUSH' ||
+    (longestSuitCount >= 6 && honorCount >= 3)
+  const notPungsRoute =
+    input.routeState.current !== 'ALL_PUNGS' &&
+    input.afterRouteState.current !== 'ALL_PUNGS'
+  const lowDiscardRisk = input.discardDanger <= 0.38
+
+  if (!routeIsSuitConcentrating || !notPungsRoute || !lowDiscardRisk) return 0
+  if (longestSuitCount < 6 || honorCount < 3 || secondSuitCount === 0 || secondSuitCount > 3) return 0
+
+  const count = sameTypeCount(input)
+  const nearby = adjacentCount(input)
+  const visibleCopies = countVisibleCopies(input)
+  const residueTightness = 4 - secondSuitCount
+  const targetAdvantage = Math.max(0, longestSuitCount - secondSuitCount)
+
+  return (
+    10.5 +
+    residueTightness * 2.8 +
+    Math.min(4, count) * 2.2 +
+    Math.min(2, nearby) * 1.5 +
+    Math.min(5, targetAdvantage) * 0.9 +
+    Math.min(2, visibleCopies) * 0.8
+  )
+}
+
 function scoreByRoute(input: RouteDiscardInput): number {
   const { routeState, tile } = input
   const count = sameTypeCount(input)
@@ -210,6 +247,7 @@ function scoreByRoute(input: RouteDiscardInput): number {
 
 export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
   const routeBias = scoreByRoute(input)
+  const residuePressure = getMinorSuitResiduePressure(input)
   const preservePrimary = input.afterRouteState.current === input.routeState.current ? 1.2 : -1.1
   const targetSuitBonus =
     input.routeState.targetSuit && input.afterRouteState.targetSuit === input.routeState.targetSuit ? 0.6 : 0
@@ -254,5 +292,5 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
       ? 7.5
       : 0
 
-  return routeBias + preservePrimary + targetSuitBonus + observeOrdering + routeStrengthDelta * 0.18 + dangerAdjustment + tingBonus + pureFlushUpgradeBonus
+  return routeBias + residuePressure + preservePrimary + targetSuitBonus + observeOrdering + routeStrengthDelta * 0.18 + dangerAdjustment + tingBonus + pureFlushUpgradeBonus
 }

@@ -1813,7 +1813,7 @@ const watchingPlayerName = computed(() => {
 const pendingSpectateId = computed(() => spectatorViewState.value?.pendingHumanPlayerId || null)
 const approvedHumanSpectateId = computed(() => spectatorViewState.value?.approvedHumanPlayerId || null)
 const hasDebugSpectateBot = computed(() => {
-  return !!gameState.value?.players?.some((player: any) => player?.name === 'AI-AK')
+  return !!gameState.value?.players?.some((player: any) => ['AI-AK', 'AI-小猪'].includes(player?.name))
 })
 const spectatorApprovalRequest = computed(() => {
   if (!gameState.value || !currentPlayer.value) return null

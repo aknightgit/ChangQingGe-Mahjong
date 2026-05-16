@@ -570,5 +570,99 @@ try {
   }
 }
 
+{
+  const discarder = makePlayer('discard-entry', 14);
+  const botPeng = makePlayer('AI-entry-peng', 13);
+  const fillerA = makePlayer('entry-a', 13);
+  const fillerB = makePlayer('entry-b', 13);
+  const entryGame = makeGame([discarder, botPeng, fillerA, fillerB]);
+  const discardTile = tile(TileSuit.DOTS, 7, 'entry-discard-7');
+  discarder.hand.concealedTiles = [
+    discardTile,
+    ...makeTiles('entry-discard-fill', 13),
+  ].slice(0, 14);
+  botPeng.hand.concealedTiles = [
+    tile(TileSuit.DOTS, 7, 'entry-match-a'),
+    tile(TileSuit.DOTS, 7, 'entry-match-b'),
+    ...makeTiles('entry-bot-fill', 11),
+  ].slice(0, 13);
+  entryGame.currentPlayerIndex = 0;
+  entryGame.drawnThisTurn = true;
+  anyManager.games.set(entryGame.gameId, entryGame);
+
+  const originalHandleBotPendingActions = anyManager.handleBotPendingActions;
+  const originalPersistGame = anyManager.persistGame;
+  const originalBroadcastGameState = anyManager.broadcastGameState;
+  let botPendingHandled = false;
+  try {
+    anyManager.handleBotPendingActions = async (gameId: string) => {
+      botPendingHandled = gameId === entryGame.gameId;
+    };
+    anyManager.persistGame = async () => {};
+    anyManager.broadcastGameState = () => {};
+    await gameManager.executeAction(entryGame.gameId, discarder.id, ActionType.DISCARD, discardTile.id);
+    ok(
+      'discard flow invokes bot pending-action handler when a bot can claim',
+      botPendingHandled === true,
+      `pending=${JSON.stringify(entryGame.pendingActions)}`
+    );
+  } finally {
+    anyManager.handleBotPendingActions = originalHandleBotPendingActions;
+    anyManager.persistGame = originalPersistGame;
+    anyManager.broadcastGameState = originalBroadcastGameState;
+    anyManager.clearPendingActionTimer(entryGame.gameId);
+    anyManager.games.delete(entryGame.gameId);
+  }
+}
+
+{
+  const timeoutDiscarder = makePlayer('timeout-discarder', 13);
+  const timeoutBot = makePlayer('AI-timeout-chow', 13);
+  const timeoutOther = makePlayer('timeout-other', 13);
+  const timeoutFiller = makePlayer('timeout-filler', 13);
+  const timeoutGame = makeGame([timeoutDiscarder, timeoutBot, timeoutOther, timeoutFiller]);
+  const timeoutTile = tile(TileSuit.CHARACTERS, 5, 'timeout-discard-5');
+  timeoutGame.currentPlayerIndex = 1;
+  timeoutGame.drawnThisTurn = false;
+  timeoutGame.hesitationWindow = 0;
+  timeoutGame.discardPile = [timeoutTile];
+  timeoutGame.pendingActions = [{
+    playerId: timeoutBot.id,
+    availableActions: [ActionType.CHOW, ActionType.PASS],
+    tile: timeoutTile,
+    chowOptions: [['timeout-a', 'timeout-b']],
+    expiresAt: Date.now() - 1,
+  }];
+  anyManager.games.set(timeoutGame.gameId, timeoutGame);
+
+  const originalResolvePendingAction = anyManager.resolvePendingAction;
+  const originalPersistGame = anyManager.persistGame;
+  const originalBroadcastGameState = anyManager.broadcastGameState;
+  let resolvedExpiredBotClaim = false;
+  try {
+    anyManager.resolvePendingAction = async (game: GameState, player: Player, pendingAction: any) => {
+      if (game.gameId === timeoutGame.gameId && player.id === timeoutBot.id && pendingAction.tile?.id === 'timeout-discard-5') {
+        resolvedExpiredBotClaim = true;
+      }
+      await anyManager.handlePass(game, player);
+    };
+    anyManager.persistGame = async () => {};
+    anyManager.broadcastGameState = () => {};
+    anyManager.schedulePendingActionTimeout(timeoutGame.gameId);
+    await new Promise(resolve => setTimeout(resolve, 60));
+    ok(
+      'pending timeout resolves expired bot-only claim instead of silently clearing it',
+      resolvedExpiredBotClaim === true,
+      `pending=${JSON.stringify(timeoutGame.pendingActions)}`
+    );
+  } finally {
+    anyManager.resolvePendingAction = originalResolvePendingAction;
+    anyManager.persistGame = originalPersistGame;
+    anyManager.broadcastGameState = originalBroadcastGameState;
+    anyManager.clearPendingActionTimer(timeoutGame.gameId);
+    anyManager.games.delete(timeoutGame.gameId);
+  }
+}
+
 console.log(`\nResult: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

@@ -1,7 +1,7 @@
 import { GamePhase, PlayerStatus, type GameState, type Player, type SpectatorViewState } from '../types/game';
 import { isBotPlayer } from '../services/botService';
 
-const TEMP_DEBUG_SPECTATE_BOT_NAMES = new Set(['AI-AK']);
+const TEMP_DEBUG_SPECTATE_BOT_NAMES = new Set(['AI-AK', 'AI-小猪']);
 
 function getSpectatorScope(game: GameState): number {
   const completedHands = Array.isArray(game.roundStats) ? game.roundStats.length : 0;
@@ -62,8 +62,13 @@ export function canRevealSpectatorTarget(game: GameState, viewerId: string, targ
   }
 
   if (viewer?.status === PlayerStatus.WON && isBotPlayer(target)) return true;
+  if (viewer?.status === PlayerStatus.SPECTATING && isBotPlayer(target)) return true;
   if (canUseDebugBotSpectator(viewer, target)) return true;
-  if (!viewer || viewer.status !== PlayerStatus.WON) return false;
+  if (!viewer) return false;
+  if (viewer.status === PlayerStatus.SPECTATING) {
+    return view.approvedHumanPlayerId === target.id;
+  }
+  if (viewer.status !== PlayerStatus.WON) return false;
   if (isBotPlayer(target)) return true;
   return view.approvedHumanPlayerId === target.id;
 }

@@ -1,4 +1,4 @@
-ï»¿import {
+import {
   GameState,
   GamePhase,
   Player,
@@ -31,1797 +31,13 @@ class GameManager {
   private games: Map<string, GameState> = new Map();
   private playerToGame: Map<string, string> = new Map();
   private wsManager: any = null;
-  private isHydrated = false;
-
-  // äº’åŒ…è·Ÿè¸ª: gameId -> Map<playerId, Map<partnerId, count>>
-  // è®°å½•æ¯ä¸ªç©å®¶ä»å¦ä¸€ä¸ªç©å®¶åƒ/ç¢°/æ äº†å¤šå°‘å£
-  private mutualBailout: Map<string, Map<string, Map<string, number>>> = new Map();
-
-  // Pending actionè¶…æ—¶å¤„ç†(è‡ªåŠ¨æ¨è¿›)
-  private pendingActionTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
-
-  // åŸå­é”ï¼šé˜²æ­¢åŒä¸€æ¸¸æˆå¹¶å‘é‡å¤æ¶ˆè´¹ pending actions
-  private actionResolutionLocks: Set<string> = new Set();
-
-  private detachTimer<T extends ReturnType<typeof setTimeout>>(timer: T): T {
-    (timer as any)?.unref?.();
-    return timer;
-  }
-
-  private isConcealedDiscardState = isConcealedDiscardState;
-
-  private tileLabel = tileLabel;
-
-  private broadcastQuickMessage(
-    gameId: string,
-    text: string,
-    type: 'info' | 'special' | 'warning' = 'info',
-    actionKind?: string
-  ): void {
-    if (!this.wsManager) return;
-    this.wsManager.broadcast(gameId, 'broadcastMessage', {
-      id: Date.now() + Math.floor(Math.random() * 1000),
-      text,
-      actionKind,
-      type,
-      timestamp: Date.now(),
-      timeLabel: formatBeijingTime()
-    });
-  }
-
-  private broadcastFlowerReplacement(game: GameState, player: Player): void {
-    if (!this.wsManager) {
-      console.log(`[broadcast] SKIP flowerReplace for ${player.name}: wsManager not set`);
-      return;
-    }
-    console.log(`[broadcast] flowerReplace: ${player.name} è¡¥èŠ±`);
-    this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-      id: Date.now() + Math.floor(Math.random() * 1000),
-      text: `ğŸŒ¸ ${player.name}è¡¥èŠ±`,
-      actionKind: 'flowerReplace',
-      type: 'special',
-      timestamp: Date.now(),
-      timeLabel: formatBeijingTime()
-    });
-  }
-
-  private broadcastKongSupplement(game: GameState, player: Player, kind: 'ming' | 'an' | 'jia'): void {
-    if (!this.wsManager) return;
-    const label = kind === 'an' ? 'æš—æ ' : kind === 'jia' ? 'è¡¥æ ' : 'æ˜æ ';
-    this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-      id: Date.now() + Math.floor(Math.random() * 1000),
-      text: `ğŸ€„ ${player.name}${label}åè¡¥ç‰Œ`,
-      actionKind: 'kongSupplement',
-      type: 'info',
-      timestamp: Date.now(),
-      timeLabel: formatBeijingTime()
-    });
-  }
-
-  private broadcastRoomJoin(game: GameState, player: Player): void {
-    if (!this.wsManager) return;
-    this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-      id: Date.now() + Math.floor(Math.random() * 1000),
-      text: `ğŸ‘¤ ${player.name}è¿›å…¥åˆ°äº†æˆ¿é—´`,
-      actionKind: 'roomJoin',
-      type: 'info',
-      timestamp: Date.now(),
-      timeLabel: formatBeijingTime()
-    });
-  }
-
-  private canPlayerDrawOnCurrentTurn(game: GameState, player: Player): boolean {
-    return game.phase === GamePhase.PLAYING
-      && game.players[game.currentPlayerIndex]?.id === player.id
-      && !game.drawnThisTurn
-      && this.getPlayableTileCount(player) < 14
-      && game.wall.length > 0;
-  }
-
-  private hasActiveHuSelectionLock(game: GameState, excludePlayerId?: string): boolean {
-    const locks = game.huSelectionLocks || {};
-    return Object.keys(locks).some(playerId => playerId !== excludePlayerId && Number(locks[playerId]) > 0);
-  }
-
-  private hasBlockingDecisionLock(game: GameState, playerId: string): boolean {
-    if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now() && game.thinkFreezePlayerId !== playerId) {
-      return true;
-    }
-    return this.hasActiveHuSelectionLock(game, playerId);
-  }
-
-  async setHuSelectionLock(gameId: string, playerId: string, locked: boolean): Promise<void> {
-    await this.hydrateFromDatabase();
-    const game = this.games.get(gameId) || await this.ensureGameLoaded(gameId);
-    if (!game) throw new Error('Game not found');
-    const player = game.players.find(p => p.id === playerId);
-    if (!player) throw new Error('Player not found');
-
-    const nextLocks = { ...(game.huSelectionLocks || {}) };
-    if (locked) {
-      nextLocks[playerId] = Date.now();
-    } else {
-      delete nextLocks[playerId];
-    }
-    game.huSelectionLocks = Object.keys(nextLocks).length ? nextLocks : undefined;
-    await this.persistGame(game);
-    this.broadcastGameState(gameId);
-  }
-
-  private isSharedDrawClaimWindow(game: GameState, playerId: string): boolean {
-    const currentPlayer = game.players[game.currentPlayerIndex];
-    if (!currentPlayer || currentPlayer.id !== playerId) return false;
-    if (game.pendingActions.length === 0) return false;
-    const playerPending = game.pendingActions.filter(pa => pa.playerId === playerId);
-    if (playerPending.length === 0) return false;
-    if (game.pendingActions.some(pa => pa.playerId !== playerId)) return false;
-    return playerPending.every(pa =>
-      pa.availableActions.length > 0 &&
-      pa.availableActions.every(action => action === ActionType.CHOW || action === ActionType.PASS)
-    );
-  }
-
-  private isChowOnlyPendingTurn(game: GameState, playerId: string): boolean {
-    if (game.players[game.currentPlayerIndex]?.id !== playerId) return false;
-    if (game.pendingActions.length === 0) return false;
-    return game.pendingActions.every(pa =>
-      pa.playerId === playerId &&
-      pa.availableActions.every(action => action === ActionType.CHOW || action === ActionType.PASS)
-    );
-  }
-
-  private canCurrentTurnPlayerDrawDuringPending(game: GameState, playerId: string): boolean {
-    void game;
-    void playerId;
-    return false;
-  }
-
-  private canExposeCurrentTurnPlayerDrawDuringPending(game: GameState, playerId: string): boolean {
-    const currentPlayer = game.players[game.currentPlayerIndex];
-    if (!currentPlayer || currentPlayer.id !== playerId) return false;
-    if (game.pendingActions.length === 0) return false;
-    if (game.drawnThisTurn) return false;
-    return this.canPlayerDrawOnCurrentTurn(game, currentPlayer);
-  }
-
-  private canExecuteCurrentTurnPlayerDrawDuringPending(game: GameState, playerId: string, now = Date.now()): boolean {
-    void now;
-    const currentPlayer = game.players[game.currentPlayerIndex];
-    if (!currentPlayer || currentPlayer.id !== playerId) return false;
-    if (!this.canExposeCurrentTurnPlayerDrawDuringPending(game, playerId)) return false;
-    return game.pendingActions.length > 0 && game.pendingActions.every(pa => pa.playerId === playerId);
-  }
-
-  private shouldAdvanceTurnAfterPass(game: GameState): boolean {
-    const currentPlayer = game.players[game.currentPlayerIndex];
-    if (!currentPlayer || currentPlayer.status !== PlayerStatus.PLAYING) return false;
-    return !this.isConcealedDiscardState(currentPlayer) && !this.canPlayerDrawOnCurrentTurn(game, currentPlayer);
-  }
-
-  private shouldRetainCurrentPlayerChowPending(game: GameState, pendingAction: PendingAction): boolean {
-    const currentPlayer = game.players[game.currentPlayerIndex];
-    if (!currentPlayer || pendingAction.playerId !== currentPlayer.id) return false;
-    return this.isSharedDrawClaimWindow(game, currentPlayer.id)
-      && pendingAction.availableActions.every(action => action === ActionType.CHOW || action === ActionType.PASS);
-  }
-
-  /**
-   * æŒ‰ç¬¬5æ¡è§„åˆ™æ¸…é™¤è¿‡æœŸclaimï¼š
-   * - å½“å‰æ‘¸ç‰Œæ–¹ï¼ˆä¸‹å®¶Bï¼‰çš„æ‰€æœ‰claimæ°¸è¿œä¸æ¸…é™¤
-   * - å…¶ä»–ç©å®¶ï¼ˆC/Dï¼‰çš„è¿‡æœŸclaimæ¸…é™¤
-   * - å¦‚æœå†³ç­–æœŸå†…æœ‰åŠ¨ä½œè§¦å‘ï¼ˆhasTriggeredActionï¼‰ï¼Œä¸æ¸…é™¤ä»»ä½•claim
-   */
-  private clearExpiredClaimsButKeepCurrentPlayerChow(game: GameState, now = Date.now()): void {
-    if ((game as any).hasTriggeredAction) {
-      // å†³ç­–æœŸå†…æœ‰åŠ¨ä½œ â†’ ä¸æ¸…é™¤ä»»ä½•claim
-      return;
-    }
-    const currentPlayerId = game.players[game.currentPlayerIndex]?.id;
-    game.pendingActions = game.pendingActions.filter(pendingAction => {
-      if (!pendingAction.expiresAt || pendingAction.expiresAt > now) return true; // æœªè¿‡æœŸä¿ç•™
-      if (pendingAction.playerId === currentPlayerId) return true; // ä¸‹å®¶Bæ°¸è¿œä¿ç•™
-      // ã€ä¿®å¤ã€‘äººç±»ç©å®¶çš„è¿‡æœŸclaimä¹Ÿä¿ç•™â€”â€”ç©å®¶å¯èƒ½åœ¨çŠ¹è±«æˆ–æ“ä½œé€‰æ‹©ä¸­
-      const player = game.players.find(p => p.id === pendingAction.playerId);
-      if (player && !this.isPlayerBotControlled(player)) return true;
-      return false; // botç©å®¶çš„è¿‡æœŸclaimæ¸…é™¤
-    });
-    game.pengChowConflict = null;
-    if (game.pendingActions.length === 0) {
-      this.clearPendingActionTimer(game.gameId);
-    }
-  }
-
-  /**
-   * æ¸…é™¤å½“å‰ç©å®¶å·²è¿‡æœŸçš„åƒç‰Œå¾…å¤„ç†åŠ¨ä½œã€‚
-   * ã€é‡è¦ã€‘å¯¹äºäººç±»ç©å®¶ï¼Œå³ä½¿è¿‡æœŸä¹Ÿä¸æ¸…é™¤â€”â€”ç©å®¶å¯èƒ½æ­£åœ¨åƒç‰Œé€‰æ‹©å™¨ä¸­åšé€‰æ‹©ï¼Œ
-   * æ¸…é™¤ä¼šå¯¼è‡´å‰ç«¯ä¸¢å¤±çŠ¶æ€ï¼ˆç©å®¶å·²ç‚¹"åƒ"ã€é€‰æ‹©ä¸­ï¼Œå´è¢«æ‘¸å€’è®¡æ—¶æ¸…é™¤äº†ï¼‰ã€‚
-   * äººç±»ç©å®¶åº”é€šè¿‡è‡ªå·±æ‘¸ç‰Œã€è¿‡ç‰Œæˆ–ç¡®è®¤åƒç‰Œæ¥è‡ªç„¶æ¸…é™¤ã€‚bot çš„åƒç‰Œè¿‡æœŸåˆ™æ­£å¸¸æ¸…é™¤ã€‚
-   */
-  private clearExpiredCurrentPlayerChowPending(game: GameState, now = Date.now()): boolean {
-    const before = game.pendingActions.length;
-    const currentPlayer = game.players[game.currentPlayerIndex];
-    const isHumanPlayer = currentPlayer && !this.isPlayerBotControlled(currentPlayer);
-    game.pendingActions = game.pendingActions.filter(pendingAction => {
-      if (!this.shouldRetainCurrentPlayerChowPending(game, pendingAction)) return true;
-      const expiresAt = typeof pendingAction.expiresAt === 'number' ? pendingAction.expiresAt : 0;
-      if (expiresAt > now) return true; // æœªè¿‡æœŸ -> ä¿ç•™
-      // ã€ä¿®å¤ã€‘äººç±»ç©å®¶çš„è¿‡æœŸåƒç‰Œä¸æ¸…é™¤ï¼Œè®©ç©å®¶è‡ªè¡Œæ“ä½œ
-      if (isHumanPlayer) return true;
-      return false; // bot è¿‡æœŸåƒç‰Œ -> æ¸…é™¤
-    });
-    if (before !== game.pendingActions.length) {
-      game.pengChowConflict = null;
-      this.clearPendingActionTimer(game.gameId);
-      return true;
-    }
-    return false;
-  }
-
-  private clearCurrentPlayerChowPending(game: GameState): boolean {
-    const before = game.pendingActions.length;
-    game.pendingActions = game.pendingActions.filter(pendingAction => !this.shouldRetainCurrentPlayerChowPending(game, pendingAction));
-    if (before !== game.pendingActions.length) {
-      game.pengChowConflict = null;
-      this.clearPendingActionTimer(game.gameId);
-      return true;
-    }
-    return false;
-  }
-
-  private clearExpiredClaimsForDecisionWindow(game: GameState, now = Date.now()): void {
-    if ((game as any).hasTriggeredAction) return;
-    const currentPlayerId = game.players[game.currentPlayerIndex]?.id;
-    game.pendingActions = game.pendingActions.filter(pendingAction => {
-      if (!pendingAction.expiresAt || pendingAction.expiresAt > now) return true;
-      return pendingAction.playerId === currentPlayerId;
-    });
-    game.pengChowConflict = null;
-    if (game.pendingActions.length === 0) {
-      this.clearPendingActionTimer(game.gameId);
-    }
-  }
-
-  private clearCurrentTurnPendingActions(game: GameState, playerId: string): boolean {
-    const before = game.pendingActions.length;
-    game.pendingActions = game.pendingActions.filter(pendingAction => pendingAction.playerId !== playerId);
-    if (before !== game.pendingActions.length) {
-      game.pengChowConflict = null;
-      this.clearPendingActionTimer(game.gameId);
-      return true;
-    }
-    return false;
-  }
-
-  private autoDrawForCurrentPlayer(game: GameState): boolean {
-    const currentPlayer = game.players[game.currentPlayerIndex];
-    if (!currentPlayer || currentPlayer.status !== PlayerStatus.PLAYING) return false;
-    if (!this.canPlayerDrawOnCurrentTurn(game, currentPlayer)) return false;
-
-    this.replaceInitialFlowers(game, currentPlayer);
-    const totalTileCount = this.getPlayableTileCount(currentPlayer);
-    if (totalTileCount >= 14) {
-      game.drawnThisTurn = true;
-      return true;
-    }
-
-    this.handleDraw(game, currentPlayer);
-    game.drawnThisTurn = true;
-    return true;
-  }
-
-  private canPlayerDeclareTurnHu(game: GameState, player: Player): boolean {
-    if (!game.drawnThisTurn) return false;
-    if ((player as any).lastDrawnTile) return true;
-    const lastAction = game.actionHistory[game.actionHistory.length - 1];
-    return !!lastAction && lastAction.playerId === player.id && lastAction.type === ActionType.DRAW;
-  }
-
-  private getConcealedPlayableTiles(game: GameState, player: Player): Tile[] {
-    const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
-    return player.hand.concealedTiles.filter(tile => !isFlower(tile) || isWildTile(tile));
-  }
-
-  private isListeningPreviewState(game: GameState, player: Player): boolean {
-    const concealedPlayableCount = this.getConcealedPlayableTiles(game, player).length;
-    return [1, 4, 7, 10, 13].includes(concealedPlayableCount);
-  }
-
-  private isDaDiaoReadyState(game: GameState, player: Player): boolean {
-    return this.getConcealedPlayableTiles(game, player).length === 1;
-  }
-
-  private filterBigDiaoPreviewTiles(
-    game: GameState,
-    player: Player,
-    winningTiles: Array<{
-      tile: Tile;
-      remainingCount: number;
-      bestDiscardOption: WinOption | null;
-      bestSelfDrawOption: WinOption | null;
-      bestOverallOption: WinOption | null;
-    }>
-  ) {
-    if (!this.isDaDiaoReadyState(game, player)) return winningTiles;
-
-    const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
-    const visibleTiles = [
-      ...player.hand.concealedTiles.filter(tile => !isWildTile(tile) && !isFlower(tile)),
-      ...player.hand.exposedMelds.flatMap(meld => meld.tiles || []).filter(tile => !isWildTile(tile) && !isFlower(tile))
-    ];
-    const numberSuits = new Set(visibleTiles
-      .filter(tile => tile.suit === TileSuit.DOTS || tile.suit === TileSuit.CHARACTERS || tile.suit === TileSuit.BAMBOOS)
-      .map(tile => tile.suit));
-    const hasHonor = visibleTiles.some(tile => tile.suit === TileSuit.WIND || tile.suit === TileSuit.DRAGON);
-
-    if (numberSuits.size !== 1 || hasHonor) return winningTiles;
-
-    const [lockedSuit] = [...numberSuits];
-    return winningTiles.filter(entry => entry.tile.suit === lockedSuit);
-  }
-
-  // Freeze/dealer auto-draw timers(éœ€è¦åœ¨æ–°å±€å¼€å§‹æ—¶æ¸…é™¤)
-  private freezeTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
-
-  // AIæ‰˜ç®¡æ¨¡å¼:ç©å®¶IDé›†åˆ,è¢«æ ‡è®°çš„ç©å®¶ç”±AIè‡ªåŠ¨å‡ºç‰Œ
-  private botModePlayers: Set<string> = new Set();
-  private winEvaluationCache: Map<string, Map<string, {
-    fast: Map<string, { canWin: boolean; types: HandType[] }>;
-    options: Map<string, WinOption[]>;
-    ting: Map<string, {
-      isTing: boolean;
-      winningTiles: Array<{
-        tile: Tile;
-        remainingCount: number;
-        bestDiscardOption: WinOption | null;
-        bestSelfDrawOption: WinOption | null;
-        bestOverallOption: WinOption | null;
-      }>;
-    }>;
-  }>> = new Map();
-
-  private getPlayerWinCache(gameId: string, playerId: string) {
-    if (!this.winEvaluationCache.has(gameId)) {
-      this.winEvaluationCache.set(gameId, new Map());
-    }
-    const gameCache = this.winEvaluationCache.get(gameId)!;
-    if (!gameCache.has(playerId)) {
-      gameCache.set(playerId, {
-        fast: new Map(),
-        options: new Map(),
-        ting: new Map()
-      });
-    }
-    return gameCache.get(playerId)!;
-  }
-
-  private invalidateWinEvaluationCache(gameId: string, playerIds?: string[]): void {
-    if (!playerIds || playerIds.length === 0) {
-      this.winEvaluationCache.delete(gameId);
-      return;
-    }
-
-    const gameCache = this.winEvaluationCache.get(gameId);
-    if (!gameCache) return;
-    for (const playerId of playerIds) {
-      gameCache.delete(playerId);
-    }
-    if (gameCache.size === 0) {
-      this.winEvaluationCache.delete(gameId);
-    }
-  }
-
-  private buildTileSignature(tiles: Tile[]): string {
-    return tiles
-      .map(tile => `${tile.suit}:${tile.value}`)
-      .sort()
-      .join(',');
-  }
-
-  private buildMeldSignature(melds: Meld[]): string {
-    return melds
-      .map(meld => `${meld.type}:${meld.isConcealed ? '1' : '0'}:${this.buildTileSignature(meld.tiles)}`)
-      .sort()
-      .join('|');
-  }
-
-  private getPlayerFlowerTiles(player: Player): Tile[] {
-    return player.hand.exposedMelds
-      .flatMap(meld => meld.tiles)
-      .filter(tile => isFlower(tile));
-  }
-
-  private isPlayerMenQing(player: Player): boolean {
-    return !player.hand.exposedMelds.some(meld =>
-      meld.type === MeldType.TRIPLET ||
-      meld.type === MeldType.SEQUENCE ||
-      (meld.type === MeldType.KONG && !meld.isConcealed)
-    );
-  }
-
-  private getPlayerWinContextKey(game: GameState, player: Player): string {
-    return [
-      `concealed=${this.buildTileSignature(player.hand.concealedTiles)}`,
-      `melds=${this.buildMeldSignature(player.hand.exposedMelds)}`,
-      `flowers=${this.getPlayerFlowerTiles(player).length}`,
-      `wild=${game.customScoringMode || ''}`,
-      `wildGroup=${(game.wildTileGroup || []).join(',')}`,
-      `round=${game.roundMultiplier ?? 1}`,
-      `inherit=${game.inheritMultiplier ?? 1}`,
-      `settlement=${game.settlementMultiplier ?? 1}`
-    ].join('|');
-  }
-
-  private getWinWildArg(game: GameState): string | null {
-    return (game.customScoringMode || null);
-  }
-
-  private getCachedWinCheck(game: GameState, player: Player): { canWin: boolean; types: HandType[] } {
-    const playerCache = this.getPlayerWinCache(game.gameId, player.id);
-    const cacheKey = this.getPlayerWinContextKey(game, player);
-    const cached = playerCache.fast.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    const result = canWin(player.hand.concealedTiles, player.hand.exposedMelds, this.getWinWildArg(game));
-    playerCache.fast.set(cacheKey, result);
-    return result;
-  }
-
-  private getCachedWinOptions(
-    game: GameState,
-    player: Player,
-    context: 'self_draw' | 'discard',
-    flags?: { isKongFlower?: boolean; isRobbingKong?: boolean; extraTile?: Tile }
-  ): WinOption[] {
-    const playerCache = this.getPlayerWinCache(game.gameId, player.id);
-    const cacheKey = [
-      this.getPlayerWinContextKey(game, player),
-      `ctx=${context}`,
-      `kongFlower=${flags?.isKongFlower ? 1 : 0}`,
-      `robKong=${flags?.isRobbingKong ? 1 : 0}`,
-      `extra=${flags?.extraTile ? `${flags.extraTile.suit}-${flags.extraTile.value}` : ''}`
-    ].join('|');
-    const cached = playerCache.options.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    const handTiles = flags?.extraTile
-      ? [...player.hand.concealedTiles, flags.extraTile]
-      : player.hand.concealedTiles;
-    const winCheck = flags?.extraTile
-      ? canWin(handTiles, player.hand.exposedMelds, this.getWinWildArg(game))
-      : this.getCachedWinCheck(game, player);
-    const wildParts = game.customScoringMode?.split('-');
-    const wildSuit = wildParts?.[0] ? wildParts[0] as TileSuit : undefined;
-    const wildValue = wildParts?.[1] ? parseInt(wildParts[1], 10) : undefined;
-    const allOptions = generateWinOptions({
-      handTiles,
-      exposedMelds: player.hand.exposedMelds,
-      flowerTiles: this.getPlayerFlowerTiles(player),
-      handTypes: winCheck.types,
-      isKongFlower: !!flags?.isKongFlower,
-      isRobbingKong: !!flags?.isRobbingKong,
-      isMenQing: this.isPlayerMenQing(player),
-      wildTileSuit: wildSuit,
-      wildTileValue: wildValue,
-      wildTileGroup: game.wildTileGroup,
-      rawRoundMultiplier: game.roundMultiplier ?? 1,
-      rawInheritMultiplier: game.inheritMultiplier ?? 1,
-      settlementMultiplier: game.settlementMultiplier ?? 1
-    });
-
-    const topOptions = allOptions
-      .filter(option => option.type === context)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
-
-    playerCache.options.set(cacheKey, topOptions);
-    return topOptions;
-  }
-
-  private prewarmWinEvaluation(
-    game: GameState,
-    player: Player,
-    context: 'self_draw' | 'discard',
-    extraTile?: Tile
-  ): void {
-    if (player.status !== PlayerStatus.PLAYING) return;
-    const winCheck = extraTile
-      ? canWin([...player.hand.concealedTiles, extraTile], player.hand.exposedMelds, this.getWinWildArg(game))
-      : this.getCachedWinCheck(game, player);
-    if (!winCheck.canWin) return;
-    this.getCachedWinOptions(game, player, context, {
-      isKongFlower: context === 'self_draw' && !!player.isSelfDrawn,
-      isRobbingKong: context === 'discard' && !!game.pendingKongClaim,
-      extraTile
-    });
-  }
-
-  private getWinningTileCandidates(): Array<{ suit: TileSuit; value: number }> {
-    const candidates: Array<{ suit: TileSuit; value: number }> = [];
-    for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
-      for (let value = 1; value <= 9; value++) {
-        candidates.push({ suit, value });
-      }
-    }
-    for (let value = 1; value <= 4; value++) {
-      candidates.push({ suit: TileSuit.WIND, value });
-    }
-    for (let value = 1; value <= 3; value++) {
-      candidates.push({ suit: TileSuit.DRAGON, value });
-    }
-    return candidates;
-  }
-
-  private getTingPreviewCandidates(game: GameState): Array<{ suit: TileSuit; value: number }> {
-    const candidates = this.getWinningTileCandidates();
-    if (game.customScoringMode?.startsWith(`${TileSuit.FLOWER}-`) && Array.isArray(game.wildTileGroup)) {
-      for (const valueText of game.wildTileGroup) {
-        const value = parseInt(valueText, 10);
-        if (!Number.isNaN(value) && value >= 1 && value <= 8) {
-          candidates.push({ suit: TileSuit.FLOWER, value });
-        }
-      }
-    }
-    return candidates;
-  }
-
-  private getTileMaxCopies(suit: TileSuit): number {
-    return suit === TileSuit.FLOWER ? 1 : 4;
-  }
-
-  private getVisibleRemainingCount(game: GameState, player: Player, suit: TileSuit, value: number): number {
-    const visibleCount =
-      player.hand.concealedTiles.filter(tile => tile.suit === suit && tile.value === value).length +
-      game.discardPile.filter(tile => tile.suit === suit && tile.value === value).length +
-      game.players.flatMap(p => p.hand.exposedMelds).flatMap(meld => meld.tiles).filter(tile => tile.suit === suit && tile.value === value).length;
-    return Math.max(0, this.getTileMaxCopies(suit) - visibleCount);
-  }
-
-  private quickPrecheckTenpai(game: GameState, player: Player): boolean {
-    // 1) å·¡ç›®é—¨æ§›ï¼šå‰ 3 å·¡å‡ ä¹ä¸å¯èƒ½å¬ç‰Œï¼Œè·³è¿‡è®¡ç®—
-    const discardCount = game.discardPile.length;
-    const playerCount = game.players.filter(p => p.status === PlayerStatus.PLAYING).length;
-    const calculatedRound = Math.max(1, Math.ceil(discardCount / Math.max(1, playerCount)));
-    if (calculatedRound < 3) {
-      return false;
-    }
-
-    // 2) ç‰¹æ®Šç‰Œå‹å§‹ç»ˆè®¡ç®—ï¼ˆä¸è·³è¿‡ï¼‰
-    const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
-    const concealed = player.hand.concealedTiles;
-    // ç»Ÿè®¡å››ç™¾æ­å’Œå…«èŠ±
-    const wildCount = concealed.filter(t => isWildTile(t)).length;
-    const flowerCount = concealed.filter(t => isFlower(t)).length;
-    if (wildCount >= 4) return true;   // å››ç™¾æ­ï¼Œè·³è¿‡ç²—ç­›
-    if (flowerCount >= 8) return true; // å…«èŠ±ï¼Œè·³è¿‡ç²—ç­›
-
-    // 3) å­¤ç‰Œæ£€æµ‹â€”â€”åªé’ˆå¯¹éç™¾æ­éèŠ±ç‰Œçš„æ•°å­—ç‰Œ
-    // å…ˆè¿‡æ»¤å‡ºæœ‰æ•ˆç‰Œï¼šä¸èŠ±ç‰Œä¸”éç™¾æ­çš„æ•°å­—ç‰Œã€é£ç‰Œã€ç®­ç‰Œ
-    const nonWildNonFlower = concealed.filter(t => !isFlower(t) && !isWildTile(t));
-
-    // ç»Ÿè®¡æ¯å¼ ç‰Œå‡ºç°æ¬¡æ•°ï¼ˆæ‰¾å¯¹å­ï¼‰
-    const valueCounts = new Map<string, number>();
-    for (const t of nonWildNonFlower) {
-      const key = `${t.suit}-${t.value}`;
-      valueCounts.set(key, (valueCounts.get(key) || 0) + 1);
-    }
-
-    // ç»Ÿè®¡æœ‰å‡ é—¨æ•°å­—ç‰Œ
-    const numberSuits = new Set<string>();
-    for (const t of nonWildNonFlower) {
-      if (t.suit !== TileSuit.WIND && t.suit !== TileSuit.DRAGON) {
-        numberSuits.add(t.suit);
-      }
-    }
-    const hasMultipleNumberSuits = numberSuits.size >= 2;
-
-    // è®¡ç®—å­¤ç‰Œæ•°
-    let orphanCount = 0;
-    for (const t of nonWildNonFlower) {
-      const key = `${t.suit}-${t.value}`;
-      if (valueCounts.get(key)! >= 2) continue; // æœ‰å¯¹å­ â†’ ä¸æ˜¯å­¤ç‰Œ
-      if (t.suit === TileSuit.WIND || t.suit === TileSuit.DRAGON) {
-        orphanCount++; // é£ç‰Œ/ç®­ç‰Œæ— å¯¹å­å³å­¤ç‰Œ
-        continue;
-      }
-      // æ•°ç‰Œï¼šæ£€æŸ¥ Â±1 æœ‰æ— åŒèŠ±è‰²é‚»ç‰Œ
-      const prevKey = `${t.suit}-${t.value - 1}`;
-      const nextKey = `${t.suit}-${t.value + 1}`;
-      if (!valueCounts.has(prevKey) && !valueCounts.has(nextKey)) {
-        orphanCount++;
-      }
-    }
-
-    if (wildCount === 0) {
-      // æ— ç™¾æ­ï¼šä»»æ„ 2+ å­¤ç‰Œå³å¯è·³è¿‡
-      if (orphanCount >= 2) return false;
-      // æ— ç™¾æ­ + ä¸¤é—¨æ•°å­—ç‰Œ + ä»»ä¸€é—¨æœ‰å­¤ç‰Œ â†’ è·³è¿‡
-      if (hasMultipleNumberSuits && orphanCount >= 1) return false;
-      return true;
-    }
-
-    // wildCount ä¸º 1 çš„æƒ…å†µï¼ˆ>=4 çš„å·²ç»åœ¨ä¸Šé¢ return true äº†ï¼‰
-    // 1ç™¾æ­ + æœ‰ä¸¤é—¨æ•°å­—ç‰Œ + æœ‰ 2+ å­¤ç‰Œ â†’ è·³è¿‡
-    if (hasMultipleNumberSuits && orphanCount >= 2) return false;
-
-    return true;
-  }
-
-  private getCachedTingPreview(game: GameState, player: Player) {
-    const playerCache = this.getPlayerWinCache(game.gameId, player.id);
-    const cacheKey = `${this.getPlayerWinContextKey(game, player)}|ting-preview`;
-    const cached = playerCache.ting.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    // å¿«é€Ÿç²—ç­›ï¼šå·¡ç›®é—¨æ§› + å­¤ç‰Œæ£€æŸ¥
-    if (!this.quickPrecheckTenpai(game, player)) {
-      const emptyResult = { isTing: false, winningTiles: [] as Array<{
-        tile: Tile;
-        remainingCount: number;
-        bestDiscardOption: WinOption | null;
-        bestSelfDrawOption: WinOption | null;
-        bestOverallOption: WinOption | null;
-      }> };
-      playerCache.ting.set(cacheKey, emptyResult);
-      return emptyResult;
-    }
-
-    const candidates = this.getTingPreviewCandidates(game);
-    const wildChecker = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
-    const winWildArg = (game.customScoringMode || null);
-    const winningTileMap = new Map<string, {
-      tile: Tile;
-      remainingCount: number;
-      bestDiscardOption: WinOption | null;
-      bestSelfDrawOption: WinOption | null;
-      bestOverallOption: WinOption | null;
-    }>();
-
-    if (!this.isListeningPreviewState(game, player)) {
-      const emptyResult = { isTing: false, winningTiles: [] as Array<{
-        tile: Tile;
-        remainingCount: number;
-        bestDiscardOption: WinOption | null;
-        bestSelfDrawOption: WinOption | null;
-        bestOverallOption: WinOption | null;
-      }> };
-      playerCache.ting.set(cacheKey, emptyResult);
-      return emptyResult;
-    }
-
-    for (const { suit, value } of candidates) {
-      const testTile: Tile = {
-        id: `ting-preview-${suit}-${value}`,
-        suit,
-        value,
-        isFlower: suit === TileSuit.FLOWER
-      };
-      const winCheck = canWin([...player.hand.concealedTiles, testTile], player.hand.exposedMelds, winWildArg);
-      if (!winCheck.canWin) continue;
-
-      const discardOptions = this.getCachedWinOptions(game, player, 'discard', {
-        extraTile: testTile,
-        isRobbingKong: false
-      });
-      const selfDrawOptions = this.getCachedWinOptions(game, player, 'self_draw', {
-        extraTile: testTile,
-        isKongFlower: false
-      });
-      const bestDiscardOption = discardOptions[0] || null;
-      const bestSelfDrawOption = selfDrawOptions[0] || null;
-      const bestOverallOption = [bestDiscardOption, bestSelfDrawOption]
-        .filter(Boolean)
-        .sort((a, b) => (b!.score ?? 0) - (a!.score ?? 0))[0] || null;
-
-      winningTileMap.set(`${suit}-${value}`, {
-        tile: testTile,
-        remainingCount: 0,
-        bestDiscardOption,
-        bestSelfDrawOption,
-        bestOverallOption
-      });
-    }
-
-    const winningTiles = this.filterBigDiaoPreviewTiles(game, player, [...winningTileMap.values()])
-      .filter(entry => !wildChecker(entry.tile))
-      .sort((a, b) => {
-        const suitOrder: Record<string, number> = {
-          [TileSuit.CHARACTERS]: 0,
-          [TileSuit.BAMBOOS]: 1,
-          [TileSuit.DOTS]: 2,
-          [TileSuit.WIND]: 3,
-          [TileSuit.DRAGON]: 4,
-          [TileSuit.FLOWER]: 5
-        };
-        const suitDelta = (suitOrder[a.tile.suit] ?? 99) - (suitOrder[b.tile.suit] ?? 99);
-        if (suitDelta !== 0) return suitDelta;
-        const valueDelta = a.tile.value - b.tile.value;
-        if (valueDelta !== 0) return valueDelta;
-        return 0;
-      });
-
-    const result = {
-      isTing: winningTiles.length > 0,
-      winningTiles
-    };
-    playerCache.ting.set(cacheKey, result);
-    return result;
-  }
-
-  /** è®­ç»ƒå¿«é€Ÿæ¨¡å¼: TRAINING_FAST_MODE=true æˆ– allClaimMode */
-  private isTrainingFastMode(game: GameState): boolean {
-    const fastByEnv = String(process.env.TRAINING_FAST_MODE || '').toLowerCase() === 'true';
-    return fastByEnv || !!(game as any).allClaimMode;
-  }
-
-  /** è·å–å†³ç­–çŠ¹è±«æœŸ(æ¯«ç§’):è®­ç»ƒæ¨¡å¼0~30ms,å®æˆ˜é»˜è®¤5000ms */
-  private getHesitationWindow(game: GameState): number {
-    const raw = game.hesitationWindow ?? 5000;
-    if (this.isTrainingFastMode(game)) {
-      return Math.min(30, Math.max(0, raw));
-    }
-    return raw;
-  }
-
-  /** è·å–çŠ¹è±«ç­‰å¾…æ¯«ç§’æ•°(ç”¨äºsetTimeoutç­‰) */
-  private getHesitationWaitMs(gameId: string): number {
-    const game = this.games.get(gameId);
-    if (!game) return 5000;
-    return this.getHesitationWindow(game);
-  }
-
-  private getBotDrawFreezeMs(game: GameState): number {
-    const base = this.getHesitationWindow(game);
-    if (this.isTrainingFastMode(game)) {
-      return Math.min(30, Math.max(0, base));
-    }
-    return base;
-  }
-
-  private getBotDiscardDelayMs(game: GameState): number {
-    const base = this.getHesitationWindow(game);
-    if (this.isTrainingFastMode(game)) {
-      return Math.min(30, Math.max(0, base));
-    }
-    const reducedBase = Math.max(250, Math.floor(base / 2));
-    return reducedBase + Math.floor(Math.random() * 250);
-  }
-
-  private isChowChoiceOnlyActions(actions: ActionType[]): boolean {
-    return actions.includes(ActionType.CHOW) &&
-      !actions.some(action => [
-        ActionType.HU,
-        ActionType.PENG,
-        ActionType.KONG,
-        ActionType.CONCEALED_KONG,
-        ActionType.EXTENDED_KONG
-      ].includes(action));
-  }
-
-  private getPendingActionExpiresAt(game: GameState, actions: ActionType[]): number {
-    return Date.now() + this.getHesitationWindow(game);
-  }
-
-  private getHumanClaimDecisionTimeoutMs(game: GameState, player: Player, actions: ActionType[]): number {
-    return this.getHesitationWindow(game);
-  }
-
-  private getPendingActionWaitMs(gameId: string): number {
-    const game = this.games.get(gameId);
-    if (!game?.pendingActions.length) return this.getHesitationWaitMs(gameId);
-    const now = Date.now();
-    const nextExpiresAt = Math.min(
-      ...game.pendingActions.map(pa =>
-        typeof pa.expiresAt === 'number' ? pa.expiresAt : now + this.getHesitationWindow(game)
-      )
-    );
-    return Math.max(0, nextExpiresAt - now);
-  }
-
-  setWebSocketManager(manager: any) {
-    this.wsManager = manager;
-  }
-
-  // ===== AIæ‰˜ç®¡æ¨¡å¼æ§åˆ¶ =====
-  /**
-   * åˆ¤æ–­ç©å®¶æ˜¯å¦è¢«AIæ‰˜ç®¡(åŒ…æ‹¬æœ¬èº«æ˜¯botç©å®¶,æˆ–è¢«æ‰‹åŠ¨æ ‡è®°ä¸ºAIæ‰˜ç®¡)
-   */
-  private isPlayerBotControlled(player: Player): boolean {
-    return isBotPlayer(player) || this.botModePlayers.has(player.id);
-  }
-
-  /**
-   * å¯ç”¨AIæ‰˜ç®¡æ¨¡å¼
-   */
-  enableBotMode(gameId: string, playerId: string): void {
-    this.botModePlayers.add(playerId);
-    // è®°å½•æœ¬å±€è¢«AIæ¥ç®¡çš„ç©å®¶(ç”¨äºç»“ç®—å‡åŠ)
-    const game = this.games.get(gameId);
-    if (game) {
-      if (!game.botTakeoverPlayers) game.botTakeoverPlayers = [];
-      if (!game.botTakeoverPlayers.includes(playerId)) {
-        game.botTakeoverPlayers.push(playerId);
-      }
-    }
-    // ç«‹å³ç”± AI å¼€å§‹å‡ºç‰Œ
-    this.scheduleBotDiscard(gameId, playerId);
-  }
-
-  /**
-   * ç¦ç”¨AIæ‰˜ç®¡æ¨¡å¼(ç©å®¶å›æ¥)
-   */
-  disableBotMode(playerId: string): void {
-    this.botModePlayers.delete(playerId);
-  }
-
-  /**
-   * æ£€æŸ¥ç©å®¶æ˜¯å¦å¤„äºAIæ‰˜ç®¡æ¨¡å¼
-   */
-  isPlayerInBotMode(playerId: string): boolean {
-    return this.botModePlayers.has(playerId);
-  }
-
-  private clearPendingActionTimer(gameId: string): void {
-    const timer = this.pendingActionTimers.get(gameId);
-    if (timer) {
-      clearTimeout(timer);
-      this.pendingActionTimers.delete(gameId);
-    }
-  }
-
-  private currentTurnPlayerHasPendingClaims(game: GameState): boolean {
-    const currentPlayerId = game.players[game.currentPlayerIndex]?.id;
-    if (!currentPlayerId) return false;
-    return game.pendingActions.some(pa => pa.playerId === currentPlayerId);
-  }
-
-  private refreshPendingActionExpirations(
-    game: GameState,
-    now = Date.now(),
-    predicate?: (pendingAction: PendingAction) => boolean
-  ): void {
-    const nextExpiresAt = now + this.getHesitationWindow(game);
-    for (const pendingAction of game.pendingActions) {
-      if (predicate && !predicate(pendingAction)) continue;
-      pendingAction.expiresAt = Math.max(
-        typeof pendingAction.expiresAt === 'number' ? pendingAction.expiresAt : 0,
-        nextExpiresAt
-      );
-    }
-  }
-
-  private schedulePendingActionTimeout(gameId: string): void {
-    this.clearPendingActionTimer(gameId);
-
-    // ç­‰freezeå»¶è¿Ÿ(1000ms)ç»“æŸåæ‰å¼€å§‹pendingè®¡æ—¶
-    // è¿™æ ·humanç©å®¶åœ¨freezeæœŸé—´çœ‹æ¸…UIå,è¿˜æœ‰å®Œæ•´çš„1sååº”æ—¶é—´
-    const timer = this.detachTimer(setTimeout(async () => {
-      // åŸå­ä¿æŠ¤ï¼šè‹¥å·²åœ¨æ¶ˆè´¹ä¸­åˆ™å¿½ç•¥æœ¬æ¬¡è§¦å‘
-      if (this.actionResolutionLocks.has(gameId)) return;
-      this.actionResolutionLocks.add(gameId);
-      try {
-        const game = await this.getGame(gameId);
-        if (!game || game.phase !== GamePhase.PLAYING) return;
-        if (!game.pendingActions.length) return;
-
-        if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now()) {
-          this.schedulePendingActionTimeout(gameId);
-          return;
-        }
-
-        // å®¡æ‰¹æµè¿›è¡Œä¸­æ—¶,ä¸è¦æå‰PASSæ¸…ç©ºpending,å¦åˆ™ä¼šæ‰“æ–­5ç§’å®¡æ‰¹çª—å£
-        if (game.pengChowConflict) {
-          this.schedulePendingActionTimeout(gameId);
-          return;
-        }
-
-        // ä¿®å¤ç«æ€:å¦‚æœç‰Œå·²è¢«botåƒ/ç¢°æ¶ˆè€—(discardPileå˜çŸ­),ä¸è¦auto-pass
-        // handleBotPendingActionså·²ç»å¤„ç†äº†,æ­¤æ—¶pendingæ˜¯æ–°çš„
-        const pendingTiles = game.pendingActions.map(pa => pa.tile?.id).filter(Boolean);
-        const discardIds = new Set(game.discardPile.map(t => t.id));
-        const tileClaimed = pendingTiles.some(tid => tid && !discardIds.has(tid));
-        if (tileClaimed) {
-          // ç‰Œå·²è¢«claim,pendingå·²è¿‡æ—¶,ç›´æ¥æ¸…é™¤
-          game.pendingActions = [];
-          await this.persistGame(game);
-          return;
-        }
-
-        const allClaimMode = (game as any).allClaimMode;
-        const now = Date.now();
-        const currentPlayer = game.players[game.currentPlayerIndex];
-        const expired = game.pendingActions.filter(pa =>
-          (!pa.expiresAt || pa.expiresAt <= now)
-        );
-        const hasTriggeredAction = !!(game as any).hasTriggeredAction;
-
-        if (allClaimMode) {
-          const pending = game.pendingActions;
-          const resolvedPlayerIds = new Set<string>();
-          for (const pa of pending) {
-            const player = game.players.find(p => p.id === pa.playerId);
-            if (!player || !this.isPlayerBotControlled(player)) continue;
-            await this.resolvePendingAction(game, player, pa);
-            resolvedPlayerIds.add(player.id);
-          }
-          if (resolvedPlayerIds.size === 0) {
-            await this.persistGame(game);
-            this.broadcastGameState(gameId);
-            return;
-          }
-          game.pendingActions = game.pendingActions.filter(pa => !resolvedPlayerIds.has(pa.playerId));
-          await this.persistGame(game);
-          this.broadcastGameState(gameId);
-          if (game.pendingActions.length > 0) {
-            this.schedulePendingActionTimeout(gameId);
-            return;
-          }
-          if (currentPlayer && this.isPlayerBotControlled(currentPlayer) && this.autoDrawForCurrentPlayer(game)) {
-            await this.persistGame(game);
-            this.broadcastGameState(gameId);
-          }
-          return;
-        }
-
-        if (hasTriggeredAction) {
-          this.refreshPendingActionExpirations(game, now);
-          await this.persistGame(game);
-          this.broadcastGameState(gameId);
-          this.schedulePendingActionTimeout(gameId);
-          return;
-        }
-
-        this.clearExpiredClaimsForDecisionWindow(game, now);
-        if (game.pendingActions.length === 0) {
-          if (currentPlayer && this.isPlayerBotControlled(currentPlayer) && this.autoDrawForCurrentPlayer(game)) {
-            await this.persistGame(game);
-            this.broadcastGameState(gameId);
-            this.scheduleBotDiscard(gameId, currentPlayer.id);
-            return;
-          }
-          await this.persistGame(game);
-          this.broadcastGameState(gameId);
-          return;
-        }
-        // ã€ä¼˜åŒ–ã€‘å¦‚æœåªå‰©å½“å‰äººç±»ç©å®¶çš„åƒç‰Œå¾…å¤„ç†ï¼Œä¸å†é‡å¤è°ƒåº¦å®šæ—¶å™¨
-        // ç©å®¶ä¼šé€šè¿‡ä¸»åŠ¨æ‘¸ç‰Œ/è¿‡ç‰Œ/ç¡®è®¤åƒç‰Œæ¥è§¦å‘ä¸‹ä¸€æ­¥
-        if (currentPlayer && this.canExecuteCurrentTurnPlayerDrawDuringPending(game, currentPlayer.id)) {
-          if (this.isPlayerBotControlled(currentPlayer)) {
-            this.clearCurrentTurnPendingActions(game, currentPlayer.id);
-            if (this.autoDrawForCurrentPlayer(game)) {
-              await this.persistGame(game);
-              this.broadcastGameState(gameId);
-              this.scheduleBotDiscard(gameId, currentPlayer.id);
-              return;
-            }
-          }
-          await this.persistGame(game);
-          this.broadcastGameState(gameId);
-          return;
-        }
-        this.schedulePendingActionTimeout(gameId);
-        await this.persistGame(game);
-        this.broadcastGameState(gameId);
-      } catch (err) {
-        console.error('Failed to auto-resolve pending actions:', err);
-      } finally {
-        this.actionResolutionLocks.delete(gameId);
-        if (this.pendingActionTimers.get(gameId) === timer) {
-          this.pendingActionTimers.delete(gameId);
-        }
-      }
-    }, this.getPendingActionWaitMs(gameId))); // å†³ç­–çŠ¹è±«æœŸ(è®­ç»ƒæ¨¡å¼å¯åŠ é€Ÿ)
-
-    this.pendingActionTimers.set(gameId, timer);
-  }
-
-  /**
-   * è®© bot å¤„ç†è‡ªå·±çš„ pending action(ç¢°/æ /èƒ¡/åƒ/è¿‡)
-   * Bugä¿®å¤:botå¿…é¡»ç­‰æ»¡ hesitationWindow å† action,å¦åˆ™äººç±»æŒ‰é’®é—ªç°æ¶ˆå¤±
-   */
-
-
-  /** ç»Ÿä¸€å¤„ç† pendingAction å†³ç­–(åƒ/ç¢°/æ /èƒ¡/PASS) */
-  private async resolvePendingAction(game: GameState, player: Player, pa: PendingAction): Promise<void> {
-    const action = await shouldClaimPendingAction(player, pa.availableActions, game);
-    console.log(`[PendingResolve] ${player.name} â†’ ${action}`);
-    if (action === ActionType.PASS) {
-      this.handlePass(game, player);
-    } else if (action === ActionType.PENG) {
-      const pengExposed = this.countExposedTilesExcludingFlowerMelds(player);
-      const pengTotal = player.hand.concealedTiles.length + pengExposed;
-      if (pengTotal - 2 + 3 <= 14) { this.handlePeng(game, player); }
-      else { this.handlePass(game, player); }
-    } else if (action === ActionType.CHOW) {
-      const chowExposed = this.countExposedTilesExcludingFlowerMelds(player);
-      const chowTotal = player.hand.concealedTiles.length + chowExposed;
-      if (chowTotal - 2 + 3 <= 14) {
-        console.log(`[PendingResolve] ${player.name} executing CHOW (concealed=${player.hand.concealedTiles.length}, exposed=${chowExposed})`);
-        this.handleChow(game, player, pa.selectedChowTileIds);
-      } else {
-        console.warn(`[PendingResolve] ${player.name} CHOW blocked: would exceed 14 tiles (total=${chowTotal})`);
-        this.handlePass(game, player);
-      }
-    } else if (action === ActionType.HU) {
-      await this.handleHu(game, player);
-    } else {
-      this.handlePass(game, player);
-    }
-  }
-
-  /** bot è®­ç»ƒæ¨¡å¼ä¸“ç”¨ */
-
-  private countExposedTilesExcludingFlowerMelds(player: Player): number {
-    return player.hand.exposedMelds.reduce((sum, m) => {
-      if (m.tiles.length === 1 && isFlower(m.tiles[0])) return sum;
-      if (m.type === MeldType.KONG || m.type === MeldType.CONCEALED_KONG) return sum + 3;
-      return sum + m.tiles.length;
-    }, 0);
-  }
-
-  private getPlayableTileCount(player: Player): number {
-    return player.hand.concealedTiles.length + this.countExposedTilesExcludingFlowerMelds(player);
-  }
-
-  /**
-   * å®æˆ˜æ¨¡å¼ï¼šbot é«˜ä¼˜å…ˆçº§åŠ¨ä½œï¼ˆç¢°/æ /èƒ¡ï¼‰ç«‹å³æ‰§è¡Œï¼Œä½†ä¸ç ´åäººç±»ç©å®¶çš„å†³ç­–çª—å£
-   * 
-   * æ ¸å¿ƒè§„åˆ™ï¼š
-   * 1. bot çš„ç¢°/æ /èƒ¡å¯ä»¥ç«‹å³æ‰§è¡Œï¼ˆä¸éœ€è¦ç­‰æ»¡ hesitationWindowï¼‰
-   * 2. æ‰§è¡Œåä¿ç•™äººç±»ç©å®¶çš„ pending çŠ¶æ€ï¼Œç‰¹åˆ«æ˜¯èƒ¡æŒ‰é’®å¿…é¡»åœ¨å†³ç­–æœŸå†…ä¿æŒå¯ç”¨
-   * 3. äººç±»ç©å®¶çš„åƒæŒ‰é’®å¯ä»¥è¢«æ¸…é™¤ï¼ˆå› ä¸ºç¢°/æ /èƒ¡ä¼˜å…ˆçº§æ›´é«˜ï¼‰
-   * 4. äººç±»çš„èƒ¡æŒ‰é’®å¿…é¡»åœ¨ hesitationWindow å†…ä¿æŒå¯ç”¨ï¼Œç­‰äººç±»è‡ªå·±å“åº”æˆ–è¶…æ—¶
-   */
-  private async handleBotPendingActions(gameId: string): Promise<void> {
-    // åŸå­ä¿æŠ¤ï¼šè‹¥ timer å·²åœ¨æ¶ˆè´¹åˆ™è·³è¿‡
-    if (this.actionResolutionLocks.has(gameId)) return;
-    const game = this.games.get(gameId);
-    if (!game) return;
-
-    // ç«‹å³åŒæ­¥å¤„ç† bot çš„é«˜ä¼˜å…ˆçº§åŠ¨ä½œï¼ˆç¢°/æ /èƒ¡ï¼‰ï¼Œä¸ç­‰å»¶è¿Ÿ
-    try {
-      if (game.phase !== GamePhase.PLAYING) return;
-      if (game.pendingActions.length === 0) return;
-
-      let claimedHigherPriority = false; // ç¢°/æ /èƒ¡æ˜¯å¦å·²è¢«botæ‰§è¡Œ
-
-      // ä¿å­˜äººç±»ç©å®¶çš„ pendingï¼ˆbot çš„ claim ä¸åº”æ¸…é™¤äººç±»çš„çŠ¹è±«çª—å£ï¼‰
-      const humanPendingActions = game.pendingActions.filter(pa => {
-        const p = game.players.find(pl => pl.id === pa.playerId);
-        return p && !this.isPlayerBotControlled(p);
-      });
-
-      // ç¬¬ä¸€è½®ï¼šbot å¤„ç†ç¢°/æ /èƒ¡ï¼ˆé«˜ä¼˜å…ˆçº§ï¼Œç«‹å³æ‰§è¡Œï¼‰
-      for (const pa of [...game.pendingActions]) {
-        const player = game.players.find(p => p.id === pa.playerId);
-        if (!player || player.status !== PlayerStatus.PLAYING) continue;
-        if (!this.isPlayerBotControlled(player)) continue;
-
-        const higherActions = pa.availableActions.filter(
-          a => a === ActionType.PENG || a === ActionType.KONG || a === ActionType.HU
-        );
-        if (higherActions.length === 0) continue;
-
-        const filteredHigherActions = higherActions.filter((candidate) => {
-          if (candidate !== ActionType.HU) return true;
-          const winOptions = this.getCachedWinOptions(game, player, 'discard', {
-            isRobbingKong: !!game.pendingKongClaim
-          });
-          return winOptions.length > 0;
-        });
-        if (filteredHigherActions.length === 0) {
-          if (pa.availableActions.includes(ActionType.CHOW)) continue;
-          this.handlePass(game, player);
-          continue;
-        }
-
-        const action = await shouldClaimPendingAction(player, filteredHigherActions, game);
-        console.log(`[BotService] ${player.name} priority action: ${action} (from ${filteredHigherActions})`);
-
-        if (action === ActionType.PENG) {
-          const pengExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
-          const pengTotalCount = player.hand.concealedTiles.length + pengExposedCount;
-          if (pengTotalCount - 2 + 3 <= 14) {
-            this.handlePeng(game, player);
-            claimedHigherPriority = true;
-          } else {
-            console.warn(`[BotPeng] ${player.name} blocked: would exceed 14 tiles`);
-            this.handlePass(game, player);
-          }
-        } else if (action === ActionType.KONG) {
-          const kongExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
-          const kongTotalCount = player.hand.concealedTiles.length + kongExposedCount;
-          if (kongTotalCount - 3 + 4 <= 14) {
-            this.handleKong(game, player, pa.tile?.id || '');
-            claimedHigherPriority = true;
-          } else {
-            console.warn(`[BotKong] ${player.name} blocked: would exceed 14 tiles`);
-            this.handlePass(game, player);
-          }
-        } else if (action === ActionType.HU) {
-          try {
-            await this.handleHu(game, player);
-            claimedHigherPriority = true;
-          } catch (err: any) {
-            console.warn(`[BotHu] ${player.name} skipped invalid hu: ${err?.message || err}`);
-            this.handlePass(game, player);
-          }
-        }
-      }
-
-      // bot æ‰§è¡Œé«˜ä¼˜å…ˆçº§åŠ¨ä½œåï¼š
-      // - å¦‚æœ bot èƒ¡äº†ï¼šæ¸¸æˆè¿›å…¥èƒ¡ç‰Œæµç¨‹ï¼Œpending ç”± handleHu å¤„ç†
-      // - å¦‚æœ bot ç¢°/æ äº†ï¼štile è¢«æ¶ˆè€—ï¼Œäººç±»çš„åƒæŒ‰é’®åº”è¢«æ¸…é™¤ï¼ˆä¼˜å…ˆçº§ä½ï¼‰
-      //   ä½†äººç±»çš„èƒ¡æŒ‰é’®å¿…é¡»ä¿ç•™ï¼Œç­‰äººç±»åœ¨ hesitationWindow å†…å“åº”
-      if (claimedHigherPriority) {
-        // æ¸…é™¤ bot è‡ªå·±çš„ pending
-        const botIds = new Set(game.players.filter(p => this.isPlayerBotControlled(p)).map(p => p.id));
-        game.pendingActions = game.pendingActions.filter(pa => !botIds.has(pa.playerId));
-        // äººç±»çš„ pendingï¼ˆç‰¹åˆ«æ˜¯èƒ¡ï¼‰ä¿ç•™ï¼Œç”± schedulePendingActionTimeout çš„ 5 ç§’è®¡æ—¶å™¨å¤„ç†
-      } else {
-        // bot æ²¡æœ‰é«˜ä¼˜å…ˆçº§åŠ¨ä½œ â†’ æ¸…é™¤ bot çš„ pendingï¼Œä¿ç•™äººç±»çš„
-        const botIds = new Set(game.players.filter(p => this.isPlayerBotControlled(p)).map(p => p.id));
-        game.pendingActions = game.pendingActions.filter(pa =>
-          !botIds.has(pa.playerId) || pa.availableActions.includes(ActionType.CHOW)
-        );
-        const now = Date.now();
-        for (const pa of game.pendingActions) {
-          const pendingPlayer = game.players.find(p => p.id === pa.playerId);
-          if (pendingPlayer && this.isPlayerBotControlled(pendingPlayer) && this.isChowChoiceOnlyActions(pa.availableActions)) {
-            pa.selectedChowTileIds = pa.tile
-              ? selectBotChowTileIds(pendingPlayer, game, pa.tile, pa.chowOptions)
-              : undefined;
-            pa.expiresAt = now + this.getHesitationWindow(game);
-          }
-        }
-      }
-
-      await this.persistGame(game);
-      this.broadcastGameState(gameId);
-
-      // å¦‚æœ bot ç¢°/æ æˆåŠŸï¼Œè°ƒåº¦ bot å‡ºç‰Œ
-      if (claimedHigherPriority) {
-        const claimingPlayer = game.players[game.currentPlayerIndex];
-        if (claimingPlayer && this.isPlayerBotControlled(claimingPlayer)) {
-          this.scheduleBotDiscard(gameId, claimingPlayer.id);
-        }
-        // å¤‡ä»½è°ƒåº¦: å¦‚æœ scheduleBotDiscard å› pendingæ®‹ç•™æ— æ³•å‡ºç‰Œ,
-        // schedulePendingActionTimeout æä¾›é€€è·¯
-        this.schedulePendingActionTimeout(gameId);
-      } else if (game.pendingActions.length === 0 && this.shouldAdvanceTurnAfterPass(game)) {
-        // æ‰€æœ‰ bot éƒ½ PASS ä¸”æ²¡æœ‰äººç±» pending æ®‹ç•™æ—¶ï¼Œå¿…é¡»ç»§ç»­æ¨è¿›å›åˆã€‚
-        // å¦åˆ™ä¼šåœåœ¨å¼ƒç‰Œè€…èº«ä¸Šï¼Œå‡ºç° "Skipped: pending cleared but turn not advanced" å¡æ­»ã€‚
-        await this.moveToNextPlayer(game);
-      } else {
-        this.schedulePendingActionTimeout(gameId);
-      }
-    } catch (err) {
-      console.error('[BotService] Pending action error:', err);
-    }
-  }
-
-  /**
-   * è®°å½•åƒ/ç¢°æ¥æº,æ£€æµ‹äº’åŒ…å…³ç³»
-   */
-  private recordBailoutAction(
-    gameId: string,
-    playerId: string,
-    sourcePlayerId: string | undefined,
-    meldType: MeldType
-  ): number {
-    if (!sourcePlayerId) return 0;
-    if (meldType !== MeldType.TRIPLET && meldType !== MeldType.SEQUENCE && meldType !== MeldType.KONG) return 0;
-
-    if (!this.mutualBailout.has(gameId)) {
-      this.mutualBailout.set(gameId, new Map());
-    }
-    const gameBailout = this.mutualBailout.get(gameId)!;
-
-    if (!gameBailout.has(playerId)) {
-      gameBailout.set(playerId, new Map());
-    }
-    const playerBailout = gameBailout.get(playerId)!;
-
-    const currentCount = playerBailout.get(sourcePlayerId) || 0;
-    const nextCount = currentCount + 1;
-    playerBailout.set(sourcePlayerId, nextCount);
-    return nextCount;
-  }
-
-  /**
-   * è·å–äº’åŒ…å…³ç³»
-   * @returns ä¸‰å£/å››å£å…³ç³»åˆ—è¡¨
-   */
-  getMutualBailoutRelations(gameId: string): Array<{
-    player1: string;
-    player2: string;
-    type: 'ä¸‰å£' | 'å››å£';
-  }> {
-    const relations: Array<{ player1: string; player2: string; type: 'ä¸‰å£' | 'å››å£' }> = [];
-    const gameBailout = this.mutualBailout.get(gameId);
-    if (!gameBailout) return relations;
-
-    const checked = new Set<string>();
-
-    for (const [playerId, partnerCounts] of gameBailout) {
-      for (const [partnerId, count] of partnerCounts) {
-        const key = [playerId, partnerId].sort().join('-');
-        if (checked.has(key)) continue;
-        checked.add(key);
-
-        // æ£€æŸ¥åŒæ–¹äº’ç›¸çš„å£æ•°
-        const countAtoB = gameBailout.get(playerId)?.get(partnerId) || 0;
-        const countBtoA = gameBailout.get(partnerId)?.get(playerId) || 0;
-
-        // äº’åŒ…å®šä¹‰:å•å‘ä¸‰å£æˆ–å››å£
-        if (countAtoB >= 4 || countBtoA >= 4) {
-          relations.push({ player1: playerId, player2: partnerId, type: 'å››å£' });
-        } else if (countAtoB >= 3 || countBtoA >= 3) {
-          relations.push({ player1: playerId, player2: partnerId, type: 'ä¸‰å£' });
-        }
-      }
-    }
-
-    return relations;
-  }
-
-  /** æ£€æµ‹æ–°å½¢æˆçš„äº’åŒ…å…³ç³»å¹¶å¹¿æ’­åˆ°ç‰Œå±€å¿«è®¯ */
-  checkAndBroadcastBailout(
-    game: GameState,
-    playerId: string,
-    sourcePlayerId: string,
-  ): void {
-    const relations = this.getMutualBailoutRelations(game.gameId);
-    const player = game.players.find(p => p.id === playerId);
-    const source = game.players.find(p => p.id === sourcePlayerId);
-    if (!player || !source) return;
-
-    const currentCount = this.mutualBailout.get(game.gameId)?.get(playerId)?.get(sourcePlayerId) || 0;
-    if ((currentCount === 2 || currentCount === 3) && this.wsManager) {
-      const label = currentCount === 3 ? 'ä¸‰å£' : 'ä¸¤å£';
-      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-        id: Date.now(),
-        text: `ğŸ“£ ${player.name}å·²ç»æäº†${source.name}${label}äº†ï¼`,
-        type: 'special',
-        timestamp: Date.now(),
-        timeLabel: formatBeijingTime()
-      });
-    }
-
-    if ((currentCount === 2 || currentCount === 3) && this.wsManager) {
-      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-        id: Date.now() + 1,
-        text: `ğŸ“£ ${player.name}å·²ç»æäº†${source.name}${currentCount}å£äº†ï¼`,
-        type: 'special',
-        timestamp: Date.now(),
-        timeLabel: formatBeijingTime()
-      });
-    }
-
-    for (const rel of relations) {
-      const pairIds = [rel.player1, rel.player2].sort().join('-');
-      const checkIds = [playerId, sourcePlayerId].sort().join('-');
-      if (pairIds === checkIds) {
-        const msg = `${player.name}æäº†${source.name}${rel.type}äº†!`;
-        if (this.wsManager) {
-          this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-            id: Date.now(),
-            text: msg,
-            type: 'special',
-            timestamp: Date.now(),
-            timeLabel: formatBeijingTime()
-          });
-        }
-      }
-    }
-  }
-
-  /**
-   * æ£€æŸ¥ä¸¤ä¸ªç©å®¶ä¹‹é—´æ˜¯å¦æœ‰äº’åŒ…å…³ç³»
-   */
-  getBailoutMultiplier(
-    gameId: string,
-    payerId: string,
-    winnerId: string
-  ): { multiplier: number; type: string | null } {
-    const relations = this.getMutualBailoutRelations(gameId);
-
-    for (const rel of relations) {
-      if ((rel.player1 === payerId && rel.player2 === winnerId) ||
-          (rel.player1 === winnerId && rel.player2 === payerId)) {
-        return {
-          multiplier: rel.type === 'å››å£' ? 5 : 3,
-          type: rel.type
-        };
-      }
-    }
-
-    return { multiplier: 1, type: null };
-  }
-
-  /**
-   * è·å–æœ€åä¸€å¼ å¼ƒç‰Œçš„ç©å®¶ID
-   */
-  private getLastDiscardPlayerId(game: GameState): string | undefined {
-    if (game.lastDiscardPlayerId) {
-      return game.lastDiscardPlayerId;
-    }
-    for (let i = game.actionHistory.length - 1; i >= 0; i--) {
-      if (game.actionHistory[i].type === ActionType.DISCARD) {
-        return game.actionHistory[i].playerId;
-      }
-    }
-    const lastDiscard = game.discardPile[game.discardPile.length - 1];
-    if (lastDiscard) {
-      const discarder = game.players.find(p => p.hand.discardedTiles.some(t => t.id === lastDiscard.id));
-      if (discarder) return discarder.id;
-      return game.players[game.currentPlayerIndex]?.id;
-    }
-    return undefined;
-  }
-
-  private getPlayerPosition(game: GameState, playerId: string): number {
-    return game.players.find(p => p.id === playerId)?.position ?? 0;
-  }
-
-  private getLastDiscardPosition(game: GameState): number | undefined {
-    if (typeof game.lastDiscardPosition === 'number') {
-      return game.lastDiscardPosition;
-    }
-    const id = this.getLastDiscardPlayerId(game);
-    if (!id) return undefined;
-    return this.getPlayerPosition(game, id);
-  }
-
-  /**
-   * æ£€æµ‹æ ä¸Šå¼€èŠ±:è‡ªæ‘¸ä¸”æœ€è¿‘çš„éDRAWåŠ¨ä½œæ˜¯æ ç‰Œ
-   * æµç¨‹:æ  â†’ è‡ªåŠ¨è¡¥ç‰Œ(å¯èƒ½è¡¥èŠ±å†DRAW) â†’ ç©å®¶å›åˆèƒ¡ç‰Œ
-   */
-  private isWinAfterKong(game: GameState, playerId: string): boolean {
-    const kongTypes = new Set([
-      ActionType.KONG,
-      ActionType.CONCEALED_KONG,
-      ActionType.EXTENDED_KONG
-    ]);
-
-    // ä» actionHistory æœ«å°¾å‘å‰æ‰¾,æ‰¾åˆ°è¯¥ç©å®¶æœ€è¿‘çš„éDRAWåŠ¨ä½œ
-    for (let i = game.actionHistory.length - 1; i >= 0; i--) {
-      const action = game.actionHistory[i];
-      if (action.playerId !== playerId) continue;
-      if (action.type === ActionType.DRAW) continue; // è·³è¿‡è‡ªåŠ¨è¡¥ç‰Œ
-      // ç¬¬ä¸€ä¸ªéDRAWåŠ¨ä½œ
-      return kongTypes.has(action.type);
-    }
-    return false;
-  }
-
-  private async hydrateFromDatabase() {
-    if (this.isHydrated) return;
-    // ä¸å†ä¸€æ¬¡æ€§åŠ è½½æ‰€æœ‰æ¸¸æˆ,æ”¹ä¸ºæŒ‰éœ€åŠ è½½(ensureGameLoaded)
-    this.isHydrated = true;
-  }
-
-  private async ensureGameLoaded(gameId: string): Promise<GameState | undefined> {
-    if (this.games.has(gameId)) {
-      return this.games.get(gameId);
-    }
-
-    try {
-      const stored = await loadGameState(gameId);
-      if (stored) {
-        this.games.set(gameId, stored);
-        for (const player of stored.players) {
-          this.playerToGame.set(player.id, gameId);
-        }
-        return stored;
-      }
-    } catch (err: any) {
-      console.warn('âš ï¸ ensureGameLoaded failed:', err.message);
-    }
-
-    return undefined;
-  }
-
-  private async persistGame(game: GameState) {
-    try {
-      await saveGameState(game);
-    } catch (error: any) {
-      console.warn('âš ï¸ MongoDB persist failed:', error.message);
-    }
-  }
-
-  private broadcastGameState(gameId: string) {
-    if (!this.wsManager) return;
-    const game = this.games.get(gameId);
-    if (!game) return;
-
-    this.wsManager.broadcast(gameId, 'gameStateUpdate', {
-      gameId,
-      phase: game.phase,
-      currentPlayerIndex: game.currentPlayerIndex,
-      discardPile: game.discardPile,
-      wallCount: game.wall.length,
-      winnersCount: game.winnersCount,
-      _freezeUntil: (game as any)._freezeUntil || 0
-    });
-  }
-
-  /**
-   * Create a new game
-   */
-  private generateRoomNumber(): string {
-    // ç”Ÿæˆ4ä½éšæœºæˆ¿é—´å·,ç¡®ä¿ä¸é‡å¤(è·³è¿‡å·²å­˜åœ¨çš„æ´»è·ƒæˆ¿é—´)
-    const maxAttempts = 100;
-    for (let i = 0; i < maxAttempts; i++) {
-      const num = String(Math.floor(1000 + Math.random() * 9000)); // 1000-9999
-      // æ£€æŸ¥æ˜¯å¦æœ‰æ´»è·ƒçš„æ¸¸æˆç”¨äº†è¿™ä¸ªæˆ¿é—´å·
-      let exists = false;
-      for (const game of this.games.values()) {
-        if (game.roomNumber === num && game.phase !== GamePhase.ENDED) {
-          exists = true;
-          break;
-        }
-      }
-      if (!exists) return num;
-    }
-    // Fallback: ä½¿ç”¨æ—¶é—´æˆ³æœ€å4ä½
-    return String(Date.now()).slice(-4);
-  }
-
-  async createGame(playerName: string, options?: { userId?: string; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number; maxBots?: number; minPlayers?: number; hesitationWindow?: number; allClaimMode?: boolean; selectedBots?: string[] }): Promise<{ gameId: string; playerId: string }> {
-    await this.hydrateFromDatabase();
-
-    const gameId = randomUUID();
-    const playerId = randomUUID();
-
-    const player: Player = {
-      id: playerId,
-      userId: options?.userId,
-      name: playerName,
-      position: 0,
-      hand: {
-        concealedTiles: [],
-        exposedMelds: [],
-        discardedTiles: []
-      },
-      status: PlayerStatus.WAITING,
-      isDealer: true,
-      isTing: false,
-      missingSuit: null,
-      windScore: 0,
-      rainScore: 0,
-      wonFan: 0,
-      winOrder: null,
-      winRound: null,
-      winTimestamp: null,
-      score: 0
-    };
-
-    const game: GameState = {
-      gameId,
-      roomNumber: this.generateRoomNumber(),
-      phase: GamePhase.WAITING,
-      endReason: null,
-      players: [player],
-      wall: [],
-      currentPlayerIndex: 0,
-      dealerIndex: 0,
-      discardPile: [],
-      actionHistory: [],
-      winnersCount: 0,
-      roundNumber: 1,
-      createdAt: Date.now(),
-      lastActionTime: Date.now(),
-      endedAt: undefined,
-      customScoringMode: null,
-      finalScores: undefined,
-      pendingActions: [],
-      pendingKongClaim: undefined,
-      multiHuStarterIndex: undefined,
-      dice: undefined,
-      roundMultiplier: undefined,
-      inheritMultiplier: undefined,
-      inheritedGlobalMultiplier: options?.firstRoundDouble ? 2 : 1,
-      rebelEvent: undefined,
-      diceRollCount: options?.diceRollCount ?? 2,
-      liangShanThreshold: options?.liangShanThreshold ?? 4000,
-      thinkChances: options?.thinkChances ?? 3,
-      settlementMultiplier: options?.settlementMultiplier ?? 10,
-      maxBots: options?.maxBots ?? 3,  // é»˜è®¤å…è®¸æœ€å¤š3ä¸ªAI
-      minPlayers: options?.minPlayers ?? 4,  // é»˜è®¤æœ€å°‘4äººå¼€å±€
-      hesitationWindow: (() => {
-        const raw = options?.hesitationWindow ?? 5000;
-        const fastByEnv = String(process.env.TRAINING_FAST_MODE || '').toLowerCase() === 'true';
-        const fastMode = fastByEnv || !!options?.allClaimMode;
-        return fastMode ? Math.min(30, Math.max(0, raw)) : raw;
-      })(), // å†³ç­–çŠ¹è±«æœŸ:è®­ç»ƒæ¨¡å¼0~30ms,å®æˆ˜é»˜è®¤5ç§’
-      thinkUsage: {},
-      allClaimMode: options?.allClaimMode,
-      spectatorMode: null,
-      spectatorViews: {},
-      spectatorApprovalRequests: []
-    };
-
-    this.games.set(gameId, game);
-    this.playerToGame.set(playerId, gameId);
-
-    // ç«‹å³æ·»åŠ é€‰å®šçš„AIç©å®¶
-    const aiBots = options?.selectedBots ?? [];
-    for (const botName of aiBots) {
-      if (game.players.length >= 4) break;
-      const botId = randomUUID();
-      const botPlayer = {
-        id: botId,
-        name: botName,
-        position: game.players.length,
-        hand: { concealedTiles: [], exposedMelds: [], discardedTiles: [] },
-        status: PlayerStatus.WAITING,
-        isDealer: false,
-        isTing: false,
-        missingSuit: null,
-        windScore: 0,
-        rainScore: 0,
-        wonFan: 0,
-        winOrder: null,
-        winRound: null,
-        winTimestamp: null,
-        score: 0,
-      };
-      game.players.push(botPlayer);
-      this.playerToGame.set(botId, gameId);
-    }
-
-    await this.persistGame(game);
-
-    return { gameId, playerId };
-  }
-
-  /**
-   * Join an existing game
-   */
-  /**
-   * é€šè¿‡4ä½æˆ¿é—´å·æŸ¥æ‰¾æ¸¸æˆ
-   */
-  async findGameByRoomNumber(roomNumber: string): Promise<string | null> {
-    await this.hydrateFromDatabase();
-    for (const [gameId, game] of this.games) {
-      if (game.roomNumber === roomNumber && game.phase !== GamePhase.ENDED) {
-        return gameId;
-      }
-    }
-    return null;
-  }
-
-  async joinGame(gameId: string, playerName: string, options?: { userId?: string }): Promise<{ playerId: string; position: number; isSpectator?: boolean }> {
-    await this.hydrateFromDatabase();
-
-    const game = await this.ensureGameLoaded(gameId);
-    if (!game) {
-      throw new Error('Game not found');
-    }
-
-    // æ»¡å‘˜ â†’ ä»¥è§‚èµ›è€…èº«ä»½åŠ å…¥
-    // æ³¨æ„ï¼šæœªæ»¡å‘˜ä½†å·²å¼€å±€ï¼ˆå¦‚A+2ä¸ªAIå·²å¼€å§‹ï¼‰ï¼ŒçœŸäººç©å®¶ä»ä½œä¸ºæ­£å¼ç©å®¶åŠ å…¥
-    const isFull = game.players.length >= 4;
-    if (isFull) {
-      const spectatorId = 'spectator-' + randomUUID();
-      const spectator: Player = {
-        id: spectatorId,
-        userId: options?.userId,
-        name: playerName + '(è§‚èµ›)',
-        position: -1,
-        status: PlayerStatus.SPECTATING,
-        hand: { concealedTiles: [], exposedMelds: [], discardedTiles: [] },
-        score: 0
-      };
-      game.players.push(spectator);
-      if (!game.spectatorViews) game.spectatorViews = {};
-      const scope = (() => {
-        const completedRounds = Array.isArray(game.roundStats) ? game.roundStats.length : 0;
-        return game.phase === 'ended' ? completedRounds : completedRounds + 1;
-      })();
-      // é»˜è®¤æŒ‡å‘åº„å®¶æˆ–ç¬¬ä¸€ä¸ªéè§‚èµ›ç©å®¶ï¼Œè®©è§‚èµ›è€…è¿›æ¥å°±èƒ½çœ‹åˆ°ç‰ŒèƒŒ
-      const defaultTarget = game.players.find(p => p.status !== 'spectating' && p.status !== 'left');
-      game.spectatorViews[spectatorId] = {
-        viewingPlayerId: defaultTarget ? defaultTarget.id : null,
-        approvedHumanPlayerId: null,
-        pendingHumanPlayerId: null,
-        roundNumber: scope,
-        updatedAt: Date.now()
-      };
-      await this.persistGame(game);
-      return { playerId: spectatorId, position: -1, isSpectator: true };
-    }
-
-    // Botä¸Šé™æ£€æŸ¥:å»ºæˆ¿æ—¶çš„AIç©å®¶ä¸Šé™å…¨ç¨‹æœ‰æ•ˆ
-    const isBotJoin = playerName.startsWith('AI-') || playerName.startsWith('ç”µè„‘');
-    if (isBotJoin) {
-      const currentBots = game.players.filter(p => p.name.startsWith('AI-') || p.name.startsWith('ç”µè„‘')).length;
-      const maxBots = game.maxBots ?? 3;
-      if (currentBots >= maxBots) {
-        throw new Error(`AIç©å®¶æ•°é‡å·²è¾¾ä¸Šé™(${maxBots}ä¸ª)`);
-      }
-    }
-
-    if (options?.userId) {
-      const existingPlayer = game.players.find((player) => player.userId === options.userId);
-      if (existingPlayer) {
-        // ç©å®¶å·²åœ¨æˆ¿é—´ä¸­ â€” ç”¨ userId ä½œä¸º playerId è¿”å›
-        // åŒæ—¶ç¡®ä¿ player æœ‰ id å­—æ®µï¼ˆé˜²æ­¢åç»­å…¶ä»–åœ°æ–¹ç”¨ entry.id åŒ¹é…å¤±è´¥ï¼‰
-        if (!existingPlayer.id) {
-          existingPlayer.id = existingPlayer.userId!
-        }
-        return { playerId: existingPlayer.id!, position: existingPlayer.position };
-      }
-    }
-
-    const playerId = randomUUID();
-    const position = game.players.length;
-
-    const player: Player = {
-      id: playerId,
-      userId: options?.userId,
-      name: playerName,
-      position,
-      hand: {
-        concealedTiles: [],
-        exposedMelds: [],
-        discardedTiles: []
-      },
-      status: PlayerStatus.WAITING,
-      isDealer: false,
-      isTing: false,
-      missingSuit: null,
-      windScore: 0,
-      rainScore: 0,
-      wonFan: 0,
-      winOrder: null,
-      winRound: null,
-      winTimestamp: null,
-      score: 0
-    };
-
-    game.players.push(player);
-    this.playerToGame.set(playerId, gameId);
-
-    // Auto-start removed. Use manual start.
-    // if (game.players.length === 4) {
-    //   this.startGame(gameId);
-    // }
-
-    // Broadcast update so lobby sees new player
-    await this.persistGame(game);
-    if (!isBotJoin) {
-      this.broadcastRoomJoin(game, player);
-    }
-    this.broadcastGameState(gameId);
-
-    return { playerId, position };
-  }
-
-  /**
-   * Set game to STARTING phase (broadcast to all clients for dice animation)
-   * Called when dealer clicks "å¼€å§‹æ¸¸æˆ" in waiting room, before actual dealing
-   */
-  async setStartingPhase(gameId: string): Promise<void> {
-    await this.hydrateFromDatabase();
-    const game = await this.ensureGameLoaded(gameId);
-    if (!game) throw new Error('Game not found');
-    if (game.phase !== GamePhase.WAITING && game.phase !== GamePhase.ENDED && game.phase !== GamePhase.CHA_JIAO && game.phase !== GamePhase.STARTING) return;
-    if (game.players.length < 4) throw new Error('Need 4 players to start');
-
-    game.endReason = null;
-    game.endedAt = undefined;
-    game.finalScores = undefined;
+  private isHydrated = false;    // Reset chow/pong exclusion for the new round.
+    game.chowPongExclusion = {};
+    // Broadcast STARTING so clients can play the opening dice animation.
     game.phase = GamePhase.STARTING;
     await this.persistGame(game);
     this.broadcastGameState(gameId);
-  }
-
-  /**
-   * Start the game
-   */
-  public async startGame(gameId: string, options?: { hesitationWindow?: number; fixedDice?: [number, number] }): Promise<void> {
-    await this.hydrateFromDatabase();
-
-    const game = await this.ensureGameLoaded(gameId);
-    if (!game) return;
-
-    if (game.players.length < 4) {
-      throw new Error('Need 4 players to start');
-    }
-
-    game.endReason = null;
-    game.endedAt = undefined;
-    game.finalScores = undefined;
-    game.customScoringMode = null;
-    // æ¸…ç©ºä¸Šä¸€å±€æ®‹ç•™çŠ¶æ€
-    game.discardPile = [];
-    game.pendingActions = [];
-    game.drawnThisTurn = false;
-    // ç»Ÿä¸€ä½¿ç”¨ hesitationWindowï¼ˆå†³ç­–çŠ¹è±«æœŸï¼‰ï¼Œæ‰€æœ‰å†»ç»“/ç­‰å¾…æ—¶é—´éƒ½åŸºäºæ­¤å‚æ•°
-    if (typeof options?.hesitationWindow === 'number') {
-      const fastMode = this.isTrainingFastMode(game);
-      game.hesitationWindow = fastMode
-        ? Math.min(30, Math.max(0, options.hesitationWindow))
-        : Math.max(1000, options.hesitationWindow);
-    }
-    game.thinkUsage = {};  // æ¯å±€é‡ç½®ã€Œç­‰æˆ‘æƒ³ä¸€æƒ³ã€ä½¿ç”¨æ¬¡æ•°
-    game.thinkFreezeUntil = undefined;
-    game.thinkFreezePlayerId = undefined;
-    game.spectatorMode = null;
-    game.spectatorViews = {};
-    game.spectatorApprovalRequests = [];
-    game.consecutiveDiscards = null;  // æ¯å±€é‡ç½®ã€Œè°¢è°¢å¸¦å¤´å¤§å“¥ã€è¿½è¸ª
-    game.leadingBrotherEvent = null;  // æ¯å±€é‡ç½®ã€Œè°¢è°¢å¸¦å¤´å¤§å“¥ã€äº‹ä»¶
-    this.mutualBailout.delete(gameId);
-    (game as any).bailoutRelations = [];
-
-    // æ¸…é™¤ä¸Šä¸€å±€æ®‹ç•™çš„freeze/dealer auto-draw timer,é˜²æ­¢æ—§timerè¦†ç›–æ–°æ¸¸æˆçŠ¶æ€
-    const oldFreezeTimer = this.freezeTimers.get(gameId);
-    if (oldFreezeTimer) {
-      clearTimeout(oldFreezeTimer);
-      this.freezeTimers.delete(gameId);
-      console.log(`[WallDebug] Cleared stale freeze timer for game ${gameId}`);
-    }
-    // æ¯å±€é‡ç½®ç™¾æ­å†·å†»çŠ¶æ€
-    game.freezePlayerId = null;
-    game.freezeComplete = false;
-    game.freezeRound = undefined;
-
-    // ğŸ”„ æ¢ä½ç½®è¯·æ±‚:æ¯å±€éƒ½å¯ä»¥ç”Ÿæ•ˆ
-    this.applySwapRequests(game);
-
-    // ğŸ”„ è§‚èµ›è€…æ›¿æ¢AIè¯·æ±‚:æ¯å±€ç”Ÿæ•ˆ
-    this.applyBotReplacement(game);
-
-    // ğŸ² éšæœºé€‰ä½ç½®:ä»…é¦–æ¬¡å¼€å±€æ—¶éšæœº,åç»­åº§ä½å›ºå®š(é™¤éæ¢ä½ç½®)
-    const isFirstRound = (game.roundStats || []).length === 0;
-    if (isFirstRound) {
-      const shuffledIndices = Array.from({ length: game.players.length }, (_, i) => i);
-      for (let i = shuffledIndices.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffledIndices[i], shuffledIndices[j]] = [shuffledIndices[j], shuffledIndices[i]];
-      }
-      game.players = shuffledIndices.map((origIdx, newPos) => {
-        const p = game.players[origIdx];
-        p.position = newPos;
-        return p;
-      });
-    }
-
-    // ğŸ° é€‰åº„å®¶:ä¸Šå±€é¦–èƒ¡è€…æ·éª°(ä¸€ç‚®å¤šå“åˆ™æ”¾å†²è€…æ·éª°)
-    if (game.nextDealerId) {
-      const nextDealer = game.players.find(p => p.id === game.nextDealerId);
-      if (nextDealer) {
-        game.dealerIndex = nextDealer.position;
-        console.log(`[StartGame] ä¸Šå±€æŒ‡å®šåº„å®¶: ${nextDealer.name}`);
-      } else {
-        game.dealerIndex = Math.floor(Math.random() * game.players.length);
-      }
-      game.nextDealerId = null;
-    } else {
-      // é¦–å±€æˆ–æ— æŒ‡å®š â†’ éšæœº
-      game.dealerIndex = Math.floor(Math.random() * game.players.length);
-    }
-    game.players.forEach((p, i) => { p.isDealer = (i === game.dealerIndex); });
-
-    // Create and shuffle deck
-    const deck = createDeck();
-    console.log(`[WallDebug] createDeck: ${deck.length} tiles`);
-    game.wall = shuffleTiles(deck);
-    console.log(`[WallDebug] after shuffle: ${game.wall.length} tiles`);
-
-    // æ¯å±€é‡ç½®åƒç¢°æ’æ–¥çŠ¶æ€
-    game.chowPongExclusion = {};
-
-    // æ­¤æ—¶ phase å·²ç»æ˜¯ STARTING(ç”± setStartingPhase è®¾å®š)ï¼Œä¸å†é‡å¤å¹¿æ’­
-    // ä»å…¨éƒ¨144ç§ç‰Œå‹ä¸­éšæœºé€‰ç™¾æ­
+    // Randomly choose the wild tile type from the full tile type set.
     const allTileTypes: Array<{ suit: TileSuit; value: number }> = [];
     for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
       for (let v = 1; v <= 9; v++) allTileTypes.push({ suit, value: v });
@@ -1834,18 +50,18 @@ class GameManager {
     const wildType = allTileTypes[wildIndex];
     game.customScoringMode = `${wildType.suit}-${wildType.value}`;
 
-    // èŠ±ç‰Œç™¾æ­: ä¸€ç»„èŠ±ç‰Œ(æ˜¥å¤ç§‹å†¬æˆ–æ¢…å…°ç«¹èŠ)å…¨éƒ¨ä¸ºç™¾æ­
+    // »¨ÅÆ°Ù´î: Ò»×é»¨ÅÆ(´ºÏÄÇï¶¬»òÃ·À¼Öñ¾Õ)È«²¿Îª°Ù´î
     if (wildType.suit === TileSuit.FLOWER) {
       if (wildType.value <= 4) {
-        // æ˜¥å¤ç§‹å†¬ç»„
+        // ´ºÏÄÇï¶¬×é
         game.wildTileGroup = ['1', '2', '3', '4'];
       } else {
-        // æ¢…å…°ç«¹èŠç»„
+        // Ã·À¼Öñ¾Õ×é
         game.wildTileGroup = ['5', '6', '7', '8'];
       }
     }
 
-    // å‘ç‰Œ(èŠ±ç‰Œä¸è¡¥èŠ±,æ”¾åˆ°é—¨å£ç­‰å¾…å›åˆè¡¥èŠ±)
+    // ·¢ÅÆ(»¨ÅÆ²»²¹»¨,·Åµ½ÃÅ¿ÚµÈ´ı»ØºÏ²¹»¨)
     for (const player of game.players) {
       player.hand.concealedTiles = [];
       player.hand.exposedMelds = [];
@@ -1853,7 +69,7 @@ class GameManager {
       for (let i = 0; i < 13; i++) {
         const tile = game.wall.pop()!;
         if (isFlower(tile) && !this.isWildTile(game, tile)) {
-          // æ™®é€šèŠ±ç‰Œæ”¾åˆ°é—¨å£,ä¸è¡¥èŠ±(ç­‰è‡ªå·±å›åˆå†è¡¥)
+          // ÆÕÍ¨»¨ÅÆ·Åµ½ÃÅ¿Ú,²»²¹»¨(µÈ×Ô¼º»ØºÏÔÙ²¹)
           player.hand.exposedMelds.push({
             type: MeldType.TRIPLET,
             tiles: [tile],
@@ -1861,7 +77,7 @@ class GameManager {
             replacementDone: false as any
           } as any);
         } else if (isFlower(tile) && this.isWildTile(game, tile)) {
-          // èŠ±ç‰Œç™¾æ­ â†’ è¿›æ‰‹ç‰Œ,ä¸æ”¾é—¨å£
+          // »¨ÅÆ°Ù´î ¡ú ½øÊÖÅÆ,²»·ÅÃÅ¿Ú
           player.hand.concealedTiles.push(tile);
         } else {
           player.hand.concealedTiles.push(tile);
@@ -1872,7 +88,7 @@ class GameManager {
       player.score = 0;
     }
 
-    // åº„å®¶æ‘¸ç‰Œ(ä¹Ÿå¤„ç†èŠ±ç‰Œ:æ™®é€šèŠ±æ”¾é—¨å£,ç™¾æ­è¿›æ‰‹ç‰Œ)
+    // ×¯¼ÒÃşÅÆ(Ò²´¦Àí»¨ÅÆ:ÆÕÍ¨»¨·ÅÃÅ¿Ú,°Ù´î½øÊÖÅÆ)
     {
       const tile = game.wall.pop()!;
       if (isFlower(tile) && !this.isWildTile(game, tile)) {
@@ -1883,7 +99,7 @@ class GameManager {
           replacementDone: false as any
         } as any);
       } else if (isFlower(tile) && this.isWildTile(game, tile)) {
-        // èŠ±ç‰Œç™¾æ­ â†’ è¿›æ‰‹ç‰Œ
+        // »¨ÅÆ°Ù´î ¡ú ½øÊÖÅÆ
         game.players[game.dealerIndex].hand.concealedTiles.push(tile);
       } else {
         game.players[game.dealerIndex].hand.concealedTiles.push(tile);
@@ -1893,7 +109,7 @@ class GameManager {
       );
     }
 
-    console.log(`[WallDebug] after dealing (13Ã—4+1): wall=${game.wall.length} tiles`);
+    console.log(`[WallDebug] after dealing (13¡Á4+1): wall=${game.wall.length} tiles`);
 
     for (const player of game.players) {
       player.winOrder = null;
@@ -1907,17 +123,17 @@ class GameManager {
       player.score = 0;
     }
 
-    // æ·éª°åˆå§‹åŒ–å€æ•°
+    // ÖÀ÷»³õÊ¼»¯±¶Êı
     const d1 = Math.min(6, Math.max(1, Math.round(options?.fixedDice?.[0] ?? (Math.floor(Math.random() * 6) + 1))));
     const d2 = Math.min(6, Math.max(1, Math.round(options?.fixedDice?.[1] ?? (Math.floor(Math.random() * 6) + 1))));
     game.dice = [d1, d2];
 
     // æ­¤æ—¶éª°å­å·²åœ¨å®¢æˆ·ç«¯æ·å®Œï¼Œä¸å†é‡æ–°å¹¿æ’­ diceRoll
     game.roundMultiplier = calculateRoundMultiplier(d1, d2);
-    // ç»§æ‰¿ä¸Šå±€å…¨å±€å€æ•°(æˆ–ä»é€ åäº‹ä»¶ç»§æ‰¿)
+    // ¼Ì³ĞÉÏ¾ÖÈ«¾Ö±¶Êı(»ò´ÓÔì·´ÊÂ¼ş¼Ì³Ğ)
     const prevGlobal = game.inheritedGlobalMultiplier ?? 1;
     if (game.rebelEvent) {
-      game.inheritMultiplier = calculateGlobalMultiplier(prevGlobal, 'é€ å');
+      game.inheritMultiplier = calculateGlobalMultiplier(prevGlobal, 'Ôì·´');
       game.rebelEvent = undefined;
     } else {
       game.inheritMultiplier = prevGlobal;
@@ -1933,12 +149,12 @@ class GameManager {
     await this.persistGame(game);
     this.broadcastGameState(gameId);
 
-    // åº„å®¶é¦–è½®è‡ªåŠ¨æ‘¸ç‰Œ(æ¨¡æ‹Ÿ moveToNextPlayer çš„ freeze æœºåˆ¶)
-    const freezeMs = this.getHesitationWindow(game);  // å†³ç­–çŠ¹è±«æœŸåŒæ—¶æ§åˆ¶äººç±»å’ŒAI
+    // ×¯¼ÒÊ×ÂÖ×Ô¶¯ÃşÅÆ(Ä£Äâ moveToNextPlayer µÄ freeze »úÖÆ)
+    const freezeMs = this.getHesitationWindow(game);  // ¾ö²ßÓÌÔ¥ÆÚÍ¬Ê±¿ØÖÆÈËÀàºÍAI
     const dealer = game.players[game.currentPlayerIndex];
     if (dealer) {
       if (this.isPlayerBotControlled(dealer)) {
-        // Bot åº„å®¶:freeze åè‡ªåŠ¨æ‘¸+å‡ºç‰Œ
+        // Bot ×¯¼Ò:freeze ºó×Ô¶¯Ãş+³öÅÆ
         const botTimer = this.detachTimer(setTimeout(async () => {
           try {
             this.freezeTimers.delete(gameId);
@@ -1953,7 +169,7 @@ class GameManager {
               console.log(`[start-bot-freeze] Dealer ${liveDealer.name} reached discard state after flower replacement`);
             } else {
               this.handleDraw(freshGame, liveDealer);
-              freshGame.drawnThisTurn = true; // ã€çŠ¶æ€æœºä¿®å¤ã€‘æ ‡è®°å·²æ‘¸ç‰Œ
+              freshGame.drawnThisTurn = true; // ¡¾×´Ì¬»úĞŞ¸´¡¿±ê¼ÇÒÑÃşÅÆ
             }
             this.scheduleBotDiscard(gameId, liveDealer.id);
             await this.persistGame(freshGame);
@@ -1964,7 +180,7 @@ class GameManager {
         }, this.getBotDrawFreezeMs(game)));
         this.freezeTimers.set(gameId, botTimer);
       } else {
-        // Human åº„å®¶:è®¾ç½® freeze è®©å®¢æˆ·ç«¯æ˜¾ç¤ºå†»ç»“è¿›åº¦,åˆ°æœŸè‡ªåŠ¨æ‘¸
+        // Human ×¯¼Ò:ÉèÖÃ freeze ÈÃ¿Í»§¶ËÏÔÊ¾¶³½á½ø¶È,µ½ÆÚ×Ô¶¯Ãş
         (game as any)._freezeUntil = Date.now() + freezeMs;
         await this.persistGame(game);
         this.broadcastGameState(gameId);
@@ -1986,7 +202,7 @@ class GameManager {
                 console.log(`[start-freeze] Dealer ${nextPlayer.name} reached discard state after flower replacement`);
               } else {
                 this.handleDraw(freshGame, nextPlayer);
-                freshGame.drawnThisTurn = true; // ã€çŠ¶æ€æœºä¿®å¤ã€‘æ ‡è®°å·²æ‘¸ç‰Œï¼Œé˜²åŒå›åˆè¿ç»­æ‘¸ç‰Œ
+                freshGame.drawnThisTurn = true; // ¡¾×´Ì¬»úĞŞ¸´¡¿±ê¼ÇÒÑÃşÅÆ£¬·ÀÍ¬»ØºÏÁ¬ĞøÃşÅÆ
                 console.log(`[start-freeze] Auto-draw for dealer ${nextPlayer.name}`);
               }
             }
@@ -2006,7 +222,7 @@ class GameManager {
    */
   async getGame(gameId: string): Promise<GameState | undefined> {
     await this.hydrateFromDatabase();
-    // å…ˆæ£€æŸ¥å†…å­˜,é¿å…é‡å¤MongoDBæŸ¥è¯¢
+    // ÏÈ¼ì²éÄÚ´æ,±ÜÃâÖØ¸´MongoDB²éÑ¯
     if (this.games.has(gameId)) return this.games.get(gameId);
     return this.ensureGameLoaded(gameId);
   }
@@ -2029,7 +245,7 @@ class GameManager {
       await this.hydrateFromDatabase();
       const game = this.games.get(gameId) || await this.ensureGameLoaded(gameId);
       if (!game) {
-        console.warn('âš ï¸ getAvailableActions: game not found:', gameId);
+        console.warn('?? getAvailableActions: game not found:', gameId);
         return [];
       }
       if (game.phase !== GamePhase.PLAYING) return [];
@@ -2037,25 +253,25 @@ class GameManager {
     const player = game.players.find(p => p.id === playerId);
     if (!player || player.status !== PlayerStatus.PLAYING) return [];
 
-    // ç­‰æˆ‘æƒ³ä¸€æƒ³å†»ç»“:éè§¦å‘ç©å®¶åœ¨å†»ç»“æœŸé—´ä¸èƒ½æ“ä½œ
-    // è¿”å›æ­£å¸¸actions,ä½†å‰ç«¯é€šè¿‡ thinkFreezeUntil åˆ¤æ–­å†»ç»“çŠ¶æ€æ¥ç¦ç”¨æŒ‰é’®
-    // ä¸å†è¿”å›ç©ºæ•°ç»„,é¿å…æŒ‰é’®æ¶ˆå¤±
+    // µÈÎÒÏëÒ»Ïë¶³½á:·Ç´¥·¢Íæ¼ÒÔÚ¶³½áÆÚ¼ä²»ÄÜ²Ù×÷
+    // ·µ»ØÕı³£actions,µ«Ç°¶ËÍ¨¹ı thinkFreezeUntil ÅĞ¶Ï¶³½á×´Ì¬À´½ûÓÃ°´Å¥
+    // ²»ÔÙ·µ»Ø¿ÕÊı×é,±ÜÃâ°´Å¥ÏûÊ§
     if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now()) {
       if (game.thinkFreezePlayerId !== playerId) {
         const currentTurnPlayer = game.players[game.currentPlayerIndex];
         if (currentTurnPlayer?.id === playerId && this.canPlayerDrawOnCurrentTurn(game, player)) {
           return [ActionType.DRAW];
         }
-        // å†»ç»“æœŸé—´:è¿”å› pending actions(å¦‚æœæœ‰çš„è¯)è®©å‰ç«¯æ˜¾ç¤ºä½†ç¦ç”¨
-        // ä¸è¿”å› turn actions(æ‘¸ç‰Œ/å‡ºç‰Œ),å› ä¸ºè¿™äº›åœ¨å†»ç»“æœŸé—´ä¸åº”è¯¥æ“ä½œ
+        // ¶³½áÆÚ¼ä:·µ»Ø pending actions(Èç¹ûÓĞµÄ»°)ÈÃÇ°¶ËÏÔÊ¾µ«½ûÓÃ
+        // ²»·µ»Ø turn actions(ÃşÅÆ/³öÅÆ),ÒòÎªÕâĞ©ÔÚ¶³½áÆÚ¼ä²»Ó¦¸Ã²Ù×÷
         const pendingAction = game.pendingActions.find(pa => pa.playerId === playerId);
         if (pendingAction) {
-          return pendingAction.availableActions; // å‰ç«¯ä¼šå›  thinkFreezeActive ç¦ç”¨è¿™äº›æŒ‰é’®
+          return pendingAction.availableActions; // Ç°¶Ë»áÒò thinkFreezeActive ½ûÓÃÕâĞ©°´Å¥
         }
-        // æ²¡æœ‰pendingæ—¶,è¿”å›ç©º(ç¡®å®æ²¡æœ‰å¯æ“ä½œçš„)
+        // Ã»ÓĞpendingÊ±,·µ»Ø¿Õ(È·ÊµÃ»ÓĞ¿É²Ù×÷µÄ)
         return [];
       }
-      // è§¦å‘è€…å¯ä»¥ç»§ç»­æ“ä½œ(ç¢°/èƒ¡/è¿‡ç­‰)
+      // ´¥·¢Õß¿ÉÒÔ¼ÌĞø²Ù×÷(Åö/ºú/¹ıµÈ)
     }
 
     const actions: ActionType[] = [];
@@ -2071,18 +287,18 @@ class GameManager {
     // Check pending actions (peng, kong, hu from another player's discard)
     const pendingAction = game.pendingActions.find(pa => pa.playerId === playerId);
     if (pendingAction) {
-      // å†·å†»æœŸé—´ä¸å“åº”å…¶ä»–ç©å®¶çš„å¼ƒç‰Œ(åƒ/ç¢°/æ /èƒ¡),ä½†è‡ªæ‘¸èƒ¡ä¸å—å½±å“
-      // è‡ªæ‘¸èƒ¡åœ¨ç©å®¶è‡ªå·±çš„å›åˆé€šè¿‡ turn actions å¤„ç†
-      // å†·å†»è§„åˆ™ï¼šæ‰“å‡ºç™¾æ­åï¼Œä¸€åœˆå†…å…¶ä»–ç©å®¶ä¸èƒ½åƒ/ç¢°/æ‰å†²
-      // ä¸€åœˆ = 4ä¸ªç©å®¶å„å‡ºä¸€æ¬¡ç‰Œï¼ˆä»æ‰“å‡ºç™¾æ­çš„ç©å®¶å¼€å§‹æ•°ï¼‰
+      // Àä¶³ÆÚ¼ä²»ÏìÓ¦ÆäËûÍæ¼ÒµÄÆúÅÆ(³Ô/Åö/¸Ü/ºú),µ«×ÔÃşºú²»ÊÜÓ°Ïì
+      // ×ÔÃşºúÔÚÍæ¼Ò×Ô¼ºµÄ»ØºÏÍ¨¹ı turn actions ´¦Àí
+      // Àä¶³¹æÔò£º´ò³ö°Ù´îºó£¬Ò»È¦ÄÚÆäËûÍæ¼Ò²»ÄÜ³Ô/Åö/×½³å
+      // Ò»È¦ = 4¸öÍæ¼Ò¸÷³öÒ»´ÎÅÆ£¨´Ó´ò³ö°Ù´îµÄÍæ¼Ò¿ªÊ¼Êı£©
       if (game.freezePlayerId && game.freezePlayerId !== playerId) {
-        // å½“å‰ç©å®¶ä¸æ˜¯æ‰“å‡ºç™¾æ­çš„äººï¼Œæ£€æŸ¥æ˜¯å¦è¿‡äº†ä¸€åœˆ
+        // µ±Ç°Íæ¼Ò²»ÊÇ´ò³ö°Ù´îµÄÈË£¬¼ì²éÊÇ·ñ¹ıÁËÒ»È¦
         if (!game.freezeComplete) {
-          return [];  // å†·å†»ä¸­ï¼Œä¸èƒ½å“åº”å…¶ä»–ç©å®¶çš„å¼ƒç‰Œ
+          return [];  // Àä¶³ÖĞ£¬²»ÄÜÏìÓ¦ÆäËûÍæ¼ÒµÄÆúÅÆ
         }
-        // freezeComplete = true æ—¶è¡¨ç¤ºå·²è¿‡å®Œæ•´ä¸€åœˆï¼Œè§£é™¤å†·å†»
+        // freezeComplete = true Ê±±íÊ¾ÒÑ¹ıÍêÕûÒ»È¦£¬½â³ıÀä¶³
       }
-      // ç­‰æˆ‘æƒ³ä¸€æƒ³:æœ‰èƒ¡/ç¢°/æ é€‰é¡¹æ—¶å¯ç”¨,æ¯å±€é™å®šæ¬¡æ•°
+      // µÈÎÒÏëÒ»Ïë:ÓĞºú/Åö/¸ÜÑ¡ÏîÊ±¿ÉÓÃ,Ã¿¾ÖÏŞ¶¨´ÎÊı
       const pendingHasPriority = pendingAction.availableActions.some(a =>
         a === ActionType.HU || a === ActionType.PENG || a === ActionType.KONG ||
         a === ActionType.CONCEALED_KONG || a === ActionType.EXTENDED_KONG
@@ -2104,13 +320,13 @@ class GameManager {
       return pendingAction.availableActions;
     }
 
-    // æ¢å±±èšä¹‰:å‰ä¸‰å·¡(å‡ºç‰Œè½®æ¬¡)å¯æŠ•ç¥¨,ä»…4äººå…¨çœŸäºº+æ²¡æŠ•è¿‡+æ´»è·ƒ+å€æ•°æœªè¾¾8å€ä¸Šé™
-    // å·¡æ•° = å‡ºç‰Œæ¬¡æ•°(DISCARD action)ï¼Œä¸‰å·¡ä»¥å†…(=0,1,2)å¯æŠ•
+    // ÁºÉ½¾ÛÒå:Ç°ÈıÑ²(³öÅÆÂÖ´Î)¿ÉÍ¶Æ±,½ö4ÈËÈ«ÕæÈË+Ã»Í¶¹ı+»îÔ¾+±¶ÊıÎ´´ï8±¶ÉÏÏŞ
+    // Ñ²Êı = ³öÅÆ´ÎÊı(DISCARD action)£¬ÈıÑ²ÒÔÄÚ(=0,1,2)¿ÉÍ¶
     const discardCount = game.actionHistory.filter(a => a.type === ActionType.DISCARD).length;
     if (game.phase === GamePhase.PLAYING && player.status === PlayerStatus.PLAYING && discardCount < 3) {
-      // åªæœ‰4äººå…¨æ˜¯çœŸäººç©å®¶æ—¶æ‰å¼€å¯æ¢å±±èšä¹‰
+      // Ö»ÓĞ4ÈËÈ«ÊÇÕæÈËÍæ¼ÒÊ±²Å¿ªÆôÁºÉ½¾ÛÒå
       const allHuman = game.players.length >= 4 && game.players.every(p => !this.isPlayerBotControlled(p));
-      // å…¨å±€å€æ•°å·²è¾¾8å€ä¸Šé™æ—¶,ç¦æ­¢æ¢å±±èšä¹‰
+      // È«¾Ö±¶ÊıÒÑ´ï8±¶ÉÏÏŞÊ±,½ûÖ¹ÁºÉ½¾ÛÒå
       const atMultiplierCap = (game.inheritMultiplier ?? 1) >= 8;
       if (allHuman && !atMultiplierCap) {
         const votes = game.liangShanVotes || [];
@@ -2120,7 +336,7 @@ class GameManager {
       }
     }
 
-    // ç­‰æˆ‘æƒ³ä¸€æƒ³:æœ‰èƒ¡/ç¢°/æ é€‰é¡¹æ—¶å¯ç”¨,æ¯å±€é™å®šæ¬¡æ•°
+    // µÈÎÒÏëÒ»Ïë:ÓĞºú/Åö/¸ÜÑ¡ÏîÊ±¿ÉÓÃ,Ã¿¾ÖÏŞ¶¨´ÎÊı
     const hasPriorityActions = actions.some(a =>
       a === ActionType.HU || a === ActionType.PENG || a === ActionType.KONG ||
       a === ActionType.CONCEALED_KONG || a === ActionType.EXTENDED_KONG
@@ -2134,9 +350,9 @@ class GameManager {
     }
 
     // If it's the player's turn, allow turn actions
-    // freeze ç™¾æ­æœŸé—´ä¸èƒ½å‡ºç‰Œ(å“åº”å…¶ä»–ç©å®¶å¼ƒç‰Œ),ä½†å¯ä»¥æ‘¸ç‰Œ(è‡ªå·±çš„å›åˆåŠ¨ä½œ)
+    // freeze °Ù´îÆÚ¼ä²»ÄÜ³öÅÆ(ÏìÓ¦ÆäËûÍæ¼ÒÆúÅÆ),µ«¿ÉÒÔÃşÅÆ(×Ô¼ºµÄ»ØºÏ¶¯×÷)
     if (currentPlayer.id === playerId) {
-      // æœ‰å…¶ä»–ç©å®¶åœ¨æŠ¢ç‰Œ(pending claim),å½“å‰ç©å®¶ç­‰å¾…å†³ç­–çª—å£
+      // ÓĞÆäËûÍæ¼ÒÔÚÇÀÅÆ(pending claim),µ±Ç°Íæ¼ÒµÈ´ı¾ö²ß´°¿Ú
       if (game.pendingActions.length > 0 && !this.canCurrentTurnPlayerDrawDuringPending(game, playerId)) {
         if (this.canExposeCurrentTurnPlayerDrawDuringPending(game, playerId) && !actions.includes(ActionType.DRAW)) {
           actions.push(ActionType.DRAW);
@@ -2144,13 +360,13 @@ class GameManager {
         return actions;
       }
 
-      // è‡ªåŠ¨è¡¥èŠ±:å¦‚æœé—¨å£æœ‰æœªæ›¿æ¢çš„èŠ±ç‰Œ,å…ˆè¡¥èŠ±
+      // ×Ô¶¯²¹»¨:Èç¹ûÃÅ¿ÚÓĞÎ´Ìæ»»µÄ»¨ÅÆ,ÏÈ²¹»¨
       const unreplacedFlowers = player.hand.exposedMelds.filter(
         m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]) && !(m as any).replacementDone
       )
       if (unreplacedFlowers.length > 0 && game.wall.length > 0) {
-        // ä»…åœ¨æ‰‹ç‰Œæœªæ»¡14å¼ æ—¶å…è®¸"æ‘¸"(æ‰§è¡Œ replaceFlowers+handleDraw)
-        // è‹¥è¡¥èŠ±åå·²åˆ°14å¼ ,åº”ç›´æ¥å…è®¸å‡ºç‰Œ,ä¸èƒ½ç»§ç»­é«˜äº®"æ‘¸"
+        // ½öÔÚÊÖÅÆÎ´Âú14ÕÅÊ±ÔÊĞí"Ãş"(Ö´ĞĞ replaceFlowers+handleDraw)
+        // Èô²¹»¨ºóÒÑµ½14ÕÅ,Ó¦Ö±½ÓÔÊĞí³öÅÆ,²»ÄÜ¼ÌĞø¸ßÁÁ"Ãş"
         const totalTileCount = this.getPlayableTileCount(player);
         if (totalTileCount < 14) {
           actions.push(ActionType.DRAW);
@@ -2159,8 +375,8 @@ class GameManager {
         actions.push(ActionType.DISCARD);
         return actions;
       }
-      // æ£€æŸ¥é€ å(äº”æ¯’æ•£) - æ¡ä»¶ï¼šåº„å®¶(player.position === dealerIndex) + é¦–å·¡(å°šæœªæ‰“å‡ºè¿‡ç‰Œ)
-      //       + æ²¡æœ‰åƒè¿‡ç‰Œ(exposedMeldsæ— CHOW) + ä»…ç¬¬ä¸€å±€ + äº”æ¯’æ•£ç‰Œå‹
+      // ¼ì²éÔì·´(Îå¶¾É¢) - Ìõ¼ş£º×¯¼Ò(player.position === dealerIndex) + Ê×Ñ²(ÉĞÎ´´ò³ö¹ıÅÆ)
+      //       + Ã»ÓĞ³Ô¹ıÅÆ(exposedMeldsÎŞCHOW) + ½öµÚÒ»¾Ö + Îå¶¾É¢ÅÆĞÍ
       const rebellionTurns = game.actionHistory.filter(a => a.type === ActionType.DISCARD).length;
       const isDealer = player.position === game.dealerIndex;
       const isFirstTurn = rebellionTurns === 0;
@@ -2179,12 +395,12 @@ class GameManager {
         }
       }
 
-      // ã€çŠ¶æ€æœºä¿®å¤ã€‘å‡ºç‰Œ:å¿…é¡»å…ˆæ‘¸ç‰Œ
+      // ¡¾×´Ì¬»úĞŞ¸´¡¿³öÅÆ:±ØĞëÏÈÃşÅÆ
       if (player.hand.concealedTiles.length > 0 && game.drawnThisTurn) {
         actions.push(ActionType.DISCARD);
       }
 
-      // æ‘¸ç‰Œ:æ‰‹ç‰Œ+é—¨å£(ä¸å«èŠ±ç‰Œ)< 14å¼ æ—¶å¯ä»¥æ‘¸;æ¯å›åˆåªèƒ½æ‘¸ä¸€æ¬¡
+      // ÃşÅÆ:ÊÖÅÆ+ÃÅ¿Ú(²»º¬»¨ÅÆ)< 14ÕÅÊ±¿ÉÒÔÃş;Ã¿»ØºÏÖ»ÄÜÃşÒ»´Î
       const totalTileCount = this.getPlayableTileCount(player);
       const winCheck = this.getCachedWinCheck(game, player);
       if (this.isDaDiaoReadyState(game, player) && winCheck.canWin && winCheck.types.length > 0) {
@@ -2212,8 +428,8 @@ class GameManager {
           }
         }
 
-        // Check if can win (å¿…é¡»æœ‰æœ‰æ•ˆç‰Œå‹)
-        // ã€P0-7ä¿®å¤ã€‘ç¬¬äºŒå‚æ•°ä¸ºnumberæ—¶ï¼Œç¬¬ä¸‰å‚æ•°å¿…é¡»æ˜¯wildTileIdå­—ç¬¦ä¸²è€Œéå‡½æ•°
+        // Check if can win (±ØĞëÓĞÓĞĞ§ÅÆĞÍ)
+        // ¡¾P0-7ĞŞ¸´¡¿µÚ¶ş²ÎÊıÎªnumberÊ±£¬µÚÈı²ÎÊı±ØĞëÊÇwildTileId×Ö·û´®¶ø·Çº¯Êı
         if (this.canPlayerDeclareTurnHu(game, player) && winCheck.canWin && winCheck.types.length > 0) {
           actions.push(ActionType.HU);
         }
@@ -2236,7 +452,7 @@ class GameManager {
 
     return actions;
     } catch (err: any) {
-      console.warn('âš ï¸ getAvailableActions failed:', err.message);
+      console.warn('?? getAvailableActions failed:', err.message);
       return [];
     }
   }
@@ -2254,13 +470,13 @@ class GameManager {
     }
 
     const pendingAction = game.pendingActions.find(pa => pa.playerId === playerId);
-    // ç¢°/æ åpendingè¢«æ¸…ä½†ä»æ˜¯æ‰å†²,ä»actionHistoryç¡®è®¤
+    // Åö/¸Üºópending±»Çåµ«ÈÔÊÇ×½³å,´ÓactionHistoryÈ·ÈÏ
     const hadPengOrKongOnDiscard = (game.actionHistory || []).some(a =>
       a.type === 'peng' || a.type === 'kong'
     );
-    // åªæ£€æŸ¥æœ¬å±€å†…æ˜¯å¦æœ‰ç¢°/æ åŠ¨ä½œï¼ˆä¸æ˜¯ä»è¿œå¤ä»Šæ£€æµ‹ï¼‰
+    // åªæ£€æŸ¥æœ¬å±€å†…æ˜¯å¦æœ‰ç¢?æ åŠ¨ä½œï¼ˆä¸æ˜¯ä»è¿œå¤ä»Šæ£€æµ‹ï¼‰
     const currentRoundActions = (game.actionHistory || []).filter(a => {
-      // roundNumber åœ¨ action ä¸Šè®°å½•
+      // roundNumber åœ?action ä¸Šè®°å½?
       return (a as any).roundNumber === game.roundNumber || (a as any).roundNumber === undefined;
     });
     const hadPengOrKongThisRound = currentRoundActions.some(a =>
@@ -2322,9 +538,9 @@ class GameManager {
     const player = game.players.find(p => p.id === playerId);
     if (!player) throw new Error('Player not found');
 
-    // ç©å®¶å·²å“åº”,å–æ¶ˆå½“å‰è‡ªåŠ¨è¶…æ—¶æ¨è¿›
+    // Íæ¼ÒÒÑÏìÓ¦,È¡Ïûµ±Ç°×Ô¶¯³¬Ê±ÍÆ½ø
     this.clearPendingActionTimer(gameId);
-    // å–æ¶ˆè¶…æ—¶è‡ªåŠ¨æ¥ç®¡(ç©å®¶å·²æ“ä½œ)
+    // È¡Ïû³¬Ê±×Ô¶¯½Ó¹Ü(Íæ¼ÒÒÑ²Ù×÷)
     this.clearAutoTakeover(gameId, playerId);
 
     const gameAction: GameAction = {
@@ -2339,8 +555,8 @@ class GameManager {
       game.huSelectionLocks = Object.keys(nextLocks).length ? nextLocks : undefined;
     }
 
-    // æ ‡è®°å†³ç­–æœŸå†…æœ‰åŠ¨ä½œè§¦å‘ï¼ˆç¬¬5dæ¡ï¼šæœ‰åŠ¨ä½œæ—¶ä¸æ¸…é™¤ä»»ä½•claimï¼‰
-    // PASS å’Œ DRAW ä¸è§¦å‘æ­¤æ ‡è®°
+    // ±ê¼Ç¾ö²ßÆÚÄÚÓĞ¶¯×÷´¥·¢£¨µÚ5dÌõ£ºÓĞ¶¯×÷Ê±²»Çå³ıÈÎºÎclaim£©
+    // PASS ºÍ DRAW ²»´¥·¢´Ë±ê¼Ç
     if (action !== ActionType.PASS && action !== ActionType.DRAW) {
       (game as any).hasTriggeredAction = true;
     }
@@ -2372,7 +588,7 @@ class GameManager {
           }
         }
 
-        // ã€çŠ¶æ€æœºä¿®å¤ã€‘æœªæ‘¸ç‰Œä¸å¯å‡ºç‰Œ
+        // ¡¾×´Ì¬»úĞŞ¸´¡¿Î´ÃşÅÆ²»¿É³öÅÆ
         if (!game.drawnThisTurn) {
           console.warn(`[DISCARD] Blocked: ${player.name} has not drawn yet this turn`);
           throw new Error('Must draw before discarding');
@@ -2422,36 +638,36 @@ class GameManager {
             throw new Error('Cannot draw in current state');
           }
         }
-        // ã€çŠ¶æ€æœºä¿®å¤ã€‘æ¯å›åˆæœ€å¤šæ‘¸ä¸€æ¬¡ï¼Œé˜²åŒå›åˆè¿ç»­æ‘¸ç‰Œ
+        // ¡¾×´Ì¬»úĞŞ¸´¡¿Ã¿»ØºÏ×î¶àÃşÒ»´Î£¬·ÀÍ¬»ØºÏÁ¬ĞøÃşÅÆ
         if (game.drawnThisTurn) {
           console.warn(`[DRAW] Blocked: ${player.name} already drew this turn (double-draw attempt)`);
           throw new Error('Already drew this turn');
         }
-        // å…ˆå¤„ç†é—¨å£çš„èŠ±ç‰Œæ›¿æ¢(èŠ±ç‰Œåœ¨é—¨å£å å‘,éœ€å…ˆè¡¥åˆ°æ‰‹ç‰Œ)
+        // ÏÈ´¦ÀíÃÅ¿ÚµÄ»¨ÅÆÌæ»»(»¨ÅÆÔÚÃÅ¿ÚÕ¼¿Ó,ĞèÏÈ²¹µ½ÊÖÅÆ)
         if (game.pendingActions.length > 0 && this.canExecuteCurrentTurnPlayerDrawDuringPending(game, player.id)) {
           this.clearCurrentTurnPendingActions(game, player.id);
         }
         this.replaceInitialFlowers(game, player);
-        // æ›¿æ¢åæ£€æŸ¥æ‰‹ç‰Œ+é—¨å£æ˜¯å¦å·²æ»¡14å¼ 
+        // Ìæ»»ºó¼ì²éÊÖÅÆ+ÃÅ¿ÚÊÇ·ñÒÑÂú14ÕÅ
         {
           const totalTileCount = this.getPlayableTileCount(player);
           if (totalTileCount >= 14) {
             console.warn(`[DRAW] Flower replacement already filled hand: player ${player.id} has ${totalTileCount} playable tiles`);
-            game.drawnThisTurn = true; // æ ‡è®°å·²å¤„ç†è¿‡æ‘¸ç‰Œé˜¶æ®µï¼Œé˜²æ­¢è¿ç»­æ‘¸ç‰Œ
+            game.drawnThisTurn = true; // ±ê¼ÇÒÑ´¦Àí¹ıÃşÅÆ½×¶Î£¬·ÀÖ¹Á¬ĞøÃşÅÆ
             break;
           }
         }
-        // æ­£å¸¸æ‘¸ç‰Œ(æ‘¸åˆ°èŠ±ç‰Œä¼šé€’å½’è¡¥èŠ±)
+        // Õı³£ÃşÅÆ(Ãşµ½»¨ÅÆ»áµİ¹é²¹»¨)
         this.handleDraw(game, player);
         game.drawnThisTurn = true;
         break;
 
       case ActionType.PENG:
-        // é˜²æ­¢è¶…é™:ç¢°ç‰Œåæ‰‹ç‰Œä¸èƒ½è¶…è¿‡14å¼ 
+        // ·ÀÖ¹³¬ÏŞ:ÅöÅÆºóÊÖÅÆ²»ÄÜ³¬¹ı14ÕÅ
         {
           const pengExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
           const pengTotalCount = player.hand.concealedTiles.length + pengExposedCount;
-          if (pengTotalCount - 2 + 3 > 14) { // ç¢°ç‰Œä»æ‰‹ç‰Œæ‹¿2å¼ +å¼ƒç‰Œ1å¼ ç»„æˆ3å¼ meld
+          if (pengTotalCount - 2 + 3 > 14) { // ÅöÅÆ´ÓÊÖÅÆÄÃ2ÕÅ+ÆúÅÆ1ÕÅ×é³É3ÕÅmeld
             console.warn(`[PENG] Blocked: player ${player.id} would exceed 14 tiles`);
             break;
           }
@@ -2460,11 +676,11 @@ class GameManager {
         break;
 
       case ActionType.CHOW:
-        // é˜²æ­¢è¶…é™:åƒç‰Œåæ‰‹ç‰Œä¸èƒ½è¶…è¿‡14å¼ 
+        // ·ÀÖ¹³¬ÏŞ:³ÔÅÆºóÊÖÅÆ²»ÄÜ³¬¹ı14ÕÅ
         {
           const chowExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
           const chowTotalCount = player.hand.concealedTiles.length + chowExposedCount;
-          if (chowTotalCount - 2 + 3 > 14) { // åƒç‰Œä»æ‰‹ç‰Œæ‹¿2å¼ +å¼ƒç‰Œ1å¼ ç»„æˆ3å¼ meld
+          if (chowTotalCount - 2 + 3 > 14) { // ³ÔÅÆ´ÓÊÖÅÆÄÃ2ÕÅ+ÆúÅÆ1ÕÅ×é³É3ÕÅmeld
             console.warn(`[CHOW] Blocked: player ${player.id} would exceed 14 tiles`);
             break;
           }
@@ -2520,8 +736,8 @@ class GameManager {
     game.actionHistory.push(gameAction);
     game.lastActionTime = Date.now();
 
-    // Claim/æ åŠ¨ä½œæ‰§è¡Œå,å½“å‰ç©å®¶æ¥ç®¡å›åˆã€‚
-    // åƒ/ç¢°ååº”ç›´æ¥å‡ºç‰Œ,ä¸èƒ½è¡¥æ‘¸ï¼›å„ç±»æ å®Œæˆè¡¥ç‰Œåå†å‡ºç‰Œã€‚
+    // Claim/¸Ü¶¯×÷Ö´ĞĞºó,µ±Ç°Íæ¼Ò½Ó¹Ü»ØºÏ¡£
+    // ³Ô/ÅöºóÓ¦Ö±½Ó³öÅÆ,²»ÄÜ²¹Ãş£»¸÷Àà¸ÜÍê³É²¹ÅÆºóÔÙ³öÅÆ¡£
     if (game.pendingActions.length === 0) {
       const currentP = game.players[game.currentPlayerIndex];
       if (currentP && this.isPlayerBotControlled(currentP) && currentP.status === PlayerStatus.PLAYING) {
@@ -2604,7 +820,7 @@ class GameManager {
       if (this.wsManager) {
         this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
           id: Date.now(),
-          text: `ğŸƒ ${player.name}æ‰“å‡ºäº†ç™¾æ­ï¼Œæœ¬è½®ä¸èƒ½åƒç¢°æ‰å†²ï¼`,
+          text: `?? ${player.name}´ò³öÁË°Ù´î£¬±¾ÂÖ²»ÄÜ³ÔÅö×½³å£¡`,
           type: 'warn',
           timestamp: Date.now(),
           timeLabel: formatBeijingTime()
@@ -2634,60 +850,60 @@ class GameManager {
         clearTimeout(existingBotTimer);
         this.botTimers.delete(game.gameId);
       }
-      this.schedulePendingActionTimeout(game.gameId);
+      await this.handleBotPendingActions(game.gameId);
     }
   }
 
   /**
-   * è°¢è°¢å¸¦å¤´å¤§å“¥:å››åç©å®¶è¿ç»­æ‰“å‡ºåŒä¸€å¼ ç‰Œ(ä¸è¦æ±‚ç›¸é‚»å‡ºç‰Œ)
-   * ç¬¬ä¸€ä¸ªæ‰“å‡ºè¯¥ç‰Œçš„ç©å®¶,ç»“ç®—æ—¶é¢å¤–èµ”ä»˜å…¶ä½™ä¸‰å®¶æ¯å®¶10åˆ†
+   * Ğ»Ğ»´øÍ·´ó¸ç:ËÄÃûÍæ¼ÒÁ¬Ğø´ò³öÍ¬Ò»ÕÅÅÆ(²»ÒªÇóÏàÁÚ³öÅÆ)
+   * µÚÒ»¸ö´ò³ö¸ÃÅÆµÄÍæ¼Ò,½áËãÊ±¶îÍâÅâ¸¶ÆäÓàÈı¼ÒÃ¿¼Ò10·Ö
    */
   private checkLeadingBrother(game: GameState, tile: Tile, currentPlayer: Player): void {
     const tileKey = `${tile.suit}-${tile.value}`;
 
-    // åˆå§‹åŒ–æˆ–é‡ç½®è¿½è¸ª(æ¢äº†ä¸€ç§ç‰Œ)
+    // ³õÊ¼»¯»òÖØÖÃ×·×Ù(»»ÁËÒ»ÖÖÅÆ)
     if (!game.consecutiveDiscards || game.consecutiveDiscards.suit !== tile.suit || game.consecutiveDiscards.value !== tile.value) {
       game.consecutiveDiscards = { suit: tile.suit, value: tile.value, playerIds: [currentPlayer.id] };
       return;
     }
 
-    // åŒä¸€ç‰Œå‹ç»§ç»­è¿½åŠ 
+    // Í¬Ò»ÅÆĞÍ¼ÌĞø×·¼Ó
     const cd = game.consecutiveDiscards;
     if (cd.playerIds.includes(currentPlayer.id)) {
       game.consecutiveDiscards = { suit: tile.suit, value: tile.value, playerIds: [currentPlayer.id] };
       return;
     }
 
-    // è¿½åŠ å½“å‰ç©å®¶(å…è®¸åŒä¸€ç©å®¶é‡å¤å‡ºç°,ç»Ÿè®¡4ä¸ªä¸åŒç©å®¶å³å¯)
+    // ×·¼Óµ±Ç°Íæ¼Ò(ÔÊĞíÍ¬Ò»Íæ¼ÒÖØ¸´³öÏÖ,Í³¼Æ4¸ö²»Í¬Íæ¼Ò¼´¿É)
     cd.playerIds.push(currentPlayer.id);
 
-    // ç»Ÿè®¡ä¸åŒç©å®¶æ•°é‡
+    // Í³¼Æ²»Í¬Íæ¼ÒÊıÁ¿
     const uniquePlayerIds = new Set(cd.playerIds);
 
-    // æ£€æŸ¥æ˜¯å¦4ä¸ªä¸åŒç©å®¶éƒ½å‡ºè¿‡åŒä¸€å¼ ç‰Œ(ä¸è¦æ±‚è¿ç»­/ç›¸é‚»)
-    // å¿…é¡»å››åç©å®¶éƒ½é½å…¨ä¸”æœªèƒ¡ç‰Œ(status === PLAYING)
+    // ¼ì²éÊÇ·ñ4¸ö²»Í¬Íæ¼Ò¶¼³ö¹ıÍ¬Ò»ÕÅÅÆ(²»ÒªÇóÁ¬Ğø/ÏàÁÚ)
+    // ±ØĞëËÄÃûÍæ¼Ò¶¼ÆëÈ«ÇÒÎ´ºúÅÆ(status === PLAYING)
     const activePlayerIds = new Set(
       game.players.filter(p => p.status === PlayerStatus.PLAYING).map(p => p.id)
     );
-    // åªç»Ÿè®¡ä»åœ¨æ¸¸æˆä¸­(æœªèƒ¡ç‰Œ)çš„ç©å®¶
+    // Ö»Í³¼ÆÈÔÔÚÓÎÏ·ÖĞ(Î´ºúÅÆ)µÄÍæ¼Ò
     const activeDiscarders = new Set(cd.playerIds.filter(id => activePlayerIds.has(id)));
     if (activePlayerIds.size >= 4 && cd.playerIds.length === 4 && activeDiscarders.size === 4) {
-      // è§¦å‘!ç¬¬ä¸€ä¸ªå‡ºè¯¥ç‰Œçš„ç©å®¶æ˜¯å¸¦å¤´å¤§å“¥
+      // ´¥·¢!µÚÒ»¸ö³ö¸ÃÅÆµÄÍæ¼ÒÊÇ´øÍ·´ó¸ç
       const firstPlayerId = cd.playerIds[0]!;
       game.leadingBrotherEvent = { firstPlayerId, tileKey };
 
       const firstPlayer = game.players.find(p => p.id === firstPlayerId);
-      console.log(`[LeadingBrother] ${firstPlayer?.name} æ˜¯å¸¦å¤´å¤§å“¥!è¿ç»­å‡º ${tileKey}`);
+      console.log(`[LeadingBrother] ${firstPlayer?.name} ÊÇ´øÍ·´ó¸ç!Á¬Ğø³ö ${tileKey}`);
 
-      // å¹¿æ’­ç»™æ‰€æœ‰å®¢æˆ·ç«¯æ˜¾ç¤ºå¼¹çª—
+      // ¹ã²¥¸øËùÓĞ¿Í»§¶ËÏÔÊ¾µ¯´°
       if (this.wsManager) {
         this.wsManager.broadcast(game.gameId, 'leadingBrother', {
-          firstPlayerName: firstPlayer?.name || 'æœªçŸ¥',
+          firstPlayerName: firstPlayer?.name || 'Î´Öª',
           tileKey
         });
       }
 
-      // é‡ç½®è¿½è¸ª
+      // ÖØÖÃ×·×Ù
       game.consecutiveDiscards = null;
     }
   }
@@ -2718,7 +934,7 @@ class GameManager {
       return;
     }
 
-    // ç‰Œæ•°ä¸Šé™æ£€æŸ¥(ä¸å«èŠ±ç‰Œçš„é—¨å£ç‰Œ+æ‰‹ç‰Œ < 14 æ‰èƒ½æ‘¸)
+    // ÅÆÊıÉÏÏŞ¼ì²é(²»º¬»¨ÅÆµÄÃÅ¿ÚÅÆ+ÊÖÅÆ < 14 ²ÅÄÜÃş)
     const playableTileCount = this.getPlayableTileCount(player);
     if (!options?.allowFullHand && playableTileCount >= 14) {
       console.warn(`[DRAW] Skipped: ${player.name} already has ${playableTileCount} playable tiles`);
@@ -2727,7 +943,7 @@ class GameManager {
 
     let tile = game.wall.pop()!;
 
-    // å¾ªç¯è¡¥èŠ±:æ‘¸åˆ°æ™®é€šèŠ±ç‰Œå°±æ”¾é—¨å£ç»§ç»­æ‘¸,ç›´åˆ°æ‘¸åˆ°éèŠ±ç‰Œ
+    // Ñ­»·²¹»¨:Ãşµ½ÆÕÍ¨»¨ÅÆ¾Í·ÅÃÅ¿Ú¼ÌĞøÃş,Ö±µ½Ãşµ½·Ç»¨ÅÆ
     while (isFlower(tile) && !this.isWildTile(game, tile)) {
       player.hand.exposedMelds.push({
         type: MeldType.TRIPLET,
@@ -2736,7 +952,7 @@ class GameManager {
         replacementDone: true as any
       } as any);
       this.broadcastFlowerReplacement(game, player);
-      console.log(`[FLOWER] ${player.name} æ‘¸åˆ°èŠ±ç‰Œ: ${tile.id}, é—¨å£èŠ±ç‰Œæ•°: ${player.hand.exposedMelds.filter(m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])).length}`);
+      console.log(`[FLOWER] ${player.name} Ãşµ½»¨ÅÆ: ${tile.id}, ÃÅ¿Ú»¨ÅÆÊı: ${player.hand.exposedMelds.filter(m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])).length}`);
       if (game.wall.length === 0) {
         this.endRound(game, GameEndReason.WALL_EXHAUSTED);
         return;
@@ -2744,11 +960,11 @@ class GameManager {
       tile = game.wall.pop()!;
     }
 
-    // èŠ±ç‰Œç™¾æ­ â†’ è¿›æ‰‹ç‰Œ
+    // »¨ÅÆ°Ù´î ¡ú ½øÊÖÅÆ
     if (isFlower(tile) && this.isWildTile(game, tile)) {
       player.hand.concealedTiles.push(tile);
     } else {
-      // æ™®é€šç‰Œ â†’ è¿›æ‰‹ç‰Œ
+      // ÆÕÍ¨ÅÆ ¡ú ½øÊÖÅÆ
       player.hand.concealedTiles.push(tile);
     }
     (player as any).lastDrawnTile = tile;
@@ -2756,7 +972,7 @@ class GameManager {
   }
 
   /**
-   * æ›¿æ¢é—¨å£çš„åˆå§‹èŠ±ç‰Œ(å‘ç‰Œæ—¶æ”¾é—¨å£ä½†æœªè¡¥èŠ±çš„)
+   * Ìæ»»ÃÅ¿ÚµÄ³õÊ¼»¨ÅÆ(·¢ÅÆÊ±·ÅÃÅ¿Úµ«Î´²¹»¨µÄ)
    */
   private replaceInitialFlowers(game: GameState, player: Player): void {
     const flowerMelds = player.hand.exposedMelds.filter(
@@ -2793,12 +1009,12 @@ class GameManager {
       }
 
       if (isFlower(replacement) && this.isWildTile(game, replacement)) {
-        // ç™¾æ­èŠ±ç‰Œ â†’ è¿›æ‰‹ç‰Œ
+        // °Ù´î»¨ÅÆ ¡ú ½øÊÖÅÆ
         player.hand.concealedTiles.push(replacement);
         (player as any).lastDrawnTile = replacement;
         player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
       } else {
-        // æ™®é€šç‰Œ â†’ è¿›æ‰‹ç‰Œ
+        // ÆÕÍ¨ÅÆ ¡ú ½øÊÖÅÆ
         player.hand.concealedTiles.push(replacement);
         (player as any).lastDrawnTile = replacement;
         player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
@@ -2809,14 +1025,14 @@ class GameManager {
   }
 
   /**
-   * æ‰‹ç‰Œæ’åº:ç™¾æ­æ”¾æœ€å·¦è¾¹,å…¶ä½™æŒ‰èŠ±è‰²æ•°å€¼æ’åº
+   * ÊÖÅÆÅÅĞò:°Ù´î·Å×î×ó±ß,ÆäÓà°´»¨É«ÊıÖµÅÅĞò
    */
   /**
-   * æ‰‹ç‰Œæ’åº:ç™¾æ­æ”¾æœ€å·¦è¾¹,å…¶ä½™æŒ‰èŠ±è‰²â†’ç‚¹æ•°æ’åº
-   * - ç™¾æ­æœ€å‰
-   * - æ•°ç‰Œ(dotsâ†’charactersâ†’bamboos)æŒ‰èŠ±è‰²â†’ç‚¹æ•°
-   * - é£/ç®­/èŠ±ç»Ÿä¸€åœ¨æ•°ç‰ŒåæŒ‰suité¡ºåº
-   * - å«è¾¹ç•Œä¿æŠ¤(ç©ºç‰Œ/ç¼ºå­—æ®µæ—¶ä¸æŠ›å¼‚å¸¸)
+   * ÊÖÅÆÅÅĞò:°Ù´î·Å×î×ó±ß,ÆäÓà°´»¨É«¡úµãÊıÅÅĞò
+   * - °Ù´î×îÇ°
+   * - ÊıÅÆ(dots¡úcharacters¡úbamboos)°´»¨É«¡úµãÊı
+   * - ·ç/¼ı/»¨Í³Ò»ÔÚÊıÅÆºó°´suitË³Ğò
+   * - º¬±ß½ç±£»¤(¿ÕÅÆ/È±×Ö¶ÎÊ±²»Å×Òì³£)
    */
   private sortHandWithWildFront(tiles: Tile[], game: GameState): Tile[] {
     if (!tiles || tiles.length === 0) return [];
@@ -2831,14 +1047,14 @@ class GameManager {
       if (aIsWild && !bIsWild) return -1;
       if (!aIsWild && bIsWild) return 1;
       if (aIsWild && bIsWild) return 0;
-      // éç™¾æ­:æŒ‰èŠ±è‰²æ•°å€¼æ’åº
+      // ·Ç°Ù´î:°´»¨É«ÊıÖµÅÅĞò
       if (a.suit !== b.suit) return (suitOrder[a.suit] ?? 99) - (suitOrder[b.suit] ?? 99);
       return a.value - b.value;
     });
   }
 
   /**
-   * æ£€æŸ¥ç‰Œæ˜¯å¦æ˜¯ç™¾æ­
+   * ¼ì²éÅÆÊÇ·ñÊÇ°Ù´î
    */
   private isWildTile(game: GameState, tile: Tile): boolean {
     if (!game.customScoringMode) return false;
@@ -2847,10 +1063,10 @@ class GameManager {
     const wildSuit = parts[0] as TileSuit;
     const wildValue = parseInt(parts[1]);
 
-    // æ™®é€šç™¾æ­
+    // ÆÕÍ¨°Ù´î
     if (tile.suit === wildSuit && tile.value === wildValue) return true;
 
-    // èŠ±ç‰Œç™¾æ­: ä¸€ç»„èŠ±ç‰Œå…¨éƒ¨ä¸ºç™¾æ­
+    // »¨ÅÆ°Ù´î: Ò»×é»¨ÅÆÈ«²¿Îª°Ù´î
     if (tile.suit === TileSuit.FLOWER && wildSuit === TileSuit.FLOWER && game.wildTileGroup) {
       return game.wildTileGroup.includes(String(tile.value));
     }
@@ -2859,7 +1075,7 @@ class GameManager {
   }
 
   /**
-   * é€šç”¨å®¡æ‰¹æµç¨‹:æ£€æŸ¥é«˜ä¼˜å…ˆçº§ç©å®¶
+   * Í¨ÓÃÉóÅúÁ÷³Ì:¼ì²é¸ßÓÅÏÈ¼¶Íæ¼Ò
    */
   private checkHighPriorityCandidates(
     game: GameState,
@@ -2874,7 +1090,7 @@ class GameManager {
       if (p.id === requestingPlayerId) continue;
       if (p.status !== PlayerStatus.PLAYING) continue;
 
-      // æ£€æŸ¥èƒ½å¦èƒ¡(å¿…é¡»æœ‰æœ‰æ•ˆç‰Œå‹)
+      // ¼ì²éÄÜ·ñºú(±ØĞëÓĞÓĞĞ§ÅÆĞÍ)
       const testHand = [...p.hand.concealedTiles, discardedTile];
       const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
       const winCheck = canWin(testHand, p.hand.exposedMelds.length, this.getWinWildArg(game));
@@ -2886,7 +1102,7 @@ class GameManager {
         }
       }
 
-      // æ£€æŸ¥ç¢°/æ 
+      // ¼ì²éÅö/¸Ü
       const matchingCount = p.hand.concealedTiles.filter(t => tilesEqual(t, discardedTile)).length;
       if (matchingCount >= 2) {
         pengCandidates.push(p.id);
@@ -2897,7 +1113,7 @@ class GameManager {
   }
 
   /**
-   * é€šç”¨å®¡æ‰¹:ç»™é«˜ä¼˜å…ˆçº§ç©å®¶å¹¿æ’­å†²çªäº‹ä»¶å¹¶è®¾ç½®pending
+   * Í¨ÓÃÉóÅú:¸ø¸ßÓÅÏÈ¼¶Íæ¼Ò¹ã²¥³åÍ»ÊÂ¼ş²¢ÉèÖÃpending
    */
   private getApprovalActionPriority(action: string): number {
     switch (action) {
@@ -2965,7 +1181,7 @@ class GameManager {
     const requester = game.players.find(p => p.id === conflict.requesterId);
     if (!requester || !this.wsManager) return;
 
-    const label = conflict.requesterAction === 'chow' ? 'åƒ' : conflict.requesterAction === 'peng' ? 'ç¢°' : 'æ ';
+    const label = conflict.requesterAction === 'chow' ? '³Ô' : conflict.requesterAction === 'peng' ? 'Åö' : '¸Ü';
     for (const candidate of stage) {
       const candidatePlayer = game.players.find(p => p.id === candidate.playerId);
       if (!candidatePlayer) continue;
@@ -3036,8 +1252,8 @@ class GameManager {
     tile: Tile,
     requesterTileIds?: string[]
   ): Promise<void> {
-    // AIä¸å‚ä¸å®¡æ‰¹ï¼šAIå€™é€‰äººç›´æ¥æŒ‰ä¼˜å…ˆçº§å†³ç­–(HU > KONG > PENG > PASS)
-    // åªæŠŠçº¯äººç±»å€™é€‰äººé€è¿›advanceApprovalConflict
+    // AI²»²ÎÓëÉóÅú£ºAIºòÑ¡ÈËÖ±½Ó°´ÓÅÏÈ¼¶¾ö²ß(HU > KONG > PENG > PASS)
+    // Ö»°Ñ´¿ÈËÀàºòÑ¡ÈËËÍ½øadvanceApprovalConflict
     const aiCandidates = candidates.filter(c => {
       const p = game.players.find(pl => pl.id === c.playerId);
       return p && this.isPlayerBotControlled(p);
@@ -3047,7 +1263,7 @@ class GameManager {
       return !p || !this.isPlayerBotControlled(p);
     });
 
-    // å…ˆå¤„ç†AIå€™é€‰äººï¼šæŒ‰ä¼˜å…ˆçº§æ’åºï¼ŒAIä¹‹é—´ç›´æ¥ç«äº‰
+    // ÏÈ´¦ÀíAIºòÑ¡ÈË£º°´ÓÅÏÈ¼¶ÅÅĞò£¬AIÖ®¼äÖ±½Ó¾ºÕù
     if (aiCandidates.length > 0) {
       const sortedAi = [...aiCandidates].sort((a, b) => {
         const aPriority = Math.max(...a.availableActions.map(action => this.getApprovalActionPriority(action)));
@@ -3062,7 +1278,7 @@ class GameManager {
         if (aiActions.includes(ActionType.HU)) {
           try {
             await this.executeWinDirectly(game, aiPlayer, tile);
-            return; // èƒ¡ç‰Œåæ¸¸æˆçŠ¶æ€å·²ç»“æŸ
+            return; // ºúÅÆºóÓÎÏ·×´Ì¬ÒÑ½áÊø
           } catch (e) {
             console.warn('[Approval] AI HU failed:', e);
           }
@@ -3075,11 +1291,11 @@ class GameManager {
           this.executePengDirectly(game, aiPlayer);
           return;
         }
-        // AIåªæœ‰CHOW â†’ PASSï¼Œç»§ç»­çœ‹ä¸‹ä¸€ä¸ªAI
+        // AIÖ»ÓĞCHOW ¡ú PASS£¬¼ÌĞø¿´ÏÂÒ»¸öAI
       }
     }
 
-    // å¦‚æœæ²¡æœ‰äººç±»å€™é€‰äººï¼ŒAIéƒ½å·²å†³ç­–å®Œæ¯•æˆ–PASSï¼Œç›´æ¥æ‰§è¡Œè¯·æ±‚è€…åŠ¨ä½œ
+    // Èç¹ûÃ»ÓĞÈËÀàºòÑ¡ÈË£¬AI¶¼ÒÑ¾ö²ßÍê±Ï»òPASS£¬Ö±½ÓÖ´ĞĞÇëÇóÕß¶¯×÷
     if (humanCandidates.length === 0) {
       if (requesterAction === 'chow') this.executeChowDirectly(game, game.players.find(p => p.id === requesterPlayerId)!, requesterTileIds);
       else if (requesterAction === 'peng') this.executePengDirectly(game, game.players.find(p => p.id === requesterPlayerId)!);
@@ -3087,7 +1303,7 @@ class GameManager {
       return;
     }
 
-    // åªæœ‰äººç±»å€™é€‰äººéœ€è¦å®¡æ‰¹æµç¨‹
+    // Ö»ÓĞÈËÀàºòÑ¡ÈËĞèÒªÉóÅúÁ÷³Ì
     game.pengChowConflict = {
       requesterId: requesterPlayerId,
       requesterAction,
@@ -3105,7 +1321,7 @@ class GameManager {
 
     game.pengChowConflict = { requesterId: requesterPlayerId, requesterAction, tile, requesterTileIds, timestamp: Date.now() };
 
-    // å®¡æ‰¹å¼€å§‹æ—¶æ¸…ç†æ—§çš„pendingè¶…æ—¶,é¿å…2ç§’è‡ªåŠ¨PASSæŠ¢è·‘ç ´å5ç§’å®¡æ‰¹
+    // ÉóÅú¿ªÊ¼Ê±ÇåÀí¾ÉµÄpending³¬Ê±,±ÜÃâ2Ãë×Ô¶¯PASSÇÀÅÜÆÆ»µ5ÃëÉóÅú
     this.clearPendingActionTimer(game.gameId);
 
     const requester = game.players.find(p => p.id === requesterPlayerId);
@@ -3115,10 +1331,10 @@ class GameManager {
       const candPlayer = game.players.find(p => p.id === c.playerId);
       if (!candPlayer || !this.wsManager) continue;
 
-      // è®¾ç½®pending action(å®¡æ‰¹çª—å£,æ— "è¿‡"æŒ‰é’®)
+      // ÉèÖÃpending action(ÉóÅú´°¿Ú,ÎŞ"¹ı"°´Å¥)
       const existingPending = game.pendingActions.find(pa => pa.playerId === c.playerId);
       if (!existingPending) {
-        const label = requesterAction === 'chow' ? 'åƒ' : requesterAction === 'peng' ? 'ç¢°' : 'æ ';
+        const label = requesterAction === 'chow' ? '³Ô' : requesterAction === 'peng' ? 'Åö' : '¸Ü';
         const expiresAt = Date.now() + this.getHumanClaimDecisionTimeoutMs(game, candPlayer, c.availableActions);
         game.pendingActions.push({
           playerId: c.playerId,
@@ -3126,7 +1342,7 @@ class GameManager {
           tile,
           expiresAt
         });
-        // å¹¿æ’­
+        // ¹ã²¥
         this.wsManager.broadcast(game.gameId, 'actionApproval', {
           requesterName: requester.name,
           requesterAction: label,
@@ -3138,7 +1354,7 @@ class GameManager {
       }
     }
 
-    // å®¡æ‰¹å€™é€‰çª—å£è¶…æ—¶åï¼Œå…è®¸ä½ä¼˜å…ˆçº§åŠ¨ä½œç»§ç»­æ‰§è¡Œ
+    // ÉóÅúºòÑ¡´°¿Ú³¬Ê±ºó£¬ÔÊĞíµÍÓÅÏÈ¼¶¶¯×÷¼ÌĞøÖ´ĞĞ
     const ts = game.pengChowConflict.timestamp;
     const gid = game.gameId;
     const approvalWaitMs = Math.max(
@@ -3154,7 +1370,7 @@ class GameManager {
         const fg = await this.getGame(gid);
         if (!fg || !fg.pengChowConflict || fg.pengChowConflict.timestamp !== ts) return;
         fg.pengChowConflict = null;
-        // æ¸…é™¤æ‰€æœ‰å€™é€‰è€… AND è¯·æ±‚è€…çš„ pending action(ä¿®å¤:ä¹‹å‰åªæ¸…å€™é€‰è€…,è¯·æ±‚è€…pendingæ®‹ç•™å¯¼è‡´æ¸¸æˆå¡ä½)
+        // Çå³ıËùÓĞºòÑ¡Õß AND ÇëÇóÕßµÄ pending action(ĞŞ¸´:Ö®Ç°Ö»ÇåºòÑ¡Õß,ÇëÇóÕßpending²ĞÁôµ¼ÖÂÓÎÏ·¿¨×¡)
         for (const c of candidates) fg.pendingActions = fg.pendingActions.filter(pa => pa.playerId !== c.playerId);
         fg.pendingActions = fg.pendingActions.filter(pa => pa.playerId !== requesterPlayerId);
         const rp = fg.players.find(p => p.id === requesterPlayerId);
@@ -3164,7 +1380,7 @@ class GameManager {
         else if (requesterAction === 'kong') this.executeKongDirectly(fg, rp, tile.id);
         await this.persistGame(fg);
         this.broadcastGameState(gid);
-        // ä¿®å¤:å®¡æ‰¹è¶…æ—¶æ‰§è¡Œå,å¦‚æœæ˜¯botæ¥ç®¡å›åˆ,è°ƒåº¦botå‡ºç‰Œ
+        // ĞŞ¸´:ÉóÅú³¬Ê±Ö´ĞĞºó,Èç¹ûÊÇbot½Ó¹Ü»ØºÏ,µ÷¶Èbot³öÅÆ
         const currentPlayer = fg.players[fg.currentPlayerIndex];
         if (currentPlayer && this.isPlayerBotControlled(currentPlayer)) {
           this.scheduleBotDiscard(gid, currentPlayer.id);
@@ -3175,7 +1391,7 @@ class GameManager {
 
   private async handleChow(game: GameState, player: Player, tileIds?: string[]): Promise<void> {
     let pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
-    // Bugä¿®å¤: pendingè¢«timeoutæ¸…ç©ºå,ä»discardPileé‡å»º
+    // BugĞŞ¸´: pending±»timeoutÇå¿Õºó,´ÓdiscardPileÖØ½¨
     if (!pendingAction || !pendingAction.tile) {
       const lastDiscard = game.discardPile[game.discardPile.length - 1];
       if (!lastDiscard) return;
@@ -3184,25 +1400,25 @@ class GameManager {
 
     const discardedTile = pendingAction.tile;
 
-    // åªåœ¨å†³ç­–çŠ¹è±«æœŸå†…æ‰éœ€è¦å®¡æ‰¹(å…¶ä»–ç©å®¶æœ‰pending = è¿˜åœ¨çª—å£å†…)
+    // Ö»ÔÚ¾ö²ßÓÌÔ¥ÆÚÄÚ²ÅĞèÒªÉóÅú(ÆäËûÍæ¼ÒÓĞpending = »¹ÔÚ´°¿ÚÄÚ)
     const otherPlayersPending = game.pendingActions.filter(pa =>
       pa.playerId !== player.id &&
       pa.availableActions.some(a => a === ActionType.HU || a === ActionType.PENG || a === ActionType.KONG)
     );
 
     if (otherPlayersPending.length > 0) {
-      // å†³ç­–çŠ¹è±«æœŸå†… â†’ æ£€æŸ¥é«˜ä¼˜å…ˆçº§ç©å®¶,è§¦å‘å®¡æ‰¹
-      // ä¼˜å…ˆçº§: HU > KONG > PENG > CHOW
+      // ¾ö²ßÓÌÔ¥ÆÚÄÚ ¡ú ¼ì²é¸ßÓÅÏÈ¼¶Íæ¼Ò,´¥·¢ÉóÅú
+      // ÓÅÏÈ¼¶: HU > KONG > PENG > CHOW
       const { huCandidates, pengCandidates, kongCandidates } = this.checkHighPriorityCandidates(game, player.id, discardedTile);
       
-      // åªè¦æœ‰ä»»ä½•é«˜ä¼˜å…ˆçº§ç©å®¶(HU/KONG/PENG)èƒ½å“åº”,å°±éœ€è¦å®¡æ‰¹
+      // Ö»ÒªÓĞÈÎºÎ¸ßÓÅÏÈ¼¶Íæ¼Ò(HU/KONG/PENG)ÄÜÏìÓ¦,¾ÍĞèÒªÉóÅú
       if (huCandidates.length > 0 || pengCandidates.length > 0 || kongCandidates.length > 0) {
         const candidates: Array<{ playerId: string; availableActions: string[] }> = [];
-        // HU æœ€é«˜ä¼˜å…ˆçº§
+        // HU ×î¸ßÓÅÏÈ¼¶
         for (const pid of huCandidates) {
           candidates.push({ playerId: pid, availableActions: ['hu'] });
         }
-        // KONG æ¬¡é«˜ä¼˜å…ˆçº§
+        // KONG ´Î¸ßÓÅÏÈ¼¶
         for (const pid of kongCandidates) {
           const existing = candidates.find(c => c.playerId === pid);
           if (existing) {
@@ -3211,7 +1427,7 @@ class GameManager {
             candidates.push({ playerId: pid, availableActions: ['kong'] });
           }
         }
-        // PENG æœ€ä½ä¼˜å…ˆçº§
+        // PENG ×îµÍÓÅÏÈ¼¶
         for (const pid of pengCandidates) {
           const existing = candidates.find(c => c.playerId === pid);
           if (existing) {
@@ -3227,15 +1443,15 @@ class GameManager {
       }
     }
 
-    // å†³ç­–çŠ¹è±«æœŸå·²è¿‡ â†’ ç¢°/æ /èƒ¡å®¶å·²ä¸§å¤±æœºä¼š,ç›´æ¥åƒ
+    // ¾ö²ßÓÌÔ¥ÆÚÒÑ¹ı ¡ú Åö/¸Ü/ºú¼ÒÒÑÉ¥Ê§»ú»á,Ö±½Ó³Ô
     this.executeChowDirectly(game, player, tileIds);
   }
 
   /**
-   * ç›´æ¥æ‰§è¡Œåƒç‰Œ(ä¸æ£€æŸ¥ç¢°ä¼˜å…ˆçº§)
+   * Ö±½ÓÖ´ĞĞ³ÔÅÆ(²»¼ì²éÅöÓÅÏÈ¼¶)
    */
   private executeChowDirectly(game: GameState, player: Player, tileIds?: string[]): void {
-    // ---- åƒç¢°æ’æ–¥æ£€æŸ¥ ----
+    // ---- ³ÔÅöÅÅ³â¼ì²é ----
     const discardTile = game.discardPile[game.discardPile.length - 1];
     if (!discardTile) return;
     const exclusion = game.chowPongExclusion?.[player.id];
@@ -3247,16 +1463,16 @@ class GameManager {
     }
 
     let pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
-    // Bugä¿®å¤: pendingè¢«timeoutæ¸…ç©ºå,ä»discardPileé‡å»º
+    // BugĞŞ¸´: pending±»timeoutÇå¿Õºó,´ÓdiscardPileÖØ½¨
     if (!pendingAction || !pendingAction.tile) {
       const lastDiscard = game.discardPile[game.discardPile.length - 1];
       if (!lastDiscard) return;
-      // ä»discardPileé‡å»ºpendingAction
+      // ´ÓdiscardPileÖØ½¨pendingAction
       pendingAction = { playerId: player.id, availableActions: [ActionType.CHOW], tile: lastDiscard } as any;
     }
 
     const discardedTile = pendingAction.tile;
-    // ä¿®å¤BUG:åƒç‰Œç©å®¶åº”è¯¥æ˜¯å¼ƒç‰Œè€…çš„ä¸‹å®¶(ä¸‹ä¸€ä¸ªæ´»è·ƒç©å®¶),ä¸æ˜¯å‰ä¸€ä¸ª
+    // ĞŞ¸´BUG:³ÔÅÆÍæ¼ÒÓ¦¸ÃÊÇÆúÅÆÕßµÄÏÂ¼Ò(ÏÂÒ»¸ö»îÔ¾Íæ¼Ò),²»ÊÇÇ°Ò»¸ö
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
     const discarderIndex = game.players.findIndex(p => p.id === sourcePlayerId);
     const nextPlayerAfterDiscarder = discarderIndex >= 0 ? this.getNextActivePlayer(game, discarderIndex) : undefined;
@@ -3289,12 +1505,12 @@ class GameManager {
     };
     player.hand.exposedMelds.push(meld);
 
-    // ---- æ›´æ–°åƒç¢°æ’æ–¥çŠ¶æ€ ----
+    // ---- ¸üĞÂ³ÔÅöÅÅ³â×´Ì¬ ----
     if (!game.chowPongExclusion) game.chowPongExclusion = {};
     const prevState = game.chowPongExclusion[player.id] || { firstActionSuit: null, firstActionType: null };
     game.chowPongExclusion[player.id] = updateChowPongExclusion(prevState, 'chow', discardTile.suit);
 
-    // Bug6: ç”¨findIndexæ‰¾å¹¶ç§»é™¤è¢«åƒç‰Œ
+    // Bug6: ÓÃfindIndexÕÒ²¢ÒÆ³ı±»³ÔÅÆ
     const cdIdx = game.discardPile.findIndex(t => t.id === discardedTile.id);
     if (cdIdx >= 0) game.discardPile.splice(cdIdx, 1);
     const discarder = game.players.find(p => p.id === sourcePlayerId);
@@ -3306,14 +1522,14 @@ class GameManager {
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
     this.replaceInitialFlowers(game, player);
     game.drawnThisTurn = true;
-    // åƒåæ‰‹ç‰Œæ’åº(ç™¾æ­ç½®é¡¶)
+    // ³ÔºóÊÖÅÆÅÅĞò(°Ù´îÖÃ¶¥)
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
 
-    // å¹¿æ’­åƒç‰Œåˆ°ç‰Œå±€å¿«è®¯
+    // ¹ã²¥³ÔÅÆµ½ÅÆ¾Ö¿ìÑ¶
     if (this.wsManager) {
       this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
         id: Date.now() + Math.floor(Math.random() * 1000),
-        text: `ğŸœ ${player.name}åƒç‰Œ`,
+        text: `?? ${player.name}³ÔÅÆ`,
         actionKind: 'chow',
         type: 'info',
         timestamp: Date.now(),
@@ -3323,13 +1539,13 @@ class GameManager {
   }
 
   /**
-   * ç›´æ¥æ‰§è¡Œç¢°(ä¸æ£€æŸ¥èƒ¡ä¼˜å…ˆçº§)
+   * Ö±½ÓÖ´ĞĞÅö(²»¼ì²éºúÓÅÏÈ¼¶)
    */
   private executePengDirectly(game: GameState, player: Player): void {
     const lastDiscard = game.discardPile[game.discardPile.length - 1];
     if (!lastDiscard) return;
 
-    // ---- åƒç¢°æ’æ–¥æ£€æŸ¥ ----
+    // ---- ³ÔÅöÅÅ³â¼ì²é ----
     const exclusion = game.chowPongExclusion?.[player.id];
     const state = exclusion || { firstActionSuit: null, firstActionType: null };
     if (!checkChowPongExclusion(state, 'pong', lastDiscard.suit)) {
@@ -3343,11 +1559,11 @@ class GameManager {
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
     this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.TRIPLET);
     this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
-    // å¹¿æ’­ç¢°ç‰Œåˆ°ç‰Œå±€å¿«è®¯
+    // ¹ã²¥ÅöÅÆµ½ÅÆ¾Ö¿ìÑ¶
     if (this.wsManager) {
       this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
         id: Date.now() + Math.floor(Math.random() * 1000),
-        text: `â“˜ ${player.name}ç¢°ç‰Œ`,
+        text: `? ${player.name}ÅöÅÆ`,
         actionKind: 'pong',
         type: 'info',
         timestamp: Date.now(),
@@ -3365,15 +1581,15 @@ class GameManager {
       sourceTileId: lastDiscard.id
     });
 
-    // ---- æ›´æ–°åƒç¢°æ’æ–¥çŠ¶æ€ ----
+    // ---- ¸üĞÂ³ÔÅöÅÅ³â×´Ì¬ ----
     if (!game.chowPongExclusion) game.chowPongExclusion = {};
     const prevState = game.chowPongExclusion[player.id] || { firstActionSuit: null, firstActionType: null };
     game.chowPongExclusion[player.id] = updateChowPongExclusion(prevState, 'pong', lastDiscard.suit);
 
-    // Bug6: ç”¨findIndexæ‰¾å¹¶ç§»é™¤è¢«ç¢°ç‰Œ
+    // Bug6: ÓÃfindIndexÕÒ²¢ÒÆ³ı±»ÅöÅÆ
     const pdIdx = game.discardPile.findIndex(t => t.id === lastDiscard.id);
     if (pdIdx >= 0) game.discardPile.splice(pdIdx, 1);
-    // Bug1ä¿®å¤: åŒæ—¶ä»å¼ƒç‰Œè€…çš„ä¸ªäººå¼ƒç‰Œåˆ—è¡¨ä¸­ç§»é™¤
+    // Bug1ĞŞ¸´: Í¬Ê±´ÓÆúÅÆÕßµÄ¸öÈËÆúÅÆÁĞ±íÖĞÒÆ³ı
     const discarder = game.players.find(p => p.id === sourcePlayerId);
     if (discarder) {
       discarder.hand.discardedTiles = discarder.hand.discardedTiles.filter(t => t.id !== lastDiscard.id);
@@ -3383,15 +1599,15 @@ class GameManager {
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
     this.replaceInitialFlowers(game, player);
     game.drawnThisTurn = true;
-    // ç¢°åæ‰‹ç‰Œæ’åº(ç™¾æ­ç½®é¡¶)
+    // ÅöºóÊÖÅÆÅÅĞò(°Ù´îÖÃ¶¥)
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
   }
 
   /**
-   * ç›´æ¥æ‰§è¡Œèƒ¡(ç¢°åƒå†²çªä¸­,é«˜ä¼˜å…ˆçº§èƒ¡ç›´æ¥æ‰§è¡Œ)
+   * Ö±½ÓÖ´ĞĞºú(Åö³Ô³åÍ»ÖĞ,¸ßÓÅÏÈ¼¶ºúÖ±½ÓÖ´ĞĞ)
    */
   private async executeWinDirectly(game: GameState, player: Player, winningTile: Tile): Promise<void> {
-    // æ„é€ å‡çš„pendingAction,è®©handleHuèƒ½è·å–winningTile
+    // ¹¹Ôì¼ÙµÄpendingAction,ÈÃhandleHuÄÜ»ñÈ¡winningTile
     const fakePending = {
       playerId: player.id,
       availableActions: [ActionType.HU],
@@ -3407,7 +1623,7 @@ class GameManager {
   }
 
   /**
-   * ç›´æ¥æ‰§è¡Œæ (ä¸æ£€æŸ¥èƒ¡ä¼˜å…ˆçº§)
+   * Ö±½ÓÖ´ĞĞ¸Ü(²»¼ì²éºúÓÅÏÈ¼¶)
    */
   private executeKongDirectly(game: GameState, player: Player, tileId: string): void {
     const lastDiscard = game.discardPile[game.discardPile.length - 1];
@@ -3431,15 +1647,15 @@ class GameManager {
       sourceTileId: lastDiscard.id
     });
 
-    // Bug6: ç”¨findIndexæ‰¾å¹¶ç§»é™¤è¢«æ ç‰Œ
+    // Bug6: ÓÃfindIndexÕÒ²¢ÒÆ³ı±»¸ÜÅÆ
     const kgIdx = game.discardPile.findIndex(t => t.id === lastDiscard.id);
     if (kgIdx >= 0) game.discardPile.splice(kgIdx, 1);
-    // å¹¿æ’­æ ç‰Œåˆ°ç‰Œå±€å¿«è®¯
+    // ¹ã²¥¸ÜÅÆµ½ÅÆ¾Ö¿ìÑ¶
     if (this.wsManager) {
-      const label = pendingAction.type === 'kong_an' ? 'æš—æ ' : pendingAction.type === 'kong_bu' ? 'è¡¥æ ' : 'æ˜æ ';
+      const label = pendingAction.type === 'kong_an' ? '°µ¸Ü' : pendingAction.type === 'kong_bu' ? '²¹¸Ü' : 'Ã÷¸Ü';
       this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
         id: Date.now() + Math.floor(Math.random() * 1000),
-        text: `â“˜ ${player.name}${label}`,
+        text: `? ${player.name}${label}`,
         actionKind: 'kong',
         type: 'info',
         timestamp: Date.now(),
@@ -3450,7 +1666,7 @@ class GameManager {
     if (discarder) {
       discarder.hand.discardedTiles = discarder.hand.discardedTiles.filter(t => t.id !== lastDiscard.id);
     }
-    // ç‚¹æ ç§¯åˆ†:å‡ºç‰Œè€…ä»˜2åˆ†
+    // µã¸Ü»ı·Ö:³öÅÆÕß¸¶2·Ö
     player.windScore += 2;
     game.pendingActions = [];
     game.pengChowConflict = null;
@@ -3461,7 +1677,7 @@ class GameManager {
   }
 
   /**
-   * å¤„ç†å®¡æ‰¹å›åº”(ç¢°åƒå†²çªã€ç¢°èƒ¡å†²çªç­‰)
+   * ´¦ÀíÉóÅú»ØÓ¦(Åö³Ô³åÍ»¡¢Åöºú³åÍ»µÈ)
    */
   async handleApprovalChoice(gameId: string, playerId: string, choice: 'confirm' | 'pass'): Promise<void> {
     const game = this.games.get(gameId);
@@ -3511,7 +1727,7 @@ class GameManager {
     const requesterAction = conflict.requesterAction;
     const tile = conflict.tile;
 
-    // æ¸…é™¤å†²çªçŠ¶æ€å’Œè¯¥ç©å®¶çš„pending(ä¿ç•™winner's pendingä¾›executeWinDirectlyä½¿ç”¨)
+    // Çå³ı³åÍ»×´Ì¬ºÍ¸ÃÍæ¼ÒµÄpending(±£Áôwinner's pending¹©executeWinDirectlyÊ¹ÓÃ)
     game.pengChowConflict = null;
     game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== playerId);
 
@@ -3520,19 +1736,19 @@ class GameManager {
     if (choice === 'confirm') {
       const candPlayer = game.players.find(p => p.id === playerId);
       if (!candPlayer) return;
-      // æ‰§è¡Œå€™é€‰è€…çš„é«˜ä¼˜å…ˆçº§åŠ¨ä½œ
+      // Ö´ĞĞºòÑ¡ÕßµÄ¸ßÓÅÏÈ¼¶¶¯×÷
       const pending = game.pendingActions.find(pa => pa.playerId === playerId);
       if (pending?.availableActions.includes(ActionType.HU)) {
-        // æ‰§è¡Œèƒ¡ç‰Œ
+        // Ö´ĞĞºúÅÆ
         await this.executeWinDirectly(game, candPlayer, tile);
         return;
       } else if (pending?.availableActions.includes(ActionType.PENG)) {
         this.executePengDirectly(game, candPlayer);
       }
-      // æ¸…é™¤è¯·æ±‚è€…çš„pending
+      // Çå³ıÇëÇóÕßµÄpending
       game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== requesterId);
     } else {
-      // æ”¾å¼ƒ â†’ å…è®¸ä½ä¼˜å…ˆçº§åŠ¨ä½œ
+      // ·ÅÆú ¡ú ÔÊĞíµÍÓÅÏÈ¼¶¶¯×÷
       if (requester) {
         if (requesterAction === 'chow') this.executeChowDirectly(game, requester, conflict.requesterTileIds);
         else if (requesterAction === 'peng') this.executePengDirectly(game, requester);
@@ -3542,7 +1758,7 @@ class GameManager {
   }
 
   /**
-   * @deprecated ä½¿ç”¨ handleApprovalChoice ä»£æ›¿
+   * @deprecated Ê¹ÓÃ handleApprovalChoice ´úÌæ
    */
   handlePengChowChoice(gameId: string, pengPlayerId: string, choice: 'peng' | 'pass'): void {
     this.handleApprovalChoice(gameId, pengPlayerId, choice === 'peng' ? 'confirm' : 'pass');
@@ -3552,7 +1768,7 @@ class GameManager {
     const lastDiscard = game.discardPile[game.discardPile.length - 1];
     if (!lastDiscard) return;
 
-    // ç¢° â†’ æ£€æŸ¥å…¶ä»–ç©å®¶æ˜¯å¦å¯ä»¥èƒ¡(å®¡æ‰¹æµç¨‹)
+    // Åö ¡ú ¼ì²éÆäËûÍæ¼ÒÊÇ·ñ¿ÉÒÔºú(ÉóÅúÁ÷³Ì)
     const { huCandidates } = this.checkHighPriorityCandidates(game, player.id, lastDiscard);
     if (huCandidates.length > 0) {
       const candidates = huCandidates.map(pid => ({ playerId: pid, availableActions: ['hu'] }));
@@ -3567,7 +1783,7 @@ class GameManager {
     const lastDiscard = game.discardPile[game.discardPile.length - 1];
     if (!lastDiscard) return;
 
-    // æ  â†’ æ£€æŸ¥å…¶ä»–ç©å®¶æ˜¯å¦å¯ä»¥èƒ¡(å®¡æ‰¹æµç¨‹)
+    // ¸Ü ¡ú ¼ì²éÆäËûÍæ¼ÒÊÇ·ñ¿ÉÒÔºú(ÉóÅúÁ÷³Ì)
     const { huCandidates } = this.checkHighPriorityCandidates(game, player.id, lastDiscard);
     if (huCandidates.length > 0) {
       const candidates = huCandidates.map(pid => ({ playerId: pid, availableActions: ['hu'] }));
@@ -3617,7 +1833,7 @@ class GameManager {
     );
     if (tripletIndex === -1) return;
 
-    // æŠ¢æ æ£€æŸ¥:ä»…è¡¥æ å¯è¢«æŠ¢
+    // ÇÀ¸Ü¼ì²é:½ö²¹¸Ü¿É±»ÇÀ
     const robbers: PendingAction[] = [];
 
     for (const candidate of game.players) {
@@ -3629,7 +1845,7 @@ class GameManager {
       const winCheck = canWin(testHand, candidate.hand.exposedMelds, robWildId || (game.wildTileGroup ?? null));
       if (!winCheck.canWin) continue;
       const flowerCount = this.countFlowerTiles(candidate);
-      // è§„åˆ™:é—¨å£æ— èŠ±ä¸èƒ½æŠ¢æ (æ‰€æœ‰éè±å…ç‰Œå‹)
+      // ¹æÔò:ÃÅ¿ÚÎŞ»¨²»ÄÜÇÀ¸Ü(ËùÓĞ·Ç»íÃâÅÆĞÍ)
       const robHandTypes = detectHandTypes(
         testHand,
         candidate.hand.exposedMelds,
@@ -3640,15 +1856,15 @@ class GameManager {
       );
       if (robHandTypes.length === 0) continue;
 
-      // è·å–æœ€é«˜ä¼˜å…ˆçº§ç‰Œå‹
+      // »ñÈ¡×î¸ßÓÅÏÈ¼¶ÅÆĞÍ
       const concealedNonFlower = candidate.hand.concealedTiles.filter(t => !isFlower(t));
       const isDaDiao = concealedNonFlower.length === 1;
       const hasTenPointExemption = this.hasTenPointClaimExemption(robHandTypes, isDaDiao);
       
-      // éœ€è¦æ£€æŸ¥é—¨å£æ¡ä»¶çš„ç‰Œå‹ï¼šç¢°ç¢°èƒ¡(ALL_TRIPLETS) æˆ– æ··ä¸€è‰²(HALF_FLUSH)
-      // å…¶ä»–æ›´å¤§ç‰Œå‹(é£ç¢°/æ¸…ç¢°/é£ä¸€è‰²ç­‰)ä¸éœ€è¦æ£€æŸ¥ï¼Œç›´æ¥å…è®¸æŠ¢
-      // è§„åˆ™ï¼šé—¨å£æ— èŠ±ä¸èƒ½æŠ¢æ ï¼ˆå¯¹æ‰€æœ‰éè±å…ç‰Œå‹ç”Ÿæ•ˆï¼‰
-      // è±å…ï¼šé£ç¢°/é£ä¸€è‰²/æ¸…ç¢°/æ··ç¢°/å…«èŠ±/å››ç™¾æ­/æ¸…ä¸€è‰²/å¤§åŠ
+      // ĞèÒª¼ì²éÃÅ¿ÚÌõ¼şµÄÅÆĞÍ£ºÅöÅöºú(ALL_TRIPLETS) »ò »ìÒ»É«(HALF_FLUSH)
+      // ÆäËû¸ü´óÅÆĞÍ(·çÅö/ÇåÅö/·çÒ»É«µÈ)²»ĞèÒª¼ì²é£¬Ö±½ÓÔÊĞíÇÀ
+      // ¹æÔò£ºÃÅ¿ÚÎŞ»¨²»ÄÜÇÀ¸Ü£¨¶ÔËùÓĞ·Ç»íÃâÅÆĞÍÉúĞ§£©
+      // »íÃâ£º·çÅö/·çÒ»É«/ÇåÅö/»ìÅö/°Ë»¨/ËÄ°Ù´î/ÇåÒ»É«/´óµõ
       if (!hasTenPointExemption) {
         const hasFlowerAtDoor = candidate.hand.exposedMelds.some(m => 
           m.tiles.some(t => t.suit === TileSuit.FLOWER)
@@ -3661,7 +1877,7 @@ class GameManager {
           m.type === MeldType.KONG || m.type === MeldType.CONCEALED_KONG
         );
         if (!hasFlowerAtDoor && !hasWindDragonTriplet && !hasAnyKong) {
-          continue;  // é—¨å£æ— èŠ±ä¸èƒ½æŠ¢æ 
+          continue;  // ÃÅ¿ÚÎŞ»¨²»ÄÜÇÀ¸Ü
         }
       }
 
@@ -3680,7 +1896,7 @@ class GameManager {
       return;
     }
 
-    // æ— äººæŠ¢æ ,æ­£å¸¸è¡¥æ 
+    // ÎŞÈËÇÀ¸Ü,Õı³£²¹¸Ü
     this.completeExtendedKong(game, player, tile);
   }
 
@@ -3712,7 +1928,7 @@ class GameManager {
     const pendingClaim = game.pendingKongClaim;
     if (!pendingClaim) return false;
 
-    // ä»æœ‰ç©å®¶ç­‰å¾…å“åº”,å…ˆä¸ç»§ç»­
+    // ÈÔÓĞÍæ¼ÒµÈ´ıÏìÓ¦,ÏÈ²»¼ÌĞø
     if (game.pendingActions.length > 0) return true;
 
     if (!pendingClaim.cancelledByHu) {
@@ -3746,7 +1962,7 @@ class GameManager {
     }
 
     // Hu resolves current player's pending reaction.
-    // ä¸€ç‚®å¤šå“ä»…ä¿ç•™å…¶ä»–"å¯èƒ¡"å“åº”,åƒ/ç¢°/æ åœ¨æœ‰äººèƒ¡ç‰Œåæ— æ•ˆã€‚
+    // Ò»ÅÚ¶àÏì½ö±£ÁôÆäËû"¿Éºú"ÏìÓ¦,³Ô/Åö/¸ÜÔÚÓĞÈËºúÅÆºóÎŞĞ§¡£
     game.pendingActions = game.pendingActions.filter(pa =>
       pa.playerId !== player.id && pa.availableActions.includes(ActionType.HU)
     );
@@ -3754,26 +1970,26 @@ class GameManager {
     const isSelfDrawn = !pendingAction;
     const projectedWinOrder = game.winnersCount + 1;
 
-    // è®¾ç½®ä¸‹å±€åº„å®¶
+    // ÉèÖÃÏÂ¾Ö×¯¼Ò
     if (!game.nextDealerId) {
       if (projectedWinOrder === 1) {
-        // é¦–èƒ¡è€…ä¸ºåº„
+        // Ê×ºúÕßÎª×¯
         game.nextDealerId = player.id;
-        // ä¸€ç‚®å¤šå“:å¦‚æœæœ‰äººå› æ”¾å†²å¯¼è‡´å¤šèƒ¡,æ”¾å†²è€…ä¸ºåº„
+        // Ò»ÅÚ¶àÏì:Èç¹ûÓĞÈËÒò·Å³åµ¼ÖÂ¶àºú,·Å³åÕßÎª×¯
         if (!isSelfDrawn) {
           const discarderId = this.getLastDiscardPlayerId(game);
           if (discarderId) {
             game.nextDealerId = discarderId;
             const discarder = game.players.find(p => p.id === discarderId);
-            console.log(`[handleHu] ä¸€ç‚®å¤šå“,æ”¾å†²è€… ${discarder?.name} ä¸ºä¸‹å±€åº„å®¶`);
+            console.log(`[handleHu] Ò»ÅÚ¶àÏì,·Å³åÕß ${discarder?.name} ÎªÏÂ¾Ö×¯¼Ò`);
           }
         } else {
-          console.log(`[handleHu] è‡ªæ‘¸,${player.name} ä¸ºä¸‹å±€åº„å®¶`);
+          console.log(`[handleHu] ×ÔÃş,${player.name} ÎªÏÂ¾Ö×¯¼Ò`);
         }
       }
     }
 
-    // ã€P0-7ä¿®å¤ã€‘canWinå½“exposedOrCountä¸ºnumberæ—¶ï¼Œç¬¬ä¸‰ä¸ªå‚æ•°å¿…é¡»æ˜¯wildTileIdå­—ç¬¦ä¸²è€Œéå‡½æ•°
+    // ¡¾P0-7ĞŞ¸´¡¿canWinµ±exposedOrCountÎªnumberÊ±£¬µÚÈı¸ö²ÎÊı±ØĞëÊÇwildTileId×Ö·û´®¶ø·Çº¯Êı
     const winCheck = this.getCachedWinCheck(game, player);
     if (!winCheck.canWin) {
       throw new Error('Invalid Hu declaration');
@@ -3789,7 +2005,7 @@ class GameManager {
       ? filteredWinOptions.find(option => option.label === selectedWinOptionLabel)
       : filteredWinOptions[0];
 
-    // ç‰Œå‹æ ¡éªŒ: ä¼˜å…ˆç”¨å³æ—¶æ£€æµ‹, è‹¥ç©ºç»“æœåˆ™å›é€€åˆ°å¯èƒ¡ç¼“å­˜/ç»“ç®—å€™é€‰, é¿å…è‡ªåŠ¨ç»“ç®—é“¾è¢«è¯¯ä¸­æ–­ã€‚
+    // ÅÆĞÍĞ£Ñé: ÓÅÏÈÓÃ¼´Ê±¼ì²â, Èô¿Õ½á¹ûÔò»ØÍËµ½¿Éºú»º´æ/½áËãºòÑ¡, ±ÜÃâ×Ô¶¯½áËãÁ´±»ÎóÖĞ¶Ï¡£
     const huHandTypes = detectHandTypes(
       player.hand.concealedTiles,
       player.hand.exposedMelds,
@@ -3805,37 +2021,37 @@ class GameManager {
       throw new Error('No valid hand type for Hu');
     }
 
-    // æ”¶é›†èŠ±ç‰Œ
+    // ÊÕ¼¯»¨ÅÆ
     const flowerTiles = player.hand.exposedMelds
       .flatMap(m => m.tiles)
       .filter(t => isFlower(t));
 
-    // æ£€æµ‹ç‰Œå‹
+    // ¼ì²âÅÆĞÍ
     const handTypes = detectHandTypes(
       player.hand.concealedTiles,
       player.hand.exposedMelds,
       isSelfDrawn,
       flowerTiles.length,
-      game.customScoringMode, // ç™¾æ­ç‰Œæ ‡è¯†
+      game.customScoringMode, // °Ù´îÅÆ±êÊ¶
       game.wildTileGroup
     );
 
-    // é—¨æ¸…æ£€æµ‹ï¼šæ²¡æœ‰åƒ/ç¢°/æ˜æ ã€‚æš—æ ä¸ç ´é—¨æ¸…
+    // ÃÅÇå¼ì²â£ºÃ»ÓĞ³Ô/Åö/Ã÷¸Ü¡£°µ¸Ü²»ÆÆÃÅÇå
     const isMenQing = !player.hand.exposedMelds.some(m =>
       m.type === MeldType.TRIPLET ||
       m.type === MeldType.SEQUENCE ||
       (m.type === MeldType.KONG && !m.isConcealed)
     );
 
-    // ç™¾æ­å‚æ•°
+    // °Ù´î²ÎÊı
     const wildParts = game.customScoringMode?.split('-');
     const wildSuit = wildParts && wildParts[0] ? wildParts[0] as TileSuit : undefined;
     const wildValue = wildParts && wildParts[1] ? parseInt(wildParts[1], 10) : undefined;
 
-    // å¤§åŠæ£€æµ‹ï¼šæ‰‹ç‰Œï¼ˆéèŠ±ç‰Œï¼‰å‰©1å¼ 
+    // ´óµõ¼ì²â£ºÊÖÅÆ£¨·Ç»¨ÅÆ£©Ê£1ÕÅ
     const concealedNonFlower = player.hand.concealedTiles.filter(t => !isFlower(t));
     const isDaDiao = concealedNonFlower.length === 1;
-    // è®¡ç®—ç•ªæ•°
+    // ¼ÆËã·¬Êı
     const scoreResult = calculateScore({
       handTiles: player.hand.concealedTiles,
       exposedMelds: player.hand.exposedMelds,
@@ -3855,8 +2071,8 @@ class GameManager {
       settlementMultiplier: game.settlementMultiplier ?? 1
     });
 
-    // wonFan å­˜æœ€ç»ˆç‚¹æ•°ï¼ˆbaseFan Ã— extraMultipliers Ã— globalMultiplierï¼‰
-    // ç”¨äºæ‰€æœ‰ç»“ç®—ï¼šæ­£å¸¸èµ”ä»˜ + äº’åŒ…èµ”ä»˜ Ã— 3/5/2
+    // wonFan ´æ×îÖÕµãÊı£¨baseFan ¡Á extraMultipliers ¡Á globalMultiplier£©
+    // ÓÃÓÚËùÓĞ½áËã£ºÕı³£Åâ¸¶ + »¥°üÅâ¸¶ ¡Á 3/5/2
     player.status = PlayerStatus.WON;
     player.winOrder = projectedWinOrder;
     player.winRound = game.roundNumber;
@@ -3889,7 +2105,7 @@ class GameManager {
       return;
     }
 
-    // èƒ¡ç‰Œåè§£å†»:æ¸…é™¤å…¶ä»–å®¶çš„pending(ä¿ç•™å¯èƒ¡çš„pendingç»™ä¸€ç‚®å¤šå“)
+    // ºúÅÆºó½â¶³:Çå³ıÆäËû¼ÒµÄpending(±£Áô¿ÉºúµÄpending¸øÒ»ÅÚ¶àÏì)
     game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
     if (game.multiHuStarterIndex === undefined) {
       game.multiHuStarterIndex = game.players.findIndex(p => p.id === player.id);
@@ -3900,16 +2116,16 @@ class GameManager {
     if (!hadPendingForMultiHu) {
       game.pendingActions = [];
     }
-    return;  // ç­‰å¾…å…¶ä»–å¯èƒ¡ç©å®¶å“åº”
+    return;  // µÈ´ıÆäËû¿ÉºúÍæ¼ÒÏìÓ¦
   }
 
   /**
-   * é€ åå¤„ç†
-   * è§¦å‘æ¡ä»¶: äº”æ¯’æ•£(è§ isFivePoison)
-   * æ•ˆæœ: æœ¬å±€ç»“æŸ,ä¸‹å±€å€æ•°Ã—2,é€ åè€…æˆä¸ºåº„å®¶
+   * Ôì·´´¦Àí
+   * ´¥·¢Ìõ¼ş: Îå¶¾É¢(¼û isFivePoison)
+   * Ğ§¹û: ±¾¾Ö½áÊø,ÏÂ¾Ö±¶Êı¡Á2,Ôì·´Õß³ÉÎª×¯¼Ò
    */
   private handleRebel(game: GameState, player: Player): void {
-    // éªŒè¯æ˜¯å¦æ»¡è¶³äº”æ¯’æ•£
+    // ÑéÖ¤ÊÇ·ñÂú×ãÎå¶¾É¢
     const wildParts = game.customScoringMode?.split('-');
     const wildSuit = wildParts ? wildParts[0] as TileSuit : undefined;
     const wildValue = wildParts && wildParts[1] ? parseInt(wildParts[1]) : undefined;
@@ -3920,32 +2136,32 @@ class GameManager {
       wildValue,
       player.hand.exposedMelds.flatMap(meld => meld.tiles || [])
     )) {
-      throw new Error('Not eligible for rebel (äº”æ¯’æ•£ condition not met)');
+      throw new Error('Not eligible for rebel (Îå¶¾É¢ condition not met)');
     }
 
-    // æœ¬å±€ç›´æ¥ç»“æŸ
+    // ±¾¾ÖÖ±½Ó½áÊø
     game.phase = GamePhase.ENDED;
     game.endReason = GameEndReason.LAST_PLAYER;
     game.endedAt = Date.now();
 
-    // è®°å½•é€ åäº‹ä»¶(ä¸‹å±€å€æ•°Ã—2,ç”± startGame ç»Ÿä¸€å¤„ç†)
+    // ¼ÇÂ¼Ôì·´ÊÂ¼ş(ÏÂ¾Ö±¶Êı¡Á2,ÓÉ startGame Í³Ò»´¦Àí)
     game.rebelEvent = {
       playerId: player.id,
       playerName: player.name,
       newDealerIndex: player.position
     };
-    // ä¸åœ¨è¿™é‡Œç¿»å€,startGame ä¼šæ ¹æ® rebelEvent ç»Ÿä¸€å¤„ç†
-    // inheritedGlobalMultiplier ç”±ä¸Šä¸€è½® endRound çš„æº¢å‡ºè§„åˆ™è®¡ç®—
-    // æœ¬å±€ç»“æŸå startGame è¯»å– inheritedGlobalMultiplier å† Ã—2(rebelEvent)
+    // ²»ÔÚÕâÀï·­±¶,startGame »á¸ù¾İ rebelEvent Í³Ò»´¦Àí
+    // inheritedGlobalMultiplier ÓÉÉÏÒ»ÂÖ endRound µÄÒç³ö¹æÔò¼ÆËã
+    // ±¾¾Ö½áÊøºó startGame ¶ÁÈ¡ inheritedGlobalMultiplier ÔÙ ¡Á2(rebelEvent)
 
-    // é€ åè€…æˆä¸ºåº„å®¶
+    // Ôì·´Õß³ÉÎª×¯¼Ò
     game.dealerIndex = player.position;
 
-    // å¹¿æ’­é€ åæˆåŠŸ
+    // ¹ã²¥Ôì·´³É¹¦
     if (this.wsManager) {
       this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
         id: Date.now(),
-        text: `âš”ï¸ ${player.name}é€ åæˆåŠŸï¼ä¸‹æŠŠç¿»å€ï¼`,
+        text: `?? ${player.name}Ôì·´³É¹¦£¡ÏÂ°Ñ·­±¶£¡`,
         type: 'special',
         timestamp: Date.now(),
         timeLabel: formatBeijingTime()
@@ -3954,101 +2170,101 @@ class GameManager {
   }
 
   /**
-   * æ¢å±±èšä¹‰:å…¨å‘˜æŠ•ç¥¨æœºåˆ¶(ä»…æ´»è·ƒç©å®¶,4äººå…¨çœŸäººæ—¶å¼€å¯)
-   * - æ¯ä¸ªæ´»è·ƒç©å®¶å¯ç‚¹å‡»ä¸€æ¬¡(ä¹‹åé”å®š)
-   * - ç´¯ç§¯èµ¢åˆ†è¶…è¿‡è¢«QJçº¿çš„ç©å®¶:è‡ªåŠ¨è§†ä¸ºåŒæ„,æ— å¦å†³æƒ
-   * - å…¨éƒ¨æ´»è·ƒç©å®¶éƒ½åŒæ„ â†’ æœ¬å±€ç»“æŸ,ä¸‹æŠŠç¿»å€
+   * ÁºÉ½¾ÛÒå:È«Ô±Í¶Æ±»úÖÆ(½ö»îÔ¾Íæ¼Ò,4ÈËÈ«ÕæÈËÊ±¿ªÆô)
+   * - Ã¿¸ö»îÔ¾Íæ¼Ò¿Éµã»÷Ò»´Î(Ö®ºóËø¶¨)
+   * - ÀÛ»ıÓ®·Ö³¬¹ı±»QJÏßµÄÍæ¼Ò:×Ô¶¯ÊÓÎªÍ¬Òâ,ÎŞ·ñ¾öÈ¨
+   * - È«²¿»îÔ¾Íæ¼Ò¶¼Í¬Òâ ¡ú ±¾¾Ö½áÊø,ÏÂ°Ñ·­±¶
    */
   private handleLiangShan(game: GameState, player: Player): void {
     if (game.phase !== GamePhase.PLAYING) return;
     if (player.status !== PlayerStatus.PLAYING) return;
 
-    // å…¨å±€å€æ•°å·²è¾¾8å€ä¸Šé™æ—¶,ç¦æ­¢æ¢å±±èšä¹‰
+    // È«¾Ö±¶ÊıÒÑ´ï8±¶ÉÏÏŞÊ±,½ûÖ¹ÁºÉ½¾ÛÒå
     if ((game.inheritMultiplier ?? 1) >= 8) return;
 
-    // åªæœ‰4äººå…¨æ˜¯çœŸäººæ—¶æ‰å…è®¸
+    // Ö»ÓĞ4ÈËÈ«ÊÇÕæÈËÊ±²ÅÔÊĞí
     const allHuman = game.players.length >= 4 && game.players.every(p => !this.isPlayerBotControlled(p));
     if (!allHuman) return;
 
-    // åˆå§‹åŒ–æŠ•ç¥¨åˆ—è¡¨
+    // ³õÊ¼»¯Í¶Æ±ÁĞ±í
     if (!game.liangShanVotes) {
       game.liangShanVotes = [];
     }
 
-    // å·²æŠ•è¿‡ç¥¨åˆ™å¿½ç•¥
+    // ÒÑÍ¶¹ıÆ±ÔòºöÂÔ
     if (game.liangShanVotes.includes(player.id)) return;
 
-    // è®°å½•æŠ•ç¥¨
+    // ¼ÇÂ¼Í¶Æ±
     game.liangShanVotes.push(player.id);
     if (this.wsManager) {
       this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
         id: Date.now(),
-        text: `ğŸ”¥ ${player.name}å‘èµ·äº†æ¢å±±èšä¹‰ï¼`,
+        text: `?? ${player.name}·¢ÆğÁËÁºÉ½¾ÛÒå£¡`,
         type: 'special',
         timestamp: Date.now(),
         timeLabel: formatBeijingTime()
       });
     }
 
-    // æ´»è·ƒç©å®¶æ€»æ•°
+    // »îÔ¾Íæ¼Ò×ÜÊı
     const activePlayers = game.players.filter(p => p.status === PlayerStatus.PLAYING);
 
-    // è®¡ç®—æœ‰æ•ˆæŠ•ç¥¨æ•°:æ‰‹åŠ¨æŠ•ç¥¨ + è¶…è¿‡è¢«QJçº¿çš„ç©å®¶è‡ªåŠ¨åŒæ„
-    // è¢«QJçº¿æ£€æŸ¥:ç©å®¶åœ¨æœ¬æˆ¿é—´çš„ç´¯ç§¯æœ‰æ•ˆè¾“èµ¢(å»æ‰ä¸AIçš„æˆ˜ç»©)
+    // ¼ÆËãÓĞĞ§Í¶Æ±Êı:ÊÖ¶¯Í¶Æ± + ³¬¹ı±»QJÏßµÄÍæ¼Ò×Ô¶¯Í¬Òâ
+    // ±»QJÏß¼ì²é:Íæ¼ÒÔÚ±¾·¿¼äµÄÀÛ»ıÓĞĞ§ÊäÓ®(È¥µôÓëAIµÄÕ½¼¨)
     const threshold = game.liangShanThreshold ?? 4000;
     let effectiveVoteCount = game.liangShanVotes.length;
 
     for (const ap of activePlayers) {
-      // å·²ç»æ‰‹åŠ¨æŠ•ç¥¨çš„è·³è¿‡
+      // ÒÑ¾­ÊÖ¶¯Í¶Æ±µÄÌø¹ı
       if (game.liangShanVotes.includes(ap.id)) continue;
-      // æ£€æŸ¥ç´¯ç§¯æœ‰æ•ˆè¾“èµ¢æ˜¯å¦è¶…è¿‡è¢«QJçº¿
+      // ¼ì²éÀÛ»ıÓĞĞ§ÊäÓ®ÊÇ·ñ³¬¹ı±»QJÏß
       const cumulativeScore = this.getPlayerCumulativeScore(game.gameId, ap.id);
       if (cumulativeScore > threshold) {
-        // è¶…è¿‡è¢«QJçº¿ â†’ è‡ªåŠ¨è§†ä¸ºåŒæ„,æ— å¦å†³æƒ
+        // ³¬¹ı±»QJÏß ¡ú ×Ô¶¯ÊÓÎªÍ¬Òâ,ÎŞ·ñ¾öÈ¨
         effectiveVoteCount++;
         if (!game.liangShanVotes.includes(ap.id)) {
-          game.liangShanVotes.push(ap.id); // æ ‡è®°ä¸ºå·²æŠ•ç¥¨
+          game.liangShanVotes.push(ap.id); // ±ê¼ÇÎªÒÑÍ¶Æ±
           if (this.wsManager) {
             this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
               id: Date.now() + effectiveVoteCount,
-              text: `ğŸ”¥ ${ap.name}å“åº”äº†${player.name}çš„æ¢å±±èšä¹‰ï¼`,
+              text: `?? ${ap.name}ÏìÓ¦ÁË${player.name}µÄÁºÉ½¾ÛÒå£¡`,
               type: 'special',
               timestamp: Date.now(),
               timeLabel: formatBeijingTime()
             });
           }
         }
-        console.log(`[LiangShan] ${ap.name} ç´¯ç§¯èµ¢åˆ†${cumulativeScore}è¶…è¿‡QJçº¿${threshold},è‡ªåŠ¨åŒæ„`);
+        console.log(`[LiangShan] ${ap.name} ÀÛ»ıÓ®·Ö${cumulativeScore}³¬¹ıQJÏß${threshold},×Ô¶¯Í¬Òâ`);
       }
     }
 
     console.log(`[LiangShan] ${player.name} voted (${effectiveVoteCount}/${activePlayers.length}, threshold: ${threshold})`);
 
-    // å…¨å‘˜æŠ•ç¥¨ â†’ ç»“æŸæœ¬å±€,ä¸‹æŠŠç¿»å€
+    // È«Ô±Í¶Æ± ¡ú ½áÊø±¾¾Ö,ÏÂ°Ñ·­±¶
     if (effectiveVoteCount >= activePlayers.length) {
-      console.log(`[LiangShan] All players agreed! Ending round with Ã—2 multiplier.`);
+      console.log(`[LiangShan] All players agreed! Ending round with ¡Á2 multiplier.`);
 
-      // æ‰€æœ‰æœªèƒ¡ç‰Œç©å®¶æ ‡è®°ä¸ºè¾“
+      // ËùÓĞÎ´ºúÅÆÍæ¼Ò±ê¼ÇÎªÊä
       for (const p of game.players) {
         if (p.status !== PlayerStatus.WON) {
           p.status = PlayerStatus.LOST;
         }
       }
 
-      // ä¸‹å±€å…¨å±€å€æ•° Ã—2(æº¢å‡ºç»§æ‰¿:effective = doubled Ã— roundMultiplier, è¶…è¿‡8å€éƒ¨åˆ†ç»§æ‰¿)
+      // ÏÂ¾ÖÈ«¾Ö±¶Êı ¡Á2(Òç³ö¼Ì³Ğ:effective = doubled ¡Á roundMultiplier, ³¬¹ı8±¶²¿·Ö¼Ì³Ğ)
       const doubled = Math.min((game.inheritMultiplier ?? 1) * 2, 8);
       const roundMul = game.roundMultiplier ?? 1;
       const effective = doubled * roundMul;
-      // å…¨å±€å€æ•°å°é¡¶8,æº¢å‡ºéƒ¨åˆ†ç»§æ‰¿
+      // È«¾Ö±¶Êı·â¶¥8,Òç³ö²¿·Ö¼Ì³Ğ
       game.inheritedGlobalMultiplier = Math.min(effective > 8 ? Math.floor(effective / 8) : doubled, 8);
 
-      // ç»“æŸæœ¬å±€
+      // ½áÊø±¾¾Ö
       game.phase = GamePhase.CHA_JIAO;
       game.endReason = GameEndReason.LAST_PLAYER;
       game.endedAt = Date.now();
       game.lastActionTime = Date.now();
 
-      // è®¡ç®—æœ€ç»ˆåˆ†æ•°
+      // ¼ÆËã×îÖÕ·ÖÊı
       const winners = game.players.filter(p => p.status === PlayerStatus.WON);
       const finalScores = calculateGameResult(game.players, winners);
       game.finalScores = finalScores;
@@ -4056,14 +2272,14 @@ class GameManager {
         p.score = finalScores[p.id] ?? 0;
       }
     }
-    // æœªå…¨ç¥¨ â†’ æ¸¸æˆæ­£å¸¸ç»§ç»­,ä¸ç»“æŸ
+    // Î´È«Æ± ¡ú ÓÎÏ·Õı³£¼ÌĞø,²»½áÊø
   }
 
   /**
-   * ç­‰æˆ‘æƒ³ä¸€æƒ³:å†»ç»“å…¶ä»–ç©å®¶8ç§’,ç»™è‡ªå·±æ€è€ƒæ—¶é—´
-   * - æ¯å±€é™å®šæ¬¡æ•°(é»˜è®¤3æ¬¡)
-   * - åªæœ‰æœ‰èƒ¡/ç¢°/æ é€‰é¡¹æ—¶å¯ç”¨
-   * - å†»ç»“æœŸé—´å…¶ä»–å®¶ä¸èƒ½æ“ä½œ
+   * µÈÎÒÏëÒ»Ïë:¶³½áÆäËûÍæ¼Ò8Ãë,¸ø×Ô¼ºË¼¿¼Ê±¼ä
+   * - Ã¿¾ÖÏŞ¶¨´ÎÊı(Ä¬ÈÏ3´Î)
+   * - Ö»ÓĞÓĞºú/Åö/¸ÜÑ¡ÏîÊ±¿ÉÓÃ
+   * - ¶³½áÆÚ¼äÆäËû¼Ò²»ÄÜ²Ù×÷
    */
   private handleThink(game: GameState, player: Player): void {
     if (game.phase !== GamePhase.PLAYING) return;
@@ -4073,13 +2289,13 @@ class GameManager {
     const used = game.thinkUsage[player.id] ?? 0;
     let remaining = Math.max(0, maxChances - used);
 
-    // å¦‚æœç©å®¶å¯èƒ¡ï¼ˆæœ‰HUçš„pendingï¼‰ï¼Œè§†ä¸ºHuPanelå¼¹å‡ºé”å®šï¼Œä¸æ¶ˆè€—æ¬¡æ•°
+    // Èç¹ûÍæ¼Ò¿Éºú£¨ÓĞHUµÄpending£©£¬ÊÓÎªHuPanelµ¯³öËø¶¨£¬²»ÏûºÄ´ÎÊı
     const hasHuClaim = game.pendingActions.some(pa =>
       pa.playerId === player.id && pa.availableActions.includes(ActionType.HU)
     );
 
     if (!hasHuClaim) {
-      // åªæœ‰ä¸»åŠ¨ç‚¹å‡»"æƒ³ä¸€æƒ³"æ‰æ‰£å‡æ¬¡æ•°
+      // Ö»ÓĞÖ÷¶¯µã»÷"ÏëÒ»Ïë"²Å¿Û¼õ´ÎÊı
       if (used >= maxChances) return;
       game.thinkUsage[player.id] = used + 1;
       remaining = maxChances - used - 1;
@@ -4088,7 +2304,7 @@ class GameManager {
       console.log(`[Think] ${player.name} opened HuPanel (auto-lock, no chance consumed)`);
     }
 
-    // å†»ç»“8ç§’
+    // ¶³½á8Ãë
     game.thinkFreezeUntil = Date.now() + 8000;
     game.thinkFreezePlayerId = player.id;
     const freezeTimer = this.freezeTimers.get(game.gameId);
@@ -4112,9 +2328,9 @@ class GameManager {
       this.schedulePendingActionTimeout(game.gameId);
     }
 
-    console.log(`[Think] ${player.name} ä½¿ç”¨ã€Œç­‰æˆ‘æƒ³ä¸€æƒ³ã€,å‰©ä½™${remaining}æ¬¡,å†»ç»“8ç§’`);
+    console.log(`[Think] ${player.name} Ê¹ÓÃ¡¸µÈÎÒÏëÒ»Ïë¡¹,Ê£Óà${remaining}´Î,¶³½á8Ãë`);
 
-    // 8ç§’åè‡ªåŠ¨è§£å†»
+    // 8Ãëºó×Ô¶¯½â¶³
     const gameId = game.gameId;
     const expectedPlayerId = player.id;
     this.detachTimer(setTimeout(async () => {
@@ -4128,17 +2344,17 @@ class GameManager {
             this.schedulePendingActionTimeout(gameId);
             await this.persistGame(freshGame);
             this.broadcastGameState(gameId);
-            console.log(`[Think] ${player.name} Ã§Å¡â€Ã¦â‚¬ÂÃ¨â‚¬Æ’Ã¦â€”Â¶Ã©â€”Â´Ã§Â»â€œÃ¦ÂÅ¸`);
+            console.log(`[Think] ${player.name} ????€?¨¨€??¡ª?¨¦¡ª¡ä??¡°???`);
             return;
           }
 
-          // ã€ä¿®å¤ã€‘ç­‰æˆ‘æƒ³ä¸€æƒ³è¶…æ—¶å:æ¸…é™¤è§¦å‘è€…è‡ªå·±å·²è¿‡æœŸçš„pending(èƒ¡/ç¢°/æ /è¿‡)
-          // è®©ä¸‹å®¶(æˆ–å½“å‰ç©å®¶)èƒ½æ­£å¸¸æ‘¸ç‰Œ,ä¸ä¼šå› ä¸ºpendingæ®‹ç•™è€Œå¡ä½
+          // ¡¾ĞŞ¸´¡¿µÈÎÒÏëÒ»Ïë³¬Ê±ºó:Çå³ı´¥·¢Õß×Ô¼ºÒÑ¹ıÆÚµÄpending(ºú/Åö/¸Ü/¹ı)
+          // ÈÃÏÂ¼Ò(»òµ±Ç°Íæ¼Ò)ÄÜÕı³£ÃşÅÆ,²»»áÒòÎªpending²ĞÁô¶ø¿¨×¡
           const triggerPending = freshGame.pendingActions.find(pa => pa.playerId === expectedPlayerId);
           if (triggerPending && triggerPending.expiresAt && triggerPending.expiresAt < Date.now()) {
             const triggerPlayer = freshGame.players.find(p => p.id === expectedPlayerId);
             if (triggerPlayer) {
-              console.log(`[Think] ${triggerPlayer.name} çš„æ€è€ƒæ—¶é—´ç»“æŸ,è‡ªåŠ¨è¿‡(PASS)è¿‡æœŸpending`);
+              console.log(`[Think] ${triggerPlayer.name} µÄË¼¿¼Ê±¼ä½áÊø,×Ô¶¯¹ı(PASS)¹ıÆÚpending`);
               this.handlePass(freshGame, triggerPlayer);
             }
           }
@@ -4151,10 +2367,10 @@ class GameManager {
               if (this.isPlayerBotControlled(currentPlayer)) {
                 this.scheduleBotDiscard(gameId, currentPlayer.id);
               } else {
-                // ã€ä¿®å¤ã€‘äººç±»ç©å®¶å†»ç»“ç»“æŸå:ä¸»åŠ¨è§¦å‘moveToNextPlayerè®©ä¸‹å®¶æ‘¸ç‰Œ
-                // å¦åˆ™äººç±»ç©å®¶ä¸¢ç‰Œç­‰å¾…æ°¸è¿œæ²¡äººå¸®TA"è¿‡"
+                // ¡¾ĞŞ¸´¡¿ÈËÀàÍæ¼Ò¶³½á½áÊøºó:Ö÷¶¯´¥·¢moveToNextPlayerÈÃÏÂ¼ÒÃşÅÆ
+                // ·ñÔòÈËÀàÍæ¼Ò¶ªÅÆµÈ´ıÓÀÔ¶Ã»ÈË°ïTA"¹ı"
                 if (currentPlayer.id === expectedPlayerId) {
-                  // è§¦å‘è€…(è‡ªå·±)å·²ç»passäº†pending,æ­¤æ—¶æ— pending â†’ ç§»åˆ°ä¸‹å®¶æ‘¸ç‰Œ
+                  // ´¥·¢Õß(×Ô¼º)ÒÑ¾­passÁËpending,´ËÊ±ÎŞpending ¡ú ÒÆµ½ÏÂ¼ÒÃşÅÆ
                   if (!freshGame.pendingActions.length) {
                     await this.moveToNextPlayer(freshGame);
                     await this.persistGame(freshGame);
@@ -4166,14 +2382,14 @@ class GameManager {
           }
           await this.persistGame(freshGame);
           this.broadcastGameState(gameId);
-          console.log(`[Think] ${player.name} çš„æ€è€ƒæ—¶é—´ç»“æŸ`);
+          console.log(`[Think] ${player.name} µÄË¼¿¼Ê±¼ä½áÊø`);
         }
       } catch (err) {
         console.error('[Think] Error:', err);
       }
     }, 8000));
 
-    // å¹¿æ’­å€’è®¡æ—¶
+    // ¹ã²¥µ¹¼ÆÊ±
     if (this.wsManager) {
       this.wsManager.broadcast(gameId, 'thinkFreeze', {
         playerName: player.name,
@@ -4184,13 +2400,13 @@ class GameManager {
   }
 
   /**
-   * è·å–ç©å®¶åœ¨æœ¬æˆ¿é—´çš„ç´¯ç§¯æœ‰æ•ˆè¾“èµ¢(ä»…è®¡ç®—ä¸çœŸäººç©å®¶çš„å¯¹æˆ˜,å»æ‰AI)
-   * é€šè¿‡ matchHistory è®¡ç®—
+   * »ñÈ¡Íæ¼ÒÔÚ±¾·¿¼äµÄÀÛ»ıÓĞĞ§ÊäÓ®(½ö¼ÆËãÓëÕæÈËÍæ¼ÒµÄ¶ÔÕ½,È¥µôAI)
+   * Í¨¹ı matchHistory ¼ÆËã
    */
   private getPlayerCumulativeScore(gameId: string, playerId: string): number {
-    // ä»å½“å‰å†…å­˜ä¸­çš„æ¸¸æˆå†å²è®¡ç®—
-    // æ³¨æ„:è¿™é‡Œç®€åŒ–å¤„ç†,é€šè¿‡å½“å‰æ¸¸æˆçš„ roundStats è¿½è¸ª
-    // å¦‚æœæ²¡æœ‰ roundStats,è¿”å› 0
+    // ´Óµ±Ç°ÄÚ´æÖĞµÄÓÎÏ·ÀúÊ·¼ÆËã
+    // ×¢Òâ:ÕâÀï¼ò»¯´¦Àí,Í¨¹ıµ±Ç°ÓÎÏ·µÄ roundStats ×·×Ù
+    // Èç¹ûÃ»ÓĞ roundStats,·µ»Ø 0
     const game = this.games.get(gameId);
     if (!game || !game.roundStats) return 0;
 
@@ -4205,14 +2421,14 @@ class GameManager {
   }
 
   /**
-   * æ£€æŸ¥å„ç©å®¶æ˜¯å¦çªç ´è¢«èšä¹‰QJçº¿,æ›´æ–° qjAlerts(æ¯å±€ç‹¬ç«‹åˆ·æ–°)
+   * ¼ì²é¸÷Íæ¼ÒÊÇ·ñÍ»ÆÆ±»¾ÛÒåQJÏß,¸üĞÂ qjAlerts(Ã¿¾Ö¶ÀÁ¢Ë¢ĞÂ)
    */
   private checkQJThresholdAlerts(game: GameState): void {
     const threshold = game.liangShanThreshold ?? 4000;
     const alerts: { playerId: string; playerName: string; score: number }[] = [];
 
     for (const player of game.players) {
-      if (this.isPlayerBotControlled(player)) continue; // è·³è¿‡AI
+      if (this.isPlayerBotControlled(player)) continue; // Ìø¹ıAI
       const cumulativeScore = this.getPlayerCumulativeScore(game.gameId, player.id);
       if (cumulativeScore > threshold) {
         alerts.push({ playerId: player.id, playerName: player.name, score: cumulativeScore });
@@ -4221,14 +2437,14 @@ class GameManager {
 
     game.qjAlerts = alerts;
     if (alerts.length > 0) {
-      console.log(`[QJ Alert] ${alerts.map(a => `${a.playerName}(${a.score})`).join(', ')} å·²çªç ´è¢«èšä¹‰QJçº¿${threshold}`);
+      console.log(`[QJ Alert] ${alerts.map(a => `${a.playerName}(${a.score})`).join(', ')} ÒÑÍ»ÆÆ±»¾ÛÒåQJÏß${threshold}`);
     }
   }
 
   /**
-   * è®¡ç®—ç©å®¶æ¢ä½ç½®æ¬¡æ•°(åŸºäºç´¯ç§¯è¾“åˆ†)
-   * æ¯è¾“ä¸€ä¸ªQJçº¿è·ç¦»,è·å¾—1æ¬¡æœºä¼š
-   * é»˜è®¤QJçº¿4000:è¾“4000â†’1æ¬¡,è¾“8000â†’2æ¬¡,è¾“12000â†’3æ¬¡
+   * ¼ÆËãÍæ¼Ò»»Î»ÖÃ´ÎÊı(»ùÓÚÀÛ»ıÊä·Ö)
+   * Ã¿ÊäÒ»¸öQJÏß¾àÀë,»ñµÃ1´Î»ú»á
+   * Ä¬ÈÏQJÏß4000:Êä4000¡ú1´Î,Êä8000¡ú2´Î,Êä12000¡ú3´Î
    */
   private computeSwapChances(game: GameState, playerId: string): number {
     const threshold = game.liangShanThreshold ?? 4000;
@@ -4239,7 +2455,7 @@ class GameManager {
   }
 
   /**
-   * è¯·æ±‚æ¢ä½ç½®
+   * ÇëÇó»»Î»ÖÃ
    */
   public requestSwapPosition(gameId: string, playerId: string, targetId: string): { success: boolean; message: string } {
     const game = this.games.get(gameId);
@@ -4248,45 +2464,45 @@ class GameManager {
       throw new Error('Can only swap during or after a round');
     }
 
-    // æ‰¾åˆ°ä¸¤ä¸ªç©å®¶
+    // ÕÒµ½Á½¸öÍæ¼Ò
     const player = game.players.find(p => p.id === playerId);
     const target = game.players.find(p => p.id === targetId);
     if (!player || !target) throw new Error('Player not found');
 
-    // æ£€æŸ¥æ˜¯å¦çœŸäººç©å®¶
+    // ¼ì²éÊÇ·ñÕæÈËÍæ¼Ò
     if (this.isPlayerBotControlled(player)) throw new Error('AI players cannot swap positions');
 
-    // è®¡ç®—å‰©ä½™æœºä¼š
+    // ¼ÆËãÊ£Óà»ú»á
     const totalChances = this.computeSwapChances(game, playerId);
     const usedChances = (game.swapRequests || []).filter(r => r.playerId === playerId).length;
     const remainingChances = totalChances - usedChances;
 
     if (remainingChances <= 0) {
-      throw new Error('æ²¡æœ‰æ¢ä½ç½®æœºä¼šäº†(ç§¯åˆ†æœªè¾¾æ ‡æˆ–å·²ç”¨å®Œ)');
+      throw new Error('Ã»ÓĞ»»Î»ÖÃ»ú»áÁË(»ı·ÖÎ´´ï±ê»òÒÑÓÃÍê)');
     }
 
-    // æ£€æŸ¥æ˜¯å¦å·²æœ‰å¾…ç”Ÿæ•ˆçš„æ¢ä½è¯·æ±‚
+    // ¼ì²éÊÇ·ñÒÑÓĞ´ıÉúĞ§µÄ»»Î»ÇëÇó
     if (!game.swapRequests) game.swapRequests = [];
     const existing = game.swapRequests.find(r => r.playerId === playerId && r.targetId === targetId);
-    if (existing) throw new Error('å·²æäº¤è¿‡æ¢ä½è¯·æ±‚,ç­‰å¾…ç”Ÿæ•ˆä¸­');
+    if (existing) throw new Error('ÒÑÌá½»¹ı»»Î»ÇëÇó,µÈ´ıÉúĞ§ÖĞ');
 
-    // è®°å½•è¯·æ±‚
+    // ¼ÇÂ¼ÇëÇó
     game.swapRequests.push({
       playerId,
       targetId,
       requestedAt: Date.now()
     });
 
-    console.log(`[Swap] ${player.name} è¯·æ±‚ä¸ ${target.name} æ¢ä½ç½® (å‰©ä½™${remainingChances - 1}æ¬¡)`);
+    console.log(`[Swap] ${player.name} ÇëÇóÓë ${target.name} »»Î»ÖÃ (Ê£Óà${remainingChances - 1}´Î)`);
 
     return {
       success: true,
-      message: `${player.name} ä¸‹ä¸€å±€å¼€å§‹å°†ä¸ ${target.name} äº’æ¢ä½ç½®`
+      message: `${player.name} ÏÂÒ»¾Ö¿ªÊ¼½«Óë ${target.name} »¥»»Î»ÖÃ`
     };
   }
 
   /**
-   * åº”ç”¨å¾…ç”Ÿæ•ˆçš„æ¢ä½è¯·æ±‚(åœ¨startGameä¸­è°ƒç”¨)
+   * Ó¦ÓÃ´ıÉúĞ§µÄ»»Î»ÇëÇó(ÔÚstartGameÖĞµ÷ÓÃ)
    */
   private applySwapRequests(game: GameState): void {
     if (!game.swapRequests || game.swapRequests.length === 0) return;
@@ -4299,53 +2515,53 @@ class GameManager {
       const p1 = game.players[p1Idx];
       const p2 = game.players[p2Idx];
 
-      // äº¤æ¢ position
+      // ½»»» position
       const tmpPos = p1.position;
       p1.position = p2.position;
       p2.position = tmpPos;
 
-      // äº¤æ¢åœ¨æ•°ç»„ä¸­çš„ä½ç½®
+      // ½»»»ÔÚÊı×éÖĞµÄÎ»ÖÃ
       game.players[p1Idx] = p2;
       game.players[p2Idx] = p1;
 
-      console.log(`[Swap] ${p1.name} â†” ${p2.name} ä½ç½®å·²äº’æ¢`);
+      console.log(`[Swap] ${p1.name} ? ${p2.name} Î»ÖÃÒÑ»¥»»`);
     }
 
-    // æ¸…ç©ºå·²ç”Ÿæ•ˆçš„è¯·æ±‚
+    // Çå¿ÕÒÑÉúĞ§µÄÇëÇó
     game.swapRequests = [];
   }
 
   /**
-   * è§‚èµ›è€…è¯·æ±‚ä¸‹å±€æ›¿æ¢æŸä¸ªAI
+   * ¹ÛÈüÕßÇëÇóÏÂ¾ÖÌæ»»Ä³¸öAI
    */
-  public requestBotReplacement(gameId: string, spectatorId: string, targetBotId: string, playerName: string, userId?: string): void {
+  public async requestBotReplacement(gameId: string, spectatorId: string, targetBotId: string, playerName: string, userId?: string): Promise<void> {
     const game = this.games.get(gameId);
     if (!game) throw new Error('Game not found');
 
-    // éªŒè¯è§‚èµ›è€…åœ¨æˆ¿é—´ä¸­
+    // ÑéÖ¤¹ÛÈüÕßÔÚ·¿¼äÖĞ
     const spectator = game.players.find(p => p.id === spectatorId && p.status === PlayerStatus.SPECTATING);
     if (!spectator) throw new Error('Spectator not found');
 
-    // éªŒè¯ç›®æ ‡ç©å®¶æ˜¯AIä¸”åœ¨æˆ¿é—´ä¸­
-    const bot = game.players.find(p => p.id === targetBotId && (p.name.startsWith('AI-') || p.name.startsWith('ç”µè„‘')));
+    // ÑéÖ¤Ä¿±êÍæ¼ÒÊÇAIÇÒÔÚ·¿¼äÖĞ
+    const bot = game.players.find(p => p.id === targetBotId && (p.name.startsWith('AI-') || p.name.startsWith('µçÄÔ')));
     if (!bot) throw new Error('Target bot not found');
 
     if (!game.botReplacementQueue) game.botReplacementQueue = [];
-    // ç§»é™¤è¯¥è§‚èµ›è€…ä¹‹å‰çš„æ›¿æ¢è¯·æ±‚(é˜²æ­¢é‡å¤)
+    // ÒÆ³ı¸Ã¹ÛÈüÕßÖ®Ç°µÄÌæ»»ÇëÇó(·ÀÖ¹ÖØ¸´)
     game.botReplacementQueue = game.botReplacementQueue.filter(r => r.spectatorId !== spectatorId);
     game.botReplacementQueue.push({
       spectatorId,
       spectatorName: playerName,
       targetBotId,
-      userId,
+      userId: userId || spectator.userId,
       requestedAt: Date.now()
     });
 
-    console.log(`[BotReplace] ${playerName}(è§‚èµ›) è¯·æ±‚ä¸‹å±€æ›¿æ¢ ${bot.name}`);
+    console.log(`[BotReplace] ${playerName}(¹ÛÈü) ÇëÇóÏÂ¾ÖÌæ»» ${bot.name}`);
   }
 
   /**
-   * åº”ç”¨å¾…ç”Ÿæ•ˆçš„æ›¿æ¢AIè¯·æ±‚(åœ¨startGameä¸­è°ƒç”¨)
+   * Ó¦ÓÃ´ıÉúĞ§µÄÌæ»»AIÇëÇó(ÔÚstartGameÖĞµ÷ÓÃ)
    */
   private applyBotReplacement(game: GameState): void {
     if (!game.botReplacementQueue || game.botReplacementQueue.length === 0) return;
@@ -4353,24 +2569,24 @@ class GameManager {
     for (const req of game.botReplacementQueue) {
       const botIdx = game.players.findIndex(p => p.id === req.targetBotId);
       if (botIdx < 0) {
-        console.warn(`[BotReplace] ç›®æ ‡AI ${req.targetBotId} å·²ä¸åœ¨æˆ¿é—´,è·³è¿‡`);
+        console.warn(`[BotReplace] Ä¿±êAI ${req.targetBotId} ÒÑ²»ÔÚ·¿¼ä,Ìø¹ı`);
         continue;
       }
 
       const spectatorIdx = game.players.findIndex(p => p.id === req.spectatorId);
       if (spectatorIdx < 0) {
-        console.warn(`[BotReplace] è§‚èµ›è€… ${req.spectatorId} å·²ä¸åœ¨æˆ¿é—´,è·³è¿‡`);
+        console.warn(`[BotReplace] ¹ÛÈüÕß ${req.spectatorId} ÒÑ²»ÔÚ·¿¼ä,Ìø¹ı`);
         continue;
       }
 
       const bot = game.players[botIdx];
       const oldSpectator = game.players[spectatorIdx];
 
-      // ç”Ÿæˆæ–°playerIdæ›¿æ¢AI
-      const newPlayerId = randomUUID();
+      // Éú³ÉĞÂplayerIdÌæ»»AI
+      const seatedPlayerId = oldSpectator.id;
       const newPlayer: Player = {
-        id: newPlayerId,
-        userId: req.userId,
+        id: seatedPlayerId,
+        userId: req.userId || oldSpectator.userId,
         name: req.spectatorName,
         position: bot.position,
         hand: { concealedTiles: [], exposedMelds: [], discardedTiles: [] },
@@ -4384,22 +2600,22 @@ class GameManager {
       };
 
       game.players[botIdx] = newPlayer;
-      // ç§»é™¤è§‚èµ›è€…è®°å½•
+      // ÒÆ³ı¹ÛÈüÕß¼ÇÂ¼
       game.players.splice(spectatorIdx, 1);
 
-      // æ¸…ç†è§‚èµ›è€…çš„ spectatorView
+      // ÇåÀí¹ÛÈüÕßµÄ spectatorView
       if (game.spectatorViews) {
         delete game.spectatorViews[req.spectatorId];
       }
 
-      console.log(`[BotReplace] ${oldSpectator.name} â†’ æ›¿æ¢ ${bot.name} æˆåŠŸ, æ–°ç©å®¶ID: ${newPlayerId}`);
+      console.log(`[BotReplace] ${oldSpectator.name} ¡ú Ìæ»» ${bot.name} ³É¹¦, ĞÂÍæ¼ÒID: ${seatedPlayerId}`);
     }
 
     game.botReplacementQueue = [];
   }
 
   /**
-   * è·å–ç©å®¶å‰©ä½™æ¢ä½ç½®æ¬¡æ•°ä¿¡æ¯
+   * »ñÈ¡Íæ¼ÒÊ£Óà»»Î»ÖÃ´ÎÊıĞÅÏ¢
    */
   public getSwapInfo(gameId: string, playerId: string): { totalChances: number; usedChances: number; remaining: number } {
     const game = this.games.get(gameId);
@@ -4442,13 +2658,13 @@ class GameManager {
       }
     }
 
-    // æŠ¢æ åœºæ™¯:æ‰€æœ‰å€™é€‰éƒ½è¿‡äº†,è¡¥æ ç»§ç»­
+    // ÇÀ¸Ü³¡¾°:ËùÓĞºòÑ¡¶¼¹ıÁË,²¹¸Ü¼ÌĞø
     if (game.pendingActions.length === 0 && game.pendingKongClaim && game.multiHuStarterIndex === undefined) {
       this.resolveRobKongIfNeeded(game);
       return;
     }
 
-    // ä¸€ç‚®å¤šå“åœºæ™¯:æ‰€æœ‰å€™é€‰å“åº”ç»“æŸ,ä»é¦–èƒ¡ç©å®¶å³æ‰‹ç»§ç»­
+    // Ò»ÅÚ¶àÏì³¡¾°:ËùÓĞºòÑ¡ÏìÓ¦½áÊø,´ÓÊ×ºúÍæ¼ÒÓÒÊÖ¼ÌĞø
     if (game.pendingActions.length === 0 && game.multiHuStarterIndex !== undefined) {
       const starter = game.multiHuStarterIndex;
       game.multiHuStarterIndex = undefined;
@@ -4460,12 +2676,12 @@ class GameManager {
         game.currentPlayerIndex = game.players.findIndex(p => p.id === next.id);
         this.replaceFlowers(game, next);
         this.handleDraw(game, next);
-        game.drawnThisTurn = true; // ã€çŠ¶æ€æœºä¿®å¤ã€‘æ ‡è®°å·²æ‘¸ç‰Œ
+        game.drawnThisTurn = true; // ¡¾×´Ì¬»úĞŞ¸´¡¿±ê¼ÇÒÑÃşÅÆ
       }
       return;
     }
 
-    // æ™®é€šåœºæ™¯ - ä¸åœ¨è¿™é‡Œè°ƒç”¨ moveToNextPlayer,ç”±è°ƒç”¨æ–¹ç»Ÿä¸€å¤„ç†
+    // ÆÕÍ¨³¡¾° - ²»ÔÚÕâÀïµ÷ÓÃ moveToNextPlayer,ÓÉµ÷ÓÃ·½Í³Ò»´¦Àí
   }
 
   private checkPendingActions(game: GameState, discardedTile: Tile): void {
@@ -4494,11 +2710,11 @@ class GameManager {
 
       // Check for hu
       const testHand = [...player.hand.concealedTiles, discardedTile];
-      // ä¼ å®é™… melds å¯¹è±¡ï¼ˆé lengthï¼‰ï¼Œç¡®ä¿ canWin æ­£ç¡®è¯†åˆ«åŒ…å«é—¨å£ç‰Œçš„å®Œæ•´ç‰Œå‹
+      // ´«Êµ¼Ê melds ¶ÔÏó£¨·Ç length£©£¬È·±£ canWin ÕıÈ·Ê¶±ğ°üº¬ÃÅ¿ÚÅÆµÄÍêÕûÅÆĞÍ
       const wildTileId = typeof game.customScoringMode === 'string' ? game.customScoringMode : null;
       const winCheck = canWin(testHand, player.hand.exposedMelds, wildTileId || (game.wildTileGroup ?? null));
       if (winCheck.canWin) {
-        // è§„åˆ™:é—¨å£æ— èŠ±ä¸èƒ½æ‰å†²(æ‰€æœ‰éè±å…ç‰Œå‹);è±å…:é£ç¢°/é£ä¸€è‰²/æ¸…ç¢°/æ··ç¢°/å…«èŠ±/å››ç™¾æ­/æ¸…ä¸€è‰²/å¤§åŠ
+        // ¹æÔò:ÃÅ¿ÚÎŞ»¨²»ÄÜ×½³å(ËùÓĞ·Ç»íÃâÅÆĞÍ);»íÃâ:·çÅö/·çÒ»É«/ÇåÅö/»ìÅö/°Ë»¨/ËÄ°Ù´î/ÇåÒ»É«/´óµõ
         const flowerCount = player.hand.exposedMelds
           .flatMap(m => m.tiles)
           .filter(t => isFlower(t)).length;
@@ -4515,10 +2731,10 @@ class GameManager {
         const concealedNonFlower = player.hand.concealedTiles.filter(t => !isFlower(t));
         const isDaDiao = concealedNonFlower.length === 1;
         const hasTenPointExemption = this.hasTenPointClaimExemption(handTypes, isDaDiao);
-        // è§„åˆ™ï¼šé—¨å£æ— èŠ±ä¸èƒ½æ‰å†²ï¼ˆå¯¹æ‰€æœ‰éè±å…ç‰Œå‹ç”Ÿæ•ˆï¼‰
-        // è±å…ç‰Œå‹ï¼šé£ç¢°/é£ä¸€è‰²/æ¸…ç¢°/æ··ç¢°/å…«èŠ±/å››ç™¾æ­/æ¸…ä¸€è‰²/å¤§åŠ
+        // ¹æÔò£ºÃÅ¿ÚÎŞ»¨²»ÄÜ×½³å£¨¶ÔËùÓĞ·Ç»íÃâÅÆĞÍÉúĞ§£©
+        // »íÃâÅÆĞÍ£º·çÅö/·çÒ»É«/ÇåÅö/»ìÅö/°Ë»¨/ËÄ°Ù´î/ÇåÒ»É«/´óµõ
         const requiresFlowerGate = !hasTenPointExemption;
-        // èŠ±ç‰Œ æˆ– é£ç®­åˆ» æˆ– ä»»æ„æ ç‰Œ æ»¡è¶³å…¶ä¸€å³å¯
+        // »¨ÅÆ »ò ·ç¼ı¿Ì »ò ÈÎÒâ¸ÜÅÆ Âú×ãÆäÒ»¼´¿É
         const hasFlowerAtDoor = flowerCount > 0;
         const hasWindDragonTriplet = player.hand.exposedMelds.some(m =>
           (m.type === MeldType.TRIPLET || m.type === MeldType.KONG) &&
@@ -4543,8 +2759,8 @@ class GameManager {
       }
     }
 
-    // Check for CHOW (åƒ) - only the next active player (ä¸‹å®¶) can chow
-    // åƒå’Œç¢°åŒæ—¶è¿›å…¥pendingæ± ,ç¢°ä¼˜å…ˆçº§é«˜äºåƒ
+    // Check for CHOW (³Ô) - only the next active player (ÏÂ¼Ò) can chow
+    // ³ÔºÍÅöÍ¬Ê±½øÈëpending³Ø,ÅöÓÅÏÈ¼¶¸ßÓÚ³Ô
     for (const pending of game.pendingActions) {
       if (!pending.availableActions.includes(ActionType.HU) || !pending.tile) continue;
       const targetPlayer = game.players.find(player => player.id === pending.playerId);
@@ -4558,7 +2774,7 @@ class GameManager {
       const sequences = this.findChowSequences(chowPlayer.hand.concealedTiles, discardedTile, game);
       if (sequences.length > 0) {
         const chowOptions = this.buildChowOptionIds(sequences, discardedTile);
-        // æ£€æŸ¥è¯¥ç©å®¶æ˜¯å¦å·²æœ‰ç¢°/æ /èƒ¡çš„pending(å¦‚æœæœ‰,è¿½åŠ åƒé€‰é¡¹)
+        // ¼ì²é¸ÃÍæ¼ÒÊÇ·ñÒÑÓĞÅö/¸Ü/ºúµÄpending(Èç¹ûÓĞ,×·¼Ó³ÔÑ¡Ïî)
         const existing = game.pendingActions.find(pa => pa.playerId === chowPlayer.id);
         if (existing) {
           if (!existing.availableActions.includes(ActionType.CHOW)) {
@@ -4629,17 +2845,17 @@ class GameManager {
 
   /**
    * Find all possible sequence combinations in hand that include the given tile
-   * Only works for number suits (ç­’ä¸‡æ¡)
-   * ç™¾æ­ç‰Œä¸èƒ½ç”¨äºåƒç‰Œ
+   * Only works for number suits (Í²ÍòÌõ)
+   * °Ù´îÅÆ²»ÄÜÓÃÓÚ³ÔÅÆ
    */
   private findChowSequences(hand: Tile[], discardedTile: Tile, game?: GameState): Tile[][] {
     const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
     if (!numberSuits.includes(discardedTile.suit)) return [];
 
-    // å¦‚æœå¼ƒç‰Œæœ¬èº«æ˜¯ç™¾æ­,ä¸èƒ½è¢«åƒ
+    // Èç¹ûÆúÅÆ±¾ÉíÊÇ°Ù´î,²»ÄÜ±»³Ô
     if (game && this.isWildTile(game, discardedTile)) return [];
 
-    // è¿‡æ»¤æ‰æ‰‹ç‰Œä¸­çš„ç™¾æ­ç‰Œ(ç™¾æ­ä¸èƒ½å‚ä¸åƒç‰Œ)
+    // ¹ıÂËµôÊÖÅÆÖĞµÄ°Ù´îÅÆ(°Ù´î²»ÄÜ²ÎÓë³ÔÅÆ)
     const eligibleHand = game
       ? hand.filter(t => !this.isWildTile(game, t))
       : hand;
@@ -4695,11 +2911,11 @@ class GameManager {
   }
 
   /**
-   * å¯¹åƒç‰Œç»„åˆè¯„åˆ†,é€‰æ‹©æœ€ä¼˜åƒæ³•
-   * è¯„åˆ†è§„åˆ™:
-   * - å¤¹å¼ (å¼ƒç‰Œåœ¨ä¸­é—´):æœ€é«˜ä¼˜å…ˆ,å®Œæˆæ­å­
-   * - å•è¾¹(å¼ƒç‰Œåœ¨è¾¹ä¸”æ‰‹ç‰Œæ˜¯1,2æˆ–8,9):æ¬¡ä¼˜å…ˆ,å®Œæˆè¾¹æ­
-   * - ä¸¤é¢(å¼ƒç‰Œåœ¨è¾¹ä¸”æ‰‹ç‰Œè¿å·):æœ€ä½ä¼˜å…ˆ,ç•™ä¸‹çµæ´»æ­å­
+   * ¶Ô³ÔÅÆ×éºÏÆÀ·Ö,Ñ¡Ôñ×îÓÅ³Ô·¨
+   * ÆÀ·Ö¹æÔò:
+   * - ¼ĞÕÅ(ÆúÅÆÔÚÖĞ¼ä):×î¸ßÓÅÏÈ,Íê³É´î×Ó
+   * - µ¥±ß(ÆúÅÆÔÚ±ßÇÒÊÖÅÆÊÇ1,2»ò8,9):´ÎÓÅÏÈ,Íê³É±ß´î
+   * - Á½Ãæ(ÆúÅÆÔÚ±ßÇÒÊÖÅÆÁ¬ºÅ):×îµÍÓÅÏÈ,ÁôÏÂÁé»î´î×Ó
    */
   private scoreChowSequence(sequence: Tile[], discardedTile: Tile): number {
     const sorted = [...sequence].sort((a, b) => a.value - b.value);
@@ -4708,40 +2924,40 @@ class GameManager {
 
     let score = 0;
 
-    // å¤¹å¼ :å¼ƒç‰Œåœ¨ä¸­é—´ [1,2åƒ3] ä¸æ˜¯å¤¹å¼ ,[1,3åƒ2] æ˜¯å¤¹å¼ 
+    // ¼ĞÕÅ:ÆúÅÆÔÚÖĞ¼ä [1,2³Ô3] ²»ÊÇ¼ĞÕÅ,[1,3³Ô2] ÊÇ¼ĞÕÅ
     if (discardIdx === 1) {
-      // å¼ƒç‰Œåœ¨ä¸­é—´ä½ç½®
+      // ÆúÅÆÔÚÖĞ¼äÎ»ÖÃ
       const gap = values[2] - values[0];
       if (gap === 2) {
-        // çœŸæ­£çš„å¤¹å¼ :å¦‚ [1,3åƒ2],[2,4åƒ3]
+        // ÕæÕıµÄ¼ĞÕÅ:Èç [1,3³Ô2],[2,4³Ô3]
         score += 10;
       }
     }
 
-    // å•è¾¹:å¼ƒç‰Œåœ¨è¾¹ç¼˜,ä¸”å‰©ä½™ç‰Œåœ¨è¾¹è§’(1,2 æˆ– 8,9)
+    // µ¥±ß:ÆúÅÆÔÚ±ßÔµ,ÇÒÊ£ÓàÅÆÔÚ±ß½Ç(1,2 »ò 8,9)
     if (discardIdx === 0 || discardIdx === 2) {
       const remaining = discardIdx === 0 ? [values[1], values[2]] : [values[0], values[1]];
       if ((remaining[0] === 1 && remaining[1] === 2) ||
           (remaining[0] === 8 && remaining[1] === 9)) {
-        // å•è¾¹æ­å­:å¦‚ åƒ3ç•™ä¸‹1,2 æˆ– åƒ7ç•™ä¸‹8,9
+        // µ¥±ß´î×Ó:Èç ³Ô3ÁôÏÂ1,2 »ò ³Ô7ÁôÏÂ8,9
         score += 8;
       } else {
-        // ä¸¤é¢æ­å­:å¦‚ åƒ1ç•™ä¸‹2,3 â†’ ç•™ä¸‹çµæ´»æ­å­,ä¸å¤ªæƒ³åƒ
+        // Á½Ãæ´î×Ó:Èç ³Ô1ÁôÏÂ2,3 ¡ú ÁôÏÂÁé»î´î×Ó,²»Ì«Ïë³Ô
         score += 2;
       }
     }
 
-    // é™„åŠ :å¦‚æœå®Œæˆçš„é¡ºå­åœ¨æ‰‹ç‰Œä¸­å½¢æˆæ›´å¤§ç»„åˆ(å¦‚ 1,2,3,4),åŠ åˆ†
+    // ¸½¼Ó:Èç¹ûÍê³ÉµÄË³×ÓÔÚÊÖÅÆÖĞĞÎ³É¸ü´ó×éºÏ(Èç 1,2,3,4),¼Ó·Ö
     const hand = [...sequence].filter(t => t.id !== discardedTile.id);
     if (hand.length === 2 && Math.abs(hand[0].value - hand[1].value) === 1) {
-      score += 1; // æ‰‹ç‰Œæœ¬èº«æ˜¯è¿å·,åƒå®Œåæ›´å®Œæ•´
+      score += 1; // ÊÖÅÆ±¾ÉíÊÇÁ¬ºÅ,³ÔÍêºó¸üÍêÕû
     }
 
     return score;
   }
 
   /**
-   * ä»å¤šä¸ªåƒç‰Œç»„åˆä¸­é€‰æ‹©æœ€ä¼˜ç»„åˆ
+   * ´Ó¶à¸ö³ÔÅÆ×éºÏÖĞÑ¡Ôñ×îÓÅ×éºÏ
    */
   private selectBestChowSequence(sequences: Tile[][], discardedTile: Tile): Tile[] {
     if (sequences.length === 1) return sequences[0];
@@ -4784,7 +3000,7 @@ class GameManager {
       return;
     }
 
-    // å¦‚æœè¿˜æœ‰ pending actions æœªå¤„ç†,ä¸è¦æ¨è¿›
+    // Èç¹û»¹ÓĞ pending actions Î´´¦Àí,²»ÒªÍÆ½ø
     if (game.pendingActions.length > 0) {
       console.log(`[moveToNextPlayer] Skipped: ${game.pendingActions.length} pending actions remaining`);
       return;
@@ -4812,29 +3028,29 @@ class GameManager {
       throw new Error('No current player available');
     }
 
-    const freezeMs = this.getHesitationWindow(game);  // å†³ç­–çŠ¹è±«æœŸåŒæ—¶æ§åˆ¶äººç±»å’ŒAI
+    const freezeMs = this.getHesitationWindow(game);  // ¾ö²ßÓÌÔ¥ÆÚÍ¬Ê±¿ØÖÆÈËÀàºÍAI
 
-    console.log(`[moveToNextPlayer] â†’ ${nextPlayer.name} (${this.isPlayerBotControlled(nextPlayer) ? 'BOT' : 'HUMAN'}), freeze: ${freezeMs}ms`);
+    console.log(`[moveToNextPlayer] ¡ú ${nextPlayer.name} (${this.isPlayerBotControlled(nextPlayer) ? 'BOT' : 'HUMAN'}), freeze: ${freezeMs}ms`);
 
-    // ã€çŠ¶æ€æœºä¿®å¤ã€‘æ–°å›åˆ:é‡ç½®æ‘¸ç‰ŒçŠ¶æ€
-    // æ¯æ¬¡è½®åˆ°æ–°ç©å®¶æ—¶é‡ç½®drawnThisTurnï¼Œè®©è¯¥ç©å®¶èƒ½æ­£å¸¸æ‘¸ç‰Œã€‚
-    // è¿™ä¿®å¤äº†"åœ¨åˆ«äººå›åˆä¸­å£°ç§°PENG/KONGåè¯¥ç©å®¶æ— æ³•æ‘¸ç‰Œ"çš„bugã€‚
+    // ¡¾×´Ì¬»úĞŞ¸´¡¿ĞÂ»ØºÏ:ÖØÖÃÃşÅÆ×´Ì¬
+    // Ã¿´ÎÂÖµ½ĞÂÍæ¼ÒÊ±ÖØÖÃdrawnThisTurn£¬ÈÃ¸ÃÍæ¼ÒÄÜÕı³£ÃşÅÆ¡£
+    // ÕâĞŞ¸´ÁË"ÔÚ±ğÈË»ØºÏÖĞÉù³ÆPENG/KONGºó¸ÃÍæ¼ÒÎŞ·¨ÃşÅÆ"µÄbug¡£
     game.drawnThisTurn = false;
     game.huSelectionLocks = undefined;
 
-    // ç™¾æ­å†·å†»ä¸€åœˆå®Œæˆæ£€æŸ¥ï¼šå½“å†æ¬¡è½®åˆ°æ‰“å‡ºç™¾æ­çš„ç©å®¶æ—¶ï¼Œè§£é™¤å†·å†»
-    // å†·å†»ä»æ‰“å‡ºç™¾æ­å¼€å§‹ï¼Œç»è¿‡ä¸Šå®¶ã€å¯¹å®¶ã€ä¸‹å®¶å„ä¸€å‡ºç‰Œåï¼ˆå³è¯¥ç©å®¶å†æ¬¡è½®åˆ°ï¼‰è§£é™¤
+    // °Ù´îÀä¶³Ò»È¦Íê³É¼ì²é£ºµ±ÔÙ´ÎÂÖµ½´ò³ö°Ù´îµÄÍæ¼ÒÊ±£¬½â³ıÀä¶³
+    // Àä¶³´Ó´ò³ö°Ù´î¿ªÊ¼£¬¾­¹ıÉÏ¼Ò¡¢¶Ô¼Ò¡¢ÏÂ¼Ò¸÷Ò»³öÅÆºó£¨¼´¸ÃÍæ¼ÒÔÙ´ÎÂÖµ½£©½â³ı
     if (game.freezePlayerId) {
       const freezePlayer = game.players.find(p => p.id === game.freezePlayerId);
       if (freezePlayer && nextPlayer.id === game.freezePlayerId) {
-        // æ‰“å‡ºç™¾æ­çš„ç©å®¶å†æ¬¡è½®åˆ°ï¼Œä¸€åœˆå®Œæˆï¼Œè§£é™¤å†·å†»
-        console.log(`[Freeze] ä¸€åœˆå®Œæˆï¼Œè§£é™¤å†·å†» for ${freezePlayer.name}`);
+        // ´ò³ö°Ù´îµÄÍæ¼ÒÔÙ´ÎÂÖµ½£¬Ò»È¦Íê³É£¬½â³ıÀä¶³
+        console.log(`[Freeze] Ò»È¦Íê³É£¬½â³ıÀä¶³ for ${freezePlayer.name}`);
         game.freezePlayerId = null;
         game.freezeComplete = false;
         if (this.wsManager) {
           this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
             id: Date.now(),
-            text: `ğŸƒ å†·å†»è§£é™¤ï¼Œç°åœ¨å¯ä»¥æ­£å¸¸åƒç¢°æ‰å†²äº†ï¼`,
+            text: `?? Àä¶³½â³ı£¬ÏÖÔÚ¿ÉÒÔÕı³£³ÔÅö×½³åÁË£¡`,
             type: 'info',
             timestamp: Date.now(),
             timeLabel: formatBeijingTime()
@@ -4852,7 +3068,7 @@ class GameManager {
           this.freezeTimers.delete(game.gameId);
           const freshGame = await this.getGame(game.gameId);
           if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
-          if (freshGame.currentPlayerIndex !== freezeBotIndex) return; // å·²è¢« claim æ¥ç®¡
+          if (freshGame.currentPlayerIndex !== freezeBotIndex) return; // ÒÑ±» claim ½Ó¹Ü
           const livePlayer = freshGame.players[freshGame.currentPlayerIndex];
           if (!livePlayer || livePlayer.id !== nextPlayer.id || livePlayer.status !== PlayerStatus.PLAYING) return;
           if (freshGame.pendingActions.length > 0) {
@@ -4871,8 +3087,8 @@ class GameManager {
               this.clearCurrentTurnPendingActions(freshGame, livePlayer.id);
             }
             if (freshGame.pendingActions.length > 0) {
-              // ğŸ”´ ä¿®å¤ï¼šbot freezeåˆ°æœŸåè¿˜æœ‰pendingæ®‹ç•™ â†’ è§†ä¸ºbotæ²¡ååº” â†’ auto-pass
-              // ç›´æ¥æ¸…é™¤pendingç»§ç»­æ¨è¿›ï¼Œè€Œä¸æ˜¯renewè¶…æ—¶å¯¼è‡´æ­»å¾ªç¯
+              // ?? ĞŞ¸´£ºbot freezeµ½ÆÚºó»¹ÓĞpending²ĞÁô ¡ú ÊÓÎªbotÃ»·´Ó¦ ¡ú auto-pass
+              // Ö±½ÓÇå³ıpending¼ÌĞøÍÆ½ø£¬¶ø²»ÊÇrenew³¬Ê±µ¼ÖÂËÀÑ­»·
               console.log(`[bot-freeze] ${livePlayer.name} no response, clearing pending actions`);
               freshGame.pendingActions = [];
               await this.persistGame(freshGame);
@@ -4880,7 +3096,7 @@ class GameManager {
             }
           }
           console.log(`[bot-freeze] Freeze expired for ${livePlayer.name}, drawing...`);
-          // ç‰Œå¢™å·²ç©º â†’ æµå±€
+          // ÅÆÇ½ÒÑ¿Õ ¡ú Á÷¾Ö
           if (freshGame.wall.length === 0) {
             this.endRound(freshGame, GameEndReason.WALL_EXHAUSTED);
             await this.persistGame(freshGame);
@@ -4893,7 +3109,7 @@ class GameManager {
             console.log(`[bot-freeze] ${livePlayer.name} already filled hand via flower replacement, scheduling discard`);
           } else {
             this.handleDraw(freshGame, livePlayer);
-            freshGame.drawnThisTurn = true; // ã€çŠ¶æ€æœºä¿®å¤ã€‘æ ‡è®°å·²æ‘¸ç‰Œ
+            freshGame.drawnThisTurn = true; // ¡¾×´Ì¬»úĞŞ¸´¡¿±ê¼ÇÒÑÃşÅÆ
             console.log(`[bot-freeze] Draw done, hand: ${livePlayer.hand.concealedTiles.length} tiles, scheduling discard`);
           }
           this.scheduleBotDiscard(game.gameId, livePlayer.id);
@@ -4915,7 +3131,7 @@ class GameManager {
           this.freezeTimers.delete(game.gameId);
           const freshGame = await this.getGame(game.gameId);
           if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
-          if (freshGame.currentPlayerIndex !== freezeCurrentIndex) return; // å·²è¢« claim æ¥ç®¡
+          if (freshGame.currentPlayerIndex !== freezeCurrentIndex) return; // ÒÑ±» claim ½Ó¹Ü
 
           delete (freshGame as any)._freezeUntil;
 
@@ -4928,17 +3144,17 @@ class GameManager {
             return;
           }
 
-          // å†»ç»“çª—å£ç»“æŸ â†’ äººç±»ç©å®¶æ‰‹åŠ¨æ‘¸ç‰Œ,AIè‡ªåŠ¨æ‘¸ç‰Œ
+          // ¶³½á´°¿Ú½áÊø ¡ú ÈËÀàÍæ¼ÒÊÖ¶¯ÃşÅÆ,AI×Ô¶¯ÃşÅÆ
           const nextPlayer = freshGame.players[freshGame.currentPlayerIndex];
           if (nextPlayer && nextPlayer.status === PlayerStatus.PLAYING) {
-            // ç‰Œå¢™å·²ç©º â†’ æµå±€
+            // ÅÆÇ½ÒÑ¿Õ ¡ú Á÷¾Ö
             if (freshGame.wall.length === 0) {
               this.endRound(freshGame, GameEndReason.WALL_EXHAUSTED);
               await this.persistGame(freshGame);
               this.broadcastGameState(game.gameId);
               return;
             }
-            // AIç©å®¶:è‡ªåŠ¨æ‘¸ç‰Œ
+            // AIÍæ¼Ò:×Ô¶¯ÃşÅÆ
             if (this.isPlayerBotControlled(nextPlayer)) {
               this.replaceFlowers(freshGame, nextPlayer);
               if (this.getPlayableTileCount(nextPlayer) >= 14) {
@@ -4946,7 +3162,7 @@ class GameManager {
                 console.log(`[freeze] ${nextPlayer.name} reached discard state after flower replacement`);
               } else {
                 this.handleDraw(freshGame, nextPlayer);
-                freshGame.drawnThisTurn = true; // ã€çŠ¶æ€æœºä¿®å¤ã€‘æ ‡è®°å·²æ‘¸ç‰Œ
+                freshGame.drawnThisTurn = true; // ¡¾×´Ì¬»úĞŞ¸´¡¿±ê¼ÇÒÑÃşÅÆ
                 console.log(`[freeze] Auto-draw for bot ${nextPlayer.name}`);
               }
               this.scheduleBotDiscard(game.gameId, nextPlayer.id);
@@ -4955,12 +3171,12 @@ class GameManager {
                 freshGame.drawnThisTurn = true;
                 console.log(`[freeze] Human ${nextPlayer.name} reached discard state after flower replacement`);
               } else {
-                // äººç±»ç©å®¶:ä¸è‡ªåŠ¨æ‘¸,æ¸…é™¤å†»ç»“,å¹¿æ’­çŠ¶æ€è®©å‰ç«¯æ˜¾ç¤º"æ‘¸"æŒ‰é’®
+                // ÈËÀàÍæ¼Ò:²»×Ô¶¯Ãş,Çå³ı¶³½á,¹ã²¥×´Ì¬ÈÃÇ°¶ËÏÔÊ¾"Ãş"°´Å¥
                 console.log(`[freeze] Human ${nextPlayer.name} freeze expired, waiting for manual draw`);
               }
             }
 
-            // è¶…æ—¶è‡ªåŠ¨æ¥ç®¡:äººç±»ç©å®¶è¿ç»­2å›åˆæœªæ“ä½œ â†’ è‡ªåŠ¨AIæ‰˜ç®¡
+            // ³¬Ê±×Ô¶¯½Ó¹Ü:ÈËÀàÍæ¼ÒÁ¬Ğø2»ØºÏÎ´²Ù×÷ ¡ú ×Ô¶¯AIÍĞ¹Ü
             if (!this.isPlayerBotControlled(nextPlayer)) {
               this.scheduleAutoTakeover(game.gameId, nextPlayer.id, freezeCurrentIndex);
             }
@@ -4977,11 +3193,11 @@ class GameManager {
   }
 
   /**
-   * è¶…æ—¶è‡ªåŠ¨æ¥ç®¡:äººç±»ç©å®¶è¿ç»­2å›åˆ60ç§’æœªæ“ä½œ â†’ è‡ªåŠ¨AIæ‰˜ç®¡
-   * ä»…æœ¬å±€ç»“ç®—å‡åŠ,ç©å®¶å›æ¥åä¸‹ä¸€å±€æ¢å¤æ­£å¸¸
+   * ³¬Ê±×Ô¶¯½Ó¹Ü:ÈËÀàÍæ¼ÒÁ¬Ğø2»ØºÏ60ÃëÎ´²Ù×÷ ¡ú ×Ô¶¯AIÍĞ¹Ü
+   * ½ö±¾¾Ö½áËã¼õ°ë,Íæ¼Ò»ØÀ´ºóÏÂÒ»¾Ö»Ö¸´Õı³£
    */
   private autoTakeoverTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
-  // è¿½è¸ªæ¯ä¸ªç©å®¶è¿ç»­è¶…æ—¶æ¬¡æ•°(gameId-playerId â†’ count)
+  // ×·×ÙÃ¿¸öÍæ¼ÒÁ¬Ğø³¬Ê±´ÎÊı(gameId-playerId ¡ú count)
   private consecutiveTimeouts: Map<string, number> = new Map();
 
   private getAutoTakeoverTimeoutMs(): number {
@@ -4990,7 +3206,7 @@ class GameManager {
 
   private scheduleAutoTakeover(gameId: string, playerId: string, expectedIndex: number): void {
     const key = `${gameId}-${playerId}`;
-    // æ¸…é™¤å·²æœ‰è®¡æ—¶å™¨
+    // Çå³ıÒÑÓĞ¼ÆÊ±Æ÷
     const existing = this.autoTakeoverTimers.get(key);
     if (existing) clearTimeout(existing);
 
@@ -4999,13 +3215,13 @@ class GameManager {
       try {
         const game = await this.getGame(gameId);
         if (!game || game.phase !== GamePhase.PLAYING) return;
-        // æ£€æŸ¥æ˜¯å¦è¿˜æ˜¯è¯¥ç©å®¶çš„å›åˆ
+        // ¼ì²éÊÇ·ñ»¹ÊÇ¸ÃÍæ¼ÒµÄ»ØºÏ
         if (game.currentPlayerIndex !== expectedIndex) return;
         const player = game.players[game.currentPlayerIndex];
         if (!player || player.id !== playerId) return;
-        if (this.isPlayerBotControlled(player)) return; // å·²ç»æ˜¯AIæ§åˆ¶äº†
+        if (this.isPlayerBotControlled(player)) return; // ÒÑ¾­ÊÇAI¿ØÖÆÁË
 
-        // ç´¯åŠ è¿ç»­è¶…æ—¶æ¬¡æ•°
+        // ÀÛ¼ÓÁ¬Ğø³¬Ê±´ÎÊı
         const currentCount = (this.consecutiveTimeouts.get(key) || 0) + 1;
         this.consecutiveTimeouts.set(key, currentCount);
 
@@ -5034,26 +3250,26 @@ class GameManager {
         }
 
         if (currentCount >= 2) {
-          // è¿ç»­2å›åˆè¶…æ—¶ â†’ è§¦å‘AIæ¥ç®¡
-          console.log(`[AutoTakeover] ${player.name} è¿ç»­${currentCount}å›åˆè¶…æ—¶60ç§’,è‡ªåŠ¨AIæ¥ç®¡`);
+          // Á¬Ğø2»ØºÏ³¬Ê± ¡ú ´¥·¢AI½Ó¹Ü
+          console.log(`[AutoTakeover] ${player.name} Á¬Ğø${currentCount}»ØºÏ³¬Ê±60Ãë,×Ô¶¯AI½Ó¹Ü`);
           this.consecutiveTimeouts.delete(key);
-          // å¯ç”¨AIæ‰˜ç®¡æ¨¡å¼(ä¼šè‡ªåŠ¨åŠ å…¥ botTakeoverPlayers â†’ æœ¬å±€å‡åŠ)
+          // ÆôÓÃAIÍĞ¹ÜÄ£Ê½(»á×Ô¶¯¼ÓÈë botTakeoverPlayers ¡ú ±¾¾Ö¼õ°ë)
           this.enableBotMode(gameId, playerId);
           await this.persistGame(game);
           this.broadcastGameState(gameId);
         } else {
-          console.log(`[AutoTakeover] ${player.name} ç¬¬${currentCount}æ¬¡è¶…æ—¶60ç§’(è¿ç»­2æ¬¡æ‰æ¥ç®¡)`);
+          console.log(`[AutoTakeover] ${player.name} µÚ${currentCount}´Î³¬Ê±60Ãë(Á¬Ğø2´Î²Å½Ó¹Ü)`);
         }
       } catch (err) {
         console.error('[AutoTakeover] Error:', err);
       }
-    }, 60000)); // 60ç§’è¶…æ—¶
+    }, 60000)); // 60Ãë³¬Ê±
 
     this.autoTakeoverTimers.set(key, timer);
   }
 
   /**
-   * å–æ¶ˆè¶…æ—¶è‡ªåŠ¨æ¥ç®¡(ç©å®¶å·²æ“ä½œ),é‡ç½®è¿ç»­è¶…æ—¶è®¡æ•°
+   * È¡Ïû³¬Ê±×Ô¶¯½Ó¹Ü(Íæ¼ÒÒÑ²Ù×÷),ÖØÖÃÁ¬Ğø³¬Ê±¼ÆÊı
    */
   private clearAutoTakeover(gameId: string, playerId: string): void {
     const key = `${gameId}-${playerId}`;
@@ -5062,12 +3278,12 @@ class GameManager {
       clearTimeout(timer);
       this.autoTakeoverTimers.delete(key);
     }
-    // ç©å®¶å·²æ“ä½œ,é‡ç½®è¿ç»­è¶…æ—¶è®¡æ•°
+    // Íæ¼ÒÒÑ²Ù×÷,ÖØÖÃÁ¬Ğø³¬Ê±¼ÆÊı
     this.consecutiveTimeouts.delete(key);
   }
 
   /**
-   * è°ƒåº¦ bot ç©å®¶å»¶è¿Ÿå‡ºç‰Œ
+   * µ÷¶È bot Íæ¼ÒÑÓ³Ù³öÅÆ
    */
   private botTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
@@ -5085,8 +3301,8 @@ class GameManager {
         }
         const currentP = game.players[game.currentPlayerIndex];
         if (currentP.id !== playerId) {
-          // å½“å‰ç©å®¶å·²æ›´æ¢â€”â€”å¯èƒ½æ˜¯å®¡æ‰¹æµæ‰§è¡Œå currentPlayerIndex å·²æ›´æ–°ä¸ºç¢°ç‰Œbot
-          // å¦‚æœå½“å‰ç©å®¶æ˜¯å¦ä¸€ä¸ªbotä¸”æ²¡æœ‰å‡ºç‰Œå®šæ—¶å™¨åœ¨è·‘ï¼Œé‡æ–°è°ƒåº¦
+          // µ±Ç°Íæ¼ÒÒÑ¸ü»»¡ª¡ª¿ÉÄÜÊÇÉóÅúÁ÷Ö´ĞĞºó currentPlayerIndex ÒÑ¸üĞÂÎªÅöÅÆbot
+          // Èç¹ûµ±Ç°Íæ¼ÒÊÇÁíÒ»¸öbotÇÒÃ»ÓĞ³öÅÆ¶¨Ê±Æ÷ÔÚÅÜ£¬ÖØĞÂµ÷¶È
           if (this.isPlayerBotControlled(currentP) && !this.botTimers.has(gameId)) {
             console.log(`[bot-discard] Current player changed to bot ${currentP.name}, rescheduling`);
             this.scheduleBotDiscard(gameId, currentP.id);
@@ -5107,7 +3323,7 @@ class GameManager {
           }
         }
 
-        // ã€Bugä¿®å¤ã€‘æœºå™¨äººæ‰˜ç®¡åï¼Œè‹¥æœªæ‘¸ç‰Œåˆ™å…ˆæ‘¸ç‰Œå†å‡ºç‰Œ
+        // ¡¾BugĞŞ¸´¡¿»úÆ÷ÈËÍĞ¹Üºó£¬ÈôÎ´ÃşÅÆÔòÏÈÃşÅÆÔÙ³öÅÆ
         if (!game.drawnThisTurn) {
           console.log(`[bot-discard] ${currentP.name} has not drawn yet, drawing first...`);
           await this.executeAction(gameId, playerId, ActionType.DRAW, undefined);
@@ -5149,23 +3365,23 @@ class GameManager {
       const g = this.games.get(gameId);
       if (!g) return 500;
       return this.getBotDiscardDelayMs(g);
-    })()));  // è®­ç»ƒæ¨¡å¼æé€Ÿå“åº”,å®æˆ˜ä¿ç•™éšæœºäººæ€§åŒ–å»¶è¿Ÿ
+    })()));  // ÑµÁ·Ä£Ê½¼«ËÙÏìÓ¦,ÊµÕ½±£ÁôËæ»úÈËĞÔ»¯ÑÓ³Ù
 
     this.botTimers.set(gameId, timer);
   }
 
   /**
-   * è¡¥èŠ±:é—¨å£æœ‰èŠ±ç‰Œæ—¶,ä»ç‰Œå¢™è¡¥ç‰Œåˆ°æ‰‹ç‰Œ
+   * ²¹»¨:ÃÅ¿ÚÓĞ»¨ÅÆÊ±,´ÓÅÆÇ½²¹ÅÆµ½ÊÖÅÆ
    */
   private replaceFlowers(game: GameState, player: Player): void {
-    // æ‰¾åˆ°é—¨å£çš„èŠ±ç‰Œmeld(åªæœ‰1å¼ ç‰Œçš„meldå°±æ˜¯èŠ±ç‰Œ)
+    // ÕÒµ½ÃÅ¿ÚµÄ»¨ÅÆmeld(Ö»ÓĞ1ÕÅÅÆµÄmeld¾ÍÊÇ»¨ÅÆ)
     const flowerMelds = player.hand.exposedMelds.filter(
       m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]) && !(m as any).replacementDone
     );
 
     if (flowerMelds.length === 0) return;
 
-    // ä» exposedMelds ä¸­ç§»é™¤è¿™äº›èŠ±ç‰Œ meld
+    // ´Ó exposedMelds ÖĞÒÆ³ıÕâĞ©»¨ÅÆ meld
 
     for (const meld of flowerMelds) {
       if (game.wall.length === 0) break;
@@ -5174,7 +3390,7 @@ class GameManager {
 
       let replacement = game.wall.pop()!;
 
-      // å¦‚æœè¡¥åˆ°èŠ±ç‰Œ,èŠ±ç‰Œç•™åœ¨é—¨å£,ç»§ç»­æ‘¸(æ­£ç¡®éº»å°†è§„åˆ™:èŠ±ç‰Œä¸å¢åŠ æ€»ç‰Œæ•°)
+      // Èç¹û²¹µ½»¨ÅÆ,»¨ÅÆÁôÔÚÃÅ¿Ú,¼ÌĞøÃş(ÕıÈ·Âé½«¹æÔò:»¨ÅÆ²»Ôö¼Ó×ÜÅÆÊı)
       while (isFlower(replacement) && !this.isWildTile(game, replacement)) {
         player.hand.exposedMelds.push({
           type: MeldType.TRIPLET,
@@ -5191,7 +3407,7 @@ class GameManager {
       }
 
       if (replacement) {
-        // è¡¥åˆ°æ™®é€šç‰Œ,åŠ å…¥æ‰‹ç‰Œ(æ›¿æ¢åŸæ¥èŠ±ç‰Œçš„ä½ç½®)
+        // ²¹µ½ÆÕÍ¨ÅÆ,¼ÓÈëÊÖÅÆ(Ìæ»»Ô­À´»¨ÅÆµÄÎ»ÖÃ)
         player.hand.concealedTiles.push(replacement);
         (player as any).lastDrawnTile = replacement;
         this.broadcastFlowerReplacement(game, player);
@@ -5200,7 +3416,7 @@ class GameManager {
 
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
 
-    // è¡¥èŠ±åæ£€æŸ¥ç‰Œå¢™æ˜¯å¦ç©ºäº†
+    // ²¹»¨ºó¼ì²éÅÆÇ½ÊÇ·ñ¿ÕÁË
     if (game.wall.length === 0 && game.phase === GamePhase.PLAYING) {
       console.log(`[replaceFlowers] Wall exhausted after flower replacement`);
       this.endRound(game, GameEndReason.WALL_EXHAUSTED);
@@ -5234,7 +3450,7 @@ class GameManager {
       toPlayerName: string;
       amount: number;
       reason: string;
-      bailoutType?: 'ä¸‰å£' | 'å››å£';
+      bailoutType?: 'Èı¿Ú' | 'ËÄ¿Ú';
     }> = [];
     const specialEvents: Array<{
       type: 'leading_brother';
@@ -5251,17 +3467,17 @@ class GameManager {
         finalScores[player.id] = isWinner ? 1 : -1;
       }
     } else {
-      // ç²¾ç¡®èµ”ä»˜:æ¯ä¸ªèµ¢å®¶ç‹¬ç«‹ç»“ç®—
-      // - è‡ªæ‘¸:æ‰€æœ‰æœªèƒ¡ç©å®¶å‡æ‘Šèµ”ä»˜
-      // - æ‰å†²:åªæœ‰æ”¾å†²è€…å…¨é¢èµ”ä»˜
+      // ¾«È·Åâ¸¶:Ã¿¸öÓ®¼Ò¶ÀÁ¢½áËã
+      // - ×ÔÃş:ËùÓĞÎ´ºúÍæ¼Ò¾ùÌ¯Åâ¸¶
+      // - ×½³å:Ö»ÓĞ·Å³åÕßÈ«¶îÅâ¸¶
       finalScores = {};
       for (const p of game.players) {
         finalScores[p.id] = 0;
       }
 
       const mutualBailoutRelations = this.getMutualBailoutRelations(game.gameId);
-      // æ„å»º mutualBailout Map<playerIndex, {partnerIndex, type}>
-      const mutualBailout = new Map<number, { partnerIndex: number; type: 'ä¸‰å£' | 'å››å£' }>();
+      // ¹¹½¨ mutualBailout Map<playerIndex, {partnerIndex, type}>
+      const mutualBailout = new Map<number, { partnerIndex: number; type: 'Èı¿Ú' | 'ËÄ¿Ú' }>();
       for (const rel of mutualBailoutRelations) {
         const p1Idx = game.players.findIndex(p => p.id === rel.player1);
         const p2Idx = game.players.findIndex(p => p.id === rel.player2);
@@ -5283,16 +3499,16 @@ class GameManager {
           })
           .map(({ index }) => index);
 
-        // æ‰å†²æ—¶æ‰¾æ”¾å†²è€…index
+        // ×½³åÊ±ÕÒ·Å³åÕßindex
         let discarderIdx: number | undefined;
         if (!winner.isSelfDrawn && winner.discarderId) {
           discarderIdx = game.players.findIndex(p => p.id === winner.discarderId);
         }
 
-        // äº’åŒ…èµ”ä»˜: finalPoints Ã— 3/5 (è‡ªæ‘¸) æˆ– Ã— 2 (æ‰å†²)
-        // winner.wonFan = finalPoints (å·²å« baseFan Ã— extraMultipliers Ã— globalMultiplier)
+        // »¥°üÅâ¸¶: finalPoints ¡Á 3/5 (×ÔÃş) »ò ¡Á 2 (×½³å)
+        // winner.wonFan = finalPoints (ÒÑº¬ baseFan ¡Á extraMultipliers ¡Á globalMultiplier)
         const breakdown = calculateSettlementBreakdownByRules(
-          winner.wonFan,        // æœ€ç»ˆç‚¹æ•°ï¼ˆå·²å«å…¨å±€å€æ•°ï¼Œç”¨äºæ­£å¸¸ç»“ç®—å’Œäº’åŒ…èµ”ä»˜ï¼‰
+          winner.wonFan,        // ×îÖÕµãÊı£¨ÒÑº¬È«¾Ö±¶Êı£¬ÓÃÓÚÕı³£½áËãºÍ»¥°üÅâ¸¶£©
           winner.isSelfDrawn ?? false,
           winnerIdx,
           eligiblePlayerIndices,
@@ -5324,12 +3540,12 @@ class GameManager {
       player.score = finalScores[player.id] ?? 0;
     }
 
-    // è°¢è°¢å¸¦å¤´å¤§å“¥:ç¬¬ä¸€ä¸ªå‡ºè¯¥ç‰Œçš„ç©å®¶èµ”ä»˜å…¶ä½™ä¸‰å®¶æ¯å®¶10åˆ†(åœ¨å¹³è¡¡ä¹‹å‰)
+    // Ğ»Ğ»´øÍ·´ó¸ç:µÚÒ»¸ö³ö¸ÃÅÆµÄÍæ¼ÒÅâ¸¶ÆäÓàÈı¼ÒÃ¿¼Ò10·Ö(ÔÚÆ½ºâÖ®Ç°)
     if (game.leadingBrotherEvent) {
       const { firstPlayerId } = game.leadingBrotherEvent;
       const firstPlayer = game.players.find(p => p.id === firstPlayerId);
       if (firstPlayer) {
-        const penalty = 30; // èµ”ä»˜3å®¶ Ã— 10åˆ†
+        const penalty = 30; // Åâ¸¶3¼Ò ¡Á 10·Ö
         firstPlayer.score -= penalty;
         finalScores[firstPlayerId] = (finalScores[firstPlayerId] || 0) - penalty;
         specialEvents.push({
@@ -5349,49 +3565,49 @@ class GameManager {
               toPlayerId: p.id,
               toPlayerName: p.name,
               amount: 10,
-              reason: 'è°¢è°¢å¸¦å¤´å¤§å“¥èµ”ä»˜'
+              reason: 'Ğ»Ğ»´øÍ·´ó¸çÅâ¸¶'
             });
           }
         }
-        game.finalScores = finalScores; // åŒæ­¥æ›´æ–°
-        console.log(`[LeadingBrother] ${firstPlayer.name} èµ”ä»˜30åˆ†(æ¯å®¶10åˆ†)`);
+        game.finalScores = finalScores; // Í¬²½¸üĞÂ
+        console.log(`[LeadingBrother] ${firstPlayer.name} Åâ¸¶30·Ö(Ã¿¼Ò10·Ö)`);
       }
       game.leadingBrotherEvent = null;
     }
 
-    // AIæ¥ç®¡ç©å®¶:èµ¢åˆ†å‡åŠ,è¾“åˆ†ç…§å¸¸
-    // æ³¨æ„:player.score å·²åŒ…å«å¸¦å¤´å¤§å“¥èµ”ä»˜,åŸºäºå½“å‰å€¼è®¡ç®—
+    // AI½Ó¹ÜÍæ¼Ò:Ó®·Ö¼õ°ë,Êä·ÖÕÕ³£
+    // ×¢Òâ:player.score ÒÑ°üº¬´øÍ·´ó¸çÅâ¸¶,»ùÓÚµ±Ç°Öµ¼ÆËã
     const botAffected = game.botTakeoverPlayers || [];
 
     for (const player of game.players) {
       if (botAffected.includes(player.id)) {
         if (player.score > 0) {
           const half = Math.floor(player.score / 2);
-          console.log(`[BotPenalty] ${player.name}(AIæ¥ç®¡) èµ¢åˆ†å‡åŠ: ${player.score} â†’ ${half}`);
+          console.log(`[BotPenalty] ${player.name}(AI½Ó¹Ü) Ó®·Ö¼õ°ë: ${player.score} ¡ú ${half}`);
           player.score = half;
         }
-        // è¾“åˆ†ç…§å¸¸,ä¸å‡
+        // Êä·ÖÕÕ³£,²»¼õ
       }
     }
 
-    // å¹³è¡¡æ€»åˆ†:å¦‚æœAIèµ¢åˆ†å‡åŠå¯¼è‡´æ€»èµ¢â‰ æ€»è¾“,æŒ‰æ¯”ä¾‹ç¼©å°è¾“å®¶æ”¯ä»˜
+    // Æ½ºâ×Ü·Ö:Èç¹ûAIÓ®·Ö¼õ°ëµ¼ÖÂ×ÜÓ®¡Ù×ÜÊä,°´±ÈÀıËõĞ¡Êä¼ÒÖ§¸¶
     const totalScore = game.players.reduce((s, p) => s + p.score, 0);
     if (totalScore !== 0) {
-      // æœ‰AIèµ¢äº†ä¸”èµ¢åˆ†å‡åŠ â†’ æ€»èµ¢ < æ€»è¾“(totalScore < 0)
-      // éœ€è¦å‡å°‘è¾“å®¶çš„æ”¯ä»˜æ¥å¹³è¡¡
+      // ÓĞAIÓ®ÁËÇÒÓ®·Ö¼õ°ë ¡ú ×ÜÓ® < ×ÜÊä(totalScore < 0)
+      // ĞèÒª¼õÉÙÊä¼ÒµÄÖ§¸¶À´Æ½ºâ
       const losers = game.players.filter(p => p.score < 0);
       const totalLoss = losers.reduce((s, p) => s + Math.abs(p.score), 0);
-      const deficit = Math.abs(totalScore); // éœ€è¦å‡å°‘çš„æ€»è¾“åˆ†
+      const deficit = Math.abs(totalScore); // ĞèÒª¼õÉÙµÄ×ÜÊä·Ö
 
       if (totalLoss > 0) {
         for (const loser of losers) {
           const ratio = Math.abs(loser.score) / totalLoss;
           const reduction = Math.floor(deficit * ratio);
-          loser.score += reduction; // å°‘è¾“ä¸€ç‚¹
+          loser.score += reduction; // ÉÙÊäÒ»µã
         }
       }
 
-      // å…œåº•:å–æ•´å·®é¢åŠ åˆ°æœ€å¤§è¾“å®¶
+      // ¶µµ×:È¡Õû²î¶î¼Óµ½×î´óÊä¼Ò
       const finalTotal = game.players.reduce((s, p) => s + p.score, 0);
       if (finalTotal !== 0) {
         const minP = game.players.reduce((a, b) => a.score < b.score ? a : b);
@@ -5404,41 +3620,41 @@ class GameManager {
     }
     game.finalScores = finalScores;
 
-    // æ¸…é™¤æœ¬å±€AIæ¥ç®¡è®°å½•
+    // Çå³ı±¾¾ÖAI½Ó¹Ü¼ÇÂ¼
     game.botTakeoverPlayers = [];
 
-    // è®°å½•æœ¬å±€ç»Ÿè®¡
+    // ¼ÇÂ¼±¾¾ÖÍ³¼Æ
     if (!game.roundStats) game.roundStats = [];
     const roundWinners = game.players.filter(p => p.status === PlayerStatus.WON);
 
-    // æ£€æŸ¥è¢«èšä¹‰QJçº¿(æ¯å±€åˆ·æ–°)
+    // ¼ì²é±»¾ÛÒåQJÏß(Ã¿¾ÖË¢ĞÂ)
     this.checkQJThresholdAlerts(game);
 
     const finalReason = (reason === GameEndReason.WALL_EXHAUSTED && roundWinners.length > 0)
       ? GameEndReason.LAST_PLAYER
       : reason;
 
-    // å€æ•°ç»§æ‰¿é“¾:æº¢å‡ºå€æ•°ç»§æ‰¿(è¶…è¿‡8å€å°é¡¶çš„éƒ¨åˆ†ä¼ é€’ç»™ä¸‹ä¸€æŠŠ)
-    // è§„åˆ™:effective = inheritMultiplier Ã— roundMultiplier,å°é¡¶8,è¶…å‡ºéƒ¨åˆ† = effective/8 ç»§æ‰¿ç»™ä¸‹æŠŠ
-    // æ³¨æ„:èšä¹‰/é€ åå·²ç»è‡ªè¡Œè®¾ç½® inheritedGlobalMultiplier,ä¸è¦è¦†ç›–
+    // ±¶Êı¼Ì³ĞÁ´:Òç³ö±¶Êı¼Ì³Ğ(³¬¹ı8±¶·â¶¥µÄ²¿·Ö´«µİ¸øÏÂÒ»°Ñ)
+    // ¹æÔò:effective = inheritMultiplier ¡Á roundMultiplier,·â¶¥8,³¬³ö²¿·Ö = effective/8 ¼Ì³Ğ¸øÏÂ°Ñ
+    // ×¢Òâ:¾ÛÒå/Ôì·´ÒÑ¾­×ÔĞĞÉèÖÃ inheritedGlobalMultiplier,²»Òª¸²¸Ç
     if (finalReason === GameEndReason.WALL_EXHAUSTED) {
-      // æµå±€:å…ˆç¿»å€,å†ç®—æº¢å‡º(ä½†å…¨å±€å€æ•°å°é¡¶8)
+      // Á÷¾Ö:ÏÈ·­±¶,ÔÙËãÒç³ö(µ«È«¾Ö±¶Êı·â¶¥8)
       const currentGlobal = game.inheritMultiplier ?? 1;
       const roundMul = game.roundMultiplier ?? 1;
-      // å…ˆç¿»å€,å°é¡¶8
+      // ÏÈ·­±¶,·â¶¥8
       const doubled = Math.min(currentGlobal * 2, 8);
       const effective = doubled * roundMul;
-      // å…¨å±€å€æ•°å°é¡¶8,æº¢å‡ºéƒ¨åˆ†ç»§æ‰¿
+      // È«¾Ö±¶Êı·â¶¥8,Òç³ö²¿·Ö¼Ì³Ğ
       game.inheritedGlobalMultiplier = Math.min(effective > 8 ? Math.floor(effective / 8) : doubled, 8);
     } else if (game.inheritedGlobalMultiplier === undefined) {
-      // æ­£å¸¸ç»“ç®—(æœ‰äººèƒ¡äº†)ä¸”æ²¡æœ‰è¢«èšä¹‰/é€ åæå‰è®¾ç½®
+      // Õı³£½áËã(ÓĞÈËºúÁË)ÇÒÃ»ÓĞ±»¾ÛÒå/Ôì·´ÌáÇ°ÉèÖÃ
       const currentGlobal = game.inheritMultiplier ?? 1;
       const roundMul = game.roundMultiplier ?? 1;
       const effective = currentGlobal * roundMul;
-      // å…¨å±€å€æ•°å°é¡¶8,æº¢å‡ºéƒ¨åˆ†ç»§æ‰¿
+      // È«¾Ö±¶Êı·â¶¥8,Òç³ö²¿·Ö¼Ì³Ğ
       game.inheritedGlobalMultiplier = Math.min(effective > 8 ? Math.floor(effective / 8) : 1, 8);
     }
-    // else: inheritedGlobalMultiplier å·²è¢«èšä¹‰/é€ åè®¾ç½®,ä¸è¦†ç›–
+    // else: inheritedGlobalMultiplier ÒÑ±»¾ÛÒå/Ôì·´ÉèÖÃ,²»¸²¸Ç
 
     game.roundStats.push({
       roundNumber: game.roundNumber,
@@ -5509,11 +3725,11 @@ class GameManager {
 
     game.customScoringMode = null;
 
-    // å¤„ç†ä¸‹å±€ç§»é™¤/æ›¿æ¢è¯·æ±‚
+    // ´¦ÀíÏÂ¾ÖÒÆ³ı/Ìæ»»ÇëÇó
     this.applyPendingChanges(game);
 
-    // ğŸ”„ è‡ªåŠ¨è¿›å…¥ä¸‹ä¸€å±€ï¼ˆæ­£å¸¸ç»“æŸ/æµå±€ï¼‰
-    // å»¶è¿Ÿä¸€å°æ®µæ—¶é—´è®©å®¢æˆ·ç«¯å±•ç¤ºç»“ç®—ç”»é¢ï¼Œç„¶åè‡ªåŠ¨è¿›å…¥æ·éª°å­é˜¶æ®µ
+    // ?? ×Ô¶¯½øÈëÏÂÒ»¾Ö£¨Õı³£½áÊø/Á÷¾Ö£©
+    // ÑÓ³ÙÒ»Ğ¡¶ÎÊ±¼äÈÃ¿Í»§¶ËÕ¹Ê¾½áËã»­Ãæ£¬È»ºó×Ô¶¯½øÈëÖÀ÷»×Ó½×¶Î
     if (
       finalReason === GameEndReason.LAST_PLAYER
     ) {
@@ -5522,7 +3738,7 @@ class GameManager {
   }
 
   /**
-   * è‡ªåŠ¨è¿›å…¥ä¸‹ä¸€å±€ï¼ˆå»¶æ—¶åè®¾ç½®STARTINGé˜¶æ®µï¼‰
+   * ×Ô¶¯½øÈëÏÂÒ»¾Ö£¨ÑÓÊ±ºóÉèÖÃSTARTING½×¶Î£©
    */
   private autoStartNextRound(gameId: string, delayMs: number = 2000): void {
     const timer = this.detachTimer(setTimeout(async () => {
@@ -5535,40 +3751,40 @@ class GameManager {
   }
 
   /**
-   * åº”ç”¨å‡ºå±€/æ›¿æ¢è¯·æ±‚(åœ¨æ¯å±€ç»“æŸåè°ƒç”¨)
+   * Ó¦ÓÃ³ö¾Ö/Ìæ»»ÇëÇó(ÔÚÃ¿¾Ö½áÊøºóµ÷ÓÃ)
    */
   private applyPendingChanges(game: GameState): void {
-    // å¤„ç†æ›¿æ¢è¯·æ±‚(ä¼˜å…ˆ)
+    // ´¦ÀíÌæ»»ÇëÇó(ÓÅÏÈ)
     if (game.pendingReplacements?.length) {
       for (const req of game.pendingReplacements) {
         const aiIdx = game.players.findIndex(p => p.id === req.aiPlayerId);
         if (aiIdx === -1) continue;
         const aiName = game.players[aiIdx].name;
-        // æ›¿æ¢ AI ç©å®¶:ä¿ç•™ä½ç½®,æ”¹å+æ”¹ID
+        // Ìæ»» AI Íæ¼Ò:±£ÁôÎ»ÖÃ,¸ÄÃû+¸ÄID
         game.players[aiIdx].id = req.spectatorId;
-        game.players[aiIdx].name = req.spectatorName || 'æ›¿è¡¥ç©å®¶';
-        console.log(`[ApplyChanges] ${aiName} â†’ ${req.spectatorName || 'æ›¿è¡¥ç©å®¶'} æ¥æ›¿`);
+        game.players[aiIdx].name = req.spectatorName || 'Ìæ²¹Íæ¼Ò';
+        console.log(`[ApplyChanges] ${aiName} ¡ú ${req.spectatorName || 'Ìæ²¹Íæ¼Ò'} ½ÓÌæ`);
       }
       game.pendingReplacements = [];
     }
 
-    // å¤„ç†ç§»é™¤è¯·æ±‚
+    // ´¦ÀíÒÆ³ıÇëÇó
     if (game.pendingRemovals?.length) {
       for (const removeId of game.pendingRemovals) {
         const idx = game.players.findIndex(p => p.id === removeId);
         if (idx === -1) continue;
         const name = game.players[idx].name;
         game.players.splice(idx, 1);
-        // æ›´æ–°ä½ç½®
+        // ¸üĞÂÎ»ÖÃ
         game.players.forEach((p, i) => { p.position = i; });
-        console.log(`[ApplyChanges] ${name} å·²ç§»é™¤`);
+        console.log(`[ApplyChanges] ${name} ÒÑÒÆ³ı`);
       }
       game.pendingRemovals = [];
 
-      // äººæ•°ä¸è¶³ â†’ å›åˆ°ç­‰å¾…çŠ¶æ€(éº»å°†éœ€è¦4äººæ»¡æ¡Œ)
+      // ÈËÊı²»×ã ¡ú »Øµ½µÈ´ı×´Ì¬(Âé½«ĞèÒª4ÈËÂú×À)
       if (game.players.length < 4) {
         game.phase = GamePhase.WAITING;
-        // é‡ç½®å›åˆç›¸å…³çŠ¶æ€,å‡†å¤‡æ–°ç©å®¶åŠ å…¥
+        // ÖØÖÃ»ØºÏÏà¹Ø×´Ì¬,×¼±¸ĞÂÍæ¼Ò¼ÓÈë
         game.currentPlayerIndex = 0;
         game.dealerIndex = 0;
         game.pendingActions = [];
@@ -5576,7 +3792,7 @@ class GameManager {
         game.discardPile = [];
         game.winnersCount = 0;
         game.roundNumber = 1;
-        // æ¸…é™¤æ‰€æœ‰ç©å®¶çš„æ¸¸æˆä¸­çŠ¶æ€,æ¢å¤ä¸ºç­‰å¾…
+        // Çå³ıËùÓĞÍæ¼ÒµÄÓÎÏ·ÖĞ×´Ì¬,»Ö¸´ÎªµÈ´ı
         for (const p of game.players) {
           p.status = PlayerStatus.WAITING;
           p.hand = { concealedTiles: [], exposedMelds: [], discardedTiles: [] };
@@ -5594,7 +3810,7 @@ class GameManager {
           p.winningScoreBreakdown = undefined;
           p.score = 0;
         }
-        console.log(`[ApplyChanges] ç©å®¶ä¸è¶³4äºº(${game.players.length}),å›åˆ°ç­‰å¾…çŠ¶æ€`);
+        console.log(`[ApplyChanges] Íæ¼Ò²»×ã4ÈË(${game.players.length}),»Øµ½µÈ´ı×´Ì¬`);
       }
     }
   }
@@ -5628,7 +3844,7 @@ class GameManager {
    * List all active games
    */
   async listGames(): Promise<GameState[]> {
-    // ä» MongoDB åªåŠ è½½æœªç»“æŸçš„æ¸¸æˆï¼ˆæƒ°æ€§åŠ è½½ä¸åŠ è½½æ‰€æœ‰æ¸¸æˆåˆ°å†…å­˜ï¼‰
+    // ä»?MongoDB åªåŠ è½½æœªç»“æŸçš„æ¸¸æˆï¼ˆæƒ°æ€§åŠ è½½ä¸åŠ è½½æ‰€æœ‰æ¸¸æˆåˆ°å†…å­˜ï¼?
     const allGames = await loadActiveGameStates();
     return Array.from(allGames);
   }

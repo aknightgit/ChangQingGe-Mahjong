@@ -1,5 +1,5 @@
 {
-  "savedAt": "2026-05-16T03:48:26.406Z",
+  "savedAt": "2026-05-16T03:48:26.403Z",
   "round": 0,
   "metrics": {
     "fitness": -8427.4,
@@ -19,7 +19,7 @@
     "note": "AI-AK iterative training - 1x1"
   },
   "policy": {
-    "id": "AI-AK",
+    "id": "AI-小猪",
     "selfWinChance": 0.5,
     "discardHuChance": 0.82,
     "selfWinWildBoost": 0.13626006977216448,
@@ -147,6 +147,7 @@
     "honorTripletKeepBonus": 8.936635474603115,
     "windDragonPairKeepBonus": 11.836265385481415,
     "tripletComboBonus": 1.3808875380252752,
-    "flushChaseBonus": 1.9372010313649672
+    "flushChaseBonus": 1.9372010313649672,
+    "pungsPreference": 1
   }
 }

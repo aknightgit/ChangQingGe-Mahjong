@@ -391,6 +391,10 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       }
       if (noWildOpenPush) score += 1.4
       if (effectiveGlobalMultiplier >= 4) score += 1.6
+      score += getPolicyValue(policy, 'daDiaoPursuit') * Math.max(
+        0,
+        features.tripletCount + features.pairCount + input.player.hand.exposedMelds.length - 4
+      ) * 2.8
       if (features.pairCount + features.tripletCount >= 4 && features.wildCount > 0) {
         reasons.push('pair_stack_with_wild')
         score += 10

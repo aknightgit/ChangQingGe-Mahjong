@@ -357,6 +357,48 @@ function tuneLiveClaimPolicy(policy: any): any {
   return tuned
 }
 
+export function applyStrategicPreferencePolicy(policy: any): any {
+  const tuned = { ...(policy || {}) }
+  const rawPreference =
+    tuned.pungsPreference ??
+    tuned.pengPengPreference ??
+    tuned.allPungsPreference ??
+    0
+  const pungsPreference = Math.max(0, Math.min(1, Number(rawPreference) || 0))
+
+  tuned.pungsPreference = pungsPreference
+  if (pungsPreference <= 0) return tuned
+
+  const raise = (key: string, value: number) => {
+    tuned[key] = Math.max(Number(tuned[key] ?? 0), value)
+  }
+  const lower = (key: string, value: number) => {
+    tuned[key] = Math.min(Number(tuned[key] ?? value), value)
+  }
+
+  raise('allPungsPursuit', 0.35 + pungsPreference * 1.85)
+  raise('qingPengPursuit', 0.2 + pungsPreference * 1.55)
+  raise('hunPengPursuit', 0.2 + pungsPreference * 1.45)
+  raise('allHonorsPungsPursuit', 0.1 + pungsPreference * 1.35)
+  raise('sequenceVsTripletBias', pungsPreference * 1.9)
+  raise('flushVsPungsBalance', pungsPreference * 1.4)
+  raise('pairWeight', 8 + pungsPreference * 4.5)
+  raise('tripletKeepBonus', 1.2 + pungsPreference * 4.4)
+  raise('pengChance', 0.72 + pungsPreference * 0.26)
+  raise('kongChance', 0.58 + pungsPreference * 0.18)
+  raise('safeTilePriority', 0.2 + pungsPreference * 0.45)
+  raise('defenseRiskAversion', 0.14 + pungsPreference * 0.26)
+  raise('wallLateDefense', 0.2 + pungsPreference * 0.28)
+  raise('honorVsSuitedBalance', pungsPreference * 1.1)
+  raise('daDiaoPursuit', pungsPreference * 1.6)
+
+  lower('chowChance', Math.max(0.08, 0.72 - pungsPreference * 0.56))
+  lower('menqingKeepBonus', Math.max(0.05, 0.32 - pungsPreference * 0.2))
+  lower('pureFlushPursuit', Math.max(0.1, 0.55 - pungsPreference * 0.22))
+
+  return tuned
+}
+
 function loadPolicyFile(cacheKey: string, filePath: string, logLabel: string): any {
   const stat = fs.statSync(filePath)
   const cachedSource = _policySources[cacheKey]
@@ -371,7 +413,7 @@ function loadPolicyFile(cacheKey: string, filePath: string, logLabel: string): a
 
   const raw = fs.readFileSync(filePath, 'utf-8')
   const data = JSON.parse(raw)
-  const policy = data.policy || data
+  const policy = applyStrategicPreferencePolicy(tuneLiveClaimPolicy(data.policy || data))
   _policies[cacheKey] = policy
   _policySources[cacheKey] = { path: filePath, mtimeMs: stat.mtimeMs }
   console.log(`[BotService] Loaded policy for ${logLabel}:`, policy.id || 'character')
@@ -400,7 +442,7 @@ function loadCharacterPolicy(botName: string): any {
       try {
         const raw = fs.readFileSync(p, 'utf-8')
         const data = JSON.parse(raw)
-        _policies[resolvedBotName] = data.policy || data
+        _policies[resolvedBotName] = applyStrategicPreferencePolicy(tuneLiveClaimPolicy(data.policy || data))
         _policies[botName] = _policies[resolvedBotName]
         console.log(`[BotService] ✅ Loaded policy for ${resolvedBotName}:`, _policies[resolvedBotName].id || 'character')
         return _policies[botName]
@@ -437,7 +479,7 @@ function loadCharacterPolicy(botName: string): any {
         try {
           const raw = fs.readFileSync(p, 'utf-8')
           const data = JSON.parse(raw)
-          _policies['default'] = data.policy || data
+          _policies['default'] = applyStrategicPreferencePolicy(tuneLiveClaimPolicy(data.policy || data))
           console.log(`[BotService] ✅ Loaded default policy:`, _policies['default'].id || 'best')
           break
         } catch (err: any) {
@@ -472,7 +514,7 @@ function loadCharacterPolicy(botName: string): any {
         honorRushBoost: 0.2,
         bailoutHuPenaltyPerMeld: 0.01,
       }
-      _policies['default'] = tuneLiveClaimPolicy(_policies['default'])
+      _policies['default'] = applyStrategicPreferencePolicy(tuneLiveClaimPolicy(_policies['default']))
       console.log('[BotService] ⚠️ Using hardcoded fallback policy')
     }
   }
@@ -1328,6 +1370,38 @@ export function selectDiscardTile(player: Player, game: GameState): string {
       score += routeScore
       composite += routeScore * 2
       const visibleCopies = countVisibleCopies(tile, game)
+      const shouldPurgeMinorSuitResidue =
+        routeState.current === 'HALF_FLUSH' &&
+        routeState.targetSuit &&
+        routeState.features.longestSuitCount >= 6 &&
+        routeState.features.honorCount >= 3 &&
+        routeState.features.secondSuitCount > 0 &&
+        routeState.features.secondSuitCount <= 3 &&
+        routeState.secondary !== 'ALL_PUNGS' &&
+        !isHonor(tile) &&
+        isNumberTile(tile) &&
+        tile.suit !== routeState.targetSuit &&
+        discardDanger <= 0.38
+      const shouldKeepHonorStackDuringMinorSuitPurge =
+        routeState.current === 'HALF_FLUSH' &&
+        routeState.targetSuit &&
+        routeState.features.longestSuitCount >= 6 &&
+        routeState.features.honorCount >= 3 &&
+        routeState.features.secondSuitCount > 0 &&
+        routeState.features.secondSuitCount <= 3 &&
+        routeState.secondary !== 'ALL_PUNGS' &&
+        isHonor(tile) &&
+        discardDanger <= 0.38
+      if (shouldPurgeMinorSuitResidue) {
+        composite +=
+          48 +
+          tilePairCount * 12 +
+          countNearbySameSuitTiles(tile, hand) * 5 +
+          Math.max(0, routeState.features.longestSuitCount - routeState.features.secondSuitCount) * 3
+      }
+      if (shouldKeepHonorStackDuringMinorSuitPurge) {
+        composite -= 28 + Math.max(0, routeState.features.honorCount - 3) * 3
+      }
       const overdueMenqingHold =
         exposedCount === 0 &&
         estimatedRound > routeMetricPolicy.menqingHoldTurns &&

@@ -6,7 +6,7 @@ import {
   Tile,
   TileSuit,
 } from '../server/types/game'
-import { selectDiscardTile } from '../server/services/botService'
+import { applyStrategicPreferencePolicy, selectDiscardTile } from '../server/services/botService'
 
 let passed = 0
 let failed = 0
@@ -146,6 +146,97 @@ ok(
   'late-game threat prefers proven safe ting discard',
   selectedTileId === safeEast1.id,
   `selected=${selectedTileId}`
+)
+
+const offSuitResidueAi = makePlayer('ai-off-suit-residue', 'AI-AK', [
+  tile(TileSuit.BAMBOOS, 2, 'b2'),
+  tile(TileSuit.BAMBOOS, 3, 'b3'),
+  tile(TileSuit.BAMBOOS, 4, 'b4'),
+  tile(TileSuit.BAMBOOS, 5, 'b5'),
+  tile(TileSuit.BAMBOOS, 6, 'b6'),
+  tile(TileSuit.BAMBOOS, 7, 'b7'),
+  tile(TileSuit.WIND, 1, 'east'),
+  tile(TileSuit.WIND, 2, 'south'),
+  tile(TileSuit.WIND, 3, 'west'),
+  tile(TileSuit.DRAGON, 1, 'red'),
+  tile(TileSuit.DOTS, 4, 'dot4-a'),
+  tile(TileSuit.DOTS, 4, 'dot4-b'),
+  tile(TileSuit.DOTS, 5, 'dot5'),
+  tile(TileSuit.FLOWER, 2, 'flower-2'),
+])
+const offSuitResidueGame = makeGame([
+  offSuitResidueAi,
+  makePlayer('p2-off', 'AI-p2-off', []),
+  makePlayer('p3-off', 'AI-p3-off', []),
+  makePlayer('p4-off', 'AI-p4-off', []),
+], [])
+offSuitResidueGame.customScoringMode = 'flower-1' as any
+offSuitResidueGame.wildTileGroup = ['1'] as any
+
+const offSuitResidueDiscardId = selectDiscardTile(offSuitResidueAi, offSuitResidueGame)
+
+ok(
+  'long one-suit hand with many honors should purge the tiny off-suit residue before honors or the main suit',
+  ['dot4-a', 'dot4-b', 'dot5'].includes(offSuitResidueDiscardId),
+  `selected=${offSuitResidueDiscardId}`
+)
+
+const offSuitTripletAi = makePlayer('ai-off-suit-triplet', 'AI-AK', [
+  tile(TileSuit.BAMBOOS, 2, 'tb2'),
+  tile(TileSuit.BAMBOOS, 3, 'tb3'),
+  tile(TileSuit.BAMBOOS, 4, 'tb4'),
+  tile(TileSuit.BAMBOOS, 5, 'tb5'),
+  tile(TileSuit.BAMBOOS, 6, 'tb6'),
+  tile(TileSuit.BAMBOOS, 7, 'tb7'),
+  tile(TileSuit.WIND, 1, 'teast'),
+  tile(TileSuit.WIND, 2, 'tsouth'),
+  tile(TileSuit.WIND, 3, 'twest'),
+  tile(TileSuit.DRAGON, 1, 'tred'),
+  tile(TileSuit.DRAGON, 2, 'tgreen'),
+  tile(TileSuit.DOTS, 4, 'tdot4-a'),
+  tile(TileSuit.DOTS, 4, 'tdot4-b'),
+  tile(TileSuit.DOTS, 4, 'tdot4-c'),
+])
+const offSuitTripletGame = makeGame([
+  offSuitTripletAi,
+  makePlayer('p2-triplet', 'AI-p2-triplet', []),
+  makePlayer('p3-triplet', 'AI-p3-triplet', []),
+  makePlayer('p4-triplet', 'AI-p4-triplet', []),
+], [])
+offSuitTripletGame.customScoringMode = 'flower-1' as any
+offSuitTripletGame.wildTileGroup = ['9'] as any
+
+const offSuitTripletDiscardId = selectDiscardTile(offSuitTripletAi, offSuitTripletGame)
+
+ok(
+  'long one-suit hand with many honors still clears a short off-suit triplet when not pursuing all pungs',
+  ['tdot4-a', 'tdot4-b', 'tdot4-c'].includes(offSuitTripletDiscardId),
+  `selected=${offSuitTripletDiscardId}`
+)
+
+const pungsTuned = applyStrategicPreferencePolicy({
+  pungsPreference: 1,
+  pengChance: 0.6,
+  chowChance: 0.8,
+  allPungsPursuit: 0.2,
+  pairWeight: 6,
+  sequenceVsTripletBias: 0,
+  flushVsPungsBalance: 0,
+})
+
+ok(
+  'pungsPreference lifts all-pungs route pressure and pair retention together',
+  pungsTuned.allPungsPursuit >= 2 &&
+    pungsTuned.pairWeight >= 12 &&
+    pungsTuned.sequenceVsTripletBias >= 1.8 &&
+    pungsTuned.flushVsPungsBalance >= 1.3,
+  `policy=${JSON.stringify(pungsTuned)}`
+)
+
+ok(
+  'pungsPreference simultaneously suppresses chow and boosts peng',
+  pungsTuned.pengChance >= 0.95 && pungsTuned.chowChance <= 0.2,
+  `peng=${pungsTuned.pengChance}, chow=${pungsTuned.chowChance}`
 )
 
 console.log(`\nResult: ${passed} passed, ${failed} failed`)

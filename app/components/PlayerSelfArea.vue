@@ -119,6 +119,7 @@ const props = defineProps<{
   discardMode?: DiscardMode
   dragDiscardThresholdPx?: number
   showDiscardConfirm?: boolean
+  readonly?: boolean
 }>()
 
 const sortedHand = computed(() => props.hand)
@@ -174,9 +175,18 @@ const emit = defineEmits<{
   (e: 'tileDiscard', tile: Tile): void
 }>()
 
-const onTileClick = (tile: Tile) => emit('tileClick', tile)
-const onTileDblclick = (tile: Tile) => emit('tileDblclick', tile)
-const onTileConfirmDiscard = (tile: Tile) => emit('tileDiscard', tile)
+const onTileClick = (tile: Tile) => {
+  if (props.readonly) return
+  emit('tileClick', tile)
+}
+const onTileDblclick = (tile: Tile) => {
+  if (props.readonly) return
+  emit('tileDblclick', tile)
+}
+const onTileConfirmDiscard = (tile: Tile) => {
+  if (props.readonly) return
+  emit('tileDiscard', tile)
+}
 
 const dragThreshold = computed(() => {
   const threshold = Number(props.dragDiscardThresholdPx)
@@ -186,6 +196,7 @@ const dragThreshold = computed(() => {
 const dragState = ref<{ pointerId: number; startX: number; startY: number; x: number; y: number; tile: Tile } | null>(null)
 
 const onPointerDown = (event: PointerEvent, tile: Tile) => {
+  if (props.readonly) return
   if (props.isWinner) return
   if (props.discardMode !== 'drag') return
   try {
@@ -203,6 +214,7 @@ const onPointerDown = (event: PointerEvent, tile: Tile) => {
 }
 
 const onPointerMove = (event: PointerEvent) => {
+  if (props.readonly) return
   if (!dragState.value || props.discardMode !== 'drag') return
   if (dragState.value.pointerId !== event.pointerId) return
   dragState.value = {
@@ -213,6 +225,7 @@ const onPointerMove = (event: PointerEvent) => {
 }
 
 const onPointerUp = (event: PointerEvent) => {
+  if (props.readonly) return
   if (!dragState.value || props.discardMode !== 'drag') return
   if (dragState.value.pointerId !== event.pointerId) return
   try {
