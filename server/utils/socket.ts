@@ -9,6 +9,7 @@ import { gameManager } from './gameManager'
 import { ActionType, GameEndReason } from '../types/game'
 import { AuthService } from '../services/authService'
 import { UserService } from '../services/userService'
+import { formatBeijingTime } from './beijingTime'
 
 let io: SocketIOServer | null = null
 
@@ -299,6 +300,14 @@ export async function initializeSocketIO(server: HTTPServer) {
           userName,
           roomUsers: roomUsersList,
           playerCount: updatedRoom!.socketIds.length
+        })
+        io!.to(roomId).emit('broadcastMessage', {
+          id: Date.now(),
+          text: `👤 ${userName}进入到了房间`,
+          type: 'info',
+          actionKind: 'roomJoin',
+          timestamp: Date.now(),
+          timeLabel: formatBeijingTime()
         })
 
         console.log(`👥 ${userName} joined room ${roomId} (${updatedRoom!.socketIds.length}/4 players)`)

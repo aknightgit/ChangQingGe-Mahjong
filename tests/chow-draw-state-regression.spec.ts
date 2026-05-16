@@ -65,7 +65,7 @@ function createPlayer(id: string) {
   } as any
 }
 
-console.log('\n=== Regression: chow-only pending should still allow draw ===\n')
+console.log('\n=== Regression: pending claim windows must freeze draw ===\n')
 
 const player = createPlayer('p1')
 
@@ -94,6 +94,7 @@ const game = {
   inheritMultiplier: 1,
   settlementMultiplier: 1,
   hesitationWindow: 5000,
+  _freezeUntil: Date.now() + 5000,
   winnersCount: 0,
   drawnThisTurn: false,
   roomOwner: player.id,
@@ -115,7 +116,7 @@ test('pending chow-only expiry also tracks hesitationWindow', pendingWindowMs <=
 const actions = await gameManager.getAvailableActions(game.gameId, player.id)
 
 test('available actions still include chow', actions.includes(ActionType.CHOW), `actions=${actions.join(',')}`)
-test('available actions expose draw during chow window', actions.includes(ActionType.DRAW), `actions=${actions.join(',')}`)
+test('available actions expose draw during chow window countdown', actions.includes(ActionType.DRAW), `actions=${actions.join(',')}`)
 
 let threw = false
 try {
@@ -126,9 +127,9 @@ try {
 
 const liveGame = await gameManager.getGame(game.gameId)
 
-test('draw is accepted while chow-only pending action exists', !threw)
-test('draw clears chow-only pending action', (liveGame?.pendingActions?.length ?? 0) === 0, `pending=${liveGame?.pendingActions?.length ?? -1}`)
-test('player is marked as having drawn', liveGame?.drawnThisTurn === true)
+test('draw is blocked while chow-only pending action exists', threw)
+test('blocked draw keeps chow-only pending action intact', (liveGame?.pendingActions?.length ?? 0) === 1, `pending=${liveGame?.pendingActions?.length ?? -1}`)
+test('blocked draw keeps drawnThisTurn false', liveGame?.drawnThisTurn === false)
 
 ;(gameManager as any).games.delete(game.gameId)
 ;(gameManager as any).clearPendingActionTimer?.(game.gameId)
@@ -146,6 +147,7 @@ const timeoutGame = {
       expiresAt: Date.now() - 10,
     }
   ],
+  _freezeUntil: undefined,
   drawnThisTurn: false,
   actionHistory: []
 } as any
@@ -161,9 +163,9 @@ await new Promise(resolve => setTimeout(resolve, 50))
 const afterTimeoutGame = await gameManager.getGame(timeoutGame.gameId)
 const timeoutActions = await gameManager.getAvailableActions(timeoutGame.gameId, player.id)
 
-test('human chow timeout clears pending instead of auto-drawing', (afterTimeoutGame?.pendingActions?.length ?? 0) === 0, `pending=${afterTimeoutGame?.pendingActions?.length ?? -1}`)
+test('human chow timeout keeps current-player claim pending alive', (afterTimeoutGame?.pendingActions?.length ?? 0) === 1, `pending=${afterTimeoutGame?.pendingActions?.length ?? -1}`)
 test('human chow timeout keeps drawnThisTurn false', afterTimeoutGame?.drawnThisTurn === false, `drawn=${String(afterTimeoutGame?.drawnThisTurn)}`)
-test('human chow timeout exposes draw action for manual click', timeoutActions.includes(ActionType.DRAW), `actions=${timeoutActions.join(',')}`)
+test('human chow timeout exposes draw action alongside claim actions', timeoutActions.includes(ActionType.DRAW) && timeoutActions.includes(ActionType.CHOW), `actions=${timeoutActions.join(',')}`)
 
 let timeoutDrawThrew = false
 try {
@@ -177,6 +179,7 @@ const afterTimeoutDrawGame = await gameManager.getGame(timeoutGame.gameId)
 test('human chow timeout still accepts manual draw click', !timeoutDrawThrew)
 test('manual draw after chow timeout marks drawnThisTurn true', afterTimeoutDrawGame?.drawnThisTurn === true, `drawn=${String(afterTimeoutDrawGame?.drawnThisTurn)}`)
 test('manual draw after chow timeout consumes wall tile', (afterTimeoutDrawGame?.wall?.length ?? -1) === 0, `wall=${afterTimeoutDrawGame?.wall?.length ?? -1}`)
+test('manual draw after chow timeout clears retained current-player claim', (afterTimeoutDrawGame?.pendingActions?.length ?? -1) === 0, `pending=${afterTimeoutDrawGame?.pendingActions?.length ?? -1}`)
 
 ;(gameManager as any).games.delete(timeoutGame.gameId)
 ;(gameManager as any).clearPendingActionTimer?.(timeoutGame.gameId)
@@ -194,6 +197,7 @@ const pengPendingGame = {
       expiresAt: Date.now() + 2000,
     }
   ],
+  _freezeUntil: Date.now() + 2000,
   drawnThisTurn: false,
   actionHistory: []
 } as any
@@ -205,7 +209,7 @@ pengPendingGame.players = [
 ;(gameManager as any).games.set(pengPendingGame.gameId, pengPendingGame)
 
 const pengPendingActions = await gameManager.getAvailableActions(pengPendingGame.gameId, player.id)
-test('peng window also exposes draw immediately for countdown UI', pengPendingActions.includes(ActionType.DRAW), `actions=${pengPendingActions.join(',')}`)
+test('peng window exposes draw during claim countdown but keeps execution locked', pengPendingActions.includes(ActionType.DRAW), `actions=${pengPendingActions.join(',')}`)
 
 let earlyPengDrawThrew = false
 try {
@@ -213,7 +217,7 @@ try {
 } catch {
   earlyPengDrawThrew = true
 }
-test('draw is accepted even before peng window expires once draw is exposed', !earlyPengDrawThrew)
+test('draw is blocked before peng window expires', earlyPengDrawThrew)
 
 ;(gameManager as any).games.delete(pengPendingGame.gameId)
 ;(gameManager as any).clearPendingActionTimer?.(pengPendingGame.gameId)
@@ -231,6 +235,7 @@ const expiredPengPendingGame = {
       expiresAt: Date.now() - 10,
     }
   ],
+  _freezeUntil: undefined,
   drawnThisTurn: false,
   actionHistory: []
 } as any
@@ -242,7 +247,7 @@ expiredPengPendingGame.players = [
 ;(gameManager as any).games.set(expiredPengPendingGame.gameId, expiredPengPendingGame)
 
 const expiredPengActions = await gameManager.getAvailableActions(expiredPengPendingGame.gameId, player.id)
-test('expired peng window still keeps draw visible until manual action', expiredPengActions.includes(ActionType.DRAW), `actions=${expiredPengActions.join(',')}`)
+test('expired peng window exposes draw alongside retained claim', expiredPengActions.includes(ActionType.DRAW) && expiredPengActions.includes(ActionType.PENG), `actions=${expiredPengActions.join(',')}`)
 
 let latePengDrawThrew = false
 try {
@@ -252,9 +257,9 @@ try {
 }
 
 const afterPengDrawGame = await gameManager.getGame(expiredPengPendingGame.gameId)
-test('draw is accepted once peng window expires', !latePengDrawThrew)
-test('expired peng window draw clears pending', (afterPengDrawGame?.pendingActions?.length ?? -1) === 0, `pending=${afterPengDrawGame?.pendingActions?.length ?? -1}`)
-test('expired peng window draw marks drawnThisTurn true', afterPengDrawGame?.drawnThisTurn === true, `drawn=${String(afterPengDrawGame?.drawnThisTurn)}`)
+test('draw becomes executable once only the current-player expired peng claim remains', !latePengDrawThrew)
+test('expired peng draw clears retained pending claim', (afterPengDrawGame?.pendingActions?.length ?? -1) === 0, `pending=${afterPengDrawGame?.pendingActions?.length ?? -1}`)
+test('expired peng draw marks drawnThisTurn true', afterPengDrawGame?.drawnThisTurn === true, `drawn=${String(afterPengDrawGame?.drawnThisTurn)}`)
 
 ;(gameManager as any).games.delete(expiredPengPendingGame.gameId)
 ;(gameManager as any).clearPendingActionTimer?.(expiredPengPendingGame.gameId)
@@ -286,7 +291,7 @@ sharedPendingDrawGame.players[1].position = 1
 ;(gameManager as any).games.set(sharedPendingDrawGame.gameId, sharedPendingDrawGame)
 
 const sharedPendingActions = await gameManager.getAvailableActions(sharedPendingDrawGame.gameId, 'p1')
-test('current player draw stays available even when other players still have pending non-hu claims', sharedPendingActions.includes(ActionType.DRAW), `actions=${sharedPendingActions.join(',')}`)
+test('current player draw may stay visible while other players still have pending non-hu claims', sharedPendingActions.includes(ActionType.DRAW), `actions=${sharedPendingActions.join(',')}`)
 
 let sharedPendingDrawThrew = false
 try {
@@ -296,8 +301,8 @@ try {
 }
 
 const sharedPendingAfterDraw = await gameManager.getGame(sharedPendingDrawGame.gameId)
-test('current player can draw while non-hu claims are still pending', !sharedPendingDrawThrew)
-test('drawing clears stale non-hu pending claims from others', (sharedPendingAfterDraw?.pendingActions?.length ?? -1) === 0, `pending=${sharedPendingAfterDraw?.pendingActions?.length ?? -1}`)
+test('current player cannot draw while non-hu claims are still pending', sharedPendingDrawThrew)
+test('blocked draw does not clear other players pending claims', (sharedPendingAfterDraw?.pendingActions?.length ?? -1) === 1, `pending=${sharedPendingAfterDraw?.pendingActions?.length ?? -1}`)
 
 ;(gameManager as any).games.delete(sharedPendingDrawGame.gameId)
 ;(gameManager as any).clearPendingActionTimer?.(sharedPendingDrawGame.gameId)
@@ -332,7 +337,7 @@ huLockGame.players[1].position = 1
 ;(gameManager as any).games.set(huLockGame.gameId, huLockGame)
 
 const huLockedActions = await gameManager.getAvailableActions(huLockGame.gameId, 'p1')
-test('draw remains visible while another player is actively selecting a hu option', huLockedActions.includes(ActionType.DRAW), `actions=${huLockedActions.join(',')}`)
+test('draw may remain visible while another player is actively selecting a hu option', huLockedActions.includes(ActionType.DRAW), `actions=${huLockedActions.join(',')}`)
 
 let huLockedDrawThrew = false
 try {
@@ -374,7 +379,7 @@ thinkLockGame.players[1].position = 1
 ;(gameManager as any).games.set(thinkLockGame.gameId, thinkLockGame)
 
 const thinkLockedActions = await gameManager.getAvailableActions(thinkLockGame.gameId, 'p1')
-test('draw remains visible while another player is using think', thinkLockedActions.includes(ActionType.DRAW), `actions=${thinkLockedActions.join(',')}`)
+test('draw may remain visible while another player is using think, but cannot execute', thinkLockedActions.includes(ActionType.DRAW), `actions=${thinkLockedActions.join(',')}`)
 
 let thinkLockedDrawThrew = false
 try {

@@ -3845,6 +3845,7 @@ const prevBailoutRelations = ref<string>('')
 const prevBotPlayers = ref<Set<string>>(new Set())
 const prevRebelEvent = ref<any>(null)
 const prevLiangShanVoteCount = ref(0)
+const prevLiangShanVoteIds = ref<string[]>([])
 const prevQjAlertIds = ref<Set<string>>(new Set())
 const prevSwapRequestIds = ref<Set<string>>(new Set())
 const prevIsMyTurn = ref(false)
@@ -4041,10 +4042,11 @@ watch(() => gameState.value, (newState, oldState) => {
   }
 
   // 梁山聚义投票进度（播报但不透露具体谁投了）
-  const currentVotes = ((newState as any).liangShanVotes || []).length
+  const currentVoteIds = ((newState as any).liangShanVotes || []) as string[]
+  const currentVotes = currentVoteIds.length
   if (currentVotes > prevLiangShanVoteCount.value) {
     if (currentVotes === 1) {
-      const voter = newState.players?.find((p: any) => p.id === (newState as any).liangShanVotes?.[0])
+      const voter = newState.players?.find((p: any) => p.id === currentVoteIds[0])
       addBroadcast(`🔥 ${voter?.name || '某玩家'} 发起了梁山聚义！`, 'special')
     } else if (currentVotes >= activePlayerCount(newState)) {
       addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
@@ -4054,10 +4056,21 @@ watch(() => gameState.value, (newState, oldState) => {
         showLiangShanOverlay.value = false
       }, 200)
     } else {
+      const newResponderIds = currentVoteIds.filter(id => !prevLiangShanVoteIds.value.includes(id))
+      const initiatorId = currentVoteIds[0]
+      const initiator = newState.players?.find((p: any) => p.id === initiatorId)
+      const responderNames = newResponderIds
+        .filter(id => id !== initiatorId)
+        .map(id => newState.players?.find((p: any) => p.id === id)?.name)
+        .filter(Boolean)
+      for (const responderName of responderNames) {
+        addBroadcast(`🔥 ${responderName} 响应了${initiator?.name || '发起者'}的梁山聚义！`, 'special')
+      }
       addBroadcast(`🔥 有${currentVotes}名玩家响应了梁山聚义！`, 'special')
     }
   }
   prevLiangShanVoteCount.value = currentVotes
+  prevLiangShanVoteIds.value = [...currentVoteIds]
 
   // 被聚义QJ线突破提醒（红色高亮）
   const currentAlerts = (newState as any).qjAlerts || []
