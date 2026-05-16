@@ -4997,7 +4997,7 @@ const forceDiscard = async (p: Player) => {
 
 .layout--mobile-landscape .settle-title-center {
   font-size: 1rem;
-  margin-bottom: 10px;
+  margin-bottom: 4px;
 }
 
 .layout--mobile-landscape .settle-table-wrap {
@@ -5911,7 +5911,7 @@ const forceDiscard = async (p: Player) => {
 
 .liang-shan-icon {
   font-size: 2.8rem;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
   filter: drop-shadow(0 0 8px rgba(255, 150, 50, 0.8));
 }
 
@@ -6233,7 +6233,7 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 4px;
 }
 .hu-combo-rank {
   font-size: 0.76rem;
@@ -6253,7 +6253,7 @@ const forceDiscard = async (p: Player) => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
 }
 .hu-combo-method {
   font-size: 0.82rem;
@@ -6263,12 +6263,36 @@ const forceDiscard = async (p: Player) => {
   border-radius: 999px;
   padding: 4px 10px;
 }
-.hu-combo-method,
-.hu-summary-grid {
+.hu-combo-method {
   display: none;
 }
+.hu-summary-grid {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.hu-summary-item {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 5px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.05);
+  text-align: center;
+}
+.hu-summary-key {
+  font-size: 0.55rem;
+  color: rgba(255,255,255,0.55);
+  display: block;
+  margin-bottom: 1px;
+}
+.hu-summary-value {
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: block;
+}
 .hu-combo-formula {
-  margin-bottom: 10px;
+  margin-bottom: 4px;
   font-size: 0.83rem;
   line-height: 1.5;
   color: rgba(255, 240, 190, 0.88);
@@ -6379,12 +6403,12 @@ const forceDiscard = async (p: Player) => {
 
   .hu-panel-title {
     font-size: 1.08rem;
-    margin-bottom: 10px;
+    margin-bottom: 4px;
   }
 
   .hu-combos {
     gap: 8px;
-    margin-bottom: 12px;
+    margin-bottom: 4px;
   }
 
   .hu-combo {
@@ -6473,7 +6497,7 @@ const forceDiscard = async (p: Player) => {
 
 .overlay-title {
   font-size: 1.6rem;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
 }
 
 .overlay-message {
