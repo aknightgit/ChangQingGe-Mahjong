@@ -351,17 +351,21 @@
           <Transition name="settings-panel" @after-leave="onSettingsClosed">
             <div
               v-if="showSettings"
-              ref="settingsPanelEl"
-              class="glass-settings-panel"
-              :style="settingsPanelStyle"
-              @click.stop
-              @wheel.stop
-              @touchmove.stop
+              class="glass-settings-overlay"
+              @click="showSettings = false"
             >
-              <!-- 三角指示箭头 -->
-              <div class="glass-settings-arrow"></div>
-                            <div class="glass-settings-body" @wheel.stop @touchmove.stop>
-                <div class="glass-settings-section">
+              <div
+                ref="settingsPanelEl"
+                class="glass-settings-panel"
+                :style="settingsPanelStyle"
+                @click.stop
+                @wheel.stop
+                @touchmove.stop
+              >
+                <!-- 三角指示箭头 -->
+                <div class="glass-settings-arrow"></div>
+                <div class="glass-settings-body" @wheel.stop @touchmove.stop>
+                  <div class="glass-settings-section">
                   <div class="glass-settings-section-header">
                     <div class="glass-settings-section-title">对局操作</div>
                     <div class="glass-settings-section-subtitle">只保留正在生效的出牌与音效控制</div>
@@ -479,6 +483,7 @@
                 </div>
               </div>
             </div>
+            </div>
           </Transition>
         </Teleport>
 
@@ -509,6 +514,11 @@
             <div class="player-name-label player-name-label--right" v-if="rightPlayer" @click="onPlayerNameClick(rightPlayer)">
               {{ rightPlayer.name }}
               <span v-if="eastIsWinner" class="winner-tag">胡</span>
+            </div>
+            <div v-if="isSpectator" class="spectating-hint spectating-hint--top">
+              <span class="spectating-hint-icon">📺</span>
+              <span class="spectating-hint-text">正在观看 <strong>{{ watchingPlayerName }}</strong> 的手牌</span>
+              <button class="mahjong-button small" @click="backToLobby">退出观赛</button>
             </div>
             <!-- 桌面中心: 弃牌池 + 牌墙 + 倍数 -->
             <TableCenter
@@ -624,12 +634,6 @@
                   @tileDblclick="handleTileDblclick"
                   @tileDiscard="handleTileDiscard"
                 />
-                <!-- Spectator hint -->
-                <div v-if="isSpectator" class="spectating-hint">
-                  <span class="spectating-hint-icon">📺</span>
-                  <span class="spectating-hint-text">正在观看 <strong>{{ watchingPlayerName }}</strong> 的手牌</span>
-                  <button class="mahjong-button small" @click="backToLobby">退出观赛</button>
-                </div>
                 <!-- 动作按钮放在手牌右侧 -->
                 <!-- 观赛模式不显示任何操作按钮 -->
                 <div v-if="isSpectator" class="inline-action-buttons inline-action-buttons--spectator">
@@ -4656,6 +4660,13 @@ const forceDiscard = async (p: Player) => {
   padding: 0;
 }
 
+.glass-settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: transparent;
+}
+
 /* 操作按钮：固定在桌面正中央 */
 .center-actions {
   position: absolute;
@@ -7697,6 +7708,20 @@ const forceDiscard = async (p: Player) => {
 
 /* 观赛模式标识 */
 .spectating-hint { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px; min-height: 56px; background: rgba(0,0,0,0.3); }
+.spectating-hint--top {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+  min-height: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(7, 19, 15, 0.86);
+  border: 1px solid rgba(79,195,247,0.28);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.22);
+  backdrop-filter: blur(10px);
+}
 .spectating-hint-icon { font-size: 1.4rem; }
 .spectating-hint-text { font-size: 0.95rem; color: rgba(255,255,255,0.8); }
 
