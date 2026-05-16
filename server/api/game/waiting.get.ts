@@ -7,7 +7,7 @@ export default defineEventHandler(async (event) => {
   let errorMsg: string | undefined;
 
   try {
-    const games = await gameManager.listWaitingGames();
+    const games = await gameManager.listGames();
     const now = Date.now();
     const INACTIVE_TIMEOUT_MS = 30 * 60 * 1000; // 30分钟
 

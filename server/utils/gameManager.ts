@@ -1860,7 +1860,7 @@ class GameManager {
       });
     }
     // Wait for dice animation on all clients
-    await new Promise(resolve => setTimeout(resolve, 800));
+    await new Promise(resolve => setTimeout(resolve, 1000));
     game.roundMultiplier = calculateRoundMultiplier(d1, d2);
     // 继承上局全局倍数(或从造反事件继承)
     const prevGlobal = game.inheritedGlobalMultiplier ?? 1;
