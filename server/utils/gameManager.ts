@@ -1712,7 +1712,7 @@ class GameManager {
     await this.hydrateFromDatabase();
     const game = await this.ensureGameLoaded(gameId);
     if (!game) throw new Error('Game not found');
-    if (game.phase !== GamePhase.WAITING && game.phase !== GamePhase.ENDED && game.phase !== GamePhase.CHA_JIAO) return;
+    if (game.phase !== GamePhase.WAITING && game.phase !== GamePhase.ENDED && game.phase !== GamePhase.CHA_JIAO && game.phase !== GamePhase.STARTING) return;
     if (game.players.length < 4) throw new Error('Need 4 players to start');
 
     game.endReason = null;
@@ -1820,11 +1820,7 @@ class GameManager {
     // 每局重置吃碰排斥状态
     game.chowPongExclusion = {};
 
-    // 广播 STARTING 阶段(所有客户端显示骰子动画)
-    game.phase = GamePhase.STARTING;
-    await this.persistGame(game);
-    this.broadcastGameState(gameId);
-
+    // 此时 phase 已经是 STARTING(由 setStartingPhase 设定)，不再重复广播
     // 从全部144种牌型中随机选百搭
     const allTileTypes: Array<{ suit: TileSuit; value: number }> = [];
     for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
@@ -1916,16 +1912,7 @@ class GameManager {
     const d2 = Math.min(6, Math.max(1, Math.round(options?.fixedDice?.[1] ?? (Math.floor(Math.random() * 6) + 1))));
     game.dice = [d1, d2];
 
-    // [Fix] broadcast dice roll to all players so non-dealers see the animation
-    if (this.wsManager) {
-      this.wsManager.broadcast(game.gameId, diceRoll, {
-        dice1: d1,
-        dice2: d2,
-        timestamp: Date.now()
-      });
-    }
-    // Wait for dice animation on all clients
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // 此时骰子已在客户端掷完，不再重新广播 diceRoll
     game.roundMultiplier = calculateRoundMultiplier(d1, d2);
     // 继承上局全局倍数(或从造反事件继承)
     const prevGlobal = game.inheritedGlobalMultiplier ?? 1;

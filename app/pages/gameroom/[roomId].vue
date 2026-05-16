@@ -720,9 +720,12 @@
                 : (gameState?.phase === 'playing' && !!currentPlayer?.isDealer) || gameState?.phase === 'ended'"
               class="settle-btn-header"
               :class="{ 'start-game-glow': canManualStartWaitingGame }"
+              :disabled="isGameStarting && gameState?.phase === GamePhase.WAITING"
               @click="gameState?.phase === GamePhase.WAITING ? onStartGame() : onRequestSettle()"
             >
-              {{ gameState?.phase === GamePhase.WAITING ? '🀄 开始牌局' : '📊 退房结算' }}
+              {{ gameState?.phase === GamePhase.WAITING
+                ? (isGameStarting ? '⏳ 正在开始...' : '🀄 开始牌局')
+                : '📊 退房结算' }}
             </button>
           </div>
 
