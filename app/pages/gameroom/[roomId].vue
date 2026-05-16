@@ -393,6 +393,13 @@
                     <div class="glass-settings-card">
                       <div class="glass-settings-card-title">出牌语音</div>
                       <div class="glass-settings-select-wrap glass-settings-select-wrap--compact">
+                        <div class="glass-settings-select-label">语音音色</div>
+                        <select class="glass-settings-select" :value="currentScheme" @change="onChangeVoiceScheme">
+                          <option value="bingtang">冰糖</option>
+                          <option value="baihua">白桦</option>
+                        </select>
+                      </div>
+                      <div class="glass-settings-select-wrap glass-settings-select-wrap--compact">
                         <div class="glass-settings-select-label">语音音量 {{ voiceVolumePercent }}%</div>
                         <input class="glass-settings-range" type="range" min="0" max="100" step="1" :value="voiceVolumePercent" @input="onChangeVoiceVolume" />
                       </div>
@@ -1124,11 +1131,15 @@ const onChangeBgmVolume = (event: Event) => {
 const onChangeVoiceVolume = (event: Event) => {
   setVoiceVolume(Number((event.target as HTMLInputElement).value || 85) / 100)
 }
+const onChangeVoiceScheme = (event: Event) => {
+  loadVoiceScheme((event.target as HTMLSelectElement).value as 'bingtang' | 'baihua')
+}
 const toggleBgmPlayback = () => {
   if (bgmIsPlaying.value) pauseBackgroundMusic()
   else playBackgroundMusic()
 }
 const {
+  currentScheme,
   currentVoiceVolume,
   loadVoiceScheme,
   preloadAllTiles,

@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 
-export type VoiceScheme = 'bingtang'
+export type VoiceScheme = 'bingtang' | 'baihua'
 
 interface TileVoiceEntry {
   key: string
@@ -84,7 +84,7 @@ const buildManifest = (scheme: VoiceScheme): Manifest => {
     .sort((a, b) => a.key.localeCompare(b.key, 'zh-CN'))
 
   return {
-    voice: '冰糖',
+    voice: scheme === 'baihua' ? '白桦' : '冰糖',
     tiles,
   }
 }
