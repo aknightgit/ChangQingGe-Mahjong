@@ -7745,16 +7745,34 @@ const forceDiscard = async (p: Player) => {
 
 
 /* ===== Xiaomi 14 Pro / compact mobile styles ===== */
-.layout--mobile-landscape .broadcast-header {
-  padding: 2px 6px !important;
-  gap: 3px !important;
+.layout--mobile-landscape :deep(.broadcast-header) {
+  padding: 1px 4px !important;
+  gap: 2px !important;
 }
-.layout--mobile-landscape .broadcast-title {
-  font-size: 0.5rem !important;
+.layout--mobile-landscape :deep(.broadcast-title) {
+  font-size: 0.45rem !important;
   line-height: 1 !important;
 }
-.layout--mobile-landscape .broadcast-icon {
-  font-size: 0.5rem !important;
+.layout--mobile-landscape :deep(.broadcast-icon) {
+  font-size: 0.45rem !important;
+}
+.layout--mobile-landscape :deep(.broadcast-msg) {
+  padding: 1px 3px !important;
+  gap: 2px !important;
+  font-size: 0.38rem !important;
+  line-height: 1.2 !important;
+}
+.layout--mobile-landscape :deep(.broadcast-time) {
+  font-size: 0.35rem !important;
+}
+.layout--mobile-landscape :deep(.broadcast-scroll) {
+  padding: 1px 3px !important;
+  gap: 1px !important;
+  max-height: 60px !important;
+}
+.layout--mobile-landscape :deep(.broadcast-empty) {
+  font-size: 0.4rem !important;
+  padding: 3px 4px !important;
 }
 .layout--mobile-landscape .inline-action-buttons {
   gap: 2px !important;
