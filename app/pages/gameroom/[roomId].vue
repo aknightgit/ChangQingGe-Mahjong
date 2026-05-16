@@ -5074,7 +5074,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .ext-title { font-size: 0.8rem; margin-bottom: 1px; }
 .layout--mobile-landscape .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
 .layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.78rem; }
-.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: 3px 6px; font-size: 0.68rem; }
+.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: 3px 6px; font-size: calc(0.68rem * var(--other-tile-scale, 1)); }
 .layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: 2px 4px; gap: 6px; flex-wrap: wrap; }
 .layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
 .layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
@@ -5285,7 +5285,7 @@ const forceDiscard = async (p: Player) => {
 
 .ting-preview-panel__tile {
   color: #ff6b6b;
-  font-size: 0.68rem;
+  font-size: calc(0.68rem * var(--other-tile-scale, 1));
   line-height: 1.2;
   flex-shrink: 0;
 }
@@ -5310,7 +5310,7 @@ const forceDiscard = async (p: Player) => {
   color: rgba(255, 255, 255, 0.6);
   padding: 2px 10px;
   border-radius: 12px;
-  font-size: 0.68rem;
+  font-size: calc(0.68rem * var(--other-tile-scale, 1));
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.15s ease;
@@ -6399,7 +6399,7 @@ const forceDiscard = async (p: Player) => {
   .hu-combo-method,
   .hu-group-kind,
   .hu-summary-key {
-    font-size: 0.68rem;
+    font-size: calc(0.68rem * var(--other-tile-scale, 1));
   }
 
   .hu-combo-score {
@@ -7583,7 +7583,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extra-action-btn,
 .layout--mobile-landscape .mahjong-button.small,
 .layout--mobile-landscape .panel-button.small {
-  font-size: 0.68rem;
+  font-size: calc(0.68rem * var(--other-tile-scale, 1));
 }
 
 .layout--mobile-landscape .action-buttons-panel {
