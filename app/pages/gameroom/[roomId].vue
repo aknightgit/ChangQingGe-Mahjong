@@ -351,21 +351,17 @@
           <Transition name="settings-panel" @after-leave="onSettingsClosed">
             <div
               v-if="showSettings"
-              class="glass-settings-overlay"
-              @click="showSettings = false"
+              ref="settingsPanelEl"
+              class="glass-settings-panel"
+              :style="settingsPanelStyle"
+              @click.stop
+              @wheel.stop
+              @touchmove.stop
             >
-              <div
-                ref="settingsPanelEl"
-                class="glass-settings-panel"
-                :style="settingsPanelStyle"
-                @click.stop
-                @wheel.stop
-                @touchmove.stop
-              >
-                <!-- 三角指示箭头 -->
-                <div class="glass-settings-arrow"></div>
-                <div class="glass-settings-body" @wheel.stop @touchmove.stop>
-                  <div class="glass-settings-section">
+              <!-- 三角指示箭头 -->
+              <div class="glass-settings-arrow"></div>
+                            <div class="glass-settings-body" @wheel.stop @touchmove.stop>
+                <div class="glass-settings-section">
                   <div class="glass-settings-section-header">
                     <div class="glass-settings-section-title">对局操作</div>
                     <div class="glass-settings-section-subtitle">只保留正在生效的出牌与音效控制</div>
@@ -483,7 +479,6 @@
                 </div>
               </div>
             </div>
-            </div>
           </Transition>
         </Teleport>
 
@@ -514,11 +509,6 @@
             <div class="player-name-label player-name-label--right" v-if="rightPlayer" @click="onPlayerNameClick(rightPlayer)">
               {{ rightPlayer.name }}
               <span v-if="eastIsWinner" class="winner-tag">胡</span>
-            </div>
-            <div v-if="isSpectator" class="spectating-hint spectating-hint--top">
-              <span class="spectating-hint-icon">📺</span>
-              <span class="spectating-hint-text">正在观看 <strong>{{ watchingPlayerName }}</strong> 的手牌</span>
-              <button class="mahjong-button small" @click="backToLobby">退出观赛</button>
             </div>
             <!-- 桌面中心: 弃牌池 + 牌墙 + 倍数 -->
             <TableCenter
@@ -634,6 +624,12 @@
                   @tileDblclick="handleTileDblclick"
                   @tileDiscard="handleTileDiscard"
                 />
+                <!-- Spectator hint -->
+                <div v-if="isSpectator" class="spectating-hint">
+                  <span class="spectating-hint-icon">📺</span>
+                  <span class="spectating-hint-text">正在观看 <strong>{{ watchingPlayerName }}</strong> 的手牌</span>
+                  <button class="mahjong-button small" @click="backToLobby">退出观赛</button>
+                </div>
                 <!-- 动作按钮放在手牌右侧 -->
                 <!-- 观赛模式不显示任何操作按钮 -->
                 <div v-if="isSpectator" class="inline-action-buttons inline-action-buttons--spectator">
@@ -724,9 +720,12 @@
                 : (gameState?.phase === 'playing' && !!currentPlayer?.isDealer) || gameState?.phase === 'ended'"
               class="settle-btn-header"
               :class="{ 'start-game-glow': canManualStartWaitingGame }"
+              :disabled="isGameStarting && gameState?.phase === GamePhase.WAITING"
               @click="gameState?.phase === GamePhase.WAITING ? onStartGame() : onRequestSettle()"
             >
-              {{ gameState?.phase === GamePhase.WAITING ? '🀄 开始牌局' : '📊 退房结算' }}
+              {{ gameState?.phase === GamePhase.WAITING
+                ? (isGameStarting ? '⏳ 正在开始...' : '🀄 开始牌局')
+                : '📊 退房结算' }}
             </button>
           </div>
 
@@ -1953,6 +1952,7 @@ const overlayReason = computed(() => roomDismissedReason.value || gameState.valu
 const isOverlayVisible = computed(() => {
   if (roomDismissedReason.value) return true
   if (!isGameEnded.value) return false
+  if (isWallExhaustedSettlement.value) return false
   return overlayReason.value !== GameEndReason.LAST_PLAYER
 })
 const canStartNextRoundOverlay = computed(() => ![
@@ -3829,6 +3829,7 @@ watch(
             totalScore: p.score ?? 0
           }))
         }
+        showSettlement.value = true
         startWallExhaustedCountdown()
       }
       return
@@ -4658,13 +4659,6 @@ const forceDiscard = async (p: Player) => {
   padding: 0;
 }
 
-.glass-settings-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  background: transparent;
-}
-
 /* 操作按钮：固定在桌面正中央 */
 .center-actions {
   position: absolute;
@@ -4995,7 +4989,7 @@ const forceDiscard = async (p: Player) => {
 
 .layout--mobile-landscape .settle-title-center {
   font-size: 1rem;
-  margin-bottom: 4px;
+  margin-bottom: 10px;
 }
 
 .layout--mobile-landscape .settle-table-wrap {
@@ -5072,7 +5066,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .ext-title { font-size: 0.8rem; margin-bottom: 1px; }
 .layout--mobile-landscape .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
 .layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.78rem; }
-.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: 3px 6px; font-size: calc(0.68rem * var(--other-tile-scale, 1)); }
+.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: 3px 6px; font-size: 0.68rem; }
 .layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: 2px 4px; gap: 6px; flex-wrap: wrap; }
 .layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
 .layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
@@ -5283,7 +5277,7 @@ const forceDiscard = async (p: Player) => {
 
 .ting-preview-panel__tile {
   color: #ff6b6b;
-  font-size: calc(0.68rem * var(--other-tile-scale, 1));
+  font-size: 0.68rem;
   line-height: 1.2;
   flex-shrink: 0;
 }
@@ -5308,7 +5302,7 @@ const forceDiscard = async (p: Player) => {
   color: rgba(255, 255, 255, 0.6);
   padding: 2px 10px;
   border-radius: 12px;
-  font-size: calc(0.68rem * var(--other-tile-scale, 1));
+  font-size: 0.68rem;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.15s ease;
@@ -5909,7 +5903,7 @@ const forceDiscard = async (p: Player) => {
 
 .liang-shan-icon {
   font-size: 2.8rem;
-  margin-bottom: 4px;
+  margin-bottom: 12px;
   filter: drop-shadow(0 0 8px rgba(255, 150, 50, 0.8));
 }
 
@@ -6231,7 +6225,7 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  margin-bottom: 10px;
 }
 .hu-combo-rank {
   font-size: 0.76rem;
@@ -6251,7 +6245,7 @@ const forceDiscard = async (p: Player) => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 4px;
+  margin-bottom: 12px;
 }
 .hu-combo-method {
   font-size: 0.82rem;
@@ -6261,36 +6255,12 @@ const forceDiscard = async (p: Player) => {
   border-radius: 999px;
   padding: 4px 10px;
 }
-.hu-combo-method {
+.hu-combo-method,
+.hu-summary-grid {
   display: none;
 }
-.hu-summary-grid {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 6px;
-  margin-top: 4px;
-}
-.hu-summary-item {
-  flex: 1;
-  min-width: 0;
-  padding: 3px 5px;
-  border-radius: 6px;
-  background: rgba(255,255,255,0.05);
-  text-align: center;
-}
-.hu-summary-key {
-  font-size: 0.55rem;
-  color: rgba(255,255,255,0.55);
-  display: block;
-  margin-bottom: 1px;
-}
-.hu-summary-value {
-  font-size: 0.7rem;
-  font-weight: 700;
-  display: block;
-}
 .hu-combo-formula {
-  margin-bottom: 4px;
+  margin-bottom: 10px;
   font-size: 0.83rem;
   line-height: 1.5;
   color: rgba(255, 240, 190, 0.88);
@@ -6401,12 +6371,12 @@ const forceDiscard = async (p: Player) => {
 
   .hu-panel-title {
     font-size: 1.08rem;
-    margin-bottom: 4px;
+    margin-bottom: 10px;
   }
 
   .hu-combos {
     gap: 8px;
-    margin-bottom: 4px;
+    margin-bottom: 12px;
   }
 
   .hu-combo {
@@ -6421,7 +6391,7 @@ const forceDiscard = async (p: Player) => {
   .hu-combo-method,
   .hu-group-kind,
   .hu-summary-key {
-    font-size: calc(0.68rem * var(--other-tile-scale, 1));
+    font-size: 0.68rem;
   }
 
   .hu-combo-score {
@@ -6495,7 +6465,7 @@ const forceDiscard = async (p: Player) => {
 
 .overlay-title {
   font-size: 1.6rem;
-  margin-bottom: 4px;
+  margin-bottom: 12px;
 }
 
 .overlay-message {
@@ -7605,7 +7575,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extra-action-btn,
 .layout--mobile-landscape .mahjong-button.small,
 .layout--mobile-landscape .panel-button.small {
-  font-size: calc(0.68rem * var(--other-tile-scale, 1));
+  font-size: 0.68rem;
 }
 
 .layout--mobile-landscape .action-buttons-panel {
@@ -7730,20 +7700,6 @@ const forceDiscard = async (p: Player) => {
 
 /* 观赛模式标识 */
 .spectating-hint { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px; min-height: 56px; background: rgba(0,0,0,0.3); }
-.spectating-hint--top {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 9;
-  min-height: 0;
-  padding: 8px 14px;
-  border-radius: 999px;
-  background: rgba(7, 19, 15, 0.86);
-  border: 1px solid rgba(79,195,247,0.28);
-  box-shadow: 0 10px 24px rgba(0,0,0,0.22);
-  backdrop-filter: blur(10px);
-}
 .spectating-hint-icon { font-size: 1.4rem; }
 .spectating-hint-text { font-size: 0.95rem; color: rgba(255,255,255,0.8); }
 
@@ -7767,34 +7723,16 @@ const forceDiscard = async (p: Player) => {
 
 
 /* ===== Xiaomi 14 Pro / compact mobile styles ===== */
-.layout--mobile-landscape :deep(.broadcast-header) {
-  padding: 1px 4px !important;
-  gap: 2px !important;
+.layout--mobile-landscape .broadcast-header {
+  padding: 2px 6px !important;
+  gap: 3px !important;
 }
-.layout--mobile-landscape :deep(.broadcast-title) {
-  font-size: 0.45rem !important;
+.layout--mobile-landscape .broadcast-title {
+  font-size: 0.5rem !important;
   line-height: 1 !important;
 }
-.layout--mobile-landscape :deep(.broadcast-icon) {
-  font-size: 0.45rem !important;
-}
-.layout--mobile-landscape :deep(.broadcast-msg) {
-  padding: 1px 3px !important;
-  gap: 2px !important;
-  font-size: 0.38rem !important;
-  line-height: 1.2 !important;
-}
-.layout--mobile-landscape :deep(.broadcast-time) {
-  font-size: 0.35rem !important;
-}
-.layout--mobile-landscape :deep(.broadcast-scroll) {
-  padding: 1px 3px !important;
-  gap: 1px !important;
-  max-height: 60px !important;
-}
-.layout--mobile-landscape :deep(.broadcast-empty) {
-  font-size: 0.4rem !important;
-  padding: 3px 4px !important;
+.layout--mobile-landscape .broadcast-icon {
+  font-size: 0.5rem !important;
 }
 .layout--mobile-landscape .inline-action-buttons {
   gap: 2px !important;
