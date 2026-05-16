@@ -742,19 +742,19 @@ onUnmounted(() => {
   .draw-action-group { gap: 8px; }
 }
 
-@media (max-width: 900px) and (orientation: landscape) {
+@media (max-width: 900px) {
   .action-panel {
-    padding: 6px;
-    gap: 6px;
+    padding: 4px;
+    gap: 4px;
     border-radius: 10px;
     flex-wrap: wrap;
     justify-content: center;
   }
-  .action-btn--small { width: 32px; height: 32px; font-size: 0.7rem; }
-  .action-btn--draw { width: 48px; height: 48px; font-size: 0.9rem; }
+  .action-btn--small { width: 28px; height: 28px; font-size: 0.65rem; }
+  .action-btn--draw { width: 40px; height: 40px; font-size: 0.8rem; }
   .draw-action-group { gap: 4px; }
   .action-grid { gap: 4px; }
-  .freeze-progress-ring { width: 52px; height: 52px; }
+  .freeze-progress-ring { width: 44px; height: 44px; }
   .delay-indicator { font-size: 0.55rem; top: -18px; }
 }
 </style>

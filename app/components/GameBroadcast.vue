@@ -167,14 +167,14 @@ watch(() => props.messages.length, () => {
   to { opacity: 1; transform: translateX(0); }
 }
 
-@media (max-width: 900px) and (orientation: landscape) {
+@media (max-width: 900px) {
   .broadcast-panel { border-radius: 6px; }
-  .broadcast-header { padding: calc(3px * var(--other-tile-scale, 1)) calc(6px * var(--other-tile-scale, 1)); gap: calc(4px * var(--other-tile-scale, 1)); }
+  .broadcast-header { padding: calc(2px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); gap: calc(2px * var(--other-tile-scale, 1)); }
   .broadcast-icon { font-size: calc(0.6rem * var(--other-tile-scale, 1)); }
   .broadcast-title { font-size: calc(0.58rem * var(--other-tile-scale, 1)); }
-  .broadcast-scroll { padding: calc(2px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); gap: calc(2px * var(--other-tile-scale, 1)); max-height: calc(120px * var(--other-tile-scale, 1)); }
-  .broadcast-msg { font-size: calc(0.5rem * var(--other-tile-scale, 1)); padding: calc(2px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); gap: calc(4px * var(--other-tile-scale, 1)); }
-  .broadcast-time { font-size: calc(0.45rem * var(--other-tile-scale, 1)); }
+  .broadcast-scroll { padding: calc(2px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); gap: calc(2px * var(--other-tile-scale, 1)); max-height: calc(80px * var(--other-tile-scale, 1)); }
+  .broadcast-msg { font-size: calc(0.4rem * var(--other-tile-scale, 1)); padding: calc(1px * var(--other-tile-scale, 1)) calc(3px * var(--other-tile-scale, 1)); gap: calc(2px * var(--other-tile-scale, 1)); }
+  .broadcast-time { font-size: calc(0.4rem * var(--other-tile-scale, 1)); }
   .broadcast-empty { font-size: calc(0.5rem * var(--other-tile-scale, 1)); padding: calc(6px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); }
 }
 </style>
