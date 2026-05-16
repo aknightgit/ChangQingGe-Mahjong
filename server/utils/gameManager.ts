@@ -16,7 +16,7 @@ import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqu
 import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
 import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier, calculateSettlementBreakdownByRules, generateWinOptions, type WinOption } from './scoring';
 import { randomUUID } from 'crypto';
-import { saveGameState, loadGameState, loadAllGameStates, deleteGameState } from './gamePersistence';
+import { saveGameState, loadGameState, loadAllGameStates, loadActiveGameStates, deleteGameState } from './gamePersistence';
 import { MatchHistoryService } from '../services/matchHistoryService';
 import { TrainingRecordService } from '../services/trainingRecordService';
 import { isBotPlayer, selectBotChowTileIds, selectDiscardTile, shouldClaimPendingAction } from '../services/botService';
@@ -5620,8 +5620,9 @@ class GameManager {
    * List all active games
    */
   async listGames(): Promise<GameState[]> {
-    await this.hydrateFromDatabase();
-    return Array.from(this.games.values());
+    // 从 MongoDB 只加载未结束的游戏（惰性加载不加载所有游戏到内存）
+    const allGames = await loadActiveGameStates();
+    return Array.from(allGames);
   }
 
   /**

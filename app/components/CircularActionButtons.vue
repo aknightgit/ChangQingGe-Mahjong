@@ -259,15 +259,28 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* ===== 尺寸变量（以17 Ultra为基准 1200px shortSide） ===== */
+.action-panel {
+  --btn-small: calc(44px * var(--mobile-scale, 1));
+  --btn-draw: calc(72px * var(--mobile-scale, 1));
+  --btn-font-small: calc(0.85rem * var(--mobile-scale, 1));
+  --btn-font-draw: calc(1.2rem * var(--mobile-scale, 1));
+  --btn-font-think: calc(1.05rem * var(--mobile-scale, 1));
+  --panel-padding: calc(12px * var(--mobile-scale, 1));
+  --panel-gap: calc(12px * var(--mobile-scale, 1));
+  --grid-gap: calc(6px * var(--mobile-scale, 1));
+  --ring-size: calc(76px * var(--mobile-scale, 1));
+}
+
 .action-panel {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
+  gap: var(--panel-gap);
+  padding: var(--panel-padding);
   background: rgba(10, 25, 18, 0.92);
   border: 1.5px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
+  border-radius: calc(16px * var(--mobile-scale, 1));
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   width: 100%;
   justify-content: flex-start;
@@ -276,12 +289,12 @@ onUnmounted(() => {
 .draw-action-group {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: calc(10px * var(--mobile-scale, 1));
 }
 
 .action-panel--compact {
-  padding: 8px;
-  gap: 8px;
+  padding: calc(8px * var(--mobile-scale, 1));
+  gap: calc(8px * var(--mobile-scale, 1));
 }
 
 /* 延迟提示 */
@@ -307,19 +320,19 @@ onUnmounted(() => {
 .action-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: var(--grid-gap);
 }
 
 .priority-action-group {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--grid-gap);
 }
 
 .priority-action-group--active {
-  padding: 8px;
-  border-radius: 14px;
+  padding: calc(8px * var(--mobile-scale, 1));
+  border-radius: calc(14px * var(--mobile-scale, 1));
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
 }
@@ -387,16 +400,16 @@ onUnmounted(() => {
 
 /* 小圆：吃碰胡杠 */
 .action-btn--small {
-  width: 44px;
-  height: 44px;
-  font-size: 0.85rem;
+  width: var(--btn-small);
+  height: var(--btn-small);
+  font-size: var(--btn-font-small);
 }
 
 /* 大圆：摸 */
 .action-btn--draw {
-  width: 72px;
-  height: 72px;
-  font-size: 1.2rem;
+  width: var(--btn-draw);
+  height: var(--btn-draw);
+  font-size: var(--btn-font-draw);
   flex-shrink: 0;
   position: relative;
 }
@@ -584,8 +597,8 @@ onUnmounted(() => {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 76px;
-  height: 76px;
+  width: var(--ring-size);
+  height: var(--ring-size);
   transform: translate(-50%, -50%);
   border-radius: 50%;
   background: conic-gradient(
@@ -634,17 +647,17 @@ onUnmounted(() => {
 }
 
 /* 紧凑态 */
-.action-panel--compact .action-btn--small { width: 36px; height: 36px; font-size: 0.75rem; }
-.action-panel--compact .action-btn--draw { width: 56px; height: 56px; font-size: 1rem; }
-.action-panel--compact .action-grid { gap: 4px; }
-.action-panel--compact .priority-action-group { gap: 4px; padding: 6px; }
-.action-panel--compact .priority-action-badge { font-size: 0.66rem; padding: 3px 8px; }
+.action-panel--compact .action-btn--small { width: calc(var(--btn-small) * 0.82); height: calc(var(--btn-small) * 0.82); font-size: calc(var(--btn-font-small) * 0.88); }
+.action-panel--compact .action-btn--draw { width: calc(var(--btn-draw) * 0.78); height: calc(var(--btn-draw) * 0.78); font-size: calc(var(--btn-font-draw) * 0.83); }
+.action-panel--compact .action-grid { gap: calc(var(--grid-gap) * 0.67); }
+.action-panel--compact .priority-action-group { gap: calc(var(--grid-gap) * 0.67); padding: calc(6px * var(--mobile-scale, 1)); }
+.action-panel--compact .priority-action-badge { font-size: calc(0.66rem * var(--mobile-scale, 1)); padding: calc(3px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); }
 
 /* 第二列：特殊操作按钮 */
 .action-grid-secondary {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--grid-gap);
   flex-wrap: nowrap;
   align-items: stretch;
 }
@@ -656,7 +669,7 @@ onUnmounted(() => {
   background: rgba(124, 58, 237, 0.3);
   color: rgba(255, 255, 255, 0.7);
   border-color: rgba(139, 92, 246, 0.3);
-  font-size: 0.75rem;
+  font-size: calc(0.75rem * var(--mobile-scale, 1));
 }
 .action-btn--think.action-btn--active {
   border-color: rgba(139, 92, 246, 0.6);
@@ -678,7 +691,9 @@ onUnmounted(() => {
 
 .action-btn--think-large {
   flex-shrink: 0;
-  font-size: 1.05rem;
+  font-size: var(--btn-font-think);
+  width: var(--btn-draw);
+  height: var(--btn-draw);
 }
 
 .action-btn--think-inline {
@@ -736,26 +751,11 @@ onUnmounted(() => {
   50% { box-shadow: 0 0 16px rgba(239, 83, 80, 0.5); }
 }
 
-@media (max-width: 768px) {
-  .action-btn--small { width: 40px; height: 40px; }
-  .action-btn--draw { width: 64px; height: 64px; font-size: 1.1rem; }
-  .draw-action-group { gap: 8px; }
-}
-
-@media (max-width: 900px) {
+/* 最小尺寸兜底（--mobile-scale 不生效时） */
+@media (max-width: 650px) {
   .action-panel {
-    padding: 4px;
-    gap: 4px;
-    border-radius: 10px;
-    flex-wrap: wrap;
-    justify-content: center;
+    --mobile-scale: 0.78 !important;
   }
-  .action-btn--small { width: 28px; height: 28px; font-size: 0.65rem; }
-  .action-btn--draw { width: 40px; height: 40px; font-size: 0.8rem; }
-  .draw-action-group { gap: 4px; }
-  .action-grid { gap: 4px; }
-  .freeze-progress-ring { width: 44px; height: 44px; }
-  .delay-indicator { font-size: 0.55rem; top: -18px; }
 }
 </style>
 

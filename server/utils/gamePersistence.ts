@@ -204,3 +204,10 @@ export const loadAllGameStates = async (): Promise<GameState[]> => {
   const docs = await games.find({}).toArray()
   return docs.map(documentToGameState)
 }
+
+/** 只加载未结束的游戏（waiting/starting/playing）用于房间列表 */
+export const loadActiveGameStates = async (): Promise<GameState[]> => {
+  const games = await getCollection<PersistedMahjongGame>(COLLECTION_NAME)
+  const docs = await games.find({ phase: { $ne: 'ended' } }).toArray()
+  return docs.map(documentToGameState)
+}
