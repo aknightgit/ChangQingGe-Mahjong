@@ -517,7 +517,8 @@ export function generateWinOptions(params: {
   }
   let uniqueOptions = Array.from(labelBest.values()).sort((a, b) => b.score - a.score);
 
-  // 当固定点数选项和公式选项同时存在时，去除公式选项（如清碰=20点 vs 基础番3番）
+  // 当固定点数选项和公式选项同时存在时，去除公式选项和子集选项
+  // 如：清碰=20点存在时，去掉清一色=10点（子集）和碰碰胡公式=3番（公式）
   // 检查是否有任何选项使用了固定点数
   const hasFixedPointOption = uniqueOptions.some(opt =>
     opt.handTypes?.some(type => {
@@ -526,30 +527,37 @@ export function generateWinOptions(params: {
     })
   );
   if (hasFixedPointOption) {
-    // 只保留使用了固定点数的选项（去除纯公式计算的低分选项）
-    const fixedPointTypeNames = new Set<string>();
-    for (const opt of uniqueOptions) {
-      for (const type of (opt.handTypes || [])) {
+    // 提取所有固定点数选项
+    const fixedOptions = uniqueOptions.filter(opt =>
+      opt.handTypes?.some(type => {
         const name = getFixedFanName(type, opt.type === 'self_draw', false, opt.handTypes);
-        if (name && FIXED_FAN[name]) {
-          fixedPointTypeNames.add(name);
-        }
-      }
-    }
+        return !!name && !!FIXED_FAN[name];
+      })
+    );
+    const maxFixedScore = Math.max(...fixedOptions.map(o => o.score), 0);
+
     uniqueOptions = uniqueOptions.filter(opt => {
-      // 保留有固定点数的选项
       const hasFixed = opt.handTypes?.some(type => {
         const name = getFixedFanName(type, opt.type === 'self_draw', false, opt.handTypes);
         return !!name && !!FIXED_FAN[name];
       });
-      if (hasFixed) return true;
-      // 也保留 score >= 固定点数选项最高分的选项（可能骰子倍数让公式分更高）
-      const maxFixedScore = Math.max(...uniqueOptions.filter(o => {
-        return o.handTypes?.some(t => {
-          const n = getFixedFanName(t, o.type === 'self_draw', false, o.handTypes);
-          return !!n && !!FIXED_FAN[n];
-        });
-      }).map(o => o.score), 0);
+
+      if (hasFixed) {
+        // 固定点数选项：检查是否被其他复合固定点数选项覆盖（严格子集 + 更低分数）
+        // 如：清一色[FULL_FLUSH] 是 清碰[QING_PENG,FULL_FLUSH,ALL_TRIPLETS] 的子集
+        for (const other of fixedOptions) {
+          if (other === opt) continue;
+          if (other.score <= opt.score) continue;
+          if (!opt.handTypes || !other.handTypes) continue;
+          if (opt.handTypes.length < other.handTypes.length &&
+              opt.handTypes.every(t => other.handTypes!.includes(t))) {
+            return false; // 移除被复合类型覆盖的子集选项
+          }
+        }
+        return true;
+      }
+
+      // 公式选项：仅保留分数 >= 最高固定分选项（可能骰子倍数翻更高）
       return opt.score >= maxFixedScore;
     });
   }
