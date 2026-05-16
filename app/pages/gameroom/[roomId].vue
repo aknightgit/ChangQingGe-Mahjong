@@ -790,8 +790,9 @@
 
               <!-- 听牌提示（左对齐紧贴操作按钮上方） -->
               <div class="ting-preview-section">
-                <label class="ting-preview-label" @click="onToggleTingPreview">
+                <div class="ting-preview-label" role="button" tabindex="0" @click="onToggleTingPreview" @keydown.enter="onToggleTingPreview">
                   <span class="ting-preview-label__text">听牌提示</span>
+                  <span class="ting-preview-label__toggle">{{ tingPreviewEnabled ? '✕' : '☰' }}</span>
                   <template v-if="tingPreviewEnabled && tingPreviewItems.length">
                     <span class="ting-preview-label__colon">：</span>
                     <span
@@ -802,7 +803,7 @@
                     >{{ item.label }}</span>
                   </template>
                   <span v-else class="ting-preview-label__hint">（未启用）</span>
-                </label>
+                </div>
               </div>
 
               <!-- 状态提示 -->
@@ -1813,7 +1814,7 @@ const watchingPlayerName = computed(() => {
 const pendingSpectateId = computed(() => spectatorViewState.value?.pendingHumanPlayerId || null)
 const approvedHumanSpectateId = computed(() => spectatorViewState.value?.approvedHumanPlayerId || null)
 const hasDebugSpectateBot = computed(() => {
-  return !!gameState.value?.players?.some((player: any) => ['AI-AK', 'AI-小猪'].includes(player?.name))
+  return !!gameState.value?.players?.some((player: any) => player?.name === 'AI-AK')
 })
 const spectatorApprovalRequest = computed(() => {
   if (!gameState.value || !currentPlayer.value) return null
@@ -4709,8 +4710,8 @@ const forceDiscard = async (p: Player) => {
 .extra-actions-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: 6px;
+  padding: 4px 8px;
   background: rgba(10, 20, 15, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
@@ -5054,8 +5055,8 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .ext-title { font-size: 0.8rem; margin-bottom: 1px; }
 .layout--mobile-landscape .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
 .layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.78rem; }
-.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(5px * var(--mobile-scale, 1)) calc(12px * var(--mobile-scale, 1)); font-size: calc(0.85rem * var(--mobile-scale, 1)); }
-.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(6px * var(--mobile-scale, 1)) calc(10px * var(--mobile-scale, 1)); gap: calc(8px * var(--mobile-scale, 1)); flex-wrap: wrap; }
+.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(4px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); font-size: calc(0.72rem * var(--mobile-scale, 1)); }
+.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: wrap; }
 .layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
 .layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
 .layout--mobile-landscape .extended-info-panel .action-buttons-panel { gap: 6px; }
@@ -5269,8 +5270,17 @@ const forceDiscard = async (p: Player) => {
   user-select: none;
   white-space: nowrap;
   overflow-x: auto;
-  padding: 1px 0;
+  padding: 2px 6px;
   -webkit-overflow-scrolling: touch;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  transition: background 0.15s ease;
+}
+.ting-preview-label:hover {
+  background: rgba(255, 255, 255, 0.10);
+}
+.ting-preview-label:active {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .ting-preview-label__text {
@@ -5292,6 +5302,24 @@ const forceDiscard = async (p: Player) => {
   flex-shrink: 0;
 }
 
+.ting-preview-label__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 3px;
+  border-radius: 3px;
+  font-size: 0.6rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+.ting-preview-label:hover .ting-preview-label__toggle {
+  background: rgba(255, 255, 255, 0.15);
+}
+
 .ting-preview-tile {
   color: #ff6b6b;
   font-size: 0.68rem;
@@ -5301,6 +5329,7 @@ const forceDiscard = async (p: Player) => {
   padding: 0;
   border: none;
   background: none;
+  pointer-events: none;
 }
 
 .ting-preview-tile--exhausted {
