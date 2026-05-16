@@ -670,12 +670,7 @@
                     :disabled="isInteractionLocked"
                     @click="handleCircularAction('kong')"
                   >杠</button>
-                  <button
-                    v-if="showHu"
-                    class="inline-action-btn inline-action-btn--hu inline-action-btn--claim-pulse"
-                    :disabled="isInteractionLocked"
-                    @click="onHu"
-                  >胡</button>
+                  <!-- [Moved] Hu button is now in extra-actions-bar -->
                   <button
                     v-if="showRebel"
                     class="inline-action-btn inline-action-btn--rebel"
@@ -858,6 +853,12 @@
                   :disabled="showRebel === false || isInteractionLocked || !isConnected || thinkFreezeActive"
                   @click="onRebel"
                 >🚨 造反</button>
+                <button
+                  v-if="showHu"
+                  class="extra-action-btn extra-action-btn--hu"
+                  :disabled="isInteractionLocked || isAIControlled"
+                  @click="onHu"
+                >🏆 您胡了</button>
                 <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
                   ⏱ {{ turnTimer }}s
                 </span>
@@ -7704,5 +7705,48 @@ const forceDiscard = async (p: Player) => {
 
 
 
-</style>
 
+/* ===== Xiaomi 14 Pro / compact mobile styles ===== */
+.layout--mobile-landscape .broadcast-header {
+  padding: 2px 6px !important;
+  gap: 3px !important;
+}
+.layout--mobile-landscape .broadcast-title {
+  font-size: 0.5rem !important;
+  line-height: 1 !important;
+}
+.layout--mobile-landscape .broadcast-icon {
+  font-size: 0.5rem !important;
+}
+.layout--mobile-landscape .inline-action-buttons {
+  gap: 2px !important;
+}
+.layout--mobile-landscape .inline-action-btn {
+  font-size: 0.5rem !important;
+  padding: 2px 5px !important;
+  min-width: 28px !important;
+}
+@media (max-width: 900px) and (orientation: portrait) {
+  .broadcast-header { padding: 3px 6px !important; gap: 3px !important; }
+  .broadcast-title { font-size: 0.55rem !important; line-height: 1.2 !important; }
+  .broadcast-icon { font-size: 0.55rem !important; }
+  .inline-action-buttons { gap: 2px !important; }
+  .inline-action-btn { font-size: 0.55rem !important; padding: 2px 6px !important; min-width: 32px !important; }
+}
+.extra-action-btn--hu {
+  color: #ff6b35 !important;
+  font-weight: 800 !important;
+  font-size: 0.7rem !important;
+  padding: 2px 8px !important;
+  border-color: #ff6b3544 !important;
+  background: rgba(255, 107, 53, 0.08) !important;
+}
+.extra-action-btn--hu:hover, .extra-action-btn--hu:active {
+  background: rgba(255, 107, 53, 0.25) !important;
+  border-color: #ff6b3588 !important;
+}
+.layout--mobile-landscape .extra-action-btn--hu {
+  font-size: 0.5rem !important;
+  padding: 1px 5px !important;
+}
+</style>
