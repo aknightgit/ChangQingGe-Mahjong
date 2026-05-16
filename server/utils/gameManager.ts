@@ -2258,9 +2258,17 @@ class GameManager {
     const hadPengOrKongOnDiscard = (game.actionHistory || []).some(a =>
       a.type === 'peng' || a.type === 'kong'
     );
+    // 只检查本局内是否有碰/杠动作（不是从远古今检测）
+    const currentRoundActions = (game.actionHistory || []).filter(a => {
+      // roundNumber 在 action 上记录
+      return (a as any).roundNumber === game.roundNumber || (a as any).roundNumber === undefined;
+    });
+    const hadPengOrKongThisRound = currentRoundActions.some(a =>
+      a.type === 'peng' || a.type === 'kong'
+    );
     const context: 'self_draw' | 'discard' = pendingAction?.tile
       ? 'discard'
-      : hadPengOrKongOnDiscard ? 'discard' : 'self_draw';
+      : hadPengOrKongThisRound ? 'discard' : 'self_draw';
     return this.getCachedWinOptions(game, player, context, {
       isKongFlower: false,
       isRobbingKong: !!pendingAction?.tile && !!game.pendingKongClaim,

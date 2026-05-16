@@ -515,7 +515,45 @@ export function generateWinOptions(params: {
       labelBest.set(key, opt);
     }
   }
-  const uniqueOptions = Array.from(labelBest.values()).sort((a, b) => b.score - a.score);
+  let uniqueOptions = Array.from(labelBest.values()).sort((a, b) => b.score - a.score);
+
+  // 当固定点数选项和公式选项同时存在时，去除公式选项（如清碰=20点 vs 基础番3番）
+  // 检查是否有任何选项使用了固定点数
+  const hasFixedPointOption = uniqueOptions.some(opt =>
+    opt.handTypes?.some(type => {
+      const name = getFixedFanName(type, opt.type === 'self_draw', false, opt.handTypes);
+      return !!name && !!FIXED_FAN[name];
+    })
+  );
+  if (hasFixedPointOption) {
+    // 只保留使用了固定点数的选项（去除纯公式计算的低分选项）
+    const fixedPointTypeNames = new Set<string>();
+    for (const opt of uniqueOptions) {
+      for (const type of (opt.handTypes || [])) {
+        const name = getFixedFanName(type, opt.type === 'self_draw', false, opt.handTypes);
+        if (name && FIXED_FAN[name]) {
+          fixedPointTypeNames.add(name);
+        }
+      }
+    }
+    uniqueOptions = uniqueOptions.filter(opt => {
+      // 保留有固定点数的选项
+      const hasFixed = opt.handTypes?.some(type => {
+        const name = getFixedFanName(type, opt.type === 'self_draw', false, opt.handTypes);
+        return !!name && !!FIXED_FAN[name];
+      });
+      if (hasFixed) return true;
+      // 也保留 score >= 固定点数选项最高分的选项（可能骰子倍数让公式分更高）
+      const maxFixedScore = Math.max(...uniqueOptions.filter(o => {
+        return o.handTypes?.some(t => {
+          const n = getFixedFanName(t, o.type === 'self_draw', false, o.handTypes);
+          return !!n && !!FIXED_FAN[n];
+        });
+      }).map(o => o.score), 0);
+      return opt.score >= maxFixedScore;
+    });
+  }
+
   return uniqueOptions;
 }
 
