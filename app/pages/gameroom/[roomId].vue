@@ -328,7 +328,7 @@
     </div>
 
     <div class="settle-actions">
-      <div v-if="isWallExhaustedSettlement" class="auto-next-countdown" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;justify-content:center;font-size:0.85rem;opacity:0.8">
+      <div v-if="isWallExhaustedSettlement && !isSettleRequested" class="auto-next-countdown" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;justify-content:center;font-size:0.85rem;opacity:0.8">
         <span class="auto-next-spinner"></span>
         <span>倒计时 {{ wallExhaustedCountdown }}s 后自动下一局</span>
       </div>
@@ -336,8 +336,11 @@
         <button v-if="canReviewHuSelection" class="settle-save-btn settle-save-btn--secondary" @click="openHuReviewPanel">
           回看胡牌选择
         </button>
-        <button class="settle-save-btn" @click="startNextRound">
+        <button v-if="!isSettleRequested" class="settle-save-btn" @click="startNextRound">
           下一局{{ isWallExhaustedSettlement && wallExhaustedCountdown > 0 ? ' (' + wallExhaustedCountdown + 's)' : '' }}
+        </button>
+        <button v-if="isSettleRequested" class="settle-save-btn settle-save-btn--primary" @click="onSaveSettle">
+          💾 保存并退出
         </button>
       </div>
     </div>
@@ -715,7 +718,7 @@
             <button
               v-if="gameState?.phase === GamePhase.WAITING
                 ? canManualStartWaitingGame
-                : (gameState?.phase === 'playing' && !!currentPlayer?.isDealer) || gameState?.phase === 'ended'"
+                : (gameState?.phase === 'playing' || gameState?.phase === 'ended')"
               class="settle-btn-header"
               :class="{ 'start-game-glow': canManualStartWaitingGame }"
               :disabled="isGameStarting && gameState?.phase === GamePhase.WAITING"
@@ -791,7 +794,7 @@
               <!-- 听牌提示（左对齐紧贴操作按钮上方） -->
               <div class="ting-preview-section">
                 <div class="ting-preview-label" role="button" tabindex="0" @click="onToggleTingPreview" @keydown.enter="onToggleTingPreview">
-                  <span class="ting-preview-label__text">听牌提示</span>
+                  <span class="ting-preview-label__text" style="font-size:0.5rem">听牌提示</span>
                   <span class="ting-preview-label__toggle">{{ tingPreviewEnabled ? '✕' : '☰' }}</span>
                   <template v-if="tingPreviewEnabled && tingPreviewItems.length">
                     <span class="ting-preview-label__colon">：</span>
@@ -2187,8 +2190,7 @@ const autoRollOnly = () => {
 const startNextRound = async () => {
   cancelWallExhaustedCountdown()
   if (isSettleRequested.value) {
-    // 退房结算已申请：直接显示总结算面板
-    showSettlement.value = true
+    // 退房结算已申请：已由 ENDED watcher 显示结算面板，不再重复
     return
   }
   showSettlement.value = false
@@ -3808,6 +3810,18 @@ watch(
   () => [gameState.value?.phase, (gameState.value as any)?.roundStats?.length ?? 0, gameState.value?.gameId, (gameState.value as any)?.endReason],
   async ([phase, roundCount, gameId, endReason]) => {
     if (phase !== GamePhase.ENDED || !gameId || !currentPlayer.value?.id) return
+    // 退房结算模式：先显示本局输赢，再显示总成绩单
+    if (isSettleRequested.value && settlementData.value?.playerStats) {
+      if (endReason === GameEndReason.WALL_EXHAUSTED) {
+        // 流局时额外记录本局信息
+        const lastRound = gameState.value?.roundStats?.[gameState.value.roundStats.length - 1]
+        if (lastRound && settlementData.value) {
+          settlementData.value.roundDetails = [lastRound]
+        }
+      }
+      showSettlement.value = true
+      return
+    }
     if (endReason === GameEndReason.WALL_EXHAUSTED) {
       const lastRound = gameState.value?.roundStats?.[gameState.value.roundStats.length - 1]
       if (lastRound) {
@@ -4721,20 +4735,24 @@ const forceDiscard = async (p: Player) => {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 2px 6px;
+  padding: 2px 48px 2px 52px;
   background: rgba(10, 20, 15, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   flex-wrap: wrap;
-  min-height: 28px;
+  position: relative;
 }
 
 .extra-actions-label {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
   font-size: 0.7rem;
   color: rgba(255, 255, 255, 0.35);
-  margin-right: 2px;
-  flex-shrink: 0;
   line-height: 1;
+  z-index: 1;
+  pointer-events: none;
 }
 
 .loading-overlay {
@@ -5289,6 +5307,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(255, 255, 255, 0.05);
   transition: background 0.15s ease;
   line-height: 1;
+  font-size: 0.5rem;
 }
 .ting-preview-label:hover {
   background: rgba(255, 255, 255, 0.10);
