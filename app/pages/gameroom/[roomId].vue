@@ -4047,6 +4047,28 @@ watch(() => gameState.value, (newState, oldState) => {
         if (player) addBroadcast(`⚔️ ${player.name} 提议梁山聚义！造反！`, 'special')
       }
     }
+    // 两吃/两碰检测：统计同一玩家对另一玩家的吃/碰次数
+    if (lastAction.type === 'chow' || lastAction.type === 'peng') {
+      // 找最近的一次 discard，确定被吃/碰的是谁
+      for (let i = history.length - 2; i >= 0; i--) {
+        const prev = history[i]
+        if (prev.type === 'discard') {
+          const discarder = newState.players?.find((p: any) => p.id === prev.playerId)
+          const claimer = newState.players?.find((p: any) => p.id === lastAction.playerId)
+          if (!discarder || !claimer) break
+          const pairKey = `${claimer.id}:${discarder.id}`
+          if (!window.__chowPengCounts) window.__chowPengCounts = {}
+          window.__chowPengCounts[pairKey] = (window.__chowPengCounts[pairKey] || 0) + 1
+          const count = window.__chowPengCounts[pairKey]
+          if (count >= 2) {
+            const actionLabel = lastAction.type === 'chow' ? '吃了' : '碰了'
+            addBroadcast(`🀄 ${claimer.name} ${actionLabel}${discarder.name} ${count}口！`, 'warn')
+            window.__chowPengCounts[pairKey] = 0  // 已通报，重置计数
+          }
+          break
+        }
+      }
+    }
   }
 
   // 梁山聚义投票进度（播报但不透露具体谁投了）
