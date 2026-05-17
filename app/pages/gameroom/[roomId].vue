@@ -2152,6 +2152,14 @@ const enterStartingPhaseWithDiceOverlay = async () => {
     try {
     // 在 API 调用前就设标记，防止 socket.io 广播先到导致 watcher 重复触发
     hasDicePreview.value = true
+    // 立即显示骰子覆盖层，给用户即时视觉反馈，不等 API 返回
+    diceValues.value = [
+      Math.floor(Math.random() * 6) + 1,
+      Math.floor(Math.random() * 6) + 1
+    ]
+    showDiceOverlay.value = true
+    playSound('dice-roll')
+    playVoiceAction('diceRoll')
     await $fetch('/mahjong/api/game/start', {
       method: 'POST',
       body: {
@@ -2160,13 +2168,6 @@ const enterStartingPhaseWithDiceOverlay = async () => {
         phaseOnly: true
       }
     })
-    diceValues.value = [
-      Math.floor(Math.random() * 6) + 1,
-      Math.floor(Math.random() * 6) + 1
-    ]
-    playSound('dice-roll')
-    playVoiceAction('diceRoll')
-    showDiceOverlay.value = true
   } catch (e: any) {
     console.error('[enterStartingPhaseWithDiceOverlay] Failed:', e)
     addBroadcast(e?.data?.message || e?.message || '进入下一局失败', 'warn')
