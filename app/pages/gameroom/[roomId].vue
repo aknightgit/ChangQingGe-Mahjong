@@ -2149,11 +2149,7 @@ const enterStartingPhaseWithDiceOverlay = async () => {
       Math.floor(Math.random() * 6) + 1,
       Math.floor(Math.random() * 6) + 1
     ]
-    // 🛡️ 因为 setStartingPhase 广播 socket 可能导致 watcher 已经设置了 overlay，
-    // 这里只做一次设置，防止重复
-    if (!showDiceOverlay.value) {
-      showDiceOverlay.value = true
-    }
+    showDiceOverlay.value = true
     hasDicePreview.value = true
     playSound('dice-roll')
     playVoiceAction('diceRoll')
@@ -2171,22 +2167,6 @@ const maybeAutoDealForBotDealer = () => {
     void onDealTiles()
   }, 420)
 }
-
-/** 自动掷骰子+发牌（AI庄家） */
-const autoRollAndDeal = () => {
-  onRerollDice()
-  // 等掷骰子动画完成（约850ms）+ 结果展示（500ms）+ 过渡
-  window.setTimeout(() => {
-    void onDealTiles()
-  }, 1800)
-}
-
-/** 仅自动掷骰子（人类庄家） */
-const autoRollOnly = () => {
-  onRerollDice()
-  // 骰子掷完，等人发牌
-}
-
 const startNextRound = async () => {
   cancelWallExhaustedCountdown()
   if (isSettleRequested.value) {
@@ -4111,69 +4091,6 @@ watch(() => gameState.value, (newState, oldState) => {
   prevPhase.value = newState.phase
   prevWinnersCount.value = newState.winnersCount || 0
 }, { deep: true })
-
-watch(
-  () => gameState.value?.phase,
-  (newPhase, oldPhase) => {
-    console.log('[DiceOverlay] phase changed:', oldPhase, '->', newPhase, 'showDiceOverlay was:', showDiceOverlay.value)
-    if (newPhase === GamePhase.STARTING) {
-      // 如果骰子覆盖已显示（由 enterStartingPhaseWithDiceOverlay 设置），跳过避免重复触发
-      if (showDiceOverlay.value) {
-        console.log('[DiceOverlay] Already showing, skipping watcher');
-        return;
-      }
-      const prevPhase = oldPhase || gameState.value?.phase;
-      showSettlement.value = false
-      settlementData.value = null
-      isHuReviewMode.value = false
-      showHuPanel.value = false
-      if (!hasDicePreview.value) {
-        // 使用服务端的骰子值(让后加入的B也能看到实际骰子结果)
-        const serverDice = gameState.value?.dice
-        if (serverDice && Array.isArray(serverDice) && serverDice.length >= 2) {
-          diceValues.value = [serverDice[0], serverDice[1]]
-          hasDicePreview.value = true
-        } else {
-          diceValues.value = [1, 1]
-        }
-      }
-      showDiceOverlay.value = true
-      console.log('[DiceOverlay] SET to true (STARTING)')
-
-      // 🔄 自动下一局：来自结算/流局后，自动走掷骰子+发牌
-      // STARTING时立即 refresh state，然后等骰子组件就绪后自动操作
-      if (prevPhase === GamePhase.ENDED) {
-        if (isSettleRequested.value) {
-          // 房主已申请退房结算：跳过下一局，直接显示总结算
-          showDiceOverlay.value = false
-          showSettlement.value = true
-          return
-        }
-        window.setTimeout(() => {
-          const dealer = dealerPlayer.value
-          if (dealer && isBotPlayer(dealer)) {
-            // AI庄家：自动掷骰子+发牌
-            autoRollAndDeal()
-          } else if (dealer && !isBotPlayer(dealer)) {
-            // 人类头胡庄家：自动掷骰子，等他手动发牌
-            // 或者直接自动掷骰子+等发牌（当前先自动掷骰子）
-            autoRollOnly()
-          } else {
-            // 没有庄家——不可能
-          }
-        }, 500)
-      }
-      return
-    }
-    if (newPhase !== GamePhase.STARTING) {
-      showDiceOverlay.value = false
-      hasDicePreview.value = false
-      console.log('[DiceOverlay] SET to false (phase=', newPhase, ')')
-    }
-  },
-  { immediate: true }
-)
-
 // 🔧 强力兜底：不管 phase watch 是否触发，每次 gameState 更新都检查
 watch(gameState, (newVal) => {
   if (newVal && newVal.phase !== GamePhase.STARTING && showDiceOverlay.value) {
@@ -4735,7 +4652,7 @@ const forceDiscard = async (p: Player) => {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 2px 48px 2px 52px;
+  padding: 2px 50px;
   background: rgba(10, 20, 15, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
@@ -5318,20 +5235,20 @@ const forceDiscard = async (p: Player) => {
 
 .ting-preview-label__text {
   color: rgba(255, 255, 255, 0.8);
-  font-size: 0.68rem;
+  font-size: 0.5rem;
   font-weight: 600;
   flex-shrink: 0;
 }
 
 .ting-preview-label__colon {
   color: rgba(255, 255, 255, 0.5);
-  font-size: 0.68rem;
+  font-size: 0.5rem;
   flex-shrink: 0;
 }
 
 .ting-preview-label__hint {
   color: rgba(255, 255, 255, 0.35);
-  font-size: 0.68rem;
+  font-size: 0.5rem;
   flex-shrink: 0;
 }
 
@@ -5343,7 +5260,7 @@ const forceDiscard = async (p: Player) => {
   height: 14px;
   margin-left: 3px;
   border-radius: 3px;
-  font-size: 0.6rem;
+  font-size: 0.5rem;
   line-height: 1;
   color: rgba(255, 255, 255, 0.45);
   background: rgba(255, 255, 255, 0.08);
@@ -5355,7 +5272,7 @@ const forceDiscard = async (p: Player) => {
 
 .ting-preview-tile {
   color: #ff6b6b;
-  font-size: 0.68rem;
+  font-size: 0.5rem;
   line-height: 1.2;
   flex-shrink: 0;
   margin: 0;
@@ -5787,7 +5704,11 @@ const forceDiscard = async (p: Player) => {
   overflow-wrap: anywhere;
 }
 .turn-timer-inline {
-  margin-left: 6px;
+  margin-left: 0px;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
   font-size: 0.78rem;
   font-weight: 700;
   color: #81c784;
