@@ -1,0 +1,1 @@
+const n="Asia/Shanghai";function a(t=Date.now(),i={hour:"2-digit",minute:"2-digit"}){const e=t instanceof Date?t:new Date(t);return new Intl.DateTimeFormat("zh-CN",{timeZone:n,...i}).format(e)}function o(t=Date.now()){return a(t,{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1})}export{o as a,a as f};

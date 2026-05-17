@@ -1,0 +1,58 @@
+import { d as defineEventHandler, r as readBody, c as createError, n as gameManager, o as requireGamePlayerAccess } from '../../../nitro/nitro.mjs';
+import 'mongodb';
+import 'node:http';
+import 'node:https';
+import 'node:crypto';
+import 'stream';
+import 'events';
+import 'http';
+import 'crypto';
+import 'buffer';
+import 'zlib';
+import 'https';
+import 'net';
+import 'tls';
+import 'url';
+import 'node:events';
+import 'node:buffer';
+import 'node:fs';
+import 'node:path';
+import 'socket.io';
+import '@socket.io/redis-adapter';
+import 'redis';
+import 'fs';
+import 'path';
+import 'node:url';
+import '@iconify/utils';
+import 'consola';
+
+const botMode_post = defineEventHandler(async (event) => {
+  const body = await readBody(event);
+  const { gameId, playerId, enabled } = body;
+  if (!gameId || !playerId || typeof enabled !== "boolean") {
+    throw createError({
+      statusCode: 400,
+      message: "gameId, playerId, enabled are required"
+    });
+  }
+  const game = await gameManager.getGame(gameId);
+  if (!game) {
+    throw createError({ statusCode: 404, message: "Game not found" });
+  }
+  await requireGamePlayerAccess(event, game, playerId);
+  if (enabled) {
+    gameManager.enableBotMode(gameId, playerId);
+  } else {
+    gameManager.disableBotMode(playerId);
+  }
+  return {
+    success: true,
+    data: {
+      playerId,
+      botMode: enabled
+    }
+  };
+});
+
+export { botMode_post as default };
+//# sourceMappingURL=bot-mode.post.mjs.map

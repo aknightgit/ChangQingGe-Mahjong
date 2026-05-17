@@ -1725,7 +1725,8 @@ class GameManager {
     game.finalScores = undefined;
     game.phase = GamePhase.STARTING;
     await this.persistGame(game);
-    this.broadcastGameState(gameId);
+    // 不在此广播 - 客户端在 HTTP 返回后自行显示骰子动画
+    // 下一阶段 startGame() 会广播 PLAYING 状态
   }
 
   /**

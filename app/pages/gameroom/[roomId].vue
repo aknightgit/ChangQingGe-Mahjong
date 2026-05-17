@@ -2146,10 +2146,14 @@ const enterStartingPhaseWithDiceOverlay = async () => {
       Math.floor(Math.random() * 6) + 1,
       Math.floor(Math.random() * 6) + 1
     ]
+    // 🛡️ 因为 setStartingPhase 广播 socket 可能导致 watcher 已经设置了 overlay，
+    // 这里只做一次设置，防止重复
+    if (!showDiceOverlay.value) {
+      showDiceOverlay.value = true
+    }
     hasDicePreview.value = true
     playSound('dice-roll')
     playVoiceAction('diceRoll')
-    showDiceOverlay.value = true
   } catch (e: any) {
     console.error('[enterStartingPhaseWithDiceOverlay] Failed:', e)
     addBroadcast(e?.data?.message || e?.message || '进入下一局失败', 'warn')
@@ -4099,6 +4103,11 @@ watch(
   (newPhase, oldPhase) => {
     console.log('[DiceOverlay] phase changed:', oldPhase, '->', newPhase, 'showDiceOverlay was:', showDiceOverlay.value)
     if (newPhase === GamePhase.STARTING) {
+      // 如果骰子覆盖已显示（由 enterStartingPhaseWithDiceOverlay 设置），跳过避免重复触发
+      if (showDiceOverlay.value) {
+        console.log('[DiceOverlay] Already showing, skipping watcher');
+        return;
+      }
       const prevPhase = oldPhase || gameState.value?.phase;
       showSettlement.value = false
       settlementData.value = null
@@ -7788,4 +7797,5 @@ const forceDiscard = async (p: Player) => {
   font-size: 0.5rem !important;
   padding: 1px 5px !important;
 }
+/* v1778981916 */
 </style>
