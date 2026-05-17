@@ -134,7 +134,7 @@
           :disabled="isCreatingGame"
           @click="confirmCreateGame"
         >
-          {{ isCreatingGame ? '创建中...' : '创建新局' }}
+          {{ isCreatingGame ? '创建中...' : '确定创建' }}
         </button>
       </div>
     </div>
