@@ -1297,7 +1297,6 @@ class GameManager {
     playerId: string,
     sourcePlayerId: string,
   ): void {
-    const relations = this.getMutualBailoutRelations(game.gameId);
     const player = game.players.find(p => p.id === playerId);
     const source = game.players.find(p => p.id === sourcePlayerId);
     if (!player || !source) {
@@ -1308,32 +1307,16 @@ class GameManager {
     const rawCount = this.mutualBailout.get(game.gameId)?.get(playerId)?.get(sourcePlayerId);
     const currentCount = rawCount || 0;
     console.log(`[BAILOUT] game=${game.gameId} player=${player.name} source=${source.name} count=${currentCount} wsManager=${!!this.wsManager}`);
-    if ((currentCount === 2 || currentCount === 3) && this.wsManager) {
-      const suffix = currentCount === 3 ? '？' : '！';
-      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-        id: Date.now(),
-        text: `📣 ${player.name}搞了${source.name}${currentCount}口了${suffix}`,
-        type: 'special',
-        timestamp: Date.now(),
-        timeLabel: formatBeijingTime()
-      });
-    }
 
-    for (const rel of relations) {
-      const pairIds = [rel.player1, rel.player2].sort().join('-');
-      const checkIds = [playerId, sourcePlayerId].sort().join('-');
-      if (pairIds === checkIds) {
-        const msg = `${player.name}搞了${source.name}${rel.type}了!`;
-        if (this.wsManager) {
-          this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-            id: Date.now(),
-            text: msg,
-            type: 'special',
-            timestamp: Date.now(),
-            timeLabel: formatBeijingTime()
-          });
-        }
-      }
+    const msgByCount: Record<number, string> = {
+      2: `📣 ${player.name}搞了${source.name}两口了！`,
+      3: `📣 ${player.name}搞了${source.name}三口了！！`,
+      4: `📣 ${player.name}搞了${source.name}四口了！！！`
+    };
+
+    const msg = msgByCount[currentCount];
+    if (msg) {
+      this.broadcastQuickMessage(game.gameId, msg, 'special', 'bailout');
     }
   }
 
@@ -3435,6 +3418,9 @@ class GameManager {
 
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
     this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.KONG);
+    if (sourcePlayerId) {
+      this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
+    }
     for (const t of matchingTiles) player.hand.concealedTiles = removeTile(player.hand.concealedTiles, t.id);
 
     const sourcePos = this.getLastDiscardPosition(game);

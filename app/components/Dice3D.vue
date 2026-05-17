@@ -11,8 +11,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-const webglFailed = ref(false)
-
 const props = defineProps<{
   value: number
   state: 'idle' | 'rolling' | 'landed'
