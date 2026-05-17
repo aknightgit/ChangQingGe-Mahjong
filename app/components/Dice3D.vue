@@ -1,10 +1,7 @@
 <template>
   <div ref="rootEl" class="dice-scene" :style="delayStyle">
-    <canvas v-show="!webglFailed" ref="canvasEl" class="dice-canvas" />
-    <div v-show="!webglFailed" class="dice-shadow" :class="`dice-shadow--${state}`"></div>
-    <div v-if="webglFailed" class="dice-fallback" :class="`dice-fallback--${state}`">
-      <span class="dice-fallback__pip" v-for="n in (landedValue || 1)" :key="n">&#9679;</span>
-    </div>
+    <canvas ref="canvasEl" class="dice-canvas" />
+    <div class="dice-shadow" :class="`dice-shadow--${state}`"></div>
   </div>
 </template>
 
@@ -23,7 +20,6 @@ type CleanupFn = () => void
 
 const rootEl = ref<HTMLElement | null>(null)
 const canvasEl = ref<HTMLCanvasElement | null>(null)
-const landedValue = computed(() => Math.min(6, Math.max(1, Math.round(props.value || 1))))
 
 const delayStyle = computed(() => ({
   ...(props.delay ? { animationDelay: `${props.delay}s` } : {}),
@@ -41,7 +37,6 @@ let resizeCleanup: CleanupFn | null = null
 let rafId = 0
 let phaseStartedAt = 0
 let phaseSeed = 0
-let initError: string | null = null
 
 const LAND_DURATION = 260
 const ROLL_DURATION = 1180
@@ -129,29 +124,16 @@ function setPhaseStart() {
 
 async function initThree() {
   if (!rootEl.value || !canvasEl.value || renderer) return
-  try {
-    three = await import('three')
+  three = await import('three')
   const THREE = three
 
-  try {
-    renderer = new THREE.WebGLRenderer({
-      canvas: canvasEl.value,
-      alpha: true,
-      antialias: true,
-      powerPreference: 'high-performance',
-    })
-  } catch (e) {
-    console.warn('[Dice3D] WebGL not available:', e)
-    webglFailed.value = true
-    initError = 'WebGL failed'
-    return
-  }
+  renderer = new THREE.WebGLRenderer({
+    canvas: canvasEl.value,
+    alpha: true,
+    antialias: true,
+    powerPreference: 'high-performance',
+  })
   renderer.setClearAlpha(0)
-  } catch (e) {
-    console.warn('[Dice3D] Three.js init failed:', e)
-    initError = String(e)
-    return
-  }
   renderer.outputColorSpace = THREE.SRGBColorSpace
 
   scene = new THREE.Scene()
@@ -230,7 +212,7 @@ async function initThree() {
 }
 
 function renderFrame(now: number) {
-  if (webglFailed.value || !three || !renderer || !scene || !camera || !displayGroup || !dicePivot || !shadowMesh) return
+  if (!three || !renderer || !scene || !camera || !displayGroup || !dicePivot || !shadowMesh) return
   const THREE = three
   const elapsed = now - phaseStartedAt
   const targetQuat = orientationForFrontFace(props.value) ?? new THREE.Quaternion()
@@ -293,7 +275,7 @@ function animate() {
 watch(
   () => [props.state, props.value, props.rollSeed] as const,
   () => {
-    if (!renderer || webglFailed.value) return
+    if (!renderer) return
     setPhaseStart()
   },
 )
@@ -386,47 +368,5 @@ onBeforeUnmount(() => {
 @keyframes shadow-land {
   0% { transform: translateX(-50%) scale(1.18); opacity: 0.26; }
   100% { transform: translateX(-50%) scale(1); opacity: 0.36; }
-}
-
-/* Fallback when WebGL is unavailable */
-.dice-fallback {
-  width: 96px;
-  height: 96px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  background: linear-gradient(145deg, #fffdfa, #f6efe3, #eadfcf);
-  border-radius: 16px;
-  border: 2px solid rgba(143, 109, 68, 0.25);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.6), 0 2px 8px rgba(0,0,0,0.12);
-}
-
-.dice-fallback__pip {
-  font-size: 20px;
-  color: #d72626;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.15);
-  line-height: 1;
-}
-
-.dice-fallback--rolling {
-  animation: dice-fallback-roll 0.6s ease-in-out infinite;
-}
-
-@keyframes dice-fallback-roll {
-  0%, 100% { transform: rotate(0deg) scale(1); }
-  25% { transform: rotate(90deg) scale(1.1); }
-  50% { transform: rotate(180deg) scale(0.9); }
-  75% { transform: rotate(270deg) scale(1.05); }
-}
-
-.dice-fallback--landed {
-  animation: dice-fallback-land 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes dice-fallback-land {
-  0% { transform: scale(1.3); }
-  60% { transform: scale(0.92); }
-  100% { transform: scale(1); }
 }
 </style>

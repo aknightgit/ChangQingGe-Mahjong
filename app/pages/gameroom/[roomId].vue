@@ -3686,12 +3686,27 @@ const onStartGame = async () => {
   }
   console.log('[onStartGame] Setting STARTING phase on server...')
 
+  // Show dice overlay BEFORE API call for instant feedback
+  diceValues.value = [
+    Math.floor(Math.random() * 6) + 1,
+    Math.floor(Math.random() * 6) + 1
+  ]
+  hasDicePreview.value = true
+  showDiceOverlay.value = true
+  playSound('dice-roll')
+
   try {
-    await enterStartingPhaseWithDiceOverlay()
+    await $fetch('/mahjong/api/game/start', {
+      method: 'POST',
+      body: { gameId: roomId.value, playerId: playerId.value, phaseOnly: true }
+    })
   } catch (err) {
+    showDiceOverlay.value = false
+    isGameStarting.value = false
+    addBroadcast('进入牌局失败，请重试', 'warn')
     console.error('[onStartGame] Failed:', err)
   } finally {
-    isGameStarting.value = false
+    // isGameStarting stays true until onDealTiles finishes
   }
 }
 
