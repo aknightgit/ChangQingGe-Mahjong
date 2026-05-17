@@ -39,6 +39,7 @@ export const useGame = () => {
       const gs = gameState.value
       if (gameId.value && playerId.value && gs && (gs.phase === 'playing' || gs.phase === 'waiting' || gs.phase === 'starting')) {
         void refreshState()
+window.__mahjong_pollRefresh = refreshState
       }
     }, POLLING_MS)
   }
@@ -147,6 +148,7 @@ export const useGame = () => {
       })
 
       socket.value.on('connect', () => {
+startPolling()
         console.log('Socket.IO connected:', socket.value?.id, 'transport=', socket.value?.io.engine.transport.name)
         isConnected.value = true
         error.value = null
@@ -178,7 +180,20 @@ export const useGame = () => {
         }
       })
 
-      socket.value.on('disconnect', () => {
+      let pollTimer = null
+const startPolling = () => {
+  if (pollTimer) return
+  pollTimer = setInterval(() => {
+    void refreshState()
+  }, 2000)
+}
+const stopPolling = () => {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+}
+startPolling()
+
+socket.value.on('disconnect', () => {
+stopPolling()socket.value.on('disconnect', () => {
         console.log('Socket disconnected', 'transport=', socket.value?.io.engine.transport.name)
         if (!gameState.value) {
           isConnected.value = false
