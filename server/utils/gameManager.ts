@@ -5520,7 +5520,8 @@ class GameManager {
     // 🔄 自动进入下一局（正常结束/流局）
     // 延迟一小段时间让客户端展示结算画面，然后自动进入掷骰子阶段
     if (
-      finalReason === GameEndReason.LAST_PLAYER
+      finalReason === GameEndReason.LAST_PLAYER ||
+      finalReason === GameEndReason.WALL_EXHAUSTED
     ) {
       this.autoStartNextRound(game.gameId, 2000);
     }

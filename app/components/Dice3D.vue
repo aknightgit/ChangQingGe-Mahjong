@@ -23,7 +23,6 @@ type CleanupFn = () => void
 
 const rootEl = ref<HTMLElement | null>(null)
 const canvasEl = ref<HTMLCanvasElement | null>(null)
-const webglFailed = ref(false)
 const landedValue = computed(() => Math.min(6, Math.max(1, Math.round(props.value || 1))))
 
 const delayStyle = computed(() => ({

@@ -349,13 +349,17 @@
           <Transition name="settings-panel" @after-leave="onSettingsClosed">
             <div
               v-if="showSettings"
-              ref="settingsPanelEl"
-              class="glass-settings-panel"
-              :style="settingsPanelStyle"
-              @click.stop
-              @wheel.stop
-              @touchmove.stop
+              class="glass-settings-overlay"
+              @click="showSettings = false"
             >
+              <div
+                ref="settingsPanelEl"
+                class="glass-settings-panel"
+                :style="settingsPanelStyle"
+                @click.stop
+                @wheel.stop
+                @touchmove.stop
+              >
               <!-- 三角指示箭头 -->
               <div class="glass-settings-arrow"></div>
                             <div class="glass-settings-body" @wheel.stop @touchmove.stop>
@@ -476,6 +480,7 @@
                   <span>长青阁麻将 v2.2</span>
                 </div>
               </div>
+            </div>
             </div>
           </Transition>
         </Teleport>
@@ -2499,7 +2504,9 @@ const hasBlockingPendingClaim = computed(() => {
 const showDraw = computed(() =>
   availableActions.value.includes(ActionType.DRAW) ||
   shouldExposeSharedDraw.value ||
-  shouldPreviewDeferredDraw.value
+  shouldPreviewDeferredDraw.value ||
+  // 【重要】到我的回合且倒计时已结束，摸按钮必须亮起
+  (isMyTurn.value && myPendingExpiresAt.value > 0 && myPendingExpiresAt.value <= nowTs.value)
 )
 const filteredCircularAvailableActions = computed(() => {
   if ((shouldExposeSharedDraw.value || shouldPreviewDeferredDraw.value) && !availableActions.value.includes(ActionType.DRAW)) {
@@ -4268,7 +4275,7 @@ const forceDiscard = async (p: Player) => {
   height: 100dvh;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   background: radial-gradient(circle at top, #153b2f, #07130e);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: #f5f5f5;
@@ -4278,7 +4285,7 @@ const forceDiscard = async (p: Player) => {
 .room-viewport {
   width: 100%;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   min-height: 100%;
 }
 
@@ -4363,7 +4370,7 @@ const forceDiscard = async (p: Player) => {
   width: 28px;
   min-height: 28px;
   padding: 0;
-  justify-content: center;
+  justify-content: flex-start;
   flex: 0 0 auto;
 }
 
@@ -4378,7 +4385,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .room-header-toggle__icon {
-  font-size: 0.78rem;
+  font-size: 0.65rem;
   line-height: 1;
 }
 
@@ -4501,7 +4508,7 @@ const forceDiscard = async (p: Player) => {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   min-width: 0;
 }
 
@@ -4735,7 +4742,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .extra-actions-label {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: rgba(255, 255, 255, 0.35);
   margin-right: 2px;
   flex-shrink: 0;
@@ -4746,7 +4753,7 @@ const forceDiscard = async (p: Player) => {
   align-items: center;
   gap: 6px;
   flex: 1;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .loading-overlay {
@@ -4756,7 +4763,7 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   background: #07130e;
   gap: 12px;
 }
@@ -5078,10 +5085,10 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .ext-section { padding: 4px 5px 5px; border-radius: 6px; margin: 0; }
 .layout--mobile-landscape .extended-info-panel .ext-title { font-size: 0.8rem; margin-bottom: 1px; }
 .layout--mobile-landscape .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
-.layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.78rem; }
+.layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.65rem; }
 .layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(4px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); font-size: calc(0.72rem * var(--mobile-scale, 1)); }
 .layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: wrap; }
-.layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
+.layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.65rem; }
 .layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
 .layout--mobile-landscape .extended-info-panel .action-buttons-panel { gap: 6px; }
 .layout--mobile-landscape .extended-info-panel .turn-status-text { font-size: 0.54rem; }
@@ -5139,7 +5146,7 @@ const forceDiscard = async (p: Player) => {
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
   padding: 12px 16px;
   border-radius: 12px;
@@ -5195,7 +5202,7 @@ const forceDiscard = async (p: Player) => {
 .seat {
   position: absolute;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   z-index: 5; /* 在牌墙z-index=1之上 */
   transition: transform 0.15s ease, filter 0.15s ease;
@@ -5250,7 +5257,7 @@ const forceDiscard = async (p: Player) => {
   width: calc(var(--seat-side-width) + 52px);
   flex-direction: column;
   align-items: flex-end;
-  justify-content: center;
+  justify-content: flex-start;
   overflow: visible;
 }
 
@@ -5262,14 +5269,14 @@ const forceDiscard = async (p: Player) => {
   width: calc(var(--seat-side-width) + 56px);
   flex-direction: column;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-start;
   overflow: visible;
 }
 
 /* ===== 本家：手牌 + 动作按钮横排 ===== */
 .self-area-with-actions {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: flex-end;
   gap: 14px;
   width: 100%;
@@ -5309,27 +5316,27 @@ const forceDiscard = async (p: Player) => {
 
 .ting-preview-label__text {
   color: rgba(255, 255, 255, 0.8);
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   font-weight: 600;
   flex-shrink: 0;
 }
 
 .ting-preview-label__colon {
   color: rgba(255, 255, 255, 0.5);
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   flex-shrink: 0;
 }
 
 .ting-preview-label__hint {
   color: rgba(255, 255, 255, 0.35);
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   flex-shrink: 0;
 }
 
 .ting-preview-label__toggle {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   width: 14px;
   height: 14px;
   margin-left: 3px;
@@ -5346,7 +5353,7 @@ const forceDiscard = async (p: Player) => {
 
 .ting-preview-tile {
   color: #ff6b6b;
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   line-height: 1.2;
   flex-shrink: 0;
   margin: 0;
@@ -5771,7 +5778,7 @@ const forceDiscard = async (p: Player) => {
   border-radius: 10px;
   background: rgba(75, 54, 10, 0.62);
   color: #ffd666;
-  font-size: 0.78rem;
+  font-size: 0.65rem;
   font-weight: 700;
   line-height: 1.25;
   text-align: center;
@@ -5779,7 +5786,7 @@ const forceDiscard = async (p: Player) => {
 }
 .turn-timer-inline {
   margin-left: 6px;
-  font-size: 0.78rem;
+  font-size: 0.65rem;
   font-weight: 700;
   color: #81c784;
   background: rgba(0, 0, 0, 0.3);
@@ -5929,7 +5936,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(3, 10, 8, 0.85);
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   z-index: 20;
   animation: liangShanFadeIn 0.1s ease-out;
 }
@@ -5982,7 +5989,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(3, 10, 8, 0.7);
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   z-index: 25;
   animation: lbFadeIn 0.03s ease-out;
 }
@@ -6036,7 +6043,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(3, 10, 8, 0.75);
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   z-index: 30;
 }
 .approval-card {
@@ -6052,7 +6059,7 @@ const forceDiscard = async (p: Player) => {
 .approval-title { font-size: 1.3rem; font-weight: 800; color: #FFD700; margin: 0 0 6px; }
 .approval-sub { font-size: 0.95rem; color: rgba(255,255,255,0.8); margin: 0 0 4px; }
 .approval-question { font-size: 1rem; color: #fff; margin: 0 0 16px; }
-.approval-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.approval-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; }
 .approval-btn {
   padding: 12px 28px;
   border-radius: 12px;
@@ -6131,7 +6138,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(3, 10, 8, 0.7);
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   z-index: 30;
 }
 .think-card {
@@ -6146,7 +6153,7 @@ const forceDiscard = async (p: Player) => {
 .think-icon { font-size: 2rem; margin-bottom: 6px; }
 .think-title { font-size: 1.2rem; font-weight: 700; color: #FFD700; margin: 0 0 4px; }
 .think-sub { font-size: 0.9rem; color: rgba(255,255,255,0.7); margin: 0 0 16px; }
-.think-options { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.think-options { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; }
 .think-opt {
   padding: 10px 24px;
   border-radius: 10px;
@@ -6169,7 +6176,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(3, 10, 8, 0.78);
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   z-index: 31;
 }
 .chow-picker-card {
@@ -6213,7 +6220,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(3, 10, 8, 0.88);
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   z-index: 30;
   backdrop-filter: blur(4px);
 }
@@ -6294,7 +6301,7 @@ const forceDiscard = async (p: Player) => {
   min-width: 40px;
 }
 .hu-combo-score {
-  font-size: 0.78rem;
+  font-size: 0.65rem;
   font-weight: 700;
   color: #ffd700;
   flex-shrink: 0;
@@ -6336,7 +6343,7 @@ const forceDiscard = async (p: Player) => {
   gap: 4px;
 }
 .hu-combo-score {
-  font-size: 1.05rem;
+  font-size: 0.65rem;
   font-weight: 900;
   color: #FFD700;
   text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
@@ -6369,7 +6376,7 @@ const forceDiscard = async (p: Player) => {
 .hu-panel-actions {
   display: flex;
   gap: 12px;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .hu-confirm-btn {
@@ -6411,7 +6418,9 @@ const forceDiscard = async (p: Player) => {
 
 @media (max-width: 900px) and (orientation: landscape) {
   .hu-panel {
-    width: min(92vw, 760px);
+    width: 100vw;
+    max-width: 100vw;
+    border-radius: 0;
     max-height: 88vh;
     padding: 16px;
   }
@@ -6438,7 +6447,7 @@ const forceDiscard = async (p: Player) => {
   .hu-combo-method,
   .hu-group-kind,
   .hu-summary-key {
-    font-size: 0.68rem;
+    font-size: 0.65rem;
   }
 
   .hu-combo-score {
@@ -6479,7 +6488,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(3, 10, 8, 0.82);
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   backdrop-filter: blur(4px);
   z-index: 10;
 }
@@ -6552,7 +6561,7 @@ const forceDiscard = async (p: Player) => {
   top: 0; left: 0; right: 0; bottom: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   z-index: 9999;
   pointer-events: none;
 }
@@ -6575,7 +6584,7 @@ const forceDiscard = async (p: Player) => {
   inset: 0;
   display: flex;
   align-items: flex-end;
-  justify-content: center;
+  justify-content: flex-start;
   padding-bottom: 18vh;
   z-index: 9998;
   pointer-events: none;
@@ -6635,7 +6644,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(3, 10, 8, 0.92);
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   backdrop-filter: blur(6px);
 }
 
@@ -6773,7 +6782,7 @@ const forceDiscard = async (p: Player) => {
 
 .settle-round-subtitle {
   color: rgba(255, 255, 255, 0.72);
-  font-size: 0.78rem;
+  font-size: 0.65rem;
 }
 
 .settle-table-wrap {
@@ -6786,7 +6795,7 @@ const forceDiscard = async (p: Player) => {
   width: 100%;
   min-width: 860px;
   border-collapse: collapse;
-  font-size: 0.78rem;
+  font-size: 0.65rem;
   color: #f3f3f3;
 }
 
@@ -6881,7 +6890,7 @@ const forceDiscard = async (p: Player) => {
 .settle-round-details,
 .settle-round-note {
   color: rgba(255, 255, 255, 0.76);
-  font-size: 0.78rem;
+  font-size: 0.65rem;
   line-height: 1.5;
 }
 
@@ -7080,7 +7089,7 @@ const forceDiscard = async (p: Player) => {
   z-index: 100;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(2px);
 }
@@ -7480,7 +7489,7 @@ const forceDiscard = async (p: Player) => {
   .inline-action-buttons {
     flex-direction: row;
     flex-wrap: wrap;
-    justify-content: center;
+    justify-content: flex-start;
   }
 
   .inline-action-btn {
@@ -7603,7 +7612,7 @@ const forceDiscard = async (p: Player) => {
 
 .layout--mobile-landscape .panel-room-number,
 .layout--mobile-landscape .mahjong-subtitle {
-  font-size: 0.78rem;
+  font-size: 0.65rem;
 }
 
 .layout--mobile-landscape .ext-section {
@@ -7643,7 +7652,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape :deep(.multiplier-badge),
 .layout--mobile-landscape :deep(.remaining-badge) {
   padding: 2px 5px;
-  font-size: 0.48rem;
+  font-size: 0.65rem;
 }
 
 .layout--mobile-landscape :deep(.multiplier-badge .badge-icon),
@@ -7746,7 +7755,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 /* 观赛模式标识 */
-.spectating-hint { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px; min-height: 56px; background: rgba(0,0,0,0.3); }
+.spectating-hint { display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 16px; min-height: 56px; background: rgba(0,0,0,0.3); }
 .spectating-hint-icon { font-size: 1.4rem; }
 .spectating-hint-text { font-size: 0.95rem; color: rgba(255,255,255,0.8); }
 
@@ -7757,7 +7766,7 @@ const forceDiscard = async (p: Player) => {
   min-width: auto;
 }
 .spectator-badge {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: #4fc3f7;
   background: rgba(79,195,247,0.12);
   border: 1px solid rgba(79,195,247,0.25);

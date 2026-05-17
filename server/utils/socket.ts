@@ -611,7 +611,10 @@ export function getIO(): SocketIOServer | null {
 // Helper to emit to specific room
 export function emitToRoom(roomId: string, event: string, data: any) {
   if (io) {
+    console.log('[emitToRoom] ' + event + ' roomId=' + roomId.substring(0,8) + ' io=YES');
     io.to(roomId).emit(event, data)
+  } else {
+    console.log('[emitToRoom] ' + event + ' roomId=' + roomId.substring(0,8) + ' io=null SKIP');
   }
 }
 
@@ -730,6 +733,10 @@ export async function forceDisconnectUser(userId: string): Promise<void> {
       }
 
       if (io) {
+    console.log(`[emitToRoom] event=${event} roomId=${roomId.substring(0,8)} io=YES`);
+  } else {
+    console.log(`[emitToRoom] event=${event} roomId=${roomId.substring(0,8)} io=NO - SKIP`);
+    console.log(`[emitToRoom] event=${event} roomId=${roomId.substring(0,8)} io=${!!io}`);
         const sock = io.sockets.sockets.get(socketId);
         sock?.disconnect(true);
       }
