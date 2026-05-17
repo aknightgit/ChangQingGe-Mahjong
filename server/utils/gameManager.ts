@@ -52,6 +52,25 @@ class GameManager {
 
   private tileLabel = tileLabel;
 
+  private tracePendingTile(tile?: Tile | null): string {
+    if (!tile) return 'none';
+    return `${tile.suit}-${tile.value}${tile.id ? `#${tile.id}` : ''}`;
+  }
+
+  private tracePendingSummary(game: GameState): string {
+    if (!game.pendingActions.length) return 'none';
+    return game.pendingActions.map(pa => {
+      const player = game.players.find(p => p.id === pa.playerId);
+      return `${player?.name || pa.playerId}[${pa.availableActions.join('|')}]@${this.tracePendingTile(pa.tile)}`;
+    }).join(' ; ');
+  }
+
+  private logPendingTrace(game: GameState, stage: string, detail: string): void {
+    console.log(
+      `[PENDING_TRACE] stage=${stage} game=${game.gameId} room=${game.roomNumber ?? 'n/a'} current=${game.players[game.currentPlayerIndex]?.name ?? 'unknown'} pending=${this.tracePendingSummary(game)} detail=${detail}`
+    );
+  }
+
   private broadcastQuickMessage(
     gameId: string,
     text: string,
@@ -929,6 +948,7 @@ class GameManager {
         const game = await this.getGame(gameId);
         if (!game || game.phase !== GamePhase.PLAYING) return;
         if (!game.pendingActions.length) return;
+        this.logPendingTrace(game, 'timeout-fired', `waitMs=${this.getPendingActionWaitMs(gameId)} thinkFreezeUntil=${game.thinkFreezeUntil ?? 0}`);
 
         if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now()) {
           this.schedulePendingActionTimeout(gameId);
@@ -1049,8 +1069,9 @@ class GameManager {
 
   /** 统一处理 pendingAction 决策(吃/碰/杠/胡/PASS) */
   private async resolvePendingAction(game: GameState, player: Player, pa: PendingAction): Promise<void> {
+    this.logPendingTrace(game, 'resolve-start', `player=${player.name}(${player.id}) available=${pa.availableActions.join('|')} tile=${this.tracePendingTile(pa.tile)}`);
     const action = await shouldClaimPendingAction(player, pa.availableActions, game);
-    console.log(`[PendingResolve] ${player.name} → ${action}`);
+    this.logPendingTrace(game, 'resolve-decision', `player=${player.name}(${player.id}) action=${action} tile=${this.tracePendingTile(pa.tile)}`);
     if (action === ActionType.PASS) {
       this.handlePass(game, player);
     } else if (action === ActionType.PENG) {
@@ -1141,8 +1162,9 @@ class GameManager {
           continue;
         }
 
+        this.logPendingTrace(game, 'bot-priority-start', `player=${player.name}(${player.id}) available=${filteredHigherActions.join('|')} tile=${this.tracePendingTile(pa.tile)}`);
         const action = await shouldClaimPendingAction(player, filteredHigherActions, game);
-        console.log(`[BotService] ${player.name} priority action: ${action} (from ${filteredHigherActions})`);
+        this.logPendingTrace(game, 'bot-priority-decision', `player=${player.name}(${player.id}) action=${action} available=${filteredHigherActions.join('|')} tile=${this.tracePendingTile(pa.tile)}`);
 
         if (action === ActionType.PENG) {
           const pengExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
@@ -3410,6 +3432,7 @@ class GameManager {
    * 直接执行胡(碰吃冲突中,高优先级胡直接执行)
    */
   private async executeWinDirectly(game: GameState, player: Player, winningTile: Tile): Promise<void> {
+    this.logPendingTrace(game, 'execute-win-directly', `player=${player.name}(${player.id}) tile=${this.tracePendingTile(winningTile)}`);
     // 构造假的pendingAction,让handleHu能获取winningTile
     const fakePending = {
       playerId: player.id,
@@ -3752,6 +3775,7 @@ class GameManager {
 
     const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
     const winningTile = pendingAction?.tile;
+    this.logPendingTrace(game, 'handle-hu-enter', `player=${player.name}(${player.id}) winningTile=${this.tracePendingTile(winningTile)} selectedWinOption=${selectedWinOptionLabel ?? 'auto'} isDaDiao=${isDaDiao}`);
 
     if (winningTile) {
       player.hand.concealedTiles.push(winningTile);
@@ -4495,6 +4519,7 @@ class GameManager {
     game.pendingActions = [];
     delete (game as any).hasTriggeredAction;
     const discarderIndex = game.currentPlayerIndex;
+    this.logPendingTrace(game, 'check-pending-start', `discarder=${game.players[game.currentPlayerIndex]?.name ?? 'unknown'} tile=${this.tracePendingTile(discardedTile)}`);
 
     const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
 
@@ -4552,6 +4577,9 @@ class GameManager {
 
         if (!requiresFlowerGate || hasGatePass) {
           actions.push(ActionType.HU);
+          console.log(`[PENDING_TRACE] stage=hu-candidate game=${game.gameId} room=${game.roomNumber ?? 'n/a'} player=${player.name}(${player.id}) tile=${this.tracePendingTile(discardedTile)} handTypes=${handTypes.join('|') || 'none'} requiresFlowerGate=${requiresFlowerGate} hasFlowerAtDoor=${hasFlowerAtDoor} hasWindDragonTriplet=${hasWindDragonTriplet} hasAnyKong=${hasAnyKong} hasGatePass=${hasGatePass} canWin=${winCheck.canWin}`);
+        } else {
+          console.log(`[PENDING_TRACE] stage=hu-blocked game=${game.gameId} room=${game.roomNumber ?? 'n/a'} player=${player.name}(${player.id}) tile=${this.tracePendingTile(discardedTile)} handTypes=${handTypes.join('|') || 'none'} requiresFlowerGate=${requiresFlowerGate} hasFlowerAtDoor=${hasFlowerAtDoor} hasWindDragonTriplet=${hasWindDragonTriplet} hasAnyKong=${hasAnyKong} hasGatePass=${hasGatePass}`);
         }
       }
 
@@ -4617,6 +4645,7 @@ class GameManager {
       }
     }
 
+    this.logPendingTrace(game, 'check-pending-finish', `discardTile=${this.tracePendingTile(discardedTile)} chowPlayer=${chowPlayer?.name ?? 'none'}`);
     if (game.pendingActions.length === 0) {
       this.clearPendingActionTimer(game.gameId);
     }
@@ -5681,4 +5710,3 @@ if (!globalGameManager.gameManager) {
 }
 
 export const gameManager = globalGameManager.gameManager;
-

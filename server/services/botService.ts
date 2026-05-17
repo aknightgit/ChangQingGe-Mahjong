@@ -71,6 +71,23 @@ async function shadowEvaluate(
   }
 }
 
+// ===== Claim trace helpers =====
+
+function traceTile(tile?: Tile | null): string {
+  if (!tile) return 'none'
+  return `${tile.suit}-${tile.value}${tile.id ? `#${tile.id}` : ''}`
+}
+
+function traceActions(actions: ActionType[]): string {
+  return actions.join('|')
+}
+
+function traceClaim(player: Player, game: GameState, stage: string, detail: string): void {
+  console.log(
+    `[CLAIM_TRACE] stage=${stage} game=${game.gameId} room=${game.roomNumber ?? 'n/a'} player=${player.name}(${player.id}) current=${game.players[game.currentPlayerIndex]?.name ?? 'unknown'} detail=${detail}`
+  )
+}
+
 // ===== Soft scoring helpers (P1: sigmoid-based probabilistic decision) =====
 
 /**
@@ -1923,6 +1940,13 @@ export async function shouldClaimPendingAction(
   const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id)
   const claimTile = pendingAction?.tile
 
+  traceClaim(
+    player,
+    game,
+    'enter',
+    `available=${traceActions(availableActions)} claimTile=${traceTile(claimTile)} concealed=${hand.length} exposed=${exposedCount} pendingType=${pendingAction?.type ?? 'claim'}`
+  )
+
   // P2 Shadow: 新管线 vs legacy 对比日志（仅在启用管线时运行，避免无用计算）
   if (USE_PIPELINE_SCORER) {
     shadowEvaluate(player, availableActions, game).catch(() => {}) // fire-and-forget
@@ -1932,10 +1956,16 @@ export async function shouldClaimPendingAction(
         const ctx = engine.buildActionContext(game, player.id, availableActions, game.turnIndex)
         const ranked = engine.rankActions(ctx)
         if (ranked[0]?.action === ActionType.HU) {
-          return shouldDeclineLowValueHu(game, player) ? ActionType.PASS : ActionType.HU
+          const decision = shouldDeclineLowValueHu(game, player) ? ActionType.PASS : ActionType.HU
+          traceClaim(player, game, 'pipeline', `rankedTop=HU decision=${decision}`)
+          return decision
         }
         const bestNonHu = ranked.find(r => r.action !== ActionType.HU)
-        if (bestNonHu) return bestNonHu.action
+        if (bestNonHu) {
+          traceClaim(player, game, 'pipeline', `rankedTop=${bestNonHu.action}`)
+          return bestNonHu.action
+        }
+        traceClaim(player, game, 'pipeline', 'rankedTop=PASS')
         return ActionType.PASS
       } catch (e) {
         if (process.env.NODE_ENV === 'development') {
@@ -1959,7 +1989,10 @@ export async function shouldClaimPendingAction(
     // 自摸：有 selfWinChance 控制意愿
     if (isSelfDraw) {
       const selfWinProb = policy.selfWinChance ?? 0.95
-      if (Math.random() < selfWinProb) {
+      const selfRoll = Math.random()
+      const decision = selfRoll < selfWinProb ? ActionType.HU : ActionType.PASS
+      traceClaim(player, game, 'hu-self-draw', `roll=${selfRoll.toFixed(6)} prob=${selfWinProb.toFixed(6)} decision=${decision}`)
+      if (decision === ActionType.HU) {
         return ActionType.HU
       }
     }
@@ -1974,41 +2007,65 @@ export async function shouldClaimPendingAction(
       const isMenQing = exposedCount === 0
       const wildCount = hand.filter(t => isWildTile(t, game)).length
       if (shouldDeclineLowValueHu(game, player)) {
+        traceClaim(player, game, 'hu-discard-blocked', `reason=low-value-hu discardTile=${traceTile(discardTile)} isMenQing=${isMenQing} wildCount=${wildCount}`)
         return ActionType.PASS
       }
 
       // 百搭惩罚：放冲胡百搭降低概率
       if (isWildDiscard && (policy.discardHuWildPenalty ?? 0) > 0) {
         const wildProb = Math.max(0, 1.0 - (policy.discardHuWildPenalty ?? 0))
-        if (Math.random() >= wildProb) return ActionType.PASS
+        const wildRoll = Math.random()
+        if (wildRoll >= wildProb) {
+          traceClaim(player, game, 'hu-discard-blocked', `reason=wild-penalty discardTile=${traceTile(discardTile)} roll=${wildRoll.toFixed(6)} prob=${wildProb.toFixed(6)}`)
+          return ActionType.PASS
+        }
       }
 
       // 门清惩罚：门清时放冲胡也降低概率
       if (isMenQing && (policy.discardHuMenQingPenalty ?? 0) > 0) {
         const menqingProb = Math.max(0, 1.0 - (policy.discardHuMenQingPenalty ?? 0))
-        if (Math.random() >= menqingProb) return ActionType.PASS
+        const menqingRoll = Math.random()
+        if (menqingRoll >= menqingProb) {
+          traceClaim(player, game, 'hu-discard-blocked', `reason=menqing-penalty discardTile=${traceTile(discardTile)} roll=${menqingRoll.toFixed(6)} prob=${menqingProb.toFixed(6)}`)
+          return ActionType.PASS
+        }
       }
 
       // 宝牌惩罚：二宝捉冲降低意愿
       if (wildCount >= 2 && (policy.bao2ClaimPenalty ?? 0) > 0) {
         const penalty = Math.max(0, 1.0 - (policy.bao2ClaimPenalty ?? 0))
-        if (Math.random() >= penalty) return ActionType.PASS
+        const bao2Roll = Math.random()
+        if (bao2Roll >= penalty) {
+          traceClaim(player, game, 'hu-discard-blocked', `reason=bao2-penalty wildCount=${wildCount} roll=${bao2Roll.toFixed(6)} prob=${penalty.toFixed(6)}`)
+          return ActionType.PASS
+        }
       }
 
       // 三宝避免：wildCount >= 3 时按概率减少冲
       if (wildCount >= 3 && (policy.bao3AvoidThreshold ?? 0) > 0) {
         const avoidProb = Math.min(0.9, (policy.bao3AvoidThreshold ?? 0) * 0.9)
-        if (Math.random() < avoidProb) return ActionType.PASS
+        const bao3Roll = Math.random()
+        if (bao3Roll < avoidProb) {
+          traceClaim(player, game, 'hu-discard-blocked', `reason=bao3-avoid wildCount=${wildCount} roll=${bao3Roll.toFixed(6)} prob=${avoidProb.toFixed(6)}`)
+          return ActionType.PASS
+        }
       }
 
       const discardHuProb = Math.max(0, Math.min(1, policy.discardHuChance ?? 1))
-      return Math.random() < discardHuProb ? ActionType.HU : ActionType.PASS
+      const finalRoll = Math.random()
+      const decision = finalRoll < discardHuProb ? ActionType.HU : ActionType.PASS
+      traceClaim(player, game, 'hu-discard-final', `discardTile=${traceTile(discardTile)} isMenQing=${isMenQing} wildCount=${wildCount} discardHuChance=${discardHuProb.toFixed(6)} roll=${finalRoll.toFixed(6)} decision=${decision}`)
+      return decision
     }
 
+    traceClaim(player, game, 'hu-no-pending-discard', `decision=HU claimTile=${traceTile(claimTile)}`)
     return ActionType.HU
   }
 
-  if (!claimTile) return ActionType.PASS
+  if (!claimTile) {
+    traceClaim(player, game, 'no-claim-tile', 'decision=PASS')
+    return ActionType.PASS
+  }
 
   const wildChecker = (t: Tile) => isWildTile(t, game)
   const exclusionState = game.chowPongExclusion?.[player.id] || { firstActionSuit: null, firstActionType: null }
