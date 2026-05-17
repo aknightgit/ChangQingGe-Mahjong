@@ -4735,19 +4735,20 @@ const forceDiscard = async (p: Player) => {
 .extra-actions-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: 3px;
+  padding: 3px 6px;
   background: rgba(10, 20, 15, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  border-radius: 6px;
   flex-wrap: nowrap;
-}
+  line-height: 1;}
 
 .extra-actions-label {
   font-size: 0.7rem;
   color: rgba(255, 255, 255, 0.35);
   margin-right: 2px;
   flex-shrink: 0;
+  line-height: 1;
 }
 
 .extra-actions-group {
@@ -4786,8 +4787,8 @@ const forceDiscard = async (p: Player) => {
 }
 
 .extra-action-btn {
-  padding: 3px 12px;
-  border-radius: 6px;
+  padding: 2px 8px;
+  border-radius: 5px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(20, 40, 28, 0.8);
   color: rgba(255, 255, 255, 0.6);
@@ -4796,7 +4797,7 @@ const forceDiscard = async (p: Player) => {
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
-}
+  line-height: 1;}
 
 .extra-action-btn:hover:not(:disabled) {
   filter: brightness(1.2);

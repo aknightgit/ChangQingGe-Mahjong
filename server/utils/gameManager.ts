@@ -845,7 +845,7 @@ class GameManager {
   }
 
   setWebSocketManager(manager: any) {
-    this.wsManager = manager;
+    this.wsManager = manager; console.log("[GameManager] setWebSocketManager called, wsManager=" + !!this.wsManager);
   }
 
   // ===== AI托管模式控制 =====
@@ -1308,15 +1308,19 @@ class GameManager {
     const rawCount = this.mutualBailout.get(game.gameId)?.get(playerId)?.get(sourcePlayerId);
     const currentCount = rawCount || 0;
     console.log(`[BAILOUT] game=${game.gameId} player=${player.name} source=${source.name} count=${currentCount} wsManager=${!!this.wsManager}`);
-    if ((currentCount === 2 || currentCount === 3) && this.wsManager) {
+    if (currentCount === 2 || currentCount === 3) {
       const suffix = currentCount === 3 ? '？' : '！';
-      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-        id: Date.now(),
-        text: `📣 ${player.name}搞了${source.name}${currentCount}口了${suffix}`,
-        type: 'special',
-        timestamp: Date.now(),
-        timeLabel: formatBeijingTime()
-      });
+      if (this.wsManager) {
+        this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+          id: Date.now(),
+          text: `📣 ${player.name}搞了${source.name}${currentCount}口了${suffix}`,
+          type: 'special',
+          timestamp: Date.now(),
+          timeLabel: formatBeijingTime()
+        });
+      } else {
+        console.log('[BAILOUT] SKIP broadcast: wsManager not set');
+      }
     }
 
     for (const rel of relations) {
