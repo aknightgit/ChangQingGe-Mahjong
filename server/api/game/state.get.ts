@@ -160,7 +160,9 @@ export default defineEventHandler(async (event) => {
   let tingPreview = { isTing: false, winningTiles: [] as any[] };
   if (query.tingPreview === 'true') {
     try {
-      tingPreview = await gameManager.getTingPreviewForPlayer(normalizedGameId, normalizedPlayerId);
+      tingPreview = await gameManager.getTingPreviewForPlayer(normalizedGameId, normalizedPlayerId, {
+        skipQuickPrecheck: true
+      });
     } catch (err: any) {
       console.warn('getTingPreviewForPlayer failed:', err.message);
     }

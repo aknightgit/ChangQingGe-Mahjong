@@ -690,16 +690,16 @@ class GameManager {
     return true;
   }
 
-  private getCachedTingPreview(game: GameState, player: Player) {
+  private getCachedTingPreview(game: GameState, player: Player, options?: { skipQuickPrecheck?: boolean }) {
     const playerCache = this.getPlayerWinCache(game.gameId, player.id);
-    const cacheKey = `${this.getPlayerWinContextKey(game, player)}|ting-preview`;
+    const cacheKey = `${this.getPlayerWinContextKey(game, player)}|ting-preview|skipQuickPrecheck=${options?.skipQuickPrecheck ? 1 : 0}`;
     const cached = playerCache.ting.get(cacheKey);
     if (cached) {
       return cached;
     }
 
     // 快速粗筛：巡目门槛 + 孤牌检查
-    if (!this.quickPrecheckTenpai(game, player)) {
+    if (!options?.skipQuickPrecheck && !this.quickPrecheckTenpai(game, player)) {
       const emptyResult = { isTing: false, winningTiles: [] as Array<{
         tile: Tile;
         remainingCount: number;
@@ -2110,6 +2110,27 @@ class GameManager {
       return actions;
     }
 
+    const mergeUniqueActions = (base: ActionType[], extras: ActionType[]): ActionType[] => {
+      const merged = [...base];
+      for (const action of extras) {
+        if (!merged.includes(action)) merged.push(action);
+      }
+      return merged;
+    };
+
+    const getCurrentTurnHuOverrides = (): ActionType[] => {
+      if (currentPlayer.id !== playerId) return [];
+      const winCheck = this.getCachedWinCheck(game, player);
+      const totalTileCount = this.getPlayableTileCount(player);
+      if (this.isDaDiaoReadyState(game, player) && winCheck.canWin && winCheck.types.length > 0) {
+        return [ActionType.HU];
+      }
+      if (totalTileCount >= 14 && this.canPlayerDeclareTurnHu(game, player) && winCheck.canWin && winCheck.types.length > 0) {
+        return [ActionType.HU];
+      }
+      return [];
+    };
+
     // Check pending actions (peng, kong, hu from another player's discard)
     const pendingAction = game.pendingActions.find(pa => pa.playerId === playerId);
     if (pendingAction) {
@@ -2133,17 +2154,19 @@ class GameManager {
         const maxChances = game.thinkChances ?? 3;
         const used = game.thinkUsage?.[playerId] ?? 0;
         if (used < maxChances) {
-          const pendingActionsWithThink = [...pendingAction.availableActions, ActionType.THINK];
+          let pendingActionsWithThink = [...pendingAction.availableActions, ActionType.THINK];
           if (this.canExposeCurrentTurnPlayerDrawDuringPending(game, playerId) && !pendingActionsWithThink.includes(ActionType.DRAW)) {
             pendingActionsWithThink.push(ActionType.DRAW);
           }
+          pendingActionsWithThink = mergeUniqueActions(pendingActionsWithThink, getCurrentTurnHuOverrides());
           return pendingActionsWithThink;
         }
       }
+      const currentTurnHuOverrides = getCurrentTurnHuOverrides();
       if (this.canExposeCurrentTurnPlayerDrawDuringPending(game, playerId) && !pendingAction.availableActions.includes(ActionType.DRAW)) {
-        return [...pendingAction.availableActions, ActionType.DRAW];
+        return mergeUniqueActions([...pendingAction.availableActions, ActionType.DRAW], currentTurnHuOverrides);
       }
-      return pendingAction.availableActions;
+      return mergeUniqueActions(pendingAction.availableActions, currentTurnHuOverrides);
     }
 
     // 梁山聚义:前三巡(出牌轮次)可投票,仅4人全真人+没投过+活跃+倍数未达8倍上限
@@ -2317,7 +2340,7 @@ class GameManager {
     });
   }
 
-  async getTingPreviewForPlayer(gameId: string, playerId: string): Promise<{
+  async getTingPreviewForPlayer(gameId: string, playerId: string, options?: { skipQuickPrecheck?: boolean }): Promise<{
     isTing: boolean;
     winningTiles: Array<{
       tile: Tile;
@@ -2342,7 +2365,7 @@ class GameManager {
       return { isTing: false, winningTiles: [] };
     }
 
-    const preview = this.getCachedTingPreview(game, player);
+    const preview = this.getCachedTingPreview(game, player, options);
     if (!preview.isTing && !player.isTing) {
       return { isTing: false, winningTiles: [] };
     }
