@@ -3721,7 +3721,7 @@ const onRerollDice = () => {
 
 const onDealTiles = async () => {
   // 防止重复调用：只有当 overlay 可见时才处理
-  if (!showDiceOverlay.value || isGameStarting.value) return
+  if (!showDiceOverlay.value ) return
   isGameStarting.value = true
   hasDicePreview.value = false
   showDiceOverlay.value = false
