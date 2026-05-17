@@ -472,7 +472,7 @@ export function evaluateRouteState(input: RouteEvaluationInput): RouteState {
 
   const HIGH_VALUE_ROUTES: RouteKind[] = ["ALL_PUNGS", "HALF_FLUSH", "HONOR_HEAVY"]
   const isPostRound10Forced = estimatedRound >= 10
-  let postRound10Top = topCandidate
+  let postRound10Top: RouteScore | null = null
   const topCandidate = routeScores[0]
   const previousCandidate = previousRouteState
     ? routeScores.find(candidate => candidate.route === previousRouteState.current) || null
