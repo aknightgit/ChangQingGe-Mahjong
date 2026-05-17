@@ -52,25 +52,6 @@ class GameManager {
 
   private tileLabel = tileLabel;
 
-  private tracePendingTile(tile?: Tile | null): string {
-    if (!tile) return 'none';
-    return `${tile.suit}-${tile.value}${tile.id ? `#${tile.id}` : ''}`;
-  }
-
-  private tracePendingSummary(game: GameState): string {
-    if (!game.pendingActions.length) return 'none';
-    return game.pendingActions.map(pa => {
-      const player = game.players.find(p => p.id === pa.playerId);
-      return `${player?.name || pa.playerId}[${pa.availableActions.join('|')}]@${this.tracePendingTile(pa.tile)}`;
-    }).join(' ; ');
-  }
-
-  private logPendingTrace(game: GameState, stage: string, detail: string): void {
-    console.log(
-      `[PENDING_TRACE] stage=${stage} game=${game.gameId} room=${game.roomNumber ?? 'n/a'} current=${game.players[game.currentPlayerIndex]?.name ?? 'unknown'} pending=${this.tracePendingSummary(game)} detail=${detail}`
-    );
-  }
-
   private broadcastQuickMessage(
     gameId: string,
     text: string,
@@ -690,16 +671,16 @@ class GameManager {
     return true;
   }
 
-  private getCachedTingPreview(game: GameState, player: Player, options?: { skipQuickPrecheck?: boolean }) {
+  private getCachedTingPreview(game: GameState, player: Player) {
     const playerCache = this.getPlayerWinCache(game.gameId, player.id);
-    const cacheKey = `${this.getPlayerWinContextKey(game, player)}|ting-preview|skipQuickPrecheck=${options?.skipQuickPrecheck ? 1 : 0}`;
+    const cacheKey = `${this.getPlayerWinContextKey(game, player)}|ting-preview`;
     const cached = playerCache.ting.get(cacheKey);
     if (cached) {
       return cached;
     }
 
     // 快速粗筛：巡目门槛 + 孤牌检查
-    if (!options?.skipQuickPrecheck && !this.quickPrecheckTenpai(game, player)) {
+    if (!this.quickPrecheckTenpai(game, player)) {
       const emptyResult = { isTing: false, winningTiles: [] as Array<{
         tile: Tile;
         remainingCount: number;
@@ -864,7 +845,7 @@ class GameManager {
   }
 
   setWebSocketManager(manager: any) {
-    this.wsManager = manager; console.log("[GameManager] setWebSocketManager called, wsManager=" + !!this.wsManager);
+    this.wsManager = manager;
   }
 
   // ===== AI托管模式控制 =====
@@ -948,7 +929,6 @@ class GameManager {
         const game = await this.getGame(gameId);
         if (!game || game.phase !== GamePhase.PLAYING) return;
         if (!game.pendingActions.length) return;
-        this.logPendingTrace(game, 'timeout-fired', `waitMs=${this.getPendingActionWaitMs(gameId)} thinkFreezeUntil=${game.thinkFreezeUntil ?? 0}`);
 
         if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now()) {
           this.schedulePendingActionTimeout(gameId);
@@ -1069,9 +1049,8 @@ class GameManager {
 
   /** 统一处理 pendingAction 决策(吃/碰/杠/胡/PASS) */
   private async resolvePendingAction(game: GameState, player: Player, pa: PendingAction): Promise<void> {
-    this.logPendingTrace(game, 'resolve-start', `player=${player.name}(${player.id}) available=${pa.availableActions.join('|')} tile=${this.tracePendingTile(pa.tile)}`);
     const action = await shouldClaimPendingAction(player, pa.availableActions, game);
-    this.logPendingTrace(game, 'resolve-decision', `player=${player.name}(${player.id}) action=${action} tile=${this.tracePendingTile(pa.tile)}`);
+    console.log(`[PendingResolve] ${player.name} → ${action}`);
     if (action === ActionType.PASS) {
       this.handlePass(game, player);
     } else if (action === ActionType.PENG) {
@@ -1162,9 +1141,8 @@ class GameManager {
           continue;
         }
 
-        this.logPendingTrace(game, 'bot-priority-start', `player=${player.name}(${player.id}) available=${filteredHigherActions.join('|')} tile=${this.tracePendingTile(pa.tile)}`);
         const action = await shouldClaimPendingAction(player, filteredHigherActions, game);
-        this.logPendingTrace(game, 'bot-priority-decision', `player=${player.name}(${player.id}) action=${action} available=${filteredHigherActions.join('|')} tile=${this.tracePendingTile(pa.tile)}`);
+        console.log(`[BotService] ${player.name} priority action: ${action} (from ${filteredHigherActions})`);
 
         if (action === ActionType.PENG) {
           const pengExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
@@ -1330,19 +1308,15 @@ class GameManager {
     const rawCount = this.mutualBailout.get(game.gameId)?.get(playerId)?.get(sourcePlayerId);
     const currentCount = rawCount || 0;
     console.log(`[BAILOUT] game=${game.gameId} player=${player.name} source=${source.name} count=${currentCount} wsManager=${!!this.wsManager}`);
-    if (currentCount === 2 || currentCount === 3) {
+    if ((currentCount === 2 || currentCount === 3) && this.wsManager) {
       const suffix = currentCount === 3 ? '？' : '！';
-      if (this.wsManager) {
-        this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-          id: Date.now(),
-          text: `📣 ${player.name}搞了${source.name}${currentCount}口了${suffix}`,
-          type: 'special',
-          timestamp: Date.now(),
-          timeLabel: formatBeijingTime()
-        });
-      } else {
-        console.log('[BAILOUT] SKIP broadcast: wsManager not set');
-      }
+      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
+        id: Date.now(),
+        text: `📣 ${player.name}搞了${source.name}${currentCount}口了${suffix}`,
+        type: 'special',
+        timestamp: Date.now(),
+        timeLabel: formatBeijingTime()
+      });
     }
 
     for (const rel of relations) {
@@ -2110,27 +2084,6 @@ class GameManager {
       return actions;
     }
 
-    const mergeUniqueActions = (base: ActionType[], extras: ActionType[]): ActionType[] => {
-      const merged = [...base];
-      for (const action of extras) {
-        if (!merged.includes(action)) merged.push(action);
-      }
-      return merged;
-    };
-
-    const getCurrentTurnHuOverrides = (): ActionType[] => {
-      if (currentPlayer.id !== playerId) return [];
-      const winCheck = this.getCachedWinCheck(game, player);
-      const totalTileCount = this.getPlayableTileCount(player);
-      if (this.isDaDiaoReadyState(game, player) && winCheck.canWin && winCheck.types.length > 0) {
-        return [ActionType.HU];
-      }
-      if (totalTileCount >= 14 && this.canPlayerDeclareTurnHu(game, player) && winCheck.canWin && winCheck.types.length > 0) {
-        return [ActionType.HU];
-      }
-      return [];
-    };
-
     // Check pending actions (peng, kong, hu from another player's discard)
     const pendingAction = game.pendingActions.find(pa => pa.playerId === playerId);
     if (pendingAction) {
@@ -2154,19 +2107,17 @@ class GameManager {
         const maxChances = game.thinkChances ?? 3;
         const used = game.thinkUsage?.[playerId] ?? 0;
         if (used < maxChances) {
-          let pendingActionsWithThink = [...pendingAction.availableActions, ActionType.THINK];
+          const pendingActionsWithThink = [...pendingAction.availableActions, ActionType.THINK];
           if (this.canExposeCurrentTurnPlayerDrawDuringPending(game, playerId) && !pendingActionsWithThink.includes(ActionType.DRAW)) {
             pendingActionsWithThink.push(ActionType.DRAW);
           }
-          pendingActionsWithThink = mergeUniqueActions(pendingActionsWithThink, getCurrentTurnHuOverrides());
           return pendingActionsWithThink;
         }
       }
-      const currentTurnHuOverrides = getCurrentTurnHuOverrides();
       if (this.canExposeCurrentTurnPlayerDrawDuringPending(game, playerId) && !pendingAction.availableActions.includes(ActionType.DRAW)) {
-        return mergeUniqueActions([...pendingAction.availableActions, ActionType.DRAW], currentTurnHuOverrides);
+        return [...pendingAction.availableActions, ActionType.DRAW];
       }
-      return mergeUniqueActions(pendingAction.availableActions, currentTurnHuOverrides);
+      return pendingAction.availableActions;
     }
 
     // 梁山聚义:前三巡(出牌轮次)可投票,仅4人全真人+没投过+活跃+倍数未达8倍上限
@@ -2340,7 +2291,7 @@ class GameManager {
     });
   }
 
-  async getTingPreviewForPlayer(gameId: string, playerId: string, options?: { skipQuickPrecheck?: boolean }): Promise<{
+  async getTingPreviewForPlayer(gameId: string, playerId: string): Promise<{
     isTing: boolean;
     winningTiles: Array<{
       tile: Tile;
@@ -2365,7 +2316,7 @@ class GameManager {
       return { isTing: false, winningTiles: [] };
     }
 
-    const preview = this.getCachedTingPreview(game, player, options);
+    const preview = this.getCachedTingPreview(game, player);
     if (!preview.isTing && !player.isTing) {
       return { isTing: false, winningTiles: [] };
     }
@@ -3455,7 +3406,6 @@ class GameManager {
    * 直接执行胡(碰吃冲突中,高优先级胡直接执行)
    */
   private async executeWinDirectly(game: GameState, player: Player, winningTile: Tile): Promise<void> {
-    this.logPendingTrace(game, 'execute-win-directly', `player=${player.name}(${player.id}) tile=${this.tracePendingTile(winningTile)}`);
     // 构造假的pendingAction,让handleHu能获取winningTile
     const fakePending = {
       playerId: player.id,
@@ -3798,7 +3748,6 @@ class GameManager {
 
     const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
     const winningTile = pendingAction?.tile;
-    this.logPendingTrace(game, 'handle-hu-enter', `player=${player.name}(${player.id}) winningTile=${this.tracePendingTile(winningTile)} selectedWinOption=${selectedWinOptionLabel ?? 'auto'} isDaDiao=${isDaDiao}`);
 
     if (winningTile) {
       player.hand.concealedTiles.push(winningTile);
@@ -4542,7 +4491,6 @@ class GameManager {
     game.pendingActions = [];
     delete (game as any).hasTriggeredAction;
     const discarderIndex = game.currentPlayerIndex;
-    this.logPendingTrace(game, 'check-pending-start', `discarder=${game.players[game.currentPlayerIndex]?.name ?? 'unknown'} tile=${this.tracePendingTile(discardedTile)}`);
 
     const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
 
@@ -4600,9 +4548,6 @@ class GameManager {
 
         if (!requiresFlowerGate || hasGatePass) {
           actions.push(ActionType.HU);
-          console.log(`[PENDING_TRACE] stage=hu-candidate game=${game.gameId} room=${game.roomNumber ?? 'n/a'} player=${player.name}(${player.id}) tile=${this.tracePendingTile(discardedTile)} handTypes=${handTypes.join('|') || 'none'} requiresFlowerGate=${requiresFlowerGate} hasFlowerAtDoor=${hasFlowerAtDoor} hasWindDragonTriplet=${hasWindDragonTriplet} hasAnyKong=${hasAnyKong} hasGatePass=${hasGatePass} canWin=${winCheck.canWin}`);
-        } else {
-          console.log(`[PENDING_TRACE] stage=hu-blocked game=${game.gameId} room=${game.roomNumber ?? 'n/a'} player=${player.name}(${player.id}) tile=${this.tracePendingTile(discardedTile)} handTypes=${handTypes.join('|') || 'none'} requiresFlowerGate=${requiresFlowerGate} hasFlowerAtDoor=${hasFlowerAtDoor} hasWindDragonTriplet=${hasWindDragonTriplet} hasAnyKong=${hasAnyKong} hasGatePass=${hasGatePass}`);
         }
       }
 
@@ -4668,7 +4613,6 @@ class GameManager {
       }
     }
 
-    this.logPendingTrace(game, 'check-pending-finish', `discardTile=${this.tracePendingTile(discardedTile)} chowPlayer=${chowPlayer?.name ?? 'none'}`);
     if (game.pendingActions.length === 0) {
       this.clearPendingActionTimer(game.gameId);
     }
@@ -5733,3 +5677,4 @@ if (!globalGameManager.gameManager) {
 }
 
 export const gameManager = globalGameManager.gameManager;
+

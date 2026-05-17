@@ -187,4 +187,15 @@ watch(() => props.messages.length, () => {
   .broadcast-time { font-size: 0.55rem; }
   .broadcast-empty { font-size: 0.55rem; padding: 2px 4px; }
 }
+
+@media (max-width: 500px) {
+  .broadcast-panel { border-radius: 4px; font-size: 0.65rem; }
+  .broadcast-header { padding: 2px 6px; gap: 3px; }
+  .broadcast-icon { font-size: 0.6rem; }
+  .broadcast-title { font-size: 0.6rem; }
+  .broadcast-scroll { padding: 2px 4px; gap: 1px; max-height: 120px; }
+  .broadcast-msg { font-size: 0.55rem; line-height: 1.1 !important; padding: 1px 4px; gap: 3px; border-left-width: 1px; margin: 0; }
+  .broadcast-time { font-size: 0.48rem; }
+  .broadcast-empty { font-size: 0.55rem; padding: 6px 4px; }
+}
 </style>

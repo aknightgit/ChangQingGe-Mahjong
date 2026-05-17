@@ -242,6 +242,7 @@
           </div>
         </div>
 
+
         <!-- 结算面板 -->
         <div v-if="drawBlockedNoticeVisible" class="draw-blocked-notice">
           {{ drawBlockedNoticeText }}
@@ -348,17 +349,13 @@
           <Transition name="settings-panel" @after-leave="onSettingsClosed">
             <div
               v-if="showSettings"
-              class="glass-settings-overlay"
-              @click="showSettings = false"
+              ref="settingsPanelEl"
+              class="glass-settings-panel"
+              :style="settingsPanelStyle"
+              @click.stop
+              @wheel.stop
+              @touchmove.stop
             >
-              <div
-                ref="settingsPanelEl"
-                class="glass-settings-panel"
-                :style="settingsPanelStyle"
-                @click.stop
-                @wheel.stop
-                @touchmove.stop
-              >
               <!-- 三角指示箭头 -->
               <div class="glass-settings-arrow"></div>
                             <div class="glass-settings-body" @wheel.stop @touchmove.stop>
@@ -479,7 +476,6 @@
                   <span>长青阁麻将 v2.2</span>
                 </div>
               </div>
-            </div>
             </div>
           </Transition>
         </Teleport>
@@ -719,7 +715,7 @@
             <button
               v-if="gameState?.phase === GamePhase.WAITING
                 ? canManualStartWaitingGame
-                : gameState?.phase === 'ended'"
+                : (gameState?.phase === 'playing' && !!currentPlayer?.isDealer) || gameState?.phase === 'ended'"
               class="settle-btn-header"
               :class="{ 'start-game-glow': canManualStartWaitingGame }"
               :disabled="isGameStarting && gameState?.phase === GamePhase.WAITING"
@@ -728,13 +724,6 @@
               {{ gameState?.phase === GamePhase.WAITING
                 ? (isGameStarting ? '⏳ 正在开始...' : '🀄 开始牌局')
                 : '📊 退房结算' }}
-            </button>
-            <button
-              v-else-if="gameState?.phase === 'playing'"
-              class="settle-btn-header settle-btn-header--exit"
-              @click="backToLobby"
-            >
-              👋 退出
             </button>
           </div>
 
@@ -872,6 +861,7 @@
           </div>
         </aside>
       </main>
+
 
       <Teleport to="body">
         <DiceAnimation
@@ -2189,6 +2179,39 @@ const maybeAutoDealForBotDealer = () => {
   }, 420)
 }
 
+/** 自动掷骰子+发牌（AI庄家） */
+const autoRollAndDeal = () => {
+  onRerollDice()
+  // 等掷骰子动画完成（约850ms）+ 结果展示（500ms）+ 过渡
+  window.setTimeout(() => {
+    void onDealTiles()
+  }, 1800)
+}
+
+/** 仅自动掷骰子（人类庄家） */
+const autoRollOnly = () => {
+  onRerollDice()
+  // 骰子掷完，等人发牌
+}
+
+const startNextRound = async () => {
+  cancelWallExhaustedCountdown()
+  if (isSettleRequested.value) {
+    // 退房结算已申请：直接显示总结算面板
+    showSettlement.value = true
+    return
+  }
+  showSettlement.value = false
+  settlementData.value = null
+  isHuReviewMode.value = false
+  await enterStartingPhaseWithDiceOverlay()
+  await forceRefreshState()
+  window.setTimeout(() => {
+    if (gameState.value?.phase === GamePhase.STARTING && showDiceOverlay.value) {
+      void onDealTiles()
+    }
+  }, 1700)
+}
 const isInteractionLocked = computed(() => isOverlayVisible.value)
 
 const formatOrdinal = (value: number | null | undefined) => {
@@ -3573,15 +3596,6 @@ watch([isMyTurn, hasPriorityActions], ([myTurn, hasActions]) => {
   }
 })
 
-// 切到 PLAYING 时强制重置倒计时（解决开局第一巡庄家isMyTurn在WAITING就已为true、watcher不触发的问题）
-watch(() => gameState.value?.phase, (newPhase, oldPhase) => {
-  if (newPhase === GamePhase.PLAYING && oldPhase !== GamePhase.PLAYING) {
-    if (!isAIControlled.value && (isMyTurn.value || hasPriorityActions.value)) {
-      startTurnTimer()
-    }
-  }
-})
-
 const actionWindowText = computed(() => {
   if (!hasPriorityActions.value && !isMyTurn.value) return ''
   const pending = myPendingAction.value
@@ -4119,7 +4133,30 @@ watch(
       showDiceOverlay.value = true
       console.log('[DiceOverlay] SET to true (STARTING)')
 
-      
+      // 🔄 自动下一局：来自结算/流局后，自动走掷骰子+发牌
+      // STARTING时立即 refresh state，然后等骰子组件就绪后自动操作
+      if (prevPhase === GamePhase.ENDED) {
+        if (isSettleRequested.value) {
+          // 房主已申请退房结算：跳过下一局，直接显示总结算
+          showDiceOverlay.value = false
+          showSettlement.value = true
+          return
+        }
+        window.setTimeout(() => {
+          const dealer = dealerPlayer.value
+          if (dealer && isBotPlayer(dealer)) {
+            // AI庄家：自动掷骰子+发牌
+            autoRollAndDeal()
+          } else if (dealer && !isBotPlayer(dealer)) {
+            // 人类头胡庄家：自动掷骰子，等他手动发牌
+            // 或者直接自动掷骰子+等发牌（当前先自动掷骰子）
+            autoRollOnly()
+          } else {
+            // 没有庄家——不可能
+          }
+        }, 500)
+      }
+      return
     }
     if (newPhase !== GamePhase.STARTING) {
       showDiceOverlay.value = false
@@ -4689,28 +4726,27 @@ const forceDiscard = async (p: Player) => {
 .extra-actions-bar {
   display: flex;
   align-items: center;
-  gap: 3px;
-  padding: 3px 6px;
+  gap: 8px;
+  padding: 6px 10px;
   background: rgba(10, 20, 15, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
+  border-radius: 10px;
   flex-wrap: nowrap;
-  line-height: 1;}
+}
 
 .extra-actions-label {
   font-size: 0.7rem;
   color: rgba(255, 255, 255, 0.35);
   margin-right: 2px;
   flex-shrink: 0;
-  line-height: 1;
 }
 
 .extra-actions-group {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex: 1;
-  justify-content: flex-start;
+  justify-content: center;
 }
 
 .loading-overlay {
@@ -4741,17 +4777,17 @@ const forceDiscard = async (p: Player) => {
 }
 
 .extra-action-btn {
-  padding: 2px 6px;
-  border-radius: 5px;
+  padding: 3px 12px;
+  border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(20, 40, 28, 0.8);
   color: rgba(255, 255, 255, 0.6);
-  font-size: 0.7rem;
+  font-size: 0.85rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
-  line-height: 1;}
+}
 
 .extra-action-btn:hover:not(:disabled) {
   filter: brightness(1.2);
@@ -5043,17 +5079,16 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .ext-title { font-size: 0.8rem; margin-bottom: 1px; }
 .layout--mobile-landscape .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
 .layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.78rem; }
-.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(4px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); font-size: calc(0.6rem * var(--mobile-scale, 1)); }
-.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: nowrap; }
-.layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.7rem; }
+.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(4px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); font-size: calc(0.72rem * var(--mobile-scale, 1)); }
+.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: wrap; }
+.layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
 .layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
 .layout--mobile-landscape .extended-info-panel .action-buttons-panel { gap: 6px; }
 .layout--mobile-landscape .extended-info-panel .turn-status-text { font-size: 0.54rem; }
 .layout--mobile-landscape .extended-info-panel .room-header-row { gap: 3px; margin: 0; }
 .layout--mobile-landscape .extended-info-panel .room-stats { padding: 2px 3px; }
 .layout--mobile-landscape .extended-info-panel .player-row { padding: 2px 3px; font-size: 0.52rem; gap: 3px; }
-.layout--mobile-landscape .extended-info-panel .broadcast-container { max-height: auto; padding: 0; }
-.layout--mobile-landscape .extended-info-panel .broadcast-panel { margin-top: 0; border-top: none; }
+.layout--mobile-landscape .extended-info-panel .broadcast-container { max-height: 52px; padding: 2px 3px; }
 .layout--mobile-landscape .extended-info-panel .broadcast-message { font-size: 0.5rem; padding: 1px 0; }
 
 .layout--mobile-landscape .extended-info-panel .action-panel { padding: 4px; gap: 4px; }
@@ -5274,20 +5309,20 @@ const forceDiscard = async (p: Player) => {
 
 .ting-preview-label__text {
   color: rgba(255, 255, 255, 0.8);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   font-weight: 600;
   flex-shrink: 0;
 }
 
 .ting-preview-label__colon {
   color: rgba(255, 255, 255, 0.5);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   flex-shrink: 0;
 }
 
 .ting-preview-label__hint {
   color: rgba(255, 255, 255, 0.35);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   flex-shrink: 0;
 }
 
@@ -5299,7 +5334,7 @@ const forceDiscard = async (p: Player) => {
   height: 14px;
   margin-left: 3px;
   border-radius: 3px;
-  font-size: 0.7rem;
+  font-size: 0.6rem;
   line-height: 1;
   color: rgba(255, 255, 255, 0.45);
   background: rgba(255, 255, 255, 0.08);
@@ -5311,7 +5346,7 @@ const forceDiscard = async (p: Player) => {
 
 .ting-preview-tile {
   color: #ff6b6b;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   line-height: 1.2;
   flex-shrink: 0;
   margin: 0;
@@ -5459,6 +5494,7 @@ const forceDiscard = async (p: Player) => {
   0%, 100% { box-shadow: 0 0 10px rgba(239,83,80,0.5); }
   50% { box-shadow: 0 0 20px rgba(255,107,107,0.88); }
 }
+
 
 .inline-action-btn--rebel {
   background: linear-gradient(135deg, #dc2626, #b91c1c);
@@ -5742,12 +5778,12 @@ const forceDiscard = async (p: Player) => {
   overflow-wrap: anywhere;
 }
 .turn-timer-inline {
-  margin-left: 4px;
-  font-size: 0.6rem;
+  margin-left: 6px;
+  font-size: 0.78rem;
   font-weight: 700;
   color: #81c784;
   background: rgba(0, 0, 0, 0.3);
-  padding: 1px 5px;
+  padding: 1px 8px;
   border-radius: 999px;
 }
 .turn-timer-inline.turn-timer--urgent {
@@ -5822,7 +5858,7 @@ const forceDiscard = async (p: Player) => {
   font-weight: 700;
   color: #81c784;
   background: rgba(0, 0, 0, 0.3);
-  padding: 1px 5px;
+  padding: 1px 8px;
   border-radius: 999px;
 }
 
@@ -7586,7 +7622,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extra-action-btn,
 .layout--mobile-landscape .mahjong-button.small,
 .layout--mobile-landscape .panel-button.small {
-  font-size: calc(0.65rem * var(--mobile-scale, 1));
+  font-size: calc(0.78rem * var(--mobile-scale, 1));
 }
 
 .layout--mobile-landscape .action-buttons-panel {
@@ -7594,7 +7630,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .extra-actions-bar {
-  gap: 4px;
+  gap: 6px;
   padding: calc(4px * var(--mobile-scale)) calc(8px * var(--mobile-scale));
 }
 
@@ -7730,11 +7766,21 @@ const forceDiscard = async (p: Player) => {
   white-space: nowrap;
 }
 
+
+
+
 /* ===== Xiaomi 14 Pro / compact mobile styles ===== */
 .layout--mobile-landscape .broadcast-header {
-  display: none !important;
+  padding: 2px 6px !important;
+  gap: 3px !important;
 }
-
+.layout--mobile-landscape .broadcast-title {
+  font-size: 0.5rem !important;
+  line-height: 1 !important;
+}
+.layout--mobile-landscape .broadcast-icon {
+  font-size: 0.5rem !important;
+}
 .layout--mobile-landscape .inline-action-buttons {
   gap: 2px !important;
 }
@@ -7744,6 +7790,9 @@ const forceDiscard = async (p: Player) => {
   min-width: 28px !important;
 }
 @media (max-width: 900px) and (orientation: portrait) {
+  .broadcast-header { padding: 3px 6px !important; gap: 3px !important; }
+  .broadcast-title { font-size: 0.55rem !important; line-height: 1.2 !important; }
+  .broadcast-icon { font-size: 0.55rem !important; }
   .inline-action-buttons { gap: 2px !important; }
   .inline-action-btn { font-size: 0.55rem !important; padding: 2px 6px !important; min-width: 32px !important; }
 }
