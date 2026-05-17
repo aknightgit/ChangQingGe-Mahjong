@@ -719,7 +719,7 @@
             <button
               v-if="gameState?.phase === GamePhase.WAITING
                 ? canManualStartWaitingGame
-                : (gameState?.phase === 'playing' && !!currentPlayer?.isDealer) || gameState?.phase === 'ended'"
+                : gameState?.phase === 'ended'"
               class="settle-btn-header"
               :class="{ 'start-game-glow': canManualStartWaitingGame }"
               :disabled="isGameStarting && gameState?.phase === GamePhase.WAITING"
@@ -728,6 +728,13 @@
               {{ gameState?.phase === GamePhase.WAITING
                 ? (isGameStarting ? '⏳ 正在开始...' : '🀄 开始牌局')
                 : '📊 退房结算' }}
+            </button>
+            <button
+              v-else-if="gameState?.phase === 'playing'"
+              class="settle-btn-header settle-btn-header--exit"
+              @click="backToLobby"
+            >
+              👋 退出
             </button>
           </div>
 
