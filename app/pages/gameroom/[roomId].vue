@@ -4712,19 +4712,21 @@ const forceDiscard = async (p: Player) => {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 /* 更多特殊操作横条 */
 .extra-actions-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
+  justify-content: center;
+  gap: 4px;
+  padding: 2px 6px;
   background: rgba(10, 20, 15, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   flex-wrap: wrap;
+  min-height: 28px;
 }
 
 .extra-actions-label {
@@ -4732,6 +4734,7 @@ const forceDiscard = async (p: Player) => {
   color: rgba(255, 255, 255, 0.35);
   margin-right: 2px;
   flex-shrink: 0;
+  line-height: 1;
 }
 
 .loading-overlay {
@@ -4762,7 +4765,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .extra-action-btn {
-  padding: 5px 12px;
+  padding: 2px 10px;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(20, 40, 28, 0.8);
@@ -4772,6 +4775,7 @@ const forceDiscard = async (p: Player) => {
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
+  line-height: 1;
 }
 
 .extra-action-btn:hover:not(:disabled) {
@@ -5065,7 +5069,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
 .layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.78rem; }
 .layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(4px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); font-size: calc(0.72rem * var(--mobile-scale, 1)); }
-.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: wrap; }
+.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(2px * var(--mobile-scale, 1)) calc(4px * var(--mobile-scale, 1)); gap: calc(3px * var(--mobile-scale, 1)); flex-wrap: wrap; justify-content: center; }
 .layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
 .layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
 .layout--mobile-landscape .extended-info-panel .action-buttons-panel { gap: 6px; }
@@ -5266,7 +5270,7 @@ const forceDiscard = async (p: Player) => {
   flex-direction: row;
   align-items: center;
   padding: 0;
-  margin: 0;
+  margin: 0 0 -2px 0;
   line-height: 1;
 }
 
@@ -5279,11 +5283,12 @@ const forceDiscard = async (p: Player) => {
   user-select: none;
   white-space: nowrap;
   overflow-x: auto;
-  padding: 2px 6px;
+  padding: 1px 4px;
   -webkit-overflow-scrolling: touch;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.05);
   transition: background 0.15s ease;
+  line-height: 1;
 }
 .ting-preview-label:hover {
   background: rgba(255, 255, 255, 0.10);
@@ -7615,8 +7620,8 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .extra-actions-bar {
-  gap: 6px;
-  padding: 4px 8px;
+  gap: 4px;
+  padding: 2px 6px;
 }
 
 .layout--mobile-landscape :deep(.center-info) {
@@ -7795,7 +7800,7 @@ const forceDiscard = async (p: Player) => {
 }
 .layout--mobile-landscape .extra-action-btn--hu {
   font-size: 0.5rem !important;
-  padding: 1px 5px !important;
+  padding: 1px 4px !important;
 }
 /* v1778981916 */
 </style>
