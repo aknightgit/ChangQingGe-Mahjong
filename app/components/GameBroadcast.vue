@@ -181,10 +181,10 @@ watch(() => props.messages.length, () => {
 @media (max-width: 500px) {
   .broadcast-panel { border-radius: 4px; }
   .broadcast-header { padding: 2px 6px; gap: 3px; }
-  .broadcast-icon, .broadcast-title { font-size: 0.7rem; }
+  .broadcast-icon, .broadcast-title { font-size: 0.55rem; }
   .broadcast-scroll { padding: 1px 4px; gap: 1px; max-height: 120px; }
-  .broadcast-msg { font-size: 0.7rem; line-height: 1.1 !important; padding: 0px 4px; gap: 2px; border-left-width: 1px; margin: 0; }
-  .broadcast-time { font-size: 0.7rem; }
-  .broadcast-empty { font-size: 0.7rem; padding: 2px 4px; }
+  .broadcast-msg { font-size: 0.55rem; line-height: 1.1 !important; padding: 0px 4px; gap: 2px; border-left-width: 1px; margin: 0; }
+  .broadcast-time { font-size: 0.55rem; }
+  .broadcast-empty { font-size: 0.55rem; padding: 2px 4px; }
 }
 </style>

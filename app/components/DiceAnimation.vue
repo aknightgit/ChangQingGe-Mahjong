@@ -2,7 +2,7 @@
   <Transition name="dice-fade">
     <div v-if="visible" class="dice-overlay">
       <div class="particles">
-        <span v-for="n in 30" :key="n" class="particle" :style="particleStyle(n)" />
+        <span v-for="n in 8" :key="n" class="particle" :style="particleStyle(n)" />
       </div>
 
       <div class="dice-container">
@@ -230,7 +230,7 @@ const onDeal = () => {
   align-items: center;
   justify-content: center;
   z-index: 200;
-  backdrop-filter: blur(6px);
+  /* backdrop-filter removed for performance */
   perspective: 1200px;
   transform-style: preserve-3d;
 }
