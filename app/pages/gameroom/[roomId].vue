@@ -176,11 +176,9 @@
               >
                 <div class="hu-combo-header">
                   <span class="hu-combo-rank">TOP {{ idx + 1 }}</span>
-                  <span class="hu-combo-score">总赢 {{ getHuOptionTotalWin(opt) }}</span>
-                </div>
-                <div class="hu-combo-main">
-                  <span class="hu-combo-label">{{ opt.label.replace(/·自摸|·捉冲|\\(无百搭×2\\)/g, '') }}</span>
+                  <span class="hu-combo-label">{{ opt.label.replace(/·自摸|·捉冲|\\\\(无百搭×2\\\\)/g, '') }}</span>
                   <span class="hu-combo-method">{{ opt.type === 'self_draw' ? '自摸' : '捉冲' }}</span>
+                  <span class="hu-combo-score">总赢 {{ getHuOptionTotalWin(opt) }}</span>
                 </div>
                 <div class="hu-combo-formula">{{ getHuOptionFormula(opt) }}</div>
                 <div v-if="formatHuOptionGroups(opt)" class="hu-group-list">
@@ -252,7 +250,7 @@
 
         <div v-if="showSettlement" class="settle-overlay">
   <div class="settle-panel">
-    <h2 class="settle-title-center">本局输赢</h2>
+    <h2 class="settle-title-center">{{ isWallExhaustedSettlement ? '💨 流局了，下把翻倍！！' : '本局输赢' }}</h2>
 
     <div class="settle-rounds settle-rounds--single">
       <div class="settle-round-card">
@@ -513,7 +511,7 @@
             <!-- 桌面中心: 弃牌池 + 牌墙 + 倍数 -->
             <TableCenter
               :remaining-tiles="remainingTileCount"
-              :status-message="showMobileActionNotice ? mobileActionNoticeText : turnMessage"
+              :status-message="turnMessage"
               hint-message="点击选牌，再次点击出牌。操作按钮将根据规则自动显示。"
               :is-winner="isWinner"
               :round-multiplier="roundMultiplier"
@@ -792,41 +790,32 @@
 
               <!-- 听牌提示（左对齐紧贴操作按钮上方） -->
               <div class="ting-preview-section">
-                <button
-                  class="ting-preview-toggle"
-                  :class="{ 'ting-preview-toggle--active': tingPreviewEnabled }"
-                  @click="onToggleTingPreview"
-                >
-                  听牌提示{{ tingPreviewEnabled ? `（${tingPreviewText}）` : '（未启用）' }}
-                </button>
-                <div v-if="tingPreviewEnabled && tingPreviewItems.length" class="ting-preview-panel">
-                  <div class="ting-preview-panel__tiles">
-                    <span
-                      v-for="item in tingPreviewItems"
-                      :key="item.key"
-                      class="ting-preview-panel__tile"
-                      :class="{
-                        'ting-preview-panel__tile--exhausted': item.isExhausted
-                      }"
-                    >
-                      {{ item.label }}
-                    </span>
-                  </div>
+                <div class="ting-preview-label" role="button" tabindex="0" @click="onToggleTingPreview" @keydown.enter="onToggleTingPreview">
+                  <span class="ting-preview-label__text">听牌</span>
+                  <span class="ting-preview-label__toggle">{{ tingPreviewEnabled ? '✕' : '☰' }}</span>
+                  <template v-if="tingPreviewEnabled">
+                    <span class="ting-preview-label__colon">：</span>
+                    <template v-if="tingPreviewItems.length">
+                      <span
+                        v-for="item in tingPreviewItems"
+                        :key="item.key"
+                        class="ting-preview-tile"
+                        :class="{ 'ting-preview-tile--exhausted': item.isExhausted }"
+                      >{{ item.label }}</span>
+                    </template>
+                    <span v-else class="ting-preview-label__hint">未听牌</span>
+                  </template>
                 </div>
               </div>
 
               <!-- 状态提示 -->
-              <div v-if="thinkFreezeActive || isWinner || isAIControlled || showMobileActionNotice" class="turn-status-text">
+              <div v-if="thinkFreezeActive || isAIControlled" class="turn-status-text">
                 <template v-if="thinkFreezeActive">
                   🧠 {{ thinkFreezePlayerName }} 在思考中... {{ thinkFreezeCountdown }}s
-                </template>
-                <template v-else-if="isWinner">
-                  🎉 你赢了！
                 </template>
                 <template v-else-if="isAIControlled">
                   🤖 AI托管中
                 </template>
-                <template v-else-if="showMobileActionNotice">{{ mobileActionNoticeText }}</template>
               </div>
               <CircularActionButtons
                 :available-actions="filteredCircularAvailableActions"
@@ -846,25 +835,28 @@
               <!-- 更多特殊操作：常驻显示聚义/造反/倒计时 -->
               <div class="extra-actions-bar">
                 <span class="extra-actions-label">更多操作</span>
-                <button
-                  class="extra-action-btn extra-action-btn--liangshan"
-                  :disabled="canLiangShan === false || isInteractionLocked || !isConnected || hasVotedLiangShan || thinkFreezeActive"
-                  @click="onLiangShan"
-                >🔥 {{ hasVotedLiangShan ? '已聚义' : '聚义' }}</button>
-                <button
-                  class="extra-action-btn extra-action-btn--rebel"
-                  :disabled="showRebel === false || isInteractionLocked || !isConnected || thinkFreezeActive"
-                  @click="onRebel"
-                >🚨 造反</button>
-                <button
-                  v-if="showHu"
-                  class="extra-action-btn extra-action-btn--hu"
-                  :disabled="isInteractionLocked || isAIControlled"
-                  @click="onHu"
-                >🏆 您胡了</button>
-                <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
-                  ⏱ {{ turnTimer }}s
-                </span>
+                <div class="extra-actions-group">
+                  <button
+                    class="extra-action-btn extra-action-btn--liangshan"
+                    :disabled="canLiangShan === false || isInteractionLocked || !isConnected || hasVotedLiangShan || thinkFreezeActive"
+                    @click="onLiangShan"
+                  >🔥 {{ hasVotedLiangShan ? '已聚义' : '聚义' }}</button>
+                  <button
+                    class="extra-action-btn extra-action-btn--rebel"
+                    :disabled="showRebel === false || isInteractionLocked || !isConnected || thinkFreezeActive"
+                    @click="onRebel"
+                  >🚨 造反</button>
+                  <button
+                    v-if="showHu"
+                    class="extra-action-btn extra-action-btn--hu"
+                    :disabled="isInteractionLocked || isAIControlled"
+                    @click="onHu"
+                  >🏆 您胡了</button>
+                  <span v-if="isWinner" class="turn-timer-inline turn-timer--winner">🎉 你赢了！</span>
+                  <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
+                    ⏱ {{ turnTimer }}s
+                  </span>
+                </div>
               </div>
           </div>
         </aside>
@@ -1480,6 +1472,16 @@ onMounted(async () => {
       if (gameState.value) {
         clearPendingRoomTarget()
         addMountLog('connect successful, cleared pending target')
+        // 保存最近房间到 localStorage（gameState 已加载，roomNumber 准确）
+        try {
+          const QUICK_JOIN_KEY = 'mahjong_recent_rooms'
+          const raw = localStorage.getItem(QUICK_JOIN_KEY) || '[]'
+          const list = JSON.parse(raw)
+          const roomNumber = gameState.value!.roomNumber || roomId.value
+          const filtered = list.filter((g: any) => g.gameId !== roomId.value)
+          filtered.unshift({ roomNumber, playerId: playerId.value, gameId: roomId.value })
+          localStorage.setItem(QUICK_JOIN_KEY, JSON.stringify(filtered.slice(0, 5)))
+        } catch { /* ignore */ }
       }
     } else {
       addMountLog(`SKIP connect: roomId=${roomId.value} playerId=${playerId.value}`)
@@ -2144,7 +2146,9 @@ const dealerPlayer = computed(() => {
 })
 
 const enterStartingPhaseWithDiceOverlay = async () => {
-  try {
+    try {
+    // 在 API 调用前就设标记，防止 socket.io 广播先到导致 watcher 重复触发
+    hasDicePreview.value = true
     await $fetch('/mahjong/api/game/start', {
       method: 'POST',
       body: {
@@ -2157,7 +2161,6 @@ const enterStartingPhaseWithDiceOverlay = async () => {
       Math.floor(Math.random() * 6) + 1,
       Math.floor(Math.random() * 6) + 1
     ]
-    hasDicePreview.value = true
     playSound('dice-roll')
     playVoiceAction('diceRoll')
     showDiceOverlay.value = true
@@ -3710,9 +3713,9 @@ const onDealTiles = async () => {
   console.log('[onDealTiles] Calling startGame API...')
   try {
     await startGame({ hesitationWindow: hesitationWindow.value, fixedDice: diceValues.value })
-    console.log('[onDealTiles] startGame done, forcing fresh state...')
-    // 强制刷新（绕过debounce），确保开局后立刻看到正确的可用操作
-    await forceRefreshState()
+    console.log('[onDealTiles] startGame done (refreshState inside), waiting for socket update...')
+    // 等 socket 广播到位，避免 forceRefreshState 和 refreshState 打架
+    await new Promise(resolve => setTimeout(resolve, 300))
     console.log('[onDealTiles] Done, phase:', gameState.value?.phase)
   } finally {
     isGameStarting.value = false
@@ -3947,13 +3950,10 @@ const checkOtherPlayerSounds = (newState: any) => {
           if (isFlowerReplacementMeld) continue
           if (m.type === 'kong' || m.tiles?.length === 4) {
             if (!isSelf) pendingMeldVoices.push('kong')
-            addBroadcast(`🀄 ${player.name}杠牌`, 'info')
           } else if (m.type === 'triplet') {
             if (!isSelf) pendingMeldVoices.push('pong')
-            addBroadcast(`👊 ${player.name}碰牌`, 'info')
           } else {
             if (!isSelf) pendingMeldVoices.push('chow')
-            addBroadcast(`🍜 ${player.name}吃牌`, 'info')
           }
         }
       }
@@ -4110,6 +4110,11 @@ watch(
   (newPhase, oldPhase) => {
     console.log('[DiceOverlay] phase changed:', oldPhase, '->', newPhase, 'showDiceOverlay was:', showDiceOverlay.value)
     if (newPhase === GamePhase.STARTING) {
+      // 如果本地已经触发了骰子动画（enterStartingPhaseWithDiceOverlay hasDicePreview提前设置了），跳过 watcher
+      if (hasDicePreview.value) {
+        console.log('[DiceOverlay] Already triggered locally (hasDicePreview), skipping watcher')
+        return
+      }
       const prevPhase = oldPhase || gameState.value?.phase;
       showSettlement.value = false
       settlementData.value = null
@@ -4714,7 +4719,7 @@ const forceDiscard = async (p: Player) => {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
 /* 更多特殊操作横条 */
@@ -4726,7 +4731,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(10, 20, 15, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .extra-actions-label {
@@ -4734,6 +4739,14 @@ const forceDiscard = async (p: Player) => {
   color: rgba(255, 255, 255, 0.35);
   margin-right: 2px;
   flex-shrink: 0;
+}
+
+.extra-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  justify-content: center;
 }
 
 .loading-overlay {
@@ -4764,7 +4777,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .extra-action-btn {
-  padding: 5px 12px;
+  padding: 3px 12px;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(20, 40, 28, 0.8);
@@ -5066,8 +5079,8 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .ext-title { font-size: 0.8rem; margin-bottom: 1px; }
 .layout--mobile-landscape .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
 .layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.78rem; }
-.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: 3px 6px; font-size: 0.68rem; }
-.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: 2px 4px; gap: 6px; flex-wrap: wrap; }
+.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(4px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); font-size: calc(0.72rem * var(--mobile-scale, 1)); }
+.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: wrap; }
 .layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
 .layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
 .layout--mobile-landscape .extended-info-panel .action-buttons-panel { gap: 6px; }
@@ -5263,58 +5276,88 @@ const forceDiscard = async (p: Player) => {
   position: relative;
 }
 
-.ting-preview-panel {
-  padding: 2px 0;
-}
-
-.ting-preview-panel__tiles {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 4px 6px;
-  overflow-x: auto;
-  white-space: nowrap;
-}
-
-.ting-preview-panel__tile {
-  color: #ff6b6b;
-  font-size: 0.68rem;
-  line-height: 1.2;
-  flex-shrink: 0;
-}
-
-.ting-preview-panel__tile--exhausted {
-  color: rgba(255, 255, 255, 0.38);
-}
-
-/* 听牌提示切换按钮 */
 .ting-preview-section {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0;
+  flex-direction: row;
+  align-items: center;
   padding: 0;
   margin: 0;
   line-height: 1;
 }
-.ting-preview-toggle {
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.6);
-  padding: 2px 10px;
-  border-radius: 12px;
-  font-size: 0.68rem;
+
+.ting-preview-label {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 1px;
   cursor: pointer;
+  user-select: none;
   white-space: nowrap;
-  transition: all 0.15s ease;
+  overflow-x: auto;
+  padding: 2px 6px;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  transition: background 0.15s ease;
 }
-.ting-preview-toggle:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.85);
+.ting-preview-label:hover {
+  background: rgba(255, 255, 255, 0.10);
 }
-.ting-preview-toggle--active {
-  border-color: #ff6b6b;
+.ting-preview-label:active {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.ting-preview-label__text {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.68rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.ting-preview-label__colon {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.68rem;
+  flex-shrink: 0;
+}
+
+.ting-preview-label__hint {
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 0.68rem;
+  flex-shrink: 0;
+}
+
+.ting-preview-label__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 3px;
+  border-radius: 3px;
+  font-size: 0.6rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+.ting-preview-label:hover .ting-preview-label__toggle {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.ting-preview-tile {
   color: #ff6b6b;
-  background: rgba(255, 107, 107, 0.08);
+  font-size: 0.68rem;
+  line-height: 1.2;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  pointer-events: none;
+}
+
+.ting-preview-tile--exhausted {
+  color: rgba(255, 255, 255, 0.38);
 }
 
 /* 内联动作按钮组 — 放在手牌右侧 */
@@ -5699,8 +5742,8 @@ const forceDiscard = async (p: Player) => {
 }
 .player-name-label--top    { top: 0%; left: 50%; transform: translateX(-50%); }
 .player-name-label--bottom { bottom: 0%; left: 50%; transform: translateX(-50%); }
-.player-name-label--left   { left: 0.6%; top: 50%; transform: translateY(-50%); }
-.player-name-label--right  { right: 0.6%; top: 50%; transform: translateY(-50%); }
+.player-name-label--left   { left: 0.6%; top: 2%; transform: translateY(0); }
+.player-name-label--right  { right: 0.6%; top: 2%; transform: translateY(0); }
 
 .winner-tag {
   font-size: clamp(0.45rem, 1.2vw, 0.7rem);
@@ -6205,9 +6248,13 @@ const forceDiscard = async (p: Player) => {
   background: rgba(255, 255, 255, 0.03);
   border: 2px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  padding: 12px;
+  padding: 8px 12px;
   cursor: pointer;
   transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
 }
 
 .hu-combo:hover {
@@ -6222,52 +6269,52 @@ const forceDiscard = async (p: Player) => {
 }
 
 .hu-combo-header {
-  display: flex;
-  justify-content: space-between;
+  display: inline-flex;
   align-items: center;
-  margin-bottom: 10px;
+  gap: 6px;
+  flex-wrap: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 .hu-combo-rank {
-  font-size: 0.76rem;
+  font-size: 0.7rem;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.05em;
   color: rgba(255, 230, 150, 0.88);
+  flex-shrink: 0;
 }
 .hu-combo-label {
-  font-size: 1.06rem;
-  font-weight: 800;
+  font-size: 0.85rem;
+  font-weight: 700;
   color: #fff;
-  white-space: normal;
-  line-height: 1.45;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 40px;
 }
-.hu-combo-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+.hu-combo-score {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #ffd700;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 .hu-combo-method {
-  font-size: 0.82rem;
+  display: inline-block;
+  font-size: 0.7rem;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.72);
   background: rgba(255, 255, 255, 0.08);
   border-radius: 999px;
-  padding: 4px 10px;
-}
-.hu-combo-method,
-.hu-summary-grid {
-  display: none;
+  padding: 2px 8px;
+  flex-shrink: 0;
 }
 .hu-combo-formula {
-  margin-bottom: 10px;
-  font-size: 0.83rem;
-  line-height: 1.5;
-  color: rgba(255, 240, 190, 0.88);
+  display: none;  /* 公式浓缩到 header 里了 */
 }
 .hu-group-list {
-  display: grid;
-  gap: 8px;
+  display: none;  /* 组牌明细折叠 */
 }
 .hu-group {
   display: flex;
@@ -7575,7 +7622,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extra-action-btn,
 .layout--mobile-landscape .mahjong-button.small,
 .layout--mobile-landscape .panel-button.small {
-  font-size: 0.68rem;
+  font-size: calc(0.78rem * var(--mobile-scale, 1));
 }
 
 .layout--mobile-landscape .action-buttons-panel {
@@ -7584,7 +7631,7 @@ const forceDiscard = async (p: Player) => {
 
 .layout--mobile-landscape .extra-actions-bar {
   gap: 6px;
-  padding: 4px 8px;
+  padding: calc(4px * var(--mobile-scale)) calc(8px * var(--mobile-scale));
 }
 
 .layout--mobile-landscape :deep(.center-info) {

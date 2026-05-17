@@ -16,7 +16,7 @@ import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqu
 import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
 import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier, calculateSettlementBreakdownByRules, generateWinOptions, type WinOption } from './scoring';
 import { randomUUID } from 'crypto';
-import { saveGameState, loadGameState, loadAllGameStates, deleteGameState } from './gamePersistence';
+import { saveGameState, loadGameState, loadAllGameStates, loadActiveGameStates, deleteGameState } from './gamePersistence';
 import { MatchHistoryService } from '../services/matchHistoryService';
 import { TrainingRecordService } from '../services/trainingRecordService';
 import { isBotPlayer, selectBotChowTileIds, selectDiscardTile, shouldClaimPendingAction } from '../services/botService';
@@ -1279,24 +1279,19 @@ class GameManager {
     const relations = this.getMutualBailoutRelations(game.gameId);
     const player = game.players.find(p => p.id === playerId);
     const source = game.players.find(p => p.id === sourcePlayerId);
-    if (!player || !source) return;
-
-    const currentCount = this.mutualBailout.get(game.gameId)?.get(playerId)?.get(sourcePlayerId) || 0;
-    if ((currentCount === 2 || currentCount === 3) && this.wsManager) {
-      const label = currentCount === 3 ? '三口' : '两口';
-      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-        id: Date.now(),
-        text: `📣 ${player.name}已经搞了${source.name}${label}了！`,
-        type: 'special',
-        timestamp: Date.now(),
-        timeLabel: formatBeijingTime()
-      });
+    if (!player || !source) {
+      console.log(`[BAILOUT] SKIP: player=${!!player} source=${!!source} playerId=${playerId} sourcePlayerId=${sourcePlayerId}`);
+      return;
     }
 
+    const rawCount = this.mutualBailout.get(game.gameId)?.get(playerId)?.get(sourcePlayerId);
+    const currentCount = rawCount || 0;
+    console.log(`[BAILOUT] game=${game.gameId} player=${player.name} source=${source.name} count=${currentCount} wsManager=${!!this.wsManager}`);
     if ((currentCount === 2 || currentCount === 3) && this.wsManager) {
+      const suffix = currentCount === 3 ? '？' : '！';
       this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-        id: Date.now() + 1,
-        text: `📣 ${player.name}已经搞了${source.name}${currentCount}口了！`,
+        id: Date.now(),
+        text: `📣 ${player.name}搞了${source.name}${currentCount}口了${suffix}`,
         type: 'special',
         timestamp: Date.now(),
         timeLabel: formatBeijingTime()
@@ -2258,9 +2253,17 @@ class GameManager {
     const hadPengOrKongOnDiscard = (game.actionHistory || []).some(a =>
       a.type === 'peng' || a.type === 'kong'
     );
+    // 只检查本局内是否有碰/杠动作（不是从远古今检测）
+    const currentRoundActions = (game.actionHistory || []).filter(a => {
+      // roundNumber 在 action 上记录
+      return (a as any).roundNumber === game.roundNumber || (a as any).roundNumber === undefined;
+    });
+    const hadPengOrKongThisRound = currentRoundActions.some(a =>
+      a.type === 'peng' || a.type === 'kong'
+    );
     const context: 'self_draw' | 'discard' = pendingAction?.tile
       ? 'discard'
-      : hadPengOrKongOnDiscard ? 'discard' : 'self_draw';
+      : hadPengOrKongThisRound ? 'discard' : 'self_draw';
     return this.getCachedWinOptions(game, player, context, {
       isKongFlower: false,
       isRobbingKong: !!pendingAction?.tile && !!game.pendingKongClaim,
@@ -5620,8 +5623,9 @@ class GameManager {
    * List all active games
    */
   async listGames(): Promise<GameState[]> {
-    await this.hydrateFromDatabase();
-    return Array.from(this.games.values());
+    // 从 MongoDB 只加载未结束的游戏（惰性加载不加载所有游戏到内存）
+    const allGames = await loadActiveGameStates();
+    return Array.from(allGames);
   }
 
   /**
