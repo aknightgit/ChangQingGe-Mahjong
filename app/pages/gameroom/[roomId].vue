@@ -5792,6 +5792,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(0, 0, 0, 0.3);
   padding: 1px 8px;
   border-radius: 999px;
+  white-space: nowrap;
 }
 .turn-timer-inline.turn-timer--urgent {
   color: #ef5350;
@@ -7089,7 +7090,7 @@ const forceDiscard = async (p: Player) => {
   z-index: 100;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(2px);
 }

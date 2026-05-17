@@ -96,7 +96,7 @@ watch(() => props.messages.length, () => {
   gap: 3px;
   padding: 1px 4px;
   border-radius: 6px;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   line-height: 1.2;
   background: rgba(255, 255, 255, 0.03);
   animation: msg-in 0.3s ease;
@@ -105,14 +105,14 @@ watch(() => props.messages.length, () => {
 .broadcast-empty {
   text-align: center;
   padding: 3px 4px;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   opacity: 0.35;
   color: rgba(255,255,255,0.5);
 }
 
 .broadcast-time {
   opacity: 0.4;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   flex-shrink: 0;
   margin-top: 0;
 }
@@ -173,9 +173,9 @@ watch(() => props.messages.length, () => {
   .broadcast-header { padding: 2px 6px; gap: 3px; }
   .broadcast-icon, .broadcast-title { font-size: 0.65rem; }
   .broadcast-scroll { padding: 1px 4px; gap: 1px; max-height: 120px; }
-  .broadcast-msg { font-size: 0.65rem; line-height: 1.1; padding: 1px 3px; gap: 2px; border-left-width: 1px; }
-  .broadcast-time { font-size: 0.65rem; }
-  .broadcast-empty { font-size: 0.65rem; padding: 1px 2px; }
+  .broadcast-msg { font-size: 0.6rem; line-height: 1.1; padding: 1px 3px; gap: 2px; border-left-width: 1px; }
+  .broadcast-time { font-size: 0.6rem; }
+  .broadcast-empty { font-size: 0.6rem; padding: 1px 2px; }
 }
 
 @media (max-width: 500px) {
