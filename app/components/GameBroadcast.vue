@@ -179,13 +179,13 @@ watch(() => props.messages.length, () => {
 }
 
 @media (max-width: 500px) {
-  .broadcast-panel { border-radius: 6px; }
-  .broadcast-header { padding: calc(3px * var(--other-tile-scale, 1)) calc(6px * var(--other-tile-scale, 1)); gap: calc(3px * var(--other-tile-scale, 1)); }
-  .broadcast-icon { font-size: calc(0.6rem * var(--other-tile-scale, 1)); }
-  .broadcast-title { font-size: calc(0.6rem * var(--other-tile-scale, 1)); }
-  .broadcast-scroll { padding: calc(2px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); gap: calc(2px * var(--other-tile-scale, 1)); max-height: calc(140px * var(--other-tile-scale, 1)); }
-  .broadcast-msg { font-size: calc(0.55rem * var(--other-tile-scale, 1)); line-height: 1.2; padding: calc(2px * var(--other-tile-scale, 1)) calc(5px * var(--other-tile-scale, 1)); gap: calc(3px * var(--other-tile-scale, 1)); border-left-width: 1px; }
-  .broadcast-time { font-size: calc(0.48rem * var(--other-tile-scale, 1)); }
-  .broadcast-empty { font-size: calc(0.55rem * var(--other-tile-scale, 1)); padding: calc(8px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); }
+  .broadcast-panel { border-radius: 4px; font-size: 0.65rem; }
+  .broadcast-header { padding: 2px 6px; gap: 3px; }
+  .broadcast-icon { font-size: 0.6rem; }
+  .broadcast-title { font-size: 0.6rem; }
+  .broadcast-scroll { padding: 2px 4px; gap: 1px; max-height: 120px; }
+  .broadcast-msg { font-size: 0.55rem; line-height: 1.1 !important; padding: 1px 4px; gap: 3px; border-left-width: 1px; margin: 0; }
+  .broadcast-time { font-size: 0.48rem; }
+  .broadcast-empty { font-size: 0.55rem; padding: 6px 4px; }
 }
 </style>

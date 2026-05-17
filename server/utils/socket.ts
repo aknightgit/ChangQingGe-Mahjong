@@ -145,25 +145,28 @@ export async function initializeSocketIO(server: HTTPServer) {
     console.warn('   Set REDIS_URL environment variable to enable scaling')
   }
 
+  // 【重要】立即设置 GameManager 广播回调，不等待客户端连接
+  // 之前 setWebSocketManager 放在 io.on('connection') 内部，导致若 Socket.IO
+  // 初始化有延迟或异常，wsManager 永远为 null，所有广播静默失败。
+  gameManager.setWebSocketManager({
+    broadcast: (gameId: string, event: string, data: any) => {
+      // Map gameId to roomId (assuming they are the same for now, or we need a lookup)
+      // In GameManager.createGame, gameId is randomUUID.
+      // In GameService.createGame, gameId is randomUUID, roomId is passed.
+      // But GameManager is in-memory and uses gameId as the key.
+      // The frontend uses gameId as roomId in the URL usually.
+      // Let's assume gameId == roomId for broadcasting purposes in this context
+      emitToRoom(gameId, event, data)
+    }
+  })
+  console.log('✅ GameManager WebSocket broadcaster set')
+
   io.on('connection', (socket: Socket) => {
     console.log(`[socket] transport=${socket.conn.transport.name} id=${socket.id}`)
     socket.conn.on('upgrade', () => {
       console.log(`[socket] upgraded transport=${socket.conn.transport.name} id=${socket.id}`)
     })
     console.log(`🔌 Client connected: ${socket.id}`)
-
-    // Set up GameManager broadcasting
-    gameManager.setWebSocketManager({
-      broadcast: (gameId: string, event: string, data: any) => {
-        // Map gameId to roomId (assuming they are the same for now, or we need a lookup)
-        // In GameManager.createGame, gameId is randomUUID.
-        // In GameService.createGame, gameId is randomUUID, roomId is passed.
-        // But GameManager is in-memory and uses gameId as the key.
-        // The frontend uses gameId as roomId in the URL usually.
-        // Let's assume gameId == roomId for broadcasting purposes in this context
-        emitToRoom(gameId, event, data)
-      }
-    })
 
     // Handle user authentication
     socket.on('auth:login', async (data: { userId: string; userName: string }) => {
