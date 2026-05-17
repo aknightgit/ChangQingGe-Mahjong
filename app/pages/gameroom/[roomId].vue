@@ -4755,7 +4755,7 @@ const forceDiscard = async (p: Player) => {
   align-items: center;
   gap: 6px;
   flex: 1;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .loading-overlay {

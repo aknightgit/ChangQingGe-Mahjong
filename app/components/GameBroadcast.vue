@@ -80,10 +80,10 @@ watch(() => props.messages.length, () => {
 }
 
 .broadcast-scroll {
-  padding: calc(6px * var(--other-tile-scale, 1)) calc(8px * var(--other-tile-scale, 1));
+  padding: calc(4px * var(--other-tile-scale, 1)) calc(8px * var(--other-tile-scale, 1));
   display: flex;
   flex-direction: column;
-  gap: calc(4px * var(--other-tile-scale, 1));
+  gap: calc(2px * var(--other-tile-scale, 1));
   max-height: calc(250px * var(--other-tile-scale, 1));
   overflow-y: auto;
   scrollbar-width: thin;
@@ -93,11 +93,11 @@ watch(() => props.messages.length, () => {
 .broadcast-msg {
   display: flex;
   align-items: flex-start;
-  gap: calc(6px * var(--other-tile-scale, 1));
-  padding: calc(5px * var(--other-tile-scale, 1)) calc(8px * var(--other-tile-scale, 1));
+  gap: calc(4px * var(--other-tile-scale, 1));
+  padding: calc(3px * var(--other-tile-scale, 1)) calc(6px * var(--other-tile-scale, 1));
   border-radius: calc(8px * var(--other-tile-scale, 1));
   font-size: calc(0.7rem * var(--other-tile-scale, 1));
-  line-height: 1.4;
+  line-height: 1.2;
   background: rgba(255, 255, 255, 0.03);
   animation: msg-in 0.3s ease;
 }
@@ -172,8 +172,8 @@ watch(() => props.messages.length, () => {
   .broadcast-header { padding: calc(3px * var(--other-tile-scale, 1)) calc(6px * var(--other-tile-scale, 1)); gap: calc(4px * var(--other-tile-scale, 1)); }
   .broadcast-icon { font-size: calc(0.7rem * var(--other-tile-scale, 1)); }
   .broadcast-title { font-size: calc(0.7rem * var(--other-tile-scale, 1)); }
-  .broadcast-scroll { padding: calc(2px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); gap: calc(2px * var(--other-tile-scale, 1)); max-height: calc(120px * var(--other-tile-scale, 1)); }
-  .broadcast-msg { font-size: calc(0.7rem * var(--other-tile-scale, 1)); padding: calc(2px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); gap: calc(4px * var(--other-tile-scale, 1)); }
+  .broadcast-scroll { padding: calc(1px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); gap: calc(1px * var(--other-tile-scale, 1)); max-height: calc(120px * var(--other-tile-scale, 1)); }
+  .broadcast-msg { font-size: calc(0.7rem * var(--other-tile-scale, 1)); line-height: 1.1; padding: calc(1px * var(--other-tile-scale, 1)) calc(3px * var(--other-tile-scale, 1)); gap: calc(2px * var(--other-tile-scale, 1)); }
   .broadcast-time { font-size: calc(0.7rem * var(--other-tile-scale, 1)); }
   .broadcast-empty { font-size: calc(0.7rem * var(--other-tile-scale, 1)); padding: calc(6px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); }
 }
@@ -183,8 +183,8 @@ watch(() => props.messages.length, () => {
   .broadcast-header { padding: 2px 6px; gap: 3px; }
   .broadcast-icon { font-size: 0.7rem; }
   .broadcast-title { font-size: 0.7rem; }
-  .broadcast-scroll { padding: 2px 4px; gap: 1px; max-height: 120px; }
-  .broadcast-msg { font-size: 0.7rem; line-height: 1.2 !important; padding: 1px 4px; gap: 3px; border-left-width: 1px; margin: 0; }
+  .broadcast-scroll { padding: 1px 4px; gap: 1px; max-height: 120px; }
+  .broadcast-msg { font-size: 0.7rem; line-height: 1.1 !important; padding: 0px 4px; gap: 2px; border-left-width: 1px; margin: 0; }
   .broadcast-time { font-size: 0.7rem; }
   .broadcast-empty { font-size: 0.7rem; padding: 6px 4px; }
 }
