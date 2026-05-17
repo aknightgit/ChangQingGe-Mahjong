@@ -22,8 +22,8 @@
               :class="{ 'dice-row--clickable': isDealer }"
               @click="isDealer && onRoll()"
             >
-              <DiceCSS :value="1" :state="'idle'" />
-              <DiceCSS :value="1" :state="'idle'" />
+              <Dice3D :value="1" :state="'idle'" />
+              <Dice3D :value="1" :state="'idle'" />
             </div>
             <p v-if="maxRollsLimit > 1" class="dice-hint dice-hint--sub">{{ currentRoll }}/{{ maxRollsLimit }}</p>
             <button
@@ -46,8 +46,8 @@
 
         <template v-else-if="phase === 'rolling'">
           <div class="dice-row">
-            <DiceCSS :value="dice1" :state="'rolling'" :delay="0" :roll-seed="rollingSeed" />
-            <DiceCSS :value="dice2" :state="'rolling'" :delay="0.1" :roll-seed="rollingSeed + 97" />
+            <Dice3D :value="dice1" :state="'rolling'" :delay="0" :roll-seed="rollingSeed" />
+            <Dice3D :value="dice2" :state="'rolling'" :delay="0.1" :roll-seed="rollingSeed + 97" />
           </div>
           <p class="dice-rolling-label">🎲 掷骰子...</p>
         </template>
@@ -59,8 +59,8 @@
               :class="{ 'dice-row--clickable': canReroll && isDealer }"
               @click="canReroll && isDealer && onReroll()"
             >
-              <DiceCSS :value="dice1" :state="'landed'" />
-              <DiceCSS :value="dice2" :state="'landed'" />
+              <Dice3D :value="dice1" :state="'landed'" />
+              <Dice3D :value="dice2" :state="'landed'" />
             </div>
             <p class="dice-total">
               <span class="dice-total-num">{{ dice1 }}</span>
@@ -83,7 +83,7 @@
 </template>
 
 <script setup lang="ts">
-import DiceCSS from './DiceCSS.vue'
+import Dice3D from './Dice3D.vue'
 
 const props = defineProps<{
   dice1: number
@@ -231,7 +231,8 @@ const onDeal = () => {
   justify-content: center;
   z-index: 200;
   /* backdrop-filter removed for performance */
-  /* 3D context removed - DiceCSS handles its own perspective */
+  perspective: 1200px;
+  transform-style: preserve-3d;
 }
 
 .particles {
@@ -308,6 +309,9 @@ const onDeal = () => {
   gap: 48px;
   justify-content: center;
   margin-bottom: 24px;
+  perspective: 800px;
+  perspective-origin: 50% 50%;
+  transform-style: preserve-3d;
 }
 
 .dice-row--clickable {
