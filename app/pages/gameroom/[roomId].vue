@@ -4708,7 +4708,7 @@ const forceDiscard = async (p: Player) => {
 .extra-actions-group {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex: 1;
   justify-content: flex-start;
 }
@@ -4741,12 +4741,12 @@ const forceDiscard = async (p: Player) => {
 }
 
 .extra-action-btn {
-  padding: 2px 8px;
+  padding: 2px 6px;
   border-radius: 5px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(20, 40, 28, 0.8);
   color: rgba(255, 255, 255, 0.6);
-  font-size: 0.85rem;
+  font-size: 0.7rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -5043,8 +5043,8 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .ext-title { font-size: 0.8rem; margin-bottom: 1px; }
 .layout--mobile-landscape .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
 .layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.78rem; }
-.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(4px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); font-size: calc(0.72rem * var(--mobile-scale, 1)); }
-.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: wrap; }
+.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(4px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); font-size: calc(0.6rem * var(--mobile-scale, 1)); }
+.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: nowrap; }
 .layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.7rem; }
 .layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
 .layout--mobile-landscape .extended-info-panel .action-buttons-panel { gap: 6px; }
@@ -5742,12 +5742,12 @@ const forceDiscard = async (p: Player) => {
   overflow-wrap: anywhere;
 }
 .turn-timer-inline {
-  margin-left: 6px;
-  font-size: 0.78rem;
+  margin-left: 4px;
+  font-size: 0.6rem;
   font-weight: 700;
   color: #81c784;
   background: rgba(0, 0, 0, 0.3);
-  padding: 1px 8px;
+  padding: 1px 5px;
   border-radius: 999px;
 }
 .turn-timer-inline.turn-timer--urgent {
@@ -5822,7 +5822,7 @@ const forceDiscard = async (p: Player) => {
   font-weight: 700;
   color: #81c784;
   background: rgba(0, 0, 0, 0.3);
-  padding: 1px 8px;
+  padding: 1px 5px;
   border-radius: 999px;
 }
 
@@ -7586,7 +7586,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extra-action-btn,
 .layout--mobile-landscape .mahjong-button.small,
 .layout--mobile-landscape .panel-button.small {
-  font-size: calc(0.78rem * var(--mobile-scale, 1));
+  font-size: calc(0.65rem * var(--mobile-scale, 1));
 }
 
 .layout--mobile-landscape .action-buttons-panel {
@@ -7594,7 +7594,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .extra-actions-bar {
-  gap: 6px;
+  gap: 4px;
   padding: calc(4px * var(--mobile-scale)) calc(8px * var(--mobile-scale));
 }
 
