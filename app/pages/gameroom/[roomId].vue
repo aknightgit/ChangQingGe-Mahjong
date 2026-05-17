@@ -2182,39 +2182,6 @@ const maybeAutoDealForBotDealer = () => {
   }, 420)
 }
 
-/** 自动掷骰子+发牌（AI庄家） */
-const autoRollAndDeal = () => {
-  onRerollDice()
-  // 等掷骰子动画完成（约850ms）+ 结果展示（500ms）+ 过渡
-  window.setTimeout(() => {
-    void onDealTiles()
-  }, 1800)
-}
-
-/** 仅自动掷骰子（人类庄家） */
-const autoRollOnly = () => {
-  onRerollDice()
-  // 骰子掷完，等人发牌
-}
-
-const startNextRound = async () => {
-  cancelWallExhaustedCountdown()
-  if (isSettleRequested.value) {
-    // 退房结算已申请：直接显示总结算面板
-    showSettlement.value = true
-    return
-  }
-  showSettlement.value = false
-  settlementData.value = null
-  isHuReviewMode.value = false
-  await enterStartingPhaseWithDiceOverlay()
-  await forceRefreshState()
-  window.setTimeout(() => {
-    if (gameState.value?.phase === GamePhase.STARTING && showDiceOverlay.value) {
-      void onDealTiles()
-    }
-  }, 1700)
-}
 const isInteractionLocked = computed(() => isOverlayVisible.value)
 
 const formatOrdinal = (value: number | null | undefined) => {
@@ -4145,30 +4112,7 @@ watch(
       showDiceOverlay.value = true
       console.log('[DiceOverlay] SET to true (STARTING)')
 
-      // 🔄 自动下一局：来自结算/流局后，自动走掷骰子+发牌
-      // STARTING时立即 refresh state，然后等骰子组件就绪后自动操作
-      if (prevPhase === GamePhase.ENDED) {
-        if (isSettleRequested.value) {
-          // 房主已申请退房结算：跳过下一局，直接显示总结算
-          showDiceOverlay.value = false
-          showSettlement.value = true
-          return
-        }
-        window.setTimeout(() => {
-          const dealer = dealerPlayer.value
-          if (dealer && isBotPlayer(dealer)) {
-            // AI庄家：自动掷骰子+发牌
-            autoRollAndDeal()
-          } else if (dealer && !isBotPlayer(dealer)) {
-            // 人类头胡庄家：自动掷骰子，等他手动发牌
-            // 或者直接自动掷骰子+等发牌（当前先自动掷骰子）
-            autoRollOnly()
-          } else {
-            // 没有庄家——不可能
-          }
-        }, 500)
-      }
-      return
+      
     }
     if (newPhase !== GamePhase.STARTING) {
       showDiceOverlay.value = false
@@ -7778,8 +7722,6 @@ const forceDiscard = async (p: Player) => {
   padding: 4px 10px;
   white-space: nowrap;
 }
-
-
 
 /* ===== Xiaomi 14 Pro / compact mobile styles ===== */
 .layout--mobile-landscape .broadcast-header {
