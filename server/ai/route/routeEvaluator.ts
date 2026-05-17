@@ -469,10 +469,27 @@ export function evaluateRouteState(input: RouteEvaluationInput): RouteState {
     .sort((a, b) => b.score - a.score)
 
   const previousRouteState = input.previousRouteState || null
+
+  const HIGH_VALUE_ROUTES: RouteKind[] = ["ALL_PUNGS", "HALF_FLUSH", "HONOR_HEAVY"]
+  const isPostRound10Forced = estimatedRound >= 10
+  let postRound10Top = topCandidate
   const topCandidate = routeScores[0]
   const previousCandidate = previousRouteState
     ? routeScores.find(candidate => candidate.route === previousRouteState.current) || null
     : null
+    if (isPostRound10Forced) {
+    const highValueScores = routeScores.filter(r => HIGH_VALUE_ROUTES.includes(r.route))
+    highValueScores.sort((a, b) => b.score - a.score)
+    const bestHighValue = highValueScores[0]
+    postRound10Top = bestHighValue || topCandidate
+    if (previousRouteState && HIGH_VALUE_ROUTES.includes(previousRouteState.current as RouteKind)) {
+      const prevHigh = highValueScores.find(r => r.route === previousRouteState.current)
+      if (prevHigh && prevHigh.score >= (postRound10Top?.score || 0) - 4) {
+        postRound10Top = prevHigh
+      }
+    }
+  }
+
   const evidenceAgainstPrevious =
     previousRouteState && previousRouteState.current !== topCandidate.route
       ? (previousRouteState.evidenceCounter || 0) + 1
@@ -485,6 +502,9 @@ export function evaluateRouteState(input: RouteEvaluationInput): RouteState {
     previousRouteState?.lockLevel === 1 ? 2 :
     (previousRouteState?.stableTurns || 0) >= 2 ? 2 : 1
   const canHoldPreviousRoute =
+    isPostRound10Forced && previousRouteState && !HIGH_VALUE_ROUTES.includes(previousRouteState.current as RouteKind)
+      ? false
+      :
     !!previousRouteState &&
     !!previousCandidate &&
     softLockedPrevious &&
@@ -493,7 +513,7 @@ export function evaluateRouteState(input: RouteEvaluationInput): RouteState {
       evidenceAgainstPrevious < requiredEvidenceToFlip
     )
 
-  const current = canHoldPreviousRoute ? previousCandidate : topCandidate
+  const current = isPostRound10Forced ? postRound10Top : (canHoldPreviousRoute ? previousCandidate : topCandidate)
   const secondary = routeScores.find(candidate => candidate.route !== current.route) || null
   const gap = current && secondary ? current.score - secondary.score : (current?.score || 0)
   const stableOnPrevious = previousRouteState?.current === current?.route
@@ -507,6 +527,7 @@ export function evaluateRouteState(input: RouteEvaluationInput): RouteState {
       ? evidenceAgainstPrevious
       : 0
   const lockLevel: 0 | 1 | 2 =
+    isPostRound10Forced && HIGH_VALUE_ROUTES.includes((postRound10Top?.route || current?.route) as RouteKind) ? 2 :
     stableTurns >= 3 && stableOnPrevious && previousRouteState && previousRouteState.lockLevel === 2 && gap >= 1.4 ? 2 :
     phase === 'RUSH' && gap >= 4 ? 2 :
     stableTurns >= 2 && stableOnPrevious && previousRouteState && previousRouteState.lockLevel >= 1 && gap >= 1.1 ? 1 :

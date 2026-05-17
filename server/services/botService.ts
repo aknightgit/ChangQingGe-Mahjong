@@ -1253,6 +1253,9 @@ export function selectDiscardTile(player: Player, game: GameState): string {
       })
     : null
 
+  const isPostTurn10 = estimatedRound >= 10
+  const round10Commitment = isPostTurn10 && useRoutePlanner && routeState && ["ALL_PUNGS", "HALF_FLUSH", "HONOR_HEAVY"].includes(routeState.current)
+
   let bestTile = discardCandidates[0]
   let bestShanten = Infinity
   let bestEffective = -1
@@ -1386,6 +1389,23 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         : 0
       score += routeScore
       composite += routeScore * 2
+      if (isPostTurn10 && round10Commitment) {
+        if (routeState.current === "HALF_FLUSH" && routeState.targetSuit) {
+          if (isNumberTile(tile) && tile.suit !== routeState.targetSuit) {
+            composite += 60 + tilePairCount * 15
+          } else if (isNumberTile(tile) && tile.suit === routeState.targetSuit) {
+            composite -= 30
+          }
+        }
+        if (routeState.current === "ALL_PUNGS") {
+          composite -= discardDanger * 40
+          if (isHonor(tile)) composite += tilePairCount * 8
+        }
+        if (routeState.current === "HONOR_HEAVY") {
+          if (isHonor(tile)) composite += tilePairCount * 12
+          else composite += 50
+        }
+      }
       const visibleCopies = countVisibleCopies(tile, game)
       const shouldPurgeMinorSuitResidue =
         routeState.current === 'HALF_FLUSH' &&
@@ -1438,6 +1458,14 @@ export function selectDiscardTile(player: Player, game: GameState): string {
       }
       if (deadHandPressure && weakObserveTile) {
         composite += 6 + routeMetricPolicy.deadHandRate * 20
+      }
+      if (isPostTurn10 && round10Commitment && shanten > 0) {
+        if (routeState.current === "HALF_FLUSH" && routeState.targetSuit) {
+          if (isNumberTile(tile) && tile.suit !== routeState.targetSuit) composite += 30
+          if (isNumberTile(tile) && tile.suit === routeState.targetSuit) composite -= 20
+        }
+        if (routeState.current === "ALL_PUNGS") composite -= discardDanger * 25
+        if (routeState.current === "HONOR_HEAVY" && !isHonor(tile)) composite += 35
       }
       if (shanten === 0) {
         composite += timingValue * (3.2 + routeMetricPolicy.tingQuality * 0.2)
