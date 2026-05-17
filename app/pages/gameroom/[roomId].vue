@@ -805,7 +805,8 @@
                       :class="{ 'ting-preview-tile--exhausted': item.isExhausted }"
                     >{{ item.label }}</span>
                   </template>
-                  <span v-else class="ting-preview-label__hint">（未启用）</span>
+                  <span v-else-if="tingPreviewEnabled && !tingPreviewItems.length" class="ting-preview-label__hint">未听牌</span>
+                  <span v-else class="ting-preview-label__hint">点击开启</span>
                 </div>
               </div>
 
@@ -3642,19 +3643,32 @@ const onExtendedKong = () => {
 
 // ---- 开局流程：掷骰子 → 发牌 ----
 // 防重复点击标志
+
 const onStartGame = async () => {
   if (isGameStarting.value) return
   isGameStarting.value = true
   if (gameState.value?.phase === GamePhase.PLAYING) {
-    console.warn('[onStartGame] Game already in PLAYING phase, skipping')
+    console.warn("[onStartGame] Game already in PLAYING phase, skipping")
     return
   }
-  console.log('[onStartGame] Setting STARTING phase on server...')
+  console.log("[onStartGame] Setting STARTING phase on server...")
+
+  // 立即显示骰子覆盖层
+  diceValues.value = [
+    Math.floor(Math.random() * 6) + 1,
+    Math.floor(Math.random() * 6) + 1
+  ]
+  hasDicePreview.value = true
+  showDiceOverlay.value = true
+  playSound("dice-roll")
 
   try {
-    await enterStartingPhaseWithDiceOverlay()
+    await $fetch("/mahjong/api/game/start", {
+      method: "POST",
+      body: { gameId: roomId.value, playerId: playerId.value, phaseOnly: true }
+    })
   } catch (err) {
-    console.error('[onStartGame] Failed:', err)
+    console.error("[onStartGame] Failed:", err)
   } finally {
     isGameStarting.value = false
   }
@@ -3689,6 +3703,10 @@ const onDealTiles = async () => {
     // 强制刷新（绕过debounce），确保开局后立刻看到正确的可用操作
     await forceRefreshState()
     console.log('[onDealTiles] Done, phase:', gameState.value?.phase)
+    // 发牌后若是我方回合，立即显示倒计时
+    if (isMyTurn.value) {
+      startTurnTimer()
+    }
   } finally {
     isGameStarting.value = false
   }

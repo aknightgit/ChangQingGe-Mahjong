@@ -313,7 +313,7 @@ const getTileWrapperStyle = (tile: Tile): Record<string, string> => {
 .player-melds {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   min-height: 50px;
   flex-shrink: 0;
   overflow: visible;
@@ -335,8 +335,8 @@ const getTileWrapperStyle = (tile: Tile): Record<string, string> => {
   position: relative;
   display: inline-flex;
   align-items: center;
-  padding: 4px 6px;
-  padding-top: 16px;
+  padding: 2px 3px;
+  padding-top: 10px;
   border-radius: 8px;
   background: transparent;
   border: 1px solid transparent;
