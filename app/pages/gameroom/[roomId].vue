@@ -242,7 +242,6 @@
           </div>
         </div>
 
-
         <!-- 结算面板 -->
         <div v-if="drawBlockedNoticeVisible" class="draw-blocked-notice">
           {{ drawBlockedNoticeText }}
@@ -866,7 +865,6 @@
           </div>
         </aside>
       </main>
-
 
       <Teleport to="body">
         <DiceAnimation
@@ -5511,7 +5509,6 @@ const forceDiscard = async (p: Player) => {
   50% { box-shadow: 0 0 20px rgba(255,107,107,0.88); }
 }
 
-
 .inline-action-btn--rebel {
   background: linear-gradient(135deg, #dc2626, #b91c1c);
   color: #fff;
@@ -7784,18 +7781,11 @@ const forceDiscard = async (p: Player) => {
 
 
 
-
 /* ===== Xiaomi 14 Pro / compact mobile styles ===== */
 .layout--mobile-landscape .broadcast-header {
   display: none !important;
 }
-.layout--mobile-landscape .broadcast-title {
-  font-size: 0.5rem !important;
-  line-height: 1 !important;
-}
-.layout--mobile-landscape .broadcast-icon {
-  font-size: 0.5rem !important;
-}
+
 .layout--mobile-landscape .inline-action-buttons {
   gap: 2px !important;
 }
@@ -7805,9 +7795,6 @@ const forceDiscard = async (p: Player) => {
   min-width: 28px !important;
 }
 @media (max-width: 900px) and (orientation: portrait) {
-  .broadcast-header { padding: 3px 6px !important; gap: 3px !important; }
-  .broadcast-title { font-size: 0.55rem !important; line-height: 1.2 !important; }
-  .broadcast-icon { font-size: 0.55rem !important; }
   .inline-action-buttons { gap: 2px !important; }
   .inline-action-btn { font-size: 0.55rem !important; padding: 2px 6px !important; min-width: 32px !important; }
 }
