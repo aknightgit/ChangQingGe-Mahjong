@@ -1,6 +1,6 @@
 <template>
   <div class="broadcast-panel">
-    <div class="broadcast-header">
+    <div v-if="messages.length > 0" class="broadcast-header">
       <span class="broadcast-icon">📢</span>
       <span class="broadcast-title">牌局快讯</span>
     </div>
@@ -104,7 +104,7 @@ watch(() => props.messages.length, () => {
 
 .broadcast-empty {
   text-align: center;
-  padding: calc(16px * var(--other-tile-scale, 1)) calc(8px * var(--other-tile-scale, 1));
+  padding: calc(4px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1));
   font-size: calc(0.7rem * var(--other-tile-scale, 1));
   opacity: 0.35;
   color: rgba(255,255,255,0.5);
@@ -175,7 +175,7 @@ watch(() => props.messages.length, () => {
   .broadcast-scroll { padding: calc(1px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); gap: calc(1px * var(--other-tile-scale, 1)); max-height: calc(120px * var(--other-tile-scale, 1)); }
   .broadcast-msg { font-size: calc(0.7rem * var(--other-tile-scale, 1)); line-height: 1.1; padding: calc(1px * var(--other-tile-scale, 1)) calc(3px * var(--other-tile-scale, 1)); gap: calc(2px * var(--other-tile-scale, 1)); }
   .broadcast-time { font-size: calc(0.7rem * var(--other-tile-scale, 1)); }
-  .broadcast-empty { font-size: calc(0.7rem * var(--other-tile-scale, 1)); padding: calc(6px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); }
+  .broadcast-empty { font-size: calc(0.7rem * var(--other-tile-scale, 1)); padding: calc(1px * var(--other-tile-scale, 1)) calc(2px * var(--other-tile-scale, 1)); }
 }
 
 @media (max-width: 500px) {

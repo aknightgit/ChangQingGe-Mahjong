@@ -349,13 +349,17 @@
           <Transition name="settings-panel" @after-leave="onSettingsClosed">
             <div
               v-if="showSettings"
-              ref="settingsPanelEl"
-              class="glass-settings-panel"
-              :style="settingsPanelStyle"
-              @click.stop
-              @wheel.stop
-              @touchmove.stop
+              class="glass-settings-overlay"
+              @click="showSettings = false"
             >
+              <div
+                ref="settingsPanelEl"
+                class="glass-settings-panel"
+                :style="settingsPanelStyle"
+                @click.stop
+                @wheel.stop
+                @touchmove.stop
+              >
               <!-- 三角指示箭头 -->
               <div class="glass-settings-arrow"></div>
                             <div class="glass-settings-body" @wheel.stop @touchmove.stop>
@@ -476,6 +480,7 @@
                   <span>长青阁麻将 v2.2</span>
                 </div>
               </div>
+            </div>
             </div>
           </Transition>
         </Teleport>
@@ -5098,7 +5103,8 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .room-header-row { gap: 3px; margin: 0; }
 .layout--mobile-landscape .extended-info-panel .room-stats { padding: 2px 3px; }
 .layout--mobile-landscape .extended-info-panel .player-row { padding: 2px 3px; font-size: 0.52rem; gap: 3px; }
-.layout--mobile-landscape .extended-info-panel .broadcast-container { max-height: 52px; padding: 2px 3px; }
+.layout--mobile-landscape .extended-info-panel .broadcast-container { max-height: auto; padding: 0; }
+.layout--mobile-landscape .extended-info-panel .broadcast-panel { margin-top: 0; border-top: none; }
 .layout--mobile-landscape .extended-info-panel .broadcast-message { font-size: 0.5rem; padding: 1px 0; }
 
 .layout--mobile-landscape .extended-info-panel .action-panel { padding: 4px; gap: 4px; }
@@ -7781,8 +7787,7 @@ const forceDiscard = async (p: Player) => {
 
 /* ===== Xiaomi 14 Pro / compact mobile styles ===== */
 .layout--mobile-landscape .broadcast-header {
-  padding: 2px 6px !important;
-  gap: 3px !important;
+  display: none !important;
 }
 .layout--mobile-landscape .broadcast-title {
   font-size: 0.5rem !important;
