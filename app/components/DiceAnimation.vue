@@ -231,8 +231,7 @@ const onDeal = () => {
   justify-content: center;
   z-index: 200;
   /* backdrop-filter removed for performance */
-  perspective: 1200px;
-  transform-style: preserve-3d;
+  /* 3D context removed - DiceCSS handles its own perspective */
 }
 
 .particles {
@@ -309,9 +308,6 @@ const onDeal = () => {
   gap: 48px;
   justify-content: center;
   margin-bottom: 24px;
-  perspective: 800px;
-  perspective-origin: 50% 50%;
-  transform-style: preserve-3d;
 }
 
 .dice-row--clickable {
