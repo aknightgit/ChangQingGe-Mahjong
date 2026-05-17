@@ -283,7 +283,7 @@ onUnmounted(() => {
   border-radius: calc(16px * var(--mobile-scale, 1));
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   width: 100%;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .draw-action-group {

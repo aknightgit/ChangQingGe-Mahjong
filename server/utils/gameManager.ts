@@ -555,7 +555,7 @@ class GameManager {
     return candidates;
   }
 
-  private getTingPreviewCandidates(game: GameState): Array<{ suit: TileSuit; value: number }> {
+  private getTingPreviewCandidates(game: GameState, player: Player): Array<{ suit: TileSuit; value: number }> {
     const candidates = this.getWinningTileCandidates();
     if (game.customScoringMode?.startsWith(`${TileSuit.FLOWER}-`) && Array.isArray(game.wildTileGroup)) {
       for (const valueText of game.wildTileGroup) {
@@ -564,6 +564,27 @@ class GameManager {
           candidates.push({ suit: TileSuit.FLOWER, value });
         }
       }
+    }
+    // 根据玩家手牌过滤：只保留玩家当前持有花色+风牌+箭牌的候选，避免列出所有牌面
+    const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
+    const playerSuits = new Set<TileSuit>();
+    for (const tile of player.hand.concealedTiles) {
+      if (!isFlower(tile) && !isWildTile(tile)) playerSuits.add(tile.suit);
+    }
+    for (const meld of player.hand.exposedMelds) {
+      for (const tile of meld.tiles) {
+        if (!isFlower(tile) && !isWildTile(tile)) playerSuits.add(tile.suit);
+      }
+    }
+    // 多花色（2+数字花色）则不限制,否则只保留匹配花色+风牌+箭牌
+    const numberSuits = [...playerSuits].filter(s => s !== TileSuit.WIND && s !== TileSuit.DRAGON);
+    const multiNumberSuit = numberSuits.length >= 2;
+    if (!multiNumberSuit) {
+      return candidates.filter(c => {
+        if (c.suit === TileSuit.WIND || c.suit === TileSuit.DRAGON) return true;
+        if (c.suit === TileSuit.FLOWER) return true;
+        return playerSuits.has(c.suit);
+      });
     }
     return candidates;
   }
@@ -671,7 +692,7 @@ class GameManager {
       return emptyResult;
     }
 
-    const candidates = this.getTingPreviewCandidates(game);
+    const candidates = this.getTingPreviewCandidates(game, player);
     const wildChecker = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
     const winWildArg = (game.customScoringMode || null);
     const winningTileMap = new Map<string, {
@@ -1288,20 +1309,10 @@ class GameManager {
     const currentCount = rawCount || 0;
     console.log(`[BAILOUT] game=${game.gameId} player=${player.name} source=${source.name} count=${currentCount} wsManager=${!!this.wsManager}`);
     if ((currentCount === 2 || currentCount === 3) && this.wsManager) {
-      const label = currentCount === 3 ? '三口' : '两口';
+      const suffix = currentCount === 3 ? '？' : '！';
       this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
         id: Date.now(),
-        text: `📣 ${player.name}已经搞了${source.name}${label}了！`,
-        type: 'special',
-        timestamp: Date.now(),
-        timeLabel: formatBeijingTime()
-      });
-    }
-
-    if ((currentCount === 2 || currentCount === 3) && this.wsManager) {
-      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-        id: Date.now() + 1,
-        text: `📣 ${player.name}已经搞了${source.name}${currentCount}口了！`,
+        text: `📣 ${player.name}搞了${source.name}${currentCount}口了${suffix}`,
         type: 'special',
         timestamp: Date.now(),
         timeLabel: formatBeijingTime()
@@ -2268,12 +2279,11 @@ class GameManager {
       // roundNumber 在 action 上记录
       return (a as any).roundNumber === game.roundNumber || (a as any).roundNumber === undefined;
     });
-    const hadPengOrKongThisRound = currentRoundActions.some(a =>
-      a.type === 'peng' || a.type === 'kong'
-    );
-    const context: 'self_draw' | 'discard' = pendingAction?.tile
-      ? 'discard'
-      : hadPengOrKongThisRound ? 'discard' : 'self_draw';
+    // 自摸/捉冲判断：
+    // 1. pending中带tile → 有人弃牌，这是捉冲
+    // 2. 没有pending（自摸自己摸到的牌）→ 自摸
+    const isDiscardContext = !!pendingAction?.tile;
+    const context: 'self_draw' | 'discard' = isDiscardContext ? 'discard' : 'self_draw';
     return this.getCachedWinOptions(game, player, context, {
       isKongFlower: false,
       isRobbingKong: !!pendingAction?.tile && !!game.pendingKongClaim,
@@ -3732,6 +3742,10 @@ class GameManager {
   }
 
   private async handleHu(game: GameState, player: Player, selectedWinOptionLabel?: string): Promise<void> {
+    // 大吊检测：必须在 winningTile 加到手牌之前检查
+    const concealedNonFlowerBefore = player.hand.concealedTiles.filter(t => !isFlower(t));
+    const isDaDiao = concealedNonFlowerBefore.length === 1;
+
     const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
     const winningTile = pendingAction?.tile;
 
@@ -3838,8 +3852,8 @@ class GameManager {
     const wildValue = wildParts && wildParts[1] ? parseInt(wildParts[1], 10) : undefined;
 
     // 大吊检测：手牌（非花牌）剩1张
+    // 已在 handleHu 顶部提前检测（避免 winningTile 加手牌后错误），此处复用已计算的 isDaDiao
     const concealedNonFlower = player.hand.concealedTiles.filter(t => !isFlower(t));
-    const isDaDiao = concealedNonFlower.length === 1;
     // 计算番数
     const scoreResult = calculateScore({
       handTiles: player.hand.concealedTiles,

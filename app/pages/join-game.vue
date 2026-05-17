@@ -9,6 +9,28 @@
         <button class="mahjong-button secondary" @click="backToLobby">返回大厅</button>
       </header>
 
+      <!-- 快速加入：从 localStorage 读取最近离开的房间 -->
+      <section v-if="quickJoinGames.length > 0" class="my-games-section">
+        <div class="available-header">
+          <h2>⚡ 快速加入</h2>
+        </div>
+        <ul class="available-list">
+          <li v-for="game in quickJoinGames" :key="game.roomNumber + '-' + game.playerId" class="available-item my-game-item">
+            <div class="available-details">
+              <span class="available-id">#{{ game.roomNumber }}</span>
+              <span class="available-meta">点击回到牌局</span>
+            </div>
+            <button
+              class="mahjong-button primary"
+              @click="quickRejoin(game)"
+              :disabled="isQuickJoining"
+            >
+              {{ isQuickJoining ? '进入中…' : '进入' }}
+            </button>
+          </li>
+        </ul>
+      </section>
+
       <!-- 我的牌局（置顶） -->
       <section v-if="myGames.length > 0" class="my-games-section">
         <div class="available-header">
@@ -95,7 +117,18 @@
               <span class="available-id">{{ game.roomNumber || game.gameId.slice(0, 8) }}</span>
               <span class="available-meta">{{ game.playerCount }}/4 人 · 庄家: {{ game.dealerName || '待定' }}</span>
             </div>
-            <button class="mahjong-button secondary join" @click="joinExistingGame(game.roomNumber || game.gameId)">
+            <button
+              v-if="rejoinMap[game.roomNumber || game.gameId]"
+              class="mahjong-button primary"
+              @click="quickRejoin(rejoinMap[game.roomNumber || game.gameId])"
+            >
+              回来
+            </button>
+            <button
+              v-else
+              class="mahjong-button secondary join"
+              @click="joinExistingGame(game.roomNumber || game.gameId)"
+            >
               加入
             </button>
           </li>
@@ -106,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 const buildGameRoomPath = (gameId: string, playerId: string, spectator = false) => {
   const params = new URLSearchParams({ playerId })
@@ -123,6 +156,66 @@ const manualGameId = ref('')
 const joinError = ref<string | null>(null)
 const isJoining = ref(false)
 
+// 快速加入：从 localStorage 读取最近参与的房间
+const QUICK_JOIN_KEY = 'mahjong_recent_rooms'
+const quickJoinGames = ref<{ roomNumber: string; playerId: string; gameId: string }[]>([])
+const isQuickJoining = ref(false)
+
+const loadQuickJoinGames = () => {
+  try {
+    const raw = localStorage.getItem(QUICK_JOIN_KEY)
+    if (!raw) return []
+    const list = JSON.parse(raw)
+    quickJoinGames.value = Array.isArray(list) ? list.slice(0, 5) : []
+  } catch {
+    quickJoinGames.value = []
+  }
+}
+
+const quickRejoin = async (game: { roomNumber: string; playerId: string; gameId: string }) => {
+  if (isQuickJoining.value) return
+  isQuickJoining.value = true
+  try {
+    // 先尝试 comeback
+    await $fetch('/mahjong/api/game/comeback', {
+      method: 'POST',
+      body: { gameId: game.gameId, playerId: game.playerId }
+    })
+    await navigateTo(`/gameroom/${game.gameId}?playerId=${game.playerId}`)
+  } catch {
+    // comeback 失败就用 join 直接进入（带 spectator 保护）
+    try {
+      await navigateTo(`/gameroom/${game.gameId}?playerId=${game.playerId}`)
+    } catch {
+      if (process.client) window.location.href = `/mahjong/gameroom/${game.gameId}?playerId=${game.playerId}`
+    }
+  } finally {
+    isQuickJoining.value = false
+  }
+}
+
+// 保存最近房间到 localStorage（供其他页面通过 window 调用）
+const saveRecentRoom = (roomNumber: string, playerId: string, gameId: string) => {
+  try {
+    const raw = localStorage.getItem(QUICK_JOIN_KEY) || '[]'
+    const list = JSON.parse(raw)
+    const filtered = list.filter((g: any) => g.gameId !== gameId)
+    filtered.unshift({ roomNumber, playerId, gameId })
+    localStorage.setItem(QUICK_JOIN_KEY, JSON.stringify(filtered.slice(0, 5)))
+  } catch { /* ignore */ }
+}
+// 暴露给全局，方便其他页面调用
+if (process.client) (window as any).__mahjongSaveRecentRoom = saveRecentRoom
+
+// 构建 roomNumber → quickJoin 映射，用于 空闲牌桌 显示"回来"
+const rejoinMap = computed(() => {
+  const map: Record<string, { roomNumber: string; playerId: string; gameId: string }> = {}
+  for (const g of quickJoinGames.value) {
+    if (g.roomNumber) map[g.roomNumber] = g
+  }
+  return map
+})
+
 // 我的牌局
 const myGames = ref<any[]>([])
 const isLoadingMy = ref(false)
@@ -134,7 +227,7 @@ const backToLobby = () => navigateTo('/')
 const fetchMyGames = async () => {
   isLoadingMy.value = true
   try {
-    const res = await $fetch<{ success: boolean; data: { games: any[] } }>('/api/game/my-games', {
+    const res = await $fetch<{ success: boolean; data: { games: any[] } }>('/mahjong/api/game/my-games', {
       cache: 'no-cache'
     })
     if (res?.success) {
@@ -240,6 +333,7 @@ const joinGame = async (gameId: string) => {
 }
 
 onMounted(() => {
+  loadQuickJoinGames()
   fetchMyGames()
   fetchWaitingGames()
 })
