@@ -3668,9 +3668,12 @@ const onStartGame = async () => {
       body: { gameId: roomId.value, playerId: playerId.value, phaseOnly: true }
     })
   } catch (err) {
+    showDiceOverlay.value = false
+    isGameStarting.value = false
+    addBroadcast(`进入牌局失败，请重试`, "warn")
     console.error("[onStartGame] Failed:", err)
   } finally {
-    isGameStarting.value = false
+    // isGameStarting stays true until onDealTiles finishes
   }
 }
 
@@ -3685,7 +3688,7 @@ const onRerollDice = () => {
 
 const onDealTiles = async () => {
   // 防止重复调用：只有当 overlay 可见时才处理
-  if (!showDiceOverlay.value || isGameStarting.value) return
+  if (!showDiceOverlay.value ) return
   isGameStarting.value = true
   hasDicePreview.value = false
   showDiceOverlay.value = false
