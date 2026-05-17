@@ -264,8 +264,8 @@ onUnmounted(() => {
   --btn-small: calc(30px * var(--mobile-scale, 1));
   --btn-draw: calc(48px * var(--mobile-scale, 1));
   --btn-font-small: calc(0.7rem * var(--mobile-scale, 1));
-  --btn-font-draw: calc(0.95rem * var(--mobile-scale, 1));
-  --btn-font-think: calc(0.8rem * var(--mobile-scale, 1));
+  --btn-font-draw: calc(0.7rem * var(--mobile-scale, 1));
+  --btn-font-think: calc(0.7rem * var(--mobile-scale, 1));
   --panel-padding: calc(8px * var(--mobile-scale, 1));
   --panel-gap: calc(8px * var(--mobile-scale, 1));
   --grid-gap: calc(4px * var(--mobile-scale, 1));
@@ -303,7 +303,7 @@ onUnmounted(() => {
   top: -24px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   color: #ffd36a;
   white-space: nowrap;
   display: flex;
@@ -345,7 +345,7 @@ onUnmounted(() => {
   padding: 4px 10px;
   border-radius: 999px;
   color: #fff;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   line-height: 1;
   letter-spacing: 0.02em;
   box-shadow: 0 0 16px rgba(255, 255, 255, 0.1);
@@ -647,11 +647,11 @@ onUnmounted(() => {
 }
 
 /* 紧凑态 */
-.action-panel--compact .action-btn--small { width: calc(var(--btn-small) * 0.82); height: calc(var(--btn-small) * 0.82); font-size: calc(var(--btn-font-small) * 0.88); }
-.action-panel--compact .action-btn--draw { width: calc(var(--btn-draw) * 0.78); height: calc(var(--btn-draw) * 0.78); font-size: calc(var(--btn-font-draw) * 0.83); }
+.action-panel--compact .action-btn--small { width: calc(var(--btn-small) * 0.82); height: calc(var(--btn-small) * 0.82); font-size: var(--btn-font-small); }
+.action-panel--compact .action-btn--draw { width: calc(var(--btn-draw) * 0.78); height: calc(var(--btn-draw) * 0.78); font-size: var(--btn-font-draw); }
 .action-panel--compact .action-grid { gap: calc(var(--grid-gap) * 0.67); }
 .action-panel--compact .priority-action-group { gap: calc(var(--grid-gap) * 0.67); padding: calc(6px * var(--mobile-scale, 1)); }
-.action-panel--compact .priority-action-badge { font-size: calc(0.66rem * var(--mobile-scale, 1)); padding: calc(3px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); }
+.action-panel--compact .priority-action-badge { font-size: calc(0.7rem * var(--mobile-scale, 1)); padding: calc(3px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); }
 
 /* 第二列：特殊操作按钮 */
 .action-grid-secondary {
@@ -669,7 +669,7 @@ onUnmounted(() => {
   background: rgba(124, 58, 237, 0.3);
   color: rgba(255, 255, 255, 0.7);
   border-color: rgba(139, 92, 246, 0.3);
-  font-size: calc(0.75rem * var(--mobile-scale, 1));
+  font-size: calc(0.7rem * var(--mobile-scale, 1));
 }
 .action-btn--think.action-btn--active {
   border-color: rgba(139, 92, 246, 0.6);
@@ -734,7 +734,7 @@ onUnmounted(() => {
   background: linear-gradient(135deg, rgba(198, 40, 40, 0.5), rgba(239, 83, 80, 0.35));
   color: #ff8a80;
   border-color: rgba(239, 83, 80, 0.6);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   animation: liangshan-btn-pulse 2s ease-in-out infinite;
 }
 .action-btn--liangshan.action-btn--highlight {

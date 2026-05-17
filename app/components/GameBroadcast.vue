@@ -57,7 +57,7 @@ watch(() => props.messages.length, () => {
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 12px;
   overflow: hidden;
-  font-size: calc(1rem * var(--other-tile-scale, 1));
+  font-size: calc(0.7rem * var(--other-tile-scale, 1));
 }
 
 .broadcast-header {
@@ -70,11 +70,11 @@ watch(() => props.messages.length, () => {
 }
 
 .broadcast-icon {
-  font-size: calc(0.85rem * var(--other-tile-scale, 1));
+  font-size: calc(0.7rem * var(--other-tile-scale, 1));
 }
 
 .broadcast-title {
-  font-size: calc(0.8rem * var(--other-tile-scale, 1));
+  font-size: calc(0.7rem * var(--other-tile-scale, 1));
   font-weight: 700;
   opacity: 0.8;
 }
@@ -96,7 +96,7 @@ watch(() => props.messages.length, () => {
   gap: calc(6px * var(--other-tile-scale, 1));
   padding: calc(5px * var(--other-tile-scale, 1)) calc(8px * var(--other-tile-scale, 1));
   border-radius: calc(8px * var(--other-tile-scale, 1));
-  font-size: calc(0.75rem * var(--other-tile-scale, 1));
+  font-size: calc(0.7rem * var(--other-tile-scale, 1));
   line-height: 1.4;
   background: rgba(255, 255, 255, 0.03);
   animation: msg-in 0.3s ease;
@@ -105,14 +105,14 @@ watch(() => props.messages.length, () => {
 .broadcast-empty {
   text-align: center;
   padding: calc(16px * var(--other-tile-scale, 1)) calc(8px * var(--other-tile-scale, 1));
-  font-size: calc(0.75rem * var(--other-tile-scale, 1));
+  font-size: calc(0.7rem * var(--other-tile-scale, 1));
   opacity: 0.35;
   color: rgba(255,255,255,0.5);
 }
 
 .broadcast-time {
   opacity: 0.4;
-  font-size: calc(0.65rem * var(--other-tile-scale, 1));
+  font-size: calc(0.7rem * var(--other-tile-scale, 1));
   flex-shrink: 0;
   margin-top: calc(1px * var(--other-tile-scale, 1));
 }
@@ -170,22 +170,22 @@ watch(() => props.messages.length, () => {
 @media (max-width: 900px) and (orientation: landscape) {
   .broadcast-panel { border-radius: 6px; }
   .broadcast-header { padding: calc(3px * var(--other-tile-scale, 1)) calc(6px * var(--other-tile-scale, 1)); gap: calc(4px * var(--other-tile-scale, 1)); }
-  .broadcast-icon { font-size: calc(0.6rem * var(--other-tile-scale, 1)); }
-  .broadcast-title { font-size: calc(0.58rem * var(--other-tile-scale, 1)); }
+  .broadcast-icon { font-size: calc(0.7rem * var(--other-tile-scale, 1)); }
+  .broadcast-title { font-size: calc(0.7rem * var(--other-tile-scale, 1)); }
   .broadcast-scroll { padding: calc(2px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); gap: calc(2px * var(--other-tile-scale, 1)); max-height: calc(120px * var(--other-tile-scale, 1)); }
-  .broadcast-msg { font-size: calc(0.5rem * var(--other-tile-scale, 1)); padding: calc(2px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); gap: calc(4px * var(--other-tile-scale, 1)); }
-  .broadcast-time { font-size: calc(0.45rem * var(--other-tile-scale, 1)); }
-  .broadcast-empty { font-size: calc(0.5rem * var(--other-tile-scale, 1)); padding: calc(6px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); }
+  .broadcast-msg { font-size: calc(0.7rem * var(--other-tile-scale, 1)); padding: calc(2px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); gap: calc(4px * var(--other-tile-scale, 1)); }
+  .broadcast-time { font-size: calc(0.7rem * var(--other-tile-scale, 1)); }
+  .broadcast-empty { font-size: calc(0.7rem * var(--other-tile-scale, 1)); padding: calc(6px * var(--other-tile-scale, 1)) calc(4px * var(--other-tile-scale, 1)); }
 }
 
 @media (max-width: 500px) {
-  .broadcast-panel { border-radius: 4px; font-size: 0.65rem; }
+  .broadcast-panel { border-radius: 4px; font-size: 0.7rem; }
   .broadcast-header { padding: 2px 6px; gap: 3px; }
-  .broadcast-icon { font-size: 0.6rem; }
-  .broadcast-title { font-size: 0.6rem; }
+  .broadcast-icon { font-size: 0.7rem; }
+  .broadcast-title { font-size: 0.7rem; }
   .broadcast-scroll { padding: 2px 4px; gap: 1px; max-height: 120px; }
-  .broadcast-msg { font-size: 0.55rem; line-height: 1.1 !important; padding: 1px 4px; gap: 3px; border-left-width: 1px; margin: 0; }
-  .broadcast-time { font-size: 0.48rem; }
-  .broadcast-empty { font-size: 0.55rem; padding: 6px 4px; }
+  .broadcast-msg { font-size: 0.7rem; line-height: 1.2 !important; padding: 1px 4px; gap: 3px; border-left-width: 1px; margin: 0; }
+  .broadcast-time { font-size: 0.7rem; }
+  .broadcast-empty { font-size: 0.7rem; padding: 6px 4px; }
 }
 </style>

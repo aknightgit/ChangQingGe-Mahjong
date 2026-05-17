@@ -3596,6 +3596,15 @@ watch([isMyTurn, hasPriorityActions], ([myTurn, hasActions]) => {
   }
 })
 
+// 切到 PLAYING 时强制重置倒计时（解决开局第一巡庄家isMyTurn在WAITING就已为true、watcher不触发的问题）
+watch(() => gameState.value?.phase, (newPhase, oldPhase) => {
+  if (newPhase === GamePhase.PLAYING && oldPhase !== GamePhase.PLAYING) {
+    if (!isAIControlled.value && (isMyTurn.value || hasPriorityActions.value)) {
+      startTurnTimer()
+    }
+  }
+})
+
 const actionWindowText = computed(() => {
   if (!hasPriorityActions.value && !isMyTurn.value) return ''
   const pending = myPendingAction.value
@@ -5081,7 +5090,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.78rem; }
 .layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(4px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); font-size: calc(0.72rem * var(--mobile-scale, 1)); }
 .layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: wrap; }
-.layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
+.layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.7rem; }
 .layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
 .layout--mobile-landscape .extended-info-panel .action-buttons-panel { gap: 6px; }
 .layout--mobile-landscape .extended-info-panel .turn-status-text { font-size: 0.54rem; }
@@ -5309,20 +5318,20 @@ const forceDiscard = async (p: Player) => {
 
 .ting-preview-label__text {
   color: rgba(255, 255, 255, 0.8);
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   font-weight: 600;
   flex-shrink: 0;
 }
 
 .ting-preview-label__colon {
   color: rgba(255, 255, 255, 0.5);
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   flex-shrink: 0;
 }
 
 .ting-preview-label__hint {
   color: rgba(255, 255, 255, 0.35);
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   flex-shrink: 0;
 }
 
@@ -5334,7 +5343,7 @@ const forceDiscard = async (p: Player) => {
   height: 14px;
   margin-left: 3px;
   border-radius: 3px;
-  font-size: 0.6rem;
+  font-size: 0.7rem;
   line-height: 1;
   color: rgba(255, 255, 255, 0.45);
   background: rgba(255, 255, 255, 0.08);
@@ -5346,7 +5355,7 @@ const forceDiscard = async (p: Player) => {
 
 .ting-preview-tile {
   color: #ff6b6b;
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   line-height: 1.2;
   flex-shrink: 0;
   margin: 0;
