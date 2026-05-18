@@ -4198,6 +4198,10 @@ watch(
       return
     }
     if (newPhase !== GamePhase.STARTING) {
+      if (hasDicePreview.value) {
+        console.log('[DiceOverlay] Phase changed to', newPhase, 'but hasDicePreview=true, keeping overlay')
+        return
+      }
       showDiceOverlay.value = false
       hasDicePreview.value = false
       console.log('[DiceOverlay] SET to false (phase=', newPhase, ')')
@@ -4209,6 +4213,10 @@ watch(
 // 🔧 强力兜底：不管 phase watch 是否触发，每次 gameState 更新都检查
 watch(gameState, (newVal) => {
   if (newVal && newVal.phase !== GamePhase.STARTING && showDiceOverlay.value) {
+    if (hasDicePreview.value) {
+      console.log('[DiceOverlay] FALLBACK: hasDicePreview=true, not closing')
+      return
+    }
     console.log('[DiceOverlay] FALLBACK: closing dice overlay (phase=', newVal.phase, ')')
     showDiceOverlay.value = false
     hasDicePreview.value = false
@@ -4225,6 +4233,10 @@ watch(showDiceOverlay, (val) => {
   if (!val) return
   const timer = setTimeout(() => {
     if (showDiceOverlay.value && gameState.value?.phase !== GamePhase.STARTING) {
+      if (hasDicePreview.value) {
+        console.log('[DiceOverlay] TIMEOUT: hasDicePreview=true, not closing')
+        return
+      }
       console.log('[DiceOverlay] TIMEOUT: forced close after 8s')
       showDiceOverlay.value = false
       hasDicePreview.value = false
@@ -4237,6 +4249,10 @@ if (typeof window !== 'undefined') {
   window.addEventListener('mahjong-phase-check', ((e: CustomEvent) => {
     const phase = e.detail?.phase
     if (phase && phase !== 'starting' && showDiceOverlay.value) {
+      if (hasDicePreview.value) {
+        console.log('[DiceOverlay] PHASE-CHECK: hasDicePreview=true, not closing')
+        return
+      }
       console.log('[DiceOverlay] PHASE-CHECK: closing (phase=', phase, ')')
       showDiceOverlay.value = false
       hasDicePreview.value = false
