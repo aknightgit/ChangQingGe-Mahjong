@@ -4241,6 +4241,7 @@ watch(gameState, () => {
 // 🔧 超时强制关闭：如果 showDiceOverlay 为 true 超过8秒（给足STARTING时间），强制关闭
 watch(showDiceOverlay, (val) => {
   if (!val) return
+  // 8秒关闭：但跳过 hasDicePreview（因为用户可能在观看骰子动画）
   const timer = setTimeout(() => {
     if (showDiceOverlay.value && gameState.value?.phase !== GamePhase.STARTING) {
       if (hasDicePreview.value) {
@@ -4252,6 +4253,15 @@ watch(showDiceOverlay, (val) => {
       hasDicePreview.value = false
     }
   }, 8000)
+  // 🔧 15秒核弹级兜底：无视 hasDicePreview，直接暴力关闭
+  const nuclearTimer = setTimeout(() => {
+    if (showDiceOverlay.value) {
+      console.log('[DiceOverlay] NUCLEAR: forced close after 15s (ignoring hasDicePreview)')
+      showDiceOverlay.value = false
+      hasDicePreview.value = false
+      optimisticDealt.value = true
+    }
+  }, 15000)
 })
 
 // 🔧 最终保险：从useGame的fetchGameState接收phase-check事件（每次API刷新都检查）

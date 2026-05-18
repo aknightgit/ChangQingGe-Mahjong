@@ -25,9 +25,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: 'Game not found' });
   }
 
-  // 等待房间开局仍要求庄家；流局/结算后下一局允许房间内任意玩家触发。
+  // waiting/starting/ended/cha_jiao 均允许任意玩家开局；AI是庄家时人类玩家也能点开始
   const { player } = await requireGamePlayerAccess(event, game, playerId);
-  const canAnyPlayerRestart = game.phase === 'ended' || game.phase === 'cha_jiao' || game.phase === 'starting';
+  const canAnyPlayerRestart = game.phase === 'ended' || game.phase === 'cha_jiao' || game.phase === 'starting' || game.phase === 'waiting';
 
   if (!canAnyPlayerRestart && !player.isDealer) {
     await apiLog(event, { endpoint: 'start', gameId, playerId, statusCode: 403, durationMs: Date.now() - startTime, error: 'Only the dealer can start the game' });
