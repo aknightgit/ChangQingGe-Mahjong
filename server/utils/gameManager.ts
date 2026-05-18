@@ -145,8 +145,10 @@ class GameManager {
     }
     game.huSelectionLocks = Object.keys(nextLocks).length ? nextLocks : undefined;
     await this.persistGame(game);
-    this.broadcastGameState(gameId);
-  }
+    console.log('[timing-startGame] persistGame:', Date.now() - _startGameTimer, 'ms');
+        this.broadcastGameState(gameId);
+    console.log('[timing-startGame] broadcastGameState:', Date.now() - _startGameTimer, 'ms');
+      }
 
   private isSharedDrawClaimWindow(game: GameState, playerId: string): boolean {
     const currentPlayer = game.players[game.currentPlayerIndex];
@@ -1726,10 +1728,13 @@ class GameManager {
    * Start the game
    */
   public async startGame(gameId: string, options?: { hesitationWindow?: number; fixedDice?: [number, number] }): Promise<void> {
+    const _startGameTimer = Date.now();
+    console.log('[timing-startGame] BEGIN');
     await this.hydrateFromDatabase();
 
     const game = await this.ensureGameLoaded(gameId);
     if (!game) return;
+    console.log('[timing-startGame] ensureGameLoaded:', Date.now() - _startGameTimer, 'ms');
 
     if (game.players.length < 4) {
       throw new Error('Need 4 players to start');
@@ -1778,6 +1783,7 @@ class GameManager {
 
     // 🔄 观赛者替换AI请求:每局生效
     this.applyBotReplacement(game);
+    console.log('[timing-startGame] setup+swap+replace:', Date.now() - _startGameTimer, 'ms');
 
     // 🎲 随机选位置:仅首次开局时随机,后续座位固定(除非换位置)
     const isFirstRound = (game.roundStats || []).length === 0;
@@ -1929,6 +1935,7 @@ class GameManager {
     TrainingRecordService.captureRoundStart(game);
 
     console.log(`[WallDebug] after dealing: wall=${game.wall.length} tiles, PLAYING phase`);
+        console.log('[timing-startGame] before persist:', Date.now() - _startGameTimer, 'ms');
     await this.persistGame(game);
     this.broadcastGameState(gameId);
 

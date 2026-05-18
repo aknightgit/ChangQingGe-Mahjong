@@ -148,7 +148,6 @@ window.__mahjong_pollRefresh = refreshState
       })
 
       socket.value.on('connect', () => {
-startPolling()
         console.log('Socket.IO connected:', socket.value?.id, 'transport=', socket.value?.io.engine.transport.name)
         isConnected.value = true
         error.value = null
@@ -180,20 +179,8 @@ startPolling()
         }
       })
 
-      let pollTimer = null
-const startPolling = () => {
-  if (pollTimer) return
-  pollTimer = setInterval(() => {
-    void refreshState()
-  }, 2000)
-}
-const stopPolling = () => {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
-}
-startPolling()
-
-socket.value.on('disconnect', () => {
-stopPolling()socket.value.on('disconnect', () => {
+      socket.value.on('disconnect', () => {
+        stopPolling()
         console.log('Socket disconnected', 'transport=', socket.value?.io.engine.transport.name)
         if (!gameState.value) {
           isConnected.value = false
@@ -408,8 +395,9 @@ stopPolling()socket.value.on('disconnect', () => {
 
   const startGame = async (options?: { hesitationWindow?: number; fixedDice?: [number, number] }) => {
     if (!gameId.value || !playerId.value) return
+    const _st = Date.now()
+    console.log('[timing-client] startGame BEGIN')
 
-    console.log('[startGame] Starting game:', gameId.value)
     try {
       const response = await $fetch('/mahjong/api/game/start', {
         method: 'POST',
@@ -420,18 +408,21 @@ stopPolling()socket.value.on('disconnect', () => {
           dice: options?.fixedDice
         }
       })
+      console.log('[timing-client] API call returned:', Date.now() - _st, 'ms')
 
       if ((response as any)?.success) {
-        console.log('[startGame] API success, refreshing state...')
-        roomDismissedReason.value = null  // 清除 overlay 原因
+        console.log('[timing-client] refreshState BEGIN')
+        roomDismissedReason.value = null
         await refreshState()
+        console.log('[timing-client] refreshState DONE:', Date.now() - _st, 'ms')
         socket.value?.emit('game:state-update', { gameId: gameId.value })
-        console.log('[startGame] Done, phase:', gameState.value?.phase)
+        console.log('[timing-client] startGame DONE:', Date.now() - _st, 'ms, phase:', gameState.value?.phase)
       } else {
         console.warn('[startGame] API returned non-success:', response)
       }
     } catch (e) {
       console.error('[startGame] Failed:', e)
+      console.log('[timing-client] startGame ERROR:', Date.now() - _st, 'ms')
     }
   }
 

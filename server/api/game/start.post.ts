@@ -42,12 +42,14 @@ export default defineEventHandler(async (event) => {
       return { success: true, phase: 'starting' };
     }
 
+    console.log('[timing-api] before gameManager.startGame:', Date.now() - startTime, 'ms');
     await gameManager.startGame(gameId, {
       hesitationWindow: hesitationWindow ?? 5000,
       fixedDice: Array.isArray(dice) && dice.length === 2
         ? [Number(dice[0]) || 1, Number(dice[1]) || 1]
         : undefined
     });
+    console.log('[timing-api] after gameManager.startGame:', Date.now() - startTime, 'ms');
     emitToRoom(gameId, 'game:state-changed', {
       gameId,
       phase: 'playing',

@@ -1893,7 +1893,9 @@ const onSpectatorApprovalChoice = async (choice: 'approve' | 'reject') => {
 const isDealer = computed(() => currentPlayer.value?.isDealer)
 const isDealerUser = computed(() => isDealer.value)
 const isGameEnded = computed(() => gameState.value?.phase === GamePhase.ENDED)
+const optimisticDealt = ref(false)
 const hasDealtCards = computed(() => {
+  if (optimisticDealt.value) return true
   if (!gameState.value?.players?.length) return false
   // 观赛者自己没有手牌，但其他玩家可能有——检查非观赛玩家
   const activePlayers = gameState.value.players.filter((p: any) => p.status !== 'spectating' && p.status !== 'left')
@@ -2509,7 +2511,12 @@ const showDraw = computed(() =>
   (isMyTurn.value && myPendingExpiresAt.value > 0 && myPendingExpiresAt.value <= nowTs.value)
 )
 const filteredCircularAvailableActions = computed(() => {
-  if ((shouldExposeSharedDraw.value || shouldPreviewDeferredDraw.value) && !availableActions.value.includes(ActionType.DRAW)) {
+  const shouldForceDraw =
+    shouldExposeSharedDraw.value ||
+    shouldPreviewDeferredDraw.value ||
+    // 【重要】到我的回合且倒计时已结束，摸按钮必须亮起
+    (isMyTurn.value && myPendingExpiresAt.value > 0 && myPendingExpiresAt.value <= nowTs.value)
+  if (shouldForceDraw && !availableActions.value.includes(ActionType.DRAW)) {
     return [...availableActions.value, ActionType.DRAW]
   }
   return availableActions.value
@@ -3677,6 +3684,7 @@ const onExtendedKong = () => {
 
 // ---- 开局流程：掷骰子 → 发牌 ----
 // 防重复点击标志
+let gameStartPromise = null
 const onStartGame = async () => {
   if (isGameStarting.value) return
   isGameStarting.value = true
@@ -3684,9 +3692,9 @@ const onStartGame = async () => {
     console.warn('[onStartGame] Game already in PLAYING phase, skipping')
     return
   }
-  console.log('[onStartGame] Setting STARTING phase on server...')
+  console.log('[onStartGame] Starting game with dice...')
 
-  // Show dice overlay BEFORE API call for instant feedback
+  // 显示骰子动画——用户可掷骰子、点发牌
   diceValues.value = [
     Math.floor(Math.random() * 6) + 1,
     Math.floor(Math.random() * 6) + 1
@@ -3695,21 +3703,18 @@ const onStartGame = async () => {
   showDiceOverlay.value = true
   playSound('dice-roll')
 
-  try {
-    await $fetch('/mahjong/api/game/start', {
-      method: 'POST',
-      body: { gameId: roomId.value, playerId: playerId.value, phaseOnly: true }
-    })
-  } catch (err) {
-    showDiceOverlay.value = false
-    isGameStarting.value = false
+  // 🔧 后台发API，不等——发牌等重工作在用户看骰子时提前完成
+  // 用户点发牌时，牌已发好，直接关overlay显示牌局
+  gameStartPromise = startGame({ hesitationWindow: hesitationWindow.value, fixedDice: diceValues.value })
+  gameStartPromise.then(() => {
+    console.log('[onStartGame] Background startGame completed, phase:', gameState.value?.phase)
+  }).catch(err => {
+    console.error('[onStartGame] Background startGame failed:', err)
     addBroadcast('进入牌局失败，请重试', 'warn')
-    console.error('[onStartGame] Failed:', err)
-  } finally {
-    // isGameStarting stays true until onDealTiles finishes
-  }
+  }).finally(() => {
+    isGameStarting.value = false
+  })
 }
-
 const onRerollDice = () => {
   diceValues.value = [
     Math.floor(Math.random() * 6) + 1,
@@ -3719,10 +3724,12 @@ const onRerollDice = () => {
   playSound('dice-roll')
 }
 
-const onDealTiles = async () => {
-  // 防止重复调用：只有当 overlay 可见时才处理
-  if (!showDiceOverlay.value ) return
-  isGameStarting.value = true
+const onDealTiles = () => {
+  // 防止重复调用
+  if (!showDiceOverlay.value) return
+  // 🔧 乐观显示：用户点发牌时立刻显示牌局界面，不等待API数据
+  // 手牌数据已在后台 API 中准备好，马上就会到达
+  optimisticDealt.value = true
   hasDicePreview.value = false
   showDiceOverlay.value = false
   showDoubleReminder.value = false
@@ -3730,18 +3737,8 @@ const onDealTiles = async () => {
     clearTimeout(doubleReminderTimer)
     doubleReminderTimer = null
   }
-  // 等 DiceAnimation 的 Leave 动画完成（约 300ms）再正式开始
-  await new Promise(resolve => setTimeout(resolve, 350))
-  console.log('[onDealTiles] Calling startGame API...')
-  try {
-    await startGame({ hesitationWindow: hesitationWindow.value, fixedDice: diceValues.value })
-    console.log('[onDealTiles] startGame done (refreshState inside), waiting for socket update...')
-    // 等 socket 广播到位，避免 forceRefreshState 和 refreshState 打架
-    await new Promise(resolve => setTimeout(resolve, 300))
-    console.log('[onDealTiles] Done, phase:', gameState.value?.phase)
-  } finally {
-    isGameStarting.value = false
-  }
+  // 不需要调API，后台 startGame 已经在跑了
+  console.log('[onDealTiles] Overlay dismissed, game started in background, phase:', gameState.value?.phase)
 }
 
 // ---- 牌局快讯（广播消息） ----
