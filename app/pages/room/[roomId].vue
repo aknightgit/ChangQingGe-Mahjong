@@ -47,6 +47,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+
 const route = useRoute()
 const router = useRouter()
 const roomNumber = computed(() => String(route.params.roomId || ''))
@@ -60,6 +61,13 @@ const loadingText = ref('')
 const newsFeedRef = ref<HTMLElement|null>(null)
 
 const playerCount = computed(() => roomPlayers.value.length)
+const availableBotNames = ['AI-小胖', 'AI-老赵', 'AI-阿水', 'AI-AK', 'AI-老蒋', 'AI-小猪']
+const selectedBotsForGame = computed(() => {
+  const needed = 4 - playerCount.value
+  if (needed <= 0) return []
+  const used = new Set(roomPlayers.value.map(p => p.name))
+  return availableBotNames.filter(n => !used.has(n)).slice(0, needed)
+})
 const emptySlots = computed(() => Math.max(0, 4 - playerCount.value))
 const isOwner = computed(() => roomPlayers.value.some(p => p.isOwner && p.id === myPlayerId.value))
 const phaseLabel = computed(() => {
@@ -71,10 +79,8 @@ let pollTimer: ReturnType<typeof setInterval>|null = null
 
 async function pollRoomState() {
   try {
-    const res = await fetch(`/api/room/state?roomNumber=${roomNumber.value}`)
-    if (!res.ok) return
-    const data = await res.json()
-    if (!data.success || !data.room) {
+    const data = await $fetch(`/api/room/state?roomNumber=${roomNumber.value}`)
+    if (!data || !data.success || !data.room) {
       if (pollTimer) clearInterval(pollTimer)
       router.replace('/')
       return
@@ -101,15 +107,14 @@ async function startGame() {
     const res = await fetch('/api/game/create', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ roomNumber: roomNumber.value, selectedBots: [], maxBots: 0, minPlayers: playerCount.value })
+      body: JSON.stringify({ roomNumber: roomNumber.value, selectedBots: selectedBotsForGame.value, maxBots: 3, minPlayers: 4 })
     })
     const data = await res.json()
     if (!data.success) throw new Error(data.message || '创建失败')
 
-    await fetch('/api/room/mark-playing', {
+    await $fetch('/api/room/mark-playing', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ roomNumber: roomNumber.value })
+      body: { roomNumber: roomNumber.value }
     })
 
     router.replace(`/gameroom/${roomNumber.value}?playerId=${myPlayerId.value}`)
