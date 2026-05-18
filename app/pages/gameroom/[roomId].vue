@@ -4199,6 +4199,16 @@ watch(
     }
     if (newPhase !== GamePhase.STARTING) {
       if (hasDicePreview.value) {
+        if (!isDealer) {
+          setTimeout(() => {
+            if (hasDicePreview.value) {
+              showDiceOverlay.value = false
+              hasDicePreview.value = false
+              optimisticDealt.value = true
+              console.log('[DiceOverlay] Auto-closed for non-dealer')
+            }
+          }, 1500)
+        }
         console.log('[DiceOverlay] Phase changed to', newPhase, 'but hasDicePreview=true, keeping overlay')
         return
       }
@@ -4250,6 +4260,10 @@ if (typeof window !== 'undefined') {
     const phase = e.detail?.phase
     if (phase && phase !== 'starting' && showDiceOverlay.value) {
       if (hasDicePreview.value) {
+        if (!isDealer) {
+          console.log('[DiceOverlay] PHASE-CHECK: non-dealer, skipping (pending 1.5s)')
+          return
+        }
         console.log('[DiceOverlay] PHASE-CHECK: hasDicePreview=true, not closing')
         return
       }
