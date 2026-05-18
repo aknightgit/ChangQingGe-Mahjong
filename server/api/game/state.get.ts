@@ -142,6 +142,7 @@ export default defineEventHandler(async (event) => {
       hasDebugSpectatorLock;
 
     return {
+      isBotControlled: gameManager.isPlayerInBotMode(p.id),
       ...p,
       hand: {
         ...p.hand,

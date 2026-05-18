@@ -1796,7 +1796,7 @@ const statsPlayers = computed(() => {
     }, null)
     return {
       id: p.id,
-      name: p.name,
+      name: p.name + (p.isBotControlled ? ' (接管)' : ''),
       score: p.score || 0,
       wins: p.status === 'won' ? 1 : 0,
       losses: p.status === 'lost' ? 1 : 0,
@@ -3460,6 +3460,26 @@ const onBotMode = async () => {
   }
 }
 
+// 回来（取消AI托管）
+const onPlayerBack = async () => {
+  if (!currentPlayer.value) return
+  try {
+    await $fetch('/mahjong/api/game/bot-mode', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: currentPlayer.value.id,
+        enabled: false
+      }
+    })
+    addBroadcast('🙋 你已回来，继续手动操作', 'info')
+    isAIControlled.value = false
+    await refreshState()
+  } catch (e) {
+    console.error('[PlayerBack] Failed:', e)
+  }
+}
+
 // 换位置
 const onSwapPosition = async () => {
   if (!playerCardPlayer.value || !currentPlayer.value) return
@@ -4195,6 +4215,11 @@ watch(gameState, (newVal) => {
   }
 }, { deep: false })
 
+// 🔧 每次 gameState 更新都检查AI接管状态
+watch(gameState, () => {
+  checkAITakeover()
+}, { deep: true })
+
 // 🔧 超时强制关闭：如果 showDiceOverlay 为 true 超过8秒（给足STARTING时间），强制关闭
 watch(showDiceOverlay, (val) => {
   if (!val) return
@@ -4223,11 +4248,9 @@ if (typeof window !== 'undefined') {
 const checkAITakeover = () => {
   if (!gameState.value?.players) return
   const currentBotPlayers = new Set<string>()
-  // 检查是否有玩家进入 AI 托管（通过玩家状态推断）
-  for (const p of gameState.value.players) {
-    // 这里通过 isAIControlled 状态检测（如果有的话）
-    // 暂时跳过，因为 bot 状态在客户端不易获取
-  }
+  // 检查当前玩家是否被AI接管
+  const me = gameState.value.players.find(p => p.id === currentPlayer.value?.id)
+  isAIControlled.value = !!me?.isBotControlled
 }
 
 // ---- Admin / Debug Functions ----
@@ -5099,7 +5122,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
 .layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.65rem; }
 .layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(4px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); font-size: calc(0.72rem * var(--mobile-scale, 1)); }
-.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: wrap; }
+.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: nowrap; }
 .layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.65rem; }
 .layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
 .layout--mobile-landscape .extended-info-panel .action-buttons-panel { gap: 6px; }
@@ -5114,7 +5137,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .action-btn--small { width: 28px; height: 28px; font-size: 0.6rem; }
 .layout--mobile-landscape .extended-info-panel .action-btn--draw { width: 40px; height: 40px; font-size: 0.75rem; }
 .layout--mobile-landscape .extended-info-panel .mobile-inline-menu { padding: 4px 6px; }
-.layout--mobile-landscape .extended-info-panel .mobile-inline-menu__actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.layout--mobile-landscape .extended-info-panel .mobile-inline-menu__actions { display: flex; gap: 4px; flex-wrap: nowrap; }
 
 /* 竖屏手机：右侧栏变底部横排 */
 @media (max-width: 900px) and (orientation: portrait) {

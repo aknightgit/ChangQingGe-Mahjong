@@ -193,12 +193,10 @@ const claimPromptTone = computed(() => {
 
 const isDelaying = computed(() => {
   if (props.lastStateChangeAt === 0) return false
-  // 冻结圆环未结束时，继续延迟高亮
+  // 冻结圆环（犹豫期倒计时）未结束时，延迟非优先操作的高亮
   if (isFreezing.value) return true
-  // 摸牌按钮：只要可用，不延迟高亮（倒计时结束后必须立即亮）
-  // 吃碰胡杠等高优先级操作仍需延迟，避免闪烁
-  if (canDraw.value) return false
-  return props.nowTs - props.lastStateChangeAt < props.highlightDelayMs
+  // 倒计时结束后，所有可用操作立即高亮，不再额外延迟
+  return false
 })
 
 // 冻结进度
