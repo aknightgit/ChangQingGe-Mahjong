@@ -8,6 +8,7 @@ export default defineEventHandler(async (event) => {
   try {
     const result = await gameManager.createGame(user.name, {
       userId: user.userId,
+      roomNumber: body.roomNumber,
       diceRollCount: body.diceRollCount ?? 2,
       firstRoundDouble: body.firstRoundDouble ?? true,
       liangShanThreshold: body.liangShanThreshold ?? 4000,

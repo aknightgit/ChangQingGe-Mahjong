@@ -1489,7 +1489,7 @@ class GameManager {
     return String(Date.now()).slice(-4);
   }
 
-  async createGame(playerName: string, options?: { userId?: string; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number; maxBots?: number; minPlayers?: number; hesitationWindow?: number; allClaimMode?: boolean; selectedBots?: string[] }): Promise<{ gameId: string; playerId: string }> {
+  async createGame(playerName: string, options?: { userId?: string; roomNumber?: string; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number; maxBots?: number; minPlayers?: number; hesitationWindow?: number; allClaimMode?: boolean; selectedBots?: string[] }): Promise<{ gameId: string; playerId: string }> {
     await this.hydrateFromDatabase();
 
     const gameId = randomUUID();
@@ -1520,7 +1520,7 @@ class GameManager {
 
     const game: GameState = {
       gameId,
-      roomNumber: this.generateRoomNumber(),
+      roomNumber: options?.roomNumber || this.generateRoomNumber(),
       phase: GamePhase.WAITING,
       endReason: null,
       players: [player],
