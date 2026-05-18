@@ -1419,6 +1419,21 @@ class GameManager {
         for (const player of stored.players) {
           this.playerToGame.set(player.id, gameId);
         }
+        // 🔧 恢复重启后丢失的 pending 超时
+        if (stored.pendingActions && stored.pendingActions.length > 0) {
+          const now = Date.now();
+          const hasUnresolved = stored.pendingActions.some(pa =>
+            typeof pa.expiresAt === 'number' && pa.expiresAt > now
+          );
+          if (hasUnresolved) {
+            this.schedulePendingActionTimeout(gameId);
+            console.log('[Recovery] Restored pending timeout for game', gameId);
+          } else {
+            // 所有 pending 已过期，立即触发自动解析
+            setImmediate(() => this.schedulePendingActionTimeout(gameId));
+            console.log('[Recovery] Scheduled immediate resolution for expired pending actions in game', gameId);
+          }
+        }
         return stored;
       }
     } catch (err: any) {
