@@ -2211,13 +2211,48 @@ const startNextRound = async () => {
   showSettlement.value = false
   settlementData.value = null
   isHuReviewMode.value = false
-  await enterStartingPhaseWithDiceOverlay()
-  await forceRefreshState()
-  window.setTimeout(() => {
-    if (gameState.value?.phase === GamePhase.STARTING && showDiceOverlay.value) {
-      void onDealTiles()
+
+  // 🎲 生成骰子值（先于庄家判断，用于倍数提示）
+  diceValues.value = [
+    Math.floor(Math.random() * 6) + 1,
+    Math.floor(Math.random() * 6) + 1
+  ]
+
+  const theDealer = dealerPlayer.value
+  if (theDealer && isBotPlayer(theDealer)) {
+    // 🤖 AI庄家：显示骰子覆盖层→自动滚动动画→显示点数→自动发牌
+    hasDicePreview.value = true
+    showDiceOverlay.value = true
+    // 触发 DiceAnimation 内部自动播放滚动→结果动画
+    diceRollTriggerKey.value++
+    // 同时调 startGame API 在后台发牌
+    try {
+      await startGame({ hesitationWindow: hesitationWindow.value, fixedDice: diceValues.value })
+      // 等骰子动画(850ms滚动+结果展示)完成后自动发牌+倍数提示
+      window.setTimeout(() => {
+        void onDealTiles()
+        showDoubleReminder.value = true
+        const d1 = diceValues.value[0], d2 = diceValues.value[1]
+        doubleReminderText.value = d1 === d2
+          ? '🎲翻' + (d1 === 1 || d1 === 4 ? '四' : '双') + '倍！'
+          : '🎲' + d1 + ' - ' + d2 + ' · 普通局'
+        setTimeout(() => { showDoubleReminder.value = false }, 2500)
+      }, 1800)
+      await forceRefreshState()
+    } catch (e: any) {
+      console.error('[startNextRound] AI dealer start failed:', e)
+      addBroadcast('开局失败，请重试', 'warn')
     }
-  }, 1700)
+  } else {
+    // 👤 人类庄家：显示骰子覆盖层，等手动发牌
+    await enterStartingPhaseWithDiceOverlay()
+    await forceRefreshState()
+    window.setTimeout(() => {
+      if (gameState.value?.phase === GamePhase.STARTING && showDiceOverlay.value) {
+        void onDealTiles()
+      }
+    }, 1700)
+  }
 }
 const isInteractionLocked = computed(() => isOverlayVisible.value)
 
@@ -3714,18 +3749,30 @@ const onStartGame = async () => {
   }
   console.log('[onStartGame] Starting game with dice...')
 
-  // 显示骰子动画——用户可掷骰子、点发牌
+  // 掷骰子
   diceValues.value = [
     Math.floor(Math.random() * 6) + 1,
     Math.floor(Math.random() * 6) + 1
   ]
-  hasDicePreview.value = true
-  showDiceOverlay.value = true
-  playSound('dice-roll')
 
-  // 🔧 后台发API，不等——发牌等重工作在用户看骰子时提前完成
-  // 用户点发牌时，牌已发好，直接关overlay显示牌局
-  gameStartPromise = startGame({ hesitationWindow: hesitationWindow.value, fixedDice: diceValues.value })
+  const theDealer = dealerPlayer.value
+  if (theDealer && isBotPlayer(theDealer)) {
+    // AI庄家：跳过骰子覆盖层，直接开局，显示翻倍提示
+    optimisticDealt.value = true
+    gameStartPromise = startGame({ hesitationWindow: hesitationWindow.value, fixedDice: diceValues.value })
+    showDoubleReminder.value = true
+    const d1 = diceValues.value[0], d2 = diceValues.value[1]
+    doubleReminderText.value = d1 === d2
+      ? '🎲翻' + (d1 === 1 || d1 === 4 ? '四' : '双') + '倍！'
+      : '🎲' + d1 + ' - ' + d2 + ' · 普通局'
+    setTimeout(() => { showDoubleReminder.value = false }, 2500)
+  } else {
+    // 人类庄家：显示骰子覆盖层，可手动掷骰+发牌
+    hasDicePreview.value = true
+    showDiceOverlay.value = true
+    playSound('dice-roll')
+    gameStartPromise = startGame({ hesitationWindow: hesitationWindow.value, fixedDice: diceValues.value })
+  }
   gameStartPromise.then(() => {
     console.log('[onStartGame] Background startGame completed, phase:', gameState.value?.phase)
   }).catch(err => {
@@ -4179,18 +4226,27 @@ watch(
         showSettlement.value = true
         return
       }
-      window.setTimeout(() => {
-        const dealer = dealerPlayer.value
-        if (dealer && isBotPlayer(dealer)) {
-          // AI庄家：自动掷骰子+发牌
-          autoRollAndDeal()
-        } else if (dealer && !isBotPlayer(dealer)) {
-          // 人类庄家：自动掷骰子，等他手动发牌
-          autoRollOnly()
-        } else {
-          // 没有庄家——不可能
+      const d = dealerPlayer.value
+      if (d && isBotPlayer(d)) {
+        // AI庄家：不显示骰子覆盖层，直接发牌，显示倍数提醒
+        showDiceOverlay.value = false
+        hasDicePreview.value = true
+        optimisticDealt.value = true
+        const sd = gameState.value?.dice || diceValues.value
+        if (sd && Array.isArray(sd) && sd.length === 2) {
+          showDoubleReminder.value = true
+          doubleReminderText.value = sd[0] === sd[1]
+            ? '🎲翻' + (sd[0] === 1 || sd[0] === 4 ? '四' : '双') + '倍！'
+            : '🎲' + sd[0] + ' - ' + sd[1] + ' · 普通局'
+          setTimeout(() => { showDoubleReminder.value = false }, 2500)
         }
-      }, 500)
+        void onDealTiles()
+      } else if (d && !isBotPlayer(d)) {
+        // 人类庄家：显示骰子覆盖层，等手动发牌
+        window.setTimeout(() => {
+          autoRollOnly()
+        }, 500)
+      }
       return
     }
     if (newPhase !== GamePhase.STARTING) {
