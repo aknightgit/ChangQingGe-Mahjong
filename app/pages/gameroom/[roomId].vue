@@ -1538,6 +1538,18 @@ onMounted(async () => {
     hasDicePreview.value = true
     diceRollTriggerKey.value++
     playSound('dice-roll')
+    // 非掷骰玩家：显示骰子覆盖层，自动播放动画
+    // 掷骰玩家已经看到了本地动画，跳过以防闪烁
+    if (!showDiceOverlay.value && gameState.value?.phase !== GamePhase.STARTING) {
+      showDiceOverlay.value = true
+      // 动画完成后(约1.8s)自动关闭
+      setTimeout(() => {
+        if (showDiceOverlay.value && !(gameState.value?.phase === GamePhase.STARTING)) {
+          optimisticDealt.value = true
+          showDiceOverlay.value = false
+        }
+      }, 1800)
+    }
   }) as EventListener)
 
   window.addEventListener('mahjong-broadcast', ((event: CustomEvent) => {
@@ -3757,15 +3769,11 @@ const onStartGame = async () => {
 
   const theDealer = dealerPlayer.value
   if (theDealer && isBotPlayer(theDealer)) {
-    // AI庄家：跳过骰子覆盖层，直接开局，显示翻倍提示
-    optimisticDealt.value = true
+    // AI庄家：先显示骰子动画，再自动开局
     gameStartPromise = startGame({ hesitationWindow: hesitationWindow.value, fixedDice: diceValues.value })
-    showDoubleReminder.value = true
-    const d1 = diceValues.value[0], d2 = diceValues.value[1]
-    doubleReminderText.value = d1 === d2
-      ? '🎲翻' + (d1 === 1 || d1 === 4 ? '四' : '双') + '倍！'
-      : '🎲' + d1 + ' - ' + d2 + ' · 普通局'
-    setTimeout(() => { showDoubleReminder.value = false }, 2500)
+    // showDiceOverlay 通过 diceRoll 广播自动显示
+    // 倍数提示由 watcher 中的 AI dealer 分支在动画完成后显示
+    // 不做 optimisticDealt - 等动画完成后再显示牌局
   } else {
     // 人类庄家：显示骰子覆盖层，可手动掷骰+发牌
     hasDicePreview.value = true
@@ -4228,19 +4236,27 @@ watch(
       }
       const d = dealerPlayer.value
       if (d && isBotPlayer(d)) {
-        // AI庄家：不显示骰子覆盖层，直接发牌，显示倍数提醒
-        showDiceOverlay.value = false
-        hasDicePreview.value = true
-        optimisticDealt.value = true
+        // AI庄家：全员显示骰子动画(通过服务端 diceRoll 广播触发)
+        // 先设好骰子值让全局覆盖层显示
         const sd = gameState.value?.dice || diceValues.value
         if (sd && Array.isArray(sd) && sd.length === 2) {
-          showDoubleReminder.value = true
-          doubleReminderText.value = sd[0] === sd[1]
-            ? '🎲翻' + (sd[0] === 1 || sd[0] === 4 ? '四' : '双') + '倍！'
-            : '🎲' + sd[0] + ' - ' + sd[1] + ' · 普通局'
-          setTimeout(() => { showDoubleReminder.value = false }, 2500)
+          diceValues.value = [sd[0], sd[1]]
         }
-        void onDealTiles()
+        showDiceOverlay.value = true
+        hasDicePreview.value = true
+        // 等 diceRoll 广播→动画完成(约1.8s)后自动发牌+倍数提示
+        // (DiceAnimation 通过 roll-trigger-key 变化自动播放)
+        setTimeout(() => {
+          optimisticDealt.value = true
+          showDiceOverlay.value = false
+          if (sd && Array.isArray(sd) && sd.length === 2) {
+            showDoubleReminder.value = true
+            doubleReminderText.value = sd[0] === sd[1]
+              ? '🎲翻' + (sd[0] === 1 || sd[0] === 4 ? '四' : '双') + '倍！'
+              : '🎲' + sd[0] + ' - ' + sd[1] + ' · 普通局'
+            setTimeout(() => { showDoubleReminder.value = false }, 2500)
+          }
+        }, 1800)
       } else if (d && !isBotPlayer(d)) {
         // 人类庄家：显示骰子覆盖层，等手动发牌
         window.setTimeout(() => {
