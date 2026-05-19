@@ -22,6 +22,8 @@ import { TrainingRecordService } from '../services/trainingRecordService';
 import { isBotPlayer, selectBotChowTileIds, selectDiscardTile, shouldClaimPendingAction } from '../services/botService';
 import { formatBeijingTime } from './beijingTime';
 import { isConcealedDiscardState, tileLabel } from './gameHelpers';
+import { RoomGameBridge } from '../services/roomGameBridge';
+import { GameStore } from '../services/gameStore';
 
 
 /**
@@ -32,6 +34,21 @@ class GameManager {
   private playerToGame: Map<string, string> = new Map();
   private wsManager: any = null;
   private isHydrated = false;
+
+  // ---- Public accessors for RoomGameBridge ----
+  /** @internal */
+  getActiveGames(): Map<string, GameState> { return this.games; }
+  /** @internal */
+  getWsManager(): any { return this.wsManager; }
+
+  private store: GameStore;
+
+  constructor() {
+    this.store = new GameStore();
+    this.store._inject(this);
+  }
+
+  getStore(): GameStore { return this.store; }
 
   // 互包跟踪: gameId -> Map<playerId, Map<partnerId, count>>
   // 记录每个玩家从另一个玩家吃/碰/杠了多少口
@@ -99,15 +116,11 @@ class GameManager {
   }
 
   private broadcastRoomJoin(game: GameState, player: Player): void {
-    if (!this.wsManager) return;
-    this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-      id: Date.now() + Math.floor(Math.random() * 1000),
-      text: `👤 ${player.name}进入到了房间`,
-      actionKind: 'roomJoin',
-      type: 'info',
-      timestamp: Date.now(),
-      timeLabel: formatBeijingTime()
-    });
+    RoomGameBridge.broadcastRoomJoin(
+      (gid, evt, data) => this.wsManager?.broadcast(gid, evt, data),
+      game,
+      player
+    );
   }
 
   private canPlayerDrawOnCurrentTurn(game: GameState, player: Player): boolean {
@@ -1401,13 +1414,11 @@ class GameManager {
     return false;
   }
 
-  private async hydrateFromDatabase() {
-    if (this.isHydrated) return;
-    // 不再一次性加载所有游戏,改为按需加载(ensureGameLoaded)
-    this.isHydrated = true;
+  public async hydrateFromDatabase(): Promise<void> {
+    return this.store.hydrateFromDatabase();
   }
 
-  private async ensureGameLoaded(gameId: string): Promise<GameState | undefined> {
+  public async ensureGameLoaded(gameId: string): Promise<GameState | undefined> {
     if (this.games.has(gameId)) {
       return this.games.get(gameId);
     }
@@ -1443,50 +1454,19 @@ class GameManager {
     return undefined;
   }
 
-  private async persistGame(game: GameState) {
-    try {
-      await saveGameState(game);
-    } catch (error: any) {
-      console.warn('⚠️ MongoDB persist failed:', error.message);
-    }
+  public async persistGame(game: GameState): Promise<void> {
+    return this.store.persistGame(game);
   }
 
-  private broadcastGameState(gameId: string) {
-    if (!this.wsManager) return;
-    const game = this.games.get(gameId);
-    if (!game) return;
-
-    this.wsManager.broadcast(gameId, 'gameStateUpdate', {
-      gameId,
-      phase: game.phase,
-      currentPlayerIndex: game.currentPlayerIndex,
-      discardPile: game.discardPile,
-      wallCount: game.wall.length,
-      winnersCount: game.winnersCount,
-      _freezeUntil: (game as any)._freezeUntil || 0
-    });
+  public broadcastGameState(gameId: string): void {
+    this.store.broadcastGameState(gameId);
   }
 
   /**
    * Create a new game
    */
   private generateRoomNumber(): string {
-    // 生成4位随机房间号,确保不重复(跳过已存在的活跃房间)
-    const maxAttempts = 100;
-    for (let i = 0; i < maxAttempts; i++) {
-      const num = String(Math.floor(1000 + Math.random() * 9000)); // 1000-9999
-      // 检查是否有活跃的游戏用了这个房间号
-      let exists = false;
-      for (const game of this.games.values()) {
-        if (game.roomNumber === num && game.phase !== GamePhase.ENDED) {
-          exists = true;
-          break;
-        }
-      }
-      if (!exists) return num;
-    }
-    // Fallback: 使用时间戳最后4位
-    return String(Date.now()).slice(-4);
+    return RoomGameBridge.generateRoomNumber(this.games);
   }
 
   async createGame(playerName: string, options?: { userId?: string; roomNumber?: string; diceRollCount?: number; firstRoundDouble?: boolean; liangShanThreshold?: number; thinkChances?: number; settlementMultiplier?: number; maxBots?: number; minPlayers?: number; hesitationWindow?: number; allClaimMode?: boolean; selectedBots?: string[] }): Promise<{ gameId: string; playerId: string }> {
@@ -1604,13 +1584,11 @@ class GameManager {
    * 通过4位房间号查找游戏
    */
   async findGameByRoomNumber(roomNumber: string): Promise<string | null> {
-    await this.hydrateFromDatabase();
-    for (const [gameId, game] of this.games) {
-      if (game.roomNumber === roomNumber && game.phase !== GamePhase.ENDED) {
-        return gameId;
-      }
-    }
-    return null;
+    return RoomGameBridge.findGameByRoomNumber(
+      () => this.hydrateFromDatabase(),
+      this.games,
+      roomNumber
+    );
   }
 
   async joinGame(gameId: string, playerName: string, options?: { userId?: string }): Promise<{ playerId: string; position: number; isSpectator?: boolean }> {
@@ -5241,7 +5219,7 @@ class GameManager {
     game.roundNumber = calculatedRound;
   }
 
-  private endRound(game: GameState, reason: GameEndReason): void {
+  public endRound(game: GameState, reason: GameEndReason): void {
     this.clearPendingActionTimer(game.gameId);
     game.phase = GamePhase.CHA_JIAO;
 
@@ -5628,28 +5606,15 @@ class GameManager {
   }
 
   async endGameForEmptyRoom(gameId: string, reason: GameEndReason = GameEndReason.EMPTY_ROOM): Promise<void> {
-    await this.hydrateFromDatabase();
-    const game = await this.ensureGameLoaded(gameId);
-    if (!game) return;
-
-    if (game.phase === GamePhase.ENDED) {
-      game.endReason = reason;
-      await this.persistGame(game);
-      return;
-    }
-
-    for (const player of game.players) {
-      if (player.status !== PlayerStatus.WON) {
-        player.status = PlayerStatus.LOST;
-      }
-      player.isTing = false;
-    }
-
-    game.pendingActions = [];
-    this.endRound(game, reason);
-
-    await this.persistGame(game);
-    this.broadcastGameState(gameId);
+    await RoomGameBridge.endGameForEmptyRoom(
+      () => this.hydrateFromDatabase(),
+      (id) => this.ensureGameLoaded(id),
+      (g) => this.persistGame(g),
+      (g, r) => this.endRound(g, r),
+      (id) => this.broadcastGameState(id),
+      gameId,
+      reason
+    );
   }
 
   /**
