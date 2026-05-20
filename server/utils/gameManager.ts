@@ -941,6 +941,9 @@ class GameManager {
         if (!game.pendingActions.length) return;
 
         if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now()) {
+        // [FIX] 先处理所有机器人 pending action（吃/碰/杠/胡）
+        const botProcessed = await this.handleBotPendingActions(gameId);
+        if (botProcessed) return;
           this.schedulePendingActionTimeout(gameId);
           return;
         }
@@ -1108,17 +1111,17 @@ class GameManager {
    * 3. 人类玩家的吃按钮可以被清除（因为碰/杠/胡优先级更高）
    * 4. 人类的胡按钮必须在 hesitationWindow 内保持可用，等人类自己响应或超时
    */
-  private async handleBotPendingActions(gameId: string): Promise<void> {
-    // 原子保护：若 timer 已在消费则跳过
-    if (this.actionResolutionLocks.has(gameId)) return;
+  private async handleBotPendingActions(gameId: string): Promise<boolean> {
+    // 由 schedulePendingActionTimeout 调用，外层已持有锁
     const game = this.games.get(gameId);
-    if (!game) return;
+    if (!game) return false;
 
     // 立即同步处理 bot 的高优先级动作（碰/杠/胡），不等延迟
     try {
-      if (game.phase !== GamePhase.PLAYING) return;
-      if (game.pendingActions.length === 0) return;
+      if (game.phase !== GamePhase.PLAYING) return false;
+      if (game.pendingActions.length === 0) return false;
 
+      let hasBotAction = false; // 是否有任何 bot 动作被处理
       let claimedHigherPriority = false; // 碰/杠/胡是否已被bot执行
 
       // 保存人类玩家的 pending（bot 的 claim 不应清除人类的犹豫窗口）
@@ -1160,6 +1163,7 @@ class GameManager {
           if (pengTotalCount - 2 + 3 <= 14) {
             this.handlePeng(game, player);
             claimedHigherPriority = true;
+            hasBotAction = true;
           } else {
             console.warn(`[BotPeng] ${player.name} blocked: would exceed 14 tiles`);
             this.handlePass(game, player);
@@ -1170,6 +1174,7 @@ class GameManager {
           if (kongTotalCount - 3 + 4 <= 14) {
             this.handleKong(game, player, pa.tile?.id || '');
             claimedHigherPriority = true;
+            hasBotAction = true;
           } else {
             console.warn(`[BotKong] ${player.name} blocked: would exceed 14 tiles`);
             this.handlePass(game, player);
@@ -1178,6 +1183,7 @@ class GameManager {
           try {
             await this.handleHu(game, player);
             claimedHigherPriority = true;
+            hasBotAction = true;
           } catch (err: any) {
             console.warn(`[BotHu] ${player.name} skipped invalid hu: ${err?.message || err}`);
             this.handlePass(game, player);
@@ -1200,14 +1206,14 @@ class GameManager {
         game.pendingActions = game.pendingActions.filter(pa =>
           !botIds.has(pa.playerId) || pa.availableActions.includes(ActionType.CHOW)
         );
-        const now = Date.now();
-        for (const pa of game.pendingActions) {
+        for (const pa of [...game.pendingActions]) {
           const pendingPlayer = game.players.find(p => p.id === pa.playerId);
           if (pendingPlayer && this.isPlayerBotControlled(pendingPlayer) && this.isChowChoiceOnlyActions(pa.availableActions)) {
             pa.selectedChowTileIds = pa.tile
               ? selectBotChowTileIds(pendingPlayer, game, pa.tile, pa.chowOptions)
               : undefined;
-            pa.expiresAt = now + this.getHesitationWindow(game);
+            await this.resolvePendingAction(game, pendingPlayer, pa);
+            hasBotAction = true;
           }
         }
       }
@@ -1231,8 +1237,10 @@ class GameManager {
       } else {
         this.schedulePendingActionTimeout(gameId);
       }
+      return hasBotAction;
     } catch (err) {
       console.error('[BotService] Pending action error:', err);
+      return false;
     }
   }
 
