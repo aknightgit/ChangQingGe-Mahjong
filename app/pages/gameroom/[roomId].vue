@@ -241,8 +241,6 @@
             </div>
           </div>
         </div>
-
-
         <!-- 结算面板 -->
         <div v-if="drawBlockedNoticeVisible" class="draw-blocked-notice">
           {{ drawBlockedNoticeText }}
@@ -302,27 +300,33 @@
     <!-- 总结算统计（退房结算时显示） -->
     <div v-if="isSettleRequested && settlementData?.playerStats" class="settle-details" style="border-top:1px solid rgba(255,215,0,0.15);padding-top:16px;margin-top:10px">
       <h3 class="settle-title-center" style="font-size:1.1rem;margin-bottom:14px">📊 总成绩单</h3>
-      <div class="settle-detail-header">
-        <span class="settle-detail-name"></span>
-        <span class="settle-detail-stat settle-detail-stat--record">总输赢</span>
-        <span class="settle-detail-stat settle-detail-stat--record">有效输赢</span>
-        <span class="settle-detail-stat">🤖 vs AI</span>
-        <span class="settle-detail-stat">🀄 自摸</span>
-        <span class="settle-detail-stat">🎯 捉冲</span>
-        <span class="settle-detail-stat settle-detail-stat--win">最大赢</span>
-        <span class="settle-detail-stat settle-detail-stat--loss">最大输</span>
-      </div>
-      <div class="settle-detail-grid">
-        <div v-for="stat in sortedSettleStats" :key="stat.id" class="settle-detail-row">
-          <span class="settle-detail-name">{{ stat.name }}</span>
-          <span class="settle-detail-stat settle-detail-stat--record">{{ (stat.totalScore ?? 0) > 0 ? '+' : '' }}{{ stat.totalScore ?? 0 }}</span>
-          <span class="settle-detail-stat settle-detail-stat--record">{{ stat.effectiveScore ?? stat.totalScore ?? 0 }}</span>
-          <span class="settle-detail-stat">{{ stat.vsAiScore ?? 0 }}</span>
-          <span class="settle-detail-stat">{{ stat.selfDraws ?? 0 }}</span>
-          <span class="settle-detail-stat">{{ stat.discards ?? 0 }}</span>
-          <span class="settle-detail-stat settle-detail-stat--win">+{{ stat.maxWin ?? 0 }}</span>
-          <span class="settle-detail-stat settle-detail-stat--loss">{{ stat.maxLoss ?? 0 }}</span>
-        </div>
+      <div class="settle-table-wrap">
+        <table class="settle-round-table settle-round-table--compact">
+          <thead>
+            <tr>
+              <th>玩家</th>
+              <th>总输赢</th>
+              <th>有效输赢</th>
+              <th>🤖 vs AI</th>
+              <th>🀄 自摸</th>
+              <th>🎯 捉冲</th>
+              <th>最大赢</th>
+              <th>最大输</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="stat in sortedSettleStats" :key="stat.id" class="settle-round-table-row">
+              <td>{{ stat.name }}</td>
+              <td :class="{ 'settle-round-positive': (stat.totalScore ?? 0) > 0, 'settle-round-negative': (stat.totalScore ?? 0) < 0 }">{{ (stat.totalScore ?? 0) > 0 ? '+' : '' }}{{ stat.totalScore ?? 0 }}</td>
+              <td>{{ stat.effectiveScore ?? stat.totalScore ?? 0 }}</td>
+              <td>{{ stat.vsAiScore ?? 0 }}</td>
+              <td>{{ stat.selfDraws ?? 0 }}</td>
+              <td>{{ stat.discards ?? 0 }}</td>
+              <td>+{{ stat.maxWin ?? 0 }}</td>
+              <td>{{ stat.maxLoss ?? 0 }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
       <p style="text-align:center;font-size:0.72rem;opacity:0.5;margin-top:10px">有效输赢 = 仅统计纯真人局的输赢，排除与AI对战的部分</p>
     </div>
@@ -716,8 +720,8 @@
                 ? canManualStartWaitingGame
                 : (gameState?.phase === 'playing' && !!currentPlayer?.isDealer) || gameState?.phase === 'ended'"
               class="settle-btn-header"
-              :class="{ 'start-game-glow': canManualStartWaitingGame }"
-              :disabled="isGameStarting && gameState?.phase === GamePhase.WAITING"
+              :class="{ 'start-game-glow': canManualStartWaitingGame, 'settle-btn-header--requested': isSettleRequested }"
+              :disabled="isSettleRequested || (isGameStarting && gameState?.phase === GamePhase.WAITING)"
               @click="gameState?.phase === GamePhase.WAITING ? onStartGame() : onRequestSettle()"
             >
               {{ gameState?.phase === GamePhase.WAITING
@@ -854,8 +858,6 @@
           </div>
         </aside>
       </main>
-
-
       <Teleport to="body">
         <DiceAnimation
           v-if="showDiceOverlay"
@@ -1578,6 +1580,8 @@ onMounted(async () => {
   window.addEventListener('mahjong-broadcast', ((event: CustomEvent) => {
     const detail = event.detail
     addBroadcast(detail.text, detail.type as BroadcastMsg['type'], {
+
+    console.log("[broadcastMessage]", detail.text, detail.actionKind);
       dedupeKey: detail?.id ? `broadcast:${detail.id}` : undefined
     })
     // 根据广播内容播放音效和语音
@@ -2262,6 +2266,7 @@ const startNextRound = async () => {
   showSettlement.value = false
   settlementData.value = null
   isHuReviewMode.value = false
+  showFinalSettlement.value = false
   await enterStartingPhaseWithDiceOverlay()
   await forceRefreshState()
   window.setTimeout(() => {
@@ -2775,8 +2780,6 @@ const syncHuSelectionLock = async (locked: boolean) => {
     console.error('[hu-selection] Failed to sync lock:', error)
   }
 }
-
-
 // 选择胡牌组合
 const selectedHuCombo = ref<number | null>(null)
 const onHu = async () => {
@@ -3139,6 +3142,7 @@ const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); playVoiceActio
 
 // 退房结算
 const showSettlement = ref(false)
+nconst showFinalSettlement = ref(false)
 const settlementData = ref<any>(null)
 const lastAutoSettlementKey = ref('')
 const wallExhaustedCountdown = ref(5)
@@ -3911,6 +3915,8 @@ watch(
         }))
       }
       showSettlement.value = true
+
+      showFinalSettlement.value = false\n      if (isSettleRequested.value) {\n        window.setTimeout(() => { showFinalSettlement.value = true }, 3000)\n      }
     }
   }
 )
@@ -4518,6 +4524,8 @@ const forceDiscard = async (p: Player) => {
 
 /* 开始牌局按钮金色呼吸光晕 — 4人到齐时亮起 */
 .start-game-glow {
+
+.settle-btn-header--requested,\n.settle-btn-header--requested:hover { background: rgba(128, 128, 128, 0.5); color: rgba(255,255,255,0.6); cursor: not-allowed; border-color: transparent; }
   animation: breatheGold 1.8s ease-in-out infinite;
   box-shadow: 0 0 12px rgba(255, 215, 0, 0.4), 0 0 24px rgba(255, 215, 0, 0.2);
   border-color: rgba(255, 215, 0, 0.6);
@@ -4715,7 +4723,7 @@ const forceDiscard = async (p: Player) => {
 :global(.glass-theme-options) {
   display: flex;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   padding: 0;
 }
 :global(.glass-theme-chip) {
@@ -5156,7 +5164,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
 .layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.78rem; }
 .layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(4px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); font-size: calc(0.72rem * var(--mobile-scale, 1)); }
-.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: wrap; }
+.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: nowrap; }
 .layout--mobile-landscape .extra-actions-group { justify-content: flex-start; }
 .layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
 .layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
@@ -5172,7 +5180,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .action-btn--small { width: 28px; height: 28px; font-size: 0.6rem; }
 .layout--mobile-landscape .extended-info-panel .action-btn--draw { width: 28px; height: 40px; font-size: 0.75rem; }
 .layout--mobile-landscape .extended-info-panel .mobile-inline-menu { padding: 4px 6px; }
-.layout--mobile-landscape .extended-info-panel .mobile-inline-menu__actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.layout--mobile-landscape .extended-info-panel .mobile-inline-menu__actions { display: flex; gap: 4px; flex-wrap: nowrap; }
 
 /* 竖屏手机：右侧栏变底部横排 */
 @media (max-width: 900px) and (orientation: portrait) {
@@ -5181,7 +5189,7 @@ const forceDiscard = async (p: Player) => {
     max-width: 100%;
     max-height: none;
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 5px;
   }
 }
@@ -5571,8 +5579,6 @@ const forceDiscard = async (p: Player) => {
   0%, 100% { box-shadow: 0 0 10px rgba(239,83,80,0.5); }
   50% { box-shadow: 0 0 20px rgba(255,107,107,0.88); }
 }
-
-
 .inline-action-btn--rebel {
   background: linear-gradient(135deg, #dc2626, #b91c1c);
   color: #fff;
@@ -5817,7 +5823,7 @@ const forceDiscard = async (p: Player) => {
   color: #fff;
   background: rgba(0, 0, 0, 0.55);
 }
-.player-name-label--top    { right: 100%; top: 50%; transform: translateY(-50%); padding: 6px 16px; margin-right: 8px; }
+.player-name-label--top    { position: relative; top: -24px; left: 8px; margin-bottom: -24px; padding: 6px 16px; }
 .player-name-label--bottom { bottom: 0%; left: 50%; transform: translateX(-50%); }
 .player-name-label--left   { left: 0.6%; top: 2%; transform: translateY(0); }
 .player-name-label--right  { right: 0.6%; top: 2%; transform: translateY(0); }
@@ -5866,6 +5872,8 @@ const forceDiscard = async (p: Player) => {
 .turn-timer-inline.turn-timer--urgent {
   color: #ef5350;
   animation: timer-pulse 0.5s infinite;
+
+.turn-timer--winner { font-size: 0.5rem; white-space: nowrap; margin-left: 3px; padding: 1px 6px; }
 }
 
 /* 状态提示 */
@@ -5885,7 +5893,7 @@ const forceDiscard = async (p: Player) => {
   align-items: center;
   gap: 4px;
   margin-left: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .spectator-label {
@@ -6129,7 +6137,7 @@ const forceDiscard = async (p: Player) => {
 .approval-title { font-size: 1.3rem; font-weight: 800; color: #FFD700; margin: 0 0 6px; }
 .approval-sub { font-size: 0.95rem; color: rgba(255,255,255,0.8); margin: 0 0 4px; }
 .approval-question { font-size: 1rem; color: #fff; margin: 0 0 16px; }
-.approval-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.approval-buttons { display: flex; flex-wrap: nowrap; gap: 10px; justify-content: center; }
 .approval-btn {
   padding: 12px 28px;
   border-radius: 8px;
@@ -6223,7 +6231,7 @@ const forceDiscard = async (p: Player) => {
 .think-icon { font-size: 2rem; margin-bottom: 6px; }
 .think-title { font-size: 1.2rem; font-weight: 700; color: #FFD700; margin: 0 0 4px; }
 .think-sub { font-size: 0.9rem; color: rgba(255,255,255,0.7); margin: 0 0 16px; }
-.think-options { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.think-options { display: flex; flex-wrap: nowrap; gap: 10px; justify-content: center; }
 .think-opt {
   padding: 10px 24px;
   border-radius: 10px;
@@ -6409,7 +6417,7 @@ const forceDiscard = async (p: Player) => {
 }
 .hu-group-tiles {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
 }
 .hu-combo-score {
@@ -6420,7 +6428,7 @@ const forceDiscard = async (p: Player) => {
 }
 .hu-summary-grid {
   display: none;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 5px;
 }
 .hu-summary-item {
@@ -6831,7 +6839,7 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   justify-content: space-between;
   gap: 5px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   color: #f7e6a8;
   font-weight: 600;
   font-size: 0.65rem;
@@ -6949,7 +6957,7 @@ const forceDiscard = async (p: Player) => {
 
 .settle-round-winner-line {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 10px;
   color: #fff;
   font-size: 0.84rem;
@@ -7056,7 +7064,7 @@ const forceDiscard = async (p: Player) => {
   text-align: center;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   margin-bottom: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .settle-detail-grid {
@@ -7073,7 +7081,7 @@ const forceDiscard = async (p: Player) => {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.02);
   font-size: clamp(0.55rem, 1.3vw, 0.8rem);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .settle-detail-name {
@@ -7311,7 +7319,7 @@ const forceDiscard = async (p: Player) => {
 
 .waiting-players {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 5px;
   margin: 0;
 }
@@ -7524,7 +7532,7 @@ const forceDiscard = async (p: Player) => {
 
   .room-title-line {
     width: 100%;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 5px;
   }
 
@@ -7556,7 +7564,7 @@ const forceDiscard = async (p: Player) => {
 
   .inline-action-buttons {
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: center;
   }
 
@@ -7843,10 +7851,6 @@ const forceDiscard = async (p: Player) => {
   padding: 3px 7px;
   white-space: nowrap;
 }
-
-
-
-
 /* ===== Xiaomi 14 Pro / compact mobile styles ===== */
 .layout--mobile-landscape .broadcast-header {
   padding: 2px 6px !important;

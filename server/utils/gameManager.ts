@@ -3307,7 +3307,9 @@ class GameManager {
 
     // 广播吃牌到牌局快讯
     if (this.wsManager) {
-      this.broadcastQuickMessage(game.gameId, `🍜 ${player.name}吃牌`, 'info', 'chow');
+      const _bc = this.mutualBailout.get(game.gameId)?.get(player.id)?.get(sourcePlayerId) || 0;
+      const _suffix = _bc >= 2 ? ` (（${_bc}口)` : '';
+      this.broadcastQuickMessage(game.gameId, `🍜 ${player.name}吃牌${_suffix}`, 'info', 'chow');
     }
   }
 
@@ -3339,7 +3341,9 @@ class GameManager {
     }
     // 广播碰牌到牌局快讯
     if (this.wsManager) {
-      this.broadcastQuickMessage(game.gameId, `ⓘ ${player.name}碰牌`, 'info', 'pong');
+      const _bc2 = this.mutualBailout.get(game.gameId)?.get(player.id)?.get(sourcePlayerId) || 0;
+      const _suffix2 = _bc2 >= 2 ? ` (（${_bc2}口)` : '';
+      this.broadcastQuickMessage(game.gameId, `ⓘ ${player.name}碰牌${_suffix2}`, 'info', 'pong');
     }
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[0].id);
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[1].id);
