@@ -74,7 +74,8 @@ export default defineEventHandler(async (event) => {
     }));
 
     // 获取互包关系
-    const bailoutRelations = gameManager.getMutualBailoutRelations(gameId);
+    let bailoutRelations = [] as any;
+    try { bailoutRelations = gameManager.getMutualBailoutRelations(gameId); } catch (e) { console.error("[bailout] failed:", e); }
 
     return {
       success: true,
