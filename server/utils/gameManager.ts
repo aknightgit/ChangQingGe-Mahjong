@@ -3277,6 +3277,14 @@ class GameManager {
     if (this.wsManager) {
       this.broadcastQuickMessage(game.gameId, `\u{1f35c} ${player.name}\u5403\u724c`, 'info', 'chow');
     }
+    // 检查互包关系（>=2口广播）
+    if (this.wsManager) {
+      const _bailoutRaw = this.mutualBailout.get(game.gameId)?.get(player.id)?.get(sourcePlayerId);
+      if (_bailoutRaw && _bailoutRaw >= 2) {
+        const _sourceName = game.players.find(p => p.id === sourcePlayerId)?.name || '??';
+        this.broadcastQuickMessage(game.gameId, `\U0001F4E3 ${player.name}\u641e\u4e86${_sourceName}${_bailoutRaw}\u53e3\u4e86\uff01`, 'special', 'bailout');
+      }
+    }
   }
 
   /**
@@ -3299,10 +3307,17 @@ class GameManager {
     if (matchingTiles.length < 2) return;
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
     const _bailoutCount2 = this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.TRIPLET);
-    }
     // 广播碰牌到牌局快讯
     if (this.wsManager) {
       this.broadcastQuickMessage(game.gameId, `\u24d8 ${player.name}\u78b0\u724c`, 'info', 'pong');
+    }
+    // 检查互包关系（>=2口广播）
+    if (this.wsManager) {
+      const _bailoutRaw = this.mutualBailout.get(game.gameId)?.get(player.id)?.get(sourcePlayerId);
+      if (_bailoutRaw && _bailoutRaw >= 2) {
+        const _sourceName = game.players.find(p => p.id === sourcePlayerId)?.name || '??';
+        this.broadcastQuickMessage(game.gameId, `\U0001F4E3 ${player.name}\u641e\u4e86${_sourceName}${_bailoutRaw}\u53e3\u4e86\uff01`, 'special', 'bailout');
+      }
     }
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[0].id);
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[1].id);
@@ -3388,6 +3403,14 @@ class GameManager {
     if (this.wsManager) {
       const label = pendingAction.type === 'kong_an' ? '暗杠' : pendingAction.type === 'kong_bu' ? '补杠' : '明杠';
       this.broadcastQuickMessage(game.gameId, `ⓘ ${player.name}${label}`, 'info', 'kong');
+    }
+    // 检查互包关系（>=2口广播）
+    if (this.wsManager) {
+      const _bailoutRaw = this.mutualBailout.get(game.gameId)?.get(player.id)?.get(sourcePlayerId);
+      if (_bailoutRaw && _bailoutRaw >= 2) {
+        const _sourceName = game.players.find(p => p.id === sourcePlayerId)?.name || '??';
+        this.broadcastQuickMessage(game.gameId, `📣 ${player.name}搞了${_sourceName}${_bailoutRaw}口了！`, 'special', 'bailout');
+      }
     }
     const discarder = game.players.find(p => p.id === sourcePlayerId);
     if (discarder) {
