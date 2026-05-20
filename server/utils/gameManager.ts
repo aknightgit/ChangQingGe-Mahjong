@@ -1221,8 +1221,8 @@ class GameManager {
       await this.persistGame(game);
       this.broadcastGameState(gameId);
 
-      // 如果 bot 碰/杠成功，调度 bot 出牌
-      if (claimedHigherPriority) {
+      // 如果 bot 碰/杠/吃成功，调度 bot 出牌
+      if (claimedHigherPriority || hasBotAction) {
         const claimingPlayer = game.players[game.currentPlayerIndex];
         if (claimingPlayer && this.isPlayerBotControlled(claimingPlayer)) {
           this.scheduleBotDiscard(gameId, claimingPlayer.id);
@@ -1310,6 +1310,60 @@ class GameManager {
   }
 
   /** 检测新形成的互包关系并广播到牌局快讯 */
+  checkAndBroadcastBailout(
+    game: GameState,
+    playerId: string,
+    sourcePlayerId: string,
+  ): void {
+    const player = game.players.find(p => p.id === playerId);
+    const source = game.players.find(p => p.id === sourcePlayerId);
+    if (!player || !source) {
+      console.log(`[BAILOUT] SKIP: player=${!!player} source=${!!source} playerId=${playerId} sourcePlayerId=${sourcePlayerId}`);
+      return;
+    }
+
+    const rawCount = this.mutualBailout.get(game.gameId)?.get(playerId)?.get(sourcePlayerId);
+    const currentCount = rawCount || 0;
+    console.log(`[BAILOUT] game=${game.gameId} player=${player.name} source=${source.name} count=${currentCount} wsManager=${!!this.wsManager}`);
+
+    const msgByCount: Record<number, string> = {
+      2: `📣 ${player.name}搞了${source.name}两口了！`,
+      3: `📣 ${player.name}搞了${source.name}三口了！！`,
+      4: `📣 ${player.name}搞了${source.name}四口了！！！`
+    };
+
+    const msg = msgByCount[currentCount];
+    if (msg) {
+      this.broadcastQuickMessage(game.gameId, msg, 'special', 'bailout');
+    }
+  }
+
+  /**
+   * 检查两个玩家之间是否有互包关系
+   */
+  getBailoutMultiplier(
+    gameId: string,
+    payerId: string,
+    winnerId: string
+  ): { multiplier: number; type: string | null } {
+    const relations = this.getMutualBailoutRelations(gameId);
+
+    for (const rel of relations) {
+      if ((rel.player1 === payerId && rel.player2 === winnerId) ||
+          (rel.player1 === winnerId && rel.player2 === payerId)) {
+        return {
+          multiplier: rel.type === '四口' ? 5 : 3,
+          type: rel.type
+        };
+      }
+    }
+
+    return { multiplier: 1, type: null };
+  }
+
+  /**
+   * 获取最后一张弃牌的玩家ID
+   */
   private getLastDiscardPlayerId(game: GameState): string | undefined {
     if (game.lastDiscardPlayerId) {
       return game.lastDiscardPlayerId;
@@ -1706,6 +1760,7 @@ class GameManager {
     game.consecutiveDiscards = null;  // 每局重置「谢谢带头大哥」追踪
     game.leadingBrotherEvent = null;  // 每局重置「谢谢带头大哥」事件
     this.mutualBailout.delete(gameId);
+    (game as any).bailoutRelations = [];
 
     // 清除上一局残留的freeze/dealer auto-draw timer,防止旧timer覆盖新游戏状态
     const oldFreezeTimer = this.freezeTimers.get(gameId);
@@ -3219,10 +3274,17 @@ class GameManager {
     const handTiles = sequence.filter(t => t.id !== discardedTile.id);
 
     const _bailoutCount = this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.SEQUENCE);
+    this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
+    if (_bailoutCount >= 2 && this.wsManager) {
+      const _source = game.players.find(p => p.id === sourcePlayerId);
+      const _bailoutMsgs = {2: `ð£ ${player.name}æäº${_source?.name||'??'}ä¸¤å£äºï¼`, 3: `ð£ ${player.name}æäº${_source?.name||'??'}ä¸å£äºï¼ï¼`, 4: `ð£ ${player.name}æäº${_source?.name||'??'}åå£äºï¼ï¼ï¼`};
+      if (_bailoutMsgs[_bailoutCount]) { this.broadcastQuickMessage(game.gameId, _bailoutMsgs[_bailoutCount], 'special', 'bailout'); }
+    }
 
     for (const tile of handTiles) {
       player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile.id);
     }
+
     const sourcePos = this.getLastDiscardPosition(game);
     const meld: Meld = {
       type: MeldType.SEQUENCE,
@@ -3255,15 +3317,9 @@ class GameManager {
 
     // 广播吃牌到牌局快讯
     if (this.wsManager) {
-      this.broadcastQuickMessage(game.gameId, `\u{1f35c} ${player.name}\u5403\u724c`, 'info', 'chow');
-    }
-    // 检查互包关系（>=2口广播）
-    if (this.wsManager) {
-      const _bailoutRaw = this.mutualBailout.get(game.gameId)?.get(player.id)?.get(sourcePlayerId);
-      if (_bailoutRaw && _bailoutRaw >= 2) {
-        const _sourceName = game.players.find(p => p.id === sourcePlayerId)?.name || '??';
-        this.broadcastQuickMessage(game.gameId, `\U0001F4E3 ${player.name}\u641e\u4e86${_sourceName}${_bailoutRaw}\u53e3\u4e86\uff01`, 'special', 'bailout');
-      }
+      const _bc = this.mutualBailout.get(game.gameId)?.get(player.id)?.get(sourcePlayerId) || 0;
+      const _suffix = _bc >= 2 ? ` (（${_bc}口)` : '';
+      this.broadcastQuickMessage(game.gameId, `🍜 ${player.name}吃牌${_suffix}`, 'info', 'chow');
     }
   }
 
@@ -3287,17 +3343,17 @@ class GameManager {
     if (matchingTiles.length < 2) return;
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
     const _bailoutCount2 = this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.TRIPLET);
+    this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
+    if (_bailoutCount2 >= 2 && this.wsManager) {
+      const _source2 = game.players.find(p => p.id === sourcePlayerId);
+      const _bailoutMsgs2 = {2: `ð£ ${player.name}æäº${_source2?.name||'??'}ä¸¤å£äºï¼`, 3: `ð£ ${player.name}æäº${_source2?.name||'??'}ä¸å£äºï¼ï¼`, 4: `ð£ ${player.name}æäº${_source2?.name||'??'}åå£äºï¼ï¼ï¼`};
+      if (_bailoutMsgs2[_bailoutCount2]) { this.broadcastQuickMessage(game.gameId, _bailoutMsgs2[_bailoutCount2], 'special', 'bailout'); }
+    }
     // 广播碰牌到牌局快讯
     if (this.wsManager) {
-      this.broadcastQuickMessage(game.gameId, `\u24d8 ${player.name}\u78b0\u724c`, 'info', 'pong');
-    }
-    // 检查互包关系（>=2口广播）
-    if (this.wsManager) {
-      const _bailoutRaw = this.mutualBailout.get(game.gameId)?.get(player.id)?.get(sourcePlayerId);
-      if (_bailoutRaw && _bailoutRaw >= 2) {
-        const _sourceName = game.players.find(p => p.id === sourcePlayerId)?.name || '??';
-        this.broadcastQuickMessage(game.gameId, `\U0001F4E3 ${player.name}\u641e\u4e86${_sourceName}${_bailoutRaw}\u53e3\u4e86\uff01`, 'special', 'bailout');
-      }
+      const _bc2 = this.mutualBailout.get(game.gameId)?.get(player.id)?.get(sourcePlayerId) || 0;
+      const _suffix2 = _bc2 >= 2 ? ` (（${_bc2}口)` : '';
+      this.broadcastQuickMessage(game.gameId, `ⓘ ${player.name}碰牌${_suffix2}`, 'info', 'pong');
     }
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[0].id);
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[1].id);
@@ -3365,6 +3421,9 @@ class GameManager {
 
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
     this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.KONG);
+    if (sourcePlayerId) {
+      this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
+    }
     for (const t of matchingTiles) player.hand.concealedTiles = removeTile(player.hand.concealedTiles, t.id);
 
     const sourcePos = this.getLastDiscardPosition(game);
@@ -3383,14 +3442,6 @@ class GameManager {
     if (this.wsManager) {
       const label = pendingAction.type === 'kong_an' ? '暗杠' : pendingAction.type === 'kong_bu' ? '补杠' : '明杠';
       this.broadcastQuickMessage(game.gameId, `ⓘ ${player.name}${label}`, 'info', 'kong');
-    }
-    // 检查互包关系（>=2口广播）
-    if (this.wsManager) {
-      const _bailoutRaw = this.mutualBailout.get(game.gameId)?.get(player.id)?.get(sourcePlayerId);
-      if (_bailoutRaw && _bailoutRaw >= 2) {
-        const _sourceName = game.players.find(p => p.id === sourcePlayerId)?.name || '??';
-        this.broadcastQuickMessage(game.gameId, `📣 ${player.name}搞了${_sourceName}${_bailoutRaw}口了！`, 'special', 'bailout');
-      }
     }
     const discarder = game.players.find(p => p.id === sourcePlayerId);
     if (discarder) {
@@ -4798,6 +4849,9 @@ class GameManager {
               if (this.isPlayerBotControlled(livePlayer)) {
                 const chowPa = freshGame.pendingActions.find(pa => pa.playerId === livePlayer.id);
                 if (chowPa && freshGame.pendingActions.length === 1) {
+                  chowPa.selectedChowTileIds = chowPa.tile
+                    ? selectBotChowTileIds(livePlayer, freshGame, chowPa.tile, chowPa.chowOptions)
+                    : undefined;
                   await this.resolvePendingAction(freshGame, livePlayer, chowPa);
                   freshGame.pendingActions = freshGame.pendingActions.filter(pa => pa.playerId !== livePlayer.id);
                   await this.persistGame(freshGame);

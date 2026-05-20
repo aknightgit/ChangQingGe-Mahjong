@@ -54,14 +54,15 @@ export const useHuReview = (options: UseHuReviewOptions) => {
     }
   }
 
-  let autoHuShown = false
-  watch(() => [options.canHu(), options.isMyTurn()], async ([canHu, myTurn]) => {
-    if (canHu && myTurn && !showHuPanel.value && !autoHuShown) {
-      autoHuShown = true
-      await onHu()
-    }
-    if (!canHu) autoHuShown = false
-  })
+  // 禁用自动弹出胡牌选择弹窗
+  // let autoHuShown = false
+  // watch(() => [options.canHu(), options.isMyTurn()], async ([canHu, myTurn]) => {
+  //   if (canHu && myTurn && !showHuPanel.value && !autoHuShown) {
+  //     autoHuShown = true
+  //     await onHu()
+  //   }
+  //   if (!canHu) autoHuShown = false
+  // })
 
   const onHu = async () => {
     isHuReviewMode.value = false
