@@ -4845,6 +4845,17 @@ class GameManager {
               return;
             }
             if (this.canExecuteCurrentTurnPlayerDrawDuringPending(freshGame, livePlayer.id)) {
+              // [FIX] Bot with chow-only pending: decide chow instead of clearing
+              if (this.isPlayerBotControlled(livePlayer)) {
+                const chowPa = freshGame.pendingActions.find(pa => pa.playerId === livePlayer.id);
+                if (chowPa && freshGame.pendingActions.length === 1) {
+                  await this.resolvePendingAction(freshGame, livePlayer, chowPa);
+                  freshGame.pendingActions = freshGame.pendingActions.filter(pa => pa.playerId !== livePlayer.id);
+                  await this.persistGame(freshGame);
+                  this.broadcastGameState(game.gameId);
+                  return;
+                }
+              }
               this.clearCurrentTurnPendingActions(freshGame, livePlayer.id);
             }
             if (freshGame.pendingActions.length > 0) {
