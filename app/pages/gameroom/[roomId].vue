@@ -346,6 +346,7 @@
 
         <!-- 设置面板（悬浮玻璃态，定位在设置按钮下方） -->
         <Teleport to="body">
+          <div v-if="showSettings" class="glass-settings-overlay" @click="showSettings = false" @touchstart="showSettings = false"></div>
           <Transition name="settings-panel" @after-leave="onSettingsClosed">
             <div
               v-if="showSettings"
