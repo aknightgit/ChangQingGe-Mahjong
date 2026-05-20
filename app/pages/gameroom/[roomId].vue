@@ -497,10 +497,6 @@
           <!-- 状态消息（桌面中心，已迁移到扩展区） -->
 
             <!-- 玩家名称标注（固定位置，不挤其他容器） -->
-            <div class="player-name-label player-name-label--top" v-if="topPlayer" @click="onPlayerNameClick(topPlayer)">
-              {{ topPlayer.name }}
-              <span v-if="northIsWinner" class="winner-tag">胡</span>
-            </div>
             <div class="player-name-label player-name-label--left" v-if="leftPlayer" @click="onPlayerNameClick(leftPlayer)">
               {{ leftPlayer.name }}
               <span v-if="westIsWinner" class="winner-tag">胡</span>
@@ -553,6 +549,8 @@
 
             <!-- Top player -->
             <div class="seat seat-top" :class="{ 'seat-active': activePosition !== null && topPlayer?.position === activePosition }">
+
+              <div class="player-name-label player-name-label--top" v-if="topPlayer" @click="onPlayerNameClick(topPlayer)">              {{ topPlayer.name }}              <span v-if="northIsWinner" class="winner-tag">胡</span>            </div>
               <PlayerOtherArea
                 v-memo="[northAreaMemoKey, northJustDrawnTileId, northIsWinner, tileBackScheme]"
                 position="top"
@@ -5819,7 +5817,7 @@ const forceDiscard = async (p: Player) => {
   color: #fff;
   background: rgba(0, 0, 0, 0.55);
 }
-.player-name-label--top    { top: 0%; left: 50%; transform: translateX(-50%); padding: 6px 16px; }
+.player-name-label--top    { right: 100%; top: 50%; transform: translateY(-50%); padding: 6px 16px; margin-right: 8px; }
 .player-name-label--bottom { bottom: 0%; left: 50%; transform: translateX(-50%); }
 .player-name-label--left   { left: 0.6%; top: 2%; transform: translateY(0); }
 .player-name-label--right  { right: 0.6%; top: 2%; transform: translateY(0); }
