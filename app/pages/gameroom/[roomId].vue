@@ -3972,7 +3972,6 @@ watch(isMyTurn, (isMe) => {
 })
 // ---- 追踪其他玩家动作（用于触发音效）----
 const prevOtherPlayerState = new Map<string, { meldCount: number; discardCount: number; replacedFlowerCount: number }>()
-const prevMeldSource = new Map<string, number>()
 const prevBailoutMap = new Map<string, Map<number, number>>()
 const getOtherMeldCount = (player: any) => (player?.hand?.exposedMelds?.length ?? 0)
 const getOtherDiscardCount = (player: any) => (player?.hand?.discardedTiles?.length ?? 0)
@@ -3986,7 +3985,6 @@ const checkOtherPlayerSounds = (newState: any) => {
   const pendingMeldVoices: Array<'kong' | 'pong' | 'chow'> = []
   for (const player of newState.players) {
     const prev = prevOtherPlayerState.get(player.id)
-const prevMeldSource = new Map<string, number>()
     const meldCount = getOtherMeldCount(player)
     const discardCount = getOtherDiscardCount(player)
     const replacedFlowerMelds = getReplacedFlowerMelds(player)
@@ -4024,13 +4022,10 @@ const prevMeldSource = new Map<string, number>()
       }
     }
     prevOtherPlayerState.set(player.id, { meldCount, discardCount, replacedFlowerCount })
-const prevMeldSource = new Map<string, number>()
   }
   const currentIds = new Set(newState.players.map((p: any) => p.id))
   for (const id of prevOtherPlayerState.keys()) {
-const prevMeldSource = new Map<string, number>()
     if (!currentIds.has(id)) prevOtherPlayerState.delete(id)
-const prevMeldSource = new Map<string, number>()
   }
   for (const action of pendingMeldVoices) {
     if (action === 'kong') {
