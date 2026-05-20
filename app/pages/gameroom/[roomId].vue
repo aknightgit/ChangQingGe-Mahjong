@@ -4086,14 +4086,8 @@ watch(() => gameState.value, (newState, oldState) => {
     const newWinners = (newState.players || []).filter(
       (p: any) => p.status === 'won' && p.winOrder === newState.winnersCount
     )
-    const bailoutRels = (newState as any).bailoutRelations || []
-    for (const w of newWinners) {
-      const method = w.winRound ? `第${w.winRound}轮` : ''
       const handType = w.winHandType ? `·${w.winHandType}` : ''
       // 检查三口/四口关系
-      const rel = bailoutRels.find((r: any) => r.player1 === w.id || r.player2 === w.id)
-      const partnerId = rel ? (rel.player1 === w.id ? rel.player2 : rel.player1) : null
-      const partner = partnerId ? (newState.players || []).find((p: any) => p.id === partnerId) : null
       const bailInfo = rel && partner ? ` · ${rel.type}包${partner.name}` : ''
       addBroadcast(`🏆 ${w.name} ${method}胡牌${handType}${bailInfo}`, 'win')
     }

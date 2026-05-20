@@ -125,11 +125,6 @@ export default defineEventHandler(async (event) => {
   }
 
   // 获取互包关系（三口/四口）
-  // try-catch: getMutualBailoutRelations 有时因 webpack 模块绑定问题不可用
-  let bailoutRelations: Array<{ player1: string; player2: string; type: string }> = [];
-  try { bailoutRelations = gameManager.getMutualBailoutRelations(normalizedGameId); } catch (e) { console.error("[bailout] failed:", e); }
-  (game as any).bailoutRelations = bailoutRelations;
-
   const maskedPlayers = game.players.map((p) => {
     const hasDebugSpectatorLock =
       !!player &&

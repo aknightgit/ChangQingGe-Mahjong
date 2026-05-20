@@ -8,14 +8,6 @@
       </span>
     </div>
 
-    <div v-if="bailoutCounts && Object.keys(bailoutCounts).length" class="bailout-warning">
-      互包提醒:
-      <span v-for="(count, playerId) in bailoutCounts" :key="playerId">
-        <span class="player-dot" :style="{ background: colors[getPlayerIndex(playerId)] }" />
-        x{{ count }}
-        <span v-if="count >= 3">!</span>
-      </span>
-    </div>
 
     <div class="player-main-row">
       <div class="player-flowers" v-if="flowerMelds.length">
@@ -112,7 +104,6 @@ const props = defineProps<{
   isWinner?: boolean
   justDrawnTileId?: string | null
   claimCandidateIds?: string[]
-  bailoutCounts?: Record<string, number>
   playerColors?: string[]
   viewerPosition?: number
   ownerPosition?: number
@@ -459,29 +450,3 @@ const getTileWrapperStyle = (tile: Tile): Record<string, string> => {
   z-index: 4;
 }
 
-.bailout-warning {
-  background: rgba(255, 152, 0, 0.2);
-  border: 1px solid #ff9800;
-  border-radius: 6px;
-  padding: 4px 8px;
-  margin: 4px 0;
-  font-size: 0.75rem;
-  color: #ffb74d;
-  text-align: center;
-}
-
-.bailout-count {
-  font-size: 0.7rem;
-  color: #ffb74d;
-  margin-left: 4px;
-}
-
-@media (max-width: 900px) and (orientation: landscape) {
-  :deep(.claimed-tile)::after {
-    top: -5px;
-    width: 8px;
-    height: 8px;
-    border-width: 1.5px;
-  }
-}
-</style>

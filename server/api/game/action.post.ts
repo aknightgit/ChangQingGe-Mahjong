@@ -74,8 +74,6 @@ export default defineEventHandler(async (event) => {
     }));
 
     // 获取互包关系
-    let bailoutRelations = [] as any;
-    try { bailoutRelations = gameManager.getMutualBailoutRelations(gameId); } catch (e) { console.error("[bailout] failed:", e); }
 
     return {
       success: true,
@@ -84,7 +82,6 @@ export default defineEventHandler(async (event) => {
           ...game,
           currentRound: game?.currentRound ?? ((game?.roundStats?.length || 0) + (game?.phase === 'ended' ? 0 : 1)),
           globalMultiplier: getEffectiveGlobalMultiplier(game),
-          bailoutRelations,
           players: game!.players.map(p => ({
             ...p,
             hand: {

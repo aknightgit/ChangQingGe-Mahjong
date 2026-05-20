@@ -56,7 +56,6 @@ export interface SettlementTransfer {
   toIndex: number;
   amount: number;
   reason: string;
-  bailoutType?: '三口' | '四口';
 }
 
 export interface SettlementBreakdown {
@@ -1067,10 +1066,8 @@ export function calculateSettlementBreakdownByRules(
     toIndex: number,
     amount: number,
     reason: string,
-    bailoutType?: '三口' | '四口'
   ) => {
     if (amount <= 0) return;
-    transfers.push({ fromIndex, toIndex, amount, reason, bailoutType });
     addDelta(fromIndex, -amount);
     addDelta(toIndex, amount);
   };
@@ -1122,12 +1119,8 @@ export function calculateSettlementBreakdownByRules(
     if (bailoutLoser !== undefined) {
       if (discarderId === bailoutLoser) {
         const pay = winnerFinalPoints * 2;
-        const bailoutType = mutualBailout?.get(discarderId)?.type;
-        addTransfer(discarderId, winnerIndex, pay, '放冲且互包赔付×2', bailoutType);
       } else {
-        const bailoutType = mutualBailout?.get(bailoutLoser)?.type;
         addTransfer(discarderId, winnerIndex, winnerFinalPoints, '放冲赔付');
-        addTransfer(bailoutLoser, winnerIndex, winnerFinalPoints, '第三方放冲触发互包补赔', bailoutType);
       }
       return { deltas, transfers };
     }

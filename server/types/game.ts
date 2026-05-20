@@ -187,7 +187,6 @@ export interface RoundStat {
   effectiveMultiplier: number;
   settlementMultiplier: number;
   overflowCarryMultiplierNextRound: number;
-  bailoutRelations: Array<{
     player1: string;
     player1Name?: string;
     player2: string;
@@ -223,7 +222,6 @@ export interface RoundStat {
     toPlayerName: string;
     amount: number;
     reason: string;
-    bailoutType?: '三口' | '四口';
   }>;
   specialEvents?: Array<{
     type: 'leading_brother';
@@ -330,7 +328,6 @@ export interface GameState {
   // 被聚义QJ线突破提醒（每局刷新）
   qjAlerts?: { playerId: string; playerName: string; score: number }[];
   // 互包关系（三口/四口）
-  bailoutRelations?: { player1: string; player2: string; type: '三口' | '四口' }[];
   // 输家换位置
   swapRequests?: { playerId: string; targetId: string; requestedAt: number }[];  // 待生效换位请求
   swapChances?: Record<string, number>;  // 每位玩家剩余换位次数
