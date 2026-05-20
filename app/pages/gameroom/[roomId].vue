@@ -3660,6 +3660,13 @@ watch([isMyTurn, hasPriorityActions], ([myTurn, hasActions]) => {
   } else {
     stopTurnTimer()
   }
+}, { immediate: true })
+
+// 监听游戏进入PLAYING阶段，强制触发倒计时
+watch(() => gameState.value?.phase, (phase) => {
+  if (phase === GamePhase.PLAYING && isMyTurn.value && !isAIControlled.value) {
+    startTurnTimer()
+  }
 })
 
 const actionWindowText = computed(() => {
@@ -5878,6 +5885,14 @@ const forceDiscard = async (p: Player) => {
   color: #81c784;
   background: rgba(0, 0, 0, 0.3);
   padding: 1px 8px;
+  border-radius: 999px;
+}
+.turn-timer--winner {
+  font-size: 0.5rem !important;
+  padding: 1px 5px !important;
+  background: rgba(255, 215, 0, 0.15) !important;
+  color: #ffd700 !important;
+  margin-left: 4px;
   border-radius: 999px;
 }
 .turn-timer-inline.turn-timer--urgent {
