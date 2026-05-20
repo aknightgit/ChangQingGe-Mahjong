@@ -248,7 +248,7 @@
 
         <div v-if="showSettlement" class="settle-overlay">
   <div class="settle-panel">
-    <h2 class="settle-title-center">{{ isWallExhaustedSettlement ? '💨 流局了，下把翻倍！！' : '本局输赢' }}</h2>
+    <h2 class="settle-title-center">{{ showFinalSettlement ? "📊 总成绩单" : (isWallExhaustedSettlement ? "💨 流局了，下把翻倍！！" : "本局输赢") }}</h2>
 
     <div class="settle-rounds settle-rounds--single">
       <div class="settle-round-card">
@@ -297,8 +297,11 @@
       </div>
     </div>
 
+    <div v-if="isSettleRequested && !showFinalSettlement" style="text-align:center;font-size:0.75rem;opacity:0.7;margin:8px 0;padding:6px;border-top:1px solid rgba(255,215,0,0.15);border-bottom:1px solid rgba(255,215,0,0.15)">
+        ⏳ 最终结算即将弹出...
+      </div>
     <!-- 总结算统计（退房结算时显示） -->
-    <div v-if="isSettleRequested && settlementData?.playerStats" class="settle-details" style="border-top:1px solid rgba(255,215,0,0.15);padding-top:16px;margin-top:10px">
+    <div v-if="showFinalSettlement && settlementData?.playerStats" class="settle-details" style="border-top:1px solid rgba(255,215,0,0.15);padding-top:16px;margin-top:10px">
       <h3 class="settle-title-center" style="font-size:1.1rem;margin-bottom:14px">📊 总成绩单</h3>
       <div class="settle-table-wrap">
         <table class="settle-round-table settle-round-table--compact">
@@ -720,7 +723,6 @@
                 ? canManualStartWaitingGame
                 : (gameState?.phase === 'playing' && !!currentPlayer?.isDealer) || gameState?.phase === 'ended'"
               class="settle-btn-header"
-              :class="{ 'start-game-glow': canManualStartWaitingGame, 'settle-btn-header--requested': isSettleRequested }"
               :disabled="isSettleRequested || (isGameStarting && gameState?.phase === GamePhase.WAITING)"
               @click="gameState?.phase === GamePhase.WAITING ? onStartGame() : onRequestSettle()"
             >
@@ -3142,7 +3144,7 @@ const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); playVoiceActio
 
 // 退房结算
 const showSettlement = ref(false)
-nconst showFinalSettlement = ref(false)
+const showFinalSettlement = ref(false)
 const settlementData = ref<any>(null)
 const lastAutoSettlementKey = ref('')
 const wallExhaustedCountdown = ref(5)
@@ -3916,10 +3918,15 @@ watch(
       }
       showSettlement.value = true
 
-      showFinalSettlement.value = false\n      if (isSettleRequested.value) {\n        window.setTimeout(() => { showFinalSettlement.value = true }, 3000)\n      }
+
+      showFinalSettlement.value = false
+      if (isSettleRequested.value) {
+        window.setTimeout(() => { showFinalSettlement.value = true }, 3000)
+      }
     }
   }
 )
+
 
 // 追踪上一轮游戏状态，检测变化生成广播
 const prevWinnersCount = ref(0)
@@ -4523,11 +4530,6 @@ const forceDiscard = async (p: Player) => {
 .settle-btn-header:hover { background: rgba(25, 118, 210, 0.8); color: #fff; }
 
 /* 开始牌局按钮金色呼吸光晕 — 4人到齐时亮起 */
-.start-game-glow {
-
-.settle-btn-header--requested,\n.settle-btn-header--requested:hover { background: rgba(128, 128, 128, 0.5); color: rgba(255,255,255,0.6); cursor: not-allowed; border-color: transparent; }
-  animation: breatheGold 1.8s ease-in-out infinite;
-  box-shadow: 0 0 12px rgba(255, 215, 0, 0.4), 0 0 24px rgba(255, 215, 0, 0.2);
   border-color: rgba(255, 215, 0, 0.6);
   background: linear-gradient(135deg, rgba(255, 193, 7, 0.85), rgba(255, 152, 0, 0.85)) !important;
   color: #fff !important;
@@ -5163,7 +5165,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .ext-title { font-size: 0.8rem; margin-bottom: 1px; }
 .layout--mobile-landscape .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
 .layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.78rem; }
-.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(4px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); font-size: calc(0.72rem * var(--mobile-scale, 1)); }
+.layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(2px * var(--mobile-scale, 1)) calc(5px * var(--mobile-scale, 1)); font-size: calc(0.6rem * var(--mobile-scale, 1)); }
 .layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: nowrap; }
 .layout--mobile-landscape .extra-actions-group { justify-content: flex-start; }
 .layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
@@ -5823,7 +5825,7 @@ const forceDiscard = async (p: Player) => {
   color: #fff;
   background: rgba(0, 0, 0, 0.55);
 }
-.player-name-label--top    { position: relative; top: -24px; left: 8px; margin-bottom: -24px; padding: 6px 16px; }
+.player-name-label--top    { position: absolute; left: 15%; top: 2%; transform: none; padding: 6px 16px; }
 .player-name-label--bottom { bottom: 0%; left: 50%; transform: translateX(-50%); }
 .player-name-label--left   { left: 0.6%; top: 2%; transform: translateY(0); }
 .player-name-label--right  { right: 0.6%; top: 2%; transform: translateY(0); }
@@ -5873,7 +5875,7 @@ const forceDiscard = async (p: Player) => {
   color: #ef5350;
   animation: timer-pulse 0.5s infinite;
 
-.turn-timer--winner { font-size: 0.5rem; white-space: nowrap; margin-left: 3px; padding: 1px 6px; }
+.turn-timer--winner { font-size: 0.5rem; white-space: nowrap !important; margin-left: 3px; padding: 1px 6px; flex-shrink: 0; }
 }
 
 /* 状态提示 */

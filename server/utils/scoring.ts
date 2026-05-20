@@ -290,6 +290,7 @@ export function generateWinOptions(params: {
   isKongFlower: boolean;
   isRobbingKong: boolean;
   isMenQing: boolean;
+  isDaDiao?: boolean;
   wildTileSuit?: TileSuit;
   wildTileValue?: number;
   wildTileGroup?: string[];
@@ -317,6 +318,7 @@ export function generateWinOptions(params: {
       ...baseParams,
       handTypes: decomp.types,
       isSelfDrawn: true,
+      isDaDiao: baseParams.isDaDiao,
       globalIncludesRound: true,
     });
     if (selfDrawResult.finalPoints > 0) {
@@ -364,6 +366,7 @@ export function generateWinOptions(params: {
       ...baseParams,
       handTypes: decomp.types,
       isSelfDrawn: false,
+      isDaDiao: baseParams.isDaDiao,
       globalIncludesRound: true,
     });
     if (discardResult.finalPoints > 0) {

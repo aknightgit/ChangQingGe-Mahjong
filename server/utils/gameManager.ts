@@ -504,6 +504,7 @@ class GameManager {
     const wildParts = game.customScoringMode?.split('-');
     const wildSuit = wildParts?.[0] ? wildParts[0] as TileSuit : undefined;
     const wildValue = wildParts?.[1] ? parseInt(wildParts[1], 10) : undefined;
+    const isDaDiao = handTiles.filter(t => !isFlower(t)).length === 1;
     const allOptions = generateWinOptions({
       handTiles,
       exposedMelds: player.hand.exposedMelds,
@@ -512,6 +513,7 @@ class GameManager {
       isKongFlower: !!flags?.isKongFlower,
       isRobbingKong: !!flags?.isRobbingKong,
       isMenQing: this.isPlayerMenQing(player),
+      isDaDiao,
       wildTileSuit: wildSuit,
       wildTileValue: wildValue,
       wildTileGroup: game.wildTileGroup,
