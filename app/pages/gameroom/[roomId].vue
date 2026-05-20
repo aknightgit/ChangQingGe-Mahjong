@@ -4808,7 +4808,7 @@ const forceDiscard = async (p: Player) => {
   align-items: center;
   gap: 6px;
   flex: 1;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .loading-overlay {
@@ -5009,7 +5009,7 @@ const forceDiscard = async (p: Player) => {
   padding: 0;
   overflow: hidden;
   align-items: stretch;
-  justify-content: flex-start;
+  justify-content: center;
 }
 
 .layout--mobile-landscape .mahjong-table {
@@ -5143,6 +5143,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.78rem; }
 .layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(4px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); font-size: calc(0.72rem * var(--mobile-scale, 1)); }
 .layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: wrap; }
+.layout--mobile-landscape .extra-actions-group { justify-content: flex-start; }
 .layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
 .layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
 .layout--mobile-landscape .extended-info-panel .action-buttons-panel { gap: 6px; }
@@ -5707,7 +5708,7 @@ const forceDiscard = async (p: Player) => {
 .panel-room-header-row {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 8px;
   padding: 6px 10px;
   border-radius: 12px;
@@ -7692,6 +7693,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape .extra-actions-bar {
+.layout--mobile-landscape .extra-actions-group { justify-content: flex-start; }
   gap: 6px;
   padding: calc(4px * var(--mobile-scale)) calc(8px * var(--mobile-scale));
 }
