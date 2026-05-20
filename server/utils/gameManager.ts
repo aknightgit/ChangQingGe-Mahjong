@@ -3263,9 +3263,13 @@ class GameManager {
     const sequence = this.selectChowSequence(sequences, discardedTile, tileIds);
     const handTiles = sequence.filter(t => t.id !== discardedTile.id);
 
-    this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.SEQUENCE);
-
+    const _bailoutCount = this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.SEQUENCE);
     this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
+    if (_bailoutCount >= 2 && this.wsManager) {
+      const _source = game.players.find(p => p.id === sourcePlayerId);
+      const _bailoutMsgs = {2: `ð£ ${player.name}æäº${_source?.name||'??'}ä¸¤å£äºï¼`, 3: `ð£ ${player.name}æäº${_source?.name||'??'}ä¸å£äºï¼ï¼`, 4: `ð£ ${player.name}æäº${_source?.name||'??'}åå£äºï¼ï¼ï¼`};
+      if (_bailoutMsgs[_bailoutCount]) { this.broadcastQuickMessage(game.gameId, _bailoutMsgs[_bailoutCount], 'special', 'bailout'); }
+    }
 
     for (const tile of handTiles) {
       player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile.id);
@@ -3326,8 +3330,13 @@ class GameManager {
     const matchingTiles = player.hand.concealedTiles.filter(t => tilesEqual(t, lastDiscard));
     if (matchingTiles.length < 2) return;
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
-    this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.TRIPLET);
+    const _bailoutCount2 = this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.TRIPLET);
     this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
+    if (_bailoutCount2 >= 2 && this.wsManager) {
+      const _source2 = game.players.find(p => p.id === sourcePlayerId);
+      const _bailoutMsgs2 = {2: `ð£ ${player.name}æäº${_source2?.name||'??'}ä¸¤å£äºï¼`, 3: `ð£ ${player.name}æäº${_source2?.name||'??'}ä¸å£äºï¼ï¼`, 4: `ð£ ${player.name}æäº${_source2?.name||'??'}åå£äºï¼ï¼ï¼`};
+      if (_bailoutMsgs2[_bailoutCount2]) { this.broadcastQuickMessage(game.gameId, _bailoutMsgs2[_bailoutCount2], 'special', 'bailout'); }
+    }
     // 广播碰牌到牌局快讯
     if (this.wsManager) {
       this.broadcastQuickMessage(game.gameId, `ⓘ ${player.name}碰牌`, 'info', 'pong');
@@ -5454,6 +5463,9 @@ class GameManager {
     game.pendingActions = [];
     game.endedAt = endedAt;
     game.lastActionTime = endedAt;
+    this.broadcastGameState(game.gameId);
+
+    console.log("[ENDED] broadcastGameState for game", game.gameId, "reason=", finalReason);
     MatchHistoryService.recordMatch(game, finalScores, finalReason).catch((error) => {
       console.error('Failed to persist match history:', error);
     });
