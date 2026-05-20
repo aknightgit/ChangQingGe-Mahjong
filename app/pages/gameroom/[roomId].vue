@@ -4353,7 +4353,7 @@ const forceDiscard = async (p: Player) => {
 .room-container {
   position: relative;
   background: rgba(7, 19, 14, 0.92);
-  border-radius: 20px;
+  border-radius: 14px;
   padding: 16px 16px 20px;
   max-width: 1400px;
   width: 100%;
@@ -4361,7 +4361,7 @@ const forceDiscard = async (p: Player) => {
   border: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 5px;
 }
 
 .room-header {
@@ -4387,7 +4387,7 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 5px;
   width: 100%;
   padding: 8px 12px;
   border-radius: 14px;
@@ -4399,7 +4399,7 @@ const forceDiscard = async (p: Player) => {
 .room-header-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
   min-height: 24px;
   min-width: 44px;
   padding: 5px 12px;
@@ -4440,7 +4440,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .room-header-toggle__icon {
-  font-size: 0.78rem;
+  font-size: 0.6rem;
   line-height: 1;
 }
 
@@ -4450,7 +4450,7 @@ const forceDiscard = async (p: Player) => {
 
 .header-actions {
   display: flex;
-  gap: 8px;
+  gap: 5px;
   align-items: center;
 }
 
@@ -4467,7 +4467,7 @@ const forceDiscard = async (p: Player) => {
 .room-title-line {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 5px;
   min-width: 0;
 }
 
@@ -4481,7 +4481,7 @@ const forceDiscard = async (p: Player) => {
 .room-header-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
 }
 .room-header-row .mahjong-subtitle {
   flex: 1;
@@ -4543,7 +4543,7 @@ const forceDiscard = async (p: Player) => {
 .room-main {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 5px;
   position: relative;
 }
 
@@ -4551,7 +4551,7 @@ const forceDiscard = async (p: Player) => {
   .room-main {
     flex-direction: row;
     align-items: stretch;
-    gap: 12px;
+    gap: 5px;
   }
 
   .table-wrapper {
@@ -4576,7 +4576,7 @@ const forceDiscard = async (p: Player) => {
   --tile-h: 40px;
   --discard-scale: 0.95;
   --tile-gap: 2px;
-  border-radius: 20px;
+  border-radius: 14px;
   /* 深木色外框 */
   background: #4a2c0a;
   border: 12px solid #3a2006;
@@ -4650,12 +4650,12 @@ const forceDiscard = async (p: Player) => {
 :global(.glass-settings-stack) {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
 }
 :global(.glass-settings-card) {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
   margin: 0 4px;
   padding: 10px 12px;
   border: 1px solid rgba(255,255,255,0.08);
@@ -4781,15 +4781,15 @@ const forceDiscard = async (p: Player) => {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
 }
 
 /* 更多特殊操作横条 */
 .extra-actions-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: 5px;
+  padding: 4px 7px;
   background: rgba(10, 20, 15, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
@@ -4820,7 +4820,7 @@ const forceDiscard = async (p: Player) => {
   align-items: center;
   justify-content: center;
   background: #07130e;
-  gap: 12px;
+  gap: 5px;
 }
 .loading-spinner {
   width: 36px;
@@ -5156,7 +5156,7 @@ const forceDiscard = async (p: Player) => {
 
 .layout--mobile-landscape .extended-info-panel .action-panel { padding: 4px; gap: 4px; }
 .layout--mobile-landscape .extended-info-panel .action-btn--small { width: 28px; height: 28px; font-size: 0.6rem; }
-.layout--mobile-landscape .extended-info-panel .action-btn--draw { width: 40px; height: 40px; font-size: 0.75rem; }
+.layout--mobile-landscape .extended-info-panel .action-btn--draw { width: 28px; height: 40px; font-size: 0.75rem; }
 .layout--mobile-landscape .extended-info-panel .mobile-inline-menu { padding: 4px 6px; }
 .layout--mobile-landscape .extended-info-panel .mobile-inline-menu__actions { display: flex; gap: 4px; flex-wrap: wrap; }
 
@@ -5168,7 +5168,7 @@ const forceDiscard = async (p: Player) => {
     max-height: none;
     flex-direction: row;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 5px;
   }
 }
 
@@ -5203,9 +5203,9 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 5px;
   padding: 12px 16px;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 2px solid rgba(239, 83, 80, 0.6);
   background: linear-gradient(135deg, rgba(198, 40, 40, 0.3), rgba(239, 83, 80, 0.2));
   color: #ff8a80;
@@ -5334,7 +5334,7 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  gap: 14px;
+  gap: 10px;
   width: 100%;
   position: relative;
 }
@@ -5709,9 +5709,9 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: 12px;
+  gap: 5px;
+  padding: 4px 7px;
+  border-radius: 8px;
   background: rgba(5, 14, 10, 0.9);
 }
 .panel-room-number {
@@ -5821,7 +5821,7 @@ const forceDiscard = async (p: Player) => {
 /* 操作区状态文字 */
 .turn-status-text {
   text-align: center;
-  font-size: 0.82rem;
+  font-size: 0.6rem;
   color: rgba(255, 255, 255, 0.85);
   padding: 4px 0;
   font-weight: 600;
@@ -5829,12 +5829,12 @@ const forceDiscard = async (p: Player) => {
 }
 .ting-action-reminder {
   max-width: 100%;
-  padding: 6px 10px;
+  padding: 4px 7px;
   border: 1px solid rgba(255, 214, 102, 0.34);
   border-radius: 10px;
   background: rgba(75, 54, 10, 0.62);
   color: #ffd666;
-  font-size: 0.78rem;
+  font-size: 0.6rem;
   font-weight: 700;
   line-height: 1.25;
   text-align: center;
@@ -5842,7 +5842,7 @@ const forceDiscard = async (p: Player) => {
 }
 .turn-timer-inline {
   margin-left: 6px;
-  font-size: 0.78rem;
+  font-size: 0.6rem;
   font-weight: 700;
   color: #81c784;
   background: rgba(0, 0, 0, 0.3);
@@ -6000,7 +6000,7 @@ const forceDiscard = async (p: Player) => {
 .liang-shan-card {
   background: linear-gradient(135deg, rgba(180, 40, 10, 0.95), rgba(120, 20, 5, 0.95));
   border: 2px solid rgba(255, 180, 50, 0.6);
-  border-radius: 20px;
+  border-radius: 14px;
   padding: 40px 48px;
   text-align: center;
   box-shadow: 0 0 60px rgba(255, 100, 20, 0.4), 0 12px 32px rgba(0, 0, 0, 0.6);
@@ -6053,7 +6053,7 @@ const forceDiscard = async (p: Player) => {
 .leading-brother-card {
   background: linear-gradient(135deg, rgba(200, 150, 30, 0.95), rgba(180, 100, 10, 0.95));
   border: 2px solid rgba(255, 220, 100, 0.7);
-  border-radius: 20px;
+  border-radius: 14px;
   padding: 36px 44px;
   text-align: center;
   box-shadow: 0 0 50px rgba(255, 180, 50, 0.4), 0 12px 32px rgba(0, 0, 0, 0.5);
@@ -6105,7 +6105,7 @@ const forceDiscard = async (p: Player) => {
 .approval-card {
   background: rgba(10, 25, 18, 0.98);
   border: 2px solid rgba(255, 215, 0, 0.3);
-  border-radius: 20px;
+  border-radius: 14px;
   padding: 28px 32px;
   text-align: center;
   max-width: 420px;
@@ -6118,7 +6118,7 @@ const forceDiscard = async (p: Player) => {
 .approval-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
 .approval-btn {
   padding: 12px 28px;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 2px solid transparent;
   font-size: 1.1rem;
   font-weight: 700;
@@ -6136,7 +6136,7 @@ const forceDiscard = async (p: Player) => {
   width: 100%;
   height: 24px;
   background: rgba(255,255,255,0.1);
-  border-radius: 12px;
+  border-radius: 8px;
   margin: 8px 0;
   overflow: hidden;
 }
@@ -6146,7 +6146,7 @@ const forceDiscard = async (p: Player) => {
   left: 0;
   height: 100%;
   background: linear-gradient(90deg, #4CAF50, #8BC34A);
-  border-radius: 12px;
+  border-radius: 8px;
   transition: width 0.1s linear, background 0.3s;
 }
 .approval-countdown--urgent .approval-countdown-bar {
@@ -6200,7 +6200,7 @@ const forceDiscard = async (p: Player) => {
 .think-card {
   background: rgba(10, 25, 18, 0.98);
   border: 1px solid rgba(255, 215, 0, 0.2);
-  border-radius: 20px;
+  border-radius: 14px;
   padding: 24px 28px;
   text-align: center;
   max-width: 350px;
@@ -6238,7 +6238,7 @@ const forceDiscard = async (p: Player) => {
 .chow-picker-card {
   background: rgba(10, 25, 18, 0.98);
   border: 1px solid rgba(255, 215, 0, 0.2);
-  border-radius: 20px;
+  border-radius: 14px;
   padding: 24px 28px;
   max-width: 420px;
   width: 88%;
@@ -6251,7 +6251,7 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 5px;
   padding: 12px 14px;
   border-radius: 14px;
   border: 1px solid rgba(255,255,255,0.12);
@@ -6294,7 +6294,7 @@ const forceDiscard = async (p: Player) => {
 
 .hu-panel-title {
   text-align: center;
-  font-size: 1.3rem;
+  font-size: 0.95rem;
   margin: 0 0 16px;
   color: #ffd700;
   text-shadow: 0 0 8px rgba(255, 215, 0, 0.3);
@@ -6310,13 +6310,13 @@ const forceDiscard = async (p: Player) => {
 .hu-combo {
   background: rgba(255, 255, 255, 0.03);
   border: 2px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 8px 12px;
   cursor: pointer;
   transition: all 0.15s;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
   flex-wrap: nowrap;
 }
 
@@ -6354,10 +6354,10 @@ const forceDiscard = async (p: Player) => {
   overflow: hidden;
   text-overflow: ellipsis;
   flex-shrink: 1;
-  min-width: 40px;
+  min-width: 28px;
 }
 .hu-combo-score {
-  font-size: 0.78rem;
+  font-size: 0.6rem;
   font-weight: 700;
   color: #ffd700;
   flex-shrink: 0;
@@ -6382,7 +6382,7 @@ const forceDiscard = async (p: Player) => {
 .hu-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
   padding: 8px 10px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.05);
@@ -6407,7 +6407,7 @@ const forceDiscard = async (p: Player) => {
 .hu-summary-grid {
   display: none;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 5px;
 }
 .hu-summary-item {
   min-width: 104px;
@@ -6431,13 +6431,13 @@ const forceDiscard = async (p: Player) => {
 
 .hu-panel-actions {
   display: flex;
-  gap: 12px;
+  gap: 5px;
   justify-content: center;
 }
 
 .hu-confirm-btn {
   padding: 12px 32px;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 2px solid rgba(255, 215, 0, 0.4);
   background: linear-gradient(135deg, #c62828, #ef5350);
   color: #fff;
@@ -6459,7 +6459,7 @@ const forceDiscard = async (p: Player) => {
 
 .hu-cancel-btn {
   padding: 12px 24px;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(255, 255, 255, 0.05);
   color: #f5f5f5;
@@ -6485,7 +6485,7 @@ const forceDiscard = async (p: Player) => {
   }
 
   .hu-combos {
-    gap: 8px;
+    gap: 5px;
     margin-bottom: 12px;
   }
 
@@ -6525,7 +6525,7 @@ const forceDiscard = async (p: Player) => {
   }
 
   .hu-panel-actions {
-    gap: 8px;
+    gap: 5px;
   }
 
   .hu-confirm-btn,
@@ -6551,7 +6551,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(4, 16, 11, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 18px;
-  padding: 32px;
+  padding: 22px;
   width: min(360px, 90%);
   text-align: center;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
@@ -6581,7 +6581,7 @@ const forceDiscard = async (p: Player) => {
 .overlay-message {
   font-size: 1rem;
   opacity: 0.9;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
 .draw-blocked-notice {
@@ -6623,7 +6623,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(239, 83, 80, 0.9);
   color: #fff;
   padding: 16px 32px;
-  border-radius: 12px;
+  border-radius: 8px;
   font-size: 1.2rem;
   font-weight: 700;
   box-shadow: 0 4px 20px rgba(239, 83, 80, 0.5);
@@ -6705,10 +6705,10 @@ const forceDiscard = async (p: Player) => {
 .settle-panel {
   background: rgba(4, 16, 11, 0.97);
   border: 1px solid rgba(255, 215, 0, 0.15);
-  border-radius: 20px;
-  padding: 32px;
+  border-radius: 14px;
+  padding: 22px;
   width: fit-content;
-  max-width: min(1100px, 96vw);
+  max-width: min(750px, 96vw);
   max-height: 85vh;
   overflow: visible;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
@@ -6717,10 +6717,10 @@ const forceDiscard = async (p: Player) => {
 
 .settle-title-center {
   text-align: center;
-  font-size: 1.3rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: #ffd700;
-  margin: 0 0 20px;
+  margin: 0 0 14px;
   letter-spacing: 0.15em;
 }
 
@@ -6739,11 +6739,11 @@ const forceDiscard = async (p: Player) => {
   text-align: center;
   font-size: 0.8rem;
   opacity: 0.5;
-  margin: 0 0 20px;
+  margin: 0 0 14px;
 }
 
 .settle-ranking {
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
 .settle-row {
@@ -6783,15 +6783,15 @@ const forceDiscard = async (p: Player) => {
 .sc-neg { color: #ef5350; }
 
 .settle-details {
-  margin-bottom: 20px;
+  margin-bottom: 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding-top: 16px;
 }
 
 .settle-rounds {
   display: grid;
-  gap: 14px;
-  margin-bottom: 20px;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .settle-rounds--single {
@@ -6807,8 +6807,8 @@ const forceDiscard = async (p: Player) => {
 .settle-round-card {
   display: grid;
   gap: 10px;
-  padding: 14px;
-  border-radius: 12px;
+  padding: 10px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -6816,16 +6816,16 @@ const forceDiscard = async (p: Player) => {
 .settle-round-header {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 5px;
   flex-wrap: wrap;
   color: #f7e6a8;
   font-weight: 600;
-  font-size: 0.86rem;
+  font-size: 0.65rem;
 }
 
 .settle-round-summary-line {
   color: rgba(255, 244, 191, 0.9);
-  font-size: 0.82rem;
+  font-size: 0.6rem;
   font-weight: 700;
 }
 
@@ -6836,25 +6836,25 @@ const forceDiscard = async (p: Player) => {
 
 .settle-round-subtitle {
   color: rgba(255, 255, 255, 0.72);
-  font-size: 0.78rem;
+  font-size: 0.6rem;
 }
 
 .settle-table-wrap {
   width: fit-content;
-  max-width: min(1040px, 92vw);
+  max-width: min(700px, 92vw);
   overflow: auto;
 }
 
 .settle-round-table {
   width: 100%;
-  min-width: 860px;
+  min-width: 600px;
   border-collapse: collapse;
-  font-size: 0.78rem;
+  font-size: 0.6rem;
   color: #f3f3f3;
 }
 
 .settle-round-table--compact {
-  min-width: 900px;
+  min-width: 630px;
   table-layout: fixed;
 }
 
@@ -6866,19 +6866,19 @@ const forceDiscard = async (p: Player) => {
 
 .settle-round-table--compact th:nth-child(1),
 .settle-round-table--compact td:nth-child(1) {
-  width: 72px;
+  width: 32px;
 }
 
 .settle-round-table--compact th:nth-child(2),
 .settle-round-table--compact td:nth-child(2) {
-  width: 40px;
+  width: 28px;
 }
 
 .settle-round-table--compact th:nth-child(3),
 .settle-round-table--compact td:nth-child(3) {
   width: auto;
-  min-width: 200px;
-  max-width: 400px;
+  min-width: 133px;
+  max-width: 267px;
 }
 
 .settle-round-table--compact th:nth-child(4),
@@ -6889,22 +6889,22 @@ const forceDiscard = async (p: Player) => {
 .settle-round-table--compact td:nth-child(6),
 .settle-round-table--compact th:nth-child(7),
 .settle-round-table--compact td:nth-child(7) {
-  width: 48px;
+  width: 32px;
 }
 
 .settle-round-table--compact th:nth-child(8),
 .settle-round-table--compact td:nth-child(8) {
-  width: 88px;
+  width: 58px;
 }
 
 .settle-round-table--compact th:nth-child(9),
 .settle-round-table--compact td:nth-child(9) {
-  width: 78px;
+  width: 35px;
 }
 
 .settle-round-table th,
 .settle-round-table td {
-  padding: 7px 8px;
+  padding: 5px 5px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   text-align: left;
   vertical-align: top;
@@ -6922,7 +6922,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .settle-round-tiles {
-  min-width: 180px;
+  min-width: 120px;
   line-height: 1.5;
   word-break: break-all;
   white-space: normal;
@@ -6944,14 +6944,14 @@ const forceDiscard = async (p: Player) => {
 .settle-round-details,
 .settle-round-note {
   color: rgba(255, 255, 255, 0.76);
-  font-size: 0.78rem;
+  font-size: 0.6rem;
   line-height: 1.5;
 }
 
 .settle-round-transfer {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 5px;
   color: #f3f3f3;
   font-size: 0.8rem;
 }
@@ -6966,7 +6966,7 @@ const forceDiscard = async (p: Player) => {
 
 @media (max-width: 768px) {
   .settle-panel {
-    width: min(96vw, 820px);
+    width: min(96vw, 550px);
     padding: 14px 12px 12px;
     border-radius: 14px;
   }
@@ -6982,11 +6982,11 @@ const forceDiscard = async (p: Player) => {
 
   .settle-round-table {
     font-size: clamp(0.5rem, 1.6vw, 0.7rem);
-    min-width: 700px;
+    min-width: 480px;
   }
 
   .settle-round-table--compact {
-    min-width: 700px;
+    min-width: 480px;
   }
 
   .settle-round-table--compact th,
@@ -6996,17 +6996,17 @@ const forceDiscard = async (p: Player) => {
 
   .settle-round-table--compact th:nth-child(1),
   .settle-round-table--compact td:nth-child(1) {
-    width: 72px;
+    width: 32px;
   }
 
   .settle-round-table--compact th:nth-child(2),
   .settle-round-table--compact td:nth-child(2) {
-    width: 40px;
+    width: 28px;
   }
 
   .settle-round-table--compact th:nth-child(3),
   .settle-round-table--compact td:nth-child(3) {
-    width: 212px;
+    width: 140px;
   }
 
   .settle-round-table--compact th:nth-child(4),
@@ -7017,7 +7017,7 @@ const forceDiscard = async (p: Player) => {
   .settle-round-table--compact td:nth-child(6),
   .settle-round-table--compact th:nth-child(7),
   .settle-round-table--compact td:nth-child(7) {
-    width: 52px;
+    width: 35px;
   }
 
   .settle-round-table--compact th:nth-child(8),
@@ -7034,8 +7034,8 @@ const forceDiscard = async (p: Player) => {
 .settle-detail-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
+  gap: 5px;
+  padding: 3px 7px;
   font-size: clamp(0.5rem, 1.2vw, 0.75rem);
   opacity: 0.5;
   font-weight: 600;
@@ -7048,14 +7048,14 @@ const forceDiscard = async (p: Player) => {
 .settle-detail-grid {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
 }
 
 .settle-detail-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: 5px;
+  padding: 4px 7px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.02);
   font-size: clamp(0.55rem, 1.3vw, 0.8rem);
@@ -7064,7 +7064,7 @@ const forceDiscard = async (p: Player) => {
 
 .settle-detail-name {
   font-weight: 600;
-  min-width: 60px;
+  min-width: 40px;
 }
 
 .settle-detail-stat {
@@ -7092,8 +7092,8 @@ const forceDiscard = async (p: Player) => {
 
 .settle-back-btn {
   flex: 1;
-  padding: 14px;
-  border-radius: 12px;
+  padding: 10px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(255, 255, 255, 0.06);
   color: #ccc;
@@ -7110,8 +7110,8 @@ const forceDiscard = async (p: Player) => {
 
 .settle-save-btn {
   flex: 1;
-  padding: 14px;
-  border-radius: 12px;
+  padding: 10px;
+  border-radius: 8px;
   border: none;
   background: linear-gradient(135deg, #1f8a52, #46c574);
   color: #03100a;
@@ -7190,7 +7190,7 @@ const forceDiscard = async (p: Player) => {
 .ai-card-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
   padding: 12px 16px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -7265,7 +7265,7 @@ const forceDiscard = async (p: Player) => {
 .waiting-panel-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
 }
 
 .waiting-panel-status {
@@ -7298,14 +7298,14 @@ const forceDiscard = async (p: Player) => {
 .waiting-players {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 5px;
   margin: 0;
 }
 
 .waiting-slot {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
   padding: 8px 12px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -7324,7 +7324,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .waiting-avatar {
-  font-size: 1.3rem;
+  font-size: 0.95rem;
   flex-shrink: 0;
 }
 
@@ -7359,7 +7359,7 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 5px;
   font-size: 0.9rem;
 }
 
@@ -7416,7 +7416,7 @@ const forceDiscard = async (p: Player) => {
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.04);
 }
 
@@ -7477,7 +7477,7 @@ const forceDiscard = async (p: Player) => {
 .overlay-empty {
   font-size: 0.9rem;
   opacity: 0.8;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
 /* ===== 造反按钮 ===== */
@@ -7511,7 +7511,7 @@ const forceDiscard = async (p: Player) => {
   .room-title-line {
     width: 100%;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 5px;
   }
 
   .header-broadcast-wrap {
@@ -7559,7 +7559,7 @@ const forceDiscard = async (p: Player) => {
 
   .mahjong-button {
     font-size: 0.75rem;
-    padding: 6px 10px;
+    padding: 4px 7px;
   }
 }
 
@@ -7612,7 +7612,7 @@ const forceDiscard = async (p: Player) => {
   .room-container--rotated {
     display: flex;
     flex-direction: row;
-    gap: 8px;
+    gap: 5px;
     transform: rotate(90deg);
     transform-origin: center;
     width: 100vh;
@@ -7666,7 +7666,7 @@ const forceDiscard = async (p: Player) => {
 
 .layout--mobile-landscape .panel-room-number,
 .layout--mobile-landscape .mahjong-subtitle {
-  font-size: 0.78rem;
+  font-size: 0.6rem;
 }
 
 .layout--mobile-landscape .ext-section {
@@ -7699,7 +7699,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .layout--mobile-landscape :deep(.center-info) {
-  padding: 6px 10px;
+  padding: 4px 7px;
   gap: 3px;
   min-width: 62px;
 }
@@ -7810,7 +7810,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 /* 观赛模式标识 */
-.spectating-hint { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px; min-height: 56px; background: rgba(0,0,0,0.3); }
+.spectating-hint { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 16px; min-height: 56px; background: rgba(0,0,0,0.3); }
 .spectating-hint-icon { font-size: 1.4rem; }
 .spectating-hint-text { font-size: 0.95rem; color: rgba(255,255,255,0.8); }
 
@@ -7826,7 +7826,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(79,195,247,0.12);
   border: 1px solid rgba(79,195,247,0.25);
   border-radius: 6px;
-  padding: 4px 10px;
+  padding: 3px 7px;
   white-space: nowrap;
 }
 
