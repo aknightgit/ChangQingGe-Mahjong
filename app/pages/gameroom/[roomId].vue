@@ -2262,8 +2262,8 @@ const autoRollOnly = () => {
 
 const startNextRound = async () => {
   cancelWallExhaustedCountdown()
-  if (isSettleRequested.value) {
-    // 退房结算已申请：直接显示总结算面板
+  if (isSettleRequested.value && !showSettlement.value) {
+    // 退房结算已申请但面板未显示：显示总结算面板
     showSettlement.value = true
     return
   }
@@ -3903,7 +3903,32 @@ watch(
     const settlementKey = `${gameId}-${roundCount}`
     if (lastAutoSettlementKey.value === settlementKey) return
     lastAutoSettlementKey.value = settlementKey
-    await onRequestSettle()
+    // 从 gameState 构建本局结算数据
+    const lastRound = gameState.value?.roundStats?.[gameState.value.roundStats.length - 1]
+    if (lastRound) {
+      settlementData.value = {
+        roundDetails: [{
+          ...lastRound,
+          winnerDetails: (newState?.players || []).filter((p: any) => p.status === 'won').map((p: any) => ({
+            playerId: p.id,
+            playerName: p.name,
+            handTypeName: p.winHandType || '',
+            tiles: p.winTiles || [],
+            flowerCount: p.hand?.flowerCount ?? 0,
+            isMenQing: p.hand?.isMenQing ?? false,
+            hasWild: p.hand?.hasWild ?? false,
+            baseFan: p.baseFan ?? 0,
+            finalPoints: p.finalPoints ?? 0,
+          }))
+        }],
+        playerStats: (newState?.players || []).map(p => ({
+          id: p.id,
+          name: p.name,
+          totalScore: p.score ?? 0
+        }))
+      }
+      showSettlement.value = true
+    }
   }
 )
 
@@ -4180,8 +4205,12 @@ watch(
         return
       }
       const prevPhase = oldPhase || gameState.value?.phase;
-      showSettlement.value = false
-      settlementData.value = null
+      if (!isSettleRequested.value) {
+        showSettlement.value = false
+        settlementData.value = null
+      } else {
+        showSettlement.value = false
+      }
       isHuReviewMode.value = false
       showHuPanel.value = false
       if (!hasDicePreview.value) {
