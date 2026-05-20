@@ -1310,24 +1310,6 @@ class GameManager {
   }
 
   /** 检测新形成的互包关系并广播到牌局快讯 */
-    const relations = this.getMutualBailoutRelations(gameId);
-
-    for (const rel of relations) {
-      if ((rel.player1 === payerId && rel.player2 === winnerId) ||
-          (rel.player1 === winnerId && rel.player2 === payerId)) {
-        return {
-          multiplier: rel.type === '四口' ? 5 : 3,
-          type: rel.type
-        };
-      }
-    }
-
-    return { multiplier: 1, type: null };
-  }
-
-  /**
-   * 获取最后一张弃牌的玩家ID
-   */
   private getLastDiscardPlayerId(game: GameState): string | undefined {
     if (game.lastDiscardPlayerId) {
       return game.lastDiscardPlayerId;
@@ -3237,12 +3219,10 @@ class GameManager {
     const handTiles = sequence.filter(t => t.id !== discardedTile.id);
 
     const _bailoutCount = this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.SEQUENCE);
-    }
 
     for (const tile of handTiles) {
       player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile.id);
     }
-
     const sourcePos = this.getLastDiscardPosition(game);
     const meld: Meld = {
       type: MeldType.SEQUENCE,

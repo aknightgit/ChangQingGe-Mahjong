@@ -450,3 +450,4 @@ const getTileWrapperStyle = (tile: Tile): Record<string, string> => {
   z-index: 4;
 }
 
+</style>

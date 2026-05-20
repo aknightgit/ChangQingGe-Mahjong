@@ -187,34 +187,6 @@ export interface RoundStat {
   effectiveMultiplier: number;
   settlementMultiplier: number;
   overflowCarryMultiplierNextRound: number;
-    player1: string;
-    player1Name?: string;
-    player2: string;
-    player2Name?: string;
-    type: '三口' | '四口';
-  }>;
-  winnerDetails: Array<{
-    playerId: string;
-    playerName: string;
-    handTypeName?: string;
-    isSelfDrawn: boolean;
-    discarderId?: string;
-    discarderName?: string;
-    baseFan: number;
-    extraMultipliers: number;
-    diceMultiplier: number;
-    inheritMultiplier: number;
-    effectiveMultiplier: number;
-    settlementMultiplier: number;
-    finalPoints: number;
-    details: string[];
-    handTiles?: Tile[];
-    exposedTiles?: Tile[];
-    exposedMeldGroups?: Tile[][];
-    tileFaces?: string[];
-    isMenQing?: boolean;
-    hasWild?: boolean;
-  }>;
   transfers: Array<{
     fromPlayerId: string;
     fromPlayerName: string;

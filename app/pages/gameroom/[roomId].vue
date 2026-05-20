@@ -4086,12 +4086,11 @@ watch(() => gameState.value, (newState, oldState) => {
     const newWinners = (newState.players || []).filter(
       (p: any) => p.status === 'won' && p.winOrder === newState.winnersCount
     )
-      const handType = w.winHandType ? `·${w.winHandType}` : ''
-      // 检查三口/四口关系
-      const bailInfo = rel && partner ? ` · ${rel.type}包${partner.name}` : ''
-      addBroadcast(`🏆 ${w.name} ${method}胡牌${handType}${bailInfo}`, 'win')
+    for (const w of newWinners) {
+      const method = w.winRound ? `第${w.winRound}轮` : ""
+      const handType = w.winHandType ? `·${w.winHandType}` : ""
+      addBroadcast(`🏆 ${w.name} ${method}胡牌${handType}`, 'win')
     }
-    playSound('round-end')
   }
 
   // 流局
