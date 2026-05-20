@@ -6,6 +6,23 @@ import { io, type Socket } from 'socket.io-client'
 
 export const useGame = () => {
   const route = useRoute()
+  const pushDiag = (event: string, detail: Record<string, any> = {}) => {
+    if (typeof window === 'undefined') return
+    try {
+      const payload = {
+        ts: new Date().toISOString(),
+        event,
+        detail
+      }
+      const w = window as any
+      if (!Array.isArray(w.__mahjongDiagLog)) w.__mahjongDiagLog = []
+      w.__mahjongDiagLog.push(payload)
+      if (w.__mahjongDiagLog.length > 300) w.__mahjongDiagLog.shift()
+      console.log(`[Diag][useGame] ${event}`, detail)
+    } catch (err) {
+      console.warn('[Diag][useGame] pushDiag failed:', err)
+    }
+  }
   const isLocalDevHost =
     typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
@@ -32,20 +49,42 @@ export const useGame = () => {
   // 🔧 轮询兜底：socket 不可靠时（Capacitor/移动网络），定时刷新确保牌局推进
   let pollingTimer: ReturnType<typeof setInterval> | null = null
   const POLLING_MS = 1000
+  let pollingTickCount = 0
+  let lastFetchStartedAt = 0
+  let lastFetchSucceededAt = 0
+  let lastStateSummary = ''
 
   const startPolling = () => {
-    if (pollingTimer) return
+    if (pollingTimer) {
+      pushDiag('polling:start:skip-existing', { gameId: gameId.value, playerId: playerId.value })
+      return
+    }
+    pollingTickCount = 0
+    pushDiag('polling:start', { gameId: gameId.value, playerId: playerId.value, intervalMs: POLLING_MS })
     pollingTimer = setInterval(() => {
+      pollingTickCount += 1
       const gs = gameState.value
       if (gameId.value && playerId.value && gs && (gs.phase === 'playing' || gs.phase === 'waiting' || gs.phase === 'starting')) {
-        void refreshState()
-window.__mahjong_pollRefresh = refreshState
+        if (pollingTickCount === 1 || pollingTickCount % 5 === 0) {
+          pushDiag('polling:tick', {
+            tick: pollingTickCount,
+            phase: gs.phase,
+            currentPlayerIndex: gs.currentPlayerIndex,
+            pendingActions: gs.pendingActions?.length || 0,
+            msSinceLastFetchSuccess: lastFetchSucceededAt ? Date.now() - lastFetchSucceededAt : null
+          })
+        }
+        void refreshState('polling')
       }
     }, POLLING_MS)
   }
 
   const stopPolling = () => {
-    if (pollingTimer) { clearInterval(pollingTimer); pollingTimer = null }
+    if (pollingTimer) {
+      clearInterval(pollingTimer)
+      pollingTimer = null
+      pushDiag('polling:stop', { tickCount: pollingTickCount, gameId: gameId.value, playerId: playerId.value })
+    }
   }
 
   const playerId = ref<string | null>(null)
@@ -62,6 +101,8 @@ window.__mahjong_pollRefresh = refreshState
   })
 
   const fetchGameState = async (gId: string, pId: string) => {
+    lastFetchStartedAt = Date.now()
+    pushDiag('fetch:start', { gId, pId })
     try {
       const response = await $fetch('/mahjong/api/game/state', {
         query: {
@@ -73,12 +114,24 @@ window.__mahjong_pollRefresh = refreshState
       })
 
       if ((response as any)?.success) {
+        const stateData = (response as any).data
         updateState((response as any).data)
         isConnected.value = true
         error.value = null
+        lastFetchSucceededAt = Date.now()
+        pushDiag('fetch:success', {
+          gId,
+          pId,
+          phase: stateData?.game?.phase,
+          currentPlayerIndex: stateData?.game?.currentPlayerIndex,
+          currentPlayerName: stateData?.game?.players?.[stateData?.game?.currentPlayerIndex || 0]?.name,
+          pendingActions: stateData?.game?.pendingActions?.length || 0,
+          updatedAt: stateData?.game?.updatedAt || null,
+          durationMs: Date.now() - lastFetchStartedAt,
+          availableActions: (stateData?.availableActions || []).join(',')
+        })
 
         // 🔧 关键保险：每次fetchGameState拿到状态后，如果phase不是STARTING，发出事件让页面关掉骰子覆盖层
-        const stateData = (response as any).data
         if (stateData?.game?.phase && stateData.game.phase !== 'starting') {
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('mahjong-phase-check', { detail: { phase: stateData.game.phase } }))
@@ -88,25 +141,38 @@ window.__mahjong_pollRefresh = refreshState
     } catch (e: any) {
       // 404 = 刚创建房间服务端还没就绪，静默重试，不抛出
       if (e?.statusCode === 404 || e?.status === 404) {
+        pushDiag('fetch:retry-404', { gId, pId, message: e?.message || '404' })
         console.warn('[fetchGameState] 404, retrying in 800ms...')
         await new Promise(r => setTimeout(r, 800))
         return fetchGameState(gId, pId)
       }
       // 403 = 鉴权问题，观赛者/访客可能遇到，也自动重试
       if (e?.statusCode === 403 || e?.status === 403) {
+        pushDiag('fetch:retry-403', { gId, pId, message: e?.message || '403' })
         console.warn('[fetchGameState] 403, retrying in 800ms...')
         await new Promise(r => setTimeout(r, 800))
         return fetchGameState(gId, pId)
       }
+      pushDiag('fetch:error', {
+        gId,
+        pId,
+        statusCode: e?.statusCode || e?.status || null,
+        durationMs: Date.now() - lastFetchStartedAt,
+        message: e?.message || String(e)
+      })
       console.error('Failed to fetch game state:', e)
     }
   }
 
-  const requestRefreshState = () => {
+  const requestRefreshState = (source = 'request') => {
     const now = Date.now()
-    if (now - lastRefreshTriggerAt < 180) return
+    if (now - lastRefreshTriggerAt < 180) {
+      pushDiag('refresh:request:throttled', { source, deltaMs: now - lastRefreshTriggerAt })
+      return
+    }
     lastRefreshTriggerAt = now
-    void refreshState()
+    pushDiag('refresh:request', { source })
+    void refreshState(source)
   }
 
   const connect = async (gId: string, pId: string) => {
@@ -119,10 +185,12 @@ window.__mahjong_pollRefresh = refreshState
       // Fetch initial state (optional, but good for immediate render)
       await fetchGameState(gId, pId)
       startPolling() // 无论 socket 状态，都启动轮询兜底
+      pushDiag('connect:after-initial-fetch', { gId, pId, hasGameState: !!gameState.value })
 
       if (debugAccessToken) {
         isConnected.value = true
         error.value = null
+        pushDiag('connect:debug-access-token', { gId, pId })
         return
       }
 
@@ -149,6 +217,12 @@ window.__mahjong_pollRefresh = refreshState
 
       socket.value.on('connect', () => {
         console.log('Socket.IO connected:', socket.value?.id, 'transport=', socket.value?.io.engine.transport.name)
+        pushDiag('socket:connect', {
+          socketId: socket.value?.id,
+          transport: socket.value?.io.engine.transport.name,
+          gId,
+          pId
+        })
         isConnected.value = true
         error.value = null
 
@@ -172,6 +246,11 @@ window.__mahjong_pollRefresh = refreshState
       socket.value.on('connect_error', (err) => {
         // Suppress first websocket error (expected fallback to polling)
         if (err.message?.includes('websocket') && !isConnected.value) return
+        pushDiag('socket:connect_error', {
+          message: err.message,
+          transport: socket.value?.io.engine.transport.name,
+          hasGameState: !!gameState.value
+        })
         console.warn('Socket connect_error:', err.message, 'transport=', socket.value?.io.engine.transport.name)
         // 已经拿到状态时，保留页面可交互，不退回“连接中”空壳
         if (!gameState.value) {
@@ -180,7 +259,10 @@ window.__mahjong_pollRefresh = refreshState
       })
 
       socket.value.on('disconnect', () => {
-        stopPolling()
+        pushDiag('socket:disconnect', {
+          transport: socket.value?.io.engine.transport.name,
+          hasGameState: !!gameState.value
+        })
         console.log('Socket disconnected', 'transport=', socket.value?.io.engine.transport.name)
         if (!gameState.value) {
           isConnected.value = false
@@ -190,12 +272,12 @@ window.__mahjong_pollRefresh = refreshState
       // Room Events
       socket.value.on('room:user-joined', async (data) => {
         console.log('User joined:', data)
-        requestRefreshState()
+        requestRefreshState('socket:room:user-joined')
       })
 
       socket.value.on('room:user-left', async (data) => {
         console.log('User left:', data)
-        requestRefreshState()
+        requestRefreshState('socket:room:user-left')
       })
 
       socket.value.on('room:error', (data) => {
@@ -205,9 +287,10 @@ window.__mahjong_pollRefresh = refreshState
 
       socket.value.on('room:dismissed', async (payload) => {
         console.warn('Room dismissed:', payload)
+        pushDiag('socket:room:dismissed', payload || {})
         roomDismissedReason.value = payload?.reason || 'owner_left'
         error.value = payload?.message || 'Room dismissed by host'
-        await refreshState()
+        await refreshState('socket:room:dismissed')
       })
 
       // 房主断连等待重连
@@ -220,30 +303,38 @@ window.__mahjong_pollRefresh = refreshState
       socket.value.on('room:owner-reconnected', async (data) => {
         console.log('Owner reconnected:', data)
         error.value = null
-        requestRefreshState()
+        requestRefreshState('socket:room:owner-reconnected')
       })
 
       // Game Events
       socket.value.on('game:state-changed', async (data) => {
         console.log('Game state update:', data)
+        pushDiag('socket:game:state-changed', {
+          keys: data ? Object.keys(data) : [],
+          gameId: data?.gameId || gId
+        })
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('mahjong-realtime-state', { detail: data }))
         }
-        requestRefreshState()
+        requestRefreshState('socket:game:state-changed')
       })
 
       // Listen for server's broadcastGameState events (different name from action-triggered events)
       socket.value.on('gameStateUpdate', async (data) => {
         console.log('GameStateUpdate from server:', data)
+        pushDiag('socket:gameStateUpdate', {
+          keys: data ? Object.keys(data) : [],
+          gameId: data?.gameId || gId
+        })
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('mahjong-realtime-state', { detail: data }))
         }
-        requestRefreshState()
+        requestRefreshState('socket:gameStateUpdate')
       })
 
       socket.value.on('game:action-received', async (data) => {
         console.log('Action received:', data)
-        requestRefreshState()
+        requestRefreshState('socket:game:action-received')
       })
 
       // 牌局快讯广播
@@ -274,11 +365,13 @@ window.__mahjong_pollRefresh = refreshState
       })
 
     } catch (e: any) {
+      pushDiag('connect:error', { gId, pId, message: e?.message || String(e) })
       error.value = e.message || 'Failed to connect'
     }
   }
 
   const disconnect = () => {
+    pushDiag('disconnect:begin', { gameId: gameId.value, playerId: playerId.value })
     stopPolling()
     if (socket.value) {
       socket.value.disconnect()
@@ -293,41 +386,62 @@ window.__mahjong_pollRefresh = refreshState
   let lastRefreshAt = 0
   const DEBOUNCE_MS = 100
 
-  const refreshState = async () => {
+  const refreshState = async (source = 'manual') => {
     if (!gameId.value || !playerId.value) return
     const now = Date.now()
     if (isRefreshing) {
       refreshQueued = true
+      pushDiag('refresh:queued:busy', { source, gameId: gameId.value, playerId: playerId.value })
       return
     }
     if (now - lastRefreshAt < DEBOUNCE_MS) {
       refreshQueued = true
+      pushDiag('refresh:queued:debounced', {
+        source,
+        deltaMs: now - lastRefreshAt,
+        debounceMs: DEBOUNCE_MS
+      })
       setTimeout(() => {
         if (refreshQueued) {
           refreshQueued = false
-          refreshState()
+          void refreshState(`${source}:debounced-retry`)
         }
       }, DEBOUNCE_MS)
       return
     }
     isRefreshing = true
     lastRefreshAt = now
+    pushDiag('refresh:start', { source, gameId: gameId.value, playerId: playerId.value })
     try {
       await fetchGameState(gameId.value, playerId.value)
     } catch (e) {
       // 静默处理刷新错误，不触发 re-render
+      pushDiag('refresh:error', { source, message: (e as any)?.message || String(e) })
       console.warn('refreshState failed:', e)
     } finally {
       isRefreshing = false
+      pushDiag('refresh:done', {
+        source,
+        queued: refreshQueued,
+        msSinceFetchSuccess: lastFetchSucceededAt ? Date.now() - lastFetchSucceededAt : null
+      })
       if (refreshQueued) {
         refreshQueued = false
         lastRefreshAt = 0
-        await refreshState()
+        await refreshState(`${source}:queued-followup`)
       }
     }
   }
 
   const updateState = (data: any) => {
+    const oldGame = gameState.value
+    const oldSummary = oldGame
+      ? `${oldGame.phase}|${oldGame.currentPlayerIndex}|${oldGame.pendingActions?.length || 0}|${oldGame.updatedAt || ''}`
+      : 'none'
+    const newGame = data.game
+    const newSummary = newGame
+      ? `${newGame.phase}|${newGame.currentPlayerIndex}|${newGame.pendingActions?.length || 0}|${newGame.updatedAt || ''}`
+      : 'none'
     gameState.value = data.game
     playerView.value = data.playerView
     if (data.tingPreview !== undefined) { tingPreview.value = data.tingPreview }
@@ -337,6 +451,15 @@ window.__mahjong_pollRefresh = refreshState
     availableActions.value = newActions
     if (JSON.stringify(oldActions.sort()) !== JSON.stringify(newActions.sort())) {
       lastStateChangeAt.value = Date.now()
+    }
+    if (oldSummary !== newSummary || lastStateSummary !== newSummary) {
+      lastStateSummary = newSummary
+      pushDiag('state:update', {
+        from: oldSummary,
+        to: newSummary,
+        currentPlayerName: newGame?.players?.[newGame?.currentPlayerIndex || 0]?.name,
+        availableActions: newActions.join(',')
+      })
     }
   }
 
@@ -395,9 +518,8 @@ window.__mahjong_pollRefresh = refreshState
 
   const startGame = async (options?: { hesitationWindow?: number; fixedDice?: [number, number] }) => {
     if (!gameId.value || !playerId.value) return
-    const _st = Date.now()
-    console.log('[timing-client] startGame BEGIN')
 
+    console.log('[startGame] Starting game:', gameId.value)
     try {
       const response = await $fetch('/mahjong/api/game/start', {
         method: 'POST',
@@ -408,21 +530,18 @@ window.__mahjong_pollRefresh = refreshState
           dice: options?.fixedDice
         }
       })
-      console.log('[timing-client] API call returned:', Date.now() - _st, 'ms')
 
       if ((response as any)?.success) {
-        console.log('[timing-client] refreshState BEGIN')
-        roomDismissedReason.value = null
+        console.log('[startGame] API success, refreshing state...')
+        roomDismissedReason.value = null  // 清除 overlay 原因
         await refreshState()
-        console.log('[timing-client] refreshState DONE:', Date.now() - _st, 'ms')
         socket.value?.emit('game:state-update', { gameId: gameId.value })
-        console.log('[timing-client] startGame DONE:', Date.now() - _st, 'ms, phase:', gameState.value?.phase)
+        console.log('[startGame] Done, phase:', gameState.value?.phase)
       } else {
         console.warn('[startGame] API returned non-success:', response)
       }
     } catch (e) {
       console.error('[startGame] Failed:', e)
-      console.log('[timing-client] startGame ERROR:', Date.now() - _st, 'ms')
     }
   }
 

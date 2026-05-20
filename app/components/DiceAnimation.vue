@@ -194,7 +194,16 @@ const onRollAndDeal = () => {
 
 onMounted(() => {
   currentRoll.value = 0
-  phase.value = 'idle'
+  if (props.rollTriggerKey && props.rollTriggerKey > 0) {
+    rollingSeed.value = Date.now() % 100000
+    phase.value = 'rolling'
+    setTimeout(() => {
+      phase.value = 'result'
+      flashResultBurst()
+    }, 850)
+  } else {
+    phase.value = 'idle'
+  }
 })
 
 // 监听服务器广播的骰子事件 - 自动播放动画（非庄家玩家）

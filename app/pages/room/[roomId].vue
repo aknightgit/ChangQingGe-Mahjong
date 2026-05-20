@@ -91,7 +91,7 @@ async function pollRoomState() {
     roomMessages.value = r.messages
     if (r.phase === 'playing') {
       if (pollTimer) clearInterval(pollTimer)
-      router.replace(`/gameroom/${roomNumber.value}`)
+      if (r.gameId) router.replace(`/gameroom/${r.gameId}`)
     }
   } catch (_) {}
 }
@@ -114,10 +114,10 @@ async function startGame() {
 
     await $fetch('/api/room/mark-playing', {
       method: 'POST',
-      body: { roomNumber: roomNumber.value }
+      body: { roomNumber: roomNumber.value, gameId: data.data.gameId }
     })
 
-    router.replace(`/gameroom/${roomNumber.value}?playerId=${myPlayerId.value}`)
+    router.replace(`/gameroom/${data.data.gameId}?playerId=${myPlayerId.value}`)
   } catch (e: any) {
     loading.value = false; alert('创建失败：'+(e.message||'未知错误'))
   }

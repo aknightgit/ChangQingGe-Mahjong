@@ -69,10 +69,10 @@ class GameManager {
 
   private tileLabel = tileLabel;
 
-  private broadcastQuickMessage(
+  public broadcastQuickMessage(
     gameId: string,
     text: string,
-    type: 'info' | 'special' | 'warning' = 'info',
+    type: 'info' | 'warn' | 'special' = 'info',
     actionKind?: string
   ): void {
     if (!this.wsManager) return;
@@ -92,14 +92,7 @@ class GameManager {
       return;
     }
     console.log(`[broadcast] flowerReplace: ${player.name} 补花`);
-    this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-      id: Date.now() + Math.floor(Math.random() * 1000),
-      text: `🌸 ${player.name}补花`,
-      actionKind: 'flowerReplace',
-      type: 'special',
-      timestamp: Date.now(),
-      timeLabel: formatBeijingTime()
-    });
+    this.broadcastQuickMessage(game.gameId, `🌸 ${player.name}补花`, 'special', 'flowerReplace');
   }
 
   private broadcastKongSupplement(game: GameState, player: Player, kind: 'ming' | 'an' | 'jia'): void {
@@ -158,9 +151,9 @@ class GameManager {
     }
     game.huSelectionLocks = Object.keys(nextLocks).length ? nextLocks : undefined;
     await this.persistGame(game);
-    console.log('[timing-startGame] persistGame:', Date.now() - _startGameTimer, 'ms');
+    console.log('[timing-startGame] persistGame:', Date.now() - Date.now(), 'ms');
         this.broadcastGameState(gameId);
-    console.log('[timing-startGame] broadcastGameState:', Date.now() - _startGameTimer, 'ms');
+    console.log('[timing-startGame] broadcastGameState:', Date.now() - Date.now(), 'ms');
       }
 
   private isSharedDrawClaimWindow(game: GameState, playerId: string): boolean {
@@ -1727,7 +1720,7 @@ class GameManager {
 
     const game = await this.ensureGameLoaded(gameId);
     if (!game) return;
-    console.log('[timing-startGame] ensureGameLoaded:', Date.now() - _startGameTimer, 'ms');
+    console.log('[timing-startGame] ensureGameLoaded:', Date.now() - Date.now(), 'ms');
 
     if (game.players.length < 4) {
       throw new Error('Need 4 players to start');
@@ -1776,7 +1769,7 @@ class GameManager {
 
     // 🔄 观赛者替换AI请求:每局生效
     this.applyBotReplacement(game);
-    console.log('[timing-startGame] setup+swap+replace:', Date.now() - _startGameTimer, 'ms');
+    console.log('[timing-startGame] setup+swap+replace:', Date.now() - Date.now(), 'ms');
 
     // 🎲 随机选位置:仅首次开局时随机,后续座位固定(除非换位置)
     const isFirstRound = (game.roundStats || []).length === 0;
@@ -1935,7 +1928,7 @@ class GameManager {
     TrainingRecordService.captureRoundStart(game);
 
     console.log(`[WallDebug] after dealing: wall=${game.wall.length} tiles, PLAYING phase`);
-        console.log('[timing-startGame] before persist:', Date.now() - _startGameTimer, 'ms');
+        console.log('[timing-startGame] before persist:', Date.now() - Date.now(), 'ms');
     await this.persistGame(game);
     this.broadcastGameState(gameId);
 
@@ -2607,13 +2600,7 @@ class GameManager {
       game.freezeComplete = false;
       game.pendingActions = [];
       if (this.wsManager) {
-        this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-          id: Date.now(),
-          text: `🃏 ${player.name}打出了百搭，本轮不能吃碰捉冲！`,
-          type: 'warn',
-          timestamp: Date.now(),
-          timeLabel: formatBeijingTime()
-        });
+        this.broadcastQuickMessage(game.gameId, `🃏 ${player.name}打出了百搭，本轮不能吃碰捉冲！`, 'warn');
       }
       await this.persistGame(game);
       this.broadcastGameState(game.gameId);
@@ -3316,14 +3303,7 @@ class GameManager {
 
     // 广播吃牌到牌局快讯
     if (this.wsManager) {
-      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-        id: Date.now() + Math.floor(Math.random() * 1000),
-        text: `🍜 ${player.name}吃牌`,
-        actionKind: 'chow',
-        type: 'info',
-        timestamp: Date.now(),
-        timeLabel: formatBeijingTime()
-      });
+      this.broadcastQuickMessage(game.gameId, `🍜 ${player.name}吃牌`, 'info', 'chow');
     }
   }
 
@@ -3350,14 +3330,7 @@ class GameManager {
     this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
     // 广播碰牌到牌局快讯
     if (this.wsManager) {
-      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-        id: Date.now() + Math.floor(Math.random() * 1000),
-        text: `ⓘ ${player.name}碰牌`,
-        actionKind: 'pong',
-        type: 'info',
-        timestamp: Date.now(),
-        timeLabel: formatBeijingTime()
-      });
+      this.broadcastQuickMessage(game.gameId, `ⓘ ${player.name}碰牌`, 'info', 'pong');
     }
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[0].id);
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[1].id);
@@ -3445,14 +3418,7 @@ class GameManager {
     // 广播杠牌到牌局快讯
     if (this.wsManager) {
       const label = pendingAction.type === 'kong_an' ? '暗杠' : pendingAction.type === 'kong_bu' ? '补杠' : '明杠';
-      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-        id: Date.now() + Math.floor(Math.random() * 1000),
-        text: `ⓘ ${player.name}${label}`,
-        actionKind: 'kong',
-        type: 'info',
-        timestamp: Date.now(),
-        timeLabel: formatBeijingTime()
-      });
+      this.broadcastQuickMessage(game.gameId, `ⓘ ${player.name}${label}`, 'info', 'kong');
     }
     const discarder = game.players.find(p => p.id === sourcePlayerId);
     if (discarder) {
@@ -3955,13 +3921,7 @@ class GameManager {
 
     // 广播造反成功
     if (this.wsManager) {
-      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-        id: Date.now(),
-        text: `⚔️ ${player.name}造反成功！下把翻倍！`,
-        type: 'special',
-        timestamp: Date.now(),
-        timeLabel: formatBeijingTime()
-      });
+      this.broadcastQuickMessage(game.gameId, `⚔️ ${player.name}造反成功！下把翻倍！`, 'special');
     }
   }
 
@@ -3993,13 +3953,7 @@ class GameManager {
     // 记录投票
     game.liangShanVotes.push(player.id);
     if (this.wsManager) {
-      this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-        id: Date.now(),
-        text: `🔥 ${player.name}发起了梁山聚义！`,
-        type: 'special',
-        timestamp: Date.now(),
-        timeLabel: formatBeijingTime()
-      });
+      this.broadcastQuickMessage(game.gameId, `🔥 ${player.name}发起了梁山聚义！`, 'special');
     }
 
     // 活跃玩家总数
@@ -4021,13 +3975,7 @@ class GameManager {
         if (!game.liangShanVotes.includes(ap.id)) {
           game.liangShanVotes.push(ap.id); // 标记为已投票
           if (this.wsManager) {
-            this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-              id: Date.now() + effectiveVoteCount,
-              text: `🔥 ${ap.name}响应了${player.name}的梁山聚义！`,
-              type: 'special',
-              timestamp: Date.now(),
-              timeLabel: formatBeijingTime()
-            });
+            this.broadcastQuickMessage(game.gameId, `🔥 ${ap.name}响应了${player.name}的梁山聚义！`, 'special');
           }
         }
         console.log(`[LiangShan] ${ap.name} 累积赢分${cumulativeScore}超过QJ线${threshold},自动同意`);
@@ -4844,13 +4792,7 @@ class GameManager {
         game.freezePlayerId = null;
         game.freezeComplete = false;
         if (this.wsManager) {
-          this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-            id: Date.now(),
-            text: `🃏 冷冻解除，现在可以正常吃碰捉冲了！`,
-            type: 'info',
-            timestamp: Date.now(),
-            timeLabel: formatBeijingTime()
-          });
+          this.broadcastQuickMessage(game.gameId, `🃏 冷冻解除，现在可以正常吃碰捉冲了！`, 'info');
         }
       }
     }

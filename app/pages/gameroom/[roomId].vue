@@ -349,17 +349,13 @@
           <Transition name="settings-panel" @after-leave="onSettingsClosed">
             <div
               v-if="showSettings"
-              class="glass-settings-overlay"
-              @click="showSettings = false"
+              ref="settingsPanelEl"
+              class="glass-settings-panel"
+              :style="settingsPanelStyle"
+              @click.stop
+              @wheel.stop
+              @touchmove.stop
             >
-              <div
-                ref="settingsPanelEl"
-                class="glass-settings-panel"
-                :style="settingsPanelStyle"
-                @click.stop
-                @wheel.stop
-                @touchmove.stop
-              >
               <!-- 三角指示箭头 -->
               <div class="glass-settings-arrow"></div>
                             <div class="glass-settings-body" @wheel.stop @touchmove.stop>
@@ -480,7 +476,6 @@
                   <span>长青阁麻将 v2.2</span>
                 </div>
               </div>
-            </div>
             </div>
           </Transition>
         </Teleport>
@@ -981,6 +976,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, provide } from 'vue'
+import { App as CapacitorApp, type PluginListenerHandle } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
 import { ScreenOrientation } from '@capacitor/screen-orientation'
 import PlayerSelfArea from '~/components/PlayerSelfArea.vue'
@@ -1447,10 +1443,46 @@ watch(discardMode, (mode) => {
 // 临时: 收集 onMounted 内的关键状态，辅助排查B跳首页问题
 const mountDebugLog = ref<string[]>([])
 const connectRetryTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+let appStateListener: PluginListenerHandle | null = null
+let pauseListener: PluginListenerHandle | null = null
+let resumeListener: PluginListenerHandle | null = null
 const addMountLog = (msg: string) => {
   mountDebugLog.value.push(`[${new Date().toISOString().slice(11,19)}] ${msg}`)
   if (mountDebugLog.value.length > 50) mountDebugLog.value.shift()
   console.log('[MountDebug]', msg)
+}
+
+const handleWindowError = (evt: ErrorEvent) => {
+  addMountLog(`GLOBAL ERROR: ${evt.message} at ${evt.filename}:${evt.lineno}`)
+}
+
+const handleUnhandledRejection = (evt: PromiseRejectionEvent) => {
+  addMountLog(`UNHANDLED REJECTION: ${evt.reason?.message || evt.reason}`)
+}
+
+const handleVisibilityChange = () => {
+  addMountLog(`visibilitychange: state=${document.visibilityState}`)
+  if (document.visibilityState === 'visible') {
+    void refreshState()
+  }
+}
+
+const handleWindowFocus = () => {
+  addMountLog('window focus')
+  void refreshState()
+}
+
+const handleWindowBlur = () => {
+  addMountLog('window blur')
+}
+
+const handleWindowOnline = () => {
+  addMountLog('network online')
+  void refreshState()
+}
+
+const handleWindowOffline = () => {
+  addMountLog('network offline')
 }
 
 onMounted(async () => {
@@ -1499,12 +1531,22 @@ onMounted(async () => {
     addMountLog('playBackgroundMusic done')
 
     // 监听全局错误
-    window.addEventListener('error', (evt) => {
-      addMountLog(`GLOBAL ERROR: ${evt.message} at ${evt.filename}:${evt.lineno}`)
-    })
-    window.addEventListener('unhandledrejection', (evt) => {
-      addMountLog(`UNHANDLED REJECTION: ${evt.reason?.message || evt.reason}`)
-    })
+    window.addEventListener('error', handleWindowError)
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+
+    if (Capacitor.isNativePlatform()) {
+      appStateListener = await CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+        addMountLog(`appStateChange: isActive=${isActive}`)
+        if (isActive) void refreshState()
+      })
+      pauseListener = await CapacitorApp.addListener('pause', () => {
+        addMountLog('capacitor pause')
+      })
+      resumeListener = await CapacitorApp.addListener('resume', () => {
+        addMountLog('capacitor resume')
+        void refreshState()
+      })
+    }
   } catch (err: any) {
     addMountLog(`MOUNT FATAL ERROR: ${err?.message || err}, will retry connect`)
     console.error('[MountDebug] Fatal onMounted error:', err)
@@ -1538,18 +1580,6 @@ onMounted(async () => {
     hasDicePreview.value = true
     diceRollTriggerKey.value++
     playSound('dice-roll')
-    // 非掷骰玩家：显示骰子覆盖层，自动播放动画
-    // 掷骰玩家已经看到了本地动画，跳过以防闪烁
-    if (!showDiceOverlay.value && gameState.value?.phase !== GamePhase.STARTING) {
-      showDiceOverlay.value = true
-      // 动画完成后(约1.8s)自动关闭
-      setTimeout(() => {
-        if (showDiceOverlay.value && !(gameState.value?.phase === GamePhase.STARTING)) {
-          optimisticDealt.value = true
-          showDiceOverlay.value = false
-        }
-      }, 1800)
-    }
   }) as EventListener)
 
   window.addEventListener('mahjong-broadcast', ((event: CustomEvent) => {
@@ -1572,6 +1602,11 @@ onMounted(async () => {
     window.addEventListener('resize', evaluateViewport)
     window.addEventListener('orientationchange', evaluateViewport)
     window.addEventListener('pointerdown', handleGlobalPointerDown as EventListener)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleWindowFocus)
+    window.addEventListener('blur', handleWindowBlur)
+    window.addEventListener('online', handleWindowOnline)
+    window.addEventListener('offline', handleWindowOffline)
     // mahjong-broadcast listener 已移至外层
     actionWindowTimer = setInterval(() => {
       nowTs.value = Date.now()
@@ -1589,6 +1624,13 @@ onUnmounted(() => {
     window.removeEventListener('resize', evaluateViewport)
     window.removeEventListener('orientationchange', evaluateViewport)
     window.removeEventListener('pointerdown', handleGlobalPointerDown as EventListener)
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
+    window.removeEventListener('focus', handleWindowFocus)
+    window.removeEventListener('blur', handleWindowBlur)
+    window.removeEventListener('online', handleWindowOnline)
+    window.removeEventListener('offline', handleWindowOffline)
+    window.removeEventListener('error', handleWindowError)
+    window.removeEventListener('unhandledrejection', handleUnhandledRejection)
     if (actionWindowTimer) {
       clearInterval(actionWindowTimer)
       actionWindowTimer = null
@@ -1599,6 +1641,12 @@ onUnmounted(() => {
     }
     stopTurnTimer()
   }
+  appStateListener?.remove()
+  pauseListener?.remove()
+  resumeListener?.remove()
+  appStateListener = null
+  pauseListener = null
+  resumeListener = null
 })
 
 const hesitationWindow = computed(() => Math.max(1000, Number(gameState.value?.hesitationWindow ?? 5000)))
@@ -1808,7 +1856,7 @@ const statsPlayers = computed(() => {
     }, null)
     return {
       id: p.id,
-      name: p.name + (p.isBotControlled ? ' (接管)' : ''),
+      name: p.name,
       score: p.score || 0,
       wins: p.status === 'won' ? 1 : 0,
       losses: p.status === 'lost' ? 1 : 0,
@@ -1905,9 +1953,7 @@ const onSpectatorApprovalChoice = async (choice: 'approve' | 'reject') => {
 const isDealer = computed(() => currentPlayer.value?.isDealer)
 const isDealerUser = computed(() => isDealer.value)
 const isGameEnded = computed(() => gameState.value?.phase === GamePhase.ENDED)
-const optimisticDealt = ref(false)
 const hasDealtCards = computed(() => {
-  if (optimisticDealt.value) return true
   if (!gameState.value?.players?.length) return false
   // 观赛者自己没有手牌，但其他玩家可能有——检查非观赛玩家
   const activePlayers = gameState.value.players.filter((p: any) => p.status !== 'spectating' && p.status !== 'left')
@@ -2223,48 +2269,13 @@ const startNextRound = async () => {
   showSettlement.value = false
   settlementData.value = null
   isHuReviewMode.value = false
-
-  // 🎲 生成骰子值（先于庄家判断，用于倍数提示）
-  diceValues.value = [
-    Math.floor(Math.random() * 6) + 1,
-    Math.floor(Math.random() * 6) + 1
-  ]
-
-  const theDealer = dealerPlayer.value
-  if (theDealer && isBotPlayer(theDealer)) {
-    // 🤖 AI庄家：显示骰子覆盖层→自动滚动动画→显示点数→自动发牌
-    hasDicePreview.value = true
-    showDiceOverlay.value = true
-    // 触发 DiceAnimation 内部自动播放滚动→结果动画
-    diceRollTriggerKey.value++
-    // 同时调 startGame API 在后台发牌
-    try {
-      await startGame({ hesitationWindow: hesitationWindow.value, fixedDice: diceValues.value })
-      // 等骰子动画(850ms滚动+结果展示)完成后自动发牌+倍数提示
-      window.setTimeout(() => {
-        void onDealTiles()
-        showDoubleReminder.value = true
-        const d1 = diceValues.value[0], d2 = diceValues.value[1]
-        doubleReminderText.value = d1 === d2
-          ? '🎲翻' + (d1 === 1 || d1 === 4 ? '四' : '双') + '倍！'
-          : '🎲' + d1 + ' - ' + d2 + ' · 普通局'
-        setTimeout(() => { showDoubleReminder.value = false }, 2500)
-      }, 1800)
-      await forceRefreshState()
-    } catch (e: any) {
-      console.error('[startNextRound] AI dealer start failed:', e)
-      addBroadcast('开局失败，请重试', 'warn')
+  await enterStartingPhaseWithDiceOverlay()
+  await forceRefreshState()
+  window.setTimeout(() => {
+    if (gameState.value?.phase === GamePhase.STARTING && showDiceOverlay.value) {
+      void onDealTiles()
     }
-  } else {
-    // 👤 人类庄家：显示骰子覆盖层，等手动发牌
-    await enterStartingPhaseWithDiceOverlay()
-    await forceRefreshState()
-    window.setTimeout(() => {
-      if (gameState.value?.phase === GamePhase.STARTING && showDiceOverlay.value) {
-        void onDealTiles()
-      }
-    }, 1700)
-  }
+  }, 1700)
 }
 const isInteractionLocked = computed(() => isOverlayVisible.value)
 
@@ -2553,17 +2564,10 @@ const hasBlockingPendingClaim = computed(() => {
 const showDraw = computed(() =>
   availableActions.value.includes(ActionType.DRAW) ||
   shouldExposeSharedDraw.value ||
-  shouldPreviewDeferredDraw.value ||
-  // 【重要】到我的回合且倒计时已结束，摸按钮必须亮起
-  (isMyTurn.value && myPendingExpiresAt.value > 0 && myPendingExpiresAt.value <= nowTs.value)
+  shouldPreviewDeferredDraw.value
 )
 const filteredCircularAvailableActions = computed(() => {
-  const shouldForceDraw =
-    shouldExposeSharedDraw.value ||
-    shouldPreviewDeferredDraw.value ||
-    // 【重要】到我的回合且倒计时已结束，摸按钮必须亮起
-    (isMyTurn.value && myPendingExpiresAt.value > 0 && myPendingExpiresAt.value <= nowTs.value)
-  if (shouldForceDraw && !availableActions.value.includes(ActionType.DRAW)) {
+  if ((shouldExposeSharedDraw.value || shouldPreviewDeferredDraw.value) && !availableActions.value.includes(ActionType.DRAW)) {
     return [...availableActions.value, ActionType.DRAW]
   }
   return availableActions.value
@@ -3507,26 +3511,6 @@ const onBotMode = async () => {
   }
 }
 
-// 回来（取消AI托管）
-const onPlayerBack = async () => {
-  if (!currentPlayer.value) return
-  try {
-    await $fetch('/mahjong/api/game/bot-mode', {
-      method: 'POST',
-      body: {
-        gameId: roomId.value,
-        playerId: currentPlayer.value.id,
-        enabled: false
-      }
-    })
-    addBroadcast('🙋 你已回来，继续手动操作', 'info')
-    isAIControlled.value = false
-    await refreshState()
-  } catch (e) {
-    console.error('[PlayerBack] Failed:', e)
-  }
-}
-
 // 换位置
 const onSwapPosition = async () => {
   if (!playerCardPlayer.value || !currentPlayer.value) return
@@ -3751,7 +3735,6 @@ const onExtendedKong = () => {
 
 // ---- 开局流程：掷骰子 → 发牌 ----
 // 防重复点击标志
-let gameStartPromise = null
 const onStartGame = async () => {
   if (isGameStarting.value) return
   isGameStarting.value = true
@@ -3759,37 +3742,17 @@ const onStartGame = async () => {
     console.warn('[onStartGame] Game already in PLAYING phase, skipping')
     return
   }
-  console.log('[onStartGame] Starting game with dice...')
+  console.log('[onStartGame] Setting STARTING phase on server...')
 
-  // 掷骰子
-  diceValues.value = [
-    Math.floor(Math.random() * 6) + 1,
-    Math.floor(Math.random() * 6) + 1
-  ]
-
-  const theDealer = dealerPlayer.value
-  if (theDealer && isBotPlayer(theDealer)) {
-    // AI庄家：先显示骰子动画，再自动开局
-    gameStartPromise = startGame({ hesitationWindow: hesitationWindow.value, fixedDice: diceValues.value })
-    // showDiceOverlay 通过 diceRoll 广播自动显示
-    // 倍数提示由 watcher 中的 AI dealer 分支在动画完成后显示
-    // 不做 optimisticDealt - 等动画完成后再显示牌局
-  } else {
-    // 人类庄家：显示骰子覆盖层，可手动掷骰+发牌
-    hasDicePreview.value = true
-    showDiceOverlay.value = true
-    playSound('dice-roll')
-    gameStartPromise = startGame({ hesitationWindow: hesitationWindow.value, fixedDice: diceValues.value })
-  }
-  gameStartPromise.then(() => {
-    console.log('[onStartGame] Background startGame completed, phase:', gameState.value?.phase)
-  }).catch(err => {
-    console.error('[onStartGame] Background startGame failed:', err)
-    addBroadcast('进入牌局失败，请重试', 'warn')
-  }).finally(() => {
+  try {
+    await enterStartingPhaseWithDiceOverlay()
+  } catch (err) {
+    console.error('[onStartGame] Failed:', err)
+  } finally {
     isGameStarting.value = false
-  })
+  }
 }
+
 const onRerollDice = () => {
   diceValues.value = [
     Math.floor(Math.random() * 6) + 1,
@@ -3799,21 +3762,26 @@ const onRerollDice = () => {
   playSound('dice-roll')
 }
 
-const onDealTiles = () => {
-  // 防止重复调用
-  if (!showDiceOverlay.value) return
-  // 🔧 乐观显示：用户点发牌时立刻显示牌局界面，不等待API数据
-  // 手牌数据已在后台 API 中准备好，马上就会到达
-  optimisticDealt.value = true
+const onDealTiles = async () => {
+  // 防止重复调用：只有当 overlay 可见时才处理
+  if (!showDiceOverlay.value || isGameStarting.value) return
+  isGameStarting.value = true
   hasDicePreview.value = false
-  showDiceOverlay.value = false
   showDoubleReminder.value = false
   if (doubleReminderTimer) {
     clearTimeout(doubleReminderTimer)
     doubleReminderTimer = null
   }
-  // 不需要调API，后台 startGame 已经在跑了
-  console.log('[onDealTiles] Overlay dismissed, game started in background, phase:', gameState.value?.phase)
+  // 💡 先调API发牌（牌已经到内存），再关遮罩 → 秒见牌，消除空窗期
+  console.log('[onDealTiles] Calling startGame API...')
+  try {
+    await startGame({ hesitationWindow: hesitationWindow.value, fixedDice: diceValues.value })
+    // API成功了，牌已经在client state里，立即关遮罩
+    showDiceOverlay.value = false
+    console.log('[onDealTiles] Done, phase:', gameState.value?.phase)
+  } finally {
+    isGameStarting.value = false
+  }
 }
 
 // ---- 牌局快讯（广播消息） ----
@@ -4227,59 +4195,32 @@ watch(
       showDiceOverlay.value = true
       console.log('[DiceOverlay] SET to true (STARTING)')
 
-      // 🔄 自动掷骰子：首次开局 & 自动下一局均走此逻辑
-      // 若是结算后且已申请退房，跳过骰子直接显示总结算
-      if (prevPhase === GamePhase.ENDED && isSettleRequested.value) {
-        showDiceOverlay.value = false
-        showSettlement.value = true
-        return
-      }
-      const d = dealerPlayer.value
-      if (d && isBotPlayer(d)) {
-        // AI庄家：全员显示骰子动画(通过服务端 diceRoll 广播触发)
-        // 先设好骰子值让全局覆盖层显示
-        const sd = gameState.value?.dice || diceValues.value
-        if (sd && Array.isArray(sd) && sd.length === 2) {
-          diceValues.value = [sd[0], sd[1]]
-        }
-        showDiceOverlay.value = true
-        hasDicePreview.value = true
-        // 等 diceRoll 广播→动画完成(约1.8s)后自动发牌+倍数提示
-        // (DiceAnimation 通过 roll-trigger-key 变化自动播放)
-        setTimeout(() => {
-          optimisticDealt.value = true
+      // 🔄 自动下一局：来自结算/流局后，自动走掷骰子+发牌
+      // STARTING时立即 refresh state，然后等骰子组件就绪后自动操作
+      if (prevPhase === GamePhase.ENDED) {
+        if (isSettleRequested.value) {
+          // 房主已申请退房结算：跳过下一局，直接显示总结算
           showDiceOverlay.value = false
-          if (sd && Array.isArray(sd) && sd.length === 2) {
-            showDoubleReminder.value = true
-            doubleReminderText.value = sd[0] === sd[1]
-              ? '🎲翻' + (sd[0] === 1 || sd[0] === 4 ? '四' : '双') + '倍！'
-              : '🎲' + sd[0] + ' - ' + sd[1] + ' · 普通局'
-            setTimeout(() => { showDoubleReminder.value = false }, 2500)
-          }
-        }, 1800)
-      } else if (d && !isBotPlayer(d)) {
-        // 人类庄家：显示骰子覆盖层，等手动发牌
+          showSettlement.value = true
+          return
+        }
         window.setTimeout(() => {
-          autoRollOnly()
+          const dealer = dealerPlayer.value
+          if (dealer && isBotPlayer(dealer)) {
+            // AI庄家：自动掷骰子+发牌
+            autoRollAndDeal()
+          } else if (dealer && !isBotPlayer(dealer)) {
+            // 人类头胡庄家：自动掷骰子，等他手动发牌
+            // 或者直接自动掷骰子+等发牌（当前先自动掷骰子）
+            autoRollOnly()
+          } else {
+            // 没有庄家——不可能
+          }
         }, 500)
       }
       return
     }
     if (newPhase !== GamePhase.STARTING) {
-      if (hasDicePreview.value) {
-        if (!isDealer) {
-          setTimeout(() => {
-            if (hasDicePreview.value) {
-              showDiceOverlay.value = false
-              hasDicePreview.value = false
-              optimisticDealt.value = true
-              console.log('[DiceOverlay] Auto-closed for non-dealer')
-            }
-          }, 1500)
-        }
-        console.log('[DiceOverlay] Phase changed to', newPhase, 'but hasDicePreview=true, keeping overlay')
-        return
-      }
       showDiceOverlay.value = false
       hasDicePreview.value = false
       console.log('[DiceOverlay] SET to false (phase=', newPhase, ')')
@@ -4291,45 +4232,22 @@ watch(
 // 🔧 强力兜底：不管 phase watch 是否触发，每次 gameState 更新都检查
 watch(gameState, (newVal) => {
   if (newVal && newVal.phase !== GamePhase.STARTING && showDiceOverlay.value) {
-    if (hasDicePreview.value) {
-      console.log('[DiceOverlay] FALLBACK: hasDicePreview=true, not closing')
-      return
-    }
     console.log('[DiceOverlay] FALLBACK: closing dice overlay (phase=', newVal.phase, ')')
     showDiceOverlay.value = false
     hasDicePreview.value = false
   }
 }, { deep: false })
 
-// 🔧 每次 gameState 更新都检查AI接管状态
-watch(gameState, () => {
-  checkAITakeover()
-}, { deep: true })
-
 // 🔧 超时强制关闭：如果 showDiceOverlay 为 true 超过8秒（给足STARTING时间），强制关闭
 watch(showDiceOverlay, (val) => {
   if (!val) return
-  // 8秒关闭：但跳过 hasDicePreview（因为用户可能在观看骰子动画）
   const timer = setTimeout(() => {
     if (showDiceOverlay.value && gameState.value?.phase !== GamePhase.STARTING) {
-      if (hasDicePreview.value) {
-        console.log('[DiceOverlay] TIMEOUT: hasDicePreview=true, not closing')
-        return
-      }
       console.log('[DiceOverlay] TIMEOUT: forced close after 8s')
       showDiceOverlay.value = false
       hasDicePreview.value = false
     }
   }, 8000)
-  // 🔧 15秒核弹级兜底：无视 hasDicePreview，直接暴力关闭
-  const nuclearTimer = setTimeout(() => {
-    if (showDiceOverlay.value) {
-      console.log('[DiceOverlay] NUCLEAR: forced close after 15s (ignoring hasDicePreview)')
-      showDiceOverlay.value = false
-      hasDicePreview.value = false
-      optimisticDealt.value = true
-    }
-  }, 15000)
 })
 
 // 🔧 最终保险：从useGame的fetchGameState接收phase-check事件（每次API刷新都检查）
@@ -4337,14 +4255,6 @@ if (typeof window !== 'undefined') {
   window.addEventListener('mahjong-phase-check', ((e: CustomEvent) => {
     const phase = e.detail?.phase
     if (phase && phase !== 'starting' && showDiceOverlay.value) {
-      if (hasDicePreview.value) {
-        if (!isDealer) {
-          console.log('[DiceOverlay] PHASE-CHECK: non-dealer, skipping (pending 1.5s)')
-          return
-        }
-        console.log('[DiceOverlay] PHASE-CHECK: hasDicePreview=true, not closing')
-        return
-      }
       console.log('[DiceOverlay] PHASE-CHECK: closing (phase=', phase, ')')
       showDiceOverlay.value = false
       hasDicePreview.value = false
@@ -4356,9 +4266,11 @@ if (typeof window !== 'undefined') {
 const checkAITakeover = () => {
   if (!gameState.value?.players) return
   const currentBotPlayers = new Set<string>()
-  // 检查当前玩家是否被AI接管
-  const me = gameState.value.players.find(p => p.id === currentPlayer.value?.id)
-  isAIControlled.value = !!me?.isBotControlled
+  // 检查是否有玩家进入 AI 托管（通过玩家状态推断）
+  for (const p of gameState.value.players) {
+    // 这里通过 isAIControlled 状态检测（如果有的话）
+    // 暂时跳过，因为 bot 状态在客户端不易获取
+  }
 }
 
 // ---- Admin / Debug Functions ----
@@ -4418,7 +4330,7 @@ const forceDiscard = async (p: Player) => {
   height: 100dvh;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   background: radial-gradient(circle at top, #153b2f, #07130e);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: #f5f5f5;
@@ -4428,7 +4340,7 @@ const forceDiscard = async (p: Player) => {
 .room-viewport {
   width: 100%;
   display: flex;
-  justify-content: flex-start;
+  justify-content: center;
   min-height: 100%;
 }
 
@@ -4513,7 +4425,7 @@ const forceDiscard = async (p: Player) => {
   width: 28px;
   min-height: 28px;
   padding: 0;
-  justify-content: flex-start;
+  justify-content: center;
   flex: 0 0 auto;
 }
 
@@ -4528,7 +4440,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .room-header-toggle__icon {
-  font-size: 0.65rem;
+  font-size: 0.78rem;
   line-height: 1;
 }
 
@@ -4651,7 +4563,7 @@ const forceDiscard = async (p: Player) => {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   min-width: 0;
 }
 
@@ -4885,7 +4797,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .extra-actions-label {
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   color: rgba(255, 255, 255, 0.35);
   margin-right: 2px;
   flex-shrink: 0;
@@ -4896,7 +4808,7 @@ const forceDiscard = async (p: Player) => {
   align-items: center;
   gap: 6px;
   flex: 1;
-  justify-content: flex-start;
+  justify-content: center;
 }
 
 .loading-overlay {
@@ -4906,7 +4818,7 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   background: #07130e;
   gap: 12px;
 }
@@ -5228,10 +5140,10 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .ext-section { padding: 4px 5px 5px; border-radius: 6px; margin: 0; }
 .layout--mobile-landscape .extended-info-panel .ext-title { font-size: 0.8rem; margin-bottom: 1px; }
 .layout--mobile-landscape .extended-info-panel .ext-meta { font-size: 0.54rem; margin-bottom: 1px; line-height: 1.25; }
-.layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.65rem; }
+.layout--mobile-landscape .extended-info-panel .panel-room-number { font-size: 0.78rem; }
 .layout--mobile-landscape .extended-info-panel .extra-action-btn { padding: calc(4px * var(--mobile-scale, 1)) calc(8px * var(--mobile-scale, 1)); font-size: calc(0.72rem * var(--mobile-scale, 1)); }
-.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: nowrap; }
-.layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.65rem; }
+.layout--mobile-landscape .extended-info-panel .extra-actions-bar { padding: calc(4px * var(--mobile-scale, 1)) calc(6px * var(--mobile-scale, 1)); gap: calc(5px * var(--mobile-scale, 1)); flex-wrap: wrap; }
+.layout--mobile-landscape .extended-info-panel .extra-actions-label { font-size: 0.48rem; }
 .layout--mobile-landscape .extended-info-panel .settle-btn-header { padding: 2px 4px; font-size: 0.52rem; min-width: auto; }
 .layout--mobile-landscape .extended-info-panel .action-buttons-panel { gap: 6px; }
 .layout--mobile-landscape .extended-info-panel .turn-status-text { font-size: 0.54rem; }
@@ -5245,7 +5157,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .extended-info-panel .action-btn--small { width: 28px; height: 28px; font-size: 0.6rem; }
 .layout--mobile-landscape .extended-info-panel .action-btn--draw { width: 40px; height: 40px; font-size: 0.75rem; }
 .layout--mobile-landscape .extended-info-panel .mobile-inline-menu { padding: 4px 6px; }
-.layout--mobile-landscape .extended-info-panel .mobile-inline-menu__actions { display: flex; gap: 4px; flex-wrap: nowrap; }
+.layout--mobile-landscape .extended-info-panel .mobile-inline-menu__actions { display: flex; gap: 4px; flex-wrap: wrap; }
 
 /* 竖屏手机：右侧栏变底部横排 */
 @media (max-width: 900px) and (orientation: portrait) {
@@ -5289,7 +5201,7 @@ const forceDiscard = async (p: Player) => {
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 8px;
   padding: 12px 16px;
   border-radius: 12px;
@@ -5345,7 +5257,7 @@ const forceDiscard = async (p: Player) => {
 .seat {
   position: absolute;
   display: flex;
-  justify-content: flex-start;
+  justify-content: center;
   align-items: center;
   z-index: 5; /* 在牌墙z-index=1之上 */
   transition: transform 0.15s ease, filter 0.15s ease;
@@ -5400,7 +5312,7 @@ const forceDiscard = async (p: Player) => {
   width: calc(var(--seat-side-width) + 52px);
   flex-direction: column;
   align-items: flex-end;
-  justify-content: flex-start;
+  justify-content: center;
   overflow: visible;
 }
 
@@ -5412,14 +5324,14 @@ const forceDiscard = async (p: Player) => {
   width: calc(var(--seat-side-width) + 56px);
   flex-direction: column;
   align-items: flex-start;
-  justify-content: flex-start;
+  justify-content: center;
   overflow: visible;
 }
 
 /* ===== 本家：手牌 + 动作按钮横排 ===== */
 .self-area-with-actions {
   display: flex;
-  justify-content: flex-start;
+  justify-content: center;
   align-items: flex-end;
   gap: 14px;
   width: 100%;
@@ -5459,27 +5371,27 @@ const forceDiscard = async (p: Player) => {
 
 .ting-preview-label__text {
   color: rgba(255, 255, 255, 0.8);
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   font-weight: 600;
   flex-shrink: 0;
 }
 
 .ting-preview-label__colon {
   color: rgba(255, 255, 255, 0.5);
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   flex-shrink: 0;
 }
 
 .ting-preview-label__hint {
   color: rgba(255, 255, 255, 0.35);
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   flex-shrink: 0;
 }
 
 .ting-preview-label__toggle {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   width: 14px;
   height: 14px;
   margin-left: 3px;
@@ -5496,7 +5408,7 @@ const forceDiscard = async (p: Player) => {
 
 .ting-preview-tile {
   color: #ff6b6b;
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   line-height: 1.2;
   flex-shrink: 0;
   margin: 0;
@@ -5921,7 +5833,7 @@ const forceDiscard = async (p: Player) => {
   border-radius: 10px;
   background: rgba(75, 54, 10, 0.62);
   color: #ffd666;
-  font-size: 0.65rem;
+  font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.25;
   text-align: center;
@@ -5929,13 +5841,12 @@ const forceDiscard = async (p: Player) => {
 }
 .turn-timer-inline {
   margin-left: 6px;
-  font-size: 0.65rem;
+  font-size: 0.78rem;
   font-weight: 700;
   color: #81c784;
   background: rgba(0, 0, 0, 0.3);
   padding: 1px 8px;
   border-radius: 999px;
-  white-space: nowrap;
 }
 .turn-timer-inline.turn-timer--urgent {
   color: #ef5350;
@@ -6080,7 +5991,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(3, 10, 8, 0.85);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   z-index: 20;
   animation: liangShanFadeIn 0.1s ease-out;
 }
@@ -6133,7 +6044,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(3, 10, 8, 0.7);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   z-index: 25;
   animation: lbFadeIn 0.03s ease-out;
 }
@@ -6187,7 +6098,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(3, 10, 8, 0.75);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   z-index: 30;
 }
 .approval-card {
@@ -6203,7 +6114,7 @@ const forceDiscard = async (p: Player) => {
 .approval-title { font-size: 1.3rem; font-weight: 800; color: #FFD700; margin: 0 0 6px; }
 .approval-sub { font-size: 0.95rem; color: rgba(255,255,255,0.8); margin: 0 0 4px; }
 .approval-question { font-size: 1rem; color: #fff; margin: 0 0 16px; }
-.approval-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; }
+.approval-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
 .approval-btn {
   padding: 12px 28px;
   border-radius: 12px;
@@ -6282,7 +6193,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(3, 10, 8, 0.7);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   z-index: 30;
 }
 .think-card {
@@ -6297,7 +6208,7 @@ const forceDiscard = async (p: Player) => {
 .think-icon { font-size: 2rem; margin-bottom: 6px; }
 .think-title { font-size: 1.2rem; font-weight: 700; color: #FFD700; margin: 0 0 4px; }
 .think-sub { font-size: 0.9rem; color: rgba(255,255,255,0.7); margin: 0 0 16px; }
-.think-options { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; }
+.think-options { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
 .think-opt {
   padding: 10px 24px;
   border-radius: 10px;
@@ -6320,7 +6231,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(3, 10, 8, 0.78);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   z-index: 31;
 }
 .chow-picker-card {
@@ -6364,7 +6275,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(3, 10, 8, 0.88);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   z-index: 30;
   backdrop-filter: blur(4px);
 }
@@ -6445,7 +6356,7 @@ const forceDiscard = async (p: Player) => {
   min-width: 40px;
 }
 .hu-combo-score {
-  font-size: 0.65rem;
+  font-size: 0.78rem;
   font-weight: 700;
   color: #ffd700;
   flex-shrink: 0;
@@ -6487,7 +6398,7 @@ const forceDiscard = async (p: Player) => {
   gap: 4px;
 }
 .hu-combo-score {
-  font-size: 0.65rem;
+  font-size: 1.05rem;
   font-weight: 900;
   color: #FFD700;
   text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
@@ -6520,7 +6431,7 @@ const forceDiscard = async (p: Player) => {
 .hu-panel-actions {
   display: flex;
   gap: 12px;
-  justify-content: flex-start;
+  justify-content: center;
 }
 
 .hu-confirm-btn {
@@ -6562,9 +6473,7 @@ const forceDiscard = async (p: Player) => {
 
 @media (max-width: 900px) and (orientation: landscape) {
   .hu-panel {
-    width: 100vw;
-    max-width: 100vw;
-    border-radius: 0;
+    width: min(92vw, 760px);
     max-height: 88vh;
     padding: 16px;
   }
@@ -6591,7 +6500,7 @@ const forceDiscard = async (p: Player) => {
   .hu-combo-method,
   .hu-group-kind,
   .hu-summary-key {
-    font-size: 0.65rem;
+    font-size: 0.68rem;
   }
 
   .hu-combo-score {
@@ -6632,7 +6541,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(3, 10, 8, 0.82);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   backdrop-filter: blur(4px);
   z-index: 10;
 }
@@ -6705,7 +6614,7 @@ const forceDiscard = async (p: Player) => {
   top: 0; left: 0; right: 0; bottom: 0;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   z-index: 9999;
   pointer-events: none;
 }
@@ -6728,7 +6637,7 @@ const forceDiscard = async (p: Player) => {
   inset: 0;
   display: flex;
   align-items: flex-end;
-  justify-content: flex-start;
+  justify-content: center;
   padding-bottom: 18vh;
   z-index: 9998;
   pointer-events: none;
@@ -6788,7 +6697,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(3, 10, 8, 0.92);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   backdrop-filter: blur(6px);
 }
 
@@ -6926,7 +6835,7 @@ const forceDiscard = async (p: Player) => {
 
 .settle-round-subtitle {
   color: rgba(255, 255, 255, 0.72);
-  font-size: 0.65rem;
+  font-size: 0.78rem;
 }
 
 .settle-table-wrap {
@@ -6939,7 +6848,7 @@ const forceDiscard = async (p: Player) => {
   width: 100%;
   min-width: 860px;
   border-collapse: collapse;
-  font-size: 0.65rem;
+  font-size: 0.78rem;
   color: #f3f3f3;
 }
 
@@ -7034,7 +6943,7 @@ const forceDiscard = async (p: Player) => {
 .settle-round-details,
 .settle-round-note {
   color: rgba(255, 255, 255, 0.76);
-  font-size: 0.65rem;
+  font-size: 0.78rem;
   line-height: 1.5;
 }
 
@@ -7633,7 +7542,7 @@ const forceDiscard = async (p: Player) => {
   .inline-action-buttons {
     flex-direction: row;
     flex-wrap: wrap;
-    justify-content: flex-start;
+    justify-content: center;
   }
 
   .inline-action-btn {
@@ -7756,7 +7665,7 @@ const forceDiscard = async (p: Player) => {
 
 .layout--mobile-landscape .panel-room-number,
 .layout--mobile-landscape .mahjong-subtitle {
-  font-size: 0.65rem;
+  font-size: 0.78rem;
 }
 
 .layout--mobile-landscape .ext-section {
@@ -7796,7 +7705,7 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape :deep(.multiplier-badge),
 .layout--mobile-landscape :deep(.remaining-badge) {
   padding: 2px 5px;
-  font-size: 0.65rem;
+  font-size: 0.48rem;
 }
 
 .layout--mobile-landscape :deep(.multiplier-badge .badge-icon),
@@ -7899,7 +7808,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 /* 观赛模式标识 */
-.spectating-hint { display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 16px; min-height: 56px; background: rgba(0,0,0,0.3); }
+.spectating-hint { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px; min-height: 56px; background: rgba(0,0,0,0.3); }
 .spectating-hint-icon { font-size: 1.4rem; }
 .spectating-hint-text { font-size: 0.95rem; color: rgba(255,255,255,0.8); }
 
@@ -7910,7 +7819,7 @@ const forceDiscard = async (p: Player) => {
   min-width: auto;
 }
 .spectator-badge {
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   color: #4fc3f7;
   background: rgba(79,195,247,0.12);
   border: 1px solid rgba(79,195,247,0.25);

@@ -22,6 +22,7 @@ export interface RoomMessage {
 export type RoomPhase = 'waiting' | 'ready' | 'playing' | 'ended'
 
 export interface Room {
+  gameId?: string    // UUID gameId, 开局后设置
   roomNumber: string
   ownerId: string
   players: RoomPlayer[]
@@ -130,10 +131,11 @@ class RoomManager {
     return !!room && room.phase === 'ready' && room.ownerId === playerId
   }
 
-  markPlaying(roomNumber: string): Room {
+  markPlaying(roomNumber: string, gameId?: string): Room {
     const room = this.rooms.get(roomNumber)
     if (!room) throw new Error('房间不存在')
     room.phase = 'playing'
+    if (gameId) room.gameId = gameId
     return room
   }
 

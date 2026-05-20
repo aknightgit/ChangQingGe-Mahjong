@@ -27,6 +27,7 @@ export default defineEventHandler(async (event) => {
     // 请求退房结算
     game.settleRequested = true;
     console.log(`[Settle] ${playerId} requested settlement`);
+    gameManager.broadcastQuickMessage(gameId, `🏠 房主已申请本局结束后退房,本局结束将自动结算`, 'warn');
 
     // 识别AI玩家ID集合
     const aiPlayerIds = new Set(
@@ -188,6 +189,7 @@ export default defineEventHandler(async (event) => {
     game.settleRequested = true;
     game.phase = GamePhase.ENDED;
     game.endReason = GameEndReason.OWNER_LEFT;
+    gameManager.broadcastQuickMessage(gameId, `🏠 本局结束,退房结算中...`, 'warn');
     game.endedAt = Date.now();
     game.lastActionTime = Date.now();
     return { success: true };
