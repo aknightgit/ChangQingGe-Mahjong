@@ -1581,9 +1581,8 @@ onMounted(async () => {
 
   window.addEventListener('mahjong-broadcast', ((event: CustomEvent) => {
     const detail = event.detail
-    addBroadcast(detail.text, detail.type as BroadcastMsg['type'], {
-
     console.log("[broadcastMessage]", detail.text, detail.actionKind);
+    addBroadcast(detail.text, detail.type as BroadcastMsg['type'], {
       dedupeKey: detail?.id ? `broadcast:${detail.id}` : undefined
     })
     // 根据广播内容播放音效和语音
@@ -4529,7 +4528,16 @@ const forceDiscard = async (p: Player) => {
 }
 .settle-btn-header:hover { background: rgba(25, 118, 210, 0.8); color: #fff; }
 
+.settle-btn-header--requested,
+.settle-btn-header--requested:hover {
+  background: rgba(128, 128, 128, 0.5) !important;
+  color: rgba(255,255,255,0.6);
+  cursor: not-allowed;
+  border-color: transparent;
+}
+
 /* 开始牌局按钮金色呼吸光晕 — 4人到齐时亮起 */
+.start-game-glow {
   border-color: rgba(255, 215, 0, 0.6);
   background: linear-gradient(135deg, rgba(255, 193, 7, 0.85), rgba(255, 152, 0, 0.85)) !important;
   color: #fff !important;
