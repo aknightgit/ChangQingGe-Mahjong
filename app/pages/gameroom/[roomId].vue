@@ -847,12 +847,6 @@
                     :disabled="showRebel === false || isInteractionLocked || !isConnected || thinkFreezeActive"
                     @click="onRebel"
                   >🚨 造反</button>
-                  <button
-                    v-if="showHu"
-                    class="extra-action-btn extra-action-btn--hu"
-                    :disabled="isInteractionLocked || isAIControlled"
-                    @click="onHu"
-                  >🏆 您胡了</button>
                   <span v-if="isWinner" class="turn-timer-inline turn-timer--winner">🎉 你赢了！</span>
                   <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
                     ⏱ {{ turnTimer }}s
@@ -2784,15 +2778,6 @@ const syncHuSelectionLock = async (locked: boolean) => {
   }
 }
 
-// 自摸时自动弹面板
-let autoHuShown = false
-watch(() => [showHu.value, isMyTurn.value], ([canHu, myTurn]) => {
-  if (canHu && myTurn && !showHuPanel.value && !autoHuShown) {
-    autoHuShown = true
-    onHu()
-  }
-  if (!canHu) autoHuShown = false
-})
 
 // 选择胡牌组合
 const selectedHuCombo = ref<number | null>(null)
@@ -5349,7 +5334,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .seat-right {
-  right: calc(var(--seat-side-inset) - var(--seat-side-player-offset) - var(--tile-w) - 0.35 * var(--tile-w));
+  right: calc(var(--seat-side-inset) - var(--seat-side-player-offset) - var(--tile-w) - 0.65 * var(--tile-w));
   top: 50%;
   transform: translateY(-50%);
   height: calc(var(--seat-side-height) + 8%);
@@ -5834,7 +5819,7 @@ const forceDiscard = async (p: Player) => {
   color: #fff;
   background: rgba(0, 0, 0, 0.55);
 }
-.player-name-label--top    { top: 0%; left: 50%; transform: translateX(-50%); }
+.player-name-label--top    { top: 0%; left: 50%; transform: translateX(-50%); padding: 6px 16px; }
 .player-name-label--bottom { bottom: 0%; left: 50%; transform: translateX(-50%); }
 .player-name-label--left   { left: 0.6%; top: 2%; transform: translateY(0); }
 .player-name-label--right  { right: 0.6%; top: 2%; transform: translateY(0); }

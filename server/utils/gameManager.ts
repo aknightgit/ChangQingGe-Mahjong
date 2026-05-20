@@ -5171,6 +5171,7 @@ class GameManager {
   public endRound(game: GameState, reason: GameEndReason): void {
     this.clearPendingActionTimer(game.gameId);
     game.phase = GamePhase.CHA_JIAO;
+    this.broadcastGameState(game.gameId);
 
     // Calculate final scores
     const winners = game.players.filter(p => p.status === PlayerStatus.WON);
