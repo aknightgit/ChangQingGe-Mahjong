@@ -4856,6 +4856,7 @@ class GameManager {
                   freshGame.pendingActions = freshGame.pendingActions.filter(pa => pa.playerId !== livePlayer.id);
                   await this.persistGame(freshGame);
                   this.broadcastGameState(game.gameId);
+                  this.scheduleBotDiscard(game.gameId, livePlayer.id);
                   return;
                 }
               }
