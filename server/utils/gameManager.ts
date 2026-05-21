@@ -3316,10 +3316,15 @@ class GameManager {
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
 
     // 广播吃牌到牌局快讯
+    const _bc = this.mutualBailout.get(game.gameId)?.get(player.id)?.get(sourcePlayerId) || 0;
+    console.log(`[CHOW-BC] wsManager=${!!this.wsManager} player=${player.name} source=${sourcePlayerId} bailoutCount=${_bc} gameId=${game.gameId}`);
     if (this.wsManager) {
-      const _bc = this.mutualBailout.get(game.gameId)?.get(player.id)?.get(sourcePlayerId) || 0;
-      const _suffix = _bc >= 2 ? ` (（${_bc}口)` : '';
-      this.broadcastQuickMessage(game.gameId, `🍜 ${player.name}吃牌${_suffix}`, 'info', 'chow');
+      const _suffix = _bc >= 2 ? ` (${_bc}口)` : '';
+      const bcText = `🍜 ${player.name}吃牌${_suffix}`;
+      console.log(`[CHOW-BC] SENDING: "${bcText}"`);
+      this.broadcastQuickMessage(game.gameId, bcText, 'info', 'chow');
+    } else {
+      console.log('[CHOW-BC] SKIP: wsManager is null');
     }
   }
 
@@ -4856,7 +4861,6 @@ class GameManager {
                   freshGame.pendingActions = freshGame.pendingActions.filter(pa => pa.playerId !== livePlayer.id);
                   await this.persistGame(freshGame);
                   this.broadcastGameState(game.gameId);
-                  this.scheduleBotDiscard(game.gameId, livePlayer.id);
                   return;
                 }
               }

@@ -4787,12 +4787,12 @@ const forceDiscard = async (p: Player) => {
   transform: translate(-50%, 0);
 }
 :deep(.discard-zone--left) {
-  top: 50%;
+  top: calc(50% - 12px);
   left: calc(50% - var(--discard-center-rect-half-w) - 10px);
   transform: translate(-100%, -50%);
 }
 :deep(.discard-zone--right) {
-  top: 50%;
+  top: calc(50% - 12px);
   left: calc(50% + var(--discard-center-rect-half-w) + 10px);
   transform: translate(0, -50%);
 }
@@ -5841,7 +5841,7 @@ const forceDiscard = async (p: Player) => {
   color: #fff;
   background: rgba(0, 0, 0, 0.55);
 }
-.player-name-label--top    { top: 0%; left: 50%; transform: translateX(-50%); }
+.player-name-label--top    { top: 0%; left: 15%; transform: translateX(-50%); }
 .player-name-label--bottom { bottom: 0%; left: 50%; transform: translateX(-50%); }
 .player-name-label--left   { left: 0.6%; top: 2%; transform: translateY(0); }
 .player-name-label--right  { right: 0.6%; top: 2%; transform: translateY(0); }
@@ -5888,12 +5888,14 @@ const forceDiscard = async (p: Player) => {
   border-radius: 999px;
 }
 .turn-timer--winner {
-  font-size: 0.5rem !important;
-  padding: 1px 5px !important;
+  font-size: 0.75rem !important;
+  padding: 2px 10px !important;
   background: rgba(255, 215, 0, 0.15) !important;
   color: #ffd700 !important;
-  margin-left: 4px;
+  margin-left: auto;
   border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .turn-timer-inline.turn-timer--urgent {
   color: #ef5350;
