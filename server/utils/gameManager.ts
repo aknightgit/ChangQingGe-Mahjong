@@ -1221,12 +1221,20 @@ class GameManager {
         );
         for (const pa of [...game.pendingActions]) {
           const pendingPlayer = game.players.find(p => p.id === pa.playerId);
-          if (pendingPlayer && this.isPlayerBotControlled(pendingPlayer) && this.isChowChoiceOnlyActions(pa.availableActions)) {
-            pa.selectedChowTileIds = pa.tile
-              ? selectBotChowTileIds(pendingPlayer, game, pa.tile, pa.chowOptions)
-              : undefined;
-            await this.resolvePendingAction(game, pendingPlayer, pa);
-            hasBotAction = true;
+          if (pendingPlayer && this.isPlayerBotControlled(pendingPlayer)) {
+            // ⭐ Bot有吃牌pending但可选项中还残留高优先级(碰/杠/胡碰过但没删掉)
+            // 移除高优先级选项，只留CHOW+PASS，确保能吃
+            const remaining = pa.availableActions.filter(a => a === ActionType.CHOW || a === ActionType.PASS);
+            if (remaining.includes(ActionType.CHOW)) {
+              pa.availableActions = remaining;
+            }
+            if (this.isChowChoiceOnlyActions(pa.availableActions)) {
+              pa.selectedChowTileIds = pa.tile
+                ? selectBotChowTileIds(pendingPlayer, game, pa.tile, pa.chowOptions)
+                : undefined;
+              await this.resolvePendingAction(game, pendingPlayer, pa);
+              hasBotAction = true;
+            }
           }
         }
       }
