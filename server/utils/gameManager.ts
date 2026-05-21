@@ -1026,6 +1026,19 @@ class GameManager {
         // 玩家会通过主动摸牌/过牌/确认吃牌来触发下一步
         if (currentPlayer && this.canExecuteCurrentTurnPlayerDrawDuringPending(game, currentPlayer.id)) {
           if (this.isPlayerBotControlled(currentPlayer)) {
+            // ⭐ Bot有吃牌pending时先执行吃, 而不是直接清掉自动摸牌
+            const chowPa = game.pendingActions.find(pa => pa.playerId === currentPlayer.id);
+            if (chowPa && game.pendingActions.length === 1) {
+              chowPa.selectedChowTileIds = chowPa.tile
+                ? selectBotChowTileIds(currentPlayer, game, chowPa.tile, chowPa.chowOptions)
+                : undefined;
+              await this.resolvePendingAction(game, currentPlayer, chowPa);
+              game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== currentPlayer.id);
+              await this.persistGame(game);
+              this.broadcastGameState(gameId);
+              this.scheduleBotDiscard(gameId, currentPlayer.id);
+              return;
+            }
             this.clearCurrentTurnPendingActions(game, currentPlayer.id);
             if (this.autoDrawForCurrentPlayer(game)) {
               await this.persistGame(game);
