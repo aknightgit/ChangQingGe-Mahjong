@@ -2262,9 +2262,8 @@ const autoRollOnly = () => {
 
 const startNextRound = async () => {
   cancelWallExhaustedCountdown()
-  if (isSettleRequested.value && !showSettlement.value) {
-    // 退房结算已申请但面板未显示：显示总结算面板
-    showSettlement.value = true
+  if (isSettleRequested.value) {
+    // 退房结算已申请 → 保留结算面板（不进入下一局）
     return
   }
   showSettlement.value = false
@@ -3890,21 +3889,22 @@ watch(
     if (phase !== GamePhase.ENDED || !gameId || !currentPlayer.value?.id) return
     if (endReason === GameEndReason.WALL_EXHAUSTED) {
       const lastRound = gameState.value?.roundStats?.[gameState.value.roundStats.length - 1]
-      if (lastRound) {
-        settlementData.value = {
-          roundDetails: [{
-            ...lastRound,
-            winnerDetails: []
-          }],
-          playerStats: (gameState.value?.players || []).map(p => ({
-            id: p.id,
-            name: p.name,
-            totalScore: p.score ?? 0
-          }))
-        }
+      settlementData.value = {
+        roundDetails: [{
+          ...(lastRound || {}),
+          winnerDetails: []
+        }],
+        playerStats: (gameState.value?.players || []).map(p => ({
+          id: p.id,
+          name: p.name,
+          totalScore: p.score ?? 0
+        }))
+      }
+      // 1s后强制显示结算
+      window.setTimeout(() => {
         showSettlement.value = true
         startWallExhaustedCountdown()
-      }
+      }, 1000)
       return
     }
     const settlementKey = `${gameId}-${roundCount}`
@@ -3916,7 +3916,7 @@ watch(
       settlementData.value = {
         roundDetails: [{
           ...lastRound,
-          winnerDetails: (newState?.players || []).filter((p: any) => p.status === 'won').map((p: any) => ({
+          winnerDetails: (gameState.value?.players || []).filter((p: any) => p.status === 'won').map((p: any) => ({
             playerId: p.id,
             playerName: p.name,
             handTypeName: p.winHandType || '',
@@ -3928,13 +3928,16 @@ watch(
             finalPoints: p.finalPoints ?? 0,
           }))
         }],
-        playerStats: (newState?.players || []).map(p => ({
+        playerStats: (gameState.value?.players || []).map(p => ({
           id: p.id,
           name: p.name,
           totalScore: p.score ?? 0
         }))
       }
-      showSettlement.value = true
+      // 1s后强制显示本局结算
+      window.setTimeout(() => {
+        showSettlement.value = true
+      }, 1000)
     }
   }
 )
@@ -4014,7 +4017,7 @@ const getReplacedFlowerMelds = (player: any) =>
     return meld?.tiles?.length === 1 && tile?.suit === 'hua' && !!meld?.replacementDone
   })
 const checkOtherPlayerSounds = (newState: any) => {
-  if (!newState?.players) return
+  if (!gameState.value?.players) return
   const pendingMeldVoices: Array<'kong' | 'pong' | 'chow'> = []
   for (const player of newState.players) {
     const prev = prevOtherPlayerState.get(player.id)
