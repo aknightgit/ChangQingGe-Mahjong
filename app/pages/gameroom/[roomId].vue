@@ -332,12 +332,12 @@
         <span class="auto-next-spinner"></span>
         <span>倒计时 {{ wallExhaustedCountdown }}s 后自动下一局</span>
       </div>
-      <div style="display:flex;gap:8px;justify-content:center">
+      <div style="display:flex;gap:8px;justify-content:center;width:100%">
         <button v-if="canReviewHuSelection" class="settle-save-btn settle-save-btn--secondary" @click="openHuReviewPanel">
           回看胡牌选择
         </button>
         <button class="settle-save-btn" @click="startNextRound">
-          下一局{{ isWallExhaustedSettlement && wallExhaustedCountdown > 0 ? ' (' + wallExhaustedCountdown + 's)' : '' }}
+          下一局{{ wallExhaustedCountdown > 0 ? ' (' + wallExhaustedCountdown + 's)' : '' }}
         </button>
       </div>
     </div>
@@ -853,7 +853,7 @@
                     :disabled="isInteractionLocked || isAIControlled"
                     @click="onHu"
                   >🏆 您胡了</button>
-                  <span v-if="isWinner" class="turn-timer-inline turn-timer--winner">🎉 你赢了！</span>
+                  <span v-if="isWinner && confirmedWinner" class="turn-timer-inline turn-timer--winner">🎉 你赢了！</span>
                   <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
                     ⏱ {{ turnTimer }}s
                   </span>
@@ -2643,6 +2643,8 @@ watch(thinkFreezeActive, (active) => {
 
 // 胡牌面板状态
 const showHuPanel = ref(false)
+// 本地控制：仅胡牌确认后才显示"你赢了"标签
+const confirmedWinner = ref(false)
 
 // 计算胡牌组合：将手牌排列成 顺子/刻子 + 对子
 const huCombinations = computed(() => {
@@ -2819,7 +2821,7 @@ const onConfirmHu = async (index: number) => {
   lastHuReviewOptions.value = displayWinOptions.value.map((option: any) => ({ ...option }))
   lastSelectedHuCombo.value = index
   isHuReviewMode.value = false
-  showHuPanel.value = false
+  showHuPanel.value = false; confirmedWinner.value = true
   const success = await executeAction(ActionType.HU, undefined, undefined, displayWinOptions.value[index]?.internalLabel || displayWinOptions.value[index]?.label)
   if (!success) {
     await syncHuSelectionLock(false)
@@ -2827,6 +2829,7 @@ const onConfirmHu = async (index: number) => {
 }
 const onCancelHu = async () => {
   showHuPanel.value = false
+  confirmedWinner.value = false
   selectedHuCombo.value = isHuReviewMode.value ? lastSelectedHuCombo.value : null
   isHuReviewMode.value = false
   await syncHuSelectionLock(false)
@@ -3157,7 +3160,7 @@ const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); playVoiceActio
 const showSettlement = ref(false)
 const settlementData = ref<any>(null)
 const lastAutoSettlementKey = ref('')
-const wallExhaustedCountdown = ref(5)
+const wallExhaustedCountdown = ref(3)
 const wallExhaustedTimer = ref(null)
 const isWallExhaustedSettlement = computed(() => wallExhaustedTimer.value !== null)
 
@@ -3170,7 +3173,7 @@ const cancelWallExhaustedCountdown = () => {
 }
 
 const startWallExhaustedCountdown = () => {
-  wallExhaustedCountdown.value = 5
+  wallExhaustedCountdown.value = 3
   wallExhaustedTimer.value = window.setInterval(() => {
     wallExhaustedCountdown.value--
     if (wallExhaustedCountdown.value <= 0) {
@@ -3938,6 +3941,7 @@ watch(
       window.setTimeout(() => {
         showSettlement.value = true
       }, 1000)
+        startWallExhaustedCountdown()
     }
   }
 )
@@ -4223,6 +4227,7 @@ watch(
       }
       isHuReviewMode.value = false
       showHuPanel.value = false
+      confirmedWinner.value = false
       if (!hasDicePreview.value) {
         // 使用服务端的骰子值(让后加入的B也能看到实际骰子结果)
         const serverDice = gameState.value?.dice
@@ -5844,7 +5849,7 @@ const forceDiscard = async (p: Player) => {
   color: #fff;
   background: rgba(0, 0, 0, 0.55);
 }
-.player-name-label--top    { top: 0%; left: 25%; transform: translateX(-50%); }
+.player-name-label--top    { top: 5%; left: 25%; transform: translateX(-50%); }
 .player-name-label--bottom { bottom: 0%; left: 50%; transform: translateX(-50%); }
 .player-name-label--left   { left: 0.6%; top: 2%; transform: translateY(0); }
 .player-name-label--right  { right: 0.6%; top: 2%; transform: translateY(0); }
@@ -5891,7 +5896,7 @@ const forceDiscard = async (p: Player) => {
   border-radius: 999px;
 }
 .turn-timer--winner {
-  font-size: 0.75rem !important;
+  font-size: 0.6rem !important;
   padding: 2px 10px !important;
   background: rgba(255, 215, 0, 0.15) !important;
   color: #ffd700 !important;

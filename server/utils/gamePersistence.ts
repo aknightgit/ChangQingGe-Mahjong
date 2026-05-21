@@ -83,6 +83,7 @@ const playerToStored = (player: Player): GamePlayer => ({
 const storedToPlayer = (player: GamePlayer): Player => ({
   id: player.userId,
   name: player.name,
+  userId: player.userId,
   position: player.position,
   hand: {
     concealedTiles: player.hand.concealedTiles.map(storedToTile),

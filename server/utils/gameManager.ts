@@ -1468,6 +1468,14 @@ class GameManager {
             setImmediate(() => this.schedulePendingActionTimeout(gameId));
             console.log('[Recovery] Scheduled immediate resolution for expired pending actions in game', gameId);
           }
+          // Recover bot turns for games with no pending actions
+          if (stored.phase === GamePhase.PLAYING && (!stored.pendingActions || stored.pendingActions.length === 0)) {
+            const curP = stored.players[stored.currentPlayerIndex];
+            if (curP && curP.status === 'playing' && this.isPlayerBotControlled(curP)) {
+              setImmediate(() => this.scheduleBotDiscard(stored.gameId, curP.id));
+              console.log('[Recovery] Scheduled bot ' + curP.name + ' after restart for game ' + stored.gameId);
+            }
+          }
         }
         return stored;
       }
@@ -4882,7 +4890,9 @@ class GameManager {
                   freshGame.pendingActions = freshGame.pendingActions.filter(pa => pa.playerId !== livePlayer.id);
                   await this.persistGame(freshGame);
                   this.broadcastGameState(game.gameId);
-                  return;
+                  // 不return,继续走到摸牌逻辑:
+                  // - chow已执行: executeChow->moveToNextPlayer, currentPlayer变了,跳过摸牌
+                  // - chow被pass: 当前玩家继续摸牌
                 }
               }
               this.clearCurrentTurnPendingActions(freshGame, livePlayer.id);
@@ -5440,6 +5450,11 @@ class GameManager {
     // 规则:effective = inheritMultiplier × roundMultiplier,封顶8,超出部分 = effective/8 继承给下把
     // 注意:聚义/造反已经自行设置 inheritedGlobalMultiplier,不要覆盖
     if (finalReason === GameEndReason.WALL_EXHAUSTED) {
+      // 流局无人胡牌：原庄家继续坐庄
+      if (roundWinners.length === 0) {
+        game.nextDealerId = game.players[game.dealerIndex]?.id ?? null;
+        console.log(`[WallExhausted] 流局,原庄家继续坐庄: ${game.nextDealerId}`);
+      }
       // 流局:先翻倍,再算溢出(但全局倍数封顶8)
       const currentGlobal = game.inheritMultiplier ?? 1;
       const roundMul = game.roundMultiplier ?? 1;
