@@ -3395,12 +3395,8 @@ const isSpectatorGamePlayer = computed(() => {
 const mySwapInfo = ref<{ totalChances: number; usedChances: number; remaining: number }>({ totalChances: 0, usedChances: 0, remaining: 0 })
 const canSwap = computed(() => mySwapInfo.value.remaining > 0)
 const canOpenPlayerCardFor = (player: any) => {
-  if (!player) return false
-  if (player.id === currentPlayer.value?.id) return true
-  if (isBotPlayer(player)) return true
-  if (canUseSpectatorView.value) return true
-  if (canSwap.value) return true
-  return false
+  // 名牌点击始终可打开玩家卡片，查看信息或观赛
+  return true
 }
 const onPlayerNameClick = (player: any) => {
   if (!player) return
@@ -5849,7 +5845,7 @@ const forceDiscard = async (p: Player) => {
   color: #fff;
   background: rgba(0, 0, 0, 0.55);
 }
-.player-name-label--top    { top: 5%; left: 25%; transform: translateX(-50%); }
+.player-name-label--top    { top: 3%; left: 25%; transform: translateX(-50%); }
 .player-name-label--bottom { bottom: 0%; left: 50%; transform: translateX(-50%); }
 .player-name-label--left   { left: 0.6%; top: 2%; transform: translateY(0); }
 .player-name-label--right  { right: 0.6%; top: 2%; transform: translateY(0); }
