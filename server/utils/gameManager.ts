@@ -1153,7 +1153,16 @@ class GameManager {
         const higherActions = pa.availableActions.filter(
           a => a === ActionType.PENG || a === ActionType.KONG || a === ActionType.HU
         );
-        if (higherActions.length === 0) continue;
+        if (higherActions.length === 0) {
+          if (pa.availableActions.includes(ActionType.CHOW)) {
+            await this.resolveBotChowNow(game, player, pa);
+            hasBotAction = true;
+          } else {
+            await this.handlePass(game, player);
+            hasBotAction = true;
+          }
+          continue;
+        }
 
         const filteredHigherActions = higherActions.filter((candidate) => {
           if (candidate !== ActionType.HU) return true;
@@ -1163,8 +1172,13 @@ class GameManager {
           return winOptions.length > 0;
         });
         if (filteredHigherActions.length === 0) {
-          if (pa.availableActions.includes(ActionType.CHOW)) continue;
-          this.handlePass(game, player);
+          if (pa.availableActions.includes(ActionType.CHOW)) {
+            await this.resolveBotChowNow(game, player, pa);
+            hasBotAction = true;
+          } else {
+            await this.handlePass(game, player);
+            hasBotAction = true;
+          }
           continue;
         }
 
@@ -1265,6 +1279,23 @@ class GameManager {
     } catch (err) {
       console.error('[BotService] Pending action error:', err);
       return false;
+    }
+  }
+
+  /**
+   * ⭐【修复】Bot自动决策吃牌：选择吃牌组合后resolve，或自动pass
+   */
+  private async resolveBotChowNow(game: GameState, player: Player, pa: PendingAction): Promise<void> {
+    if (!pa.tile || !pa.chowOptions || pa.chowOptions.length === 0) {
+      await this.handlePass(game, player);
+      return;
+    }
+    pa.selectedChowTileIds = selectBotChowTileIds(player, game, pa.tile, pa.chowOptions);
+    if (pa.selectedChowTileIds && pa.selectedChowTileIds.length > 0) {
+      await this.resolvePendingAction(game, player, pa);
+      game.pendingActions = game.pendingActions.filter(p => p.playerId !== player.id);
+    } else {
+      await this.handlePass(game, player);
     }
   }
 
