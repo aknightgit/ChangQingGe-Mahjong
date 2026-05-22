@@ -81,7 +81,7 @@ const playerToStored = (player: Player): GamePlayer => ({
 })
 
 const storedToPlayer = (player: GamePlayer): Player => ({
-  id: player.userId,
+  id: player.userId || player.id || '',
   name: player.name,
   userId: player.userId,
   position: player.position,

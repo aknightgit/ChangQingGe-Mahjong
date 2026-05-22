@@ -1457,27 +1457,79 @@ class GameManager {
     try {
       const stored = await loadGameState(gameId);
       if (stored) {
-        this.games.set(gameId, stored);
+                this.games.set(gameId, stored);
+        // 🔧 【根治】修复恢复时 player.id 为空: userId → id
         for (const player of stored.players) {
-          this.playerToGame.set(player.id, gameId);
+          const oldId = player.id;
+          if (!player.id && player.userId) {
+            player.id = player.userId;
+          } else if (!player.id && !player.userId) {
+            player.id = 'recovered-' + randomUUID();
+          }
+          if (player.id) {
+            this.playerToGame.set(player.id, gameId);
+            if (oldId !== player.id) {
+              console.log('[Recovery] Fixed player.id for', player.name, ':', oldId, '->', player.id);
+            }
+          }
         }
-        // 🔧 恢复重启后丢失的 pending 超时
-        if (stored.pendingActions && stored.pendingActions.length > 0) {
-          const now = Date.now();
-          const hasUnresolved = stored.pendingActions.some(pa =>
-            typeof pa.expiresAt === 'number' && pa.expiresAt > now
-          );
-          if (hasUnresolved) {
+        // 🔧 【根治】恢复重启后丢失的 pending 超时和 freeze timer
+        if (stored.phase === 'playing') {
+          const currentPlayer = stored.players[stored.currentPlayerIndex];
+          const hasPending = stored.pendingActions && stored.pendingActions.length > 0;
+          
+          if (hasPending) {
+            const now = Date.now();
+            const hasUnresolved = stored.pendingActions.some(pa =>
+              typeof pa.expiresAt === 'number' && pa.expiresAt > now
+            );
+            if (hasUnresolved) {
+              // 重建 freeze timer (bot) 或 pending timer (human)
+              this.schedulePendingActionTimeout(gameId);
+              console.log('[Recovery] Restored pending timeout for game', gameId);
+            } else {
+              setImmediate(() => this.schedulePendingActionTimeout(gameId));
+              console.log('[Recovery] Scheduled immediate resolution for expired pending in game', gameId);
+            }
+          } else if (currentPlayer && this.isPlayerBotControlled(currentPlayer)) {
+            // ⭐ 修复核心: bot 轮到但没有 freeze timer → 模拟 beginCurrentPlayerTurn 的 freeze
+            const freezeMs = this.getHesitationWindow(stored);
+            console.log('[Recovery] Restoring bot freeze timer for', currentPlayer.name, 'delay:', freezeMs);
+            const botFreezeTimer = this.detachTimer(setTimeout(async () => {
+              try {
+                this.freezeTimers.delete(gameId);
+                const freshGame = await this.getGame(gameId);
+                if (!freshGame || freshGame.phase !== 'playing') return;
+                if (freshGame.currentPlayerIndex !== stored.currentPlayerIndex) return;
+                const livePlayer = freshGame.players[freshGame.currentPlayerIndex];
+                if (!livePlayer || livePlayer.status !== 'playing') return;
+                console.log('[Recovery] Bot freeze expired for', livePlayer.name, 'drawing...');
+                if (freshGame.wall.length === 0) {
+                  this.endRound(freshGame, 'wall_exhausted');
+                  return;
+                }
+                this.replaceFlowers(freshGame, livePlayer);
+                if (this.getPlayableTileCount(livePlayer) >= 14) {
+                  freshGame.drawnThisTurn = true;
+                } else {
+                  this.handleDraw(freshGame, livePlayer);
+                  freshGame.drawnThisTurn = true;
+                }
+                this.scheduleBotDiscard(gameId, livePlayer.id);
+                await this.persistGame(freshGame);
+                this.broadcastGameState(gameId);
+              } catch (err) {
+                console.warn('[Recovery] Bot freeze handler error:', err);
+              }
+            }, freezeMs));
+            this.freezeTimers.set(gameId, botFreezeTimer);
+          } else if (currentPlayer) {
+            // 人类玩家: 调度 pending 超时等待操作
             this.schedulePendingActionTimeout(gameId);
-            console.log('[Recovery] Restored pending timeout for game', gameId);
-          } else {
-            // 所有 pending 已过期，立即触发自动解析
-            setImmediate(() => this.schedulePendingActionTimeout(gameId));
-            console.log('[Recovery] Scheduled immediate resolution for expired pending actions in game', gameId);
+            console.log('[Recovery] Scheduled pending timeout for human player', currentPlayer.name);
           }
         }
         return stored;
-      }
     } catch (err: any) {
       console.warn('⚠️ ensureGameLoaded failed:', err.message);
     }
@@ -4499,7 +4551,7 @@ class GameManager {
 
     for (const player of game.players) {
       if (player.status !== PlayerStatus.PLAYING) continue;
-      if (player.id === game.players[game.currentPlayerIndex].id) continue;
+      if (player.id && player.id === game.players[game.currentPlayerIndex].id) continue;
 
       const actions: ActionType[] = [];
 
