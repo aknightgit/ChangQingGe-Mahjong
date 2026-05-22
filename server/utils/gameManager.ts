@@ -1530,7 +1530,6 @@ class GameManager {
           }
         }
       }
-      }
         return stored;
     } catch (err: any) {
       console.warn('⚠️ ensureGameLoaded failed:', err.message);
