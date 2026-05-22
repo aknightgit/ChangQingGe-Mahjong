@@ -1074,7 +1074,7 @@ class GameManager {
 
 
   /** 统一处理 pendingAction 决策(吃/碰/杠/胡/PASS) */
-  private async resolvePendingAction(game: GameState, player: Player, pa: PendingAction): Promise<void> {
+  private async resolvePendingAction(game: GameState, player: Player, pa: PendingAction): Promise<ActionType> {
     const action = await shouldClaimPendingAction(player, pa.availableActions, game);
     console.log(`[PendingResolve] ${player.name} → ${action}`);
     if (action === ActionType.PASS) {
@@ -1099,6 +1099,7 @@ class GameManager {
     } else {
       this.handlePass(game, player);
     }
+    return action;
   }
 
   /** bot 训练模式专用 */
@@ -1232,8 +1233,10 @@ class GameManager {
               pa.selectedChowTileIds = pa.tile
                 ? selectBotChowTileIds(pendingPlayer, game, pa.tile, pa.chowOptions)
                 : undefined;
-              await this.resolvePendingAction(game, pendingPlayer, pa);
-              hasBotAction = true;
+              const resolved = await this.resolvePendingAction(game, pendingPlayer, pa);
+              if (resolved === ActionType.CHOW) {
+                hasBotAction = true;
+              }
             }
           }
         }
@@ -1274,7 +1277,10 @@ class GameManager {
     sourcePlayerId: string | undefined,
     meldType: MeldType
   ): number {
-    if (!sourcePlayerId) return 0;
+    if (!sourcePlayerId) {
+      console.warn(`[BAILOUT] recordBailoutAction SKIP: no sourcePlayerId for playerId=${playerId} meldType=${meldType}`);
+      return 0;
+    }
     if (meldType !== MeldType.TRIPLET && meldType !== MeldType.SEQUENCE && meldType !== MeldType.KONG) return 0;
 
     if (!this.mutualBailout.has(gameId)) {
@@ -1290,6 +1296,7 @@ class GameManager {
     const currentCount = playerBailout.get(sourcePlayerId) || 0;
     const nextCount = currentCount + 1;
     playerBailout.set(sourcePlayerId, nextCount);
+    console.log(`[BAILOUT] game=${gameId} ${playerId} ate ${nextCount}x from ${sourcePlayerId} (meldType=${meldType})`);
     return nextCount;
   }
 
@@ -1467,14 +1474,6 @@ class GameManager {
             // 所有 pending 已过期，立即触发自动解析
             setImmediate(() => this.schedulePendingActionTimeout(gameId));
             console.log('[Recovery] Scheduled immediate resolution for expired pending actions in game', gameId);
-          }
-          // Recover bot turns for games with no pending actions
-          if (stored.phase === GamePhase.PLAYING && (!stored.pendingActions || stored.pendingActions.length === 0)) {
-            const curP = stored.players[stored.currentPlayerIndex];
-            if (curP && curP.status === 'playing' && this.isPlayerBotControlled(curP)) {
-              setImmediate(() => this.scheduleBotDiscard(stored.gameId, curP.id));
-              console.log('[Recovery] Scheduled bot ' + curP.name + ' after restart for game ' + stored.gameId);
-            }
           }
         }
         return stored;
@@ -2474,7 +2473,7 @@ class GameManager {
           const totalTileCount = this.getPlayableTileCount(player);
           if (totalTileCount >= 14) {
             console.warn(`[DRAW] Flower replacement already filled hand: player ${player.id} has ${totalTileCount} playable tiles`);
-            game.drawnThisTurn = true; // 标记已处理过摸牌阶段，防止连续摸牌
+          game.drawnThisTurn = true; // 吃/碰/杠后手牌已满或即将满，标记已摸牌状态
             break;
           }
         }
@@ -2569,6 +2568,7 @@ class GameManager {
           action === ActionType.CONCEALED_KONG ||
           action === ActionType.EXTENDED_KONG
         ) {
+          game.drawnThisTurn = true; // 吃/碰/杠后手牌已满或即将满，标记已摸牌状态
           this.scheduleBotDiscard(gameId, currentP.id);
         }
       }
@@ -3309,6 +3309,10 @@ class GameManager {
       const _bailoutMsgs = {2: `ð£ ${player.name}æäº${_source?.name||'??'}ä¸¤å£äºï¼`, 3: `ð£ ${player.name}æäº${_source?.name||'??'}ä¸å£äºï¼ï¼`, 4: `ð£ ${player.name}æäº${_source?.name||'??'}åå£äºï¼ï¼ï¼`};
       if (_bailoutMsgs[_bailoutCount]) { this.broadcastQuickMessage(game.gameId, _bailoutMsgs[_bailoutCount], 'special', 'bailout'); }
     }
+    // 广播吃牌到牌局快讯（所有吃都会显示，不限于口数）
+    if (this.wsManager) {
+      this.broadcastQuickMessage(game.gameId, `ⓘ ${player.name}吃牌`, 'info', 'chow');
+    }
 
     for (const tile of handTiles) {
       player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile.id);
@@ -3368,8 +3372,9 @@ class GameManager {
     const exclusion = game.chowPongExclusion?.[player.id];
     const state = exclusion || { firstActionSuit: null, firstActionType: null };
     if (!checkChowPongExclusion(state, 'pong', lastDiscard.suit)) {
-      console.warn(`[PENG] Player ${player.name} blocked by exclusion rule (firstAction=${state.firstActionSuit})`);
+      console.warn(`[PENG] Player ${player.name} blocked by exclusion rule (firstAction=${state.firstActionSuit}), passing`);
       game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
+      this.handlePass(game, player);
       return;
     }
 
@@ -4890,9 +4895,7 @@ class GameManager {
                   freshGame.pendingActions = freshGame.pendingActions.filter(pa => pa.playerId !== livePlayer.id);
                   await this.persistGame(freshGame);
                   this.broadcastGameState(game.gameId);
-                  // 不return,继续走到摸牌逻辑:
-                  // - chow已执行: executeChow->moveToNextPlayer, currentPlayer变了,跳过摸牌
-                  // - chow被pass: 当前玩家继续摸牌
+                  return;
                 }
               }
               this.clearCurrentTurnPendingActions(freshGame, livePlayer.id);
@@ -5288,6 +5291,7 @@ class GameManager {
       }
 
       const mutualBailoutRelations = this.getMutualBailoutRelations(game.gameId);
+      console.log(`[SETTLEMENT] game=${game.gameId} bailoutRelations=${JSON.stringify(mutualBailoutRelations)} players=${game.players.map(p => p.name).join(',')}`);
       // 构建 mutualBailout Map<playerIndex, {partnerIndex, type}>
       const mutualBailout = new Map<number, { partnerIndex: number; type: '三口' | '四口' }>();
       for (const rel of mutualBailoutRelations) {
@@ -5450,11 +5454,6 @@ class GameManager {
     // 规则:effective = inheritMultiplier × roundMultiplier,封顶8,超出部分 = effective/8 继承给下把
     // 注意:聚义/造反已经自行设置 inheritedGlobalMultiplier,不要覆盖
     if (finalReason === GameEndReason.WALL_EXHAUSTED) {
-      // 流局无人胡牌：原庄家继续坐庄
-      if (roundWinners.length === 0) {
-        game.nextDealerId = game.players[game.dealerIndex]?.id ?? null;
-        console.log(`[WallExhausted] 流局,原庄家继续坐庄: ${game.nextDealerId}`);
-      }
       // 流局:先翻倍,再算溢出(但全局倍数封顶8)
       const currentGlobal = game.inheritMultiplier ?? 1;
       const roundMul = game.roundMultiplier ?? 1;

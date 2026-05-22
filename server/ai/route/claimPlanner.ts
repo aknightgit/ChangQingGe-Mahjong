@@ -304,14 +304,18 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       if (action === ActionType.CHOW) {
         return { allowed: false, tuneDelta: -2, reason: 'all_pungs_blocks_chow' }
       }
+      const _apPursuit = (policy?.allPungsPursuit || 0)
+      const _apAgg = _apPursuit >= 1.2
       return {
         allowed: true,
         tuneDelta:
-          0.55 +
-          (action === ActionType.KONG ? 0.18 : 0.12) +
-          routeGain * 0.04 +
-          ((policy?.qingPengPursuit || 0) * (routeState.features.secondSuitCount === 0 ? 0.14 : 0)) +
-          ((policy?.hunPengPursuit || 0) * (routeState.features.honorPairCount >= 1 ? 0.16 : 0)),
+          (_apAgg ? 1.2 : 0.55) +
+          (action === ActionType.KONG ? 0.25 : 0.15) +
+          routeGain * 0.05 +
+          ((policy?.qingPengPursuit || 0) * (routeState.features.secondSuitCount === 0 ? 0.18 : 0)) +
+          ((policy?.hunPengPursuit || 0) * (routeState.features.honorPairCount >= 1 ? 0.20 : 0)) +
+          (_apAgg && isHonorTile && routeState.features.honorPairCount >= 1 ? 0.4 : 0) +
+          (_apAgg && routeState.features.wildCount > 0 ? 0.35 : 0),
         reason: 'all_pungs_claim',
       }
 

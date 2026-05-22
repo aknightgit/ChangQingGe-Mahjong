@@ -1300,7 +1300,8 @@ export function canWin(
   handTiles: Tile[],
   exposedOrCount: Meld[] | number,
   wildTileIdOrChecker: string | null | WildTileChecker,
-  _skipWildAssignment?: boolean  // 跳过 findBestAssignment DFS（用于 baseline 训练提速）
+  _skipWildAssignment?: boolean,  // 跳过 findBestAssignment DFS（用于 baseline 训练提速）
+  wildTileGroup?: string[]  // 花牌百搭组，如 ['1','3','5','7','9']
 ): { canWin: boolean; types: HandType[] } {
   const isOldSig = typeof exposedOrCount === 'number';
   const exposed: Meld[] = isOldSig ? [] : exposedOrCount;
@@ -1331,7 +1332,7 @@ export function canWin(
   // canWin 结果缓存（同时缓存 boolean 和 types，避免重复计算）
   const handSig = handSignature(handTiles)
   const exposedSig = meldSignature(exposed)
-  const wildCacheKey = typeof wildTileIdOrChecker === 'function' ? '__wild_fn__' : (wildTileId || '')
+  const wildCacheKey = typeof wildTileIdOrChecker === 'function' ? '__wild_fn__' : ((wildTileId || '') + (wildTileGroup ? '|g=' + wildTileGroup.sort().join(',') : ''))
   const cacheKey = `${handSig}|${exposedSig}|${wildCacheKey}`
   if (canWinResultCache.has(cacheKey)) {
     _canWinHits++
@@ -1348,7 +1349,7 @@ export function canWin(
   const concealedFlowers = concealed.filter(t => isFlower(t));
   const isWildTileFn = typeof wildTileIdOrChecker === 'function'
     ? wildTileIdOrChecker
-    : buildWildTileChecker(wildTileId);
+    : buildWildTileChecker(wildTileId, wildTileGroup);
   const concealedNonFlower = concealed.filter(t => !isFlower(t) || isWildTileFn(t));
   // 八花优化：只有 concealed 里 >=6 花才需要统计 exposed（节省遍历开销）
   const flowerCount = concealedFlowers.length >= 6

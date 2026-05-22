@@ -3160,7 +3160,7 @@ const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); playVoiceActio
 const showSettlement = ref(false)
 const settlementData = ref<any>(null)
 const lastAutoSettlementKey = ref('')
-const wallExhaustedCountdown = ref(3)
+const wallExhaustedCountdown = ref(5)
 const wallExhaustedTimer = ref(null)
 const isWallExhaustedSettlement = computed(() => wallExhaustedTimer.value !== null)
 
@@ -3173,7 +3173,7 @@ const cancelWallExhaustedCountdown = () => {
 }
 
 const startWallExhaustedCountdown = () => {
-  wallExhaustedCountdown.value = 3
+  wallExhaustedCountdown.value = 5
   wallExhaustedTimer.value = window.setInterval(() => {
     wallExhaustedCountdown.value--
     if (wallExhaustedCountdown.value <= 0) {
@@ -5302,7 +5302,7 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 5; /* 在牌墙z-index=1之上 */
+  z-index: 100; /* 在牌墙z-index=1之上 */
   transition: transform 0.15s ease, filter 0.15s ease;
   /* P0 FIX: 统一容器裁剪 — 每家手牌+门口牌共同受该容器裁剪，不再越界 */
   overflow: hidden;
@@ -5829,23 +5829,26 @@ const forceDiscard = async (p: Player) => {
 /* 玩家名称标注（固定在牌桌四边，不挤占其他容器） */
 .player-name-label {
   position: absolute;
-  z-index: 5;
+  z-index: 200;
   font-size: clamp(0.5rem, 1.4vw, 0.85rem);
   font-weight: 700;
   color: rgba(255, 255, 255, 0.55);
   background: rgba(0, 0, 0, 0.3);
-  padding: 3px 10px;
+  padding: 6px 14px;
   border-radius: 4px;
   cursor: pointer;
   pointer-events: auto;
   white-space: nowrap;
   transition: color 0.2s, background 0.2s;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .player-name-label:hover {
   color: #fff;
   background: rgba(0, 0, 0, 0.55);
 }
-.player-name-label--top    { top: 3%; left: 25%; transform: translateX(-50%); }
+.player-name-label--top    { top: 2.8px; left: 25%; transform: translateX(-50%); }
 .player-name-label--bottom { bottom: 0%; left: 50%; transform: translateX(-50%); }
 .player-name-label--left   { left: 0.6%; top: 2%; transform: translateY(0); }
 .player-name-label--right  { right: 0.6%; top: 2%; transform: translateY(0); }
@@ -5896,7 +5899,7 @@ const forceDiscard = async (p: Player) => {
   padding: 2px 10px !important;
   background: rgba(255, 215, 0, 0.15) !important;
   color: #ffd700 !important;
-  margin-left: auto;
+  margin-left: 4px;
   border-radius: 999px;
   white-space: nowrap;
   flex-shrink: 0;

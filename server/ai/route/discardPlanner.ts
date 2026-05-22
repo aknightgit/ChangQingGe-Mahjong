@@ -231,10 +231,17 @@ function scoreByRoute(input: RouteDiscardInput): number {
       return 5.8 + (tile.suit === shortestSuit ? 1.1 : 0)
 
     case 'ALL_PUNGS':
+      // 碰碰胡路线出牌策略：
+      // - 对子坚决保留（count>=2强保留）
+      // - 孤张按优先级：熟张>对手不要的花色>风箭孤张>数牌孤张
+      // - 有百搭+大吊可能时优先冲大吊
       return (
-        (count >= 2 ? -4.4 : 2.8) +
-        (nearby > 0 && count === 1 ? 1.6 : 0) +
-        (isHonor(tile) && count >= 2 ? -1 : 0)
+        (count >= 2 ? -6.0 : 3.5) +
+        (nearby > 0 && count === 1 ? 2.0 : 0) +      // 附近有搭子→保留
+        (isHonor(tile) && count >= 2 ? -2.0 : 0) +    // 风箭对子→更强保留
+        (isHonor(tile) && count === 1 ? 2.5 : 0) +    // 风箭孤张→打出
+        (input.discardDanger < 0.3 && count === 1 ? 0.8 : 0) +  // 熟张(低危险)→优先出
+        (input.afterRouteState?.features?.opponentAvoidSuit === tile.suit && count === 1 ? 1.5 : 0)  // 对手不要的花色→出
       )
 
     case 'HONOR_HEAVY':

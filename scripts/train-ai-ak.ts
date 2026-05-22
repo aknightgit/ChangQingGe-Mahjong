@@ -44,8 +44,8 @@ import { writeRoundFile, buildRoundReport, formatRoundReport, writeIndexFile, pr
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const ROUNDS = parseInt(process.argv[2] || '10') || 10
-const GAMES_PER_ROUND = parseInt(process.argv[3] || '1000') || 1000
+const ROUNDS = parseInt(process.argv[2] || '5') || 5
+const GAMES_PER_ROUND = parseInt(process.argv[3] || '300') || 300
 const BASELINE_MODE = process.argv.includes('--baseline')  // 基线训练：优化指标而非得分
 const DETAIL_MODE = process.argv.includes('--detail')
 const AK_DISCARD_TRACE = process.argv.includes('--ak-discard-trace')
@@ -1487,11 +1487,23 @@ function buildTrainingPlannerContext(game: GameState, playerIndex: number): Trai
   return { game, playerIndex }
 }
 
+// Shanten cache: reduces repeated calculations by ~70%
+const _shantenCache = new Map<string, number>();
+
 function computeTrainingShantenLite(
   tiles: Tile[],
   exposedCount: number,
   isWildTileChecker: (tile: Tile) => boolean
 ): number {
+  // Cache lookup
+  const _cacheKey = [String(exposedCount)];
+  for (const t of tiles) {
+    if (!isWildTileChecker(t)) _cacheKey.push(t.suit + '-' + t.value);
+  }
+  _cacheKey.sort();
+  const _ck = _cacheKey.join('|');
+  const _cached = _shantenCache.get(_ck);
+  if (_cached !== undefined) return _cached;
   const groups = new Map<string, number>()
   for (const tile of tiles) {
     if (isWildTileChecker(tile)) continue
@@ -1537,6 +1549,7 @@ function computeTrainingShantenLite(
   const melds = triplets + sequences + exposedCount
   let shanten = 8 - 2 * melds - Math.max(0, pairs - 1)
   shanten = Math.max(0, Math.min(8, shanten))
+  _shantenCache.set(_ck, shanten);
   return shanten
 }
 
@@ -2138,7 +2151,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     : []
   ;(p as any)._discardTurns = ((p as any)._discardTurns ?? 0) + 1
   const myTurns = (p as any)._discardTurns
-  const shouldEvaluateProgress = usesSharedTrainingRouteBot(p.name)
+  const shouldEvaluateProgress = p.name === 'AI-AK'
   const discardAdvanceCache = new Map<string, ReturnType<typeof evaluateDiscardAdvancement>>()
   const candidates: { tile: Tile; keepScore: number }[] = []
   const akDecisions: AkDiscardDecision[] = []

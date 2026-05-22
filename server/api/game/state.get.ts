@@ -177,11 +177,19 @@ export default defineEventHandler(async (event) => {
     durationMs: Date.now() - startTime,
   });
 
+  // 注入实时互包关系(三口/四口)，不是局初的空数组
+  const bailoutRelations = gameManager.getMutualBailoutRelations(normalizedGameId).map(rel => ({
+    ...rel,
+    player1Name: game.players.find(p => p.id === rel.player1)?.name,
+    player2Name: game.players.find(p => p.id === rel.player2)?.name
+  }));
+
   return {
     success: true,
     data: {
       game: {
         ...game,
+        bailoutRelations,
         currentRound: getCurrentRoundNumber(game),
         globalMultiplier: getEffectiveGlobalMultiplier(game),
         players: maskedPlayers

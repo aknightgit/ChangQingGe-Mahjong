@@ -641,7 +641,6 @@ function calculateFormulaFan(
   // 优先级：箭牌刻子(+2) > 风牌刻子(+1) > 其他
   // 支持：3张百搭→刻子, 2百搭+1牌→刻子, 1百搭+2牌→刻子
   let virtualHand = [...handTiles];
-  const virtualMelds: Meld[] = [];
   if (wildTileSuit !== undefined && wildTileValue !== undefined) {
     const wildTiles = handTiles.filter(t => t.suit === wildTileSuit && t.value === wildTileValue);
     if (wildTiles.length > 0) {
@@ -666,13 +665,11 @@ function calculateFormulaFan(
           }
           remainingWilds -= 3;
           details.push(`百搭×3→${getTileDisplayName(dragon)}(箭牌刻子) +2`);
-          virtualMelds.push({ type: MeldType.TRIPLET, tiles: [dragon, dragon, dragon], isConcealed: true });
         } else if (dragonCount >= 2 && remainingWilds >= 1) {
           // 2箭牌+1百搭 → 箭牌刻子
           virtualParts.push({ ...dragon, id: wildTiles[wildTiles.length - remainingWilds].id, isWild: false });
           remainingWilds -= 1;
           details.push(`百搭→${getTileDisplayName(dragon)}(箭牌刻子) +2`);
-          virtualMelds.push({ type: MeldType.TRIPLET, tiles: [dragon, dragon, dragon], isConcealed: true });
         } else if (dragonCount >= 1 && remainingWilds >= 2) {
           // 1箭牌+2百搭 → 箭牌刻子
           for (let i = 0; i < 2; i++) {
@@ -680,7 +677,6 @@ function calculateFormulaFan(
           }
           remainingWilds -= 2;
           details.push(`百搭×2→${getTileDisplayName(dragon)}(箭牌刻子) +2`);
-          virtualMelds.push({ type: MeldType.TRIPLET, tiles: [dragon, dragon, dragon], isConcealed: true });
         }
         if (remainingWilds <= 0) break;
       }
@@ -701,19 +697,16 @@ function calculateFormulaFan(
             }
             remainingWilds -= 3;
             details.push(`百搭×3→${getTileDisplayName(wind)}(风牌刻子) +1`);
-            virtualMelds.push({ type: MeldType.TRIPLET, tiles: [wind, wind, wind], isConcealed: true });
           } else if (windCount >= 2 && remainingWilds >= 1) {
             virtualParts.push({ ...wind, id: wildTiles[wildTiles.length - remainingWilds].id, isWild: false });
             remainingWilds -= 1;
             details.push(`百搭→${getTileDisplayName(wind)}(风牌刻子) +1`);
-            virtualMelds.push({ type: MeldType.TRIPLET, tiles: [wind, wind, wind], isConcealed: true });
           } else if (windCount >= 1 && remainingWilds >= 2) {
             for (let i = 0; i < 2; i++) {
               virtualParts.push({ ...wind, id: wildTiles[wildTiles.length - remainingWilds + i].id, isWild: false });
             }
             remainingWilds -= 2;
             details.push(`百搭×2→${getTileDisplayName(wind)}(风牌刻子) +1`);
-            virtualMelds.push({ type: MeldType.TRIPLET, tiles: [wind, wind, wind], isConcealed: true });
           }
           if (remainingWilds <= 0) break;
         }
@@ -725,7 +718,6 @@ function calculateFormulaFan(
 
   // 计算组合牌点数（使用虚拟分配后的手牌）
   const allMelds = [...exposedMelds];
-  allMelds.push(...virtualMelds);
   const actualConcealedGroups = groupTiles(handTiles);
   
   // 只统计真实手牌里的暗杠，避免百搭虚拟补位后被重复当作杠牌加分。
@@ -1086,6 +1078,7 @@ export function calculateSettlementBreakdownByRules(
       const bailout = mutualBailout?.get(idx);
       return bailout?.partnerIndex === winnerIndex;
     });
+    console.log(`[SETTLEMENT-BREAKDOWN] isSelfDrawn winnerIdx=${winnerIndex} all=${JSON.stringify(allPlayerIndices)} bailoutLoser=${bailoutLoser} mutualBailout=${JSON.stringify([...mutualBailout?.entries() || []].map(([k,v]) => ({key:k, partnerIndex:v.partnerIndex, type:v.type})))}`);
 
     if (bailoutLoser !== undefined) {
       const bailout = mutualBailout!.get(bailoutLoser)!;

@@ -1137,49 +1137,8 @@ export function computeShanten(
   }
 
   const melds = triplets + sequences;
-  // === detect partial sequences (e.g., 8-dot + 9-dot, needs 1 more) ===
-  let partialSeqs = 0;
-  for (const suit of numSuits) {
-    for (let v = 1; v <= 8; v++) {
-      const k1 = `${suit}-${v}`, k2 = `${suit}-${v+1}`;
-      if (!counted.has(k1) && !counted.has(k2) && (groups.get(k1) || 0) > 0 && (groups.get(k2) || 0) > 0) {
-        partialSeqs++;
-        counted.add(k1); counted.add(k2);
-      }
-    }
-  }
-  // recount isolated after removing partial seq tiles
-  isolated = 0;
-  for (const [k, c] of groups) {
-    if (!counted.has(k)) isolated++;
-  }
-
-  // === wild tile handling ===
-  const wildUsedForPartial = Math.min(partialSeqs, wildCount);
-  const wildsRemaining = wildCount - wildUsedForPartial;
-  const effectiveMelds = melds + wildUsedForPartial;
-  
-  let wildMelds = 0;
-  let wildPairs = pairs;
-  if (wildsRemaining > 0) {
-    const pairsForWildMeld = Math.min(pairs, Math.floor(wildsRemaining));
-    wildMelds += pairsForWildMeld;
-    wildPairs -= pairsForWildMeld;
-    const w2 = wildsRemaining - pairsForWildMeld;
-    const isoWildMelds = Math.min(isolated, Math.floor(w2 / 2));
-    wildMelds += isoWildMelds;
-    const w3 = w2 - isoWildMelds * 2;
-    if (wildPairs === 0 && w3 >= 1) {
-      wildPairs = 1;
-    }
-  }
-
-  const totalMelds = effectiveMelds + wildMelds;
-  const totalPairs = wildPairs;
-  
-  const concealedCount = tiles.length;
-  const neededMelds = Math.floor((concealedCount - 2) / 3);
-  let shanten = neededMelds * 2 - totalMelds * 2 - Math.max(0, totalPairs - 1);
+  // shanten ≈ 8 - 2*melds - max(0, pairs-1) + isolated_penalty
+  let shanten = 8 - 2 * melds - Math.max(0, pairs - 1);
   shanten = Math.max(0, Math.min(8, shanten));
 
   _shantenCache.set(key, shanten);
@@ -1532,6 +1491,9 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         bestScore = score
         bestTingValue = timingValue
         bestTile = tile
+      }
+      if (hand.length <= 6) {
+        console.log(`[AI-DISCARD] ${player.name} tile=${tile.suit}-${tile.value} composite=${composite.toFixed(1)} shanten=${shanten} effective=${effective} score=${score.toFixed(1)} honor=${isHonor(tile)} committed=${tile.suit === committedOpenSuit}`)
       }
     } else if (!legacyDiscardPathDisabled && (
       shanten < bestShanten ||
@@ -2442,9 +2404,9 @@ export async function shouldClaimPendingAction(
   // CHOW（取最好吃法）
   if (
     availableActions.includes(ActionType.CHOW) &&
-    checkChowPongExclusion(exclusionState, 'chow', claimTile.suit) &&
     !isHonor(claimTile)
   ) {
+    const exclusionBlocked = !checkChowPongExclusion(exclusionState, 'chow', claimTile.suit)
     const v = claimTile.value
     const suit = claimTile.suit
 
@@ -2558,6 +2520,11 @@ export async function shouldClaimPendingAction(
           }) * (0.055 + routeMetricPolicy.tingQuality * 0.005)
         }
         bestChow.tune = Math.max(0.05, bestChow.tune)
+        // P0: 排除规则软限制 - 不硬拒绝但大幅降低吃牌概率
+        // 门清时吃A门后只能吃碰A门，若此门不足6张则大概率做不成清混一色
+        if (exclusionBlocked) {
+          bestChow.tune *= 0.08
+        }
         actionScores.set(ActionType.CHOW, {
           shanten: bestChow.shanten,
           effective: bestChow.effective,

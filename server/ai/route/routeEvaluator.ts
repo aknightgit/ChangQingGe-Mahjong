@@ -371,11 +371,13 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       break
 
     case 'ALL_PUNGS':
-      score += features.pairCount * 5.2
-      score += features.tripletCount * 5.8
-      score += features.honorPairCount * 2.5
-      score += features.wildCount * 2.8
-      score += getPolicyValue(policy, 'allPungsPursuit') * 6.5
+      const _ap_pursuitVal = getPolicyValue(policy, 'allPungsPursuit')
+      const _ap_isAgg = _ap_pursuitVal >= 1.2  // 高意愿→更激进
+      score += features.pairCount * (5.2 + (_ap_isAgg ? 4.0 : 0))
+      score += features.tripletCount * (5.8 + (_ap_isAgg ? 3.5 : 0))
+      score += features.honorPairCount * (2.5 + (_ap_isAgg ? 3.0 : 0))
+      score += features.wildCount * (2.8 + (_ap_isAgg ? 3.5 : 0))
+      score += _ap_pursuitVal * 8.5
       score += getWildRouteBoost(policy, features.wildCount, 'allPungs') * 4.8
       score += routeBucketBoost * (3.0 + handRouteBias)
       score += getPolicyValue(policy, 'sequenceVsTripletBias') * Math.max(0, features.tripletCount - features.sequenceLikeCount * 0.25) * 1.2
@@ -388,6 +390,15 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       if (earlyPairHeavy) {
         reasons.push('early_four_pairs_push')
         score += 8.5
+      }
+      // 高意愿+足够对子→提前决定性commit
+      if (_ap_isAgg && features.pairCount + features.tripletCount >= 3) {
+        reasons.push('aggressive_pungs_commit')
+        score += 12
+      }
+      if (_ap_isAgg && features.wildCount > 0 && features.pairCount + features.tripletCount >= 2) {
+        reasons.push('wild_pungs_push')
+        score += 7
       }
       if (noWildOpenPush) score += 1.4
       if (effectiveGlobalMultiplier >= 4) score += 1.6
@@ -416,6 +427,12 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       if (features.honorCount >= 9) {
         reasons.push('honor_stack_nine_plus')
         score += 10
+        // P0: 前5回合摸到9+风牌（含箭牌+百搭）时，强推风一色
+        const _estRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
+        if (features.honorCount + features.wildCount >= 9 && _estRound <= 5) {
+          reasons.push('early_honor_9_plus_commit')
+          score += 30
+        }
       } else if (features.honorCount >= 7) {
         score += 4
       } else if (features.honorCount < 6) {
