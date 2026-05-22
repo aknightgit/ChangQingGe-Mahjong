@@ -38,6 +38,7 @@ export const useGame = () => {
   const socket = ref<Socket | null>(null)
   const isConnected = ref(false)
   const error = ref<string | null>(null)
+  const rebelEvent = ref<{ playerId: string; playerName: string; hand: any[]; rebelEndTime: number } | null>(null)
   const leadingBrotherEvent = ref<{ firstPlayerName: string; tileKey: string } | null>(null)
   const actionApprovalEvent = ref<{ requesterName: string; requesterAction: string; candidatePlayerId: string; availableActions: string[]; tileKey: string; expiresAt?: number } | null>(null)
   const isActionPending = ref(false)
@@ -348,6 +349,17 @@ export const useGame = () => {
         window.dispatchEvent(new CustomEvent('mahjong-dice-roll', { detail: data }))
       })
 
+      // 造反亮手牌事件
+      socket.value.on('rebel', (data: { playerId: string; playerName: string; hand: any[]; rebelEndTime: number }) => {
+        console.log('⚔️ 造反事件:', data.playerName, data.rebelEndTime)
+        rebelEvent.value = data
+        // rebelEndTime 后自动清除
+        const remaining = data.rebelEndTime - Date.now()
+        if (remaining > 0) {
+          setTimeout(() => { rebelEvent.value = null }, remaining + 100)
+        }
+      })
+
       // 谢谢带头大哥事件
       socket.value.on('leadingBrother', (data: { firstPlayerName: string; tileKey: string }) => {
         console.log('🔥 谢谢带头大哥！', data)
@@ -597,6 +609,7 @@ export const useGame = () => {
     isActionPending,
     roomDismissedReason,
     lastStateChangeAt,
+    rebelEvent,
     leadingBrotherEvent,
     actionApprovalEvent
   }

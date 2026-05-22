@@ -1530,6 +1530,7 @@ class GameManager {
           }
         }
       }
+      }
         return stored;
     } catch (err: any) {
       console.warn('⚠️ ensureGameLoaded failed:', err.message);
@@ -2252,10 +2253,10 @@ class GameManager {
       // 检查造反(五毒散) - 条件：庄家(player.position === dealerIndex) + 首巡(尚未打出过牌)
       //       + 没有吃过牌(exposedMelds无CHOW) + 仅第一局 + 五毒散牌型
       const rebellionTurns = game.actionHistory.filter(a => a.type === ActionType.DISCARD).length;
-      const isDealer = player.position === game.dealerIndex;
       const isFirstTurn = rebellionTurns === 0;
       const hasEatenBefore = player.hand.exposedMelds.some(m => m.type === MeldType.SEQUENCE);
-      if (game.roundNumber <= 1 && isDealer && isFirstTurn && !hasEatenBefore) {
+      // 任何玩家满足五毒散均可造反
+      if (game.roundNumber <= 1 && isFirstTurn && !hasEatenBefore) {
         const wildParts = game.customScoringMode?.split('-');
         const wildSuit = wildParts ? wildParts[0] as TileSuit : undefined;
         const wildValue = wildParts && wildParts[1] ? parseInt(wildParts[1]) : undefined;
@@ -4001,7 +4002,7 @@ class GameManager {
    * 触发条件: 五毒散(见 isFivePoison)
    * 效果: 本局结束,下局倍数×2,造反者成为庄家
    */
-  private handleRebel(game: GameState, player: Player): void {
+  private async handleRebel(game: GameState, player: Player): Promise<void> {
     // 验证是否满足五毒散
     const wildParts = game.customScoringMode?.split('-');
     const wildSuit = wildParts ? wildParts[0] as TileSuit : undefined;
@@ -4016,28 +4017,56 @@ class GameManager {
       throw new Error('Not eligible for rebel (五毒散 condition not met)');
     }
 
-    // 本局直接结束
-    game.phase = GamePhase.ENDED;
-    game.endReason = GameEndReason.LAST_PLAYER;
-    game.endedAt = Date.now();
-
     // 记录造反事件(下局倍数×2,由 startGame 统一处理)
     game.rebelEvent = {
       playerId: player.id,
       playerName: player.name,
       newDealerIndex: player.position
     };
-    // 不在这里翻倍,startGame 会根据 rebelEvent 统一处理
-    // inheritedGlobalMultiplier 由上一轮 endRound 的溢出规则计算
-    // 本局结束后 startGame 读取 inheritedGlobalMultiplier 再 ×2(rebelEvent)
-
     // 造反者成为庄家
     game.dealerIndex = player.position;
+    // 设置5秒倒计时
+    game.rebelEndTime = Date.now() + 5000;
 
-    // 广播造反成功
+    // 亮手牌给所有人
     if (this.wsManager) {
-      this.broadcastQuickMessage(game.gameId, `⚔️ ${player.name}造反成功！下把翻倍！`, 'special');
+      this.wsManager.broadcast(game.gameId, 'rebel', {
+        playerId: player.id,
+        playerName: player.name,
+        hand: player.hand.concealedTiles,
+        rebelEndTime: game.rebelEndTime
+      });
+      this.broadcastQuickMessage(game.gameId, `⚔️ ${player.name}造反了！！`, 'special');
     }
+
+    // 5秒后自动结束本局+进入下一局
+    const gameId = game.gameId;
+    this.detachTimer(setTimeout(async () => {
+      try {
+        const freshGame = await this.getGame(gameId);
+        if (!freshGame || !freshGame.rebelEndTime) return;
+        if (freshGame.phase !== GamePhase.PLAYING) return;
+
+        freshGame.phase = GamePhase.ENDED;
+        freshGame.endReason = GameEndReason.LAST_PLAYER;
+        freshGame.endedAt = Date.now();
+        delete freshGame.rebelEndTime;
+
+        await this.persistGame(freshGame);
+        this.broadcastGameState(gameId);
+
+        // 短延迟后自动开始下一局
+        this.detachTimer(setTimeout(async () => {
+          try {
+            await this.startGame(gameId);
+          } catch (err: any) {
+            console.warn('[Rebel] Auto-start next round failed:', err?.message || err);
+          }
+        }, 300));
+      } catch (err: any) {
+        console.warn('[Rebel] End round timeout error:', err?.message || err);
+      }
+    }, 5000));
   }
 
   /**

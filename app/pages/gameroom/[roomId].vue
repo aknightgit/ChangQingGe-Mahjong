@@ -55,6 +55,25 @@
           </div>
         </div>
 
+        <!-- 造反亮手牌弹窗 -->
+        <div v-if="rebelEvent" class="rebel-overlay">
+          <div class="rebel-card">
+            <div class="rebel-icon">⚔️🀄</div>
+            <p class="rebel-title">{{ rebelEvent.playerName }} 造反了！！</p>
+            <p class="rebel-hand-label">手牌：</p>
+            <div class="rebel-hand-tiles">
+              <span v-for="t in rebelEvent.hand" :key="t.id" class="rebel-tile" :class="'tile-' + t.suit + '-' + t.value">
+                {{ t.suit === 'wan' ? '万' : t.suit === 'dots' ? '筒' : t.suit === 'tiao' ? '条' : t.suit === 'feng' ? ['东','南','西','北'][t.value-1] : ['中','发','白'][t.value-1] }}{{ t.suit === 'wan' || t.suit === 'dots' || t.suit === 'tiao' ? t.value : '' }}
+              </span>
+            </div>
+            <div class="rebel-multiplier">即将下一局，翻倍！</div>
+            <div class="rebel-countdown-wrap">
+              <div class="rebel-countdown-bar" :style="{ width: rebelCountdownPercent + '%' }"></div>
+              <span class="rebel-countdown-text">{{ rebelCountdownSec }}s</span>
+            </div>
+          </div>
+        </div>
+
         <!-- 谢谢带头大哥弹窗 -->
         <div v-if="leadingBrotherEvent" class="leading-brother-overlay">
           <div class="leading-brother-card">
@@ -1093,7 +1112,8 @@ const {
     roomDismissedReason,
     lastStateChangeAt,
     leadingBrotherEvent,
-    actionApprovalEvent
+    actionApprovalEvent,
+    rebelEvent
   } = useGame()
 
 const backToLobby = () => {
@@ -2925,6 +2945,29 @@ const isMyApprovalWaiting = computed(() => {
 })
 
 // 审批弹窗倒计时（3秒）
+let rebelTimer_ = null
+const rebelCountdownSec = ref(5)
+const rebelCountdownPercent = ref(100)
+watch(rebelEvent, (event) => {
+  if (rebelTimer_) { clearInterval(rebelTimer_); rebelTimer_ = null }
+  if (!event) return
+  rebelCountdownSec.value = 5
+  rebelCountdownPercent.value = 100
+  const end = event.rebelEndTime
+  const tick = () => {
+    const remaining = Math.max(0, end - Date.now())
+    rebelCountdownSec.value = Math.ceil(remaining / 1000)
+    rebelCountdownPercent.value = (remaining / 5000) * 100
+    if (remaining <= 0 && rebelTimer_) {
+      clearInterval(rebelTimer_)
+      rebelTimer_ = null
+    }
+  }
+  tick()
+  rebelTimer_ = setInterval(tick, 100)
+})
+onUnmounted(() => { if (rebelTimer_) { clearInterval(rebelTimer_); rebelTimer_ = null } })
+
 const approvalCountdownRatio = computed(() => {
   const expiresAt = actionApprovalEvent.value?.expiresAt
   if (!expiresAt) return 1
@@ -4913,6 +4956,7 @@ const forceDiscard = async (p: Player) => {
   background: rgba(220, 38, 38, 0.3);
   border-color: rgba(255, 215, 0, 0.4);
   color: #ffd6d6;
+  animation: heartbeat 1.2s ease-in-out infinite;
 }
 
 /* 桌面端严格 1/4 宽 */
