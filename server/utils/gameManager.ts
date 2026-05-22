@@ -1529,6 +1529,7 @@ class GameManager {
             console.log('[Recovery] Scheduled pending timeout for human player', currentPlayer.name);
           }
         }
+      }
         return stored;
     } catch (err: any) {
       console.warn('⚠️ ensureGameLoaded failed:', err.message);
