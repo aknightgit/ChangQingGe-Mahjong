@@ -1300,6 +1300,23 @@ class GameManager {
   }
 
   /**
+   * ★【修复】Bot自动决策吃牌：选择吃牌组合后resolve，或自动pass
+   */
+  private async resolveBotChowNow(game: GameState, player: Player, pa: PendingAction): Promise<void> {
+    if (!pa.tile || !pa.chowOptions || pa.chowOptions.length === 0) {
+      await this.handlePass(game, player);
+      return;
+    }
+    pa.selectedChowTileIds = selectBotChowTileIds(player, game, pa.tile, pa.chowOptions);
+    if (pa.selectedChowTileIds && pa.selectedChowTileIds.length > 0) {
+      await this.resolvePendingAction(game, player, pa);
+      game.pendingActions = game.pendingActions.filter(p => p.playerId !== player.id);
+    } else {
+      await this.handlePass(game, player);
+    }
+  }
+
+  /**
    * 记录吃/碰来源,检测互包关系
    */
   private recordBailoutAction(
@@ -5007,7 +5024,7 @@ class GameManager {
                   freshGame.pendingActions = freshGame.pendingActions.filter(pa => pa.playerId !== livePlayer.id);
                   await this.persistGame(freshGame);
                   this.broadcastGameState(game.gameId);
-                  return;
+                  // ⚠️ 不要 return！必须继续执行摸牌逻辑
                 }
               }
               this.clearCurrentTurnPendingActions(freshGame, livePlayer.id);
@@ -5243,9 +5260,17 @@ class GameManager {
               await this.persistGame(game);
             }
           } else {
-          console.log(`[bot-discard] Pending actions still unresolved for ${currentP.name}, delegating to timeout`);
-          this.schedulePendingActionTimeout(gameId);
-          return;
+            // ★【修复】当前玩家是bot且未摸牌，其他玩家的claim是上家出牌的残留
+            // 清除这些残留让bot继续摸牌出牌，而不是无限defer到pending timeout
+            if (!game.drawnThisTurn) {
+              game.pendingActions = game.pendingActions.filter(pa => pa.playerId === currentP.id);
+              await this.persistGame(game);
+              // 继续下面的摸牌出牌流程
+            } else {
+              console.log(`[bot-discard] Pending actions still unresolved for ${currentP.name}, delegating to timeout`);
+              this.schedulePendingActionTimeout(gameId);
+              return;
+            }
           }
         }
 

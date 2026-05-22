@@ -6,7 +6,7 @@ import { Player, Tile, TileSuit } from '../types/game'
  */
 export function isConcealedDiscardState(player: Player): boolean {
   const concealedCount = player.hand.concealedTiles.length
-  return concealedCount >= 2 && concealedCount % 3 === 2
+  return concealedCount >= 2 && (concealedCount % 3 === 2 || concealedCount >= 14)
 }
 
 /**

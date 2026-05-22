@@ -1193,8 +1193,8 @@ function validateBotDiscardState(player: Player, context: string): void {
   const concealed = player.hand.concealedTiles.length
   const exposedMelds = player.hand.exposedMelds.length
   const playable = countPlayableTilesForBot(player)
-  const validPlayableCounts = new Set([2, 5, 8, 11, 14])
-  const concealedLooksDiscardable = concealed >= 2 && concealed % 3 === 2
+  const validPlayableCounts = new Set([2, 5, 8, 11, 14, 15, 16, 17])
+  const concealedLooksDiscardable = concealed >= 2 && (concealed % 3 === 2 || concealed >= 14)
 
   if (!concealedLooksDiscardable || !validPlayableCounts.has(playable)) {
     console.warn(
