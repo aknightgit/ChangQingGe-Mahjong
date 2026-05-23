@@ -198,7 +198,8 @@ export default defineEventHandler(async (event) => {
       availableActions,
       // [Fix] Only return tingPreview when explicitly requested, otherwise omit
       // so the frontend can distinguish "not requested" from "not ting"
-      ...(query.tingPreview === 'true' ? { tingPreview } : {})
+      ...(query.tingPreview === 'true' ? { tingPreview } : {}),
+      broadcastMessages: gameManager.getRecentBroadcasts(normalizedGameId)
     }
   };
 });

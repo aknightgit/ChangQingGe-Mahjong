@@ -2805,23 +2805,10 @@ const syncHuSelectionLock = async (locked: boolean) => {
   }
 }
 
-// 自摸时自动弹面板
-let autoHuShown = false
-watch(() => [showHu.value, isMyTurn.value], ([canHu, myTurn]) => {
-  if (canHu && myTurn && !showHuPanel.value && !autoHuShown) {
-    autoHuShown = true
-    onHu()
-  }
-  if (!canHu) autoHuShown = false
-})
-
 // 选择胡牌组合
 const selectedHuCombo = ref<number | null>(null)
 const onHu = async () => {
   // 不管自摸还是捉冲，都弹面板
-  // 先发THINK锁定决策状态（设hasTriggeredAction，不扣次数）
-  // 防止用户在HuPanel选方案期间pending被清除
-  await executeAction(ActionType.THINK)
   isHuReviewMode.value = false
   await fetchWinOptions()
   await syncHuSelectionLock(true)
@@ -3912,12 +3899,12 @@ const addBroadcast = (
     : text
   const dedupeKey = options?.dedupeKey || sanitizedText
   const lastAt = recentBroadcastTexts.get(dedupeKey) ?? 0
-  if (now - lastAt < 1500) {
+  if (now - lastAt < 30000) {
     return
   }
   recentBroadcastTexts.set(dedupeKey, now)
   for (const [key, ts] of recentBroadcastTexts) {
-    if (now - ts > 10000) recentBroadcastTexts.delete(key)
+    if (now - ts > 300000) recentBroadcastTexts.delete(key)
   }
   broadcastMessages.value.push({ id: ++broadcastId, text: sanitizedText, type, timestamp: now, timeLabel })
   if (broadcastMessages.value.length > 20) {
@@ -5940,6 +5927,7 @@ const forceDiscard = async (p: Player) => {
 }
 .turn-timer--winner {
   font-size: 0.6rem !important;
+  white-space: nowrap;
   padding: 2px 10px !important;
   background: rgba(255, 215, 0, 0.15) !important;
   color: #ffd700 !important;
@@ -5947,6 +5935,7 @@ const forceDiscard = async (p: Player) => {
   border-radius: 999px;
   white-space: nowrap;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 .turn-timer-inline.turn-timer--urgent {
   color: #ef5350;

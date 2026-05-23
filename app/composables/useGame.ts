@@ -54,6 +54,8 @@ export const useGame = () => {
   let lastFetchStartedAt = 0
   let lastFetchSucceededAt = 0
   let lastStateSummary = ''
+  // 已显示过的广播ID（HTTP兜底用，避免轮询重复追加）
+  const seenBroadcastIds = new Set<number>()
 
   const startPolling = () => {
     if (pollingTimer) {
@@ -457,6 +459,18 @@ export const useGame = () => {
     gameState.value = data.game
     playerView.value = data.playerView
     if (data.tingPreview !== undefined) { tingPreview.value = data.tingPreview }
+    // 从HTTP API兜底广播消息（仅取最新3条，避免反复重放旧消息）
+    // 从HTTP API兜底广播消息（用 Set 追踪已显示ID，绝不重复）
+    if (data.broadcastMessages && Array.isArray(data.broadcastMessages)) {
+      const msgs = data.broadcastMessages.slice(-3);
+      for (const msg of msgs) {
+        if (msg.id && seenBroadcastIds.has(msg.id)) continue;
+        if (msg.id) seenBroadcastIds.add(msg.id);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('mahjong-broadcast', { detail: msg }))
+        }
+      }
+    }
     // 只在availableActions实际变化时才更新lastStateChangeAt
     const oldActions = availableActions.value
     const newActions = data.availableActions || []

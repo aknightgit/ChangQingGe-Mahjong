@@ -54,6 +54,9 @@ class GameManager {
   // 记录每个玩家从另一个玩家吃/碰/杠了多少口
   private mutualBailout: Map<string, Map<string, Map<string, number>>> = new Map();
 
+  // 广播消息缓存: gameId -> BroadcastMsg[]（供HTTP API兜底，避免依赖WebSocket）
+  private recentBroadcasts: Map<string, { id: number; text: string; type: string; timestamp: number; timeLabel: string }[]> = new Map();
+
   // Pending action超时处理(自动推进)
   private pendingActionTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
@@ -75,15 +78,25 @@ class GameManager {
     type: 'info' | 'warn' | 'special' = 'info',
     actionKind?: string
   ): void {
-    if (!this.wsManager) return;
-    this.wsManager.broadcast(gameId, 'broadcastMessage', {
+    const msg = {
       id: Date.now() + Math.floor(Math.random() * 1000),
       text,
       actionKind,
       type,
       timestamp: Date.now(),
       timeLabel: formatBeijingTime()
-    });
+    };
+    if (this.wsManager) {
+      this.wsManager.broadcast(gameId, 'broadcastMessage', msg);
+    }
+    // 缓存到内存供HTTP API兜底（最多保留20条）
+    let list = this.recentBroadcasts.get(gameId);
+    if (!list) {
+      list = [];
+      this.recentBroadcasts.set(gameId, list);
+    }
+    list.push({ id: msg.id, text: msg.text, type: msg.type, timestamp: msg.timestamp, timeLabel: msg.timeLabel });
+    if (list.length > 20) list.splice(0, list.length - 20);
   }
 
   private broadcastFlowerReplacement(game: GameState, player: Player): void {
@@ -858,6 +871,11 @@ class GameManager {
     this.wsManager = manager;
   }
 
+  /** 获取广播消息缓存（供HTTP API兜底） */
+  getRecentBroadcasts(gameId: string): { id: number; text: string; type: string; timestamp: number; timeLabel: string }[] {
+    return this.recentBroadcasts.get(gameId) || [];
+  }
+
   // ===== AI托管模式控制 =====
   /**
    * 判断玩家是否被AI托管(包括本身是bot玩家,或被手动标记为AI托管)
@@ -1298,27 +1316,6 @@ class GameManager {
       await this.handlePass(game, player);
     }
   }
-
-  /**
-   * ★【修复】Bot自动决策吃牌：选择吃牌组合后resolve，或自动pass
-   */
-  private async resolveBotChowNow(game: GameState, player: Player, pa: PendingAction): Promise<void> {
-    if (!pa.tile || !pa.chowOptions || pa.chowOptions.length === 0) {
-      await this.handlePass(game, player);
-      return;
-    }
-    pa.selectedChowTileIds = selectBotChowTileIds(player, game, pa.tile, pa.chowOptions);
-    if (pa.selectedChowTileIds && pa.selectedChowTileIds.length > 0) {
-      await this.resolvePendingAction(game, player, pa);
-      game.pendingActions = game.pendingActions.filter(p => p.playerId !== player.id);
-    } else {
-      await this.handlePass(game, player);
-    }
-  }
-
-  /**
-   * 记录吃/碰来源,检测互包关系
-   */
   private recordBailoutAction(
     gameId: string,
     playerId: string,
@@ -3405,15 +3402,7 @@ class GameManager {
 
     const _bailoutCount = this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.SEQUENCE);
     this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
-    if (_bailoutCount >= 2 && this.wsManager) {
-      const _source = game.players.find(p => p.id === sourcePlayerId);
-      const _bailoutMsgs = {2: `ð£ ${player.name}æäº${_source?.name||'??'}ä¸¤å£äºï¼`, 3: `ð£ ${player.name}æäº${_source?.name||'??'}ä¸å£äºï¼ï¼`, 4: `ð£ ${player.name}æäº${_source?.name||'??'}åå£äºï¼ï¼ï¼`};
-      if (_bailoutMsgs[_bailoutCount]) { this.broadcastQuickMessage(game.gameId, _bailoutMsgs[_bailoutCount], 'special', 'bailout'); }
-    }
     // 广播吃牌到牌局快讯（所有吃都会显示，不限于口数）
-    if (this.wsManager) {
-      this.broadcastQuickMessage(game.gameId, `ⓘ ${player.name}吃牌`, 'info', 'chow');
-    }
 
     for (const tile of handTiles) {
       player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile.id);
@@ -3484,17 +3473,7 @@ class GameManager {
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
     const _bailoutCount2 = this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.TRIPLET);
     this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
-    if (_bailoutCount2 >= 2 && this.wsManager) {
-      const _source2 = game.players.find(p => p.id === sourcePlayerId);
-      const _bailoutMsgs2 = {2: `ð£ ${player.name}æäº${_source2?.name||'??'}ä¸¤å£äºï¼`, 3: `ð£ ${player.name}æäº${_source2?.name||'??'}ä¸å£äºï¼ï¼`, 4: `ð£ ${player.name}æäº${_source2?.name||'??'}åå£äºï¼ï¼ï¼`};
-      if (_bailoutMsgs2[_bailoutCount2]) { this.broadcastQuickMessage(game.gameId, _bailoutMsgs2[_bailoutCount2], 'special', 'bailout'); }
-    }
-    // 广播碰牌到牌局快讯
-    if (this.wsManager) {
-      const _bc2 = this.mutualBailout.get(game.gameId)?.get(player.id)?.get(sourcePlayerId) || 0;
-      const _suffix2 = _bc2 >= 2 ? ` (（${_bc2}口)` : '';
-      this.broadcastQuickMessage(game.gameId, `ⓘ ${player.name}碰牌${_suffix2}`, 'info', 'pong');
-    }
+    // 碰牌广播已合并到上方bailout逻辑中
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[0].id);
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[1].id);
     const sourcePos = this.getLastDiscardPosition(game);

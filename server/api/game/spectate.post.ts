@@ -70,7 +70,7 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 404, message: 'Target player not found' });
     }
     if (player.status !== PlayerStatus.WON && player.status !== PlayerStatus.SPECTATING && !canUseDebugBotSpectator(player, target)) {
-      throw createError({ statusCode: 400, message: 'Only players who have won can use spectator view' });
+      throw createError({ statusCode: 400, message: '胡牌玩家方可观赛' });
     }
     if (!isSpectatorTargetWatchable(target)) {
       throw createError({ statusCode: 400, message: 'Target player is not watchable in this round' });
