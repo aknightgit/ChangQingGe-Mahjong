@@ -68,12 +68,46 @@ export class GameStore {
     return undefined;
   }
 
+  // 异步批量写入：标记脏数据，定期刷盘，关键节点立即刷
+  private dirtyGames: Map<string, GameState> = new Map()
+  private flushTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
+  private readonly FLUSH_INTERVAL_MS = 3000
+
   async persistGame(game: GameState): Promise<void> {
-    try {
-      await saveGameState(game);
-    } catch (error: any) {
-      console.warn('MongoDB persist failed:', error.message);
+    // 仅标记脏数据，定期批量刷盘
+    this.dirtyGames.set(game.gameId, game)
+    if (!this.flushTimers.has(game.gameId)) {
+      this.flushTimers.set(game.gameId, setTimeout(() => {
+        this.flushGameNow(game.gameId)
+      }, this.FLUSH_INTERVAL_MS))
     }
+  }
+
+  /** 关键节点立即刷盘（回合结束/退房/断连） */
+  async flushGameNow(gameId: string): Promise<void> {
+    const timer = this.flushTimers.get(gameId)
+    if (timer) { clearTimeout(timer); this.flushTimers.delete(gameId) }
+    const game = this.dirtyGames.get(gameId)
+    if (!game) return
+    try {
+      await saveGameState(game)
+      this.dirtyGames.delete(gameId)
+    } catch (error: any) {
+      console.warn('MongoDB persist failed:', error.message)
+    }
+  }
+
+  /** 服务关闭前刷所有脏数据 */
+  async flushAll(): Promise<void> {
+    for (const [id] of this.flushTimers) {
+      const timer = this.flushTimers.get(id)
+      if (timer) { clearTimeout(timer); this.flushTimers.delete(id) }
+    }
+    const promises = [...this.dirtyGames.values()].map(g => 
+      saveGameState(g).catch((e: any) => console.warn('MongoDB flushAll failed:', e.message))
+    )
+    this.dirtyGames.clear()
+    await Promise.all(promises)
   }
 
   broadcastGameState(gameId: string): void {

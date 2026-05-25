@@ -39,7 +39,7 @@
           @click="$emit('confirm', selectedIndex ?? 0)"
           :disabled="selectedIndex === null"
         >确认胡牌</button>
-        <button class="hu-cancel-btn" @click="$emit('cancel')">{{ isReviewMode ? '关闭' : '取消' }}</button>
+        <button class="hu-cancel-btn" @click="$emit('cancel')">{{ isReviewMode ? '关闭' : '返回' }}</button>
       </div>
     </div>
   </div>

@@ -1,6 +1,4 @@
 {
-  "savedAt": "2026-05-24T06:46:03.658Z",
-  "round": 0,
   "metrics": {
     "fitness": -11400,
     "huRate": 0.01,
@@ -143,7 +141,6 @@
     "honorTripletKeepBonus": 8.936635474603115,
     "windDragonPairKeepBonus": 11.836265385481415,
     "tripletComboBonus": 1.3808875380252752,
-    "flushChaseBonus": 1.9372010313649672,
-    "useV2Engine": true
+    "flushChaseBonus": 1.9372010313649672
   }
 }

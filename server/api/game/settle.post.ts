@@ -27,7 +27,9 @@ export default defineEventHandler(async (event) => {
     // 请求退房结算
     game.settleRequested = true;
     console.log(`[Settle] ${playerId} requested settlement`);
-    gameManager.broadcastQuickMessage(gameId, `🏠 房主申请退房，本局后结算`, 'warn');
+    const requestPlayer = game.players.find((p: any) => p.id === playerId);
+    const requestPlayerName = requestPlayer?.name || '玩家';
+    gameManager.broadcastQuickMessage(gameId, `🏠 ${requestPlayerName}申请退房，本局后结算`, 'warn');
 
     // 识别AI玩家ID集合
     const aiPlayerIds = new Set(
@@ -108,6 +110,17 @@ export default defineEventHandler(async (event) => {
       }
     };
   }
+  if (action === 'cancel') {
+    // 取消退房结算
+    game.settleRequested = false;
+    const cancelPlayer = game.players.find((p: any) => p.id === playerId);
+    const cancelPlayerName = cancelPlayer?.name || '玩家';
+    gameManager.broadcastQuickMessage(gameId, `🏠 ${cancelPlayerName}取消了退房`, 'warn');
+    gameManager.broadcastGameState(gameId);
+    console.log('[Settle] ' + playerId + ' cancelled settlement');
+    return { success: true, data: { settleRequested: false } };
+  }
+
 
   if (action === 'save') {
     // 识别AI玩家ID集合

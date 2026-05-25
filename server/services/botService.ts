@@ -12,10 +12,36 @@ import {
   USE_PIPELINE_SCORER
 } from '../ai/config/policyFlags'
 import { evaluateRouteState } from '../ai/route/routeEvaluator'
+// ★ V2 Engine
+import { evaluateRouteStateV2 } from '../ai_v2/pathSelector'
+import { runV2Engine } from '../ai_v2/engineEntry'
 import { scoreRouteDiscardCandidate } from '../ai/route/discardPlanner'
 import { evaluateRouteClaim } from '../ai/route/claimPlanner'
+import { evaluateRouteClaim as evaluateRouteClaimV2 } from '../ai_v2/claimDecider'
+import { scoreRouteDiscardCandidate } from '../ai/route/discardPlanner'
+import { scoreRouteDiscardCandidate as scoreDiscardV2 } from '../ai_v2/discardDecider'
 import fs from 'fs'
 import path from 'path'
+
+// ★ V2 Engine routing
+function useV2Engine(policy: any): boolean {
+  return policy?.useV2Engine === true
+}
+function getEvaluator(player: Player): { evaluate: typeof evaluateRouteState; label: string } {
+  const policy = getPolicyForPlayer(player)
+  if (useV2Engine(policy)) {
+    return { evaluate: evaluateRouteStateV2 as any, label: 'V2' }
+  }
+  return { evaluate: evaluateRouteState, label: 'V1' }
+}
+function getClaimEvaluator(player: Player) {
+  const policy = getPolicyForPlayer(player)
+  return useV2Engine(policy) ? evaluateRouteClaimV2 : evaluateRouteClaim
+}
+function getDiscardEvaluator(player: Player) {
+  const policy = getPolicyForPlayer(player)
+  return useV2Engine(policy) ? scoreDiscardV2 : scoreRouteDiscardCandidate
+}
 
 // ===== P2: Pipeline Shadow Bridge =====
 // 导入新管线（条件导入，避免破坏现有逻辑）
@@ -1240,7 +1266,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
     : 0
   const routeMetricPolicy = getLiveRouteMetricPolicy(getPolicyForPlayer(player))
   const routeState = useRoutePlanner
-    ? evaluateRouteState({
+    ? getEvaluator(player).evaluate({
         game,
         player,
         hand,
@@ -1268,7 +1294,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
     if (committedOpenSuit && hasCommittedOpenOffSuitNumberCandidate && tile.suit === committedOpenSuit) {
       continue
     }
-    if (committedOpenSuit && hasCommittedOpenOffSuitNumberWaste && isHonor(tile)) {
+    if (committedOpenSuit && hasCommittedOpenOffSuitNumberCandidate && isHonor(tile)) {
       continue
     }
     let removed = false
@@ -1351,7 +1377,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
     }
 
     if (useRoutePlanner && routeState) {
-      const afterRouteState = evaluateRouteState({
+      const afterRouteState = getEvaluator(player).evaluate({
         game,
         player,
         hand: remaining,
@@ -1362,7 +1388,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         previousRouteState: routeState,
         policy: getPolicyForPlayer(player),
       })
-      const routeScore = scoreRouteDiscardCandidate({
+      const routeScore = getDiscardEvaluator(player)({
         tile,
         hand,
         player,
@@ -1551,7 +1577,7 @@ export function selectBotChowTileIds(
   const passShanten = calculateShanten(hand, exposedCount, wildChecker)
   const passEffective = countEffectiveTiles(hand, exposedCount, wildChecker)
   const routeState = useRoutePlanner
-    ? evaluateRouteState({
+    ? getEvaluator(player).evaluate({
         game,
         player,
         hand,
@@ -1580,7 +1606,7 @@ export function selectBotChowTileIds(
     let tune = evaluateChowValue(player, game, claimTile)
 
     if (useRoutePlanner && routeState) {
-      const routeDecision = evaluateRouteClaim({
+      const routeDecision = getClaimEvaluator(player)({
         action: ActionType.CHOW,
         player,
         game,
@@ -2138,7 +2164,7 @@ export async function shouldClaimPendingAction(
 
   const passEval = actionScores.get(ActionType.PASS)!
   const routeState = useRoutePlanner
-    ? evaluateRouteState({
+    ? getEvaluator(player).evaluate({
         game,
         player,
         hand,
@@ -2171,7 +2197,7 @@ export async function shouldClaimPendingAction(
       if (removed === 2 && candidateHand.length > 0) {
         const { shanten, effective } = evaluateResultingHand(candidateHand)
         const candidateRouteState = useRoutePlanner
-          ? evaluateRouteState({
+          ? getEvaluator(player).evaluate({
               game,
               player,
               hand: candidateHand,
@@ -2291,7 +2317,7 @@ export async function shouldClaimPendingAction(
 
         let pengBlockedByRoute = false
         if (useRoutePlanner && routeState) {
-          const routeDecision = evaluateRouteClaim({
+          const routeDecision = getClaimEvaluator(player)({
             action: ActionType.PENG,
             player,
             game,
@@ -2375,7 +2401,7 @@ export async function shouldClaimPendingAction(
         kongTune = Math.max(0.05, Math.min(2.0, kongTune)) // 上限 2.0，防止 kongWildBoost 过大导致过度杠牌
         let kongBlockedByRoute = false
         if (useRoutePlanner && routeState) {
-          const routeDecision = evaluateRouteClaim({
+          const routeDecision = getClaimEvaluator(player)({
             action: ActionType.KONG,
             player,
             game,
@@ -2444,7 +2470,7 @@ export async function shouldClaimPendingAction(
 
     if (bestChow) {
       const candidateRouteState = useRoutePlanner
-        ? evaluateRouteState({
+        ? getEvaluator(player).evaluate({
             game,
             player,
             hand: bestChow.candidateHand,
@@ -2485,7 +2511,7 @@ export async function shouldClaimPendingAction(
 
       let chowBlockedByRoute = false
       if (useRoutePlanner && routeState) {
-        const routeDecision = evaluateRouteClaim({
+        const routeDecision = getClaimEvaluator(player)({
           action: ActionType.CHOW,
           player,
           game,

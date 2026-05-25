@@ -104,17 +104,22 @@ export const useGame = () => {
   })
 
   const fetchGameState = async (gId: string, pId: string) => {
+    const _fetchStart = Date.now();
+    console.log("[client] fetch START gId=" + gId.slice(0,8));
     lastFetchStartedAt = Date.now()
     pushDiag('fetch:start', { gId, pId })
     try {
+      const _perfStart = performance.now()
       const response = await $fetch('/mahjong/api/game/state', {
         query: {
           gameId: gId,
           playerId: pId,
           debugAccessToken: typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
         },
-        cache: 'no-cache'
+        cache: 'no-cache',
+        retry: false
       })
+      console.log('[perf] $fetch state took', (performance.now() - _perfStart).toFixed(0), 'ms')
 
       if ((response as any)?.success) {
         const stateData = (response as any).data
@@ -122,7 +127,8 @@ export const useGame = () => {
         isConnected.value = true
         error.value = null
         lastFetchSucceededAt = Date.now()
-        pushDiag('fetch:success', {
+        console.log("[client] fetch DONE " + (Date.now() - _fetchStart) + "ms");
+        pushDiag("fetch:success", {
           gId,
           pId,
           phase: stateData?.game?.phase,
@@ -179,6 +185,8 @@ export const useGame = () => {
   }
 
   const connect = async (gId: string, pId: string) => {
+    console.log("[client] connect START");
+    const _connStart = Date.now();
     gameId.value = gId
     playerId.value = pId
     roomDismissedReason.value = null
@@ -187,6 +195,7 @@ export const useGame = () => {
     try {
       // Fetch initial state (optional, but good for immediate render)
       await fetchGameState(gId, pId)
+      console.log("[client] connect fetch DONE " + (Date.now() - _connStart) + "ms");
       startPolling() // 无论 socket 状态，都启动轮询兜底
       pushDiag('connect:after-initial-fetch', { gId, pId, hasGameState: !!gameState.value })
 
@@ -342,8 +351,6 @@ export const useGame = () => {
 
       // 牌局快讯广播
       socket.value.on('broadcastMessage', (data: { id: number; text: string; type: string; timestamp: number; timeLabel: string; actionKind?: string }) => {
-        if (data.id && seenBroadcastIds.has(data.id)) { console.log('[BC-DIAG] WS BLOCK:', data.id, data.text?.slice(0,20)); return }
-        if (data.id) seenBroadcastIds.add(data.id)
         console.log('📢 广播消息:', data)
         window.dispatchEvent(new CustomEvent('mahjong-broadcast', { detail: data }))
       })
@@ -466,9 +473,8 @@ export const useGame = () => {
     if (data.broadcastMessages && Array.isArray(data.broadcastMessages)) {
       const msgs = data.broadcastMessages.slice(-3);
       for (const msg of msgs) {
-        if (msg.id && seenBroadcastIds.has(msg.id)) { console.log('[BC-DIAG] HTTP DUPLICATE blocked:', msg.id, msg.text?.slice(0,20)); continue; }
+        if (msg.id && seenBroadcastIds.has(msg.id)) continue;
         if (msg.id) seenBroadcastIds.add(msg.id);
-        console.log('[BC-DIAG] HTTP dispatch:', msg.id, msg.text?.slice(0,20));
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('mahjong-broadcast', { detail: msg }))
         }
@@ -550,6 +556,7 @@ export const useGame = () => {
 
     console.log('[startGame] Starting game:', gameId.value)
     try {
+      const _startPerf = performance.now()
       const response = await $fetch('/mahjong/api/game/start', {
         method: 'POST',
         body: {
@@ -557,8 +564,10 @@ export const useGame = () => {
           playerId: playerId.value,
           hesitationWindow: Math.max(1000, options?.hesitationWindow ?? 5000),
           dice: options?.fixedDice
-        }
+        },
+        retry: false
       })
+      console.log('[perf] $fetch start took', (performance.now() - _startPerf).toFixed(0), 'ms')
 
       if ((response as any)?.success) {
         console.log('[startGame] API success, refreshing state...')
@@ -590,6 +599,7 @@ export const useGame = () => {
   const refreshTingPreview = async () => {
     if (!gameId.value || !playerId.value) return
     try {
+      const _tingPerf = performance.now()
       const response = await $fetch('/mahjong/api/game/state', {
         query: {
           gameId: gameId.value,
@@ -597,8 +607,10 @@ export const useGame = () => {
           tingPreview: 'true',
           debugAccessToken: typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
         },
-        cache: 'no-cache'
+        cache: 'no-cache',
+        retry: false
       })
+      console.log('[perf] $fetch tingPreview took', (performance.now() - _tingPerf).toFixed(0), 'ms')
       if ((response as any)?.success) {
         updateState((response as any).data)
       }

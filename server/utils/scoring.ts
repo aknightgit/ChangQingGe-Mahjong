@@ -1119,7 +1119,8 @@ export function calculateSettlementBreakdownByRules(
 
     if (bailoutLoser !== undefined) {
       if (discarderId === bailoutLoser) {
-        const pay = winnerFinalPoints * 2;
+        const bType = mutualBailout?.get(discarderId)?.type || '三口';
+        addTransfer(discarderId, winnerIndex, winnerFinalPoints * 2, '互包捉冲×2', bType);
       } else {
         addTransfer(discarderId, winnerIndex, winnerFinalPoints, '放冲赔付');
       }

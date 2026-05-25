@@ -269,6 +269,7 @@
 
         <div v-if="showSettlement" class="settle-overlay">
   <div class="settle-panel">
+    <template v-if="!settleFinalMode">
     <h2 class="settle-title-center">{{ isWallExhaustedSettlement ? '💨 流局了，下把翻倍！！' : '本局输赢' }}</h2>
 
     <div class="settle-rounds settle-rounds--single">
@@ -317,51 +318,67 @@
         </div>
       </div>
     </div>
+    </template>
 
-    <!-- 总结算统计（退房结算时显示） -->
-    <div v-if="isSettleRequested && settlementData?.playerStats" class="settle-details" style="border-top:1px solid rgba(255,215,0,0.15);padding-top:16px;margin-top:10px">
-      <h3 class="settle-title-center" style="font-size:1.1rem;margin-bottom:14px">📊 总成绩单</h3>
-      <div class="settle-detail-header">
-        <span class="settle-detail-name"></span>
-        <span class="settle-detail-stat settle-detail-stat--record">总输赢</span>
-        <span class="settle-detail-stat settle-detail-stat--record">有效输赢</span>
-        <span class="settle-detail-stat">🤖 vs AI</span>
-        <span class="settle-detail-stat">🀄 自摸</span>
-        <span class="settle-detail-stat">🎯 捉冲</span>
-        <span class="settle-detail-stat settle-detail-stat--win">最大赢</span>
-        <span class="settle-detail-stat settle-detail-stat--loss">最大输</span>
-      </div>
-      <div class="settle-detail-grid">
-        <div v-for="stat in sortedSettleStats" :key="stat.id" class="settle-detail-row">
-          <span class="settle-detail-name">{{ stat.name }}</span>
-          <span class="settle-detail-stat settle-detail-stat--record">{{ (stat.totalScore ?? 0) > 0 ? '+' : '' }}{{ stat.totalScore ?? 0 }}</span>
-          <span class="settle-detail-stat settle-detail-stat--record">{{ stat.effectiveScore ?? stat.totalScore ?? 0 }}</span>
-          <span class="settle-detail-stat">{{ stat.vsAiScore ?? 0 }}</span>
-          <span class="settle-detail-stat">{{ stat.selfDraws ?? 0 }}</span>
-          <span class="settle-detail-stat">{{ stat.discards ?? 0 }}</span>
-          <span class="settle-detail-stat settle-detail-stat--win">+{{ stat.maxWin ?? 0 }}</span>
-          <span class="settle-detail-stat settle-detail-stat--loss">{{ stat.maxLoss ?? 0 }}</span>
-        </div>
-      </div>
-      <p style="text-align:center;font-size:0.72rem;opacity:0.5;margin-top:10px">有效输赢 = 仅统计纯真人局的输赢，排除与AI对战的部分</p>
-    </div>
+
 
     <div class="settle-actions">
-      <div v-if="isWallExhaustedSettlement" class="auto-next-countdown" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;justify-content:center;font-size:0.85rem;opacity:0.8">
-        <span class="auto-next-spinner"></span>
-        <span>倒计时 {{ wallExhaustedCountdown }}s 后自动下一局</span>
+      <!-- 第一阶段：本局输赢（独面板） -->
+      <div v-if="!settleFinalMode">
+        <div class="auto-next-countdown" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;justify-content:center;font-size:0.85rem;opacity:0.8">
+          <span class="auto-next-spinner"></span>
+          <span>倒计时 {{ wallExhaustedCountdown }}s 后{{ isSettleRequested ? '显示最终结算' : '自动下一局' }}</span>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:center;width:100%">
+          <button v-if="canReviewHuSelection" class="settle-save-btn settle-save-btn--secondary" @click="openHuReviewPanel">
+            回看胡牌选择
+          </button>
+          <button class="settle-save-btn" @click="isSettleRequested ? finishSettleToFinal() : startNextRound()">
+            {{ isSettleRequested ? '查看最终结算' : '下一局' }}{{ wallExhaustedCountdown > 0 ? ' (' + wallExhaustedCountdown + 's)' : '' }}
+          </button>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;justify-content:center;width:100%">
-        <button v-if="canReviewHuSelection" class="settle-save-btn settle-save-btn--secondary" @click="openHuReviewPanel">
-          回看胡牌选择
-        </button>
-        <button class="settle-save-btn" @click="startNextRound">
-          下一局{{ wallExhaustedCountdown > 0 ? ' (' + wallExhaustedCountdown + 's)' : '' }}
-        </button>
+      <!-- 第二阶段：最终结算（独面板，表格化列对齐） -->
+      <div v-if="settleFinalMode" class="final-settle-panel">
+        <h3 class="settle-title-center" style="font-size:1.1rem;margin-bottom:14px;color:#ffd700">🎯 最终结算</h3>
+        <div class="settle-table-wrap">
+          <table class="settle-round-table settle-round-table--compact settle-round-table--final">
+            <thead>
+              <tr>
+                <th>玩家</th>
+                <th style="color:#ffd700;font-weight:800">总输赢</th>
+                <th style="color:#ffd700;font-weight:800">有效输赢</th>
+                <th>🤖 vs AI</th>
+                <th>🀄 自摸</th>
+                <th>🎯 捉冲</th>
+                <th class="settle-detail-stat--win">最大赢</th>
+                <th class="settle-detail-stat--loss">最大输</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="stat in sortedSettleStats" :key="stat.id">
+                <td>{{ stat.name }}</td>
+                <td :style="{ color: (stat.totalScore ?? 0) > 0 ? '#4caf50' : (stat.totalScore ?? 0) < 0 ? '#ff6b6b' : '#fff' }">{{ (stat.totalScore ?? 0) > 0 ? '+' : '' }}{{ stat.totalScore ?? 0 }}</td>
+                <td :style="{ color: (stat.effectiveScore ?? 0) > 0 ? '#ffd700' : (stat.effectiveScore ?? 0) < 0 ? '#ff6b6b' : '#fff', fontWeight: 800 }">{{ (stat.effectiveScore ?? stat.totalScore ?? 0) > 0 ? '+' : '' }}{{ stat.effectiveScore ?? stat.totalScore ?? 0 }}</td>
+                <td>{{ stat.vsAiScore ?? 0 }}</td>
+                <td>{{ stat.selfDraws ?? 0 }}</td>
+                <td>{{ stat.discards ?? 0 }}</td>
+                <td style="color:#4caf50">+{{ stat.maxWin ?? 0 }}</td>
+                <td style="color:#ff6b6b">{{ stat.maxLoss ?? 0 }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="text-align:center;font-size:0.72rem;opacity:0.5;margin-top:10px">有效输赢 = 仅统计纯真人局的输赢，排除与AI对战的部分</p>
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:14px">
+          <button class="settle-save-btn" @click="onSaveSettle">保存并退出</button>
+        </div>
       </div>
     </div>
   </div>
 </div>
+
+        <!-- 胡牌玩家手牌展示已移除，直接进本局输赢 -->
 
         <!-- 设置面板（悬浮玻璃态，定位在设置按钮下方） -->
         <Teleport to="body">
@@ -735,9 +752,9 @@
             <button
               v-if="gameState?.phase === GamePhase.WAITING
                 ? canManualStartWaitingGame
-                : (gameState?.phase === 'playing' && !!currentPlayer?.isDealer) || gameState?.phase === 'ended'"
+                : (gameState?.phase === 'playing' && !isAIControlled) || gameState?.phase === 'ended'"
               class="settle-btn-header"
-              :class="{ 'start-game-glow': canManualStartWaitingGame }"
+              :class="{ 'start-game-glow': canManualStartWaitingGame, 'settle-btn--grayed': isSettleRequested }"
               :disabled="isGameStarting && gameState?.phase === GamePhase.WAITING"
               @click="gameState?.phase === GamePhase.WAITING ? onStartGame() : onRequestSettle()"
             >
@@ -854,7 +871,6 @@
               />
               <!-- 更多特殊操作：常驻显示聚义/造反/倒计时 -->
               <div class="extra-actions-bar">
-                <span class="extra-actions-label">更多操作</span>
                 <div class="extra-actions-group">
                   <button
                     class="extra-action-btn extra-action-btn--liangshan"
@@ -866,13 +882,8 @@
                     :disabled="showRebel === false || isInteractionLocked || !isConnected || thinkFreezeActive"
                     @click="onRebel"
                   >🚨 造反</button>
-                  <button
-                    v-if="showHu"
-                    class="extra-action-btn extra-action-btn--hu"
-                    :disabled="isInteractionLocked || isAIControlled"
-                    @click="onHu"
-                  >🏆 您胡了</button>
-                  <span v-if="isWinner && confirmedWinner" class="turn-timer-inline turn-timer--winner">🎉 你赢了！</span>
+                  <!-- 胡按钮已整合到 CircularActionButtons -->
+                  <!--🏆 胡</button>-->
                   <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
                     ⏱ {{ turnTimer }}s
                   </span>
@@ -3192,7 +3203,10 @@ const settlementData = ref<any>(null)
 const lastAutoSettlementKey = ref('')
 const wallExhaustedCountdown = ref(5)
 const wallExhaustedTimer = ref(null)
-const isWallExhaustedSettlement = computed(() => wallExhaustedTimer.value !== null)
+
+const settleFinalMode = ref(false)
+const isRoundWallExhausted = ref(false)
+const isWallExhaustedSettlement = computed(() => isRoundWallExhausted.value)
 
 const cancelWallExhaustedCountdown = () => {
   if (wallExhaustedTimer.value !== null) {
@@ -3202,13 +3216,23 @@ const cancelWallExhaustedCountdown = () => {
   wallExhaustedCountdown.value = 0
 }
 
+const finishSettleToFinal = () => {
+  cancelWallExhaustedCountdown()
+  settleFinalMode.value = true
+}
+
 const startWallExhaustedCountdown = () => {
   wallExhaustedCountdown.value = 5
+  settleFinalMode.value = false
   wallExhaustedTimer.value = window.setInterval(() => {
     wallExhaustedCountdown.value--
     if (wallExhaustedCountdown.value <= 0) {
       cancelWallExhaustedCountdown()
-      void startNextRound()
+      if (isSettleRequested.value) {
+        settleFinalMode.value = true
+      } else {
+        void startNextRound()
+      }
     }
   }, 1000)
 }
@@ -3376,20 +3400,36 @@ const formatScoreSigned = (score: number) => score > 0 ? `+${score}` : `${score}
 
 const onRequestSettle = async () => {
   try {
-    const res = await $fetch('/mahjong/api/game/settle', {
-      method: 'POST',
-      body: {
-        gameId: roomId.value,
-        playerId: currentPlayer.value?.id,
-        action: 'request',
-        debugAccessToken: typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
+    if (isSettleRequested.value) {
+      // 取消退房
+      const res = await $fetch('/mahjong/api/game/settle', {
+        method: 'POST',
+        body: {
+          gameId: roomId.value,
+          playerId: currentPlayer.value?.id,
+          action: 'cancel',
+          debugAccessToken: typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
+        }
+      })
+      if ((res as any)?.success) {
+        isSettleRequested.value = false
+        settlementData.value = null
       }
-    })
-    if ((res as any)?.success) {
-      settlementData.value = (res as any).data
-      isSettleRequested.value = true
-      // 不显示结算面板，改为发广播消息
-      addBroadcast('🏠 房主已申请本局结束后退房，本局结束将自动结算', 'warn')
+    } else {
+      // 申请退房
+      const res = await $fetch('/mahjong/api/game/settle', {
+        method: 'POST',
+        body: {
+          gameId: roomId.value,
+          playerId: currentPlayer.value?.id,
+          action: 'request',
+          debugAccessToken: typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
+        }
+      })
+      if ((res as any)?.success) {
+        settlementData.value = (res as any).data
+        isSettleRequested.value = true
+      }
     }
   } catch (e) {
     console.error('[Settle] Failed:', e)
@@ -3929,7 +3969,8 @@ watch(
           totalScore: p.score ?? 0
         }))
       }
-      // 1s后强制显示结算
+      isRoundWallExhausted.value = true
+      // 流局直接显示结算（无胡牌玩家）
       window.setTimeout(() => {
         showSettlement.value = true
         startWallExhaustedCountdown()
@@ -3950,11 +3991,11 @@ watch(
             playerName: p.name,
             handTypeName: p.winHandType || '',
             tiles: p.winTiles || [],
-            flowerCount: p.hand?.flowerCount ?? 0,
+            flowerCount: lastRound?.winnerDetails?.find((wd: any) => wd.playerId === p.id)?.flowerCount ?? (p.hand?.exposedMelds || []).filter((m: any) => m.tiles?.length === 1 && (m.tiles[0]?.suit === 'hua' || m.tiles[0]?.suit === 'flower')).length ?? 0,
             isMenQing: p.hand?.isMenQing ?? false,
             hasWild: p.hand?.hasWild ?? false,
-            baseFan: p.baseFan ?? 0,
-            finalPoints: p.finalPoints ?? 0,
+            baseFan: lastRound?.winnerDetails?.find((wd: any) => wd.playerId === p.id)?.baseFan ?? (p.winHandType ? 1 : 0),
+            finalPoints: lastRound?.winnerDetails?.find((wd: any) => wd.playerId === p.id)?.finalPoints ?? (p.wonFan ?? 0),
           }))
         }],
         playerStats: (gameState.value?.players || []).map(p => ({
@@ -3963,11 +4004,12 @@ watch(
           totalScore: p.score ?? 0
         }))
       }
-      // 1s后强制显示本局结算
+      isRoundWallExhausted.value = false
+      // 1s后直接显示本局输赢
       window.setTimeout(() => {
         showSettlement.value = true
-      }, 1000)
         startWallExhaustedCountdown()
+      }, 1000)
     }
   }
 )
@@ -4060,7 +4102,7 @@ const checkOtherPlayerSounds = (newState: any) => {
       // [Fix] own actions also broadcast to news feed, skip sound only
       if (replacedFlowerCount > prev.replacedFlowerCount) {
         if (!isSelf) { playSound('tile-draw'); playVoiceAction('flowerReplace') }
-        addBroadcast(`🌸 ${player.name}补花`, 'special')
+        // 补花消息由服务端 broadcastQuickMessage 统一广播,客户端不再重复添加
       }
       if (!isSelf && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
         const newDiscards = (player.hand?.discardedTiles || []).slice(prev.discardCount)
@@ -4573,6 +4615,7 @@ const forceDiscard = async (p: Player) => {
   min-width: 108px;
 }
 .settle-btn-header:hover { background: rgba(25, 118, 210, 0.8); color: #fff; }
+.settle-btn--grayed { background: rgba(120, 120, 120, 0.4) !important; color: #aaa !important; border-color: rgba(255, 255, 255, 0.1) !important; box-shadow: none !important; }
 
 /* 开始牌局按钮金色呼吸光晕 — 4人到齐时亮起 */
 .start-game-glow {
@@ -4944,6 +4987,12 @@ const forceDiscard = async (p: Player) => {
   border-color: rgba(255, 215, 0, 0.4);
   color: #ffd6d6;
   animation: heartbeat 1.2s ease-in-out infinite;
+}
+.extra-action-btn--hu:not(:disabled) {
+  background: rgba(239, 83, 80, 0.3);
+  border-color: rgba(239, 83, 80, 0.5);
+  color: #ffcdd2;
+  animation: heartbeat 1.0s ease-in-out infinite;
 }
 
 /* 桌面端严格 1/4 宽 */
@@ -7948,21 +7997,8 @@ const forceDiscard = async (p: Player) => {
   .inline-action-buttons { gap: 2px !important; }
   .inline-action-btn { font-size: 0.55rem !important; padding: 2px 6px !important; min-width: 32px !important; }
 }
-.extra-action-btn--hu {
-  color: #ff6b35 !important;
-  font-weight: 800 !important;
-  font-size: 0.7rem !important;
-  padding: 2px 8px !important;
-  border-color: #ff6b3544 !important;
-  background: rgba(255, 107, 53, 0.08) !important;
-  animation: hu-glow 1.2s ease-in-out infinite !important;
-}
-.extra-action-btn--hu:hover, .extra-action-btn--hu:active {
-  background: rgba(255, 107, 53, 0.25) !important;
-  border-color: #ff6b3588 !important;
-}
-.layout--mobile-landscape .extra-action-btn--hu {
-  font-size: 0.5rem !important;
-  padding: 1px 5px !important;
-}
+/* extra-action-btn--hu removed - Hu is in CircularActionButtons only */
+
+
+
 </style>

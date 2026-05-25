@@ -24,6 +24,7 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event);
   const { gameId, playerId, debugAccessToken } = query;
   const startTime = Date.now();
+  const _t_marks: Record<string, number> = {};
 
   if (!gameId || !playerId) {
     await apiLog(event, {
@@ -43,7 +44,7 @@ export default defineEventHandler(async (event) => {
 
   let game;
   try {
-    game = await gameManager.getGame(normalizedGameId);
+    game = await gameManager.getGame(normalizedGameId); _t_marks.getGame = Date.now() - startTime;
   } catch (err: any) {
     console.warn('⚠️ getGame failed:', err.message);
     game = undefined;
@@ -77,7 +78,7 @@ export default defineEventHandler(async (event) => {
           player: game.players.find((entry) => entry.id === normalizedPlayerId || entry.userId === normalizedPlayerId),
           isAdmin: true
         }
-      : await requireGamePlayerAccess(event, game, normalizedPlayerId, { allowAdmin: true });
+      : await requireGamePlayerAccess(event, game, normalizedPlayerId, { allowAdmin: true }); _t_marks.requireAccess = Date.now() - startTime;
   } catch (err: any) {
     // 访客（未登录用户）降级：通过 playerId 直接匹配，不校验 userId
     const fallbackPlayer = game.players.find(
@@ -118,7 +119,7 @@ export default defineEventHandler(async (event) => {
 
   let availableActions: string[] = [];
   try {
-    availableActions = await gameManager.getAvailableActions(normalizedGameId, normalizedPlayerId);
+    availableActions = await gameManager.getAvailableActions(normalizedGameId, normalizedPlayerId); _t_marks.getActions = Date.now() - startTime;
   } catch (err: any) {
     console.warn('⚠️ getAvailableActions failed:', err.message);
     availableActions = [];
@@ -183,7 +184,11 @@ export default defineEventHandler(async (event) => {
     player1Name: game.players.find(p => p.id === rel.player1)?.name,
     player2Name: game.players.find(p => p.id === rel.player2)?.name
   }));
-
+  _t_marks.bailout = Date.now() - startTime;
+const _total = Date.now() - startTime;
+  const _parts = [];
+  for (const k of Object.keys(_t_marks)) _parts.push(k + "=" + _t_marks[k] + "ms");
+  console.log("[timing-state] total=" + _total + "ms " + _parts.join(" ") + " gameId=" + normalizedGameId.slice(0, 8));
   return {
     success: true,
     data: {

@@ -54,6 +54,9 @@ class GameManager {
   // 记录每个玩家从另一个玩家吃/碰/杠了多少口
   private mutualBailout: Map<string, Map<string, Map<string, number>>> = new Map();
 
+  // 互包关系缓存（500ms TTL，避免每次 state.get 重算）
+  private bailoutRelationsCache: Map<string, { result: any[]; timestamp: number }> = new Map();
+
   // 广播消息缓存: gameId -> BroadcastMsg[]（供HTTP API兜底，避免依赖WebSocket）
   private recentBroadcasts: Map<string, { id: number; text: string; type: string; timestamp: number; timeLabel: string }[]> = new Map();
 
@@ -78,6 +81,18 @@ class GameManager {
     type: 'info' | 'warn' | 'special' = 'info',
     actionKind?: string
   ): void {
+    // 【加强去重】检查3秒内所有同文本消息(不只是最后一条)
+    const existing = this.recentBroadcasts.get(gameId);
+    if (existing && existing.length > 0) {
+      const now = Date.now();
+      for (let i = existing.length - 1; i >= Math.max(0, existing.length - 10); i--) {
+        const msg = existing[i];
+        if (msg.text === text && (now - msg.timestamp) < 3000) {
+          console.log(`[BC-DIAG] SERVER DEDUP: text="${text.slice(0,30)}" last=${msg.timestamp} now=${now}`);
+          return;
+        }
+      }
+    }
     const msg = {
       id: Date.now() + Math.floor(Math.random() * 1000),
       text,
@@ -91,6 +106,7 @@ class GameManager {
     }
     // 缓存到内存供HTTP API兜底（最多保留20条）
     let list = this.recentBroadcasts.get(gameId);
+    console.log(`[BC-DIAG] broadcastQuickMessage: gameId=${gameId.slice(0,8)} text="${text.slice(0,30)}" id=${msg.id} cached=${list ? list.length + 1 : 1}`)
     if (!list) {
       list = [];
       this.recentBroadcasts.set(gameId, list);
@@ -327,6 +343,9 @@ class GameManager {
 
     this.handleDraw(game, currentPlayer);
     game.drawnThisTurn = true;
+    if (this.isPlayerBotControlled(currentPlayer)) {
+      this.scheduleBotDiscard(game.gameId, currentPlayer.id);
+    }
     return true;
   }
 
@@ -517,7 +536,7 @@ class GameManager {
     const wildParts = game.customScoringMode?.split('-');
     const wildSuit = wildParts?.[0] ? wildParts[0] as TileSuit : undefined;
     const wildValue = wildParts?.[1] ? parseInt(wildParts[1], 10) : undefined;
-    const isDaDiao = handTiles.filter(t => !isFlower(t)).length === 1;
+    const isDaDiao = player.hand.concealedTiles.filter(t => !isFlower(t)).length === 1;
     const allOptions = generateWinOptions({
       handTiles,
       exposedMelds: player.hand.exposedMelds,
@@ -682,7 +701,6 @@ class GameManager {
     if (wildCount === 0) {
       // 无百搭：任意 2+ 孤牌即可跳过
       if (orphanCount >= 2) return false;
-      // 无百搭 + 两门数字牌 + 任一门有孤牌 → 跳过
       if (hasMultipleNumberSuits && orphanCount >= 1) return false;
       return true;
     }
@@ -694,7 +712,7 @@ class GameManager {
     return true;
   }
 
-  private getCachedTingPreview(game: GameState, player: Player) {
+  private getCachedTingPreview(game: GameState, player: Player, options?: { skipQuickPrecheck?: boolean }) {
     const playerCache = this.getPlayerWinCache(game.gameId, player.id);
     const cacheKey = `${this.getPlayerWinContextKey(game, player)}|ting-preview`;
     const cached = playerCache.ting.get(cacheKey);
@@ -703,7 +721,7 @@ class GameManager {
     }
 
     // 快速粗筛：巡目门槛 + 孤牌检查
-    if (!this.quickPrecheckTenpai(game, player)) {
+    if (!options?.skipQuickPrecheck && !this.quickPrecheckTenpai(game, player)) {
       const emptyResult = { isTing: false, winningTiles: [] as Array<{
         tile: Tile;
         remainingCount: number;
@@ -1316,6 +1334,10 @@ class GameManager {
       await this.handlePass(game, player);
     }
   }
+  private invalidateBailoutCache(gameId: string): void {
+    this.bailoutRelationsCache.delete(gameId);
+  }
+
   private recordBailoutAction(
     gameId: string,
     playerId: string,
@@ -1323,6 +1345,7 @@ class GameManager {
     meldType: MeldType
   ): number {
     if (!sourcePlayerId) {
+      this.invalidateBailoutCache(gameId);
       console.warn(`[BAILOUT] recordBailoutAction SKIP: no sourcePlayerId for playerId=${playerId} meldType=${meldType}`);
       return 0;
     }
@@ -1342,6 +1365,7 @@ class GameManager {
     const nextCount = currentCount + 1;
     playerBailout.set(sourcePlayerId, nextCount);
     console.log(`[BAILOUT] game=${gameId} ${playerId} ate ${nextCount}x from ${sourcePlayerId} (meldType=${meldType})`);
+    this.invalidateBailoutCache(gameId);
     return nextCount;
   }
 
@@ -1354,9 +1378,17 @@ class GameManager {
     player2: string;
     type: '三口' | '四口';
   }> {
+    // 缓存命中（500ms TTL）
+    const cached = this.bailoutRelationsCache.get(gameId);
+    if (cached && Date.now() - cached.timestamp < 500) {
+      return cached.result;
+    }
     const relations: Array<{ player1: string; player2: string; type: '三口' | '四口' }> = [];
     const gameBailout = this.mutualBailout.get(gameId);
-    if (!gameBailout) return relations;
+    if (!gameBailout) {
+      this.bailoutRelationsCache.set(gameId, { result: relations, timestamp: Date.now() });
+      return relations;
+    }
 
     const checked = new Set<string>();
 
@@ -1379,6 +1411,7 @@ class GameManager {
       }
     }
 
+    this.bailoutRelationsCache.set(gameId, { result: relations, timestamp: Date.now() });
     return relations;
   }
 
@@ -1585,6 +1618,16 @@ class GameManager {
 
   public async persistGame(game: GameState): Promise<void> {
     return this.store.persistGame(game);
+  }
+
+  /** 关键节点立即刷盘（回合结束/退房/断连） */
+  public async flushGameNow(gameId: string): Promise<void> {
+    return this.store.flushGameNow(gameId);
+  }
+
+  /** 服务关闭前刷所有脏数据 */
+  public async flushAllGames(): Promise<void> {
+    return this.store.flushAll();
   }
 
   public broadcastGameState(gameId: string): void {
@@ -1842,6 +1885,25 @@ class GameManager {
     game.endedAt = undefined;
     game.finalScores = undefined;
     game.phase = GamePhase.STARTING;
+
+    // 🔥 预热：后台创建牌墙+选百搭，消除 startGame 的等待延迟
+    const preheatWall = shuffleTiles(createDeck());
+    console.log(`[WallDebug] preheated deck: ${preheatWall.length} tiles`);
+
+    const allTileTypes: Array<{ suit: TileSuit; value: number }> = [];
+    for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+      for (let v = 1; v <= 9; v++) allTileTypes.push({ suit, value: v });
+    }
+    for (let v = 1; v <= 4; v++) allTileTypes.push({ suit: TileSuit.WIND, value: v });
+    for (let v = 1; v <= 3; v++) allTileTypes.push({ suit: TileSuit.DRAGON, value: v });
+    for (let v = 1; v <= 8; v++) allTileTypes.push({ suit: TileSuit.FLOWER, value: v });
+    const wildIndex = Math.floor(Math.random() * allTileTypes.length);
+    const wildType = allTileTypes[wildIndex];
+
+    (game as any)._preheatedWall = preheatWall;
+    (game as any)._preheatedWild = wildType;
+    console.log(`[WallDebug] preheated wild: suit=${wildType.suit} value=${wildType.value}`);
+
     await this.persistGame(game);
     this.broadcastGameState(gameId);
   }
@@ -1938,39 +2000,55 @@ class GameManager {
     }
     game.players.forEach((p, i) => { p.isDealer = (i === game.dealerIndex); });
 
-    // Create and shuffle deck
-    const deck = createDeck();
-    console.log(`[WallDebug] createDeck: ${deck.length} tiles`);
-    game.wall = shuffleTiles(deck);
-    console.log(`[WallDebug] after shuffle: ${game.wall.length} tiles`);
+    // 🔥 优先使用 setStartingPhase 阶段的预热数据
+    const preheatedWall = (game as any)._preheatedWall;
+    const preheatedWild = (game as any)._preheatedWild;
+    if (preheatedWall && preheatedWild) {
+      game.wall = preheatedWall;
+      const wildType = preheatedWild;
+      game.customScoringMode = `${wildType.suit}-${wildType.value}`;
+      console.log(`[WallDebug] used preheated: ${game.wall.length} tiles, wild=${game.customScoringMode}`);
+
+      // 花牌百搭: 一组花牌(春夏秋冬或梅兰竹菊)全部为百搭
+      if (wildType.suit === TileSuit.FLOWER) {
+        if (wildType.value <= 4) {
+          game.wildTileGroup = ['1', '2', '3', '4'];
+        } else {
+          game.wildTileGroup = ['5', '6', '7', '8'];
+        }
+      }
+
+      delete (game as any)._preheatedWall;
+      delete (game as any)._preheatedWild;
+    } else {
+      // Fallback: 实时创建（理论上不应该走到这里）
+      const deck = createDeck();
+      console.log(`[WallDebug] createDeck (fallback): ${deck.length} tiles`);
+      game.wall = shuffleTiles(deck);
+      console.log(`[WallDebug] after shuffle (fallback): ${game.wall.length} tiles`);
+
+      const allTileTypes: Array<{ suit: TileSuit; value: number }> = [];
+      for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+        for (let v = 1; v <= 9; v++) allTileTypes.push({ suit, value: v });
+      }
+      for (let v = 1; v <= 4; v++) allTileTypes.push({ suit: TileSuit.WIND, value: v });
+      for (let v = 1; v <= 3; v++) allTileTypes.push({ suit: TileSuit.DRAGON, value: v });
+      for (let v = 1; v <= 8; v++) allTileTypes.push({ suit: TileSuit.FLOWER, value: v });
+      const wildIndex = Math.floor(Math.random() * allTileTypes.length);
+      const wildType = allTileTypes[wildIndex];
+      game.customScoringMode = `${wildType.suit}-${wildType.value}`;
+
+      if (wildType.suit === TileSuit.FLOWER) {
+        if (wildType.value <= 4) {
+          game.wildTileGroup = ['1', '2', '3', '4'];
+        } else {
+          game.wildTileGroup = ['5', '6', '7', '8'];
+        }
+      }
+    }
 
     // 每局重置吃碰排斥状态
     game.chowPongExclusion = {};
-
-    // 此时 phase 已经是 STARTING(由 setStartingPhase 设定)，不再重复广播
-    // 从全部144种牌型中随机选百搭
-    const allTileTypes: Array<{ suit: TileSuit; value: number }> = [];
-    for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
-      for (let v = 1; v <= 9; v++) allTileTypes.push({ suit, value: v });
-    }
-    for (let v = 1; v <= 4; v++) allTileTypes.push({ suit: TileSuit.WIND, value: v });
-    for (let v = 1; v <= 3; v++) allTileTypes.push({ suit: TileSuit.DRAGON, value: v });
-    for (let v = 1; v <= 8; v++) allTileTypes.push({ suit: TileSuit.FLOWER, value: v });
-
-    const wildIndex = Math.floor(Math.random() * allTileTypes.length);
-    const wildType = allTileTypes[wildIndex];
-    game.customScoringMode = `${wildType.suit}-${wildType.value}`;
-
-    // 花牌百搭: 一组花牌(春夏秋冬或梅兰竹菊)全部为百搭
-    if (wildType.suit === TileSuit.FLOWER) {
-      if (wildType.value <= 4) {
-        // 春夏秋冬组
-        game.wildTileGroup = ['1', '2', '3', '4'];
-      } else {
-        // 梅兰竹菊组
-        game.wildTileGroup = ['5', '6', '7', '8'];
-      }
-    }
 
     // 发牌(花牌不补花,放到门口等待回合补花)
     for (const player of game.players) {
@@ -2410,7 +2488,7 @@ class GameManager {
     });
   }
 
-  async getTingPreviewForPlayer(gameId: string, playerId: string): Promise<{
+  async getTingPreviewForPlayer(gameId: string, playerId: string, options?: { skipQuickPrecheck?: boolean }): Promise<{
     isTing: boolean;
     winningTiles: Array<{
       tile: Tile;
@@ -2435,7 +2513,7 @@ class GameManager {
       return { isTing: false, winningTiles: [] };
     }
 
-    const preview = this.getCachedTingPreview(game, player);
+    const preview = this.getCachedTingPreview(game, player, options);
     if (!preview.isTing && !player.isTing) {
       return { isTing: false, winningTiles: [] };
     }
@@ -2864,7 +2942,6 @@ class GameManager {
         isConcealed: false,
         replacementDone: true as any
       } as any);
-      this.broadcastFlowerReplacement(game, player);
       console.log(`[FLOWER] ${player.name} 摸到花牌: ${tile.id}, 门口花牌数: ${player.hand.exposedMelds.filter(m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])).length}`);
       if (game.wall.length === 0) {
         this.endRound(game, GameEndReason.WALL_EXHAUSTED);
@@ -2908,7 +2985,6 @@ class GameManager {
           isConcealed: false,
           replacementDone: true as any
         } as any);
-        this.broadcastFlowerReplacement(game, player);
         if (game.wall.length === 0) {
           replacement = null as any;
           break;
@@ -3295,7 +3371,7 @@ class GameManager {
         this.broadcastGameState(gid);
         // 修复:审批超时执行后,如果是bot接管回合,调度bot出牌
         const currentPlayer = fg.players[fg.currentPlayerIndex];
-        if (currentPlayer && this.isPlayerBotControlled(currentPlayer)) {
+        if (player && this.isPlayerBotControlled(player)) {
           this.scheduleBotDiscard(gid, currentPlayer.id);
         }
       } catch (e) { console.error('[Approval] timeout err:', e); }
@@ -3435,6 +3511,12 @@ class GameManager {
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
     this.replaceInitialFlowers(game, player);
     game.drawnThisTurn = true;
+    if (this.isPlayerBotControlled(player)) {
+      this.scheduleBotDiscard(game.gameId, currentPlayer.id);
+    }
+    if (this.isPlayerBotControlled(player)) {
+      this.scheduleBotDiscard(game.gameId, currentPlayer.id);
+    }
     // 吃后手牌排序(百搭置顶)
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
 
@@ -3443,9 +3525,8 @@ class GameManager {
     console.log(`[CHOW-BC] wsManager=${!!this.wsManager} player=${player.name} source=${sourcePlayerId} bailoutCount=${_bc} gameId=${game.gameId}`);
     if (this.wsManager) {
       const _suffix = _bc >= 2 ? ` (${_bc}口)` : '';
-      const bcText = `🍜 ${player.name}吃牌${_suffix}`;
-      console.log(`[CHOW-BC] SENDING: "${bcText}"`);
-      this.broadcastQuickMessage(game.gameId, bcText, 'info', 'chow');
+      // Removed: 吃牌消息已由 bailout checkAndBroadcastBailout 统一处理
+      console.log(`[CHOW-BC] CHOW by ${player.name} (${_bc}口)`);
     } else {
       console.log('[CHOW-BC] SKIP: wsManager is null');
     }
@@ -3503,6 +3584,12 @@ class GameManager {
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
     this.replaceInitialFlowers(game, player);
     game.drawnThisTurn = true;
+    if (this.isPlayerBotControlled(player)) {
+      this.scheduleBotDiscard(game.gameId, currentPlayer.id);
+    }
+    if (this.isPlayerBotControlled(player)) {
+      this.scheduleBotDiscard(game.gameId, currentPlayer.id);
+    }
     // 碰后手牌排序(百搭置顶)
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
   }
@@ -3573,6 +3660,9 @@ class GameManager {
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
     this.handleDraw(game, player, { allowFullHand: true });
     game.drawnThisTurn = true;
+    if (this.isPlayerBotControlled(player)) {
+      this.scheduleBotDiscard(game.gameId, currentPlayer.id);
+    }
     this.broadcastKongSupplement(game, player, 'ming');
   }
 
@@ -3720,6 +3810,9 @@ class GameManager {
     // Draw supplement tile
     this.handleDraw(game, player, { allowFullHand: true });
     game.drawnThisTurn = true;
+    if (this.isPlayerBotControlled(player)) {
+      this.scheduleBotDiscard(game.gameId, currentPlayer.id);
+    }
     this.broadcastKongSupplement(game, player, 'an');
   }
 
@@ -3821,6 +3914,9 @@ class GameManager {
     // Draw supplement tile
     this.handleDraw(game, player, { allowFullHand: true });
     game.drawnThisTurn = true;
+    if (this.isPlayerBotControlled(player)) {
+      this.scheduleBotDiscard(game.gameId, currentPlayer.id);
+    }
     this.broadcastKongSupplement(game, player, 'jia');
   }
 
@@ -3877,19 +3973,9 @@ class GameManager {
     // 设置下局庄家
     if (!game.nextDealerId) {
       if (projectedWinOrder === 1) {
-        // 首胡者为庄
+        // 头胡者为下局庄家（无论自摸还是捉冲）
         game.nextDealerId = player.id;
-        // 一炮多响:如果有人因放冲导致多胡,放冲者为庄
-        if (!isSelfDrawn) {
-          const discarderId = this.getLastDiscardPlayerId(game);
-          if (discarderId) {
-            game.nextDealerId = discarderId;
-            const discarder = game.players.find(p => p.id === discarderId);
-            console.log(`[handleHu] 一炮多响,放冲者 ${discarder?.name} 为下局庄家`);
-          }
-        } else {
-          console.log(`[handleHu] 自摸,${player.name} 为下局庄家`);
-        }
+        console.log(`[handleHu] 头胡 ${player.name} 为下局庄家`);
       }
     }
 
@@ -4012,13 +4098,45 @@ class GameManager {
     // 胡牌后解冻:清除其他家的pending(保留可胡的pending给一炮多响)
     game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
     if (game.multiHuStarterIndex === undefined) {
+      (game as any).multiHuDiscarderIndex = game.currentPlayerIndex;
       game.multiHuStarterIndex = game.players.findIndex(p => p.id === player.id);
     }
     if (isRobbingKong && game.pendingKongClaim) {
       game.pendingKongClaim.cancelledByHu = true;
     }
     if (!hadPendingForMultiHu) {
+      // 不结束牌局：继续让剩余玩家打牌，直到三人胡或牌墙摸光
       game.pendingActions = [];
+      // 找到下一个未胡牌的玩家
+      let nextIdx = game.currentPlayerIndex;
+      let searched = 0;
+      while (searched < game.players.length) {
+        nextIdx = (nextIdx + 1) % game.players.length;
+        searched++;
+        if (game.players[nextIdx].status === PlayerStatus.PLAYING) {
+          break;
+        }
+      }
+      if (searched >= game.players.length || game.players[nextIdx].status !== PlayerStatus.PLAYING) {
+        this.endRound(game, GameEndReason.LAST_PLAYER);
+        return;
+      }
+      game.currentPlayerIndex = nextIdx;
+      game.drawnThisTurn = false;
+      // 让下家摸牌
+      const nextPlayer = game.players[nextIdx];
+      this.replaceInitialFlowers(game, nextPlayer);
+      const totalTiles = this.getPlayableTileCount(nextPlayer);
+      if (totalTiles < 14) {
+        this.handleDraw(game, nextPlayer);
+        game.drawnThisTurn = true;
+      } else {
+        game.drawnThisTurn = true;
+      }
+      if (this.isPlayerBotControlled(nextPlayer)) {
+        this.scheduleBotDiscard(game.gameId, nextPlayer.id);
+      }
+      return;
     }
     return;  // 等待其他可胡玩家响应
   }
@@ -4578,26 +4696,34 @@ class GameManager {
       return;
     }
 
-    // 一炮多响场景:所有候选响应结束,从首胡玩家右手继续
+    // 一炮多响场景:所有候选响应结束,从弃牌者右手继续
     if (game.pendingActions.length === 0 && game.multiHuStarterIndex !== undefined) {
       const starter = game.multiHuStarterIndex;
+      const discarderIdx = (game as any).multiHuDiscarderIndex;
       game.multiHuStarterIndex = undefined;
+      delete (game as any).multiHuDiscarderIndex;
       if (game.pendingKongClaim?.cancelledByHu) {
         game.pendingKongClaim = undefined;
       }
-      const next = this.getNextActivePlayer(game, starter);
+      // ★ FIX: 使用弃牌者索引推进,避免弃牌者多走一回合
+      const next = discarderIdx !== undefined
+        ? this.getNextActivePlayer(game, discarderIdx)
+        : this.getNextActivePlayer(game, starter);
       if (next) {
         game.currentPlayerIndex = game.players.findIndex(p => p.id === next.id);
         this.replaceFlowers(game, next);
         this.handleDraw(game, next);
-        game.drawnThisTurn = true; // 【状态机修复】标记已摸牌
+        game.drawnThisTurn = true;
+      } else {
+        // 无未完牌玩家,直接结束本局
+        this.endRound(game, GameEndReason.LAST_PLAYER);
       }
       return;
-    }
 
     // 普通场景 - 不在这里调用 moveToNextPlayer,由调用方统一处理
   }
 
+}
   private checkPendingActions(game: GameState, discardedTile: Tile): void {
     game.pendingActions = [];
     delete (game as any).hasTriggeredAction;
@@ -4968,6 +5094,10 @@ class GameManager {
     }
 
     this.replaceFlowers(game, nextPlayer);
+    // 补花后手牌可能已达14张，标记已摸牌，避免 bot 出牌时尝试 DRAW 被拒绝
+    if (this.getPlayableTileCount(nextPlayer) >= 14) {
+      game.drawnThisTurn = true;
+    }
 
     if (this.isPlayerBotControlled(nextPlayer)) {
       const freezeBotIndex = game.currentPlayerIndex;
@@ -5328,7 +5458,6 @@ class GameManager {
           isConcealed: false,
           replacementDone: true as any
         } as any);
-        this.broadcastFlowerReplacement(game, player);
         if (game.wall.length === 0) {
           replacement = null as any;
           break;
@@ -5363,6 +5492,8 @@ class GameManager {
   public endRound(game: GameState, reason: GameEndReason): void {
     this.clearPendingActionTimer(game.gameId);
     game.phase = GamePhase.CHA_JIAO;
+    // 回合结束立即刷盘
+    this.store.flushGameNow(game.gameId).catch(() => {});
     this.broadcastGameState(game.gameId);
 
     // Calculate final scores
@@ -5447,6 +5578,7 @@ class GameManager {
           mutualBailout,
           discarderIdx
         );
+        console.log(`[SETTLEMENT] winner=${game.players[winnerIdx]?.name} wonFan=${winner.wonFan} isSelfDrawn=${winner.isSelfDrawn} bailoutSize=${mutualBailout.size} eligibleIndices=${JSON.stringify(eligiblePlayerIndices)}`);
 
         for (const transfer of breakdown.transfers) {
           roundTransfers.push({

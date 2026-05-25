@@ -1,5 +1,5 @@
-﻿import { TileSuit } from '../../types/game'
-import { groupTiles, isHonor } from '../../utils/tiles'
+﻿import { TileSuit } from '../types/game'
+import { groupTiles, isHonor } from '../utils/tiles'
 import type { RouteDiscardInput } from './types'
 
 function sameTypeCount(input: RouteDiscardInput): number {
@@ -264,6 +264,13 @@ function scoreByRoute(input: RouteDiscardInput): number {
         return count >= 2 ? -4.2 : -1.4
       }
       return 3.8 + (longestSuit && tile.suit !== longestSuit ? 0.6 : 0)
+
+    case 'STRIVE_DRAW':
+      // ★ V2: 争取流局 → 打熟张优先，留安全牌
+      if (visibleCopies >= 2) return 8.5 + visibleCopies  // 熟张优先打
+      if (count >= 2) return -3.5  // 留对子防点炮
+      if (isHonor(tile)) return -1.2  // 留风箭当安全牌
+      return 3.2 + (visibleCopies >= 1 ? 2.5 : -1.5)  // 有熟张打熟张，生张慎打
   }
 }
 

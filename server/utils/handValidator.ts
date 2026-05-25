@@ -1392,12 +1392,13 @@ export function canWin(
   if (!wildTileId && flowerCount >= 8) {
     return { canWin: true, types: [HandType.EIGHT_FLOWERS] };
   }
-
-  const exposedNonFlower = exposed.flatMap(m => m.tiles).filter(t => !isFlower(t) || isWildTileFn(t));
-  const combinedNonFlower = [...concealedNonFlower, ...exposedNonFlower];
-  const allWind = combinedNonFlower.length > 0 &&
-    combinedNonFlower.every(t => isWind(t) || isDragon(t) || isWildTileFn(t));
-  if (allWind) {
+  const exposedNonFlower = exposed.flatMap(m => m.tiles).filter(t => !isFlower(t) && !isWildTileFn(t));
+  const concealedWilds = concealedNonFlower.filter(t => isWildTileFn(t));
+  const concealedNaturals = concealedNonFlower.filter(t => !isWildTileFn(t));
+  const combinedNaturalOnly = [...concealedNaturals, ...exposedNonFlower];
+  const allWind = combinedNaturalOnly.length > 0 &&
+    combinedNaturalOnly.every(t => isWind(t) || isDragon(t));
+  if (allWind && concealedWilds.length === 0) {
     return { canWin: true, types: [HandType.ALL_WIND] };
   }
 
@@ -1441,35 +1442,32 @@ export function canWin(
 export function detectHandTypes(
   handTiles: Tile[],
   exposedOrCount: Meld[] | number,
-  wildTileIdOrChecker: string | null | WildTileChecker,
   _isSelfDrawn?: boolean,
   _flowerCount?: number,
-  _ruleConfigOrNull?: any,
-  gameStateOrWildGroup?: any
+  customScoringMode?: string | null,
+  wildTileGroup?: string[],
+  gameState?: any
 ): HandType[] {
-  let resolvedWild: string | null | WildTileChecker = wildTileIdOrChecker;
+  let resolvedWild: string | null = customScoringMode || null;
 
-  // 兼容旧调用: detectHandTypes(..., null, game.wildTileGroup)
-  // 当 wildTileId 为空时，尝试从 gameState/ruleConfig 兜底取当前百搭
-  if (!resolvedWild) {
-    const src = gameStateOrWildGroup || _ruleConfigOrNull;
-
-    if (src && typeof src === 'object') {
-      if (typeof src.customScoringMode === 'string' && src.customScoringMode.includes('-')) {
-        // 标准化 suit 别名（bamboo → tiao）
-        const [suit, ...rest] = src.customScoringMode.split('-')
-        resolvedWild = normalizeSuitAlias(suit) + '-' + rest.join('-')
-      } else if (typeof src.wildTileId === 'string') {
-        // 标准化 suit 别名
-        const parts = src.wildTileId.split('-')
-        resolvedWild = parts.length >= 2 ? normalizeSuitAlias(parts[0]) + '-' + parts.slice(1).join('-') : src.wildTileId
-      } else if (typeof src.wildTileSuit === 'string' && typeof src.wildTileValue === 'number') {
-        resolvedWild = `${src.wildTileSuit}-${src.wildTileValue}`;
-      }
+  // 兼容: customScoringMode 为空时从 gameState 兜底
+  if (!resolvedWild && gameState) {
+    if (typeof gameState.customScoringMode === 'string' && gameState.customScoringMode.includes('-')) {
+      const [suit, ...rest] = gameState.customScoringMode.split('-')
+      resolvedWild = normalizeSuitAlias(suit) + '-' + rest.join('-')
+    } else if (typeof gameState.wildTileId === 'string') {
+      const parts = gameState.wildTileId.split('-')
+      resolvedWild = parts.length >= 2 ? normalizeSuitAlias(parts[0]) + '-' + parts.slice(1).join('-') : gameState.wildTileId
     }
   }
 
-  return canWin(handTiles, exposedOrCount as any, resolvedWild as any).types;
+  // 标准化 suit 别名
+  if (resolvedWild && resolvedWild.includes('-')) {
+    const [suit, ...rest] = resolvedWild.split('-')
+    resolvedWild = normalizeSuitAlias(suit) + '-' + rest.join('-')
+  }
+
+  return canWin(handTiles, exposedOrCount as any, resolvedWild as any, undefined, wildTileGroup).types;
 }
 
 // ============================================================
@@ -1576,7 +1574,7 @@ export function isTing(
   const candidates = buildTingCandidateTiles(wildTileIdOrChecker, wildTileGroup)
 
   for (const t of candidates) {
-    if (canWin([...tiles, t], existingMelds, isWildTile).canWin) {
+    if (canWin([...tiles, t], existingMelds, wildTileIdOrChecker, undefined, wildTileGroup).canWin) {
       isTingCache.set(key, true)
       return true
     }
