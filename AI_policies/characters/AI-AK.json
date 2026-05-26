@@ -16,8 +16,8 @@
   },
   "policy": {
     "id": "AI-AK",
-    "selfWinChance": 0.5,
-    "discardHuChance": 0.82,
+    "selfWinChance": 1.0,
+    "discardHuChance": 1.0,
     "selfWinWildBoost": 0.13626006977216448,
     "discardHuWildPenalty": 0.15,
     "discardHuMenQingPenalty": 0.11443176185539769,

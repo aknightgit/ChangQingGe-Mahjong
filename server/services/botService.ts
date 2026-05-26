@@ -2185,7 +2185,10 @@ export async function shouldClaimPendingAction(
     const groups = groupTiles(hand)
     const key = `${claimTile.suit}-${claimTile.value}`
     const sameTiles = groups.get(key) || []
-    if (sameTiles.length >= 2) {
+    // 🛑 已有3张同牌（暗刻），碰牌会拆刻+留下一张废牌，绝不碰
+    if (sameTiles.length >= 3) {
+      // 不阻止胡（HU判断在下方单独处理）
+    } else if (sameTiles.length >= 2) {
       const candidateHand = [...hand]
       let removed = 0
       for (let i = candidateHand.length - 1; i >= 0 && removed < 2; i--) {
