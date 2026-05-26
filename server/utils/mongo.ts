@@ -35,8 +35,9 @@ export async function getMongoClient(): Promise<MongoClient> {
 		serverSelectionTimeoutMS: 10000, // 服务选择超时 10s
 		retryWrites: true,             // 写入失败自动重试
 		retryReads: true,              // 读取失败自动重试
-		maxPoolSize: 10,               // 连接池
-		minPoolSize: 1,
+		maxPoolSize: 50,               // 连接池（多房间并发优化）
+		minPoolSize: 5,
+		waitQueueTimeoutMS: 5000,        // 等待队列超时5s（防卡死）
 		heartbeatFrequencyMS: 10000,
 	})
 	// Ensure the connection is valid by pinging admin

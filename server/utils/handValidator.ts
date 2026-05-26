@@ -1366,6 +1366,17 @@ export function canWin(
     return { canWin: true, types: [HandType.FOUR_WILD] };
   }
 
+  // 风一色/箭一色：全风箭牌可胡，不受手牌数限制（特殊牌型）
+  const exposedNonFlower = exposed.flatMap(m => m.tiles).filter(t => !isFlower(t) && !isWildTileFn(t));
+  const concealedWilds = concealedNonFlower.filter(t => isWildTileFn(t));
+  const concealedNaturals = concealedNonFlower.filter(t => !isWildTileFn(t));
+  const combinedNaturalOnly = [...concealedNaturals, ...exposedNonFlower];
+  const allWind = combinedNaturalOnly.length > 0 &&
+    combinedNaturalOnly.every(t => isWind(t) || isDragon(t));
+  if (allWind) {
+    return { canWin: true, types: [HandType.ALL_WIND] };
+  }
+
   // 手牌数校验
   // 有 wildTile 时：花=百搭，计入手牌数 → 用 concealed.length
   // 无 wildTile 时：花=普通牌，不参与组牌 → 用 concealedNonFlower.length
@@ -1391,15 +1402,6 @@ export function canWin(
   // 花=百搭时：不检测八花，只检测四百搭（上面已处理）
   if (!wildTileId && flowerCount >= 8) {
     return { canWin: true, types: [HandType.EIGHT_FLOWERS] };
-  }
-  const exposedNonFlower = exposed.flatMap(m => m.tiles).filter(t => !isFlower(t) && !isWildTileFn(t));
-  const concealedWilds = concealedNonFlower.filter(t => isWildTileFn(t));
-  const concealedNaturals = concealedNonFlower.filter(t => !isWildTileFn(t));
-  const combinedNaturalOnly = [...concealedNaturals, ...exposedNonFlower];
-  const allWind = combinedNaturalOnly.length > 0 &&
-    combinedNaturalOnly.every(t => isWind(t) || isDragon(t));
-  if (allWind && concealedWilds.length === 0) {
-    return { canWin: true, types: [HandType.ALL_WIND] };
   }
 
   if (typeof wildTileIdOrChecker === 'function' && !wildTileId) {

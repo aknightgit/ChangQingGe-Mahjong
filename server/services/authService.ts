@@ -15,7 +15,7 @@ export class AuthService {
     const sessionId = randomUUID();
     const token = randomUUID(); // In production, use JWT
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+    expiresAt.setDate(expiresAt.getDate() + 30); // 7 days
 
     const session: Session = {
       sessionId,

@@ -6,75 +6,91 @@
           <h1 class="mahjong-title">长清阁麻将</h1>
           <p class="mahjong-subtitle">上海麻将 × 四川麻将</p>
 
-          <div class="tab-bar">
-            <button
-              class="tab-btn"
-              :class="{ 'tab-btn--active': activeTab === 'login' }"
-              @click="activeTab = 'login'"
-            >登录</button>
-            <button
-              class="tab-btn"
-              :class="{ 'tab-btn--active': activeTab === 'register' }"
-              @click="activeTab = 'register'"
-            >注册</button>
+          <!-- Auto-login status -->
+          <div v-if="autoLoggingIn" class="auto-login-status">
+            <div class="spinner"></div>
+            <span>自动登录中...</span>
           </div>
 
-          <div v-if="activeTab === 'login'" class="form-section">
-            <div class="form-field">
-              <label>手机号</label>
-              <input
-                v-model="loginForm.phone"
-                type="tel"
-                placeholder="输入11位手机号"
-                maxlength="11"
-                autocomplete="tel"
-              />
+          <template v-else>
+            <div class="tab-bar">
+              <button
+                class="tab-btn"
+                :class="{ 'tab-btn--active': activeTab === 'login' }"
+                @click="activeTab = 'login'"
+              >登录</button>
+              <button
+                class="tab-btn"
+                :class="{ 'tab-btn--active': activeTab === 'register' }"
+                @click="activeTab = 'register'"
+              >注册</button>
             </div>
-            <div class="form-field">
-              <label>密码</label>
-              <input
-                v-model="loginForm.password"
-                type="password"
-                placeholder="输入密码"
-                autocomplete="current-password"
-                @keyup.enter="handlePhoneLogin"
-              />
-            </div>
-            <p v-if="loginError" class="status-text error">{{ loginError }}</p>
-          </div>
 
-          <div v-else class="form-section">
-            <div class="form-field">
-              <label>玩家名 <span class="required">*</span></label>
-              <input
-                v-model="registerForm.name"
-                type="text"
-                placeholder="输入你的昵称"
-                maxlength="20"
-              />
+            <div v-if="activeTab === 'login'" class="form-section">
+              <div class="form-fields">
+                <div class="form-field">
+                  <label>手机号</label>
+                  <input
+                    v-model="loginForm.phone"
+                    type="tel"
+                    placeholder="输入11位手机号"
+                    maxlength="11"
+                    autocomplete="tel"
+                  />
+                </div>
+                <div class="form-field">
+                  <label>密码</label>
+                  <input
+                    v-model="loginForm.password"
+                    type="password"
+                    placeholder="输入密码"
+                    autocomplete="current-password"
+                    @keyup.enter="handlePhoneLogin"
+                  />
+                </div>
+                <label class="remember-checkbox">
+                  <input type="checkbox" v-model="loginForm.rememberMe" />
+                  <span>记住密码，下次自动登录</span>
+                </label>
+                <p v-if="loginError" class="status-text error">{{ loginError }}</p>
+              </div>
             </div>
-            <div class="form-field">
-              <label>手机号 <span class="required">*</span></label>
-              <input
-                v-model="registerForm.phone"
-                type="tel"
-                placeholder="输入11位国内手机号"
-                maxlength="11"
-                autocomplete="tel"
-              />
+
+            <div v-else class="form-section">
+              <div class="form-fields">
+                <div class="form-field">
+                  <label>玩家名 <span class="required">*</span></label>
+                  <input
+                    v-model="registerForm.name"
+                    type="text"
+                    placeholder="输入你的昵称"
+                    maxlength="20"
+                  />
+                </div>
+                <div class="form-field">
+                  <label>手机号 <span class="required">*</span></label>
+                  <input
+                    v-model="registerForm.phone"
+                    type="tel"
+                    placeholder="输入11位国内手机号"
+                    maxlength="11"
+                    autocomplete="tel"
+                  />
+                </div>
+                <div class="form-field">
+                  <label>密码 <span class="required">*</span></label>
+                  <input
+                    v-model="registerForm.password"
+                    type="password"
+                    placeholder="至少4位密码"
+                    autocomplete="new-password"
+                    @keyup.enter="handleRegister"
+                  />
+                </div>
+                <p v-if="registerError" class="status-text error">{{ registerError }}</p>
+              </div>
             </div>
-            <div class="form-field">
-              <label>密码 <span class="required">*</span></label>
-              <input
-                v-model="registerForm.password"
-                type="password"
-                placeholder="至少4位密码"
-                autocomplete="new-password"
-                @keyup.enter="handleRegister"
-              />
-            </div>
-            <p v-if="registerError" class="status-text error">{{ registerError }}</p>
-          </div>
+          </template>
         </section>
 
         <aside class="login-side">
@@ -85,7 +101,7 @@
               @click="handlePhoneLogin"
               :disabled="isSubmitting"
             >
-              {{ isSubmitting ? '登录中...' : '登录' }}
+              {{ isSubmitting ? "登录中..." : "登录" }}
             </button>
             <button
               v-else
@@ -93,27 +109,40 @@
               @click="handleRegister"
               :disabled="isSubmitting"
             >
-              {{ isSubmitting ? '注册中...' : '注册' }}
+              {{ isSubmitting ? "注册中..." : "注册" }}
             </button>
           </div>
 
           <div class="divider">
-            <span>或选择已有玩家</span>
+            <span>或选择已有账号</span>
           </div>
 
           <div class="quick-login">
-            <div v-if="usersPending" class="status-text">加载中...</div>
-            <div v-else-if="playerUsers.length === 0" class="status-text">暂无已有玩家</div>
+            <div v-if="deviceUsers.length === 0" class="status-text">暂无保存的账号，请先登录</div>
             <div v-else class="player-chips">
               <button
-                v-for="user in playerUsers"
+                v-for="user in deviceUsers"
                 :key="user.userId"
                 class="player-chip"
+                :class="{ 'player-chip--avatar': !!user.avatar }"
                 @click="handleQuickLogin(user)"
                 :disabled="isSubmitting"
               >
-                {{ user.name }}
+                <span v-if="user.avatar" class="chip-avatar">{{ displayAvatar(user.avatar) }}</span>
+                <span class="chip-name">{{ user.name }}</span>
               </button>
+            </div>
+          </div>
+
+          <div v-if="storedCredentials.length > 1" class="cred-mgmt">
+            <button class="cred-mgmt-btn" @click="showCredMgmt = !showCredMgmt">
+              {{ showCredMgmt ? "收起" : "管理已记住的账号 (" + storedCredentials.length + ")" }}
+            </button>
+            <div v-if="showCredMgmt" class="cred-mgmt-list">
+              <div v-for="cred in storedCredentials" :key="cred.userId" class="cred-mgmt-item">
+                <span class="cred-mgmt-name">{{ cred.name || cred.phone }}</span>
+                <button class="cred-forget-btn" @click="forgetCredential(cred.userId)">忘记</button>
+              </div>
             </div>
           </div>
         </aside>
@@ -123,118 +152,216 @@
 </template>
 
 <script setup>
-const { data: usersData, pending: usersPending } = await useFetch('/mahjong/api/auth/users')
-const playerUsers = computed(() => (usersData.value?.users || []).filter((u) => !u.isAdmin))
+import { ref, reactive, computed, onMounted } from "vue"
 
-const activeTab = ref('login')
+// ============ Stored Credentials ============
+const CRED_KEY = "mj_credentials"
+
+function loadStoredCredentials() {
+  try {
+    const raw = localStorage.getItem(CRED_KEY)
+    if (!raw) return []
+    return JSON.parse(raw)
+  } catch {
+    return []
+  }
+}
+
+function saveStoredCredentials(list) {
+  try {
+    localStorage.setItem(CRED_KEY, JSON.stringify(list))
+  } catch {}
+}
+
+function addCredential(phone, password, userId, name, avatar) {
+  const list = loadStoredCredentials().filter((c) => c.userId !== userId)
+  list.push({ phone, password, userId, name, avatar })
+  saveStoredCredentials(list)
+}
+
+function removeCredential(userId) {
+  saveStoredCredentials(loadStoredCredentials().filter((c) => c.userId !== userId))
+}
+
+function isAIBot(name) {
+  return /^AI-/i.test(name)
+}
+
+const storedCredentials = ref([])
+const showCredMgmt = ref(false)
+const autoLoggingIn = ref(false)
+
+// Device-bound users: only accounts saved on this device, excluding AI bots
+const deviceUsers = computed(() => {
+  return storedCredentials.value.filter((c) => !isAIBot(c.name))
+})
+
+const activeTab = ref("login")
 const isSubmitting = ref(false)
-const loginError = ref('')
-const registerError = ref('')
+const loginError = ref("")
+const registerError = ref("")
 
-const loginForm = reactive({ phone: '', password: '' })
-const registerForm = reactive({ name: '', phone: '', password: '' })
+const loginForm = reactive({ phone: "", password: "", rememberMe: false })
+const registerForm = reactive({ name: "", phone: "", password: "" })
 
-onMounted(() => {
-  const cached = localStorage.getItem('mj_phone')
+// ============ Avatar Display ============
+function displayAvatar(avatar) {
+  if (!avatar) return "👤"
+  if (/^[\u{1F000}-\u{1FFFF}]/u.test(avatar)) return avatar
+  if (avatar.startsWith("http")) return "👤"
+  return avatar
+}
+
+// ============ Session Management ============
+const saveSession = (data) => {
+  const token = useCookie("auth_token", { maxAge: 60 * 60 * 24 * 30 })
+  token.value = data.token
+  const userName = useCookie("user_name")
+  userName.value = data.name
+  const userId = useCookie("user_id")
+  userId.value = data.userId
+  localStorage.setItem("mj_phone", data.phone || "")
+}
+
+// ============ Auto-login on mount ============
+onMounted(async () => {
+  storedCredentials.value = loadStoredCredentials()
+
+  // Check if user already has a valid session
+  const existingToken = useCookie("auth_token").value
+  if (existingToken) {
+    try {
+      await $fetch("/mahjong/api/auth/me", { cache: "no-cache" })
+      await navigateTo("/")
+      return
+    } catch {
+      // Session expired
+    }
+  }
+
+  // Try auto-login with stored credentials
+  if (storedCredentials.value.length > 0) {
+    autoLoggingIn.value = true
+    for (const cred of storedCredentials.value) {
+      if (isAIBot(cred.name)) continue
+      if (!cred.password) continue
+      try {
+        const res = await $fetch("/mahjong/api/auth/login", {
+          method: "POST",
+          body: { phone: cred.phone, password: cred.password },
+        })
+        saveSession(res.data)
+        await navigateTo("/")
+        return
+      } catch {
+        continue
+      }
+    }
+    autoLoggingIn.value = false
+  }
+
+  const cached = localStorage.getItem("mj_phone")
   if (cached) {
     loginForm.phone = cached
-    activeTab.value = 'login'
+    loginForm.rememberMe = true
   }
 })
 
-const saveSession = (data) => {
-  const token = useCookie('auth_token', { maxAge: 60 * 60 * 24 * 30 })
-  token.value = data.token
-
-  const userName = useCookie('user_name')
-  userName.value = data.name
-
-  const userId = useCookie('user_id')
-  userId.value = data.userId
-
-  localStorage.setItem('mj_phone', data.phone)
-}
-
-const handlePhoneLogin = async () => {
-  if (isSubmitting.value) return
-  loginError.value = ''
-
-  if (!loginForm.phone || !loginForm.password) {
-    loginError.value = '请输入手机号和密码'
-    return
-  }
-
-  isSubmitting.value = true
-  try {
-    const res = await $fetch('/mahjong/api/auth/login', {
-      method: 'POST',
-      body: { phone: loginForm.phone, password: loginForm.password }
-    })
-    saveSession(res.data)
-    await navigateTo('/')
-  } catch (err) {
-    loginError.value = err?.data?.message || err?.message || '登录失败'
-  } finally {
-    isSubmitting.value = false
-  }
-}
-
-const handleRegister = async () => {
-  if (isSubmitting.value) return
-  registerError.value = ''
-
-  if (!registerForm.name.trim()) {
-    registerError.value = '请输入玩家名'
-    return
-  }
-  if (!/^1[3-9]\d{9}$/.test(registerForm.phone)) {
-    registerError.value = '手机号格式不正确（需11位国内手机号）'
-    return
-  }
-  if (!registerForm.password || registerForm.password.length < 4) {
-    registerError.value = '密码至少4位'
-    return
-  }
-
-  isSubmitting.value = true
-  try {
-    const res = await $fetch('/mahjong/api/auth/register', {
-      method: 'POST',
-      body: {
-        name: registerForm.name.trim(),
-        phone: registerForm.phone,
-        password: registerForm.password
-      }
-    })
-    saveSession(res.data)
-    await navigateTo('/')
-  } catch (err) {
-    registerError.value = err?.data?.message || err?.message || '注册失败'
-  } finally {
-    isSubmitting.value = false
-  }
-}
-
+// ============ Quick Login ============
 const handleQuickLogin = async (user) => {
   if (isSubmitting.value) return
   isSubmitting.value = true
+  loginError.value = ""
   try {
-    const res = await $fetch('/mahjong/api/auth/debug-login', {
-      method: 'POST',
-      body: { userId: user.userId }
+    const res = await $fetch("/mahjong/api/auth/debug-login", {
+      method: "POST",
+      body: { userId: user.userId },
     })
     saveSession({
-      token: res.token || `session-${res.user.userId}`,
+      token: res.token,
       name: res.user.name,
       userId: res.user.userId,
-      phone: ''
+      phone: res.user.phone || "",
     })
-    await navigateTo('/')
+    await navigateTo("/")
   } catch (err) {
-    console.error('Quick login failed:', err)
+    loginError.value = "快速登录失败，请尝试手动登录"
   } finally {
     isSubmitting.value = false
   }
+}
+
+// ============ Phone Login ============
+const handlePhoneLogin = async () => {
+  if (isSubmitting.value) return
+  loginError.value = ""
+  if (!loginForm.phone || !loginForm.password) {
+    loginError.value = "请输入手机号和密码"
+    return
+  }
+  isSubmitting.value = true
+  try {
+    const res = await $fetch("/mahjong/api/auth/login", {
+      method: "POST",
+      body: { phone: loginForm.phone, password: loginForm.password },
+    })
+    saveSession(res.data)
+
+    // Always save for quick login display; only save password if "记住密码"
+    const { userId, name } = res.data
+    const savedPwd = loginForm.rememberMe ? loginForm.password : ""
+    addCredential(loginForm.phone, savedPwd, userId, name, "")
+
+    await navigateTo("/")
+  } catch (err) {
+    loginError.value = err?.data?.message || err?.message || "登录失败"
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+// ============ Register ============
+const handleRegister = async () => {
+  if (isSubmitting.value) return
+  registerError.value = ""
+  if (!registerForm.name.trim()) {
+    registerError.value = "请输入玩家名"
+    return
+  }
+  if (!/^1[3-9]\d{9}$/.test(registerForm.phone)) {
+    registerError.value = "手机号格式不正确（需11位国内手机号）"
+    return
+  }
+  if (!registerForm.password || registerForm.password.length < 4) {
+    registerError.value = "密码至少4位"
+    return
+  }
+  isSubmitting.value = true
+  try {
+    const res = await $fetch("/mahjong/api/auth/register", {
+      method: "POST",
+      body: {
+        name: registerForm.name.trim(),
+        phone: registerForm.phone,
+        password: registerForm.password,
+      },
+    })
+    saveSession(res.data)
+    addCredential(registerForm.phone, registerForm.password, res.data.userId, registerForm.name.trim(), "")
+    storedCredentials.value = loadStoredCredentials()
+    await navigateTo("/")
+  } catch (err) {
+    registerError.value = err?.data?.message || err?.message || "注册失败"
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+// ============ Credential Management ============
+const forgetCredential = (userId) => {
+  removeCredential(userId)
+  storedCredentials.value = loadStoredCredentials()
+  loginError.value = ""
 }
 </script>
 
@@ -287,6 +414,29 @@ const handleQuickLogin = async (user) => {
   text-align: center;
 }
 
+.auto-login-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 40px 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1rem;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(70, 197, 116, 0.2);
+  border-top: 3px solid #46c574;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .tab-bar {
   display: flex;
   gap: 0;
@@ -321,6 +471,12 @@ const handleQuickLogin = async (user) => {
   text-align: left;
 }
 
+.form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .form-field {
   display: flex;
   flex-direction: column;
@@ -346,6 +502,8 @@ const handleQuickLogin = async (user) => {
   font-size: 1rem;
   outline: none;
   transition: border-color 0.2s;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .form-field input:focus {
@@ -354,6 +512,23 @@ const handleQuickLogin = async (user) => {
 
 .form-field input::placeholder {
   color: rgba(255, 255, 255, 0.3);
+}
+
+.remember-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+  user-select: none;
+}
+
+.remember-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #46c574;
+  cursor: pointer;
 }
 
 .login-side {
@@ -385,8 +560,7 @@ const handleQuickLogin = async (user) => {
   box-shadow: 0 6px 20px rgba(70, 197, 116, 0.3);
 }
 
-.primary-btn:disabled,
-.player-chip:disabled {
+.primary-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
@@ -413,7 +587,7 @@ const handleQuickLogin = async (user) => {
 
 .divider::before,
 .divider::after {
-  content: '';
+  content: "";
   flex: 1;
   height: 1px;
   background: rgba(255, 255, 255, 0.1);
@@ -431,6 +605,9 @@ const handleQuickLogin = async (user) => {
 }
 
 .player-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 8px 16px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -440,11 +617,94 @@ const handleQuickLogin = async (user) => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
+  font-family: inherit;
 }
 
 .player-chip:hover {
   background: rgba(70, 197, 116, 0.15);
   border-color: rgba(70, 197, 116, 0.3);
+  transform: translateY(-1px);
+}
+
+.player-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.chip-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.cred-mgmt {
+  margin-top: 2px;
+}
+
+.cred-mgmt-btn {
+  width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.cred-mgmt-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.cred-mgmt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.cred-mgmt-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.82rem;
+}
+
+.cred-mgmt-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cred-forget-btn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 100, 100, 0.2);
+  background: rgba(255, 100, 100, 0.08);
+  color: #ff9d9d;
+  font-size: 0.75rem;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.cred-forget-btn:hover {
+  background: rgba(255, 100, 100, 0.18);
 }
 
 @media (orientation: landscape) {

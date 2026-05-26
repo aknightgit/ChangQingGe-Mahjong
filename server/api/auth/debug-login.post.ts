@@ -1,31 +1,27 @@
-import { UserService } from '../../services/userService'
-import { AuthService } from '../../services/authService'
+import { UserService } from "../../services/userService"
+import { AuthService } from "../../services/authService"
 
 export default defineEventHandler(async (event) => {
-  if (process.env.NODE_ENV === 'production') {
-    throw createError({ statusCode: 404, message: 'Not found' })
-  }
-
   const body = await readBody(event)
   const { userId } = body
 
   if (!userId) {
-    throw createError({ statusCode: 400, message: 'userId is required' })
+    throw createError({ statusCode: 400, message: "userId is required" })
   }
 
   const user = await UserService.getUserById(userId)
 
   if (!user) {
-    throw createError({ statusCode: 404, message: 'User not found' })
+    throw createError({ statusCode: 404, message: "User not found" })
   }
 
   const session = await AuthService.createSession(user.userId)
 
-  setCookie(event, 'mahjong_session', session.token, {
+  setCookie(event, "mahjong_session", session.token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === "production",
     maxAge: 60 * 60 * 24 * 7,
-    path: '/'
+    path: "/",
   })
 
   return {
@@ -35,9 +31,10 @@ export default defineEventHandler(async (event) => {
       userId: user.userId,
       email: user.email,
       name: user.name,
-      avatar: user.avatar,
+      phone: user.phone || "",
+      avatar: user.avatar || "",
       isAdmin: user.isAdmin ?? false,
-      stats: user.stats
-    }
+      stats: user.stats,
+    },
   }
 })

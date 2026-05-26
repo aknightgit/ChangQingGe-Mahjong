@@ -3372,7 +3372,7 @@ class GameManager {
         // 修复:审批超时执行后,如果是bot接管回合,调度bot出牌
         const currentPlayer = fg.players[fg.currentPlayerIndex];
         if (player && this.isPlayerBotControlled(player)) {
-          this.scheduleBotDiscard(gid, currentPlayer.id);
+          this.scheduleBotDiscard(gid, player.id);
         }
       } catch (e) { console.error('[Approval] timeout err:', e); }
     }, approvalWaitMs));
@@ -3512,11 +3512,8 @@ class GameManager {
     this.replaceInitialFlowers(game, player);
     game.drawnThisTurn = true;
     if (this.isPlayerBotControlled(player)) {
-      this.scheduleBotDiscard(game.gameId, currentPlayer.id);
-    }
-    if (this.isPlayerBotControlled(player)) {
-      this.scheduleBotDiscard(game.gameId, currentPlayer.id);
-    }
+      this.scheduleBotDiscard(game.gameId, player.id);
+}
     // 吃后手牌排序(百搭置顶)
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
 
@@ -3585,10 +3582,7 @@ class GameManager {
     this.replaceInitialFlowers(game, player);
     game.drawnThisTurn = true;
     if (this.isPlayerBotControlled(player)) {
-      this.scheduleBotDiscard(game.gameId, currentPlayer.id);
-    }
-    if (this.isPlayerBotControlled(player)) {
-      this.scheduleBotDiscard(game.gameId, currentPlayer.id);
+      this.scheduleBotDiscard(game.gameId, player.id);
     }
     // 碰后手牌排序(百搭置顶)
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);

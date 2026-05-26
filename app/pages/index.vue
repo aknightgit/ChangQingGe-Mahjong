@@ -4,7 +4,7 @@
     <div class="mahjong-card">
       <h1 class="mahjong-title">长清阁麻将</h1>
       <p class="mahjong-subtitle">
-        欢迎回来，{{ userName || '牌友' }}。
+        欢迎回来，{{ userName }}。
         <span v-if="isAdminUser" class="admin-badge">(管理员模式)</span>
       </p>
 
@@ -272,8 +272,8 @@ const navigateToCreatedRoom = async (targetUrl: string) => {
   clearPendingRoomTarget()
 }
 
-const userName = useCookie('user_name')
-const isAdmin = useCookie('is_admin')
+const userName = useCookie('user_name', { path: '/' })
+const isAdmin = useCookie('is_admin', { path: '/' })
 const router = useRouter()
 const route = useRoute()
 
@@ -389,9 +389,9 @@ const confirmCreateGame = async () => {
   } catch (e) {
     console.error('[Create] Error:', e)
     if (e?.status === 401 || e?.statusCode === 401 || e?.data?.statusCode === 401) {
-      useCookie('auth_token').value = null
-      useCookie('user_id').value = null
-      useCookie('user_name').value = null
+      useCookie('auth_token', { path: '/' }).value = null
+      useCookie('user_id', { path: '/' }).value = null
+      useCookie('user_name', { path: '/' }).value = null
       await navigateTo('/login')
       return
     }
@@ -557,11 +557,11 @@ const exitGame = async () => {
   }
 
   // 清理cookies
-  useCookie('auth_token').value = null
-  useCookie('user_id').value = null
-  useCookie('user_name').value = null
-  useCookie('is_admin').value = null
-  useCookie('mahjong_session').value = null
+  useCookie('auth_token', { path: '/' }).value = null
+  useCookie('user_id', { path: '/' }).value = null
+  useCookie('user_name', { path: '/' }).value = null
+  useCookie('is_admin', { path: '/' }).value = null
+  useCookie('mahjong_session', { path: '/' }).value = null
 
   // 通过 Capacitor 退出APP
   if (process.client && typeof window !== 'undefined') {
@@ -584,11 +584,11 @@ const logoutAccount = async () => {
   } catch (e) {
     console.error('[Logout] logout API error:', e)
   }
-  useCookie('auth_token').value = null
-  useCookie('user_id').value = null
-  useCookie('user_name').value = null
-  useCookie('is_admin').value = null
-  useCookie('mahjong_session').value = null
+  useCookie('auth_token', { path: '/' }).value = null
+  useCookie('user_id', { path: '/' }).value = null
+  useCookie('user_name', { path: '/' }).value = null
+  useCookie('is_admin', { path: '/' }).value = null
+  useCookie('mahjong_session', { path: '/' }).value = null
   await navigateTo('/login')
 }
 </script>

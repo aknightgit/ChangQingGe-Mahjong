@@ -26,6 +26,8 @@ async function getCollection() {
     _client = new MongoClient(MONGO_URI, {
       connectTimeoutMS: 3000,
       serverSelectionTimeoutMS: 3000,
+      maxPoolSize: 5,
+      minPoolSize: 1,
     })
   }
   if (!_connected) {
