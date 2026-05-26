@@ -4190,14 +4190,8 @@ class GameManager {
         await this.persistGame(freshGame);
         this.broadcastGameState(gameId);
 
-        // 短延迟后自动开始下一局
-        this.detachTimer(setTimeout(async () => {
-          try {
-            await this.startGame(gameId);
-          } catch (err: any) {
-            console.warn('[Rebel] Auto-start next round failed:', err?.message || err);
-          }
-        }, 300));
+        // 造反结束后走标准流程：setStartingPhase → 客户端骰子动画 → startGame
+        this.autoStartNextRound(gameId, 1500);
       } catch (err: any) {
         console.warn('[Rebel] End round timeout error:', err?.message || err);
       }
@@ -5801,6 +5795,8 @@ class GameManager {
     this.broadcastGameState(game.gameId);
 
     console.log("[ENDED] broadcastGameState for game", game.gameId, "reason=", finalReason);
+    // ENDED 阶段数据完整，立即刷盘确保 MongoDB 不丢数据
+    this.store.flushGameNow(game.gameId).catch(() => {});
     MatchHistoryService.recordMatch(game, finalScores, finalReason).catch((error) => {
       console.error('Failed to persist match history:', error);
     });

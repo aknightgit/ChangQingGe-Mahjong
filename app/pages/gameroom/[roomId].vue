@@ -2298,16 +2298,8 @@ const startNextRound = async () => {
   showSettlement.value = false
   settlementData.value = null
   isHuReviewMode.value = false
-  await enterStartingPhaseWithDiceOverlay()
-  await forceRefreshState()
-  window.setTimeout(() => {
-    if (gameState.value?.phase === GamePhase.STARTING && showDiceOverlay.value) {
-      const dealer = dealerPlayer.value
-      if (dealer && isBotPlayer(dealer)) {
-        void onDealTiles()
-      }
-    }
-  }, 1700)
+  // 不再主动调 API，服务端 autoStartNextRound 会自动切到 STARTING
+  // 客户端只需关闭结算弹窗，等 phase watcher 响应 STARTING 阶段
 }
 const isInteractionLocked = computed(() => isOverlayVisible.value)
 
@@ -3230,9 +3222,12 @@ const startWallExhaustedCountdown = () => {
     if (wallExhaustedCountdown.value <= 0) {
       cancelWallExhaustedCountdown()
       if (isSettleRequested.value) {
+        // 退房申请中 → 切到最终结算视图
         settleFinalMode.value = true
       } else {
-        void startNextRound()
+        // 倒计时结束 → 关闭弹窗，等服务端 STARTING 广播自动进下一局
+        showSettlement.value = false
+        settlementData.value = null
       }
     }
   }, 1000)
@@ -3957,61 +3952,35 @@ watch(
   () => [gameState.value?.phase, (gameState.value as any)?.roundStats?.length ?? 0, gameState.value?.gameId, (gameState.value as any)?.endReason],
   async ([phase, roundCount, gameId, endReason]) => {
     if (phase !== GamePhase.ENDED || !gameId || !currentPlayer.value?.id) return
-    if (endReason === GameEndReason.WALL_EXHAUSTED) {
-      const lastRound = gameState.value?.roundStats?.[gameState.value.roundStats.length - 1]
-      settlementData.value = {
-        roundDetails: [{
-          ...(lastRound || {}),
-          winnerDetails: []
-        }],
-        playerStats: (gameState.value?.players || []).map(p => ({
-          id: p.id,
-          name: p.name,
-          totalScore: p.score ?? 0
-        }))
-      }
-      isRoundWallExhausted.value = true
-      // 流局直接显示结算（无胡牌玩家）
-      window.setTimeout(() => {
-        showSettlement.value = true
-        startWallExhaustedCountdown()
-      }, 1000)
-      return
-    }
+
     const settlementKey = `${gameId}-${roundCount}`
     if (lastAutoSettlementKey.value === settlementKey) return
     lastAutoSettlementKey.value = settlementKey
-    // 从 gameState 构建本局结算数据
+
+    // 统一从 roundStats 取结算数据（服务端已精确计算，含赢家手牌/牌型/番数）
     const lastRound = gameState.value?.roundStats?.[gameState.value.roundStats.length - 1]
-    if (lastRound) {
-      settlementData.value = {
-        roundDetails: [{
-          ...lastRound,
-          winnerDetails: (gameState.value?.players || []).filter((p: any) => p.status === 'won').map((p: any) => ({
-            playerId: p.id,
-            playerName: p.name,
-            handTypeName: p.winHandType || '',
-            tiles: p.winTiles || [],
-            flowerCount: lastRound?.winnerDetails?.find((wd: any) => wd.playerId === p.id)?.flowerCount ?? (p.hand?.exposedMelds || []).filter((m: any) => m.tiles?.length === 1 && (m.tiles[0]?.suit === 'hua' || m.tiles[0]?.suit === 'flower')).length ?? 0,
-            isMenQing: p.hand?.isMenQing ?? false,
-            hasWild: p.hand?.hasWild ?? false,
-            baseFan: lastRound?.winnerDetails?.find((wd: any) => wd.playerId === p.id)?.baseFan ?? (p.winHandType ? 1 : 0),
-            finalPoints: lastRound?.winnerDetails?.find((wd: any) => wd.playerId === p.id)?.finalPoints ?? (p.wonFan ?? 0),
-          }))
-        }],
-        playerStats: (gameState.value?.players || []).map(p => ({
-          id: p.id,
-          name: p.name,
-          totalScore: p.score ?? 0
-        }))
-      }
-      isRoundWallExhausted.value = false
-      // 1s后直接显示本局输赢
-      window.setTimeout(() => {
-        showSettlement.value = true
-        startWallExhaustedCountdown()
-      }, 1000)
+    if (!lastRound) return
+
+    const isWallExhausted = endReason === GameEndReason.WALL_EXHAUSTED
+
+    settlementData.value = {
+      roundDetails: [{
+        ...lastRound,
+        winnerDetails: lastRound.winnerDetails || []
+      }],
+      playerStats: (gameState.value?.players || []).map(p => ({
+        id: p.id,
+        name: p.name,
+        totalScore: p.score ?? 0
+      }))
     }
+    isRoundWallExhausted.value = isWallExhausted
+
+    // 1s后显示结算弹窗，启动倒计时自动下一局
+    window.setTimeout(() => {
+      showSettlement.value = true
+      startWallExhaustedCountdown()
+    }, 1000)
   }
 )
 
