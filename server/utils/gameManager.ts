@@ -4157,7 +4157,8 @@ class GameManager {
       playerName: player.name,
       newDealerIndex: player.position
     };
-    // 造反者成为庄家
+    // 造反者成为庄家（设 nextDealerId，startGame 会优先使用）
+    game.nextDealerId = player.id;
     game.dealerIndex = player.position;
     // 设置5秒倒计时
     game.rebelEndTime = Date.now() + 5000;
@@ -4242,6 +4243,9 @@ class GameManager {
     const threshold = game.liangShanThreshold ?? 4000;
     let effectiveVoteCount = game.liangShanVotes.length;
 
+    // 广播投票进度，让所有客户端刷新聚义状态
+    this.broadcastGameState(game.gameId);
+
     for (const ap of activePlayers) {
       // 已经手动投票的跳过
       if (game.liangShanVotes.includes(ap.id)) continue;
@@ -4293,8 +4297,25 @@ class GameManager {
       for (const p of game.players) {
         p.score = finalScores[p.id] ?? 0;
       }
+
+      // 聚义成功：庄家不变，保留当前庄家
+      if (!game.nextDealerId) {
+        const currentDealer = game.players[game.dealerIndex];
+        if (currentDealer) {
+          game.nextDealerId = currentDealer.id;
+        }
+      }
+
+      // 广播最终状态
+      this.broadcastGameState(game.gameId);
+
+      // 自动进入下一局
+      this.autoStartNextRound(game.gameId, 2000);
     }
-    // 未全票 → 游戏正常继续,不结束
+    // 未全票 → 广播当前投票进度，游戏正常继续
+    else {
+      this.broadcastGameState(game.gameId);
+    }
   }
 
   /**
@@ -5692,6 +5713,14 @@ class GameManager {
     // 规则:effective = inheritMultiplier × roundMultiplier,封顶8,超出部分 = effective/8 继承给下把
     // 注意:聚义/造反已经自行设置 inheritedGlobalMultiplier,不要覆盖
     if (finalReason === GameEndReason.WALL_EXHAUSTED) {
+      // 流局:庄家不变,保留当前庄家为下局庄家
+      if (!game.nextDealerId) {
+        const currentDealer = game.players[game.dealerIndex];
+        if (currentDealer) {
+          game.nextDealerId = currentDealer.id;
+          console.log(`[endRound] 流局，庄家不变: ${currentDealer.name}`);
+        }
+      }
       // 流局:先翻倍,再算溢出(但全局倍数封顶8)
       const currentGlobal = game.inheritMultiplier ?? 1;
       const roundMul = game.roundMultiplier ?? 1;
