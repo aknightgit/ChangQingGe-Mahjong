@@ -1616,6 +1616,11 @@ class GameManager {
     return this.store.persistGame(game);
   }
 
+  /** 立即持久化（不走延迟队列） */
+  public async persistGameImmediate(game: GameState): Promise<void> {
+    return this.store.persistGameImmediate(game);
+  }
+
   /** 关键节点立即刷盘（回合结束/退房/断连） */
   public async flushGameNow(gameId: string): Promise<void> {
     return this.store.flushGameNow(gameId);
@@ -1740,7 +1745,8 @@ class GameManager {
       this.playerToGame.set(botId, gameId);
     }
 
-    await this.persistGame(game);
+    // 立即刷盘，确保其他设备能从 MongoDB 查到此房间
+    await this.persistGameImmediate(game);
 
     return { gameId, playerId };
   }

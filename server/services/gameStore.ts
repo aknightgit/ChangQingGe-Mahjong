@@ -83,6 +83,12 @@ export class GameStore {
     }
   }
 
+  /** 立即持久化（不走延迟队列），用于创建房间等需要即时可见的场景 */
+  async persistGameImmediate(game: GameState): Promise<void> {
+    this.dirtyGames.set(game.gameId, game)
+    await this.flushGameNow(game.gameId)
+  }
+
   /** 关键节点立即刷盘（回合结束/退房/断连） */
   async flushGameNow(gameId: string): Promise<void> {
     const timer = this.flushTimers.get(gameId)
