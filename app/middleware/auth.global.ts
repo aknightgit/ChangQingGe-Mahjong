@@ -43,7 +43,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   } catch {
     useCookie("auth_token").value = null
     useCookie("user_id").value = null
-    useCookie("user_name").value = null
+    useCookie("user_name", { path: "/" }).value = null
     return navigateTo(LOGIN_PATH, { external: true })
   }
 })

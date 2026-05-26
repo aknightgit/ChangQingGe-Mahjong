@@ -363,7 +363,7 @@ class GameManager {
 
   private isListeningPreviewState(game: GameState, player: Player): boolean {
     const concealedPlayableCount = this.getConcealedPlayableTiles(game, player).length;
-    return [1, 4, 7, 10, 13].includes(concealedPlayableCount);
+    return [1, 2, 4, 5, 7, 8, 10, 11, 13, 14].includes(concealedPlayableCount);
   }
 
   private isDaDiaoReadyState(game: GameState, player: Player): boolean {
@@ -1116,18 +1116,14 @@ class GameManager {
     if (action === ActionType.PASS) {
       this.handlePass(game, player);
     } else if (action === ActionType.PENG) {
-      const pengExposed = this.countExposedTilesExcludingFlowerMelds(player);
-      const pengTotal = player.hand.concealedTiles.length + pengExposed;
-      if (pengTotal - 2 + 3 <= 14) { this.handlePeng(game, player); }
+      if (player.hand.concealedTiles.length >= 2) { this.handlePeng(game, player); }
       else { this.handlePass(game, player); }
     } else if (action === ActionType.CHOW) {
-      const chowExposed = this.countExposedTilesExcludingFlowerMelds(player);
-      const chowTotal = player.hand.concealedTiles.length + chowExposed;
-      if (chowTotal - 2 + 3 <= 14) {
-        console.log(`[PendingResolve] ${player.name} executing CHOW (concealed=${player.hand.concealedTiles.length}, exposed=${chowExposed})`);
+      if (player.hand.concealedTiles.length >= 2) {
+        console.log(`[PendingResolve] ${player.name} executing CHOW (concealed=${player.hand.concealedTiles.length})`);
         this.handleChow(game, player, pa.selectedChowTileIds);
       } else {
-        console.warn(`[PendingResolve] ${player.name} CHOW blocked: would exceed 14 tiles (total=${chowTotal})`);
+        console.warn(`[PendingResolve] ${player.name} CHOW blocked: not enough tiles`);
         this.handlePass(game, player);
       }
     } else if (action === ActionType.HU) {
@@ -2659,12 +2655,10 @@ class GameManager {
         break;
 
       case ActionType.PENG:
-        // 防止超限:碰牌后手牌不能超过14张
+        // 防止超限:碰牌至少需要2张手牌
         {
-          const pengExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
-          const pengTotalCount = player.hand.concealedTiles.length + pengExposedCount;
-          if (pengTotalCount - 2 + 3 > 14) { // 碰牌从手牌拿2张+弃牌1张组成3张meld
-            console.warn(`[PENG] Blocked: player ${player.id} would exceed 14 tiles`);
+          if (player.hand.concealedTiles.length < 2) {
+            console.warn(`[PENG] Blocked: player ${player.id} needs 2 tiles in hand`);
             break;
           }
         }
@@ -2672,12 +2666,10 @@ class GameManager {
         break;
 
       case ActionType.CHOW:
-        // 防止超限:吃牌后手牌不能超过14张
+        // 防止超限:吃牌至少需要2张手牌
         {
-          const chowExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
-          const chowTotalCount = player.hand.concealedTiles.length + chowExposedCount;
-          if (chowTotalCount - 2 + 3 > 14) { // 吃牌从手牌拿2张+弃牌1张组成3张meld
-            console.warn(`[CHOW] Blocked: player ${player.id} would exceed 14 tiles`);
+          if (player.hand.concealedTiles.length < 2) {
+            console.warn(`[CHOW] Blocked: player ${player.id} needs 2 tiles in hand`);
             break;
           }
         }
@@ -2686,10 +2678,8 @@ class GameManager {
 
       case ActionType.KONG:
         {
-          const kongExposedCount = this.countExposedTilesExcludingFlowerMelds(player);
-          const kongTotalCount = player.hand.concealedTiles.length + kongExposedCount;
-          if (kongTotalCount - 3 + 4 > 14) {
-            console.warn(`[KONG] Blocked: player ${player.id} would exceed 14 tiles`);
+          if (player.hand.concealedTiles.length < 3) {
+            console.warn(`[KONG] Blocked: player ${player.id} needs 3 tiles in hand`);
             break;
           }
         }

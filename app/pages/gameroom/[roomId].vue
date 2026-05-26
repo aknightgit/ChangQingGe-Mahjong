@@ -846,14 +846,11 @@
               </div>
 
               <!-- 状态提示 -->
-              <div v-if="thinkFreezeActive || isAIControlled" class="turn-status-text">
+              <div v-if="thinkFreezeActive" class="turn-status-text">
                 <template v-if="thinkFreezeActive">
                   🧠 {{ thinkFreezePlayerName }} 在思考中... {{ thinkFreezeCountdown }}s
                 </template>
-                <template v-else-if="isAIControlled">
-                  🤖 AI托管中
-                </template>
-              </div>
+                </div>
               <CircularActionButtons
                 :available-actions="filteredCircularAvailableActions"
                 :is-connected="isConnected"
@@ -1890,6 +1887,7 @@ const statsPlayers = computed(() => {
       id: p.id,
       name: p.name,
       score: p.score || 0,
+      isBotControlled: !!(p as any).isBotControlled,
       wins: p.status === 'won' ? 1 : 0,
       losses: p.status === 'lost' ? 1 : 0,
       color: positionColors[p.position] || 'south',
@@ -2304,7 +2302,10 @@ const startNextRound = async () => {
   await forceRefreshState()
   window.setTimeout(() => {
     if (gameState.value?.phase === GamePhase.STARTING && showDiceOverlay.value) {
-      void onDealTiles()
+      const dealer = dealerPlayer.value
+      if (dealer && isBotPlayer(dealer)) {
+        void onDealTiles()
+      }
     }
   }, 1700)
 }
@@ -3201,7 +3202,7 @@ const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); playVoiceActio
 const showSettlement = ref(false)
 const settlementData = ref<any>(null)
 const lastAutoSettlementKey = ref('')
-const wallExhaustedCountdown = ref(5)
+const wallExhaustedCountdown = ref(10)
 const wallExhaustedTimer = ref(null)
 
 const settleFinalMode = ref(false)
@@ -3222,7 +3223,7 @@ const finishSettleToFinal = () => {
 }
 
 const startWallExhaustedCountdown = () => {
-  wallExhaustedCountdown.value = 5
+  wallExhaustedCountdown.value = 10
   settleFinalMode.value = false
   wallExhaustedTimer.value = window.setInterval(() => {
     wallExhaustedCountdown.value--
@@ -4345,6 +4346,7 @@ watch(
 
 // 🔧 强力兜底：不管 phase watch 是否触发，每次 gameState 更新都检查
 watch(gameState, (newVal) => {
+  checkAITakeover()
   if (newVal && newVal.phase !== GamePhase.STARTING && showDiceOverlay.value) {
     console.log('[DiceOverlay] FALLBACK: closing dice overlay (phase=', newVal.phase, ')')
     showDiceOverlay.value = false
@@ -4378,13 +4380,10 @@ if (typeof window !== 'undefined') {
 
 // AI 接管检测（通过轮询检查 botModePlayers）
 const checkAITakeover = () => {
-  if (!gameState.value?.players) return
-  const currentBotPlayers = new Set<string>()
-  // 检查是否有玩家进入 AI 托管（通过玩家状态推断）
-  for (const p of gameState.value.players) {
-    // 这里通过 isAIControlled 状态检测（如果有的话）
-    // 暂时跳过，因为 bot 状态在客户端不易获取
-  }
+  if (!gameState.value?.players || !currentPlayer.value) return
+  // 检查当前玩家是否被AI托管（从 gameState 的 isBotControlled 字段检测）
+  const me = gameState.value.players.find(p => p.id === currentPlayer.value!.id)
+  isAIControlled.value = !!(me as any)?.isBotControlled
 }
 
 // ---- Admin / Debug Functions ----

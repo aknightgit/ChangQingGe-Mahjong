@@ -29,7 +29,7 @@
             >
               <span class="td-name-inner">
                 <span class="rank-dot" :class="`dot--${player.color}`"></span>
-                <span :class="{ 'name-me': player.isMe }">{{ player.name }}</span>
+                <span :class="{ 'name-me': player.isMe }">{{ player.name }}{{ player.isBotControlled ? ' (拖)' : '' }}</span>
                 <span
                   v-if="player.isQJCrossed"
                   class="rank-qj-icon"

@@ -392,7 +392,8 @@ const confirmCreateGame = async () => {
       useCookie('auth_token', { path: '/' }).value = null
       useCookie('user_id', { path: '/' }).value = null
       useCookie('user_name', { path: '/' }).value = null
-      await navigateTo('/login')
+      localStorage.setItem("mj_pending_logout", "1")
+  await navigateTo("/login")
       return
     }
     alert('创建房间失败：' + (e?.message || '未知错误'))
@@ -570,7 +571,8 @@ const exitGame = async () => {
       await App.exitApp()
     } catch {
       // 非Capacitor环境（浏览器调试）则跳转登录页
-      await navigateTo('/login')
+      localStorage.setItem("mj_pending_logout", "1")
+  await navigateTo("/login")
     }
   }
 }
@@ -589,7 +591,8 @@ const logoutAccount = async () => {
   useCookie('user_name', { path: '/' }).value = null
   useCookie('is_admin', { path: '/' }).value = null
   useCookie('mahjong_session', { path: '/' }).value = null
-  await navigateTo('/login')
+  localStorage.setItem("mj_pending_logout", "1")
+  await navigateTo("/login")
 }
 </script>
 

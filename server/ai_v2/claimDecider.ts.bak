@@ -70,24 +70,6 @@ function getBestNumberSuit(hand: Tile[], routeState: RouteState): TileSuit | nul
   return ranked[0]?.count ? ranked[0].suit : null
 }
 
-function isGapChow(hand: Tile[], claimTile: Tile): boolean {
-  if (!isNumberSuit(claimTile.suit)) return false
-  const vals = hand.filter(t => t.suit === claimTile.suit).map(t => t.value)
-  const cv = claimTile.value
-  return vals.includes(cv - 1) && vals.includes(cv + 1)
-}
-
-function isEdgeChow(hand: Tile[], claimTile: Tile): boolean {
-  if (!isNumberSuit(claimTile.suit)) return false
-  const vals = hand.filter(t => t.suit === claimTile.suit).map(t => t.value)
-  const cv = claimTile.value
-  if (cv === 3 && vals.includes(1) && vals.includes(2)) return true
-  if (cv === 7 && vals.includes(8) && vals.includes(9)) return true
-  if (cv === 1 && vals.includes(2) && vals.includes(3)) return true
-  if (cv === 9 && vals.includes(7) && vals.includes(8)) return true
-  return false
-}
-
 function breaksCoreStructure(beforeHand: Tile[], afterHand: Tile[]): boolean {
   const beforeGroups = groupTiles(beforeHand)
   const afterGroups = groupTiles(afterHand)
@@ -138,24 +120,13 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
   const sameOpponentMeldCount = discardSourceId
     ? player.hand.exposedMelds.filter((m: any) => m.fromPlayerId === discardSourceId).length
     : 0
-  const wildCount = routeState.features.wildCount
-  const wildBaoStartPush = sameOpponentMeldCount === 0 && wildCount >= 2
-    ? Math.min(0.45, (wildCount - 1) * 0.20)
-    : 0
-  const mutualBaoBuildPush = sameOpponentMeldCount === 1 && wildCount > 0
-    ? Math.min(1.3, wildCount * 0.48)
-    : 0
-  const mutualBaoFinalPush = sameOpponentMeldCount >= 2
-    ? Math.min(1.6, wildCount * 0.42)
-    : 0
-  const chowGapEdgeBoost = action === ActionType.CHOW && exposedMeldCount > 0 && wildCount <= 2 && isNumberSuit(claimTile.suit)
-    ? (isGapChow(player.hand.concealedTiles, claimTile) ? 0.35 :
-       isEdgeChow(player.hand.concealedTiles, claimTile) ? 0.30 : 0)
-    : 0
+  const bailoutPush = sameOpponentMeldCount >= 2 ? wildCount * 0.22 : 0
+  const chowMiddleEdgeBoost = action === ActionType.CHOW && exposedMeldCount > 0 && wildCount <= 2 && isNumberSuit(claimTile.suit) && claimTile.value >= 3 && claimTile.value <= 7 ? 0.25 : 0
   const openingMenqing = player.hand.exposedMelds.length === 0 && player.hand.concealedTiles.length >= 11
   const committedOpenSuit = getCommittedOpenNumberSuit(player)
   const effectiveGlobalMultiplier = getEffectiveGlobalMultiplier(game)
   const estimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
+  const wildCount = routeState.features.wildCount
   const pairHeavyPungsPush = estimatedRound <= 8 && routeState.features.pairCount >= 3
   const upstreamRejectedSuit = routeState.features.upstreamRejectedSuit
   const upstreamSuitCount = upstreamRejectedSuit ? getNumberSuitCount(player.hand.concealedTiles, upstreamRejectedSuit) : 0
@@ -261,7 +232,7 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
         candidateShanten <= passShanten &&
         candidateEffective + 2 >= passEffective
       ) {
-        return { allowed: true, tuneDelta: 0.65 + routeGain * 0.05 + wildBaoStartPush + mutualBaoBuildPush + mutualBaoFinalPush, reason: 'honor_peng_push' }
+        return { allowed: true, tuneDelta: 0.65 + routeGain * 0.05, reason: 'honor_peng_push' }
       }
 
       const canBreakForSpeed =
@@ -304,7 +275,7 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       if (upstreamRejectedOpenPush) tuneDelta += 0.32
       if (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG)) tuneDelta += 0.5
       if (multiWildMenqingPush && openingMenqing) tuneDelta -= 0.18
-      tuneDelta += wildBaoStartPush + mutualBaoBuildPush + mutualBaoFinalPush
+      tuneDelta += bailoutPush
       return { allowed: true, tuneDelta, reason: 'menqing_speed' }
     }
 
@@ -316,8 +287,8 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
           Math.max(0, speedGain) * 0.1 +
           (action === ActionType.CHOW ? 0.2 : 0.12) +
           (committedOpenSuit && claimTile.suit === committedOpenSuit ? 0.35 : 0) +
-          wildBaoStartPush + mutualBaoBuildPush + mutualBaoFinalPush +
-          chowGapEdgeBoost,
+          bailoutPush +
+          chowMiddleEdgeBoost,
         reason: 'open_speed_push',
       }
 

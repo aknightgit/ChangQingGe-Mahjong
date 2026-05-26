@@ -182,7 +182,7 @@ export const useGame = () => {
     gameId.value = gId
     playerId.value = pId
     roomDismissedReason.value = null
-    const userName = useCookie('user_name').value || 'Player'
+    const userName = useCookie('user_name', { path: '/' }).value || 'Player'
 
     try {
       // Fetch initial state (optional, but good for immediate render)

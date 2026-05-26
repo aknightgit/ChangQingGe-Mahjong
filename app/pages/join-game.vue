@@ -9,27 +9,7 @@
         <button class="mahjong-button secondary" @click="backToLobby">返回大厅</button>
       </header>
 
-      <!-- 快速加入：从 localStorage 读取最近离开的房间 -->
-      <section v-if="quickJoinGames.length > 0" class="my-games-section">
-        <div class="available-header">
-          <h2>⚡ 快速加入</h2>
-        </div>
-        <ul class="available-list">
-          <li v-for="game in quickJoinGames" :key="game.roomNumber + '-' + game.playerId" class="available-item my-game-item">
-            <div class="available-details">
-              <span class="available-id">#{{ game.roomNumber }}</span>
-              <span class="available-meta">点击回到牌局</span>
-            </div>
-            <button
-              class="mahjong-button primary"
-              @click="quickRejoin(game)"
-              :disabled="isQuickJoining"
-            >
-              {{ isQuickJoining ? '进入中…' : '进入' }}
-            </button>
-          </li>
-        </ul>
-      </section>
+      
 
       <!-- 我的牌局（置顶） -->
       <section v-if="myGames.length > 0" class="my-games-section">
@@ -134,6 +114,29 @@
           </li>
         </ul>
       </section>
+
+<!-- 快速加入：从 localStorage 读取最近离开的房间 -->
+      <section v-if="quickJoinGames.length > 0" class="my-games-section">
+        <div class="available-header">
+          <h2>⚡ 快速加入</h2>
+        </div>
+        <ul class="available-list">
+          <li v-for="game in quickJoinGames" :key="game.roomNumber + '-' + game.playerId" class="available-item my-game-item">
+            <div class="available-details">
+              <span class="available-id">#{{ game.roomNumber }}</span>
+              <span class="available-meta">点击回到牌局</span>
+            </div>
+            <button
+              class="mahjong-button primary"
+              @click="quickRejoin(game)"
+              :disabled="isQuickJoining"
+            >
+              {{ isQuickJoining ? '进入中…' : '进入' }}
+            </button>
+          </li>
+        </ul>
+      </section>
+
     </div>
   </div>
 </template>
@@ -147,7 +150,7 @@ const buildGameRoomPath = (gameId: string, playerId: string, spectator = false) 
   return `/gameroom/${gameId}?${params.toString()}`
 }
 
-const userName = useCookie('user_name')
+const userName = useCookie('user_name', { path: '/' })
 const userId = useCookie('user_id')
 const waitingGames = ref<any[]>([])
 const waitingGamesError = ref<string | null>(null)

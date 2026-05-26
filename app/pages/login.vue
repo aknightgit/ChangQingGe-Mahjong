@@ -216,7 +216,7 @@ function displayAvatar(avatar) {
 const saveSession = (data) => {
   const token = useCookie("auth_token", { maxAge: 60 * 60 * 24 * 30 })
   token.value = data.token
-  const userName = useCookie("user_name")
+  const userName = useCookie("user_name", { path: "/" })
   userName.value = data.name
   const userId = useCookie("user_id")
   userId.value = data.userId
@@ -239,7 +239,12 @@ onMounted(async () => {
     }
   }
 
-  // Try auto-login with stored credentials
+  // 退出标记：用户主动退出过，跳过自动登录
+  if (localStorage.getItem("mj_pending_logout")) {
+    localStorage.removeItem("mj_pending_logout")
+    autoLoggingIn.value = false
+  } else {
+    // Try auto-login with stored credentials
   if (storedCredentials.value.length > 0) {
     autoLoggingIn.value = true
     for (const cred of storedCredentials.value) {
@@ -258,6 +263,7 @@ onMounted(async () => {
       }
     }
     autoLoggingIn.value = false
+  }
   }
 
   const cached = localStorage.getItem("mj_phone")

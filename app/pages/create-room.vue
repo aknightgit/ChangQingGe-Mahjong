@@ -159,7 +159,7 @@ const clearPendingRoomTarget = () => {
   try { sessionStorage.removeItem(PENDING_ROOM_STORAGE_KEY) } catch {}
 }
 
-const userName = useCookie('user_name')
+const userName = useCookie('user_name', { path: '/' })
 const router = useRouter()
 const isCreatingGame = ref(false)
 const activeHelp = ref<string | null>(null)
