@@ -2335,6 +2335,9 @@ export async function shouldClaimPendingAction(
             wallRemaining,
           })
           pengBlockedByRoute = !routeDecision.allowed
+          if (!routeDecision.allowed) {
+            console.log(`[ClaimDecider] ${player.name} PENG blocked: reason=${routeDecision.reason} tuneDelta=${routeDecision.tuneDelta.toFixed(2)} claimTile=${traceTile(claimTile)} route=${routeState?.current} targetSuit=${routeState?.targetSuit}`)
+          }
           pengTune = routeDecision.allowed ? pengTune + routeDecision.tuneDelta : 0.01
         }
 
@@ -2419,6 +2422,9 @@ export async function shouldClaimPendingAction(
             wallRemaining,
           })
           kongBlockedByRoute = !routeDecision.allowed
+          if (!routeDecision.allowed) {
+            console.log(`[ClaimDecider] ${player.name} KONG blocked: reason=${routeDecision.reason} tuneDelta=${routeDecision.tuneDelta.toFixed(2)} claimTile=${traceTile(claimTile)} route=${routeState?.current} targetSuit=${routeState?.targetSuit}`)
+          }
           kongTune = routeDecision.allowed ? kongTune + routeDecision.tuneDelta : 0.01
         }
 
@@ -2529,6 +2535,9 @@ export async function shouldClaimPendingAction(
           wallRemaining,
         })
         chowBlockedByRoute = !routeDecision.allowed
+        if (!routeDecision.allowed) {
+          console.log(`[ClaimDecider] ${player.name} CHOW blocked: reason=${routeDecision.reason} tuneDelta=${routeDecision.tuneDelta.toFixed(2)} claimTile=${traceTile(claimTile)} route=${routeState?.current} targetSuit=${routeState?.targetSuit}`)
+        }
         bestChow.tune = routeDecision.allowed ? bestChow.tune + routeDecision.tuneDelta : 0.01
       }
 
