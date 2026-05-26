@@ -279,7 +279,9 @@ const route = useRoute()
 
 // 昵称 fallback: cookie → localStorage → '牌友'
 const displayName = computed(() => {
-  return userName.value || localStorage.getItem('mj_last_user_name') || '牌友'
+  if (userName.value) return userName.value
+  if (process.client) return localStorage.getItem('mj_last_user_name') || '牌友'
+  return '牌友'
 })
 
 const isAdminUser = computed(() => isAdmin.value === 'true' || isAdmin.value === true)
