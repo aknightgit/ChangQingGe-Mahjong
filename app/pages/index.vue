@@ -280,7 +280,14 @@ const route = useRoute()
 // 昵称 fallback: cookie → localStorage → '牌友'
 const displayName = computed(() => {
   if (userName.value) return userName.value
-  if (process.client) return localStorage.getItem('mj_last_user_name') || '牌友'
+  if (process.client) {
+    const stored = localStorage.getItem('mj_last_user_name')
+    if (stored) {
+      // cookie 丢了但 localStorage 有，恢复 cookie
+      userName.value = stored
+      return stored
+    }
+  }
   return '牌友'
 })
 

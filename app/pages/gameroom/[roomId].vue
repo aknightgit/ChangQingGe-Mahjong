@@ -676,10 +676,8 @@
                     @click="openHuReviewPanel"
                   >回看胡牌选项</button>
                 </div>
-                <div v-else-if="isAIControlled" class="inline-action-buttons">
-                  <div class="ai-controlled-notice">
-                    🤖 已由AI自动出牌
-                  </div>
+                <div v-if="isAIControlled" class="comeback-floating-bar">
+                  <span class="comeback-label">🤖 AI托管中</span>
                   <button
                     class="inline-action-btn inline-action-btn--comeback"
                     @click="onPlayerBack"
@@ -5735,18 +5733,51 @@ const forceDiscard = async (p: Player) => {
   50% { opacity: 0.6; }
 }
 
+.comeback-floating-bar {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  border-radius: 16px;
+  background: rgba(7, 19, 14, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(66, 165, 245, 0.4);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  animation: comeback-glow 1.5s infinite;
+}
+
+.comeback-label {
+  font-size: 0.8rem;
+  color: #ffd36a;
+  white-space: nowrap;
+}
+
 .inline-action-btn--comeback {
   background: linear-gradient(135deg, #0d6efd, #42a5f5);
   color: #fff;
   border-color: rgba(66, 165, 245, 0.6);
   font-size: 0.85rem;
   padding: 8px 16px;
-  animation: comeback-glow 1.5s infinite;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.inline-action-btn--comeback:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 16px rgba(66, 165, 245, 0.6);
 }
 
 @keyframes comeback-glow {
-  0%, 100% { box-shadow: 0 0 8px rgba(66, 165, 245, 0.4); }
-  50% { box-shadow: 0 0 20px rgba(66, 165, 245, 0.8); }
+  0%, 100% { box-shadow: 0 4px 24px rgba(66, 165, 245, 0.3); }
+  50% { box-shadow: 0 4px 32px rgba(66, 165, 245, 0.7); }
 }
 
 .ai-controlled-notice {
