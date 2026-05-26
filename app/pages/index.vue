@@ -4,7 +4,7 @@
     <div class="mahjong-card">
       <h1 class="mahjong-title">长清阁麻将</h1>
       <p class="mahjong-subtitle">
-        欢迎回来，{{ userName }}。
+        欢迎回来，{{ displayName }}。
         <span v-if="isAdminUser" class="admin-badge">(管理员模式)</span>
       </p>
 
@@ -276,6 +276,11 @@ const userName = useCookie('user_name', { path: '/' })
 const isAdmin = useCookie('is_admin', { path: '/' })
 const router = useRouter()
 const route = useRoute()
+
+// 昵称 fallback: cookie → localStorage → '牌友'
+const displayName = computed(() => {
+  return userName.value || localStorage.getItem('mj_last_user_name') || '牌友'
+})
 
 const isAdminUser = computed(() => isAdmin.value === 'true' || isAdmin.value === true)
 const isCreatingGame = ref(false)

@@ -214,37 +214,52 @@ function displayAvatar(avatar) {
 
 // ============ Session Management ============
 const saveSession = (data) => {
-  const token = useCookie("auth_token", { maxAge: 60 * 60 * 24 * 30 })
+  const token = useCookie("auth_token", { maxAge: 60 * 60 * 24 * 30, path: "/" })
   token.value = data.token
   const userName = useCookie("user_name", { path: "/" })
   userName.value = data.name
-  const userId = useCookie("user_id")
+  const userId = useCookie("user_id", { path: "/" })
   userId.value = data.userId
   localStorage.setItem("mj_phone", data.phone || "")
+  // 昵称持久化备份（cookie 可能丢失，localStorage 作 fallback）
+  if (data.name) localStorage.setItem("mj_last_user_name", data.name)
 }
 
 // ============ Auto-login on mount ============
 onMounted(async () => {
   storedCredentials.value = loadStoredCredentials()
 
+  // 退出标记：用户主动退出过，跳过一切自动登录
+  if (localStorage.getItem("mj_pending_logout")) {
+    localStorage.removeItem("mj_pending_logout")
+    // 彻底清理残留 session，确保退出干净
+    useCookie("auth_token", { path: "/" }).value = null
+    useCookie("user_id", { path: "/" }).value = null
+    useCookie("user_name", { path: "/" }).value = null
+    autoLoggingIn.value = false
+    const cached = localStorage.getItem("mj_phone")
+    if (cached) { loginForm.phone = cached; loginForm.rememberMe = true }
+    return
+  }
+
   // Check if user already has a valid session
-  const existingToken = useCookie("auth_token").value
+  const existingToken = useCookie("auth_token", { path: "/" }).value
   if (existingToken) {
     try {
-      await $fetch("/mahjong/api/auth/me", { cache: "no-cache" })
+      const meRes = await $fetch("/mahjong/api/auth/me", { cache: "no-cache" })
+      // 确保 user_name cookie 存在
+      if (meRes?.data?.name && !useCookie("user_name", { path: "/" }).value) {
+        useCookie("user_name", { path: "/" }).value = meRes.data.name
+      }
       await navigateTo("/")
       return
     } catch {
-      // Session expired
+      // Session expired, clear stale cookies
+      useCookie("auth_token", { path: "/" }).value = null
     }
   }
 
-  // 退出标记：用户主动退出过，跳过自动登录
-  if (localStorage.getItem("mj_pending_logout")) {
-    localStorage.removeItem("mj_pending_logout")
-    autoLoggingIn.value = false
-  } else {
-    // Try auto-login with stored credentials
+  // Try auto-login with stored credentials
   if (storedCredentials.value.length > 0) {
     autoLoggingIn.value = true
     for (const cred of storedCredentials.value) {
@@ -263,7 +278,6 @@ onMounted(async () => {
       }
     }
     autoLoggingIn.value = false
-  }
   }
 
   const cached = localStorage.getItem("mj_phone")

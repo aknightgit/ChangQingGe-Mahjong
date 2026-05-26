@@ -21,8 +21,8 @@ export default defineNuxtRouteMiddleware(async (to) => {
     typeof to.query.debugAccessToken === "string" ? to.query.debugAccessToken : ""
   if (debugAccessToken && p.startsWith("/gameroom/")) return
 
-  const authToken = useCookie("auth_token").value
-  const userId = useCookie("user_id").value
+  const authToken = useCookie("auth_token", { path: "/" }).value
+  const userId = useCookie("user_id", { path: "/" }).value
 
   // ============ 无 cookie 访客 ============
   if (!authToken && !userId) {
@@ -41,8 +41,8 @@ export default defineNuxtRouteMiddleware(async (to) => {
       cache: "no-cache"
     })
   } catch {
-    useCookie("auth_token").value = null
-    useCookie("user_id").value = null
+    useCookie("auth_token", { path: "/" }).value = null
+    useCookie("user_id", { path: "/" }).value = null
     useCookie("user_name", { path: "/" }).value = null
     return navigateTo(LOGIN_PATH, { external: true })
   }
