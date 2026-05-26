@@ -473,7 +473,7 @@ onUnmounted(() => {
 }
 
 .action-btn--hu.action-btn--highlight-pulse {
-  animation: action-breathe-strong 0.92s ease-in-out infinite, hu-glow-strong 0.92s ease-in-out infinite;
+  animation: heartbeat 1.2s ease-in-out infinite, hu-glow-strong 0.92s ease-in-out infinite;
 }
 
 .action-btn--kong.action-btn--highlight {
