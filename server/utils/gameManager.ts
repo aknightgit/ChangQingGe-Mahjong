@@ -763,7 +763,7 @@ class GameManager {
         value,
         isFlower: suit === TileSuit.FLOWER
       };
-      const winCheck = canWin([...player.hand.concealedTiles, testTile], player.hand.exposedMelds, winWildArg);
+      const winCheck = canWin([...player.hand.concealedTiles, testTile], player.hand.exposedMelds, winWildArg, undefined, game.wildTileGroup);
       if (!winCheck.canWin) continue;
 
       const discardOptions = this.getCachedWinOptions(game, player, 'discard', {
@@ -5283,29 +5283,37 @@ class GameManager {
         const currentCount = (this.consecutiveTimeouts.get(key) || 0) + 1;
         this.consecutiveTimeouts.set(key, currentCount);
 
-        if (!game.pendingActions.length) {
-          if (!game.drawnThisTurn && this.canPlayerDrawOnCurrentTurn(game, player)) {
-            await this.executeAction(gameId, playerId, ActionType.DRAW, undefined);
-          }
-          const refreshedGame = await this.getGame(gameId);
-          const refreshedPlayer = refreshedGame?.players?.[refreshedGame.currentPlayerIndex];
-          if (
-            refreshedGame &&
-            refreshedGame.phase === GamePhase.PLAYING &&
-            refreshedPlayer &&
-            refreshedPlayer.id === playerId &&
-            refreshedGame.drawnThisTurn &&
-            this.isConcealedDiscardState(refreshedPlayer)
-          ) {
-            const forcedTileId =
-              (refreshedPlayer as any).lastDrawnTile?.id ||
-              refreshedPlayer.hand.concealedTiles[refreshedPlayer.hand.concealedTiles.length - 1]?.id;
-            if (forcedTileId) {
-              await this.executeAction(gameId, playerId, ActionType.DISCARD, forcedTileId);
-            }
-          }
-          this.consecutiveTimeouts.set(key, currentCount);
+        // ★ K哥规则：超时后强制摸牌+出牌，不管pendingActions
+        // 先清除所有pendingActions（吃/碰/胡/杠选项）
+        if (game.pendingActions.length > 0) {
+          console.log(`[AutoTakeover] ${player.name} 超时60秒,清除所有pendingActions(${game.pendingActions.length}个)`);
+          game.pendingActions = [];
+          this.clearPendingActionTimer(gameId);
         }
+
+        // 强制摸牌（如果未摸牌）
+        if (!game.drawnThisTurn && this.canPlayerDrawOnCurrentTurn(game, player)) {
+          await this.executeAction(gameId, playerId, ActionType.DRAW, undefined);
+        }
+        // 强制出牌
+        const refreshedGame = await this.getGame(gameId);
+        const refreshedPlayer = refreshedGame?.players?.[refreshedGame.currentPlayerIndex];
+        if (
+          refreshedGame &&
+          refreshedGame.phase === GamePhase.PLAYING &&
+          refreshedPlayer &&
+          refreshedPlayer.id === playerId &&
+          refreshedGame.drawnThisTurn &&
+          this.isConcealedDiscardState(refreshedPlayer)
+        ) {
+          const forcedTileId =
+            (refreshedPlayer as any).lastDrawnTile?.id ||
+            refreshedPlayer.hand.concealedTiles[refreshedPlayer.hand.concealedTiles.length - 1]?.id;
+          if (forcedTileId) {
+            await this.executeAction(gameId, playerId, ActionType.DISCARD, forcedTileId);
+          }
+        }
+        this.consecutiveTimeouts.set(key, currentCount);
 
         if (currentCount >= 2) {
           // 连续2回合超时 → 触发AI接管
