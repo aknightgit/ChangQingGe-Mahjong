@@ -5781,20 +5781,21 @@ const forceDiscard = async (p: Player) => {
 
 .comeback-floating-bar {
   position: fixed;
-  bottom: 100px;
+  bottom: 180px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 9999;
+  z-index: 99999;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 20px;
+  padding: 12px 24px;
   border-radius: 16px;
-  background: rgba(7, 19, 14, 0.85);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(66, 165, 245, 0.4);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  background: rgba(7, 19, 14, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(66, 165, 245, 0.5);
+  box-shadow: 0 6px 32px rgba(0, 0, 0, 0.7);
   animation: comeback-glow 1.5s infinite;
+  pointer-events: auto;
 }
 
 .comeback-label {
