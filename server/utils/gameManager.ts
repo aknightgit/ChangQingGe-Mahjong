@@ -925,6 +925,12 @@ class GameManager {
    */
   disableBotMode(playerId: string): void {
     this.botModePlayers.delete(playerId);
+    // ★ 回来时重置连续超时计数，避免下次超时从累积值继续
+    for (const [key, _] of this.consecutiveTimeouts) {
+      if (key.endsWith(`-${playerId}`)) {
+        this.consecutiveTimeouts.delete(key);
+      }
+    }
   }
 
   /**
@@ -5255,6 +5261,7 @@ class GameManager {
    * 仅本局结算减半,玩家回来后下一局恢复正常
    */
   private autoTakeoverTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  private autoTakeoverWarnings: Map<string, ReturnType<typeof setTimeout>> = new Map();
   // 追踪每个玩家连续超时次数(gameId-playerId → count)
   private consecutiveTimeouts: Map<string, number> = new Map();
 
@@ -5267,6 +5274,23 @@ class GameManager {
     // 清除已有计时器
     const existing = this.autoTakeoverTimers.get(key);
     if (existing) clearTimeout(existing);
+    const existingWarning = this.autoTakeoverWarnings.get(key);
+    if (existingWarning) clearTimeout(existingWarning);
+
+    // ★ 50秒时发预警：即将被AI接管
+    const warningTimer = this.detachTimer(setTimeout(async () => {
+      this.autoTakeoverWarnings.delete(key);
+      try {
+        const game = await this.getGame(gameId);
+        if (!game || game.phase !== GamePhase.PLAYING) return;
+        if (game.currentPlayerIndex !== expectedIndex) return;
+        const player = game.players[game.currentPlayerIndex];
+        if (!player || player.id !== playerId) return;
+        if (this.isPlayerBotControlled(player)) return;
+        this.broadcastGameState(gameId);
+      } catch (_) {}
+    }, 50000));
+    this.autoTakeoverWarnings.set(key, warningTimer);
 
     const timer = this.detachTimer(setTimeout(async () => {
       this.autoTakeoverTimers.delete(key);
@@ -5343,6 +5367,11 @@ class GameManager {
     if (timer) {
       clearTimeout(timer);
       this.autoTakeoverTimers.delete(key);
+    }
+    const warning = this.autoTakeoverWarnings.get(key);
+    if (warning) {
+      clearTimeout(warning);
+      this.autoTakeoverWarnings.delete(key);
     }
     // 玩家已操作,重置连续超时计数
     this.consecutiveTimeouts.delete(key);

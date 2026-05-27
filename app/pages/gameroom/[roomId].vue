@@ -683,6 +683,12 @@
                     @click="onPlayerBack"
                   >我回来了</button>
                 </div>
+                <div v-else-if="isMyTurn && !isSpectator" class="takeover-float-bar">
+                  <button
+                    class="inline-action-btn inline-action-btn--bot-mode"
+                    @click="onBotModeDirect"
+                  >🤖 托管</button>
+                </div>
                 <div class="inline-action-buttons" v-else-if="isConnected && !isInteractionLocked" style="display:none">
                   <div v-if="actionWindowText" class="inline-action-timer">{{ actionWindowText }}</div>
                   <button
@@ -881,6 +887,7 @@
                   <!--🏆 胡</button>-->
                   <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
                     ⏱ {{ turnTimer }}s
+                    <span v-if="turnTimer <= 10" class="takeover-warning">⚠️ 即将被AI接管</span>
                   </span>
                 </div>
               </div>
@@ -3574,6 +3581,45 @@ const onBotMode = async () => {
   }
 }
 
+// 我回来了（取消AI托管）
+const onPlayerBack = async () => {
+  if (!currentPlayer.value) return
+  try {
+    await $fetch('/mahjong/api/game/comeback', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: currentPlayer.value.id
+      }
+    })
+    isAIControlled.value = false
+    addBroadcast(`👋 ${currentPlayer.value.name} 已回到牌桌！`, 'success')
+    await refreshState()
+  } catch (e) {
+    console.error('[Comeback] Failed:', e)
+  }
+}
+
+// 快捷托管（不需要长按玩家卡）
+const onBotModeDirect = async () => {
+  if (!currentPlayer.value) return
+  try {
+    await $fetch('/mahjong/api/game/bot-mode', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: currentPlayer.value.id,
+        enabled: true
+      }
+    })
+    isAIControlled.value = true
+    addBroadcast(`🤖 ${currentPlayer.value.name} 已托管给AI！`, 'warn')
+    await refreshState()
+  } catch (e) {
+    console.error('[BotMode] Failed:', e)
+  }
+}
+
 // 换位置
 const onSwapPosition = async () => {
   if (!playerCardPlayer.value || !currentPlayer.value) return
@@ -5778,6 +5824,38 @@ const forceDiscard = async (p: Player) => {
 @keyframes comeback-glow {
   0%, 100% { box-shadow: 0 4px 24px rgba(66, 165, 245, 0.3); }
   50% { box-shadow: 0 4px 32px rgba(66, 165, 245, 0.7); }
+}
+
+.takeover-float-bar {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.inline-action-btn--bot-mode {
+  background: rgba(100, 100, 100, 0.5);
+  color: #aaa;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 4px 14px;
+  border-radius: 16px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.inline-action-btn--bot-mode:hover {
+  background: rgba(150, 150, 150, 0.6);
+  color: #fff;
+}
+
+.takeover-warning {
+  color: #ff9800;
+  font-size: 0.75rem;
+  font-weight: bold;
+  margin-left: 6px;
+  animation: takeover-blink 1s infinite;
+}
+@keyframes takeover-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 .ai-controlled-notice {
