@@ -137,12 +137,8 @@ class GameManager {
     });
   }
 
-  private broadcastRoomJoin(game: GameState, player: Player): void {
-    RoomGameBridge.broadcastRoomJoin(
-      (gid, evt, data) => this.wsManager?.broadcast(gid, evt, data),
-      game,
-      player
-    );
+  private broadcastRoomJoin(_game: GameState, _player: Player): void {
+    // 已移至 socket.ts room:join 处理，避免 REST API 时序问题（Socket 连接前广播不到）
   }
 
   private canPlayerDrawOnCurrentTurn(game: GameState, player: Player): boolean {
@@ -2328,15 +2324,13 @@ class GameManager {
       return pendingAction.availableActions;
     }
 
-    // 梁山聚义:前三巡(出牌轮次)可投票,仅4人全真人+没投过+活跃+倍数未达8倍上限
+    // 梁山聚义:前三巡(出牌轮次)可投票,没投过+活跃+倍数未达8倍上限
     // 巡数 = 出牌次数(DISCARD action)，三巡以内(=0,1,2)可投
     const discardCount = game.actionHistory.filter(a => a.type === ActionType.DISCARD).length;
     if (game.phase === GamePhase.PLAYING && player.status === PlayerStatus.PLAYING && discardCount < 3) {
-      // 只有4人全是真人玩家时才开启梁山聚义
-      const allHuman = game.players.length >= 4 && game.players.every(p => !this.isPlayerBotControlled(p));
       // 全局倍数已达8倍上限时,禁止梁山聚义
       const atMultiplierCap = (game.inheritMultiplier ?? 1) >= 8;
-      if (allHuman && !atMultiplierCap) {
+      if (!atMultiplierCap) {
         const votes = game.liangShanVotes || [];
         if (!votes.includes(playerId)) {
           actions.push(ActionType.LIANG_SHAN);
