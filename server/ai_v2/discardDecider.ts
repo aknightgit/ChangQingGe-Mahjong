@@ -183,9 +183,11 @@ function scoreByRoute(input: RouteDiscardInput): number {
   const isLongestSuitTile = !!longestSuit && tile.suit === longestSuit
   const suitGap = Math.max(0, longestSuitCount - shortestSuitCount)
   const shortSuitGapTrap = isShortestSuitTile && suitGap >= 4
+  // ★ K哥规则：短门的顺子/邻接张不值钱，优先打掉！
+  // 正分=保留，负分=打掉。短门有邻接张 → 负分鼓励拆门
   const shortestSuitSequenceBreakBias =
     isShortestSuitTile && nearby > 0
-      ? 6.4 + Math.max(0, suitGap - 1) * 1.2 + (shortSuitGapTrap && count === 1 ? 3.6 : 0)
+      ? -(6.4 + Math.max(0, suitGap - 1) * 1.2 + (shortSuitGapTrap && count === 1 ? 3.6 : 0))
       : 0
   const shortestSuitPairReserveBias =
     shortSuitGapTrap && count >= 2 && estimatedRound <= 6
