@@ -790,7 +790,8 @@ class GameManager {
     }
 
     const winningTiles = this.filterBigDiaoPreviewTiles(game, player, [...winningTileMap.values()])
-      .filter(entry => !wildChecker(entry.tile))
+      // ★ K哥规则：百搭牌也应该出现在听牌提示中（花牌百搭可以替代任何牌）
+      // .filter(entry => !wildChecker(entry.tile))  // 原代码：过滤掉所有百搭牌
       .sort((a, b) => {
         const suitOrder: Record<string, number> = {
           [TileSuit.CHARACTERS]: 0,
