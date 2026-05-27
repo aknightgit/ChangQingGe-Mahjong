@@ -846,7 +846,7 @@
                 >🚨 造反</button>
                 <button
                   v-if="showHu"
-                  class="extra-action-btn extra-action-btn--hu"
+                  class="extra-action-btn extra-action-btn--hu extra-action-btn--claim-pulse"
                   :disabled="isInteractionLocked || isAIControlled"
                   @click="onHu"
                 >🏆 您胡了</button>
@@ -7779,6 +7779,17 @@ const forceDiscard = async (p: Player) => {
   padding: 2px 8px !important;
   border-color: #ff6b3544 !important;
   background: rgba(255, 107, 53, 0.08) !important;
+}
+.extra-action-btn--hu.extra-action-btn--claim-pulse {
+  animation: extra-hu-breathe 0.72s ease-in-out infinite, extra-hu-glow 0.72s ease-in-out infinite, heartbeat 1.2s ease-in-out infinite;
+}
+@keyframes extra-hu-breathe {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.18); filter: brightness(1.24); }
+}
+@keyframes extra-hu-glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(255,107,53,0.45); }
+  50% { box-shadow: 0 0 18px rgba(255,107,53,0.78); }
 }
 .extra-action-btn--hu:hover, .extra-action-btn--hu:active {
   background: rgba(255, 107, 53, 0.25) !important;
