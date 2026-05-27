@@ -1111,6 +1111,15 @@ export function calculateSettlementBreakdownByRules(
   }
 
   if (discarderId !== undefined && allPlayerIndices.includes(discarderId)) {
+    // 先检查放冲者本身是否是互包伙伴
+    const discarderBailout = mutualBailout?.get(discarderId);
+    if (discarderBailout && discarderBailout.partnerIndex === winnerIndex) {
+      const bType = discarderBailout.type || '三口';
+      addTransfer(discarderId, winnerIndex, winnerFinalPoints * 2, '互包捉冲×2', bType);
+      return { deltas, transfers };
+    }
+
+    // 再检查其他玩家是否有互包关系（第三方互包补赔）
     const bailoutLoser = allPlayerIndices.find(idx => {
       if (idx === winnerIndex || idx === discarderId) return false;
       const bailout = mutualBailout?.get(idx);
@@ -1118,12 +1127,7 @@ export function calculateSettlementBreakdownByRules(
     });
 
     if (bailoutLoser !== undefined) {
-      if (discarderId === bailoutLoser) {
-        const bType = mutualBailout?.get(discarderId)?.type || '三口';
-        addTransfer(discarderId, winnerIndex, winnerFinalPoints * 2, '互包捉冲×2', bType);
-      } else {
-        addTransfer(discarderId, winnerIndex, winnerFinalPoints, '放冲赔付');
-      }
+      addTransfer(discarderId, winnerIndex, winnerFinalPoints, '放冲赔付');
       return { deltas, transfers };
     }
 
