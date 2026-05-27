@@ -17,6 +17,7 @@ import * as tileHelper from './tileHelper';
 import { BroadcastService } from './broadcastService';
 import { TimerManager } from './timerManager';
 import { WinEvaluator } from './winEvaluator';
+import { SettlementEngine } from './settlementEngine';
 import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
 import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier, calculateSettlementBreakdownByRules, generateWinOptions, type WinOption } from './scoring';
 import { randomUUID } from 'crypto';
@@ -38,6 +39,7 @@ class GameManager {
   private playerToGame: Map<string, string> = new Map();
   private wsManager: any = null;
   private broadcastService = new BroadcastService();
+  private settlementEngine = new SettlementEngine(this.broadcastService, () => this.wsManager);
   private timerManager = new TimerManager();
   private winEvaluator = new WinEvaluator();
   private isHydrated = false;
@@ -59,11 +61,9 @@ class GameManager {
 
   // 互包跟踪: gameId -> Map<playerId, Map<partnerId, count>>
   // 记录每个玩家从另一个玩家吃/碰/杠了多少口
-  private mutualBailout: Map<string, Map<string, Map<string, number>>> = new Map();
-
+  
   // 互包关系缓存（500ms TTL，避免每次 state.get 重算）
-  private bailoutRelationsCache: Map<string, { result: any[]; timestamp: number }> = new Map();
-
+  
   // 广播消息缓存: gameId -> BroadcastMsg[]（供HTTP API兜底，避免依赖WebSocket）
   // recentBroadcasts moved to BroadcastService
 
@@ -1089,136 +1089,33 @@ class GameManager {
     }
   }
   private invalidateBailoutCache(gameId: string): void {
-    this.bailoutRelationsCache.delete(gameId);
+    this.settlementEngine.invalidateBailoutCache(gameId);
   }
 
-  private recordBailoutAction(
-    gameId: string,
-    playerId: string,
-    sourcePlayerId: string | undefined,
-    meldType: MeldType
-  ): number {
-    if (!sourcePlayerId) {
-      this.invalidateBailoutCache(gameId);
-      console.warn(`[BAILOUT] recordBailoutAction SKIP: no sourcePlayerId for playerId=${playerId} meldType=${meldType}`);
-      return 0;
-    }
-    if (meldType !== MeldType.TRIPLET && meldType !== MeldType.SEQUENCE && meldType !== MeldType.KONG) return 0;
-
-    if (!this.mutualBailout.has(gameId)) {
-      this.mutualBailout.set(gameId, new Map());
-    }
-    const gameBailout = this.mutualBailout.get(gameId)!;
-
-    if (!gameBailout.has(playerId)) {
-      gameBailout.set(playerId, new Map());
-    }
-    const playerBailout = gameBailout.get(playerId)!;
-
-    const currentCount = playerBailout.get(sourcePlayerId) || 0;
-    const nextCount = currentCount + 1;
-    playerBailout.set(sourcePlayerId, nextCount);
-    console.log(`[BAILOUT] game=${gameId} ${playerId} ate ${nextCount}x from ${sourcePlayerId} (meldType=${meldType})`);
-    this.invalidateBailoutCache(gameId);
-    return nextCount;
+  private recordBailoutAction(gameId: string, playerId: string, sourcePlayerId: string | undefined, meldType: MeldType): number {
+    return this.settlementEngine.recordBailoutAction(gameId, playerId, sourcePlayerId, meldType);
   }
 
   /**
    * 获取互包关系
    * @returns 三口/四口关系列表
    */
-  getMutualBailoutRelations(gameId: string): Array<{
-    player1: string;
-    player2: string;
-    type: '三口' | '四口';
-  }> {
-    // 缓存命中（500ms TTL）
-    const cached = this.bailoutRelationsCache.get(gameId);
-    if (cached && Date.now() - cached.timestamp < 500) {
-      return cached.result;
-    }
-    const relations: Array<{ player1: string; player2: string; type: '三口' | '四口' }> = [];
-    const gameBailout = this.mutualBailout.get(gameId);
-    if (!gameBailout) {
-      this.bailoutRelationsCache.set(gameId, { result: relations, timestamp: Date.now() });
-      return relations;
-    }
-
-    const checked = new Set<string>();
-
-    for (const [playerId, partnerCounts] of gameBailout) {
-      for (const [partnerId, count] of partnerCounts) {
-        const key = [playerId, partnerId].sort().join('-');
-        if (checked.has(key)) continue;
-        checked.add(key);
-
-        // 检查双方互相的口数
-        const countAtoB = gameBailout.get(playerId)?.get(partnerId) || 0;
-        const countBtoA = gameBailout.get(partnerId)?.get(playerId) || 0;
-
-        // 互包定义:单向三口或四口
-        if (countAtoB >= 4 || countBtoA >= 4) {
-          relations.push({ player1: playerId, player2: partnerId, type: '四口' });
-        } else if (countAtoB >= 3 || countBtoA >= 3) {
-          relations.push({ player1: playerId, player2: partnerId, type: '三口' });
-        }
-      }
-    }
-
-    this.bailoutRelationsCache.set(gameId, { result: relations, timestamp: Date.now() });
-    return relations;
+  getMutualBailoutRelations(gameId: string) {
+    return this.settlementEngine.getMutualBailoutRelations(gameId);
   }
 
   /** 检测新形成的互包关系并广播到牌局快讯 */
-  checkAndBroadcastBailout(
-    game: GameState,
-    playerId: string,
-    sourcePlayerId: string,
-  ): void {
-    const player = game.players.find(p => p.id === playerId);
-    const source = game.players.find(p => p.id === sourcePlayerId);
-    if (!player || !source) {
-      console.log(`[BAILOUT] SKIP: player=${!!player} source=${!!source} playerId=${playerId} sourcePlayerId=${sourcePlayerId}`);
-      return;
-    }
-
-    const rawCount = this.mutualBailout.get(game.gameId)?.get(playerId)?.get(sourcePlayerId);
-    const currentCount = rawCount || 0;
-    console.log(`[BAILOUT] game=${game.gameId} player=${player.name} source=${source.name} count=${currentCount} wsManager=${!!this.wsManager}`);
-
-    const msgByCount: Record<number, string> = {
-      2: `📣 ${player.name}搞了${source.name}两口了！`,
-      3: `📣 ${player.name}搞了${source.name}三口了！！`,
-      4: `📣 ${player.name}搞了${source.name}四口了！！！`
-    };
-
-    const msg = msgByCount[currentCount];
-    if (msg) {
-      this.broadcastService.broadcastQuickMessage(game.gameId, msg, 'special', 'bailout');
-    }
+  checkAndBroadcastBailout(game: GameState, playerId: string, sourcePlayerId: string): void {
+    this.settlementEngine.checkAndBroadcastBailout(game, playerId, sourcePlayerId);
   }
+
+      }
 
   /**
    * 检查两个玩家之间是否有互包关系
    */
-  getBailoutMultiplier(
-    gameId: string,
-    payerId: string,
-    winnerId: string
-  ): { multiplier: number; type: string | null } {
-    const relations = this.getMutualBailoutRelations(gameId);
-
-    for (const rel of relations) {
-      if ((rel.player1 === payerId && rel.player2 === winnerId) ||
-          (rel.player1 === winnerId && rel.player2 === payerId)) {
-        return {
-          multiplier: rel.type === '四口' ? 5 : 3,
-          type: rel.type
-        };
-      }
-    }
-
-    return { multiplier: 1, type: null };
+  getBailoutMultiplier(gameId: string, payerId: string, winnerId: string) {
+    return this.settlementEngine.getBailoutMultiplier(gameId, payerId, winnerId);
   }
 
   /**
@@ -1707,7 +1604,7 @@ class GameManager {
     game.spectatorApprovalRequests = [];
     game.consecutiveDiscards = null;  // 每局重置「谢谢带头大哥」追踪
     game.leadingBrotherEvent = null;  // 每局重置「谢谢带头大哥」事件
-    this.mutualBailout.delete(gameId);
+    this.settlementEngine.clearGame(gameId);
     (game as any).bailoutRelations = [];
 
     // 清除上一局残留的freeze/dealer auto-draw timer,防止旧timer覆盖新游戏状态
@@ -2219,357 +2116,6 @@ class GameManager {
     if (!game) {
       throw new Error('Game not found');
     }
-
-    const player = game.players.find(p => p.id === playerId);
-    if (!player) {
-      throw new Error('Player not found');
-    }
-
-    const pendingAction = game.pendingActions.find(pa => pa.playerId === playerId);
-    // 碰/杠后pending被清但仍是捉冲,从actionHistory确认
-    const hadPengOrKongOnDiscard = (game.actionHistory || []).some(a =>
-      a.type === 'peng' || a.type === 'kong'
-    );
-    // 只检查本局内是否有碰/杠动作（不是从远古今检测）
-    const currentRoundActions = (game.actionHistory || []).filter(a => {
-      // roundNumber 在 action 上记录
-      return (a as any).roundNumber === game.roundNumber || (a as any).roundNumber === undefined;
-    });
-    // 自摸/捉冲判断：
-    // 1. pending中带tile → 有人弃牌，这是捉冲
-    // 2. 没有pending（自摸自己摸到的牌）→ 自摸
-    const isDiscardContext = !!pendingAction?.tile;
-    const context: 'self_draw' | 'discard' = isDiscardContext ? 'discard' : 'self_draw';
-    return this.getCachedWinOptions(game, player, context, {
-      isKongFlower: false,
-      isRobbingKong: !!pendingAction?.tile && !!game.pendingKongClaim,
-      extraTile: pendingAction?.tile
-    });
-  }
-
-  async getTingPreviewForPlayer(gameId: string, playerId: string, options?: { skipQuickPrecheck?: boolean }): Promise<{
-    isTing: boolean;
-    winningTiles: Array<{
-      tile: Tile;
-      remainingCount: number;
-      bestDiscardOption: WinOption | null;
-      bestSelfDrawOption: WinOption | null;
-      bestOverallOption: WinOption | null;
-    }>;
-  }> {
-    await this.hydrateFromDatabase();
-    const game = this.games.get(gameId) || await this.ensureGameLoaded(gameId);
-    if (!game) {
-      throw new Error('Game not found');
-    }
-
-    const player = game.players.find(p => p.id === playerId);
-    if (!player) {
-      throw new Error('Player not found');
-    }
-
-    if (player.status !== PlayerStatus.PLAYING) {
-      return { isTing: false, winningTiles: [] };
-    }
-
-    const preview = this.getCachedTingPreview(game, player, options);
-    if (!preview.isTing && !player.isTing) {
-      return { isTing: false, winningTiles: [] };
-    }
-    return preview;
-  }
-
-  /**
-   * Execute a game action
-   */
-  async executeAction(gameId: string, playerId: string, action: ActionType, tileId?: string, tileIds?: string[], winOptionLabel?: string): Promise<void> {
-    await this.hydrateFromDatabase();
-    const game = await this.ensureGameLoaded(gameId);
-    if (!game) throw new Error('Game not found');
-    if (game.phase !== GamePhase.PLAYING) {
-      throw new Error('Game is not active');
-    }
-
-    const player = game.players.find(p => p.id === playerId);
-    if (!player) throw new Error('Player not found');
-
-    // 玩家已响应,取消当前自动超时推进
-    this.timerManager.clearPendingActionTimer(gameId);
-    // 取消超时自动接管(玩家已操作)
-    this.timerManager.clearAutoTakeover(gameId, playerId);
-
-    const gameAction: GameAction = {
-      playerId,
-      type: action,
-      timestamp: Date.now()
-    };
-
-    if (game.huSelectionLocks?.[playerId]) {
-      const nextLocks = { ...game.huSelectionLocks };
-      delete nextLocks[playerId];
-      game.huSelectionLocks = Object.keys(nextLocks).length ? nextLocks : undefined;
-    }
-
-    // 标记决策期内有动作触发（第5d条：有动作时不清除任何claim）
-    // PASS 和 DRAW 不触发此标记
-    if (action !== ActionType.PASS && action !== ActionType.DRAW) {
-      (game as any).hasTriggeredAction = true;
-    }
-
-    switch (action) {
-      case ActionType.DISCARD:
-        {
-          const currentTurnPlayer = game.players[game.currentPlayerIndex];
-          if (!currentTurnPlayer || currentTurnPlayer.id !== player.id) {
-            console.warn(
-              `[DISCARD] Blocked: ${player.name} is not current player (current=${currentTurnPlayer?.name ?? 'none'} index=${game.currentPlayerIndex})`
-            );
-            throw new Error('Not your turn to discard');
-          }
-
-          if (game.pendingActions.length > 0) {
-            console.warn(
-              `[DISCARD] Blocked: ${player.name} attempted discard with pending actions unresolved (${game.pendingActions.length})`
-            );
-            throw new Error('Pending actions must resolve before discarding');
-          }
-
-          const concealedCount = player.hand.concealedTiles.length;
-          if (!this.isConcealedDiscardState(player)) {
-            console.warn(
-              `[DISCARD] Blocked: ${player.name} has invalid concealed count for discard (${concealedCount})`
-            );
-            throw new Error('Invalid hand state for discard');
-          }
-        }
-
-        // 【状态机修复】未摸牌不可出牌
-        if (!game.drawnThisTurn) {
-          console.warn(`[DISCARD] Blocked: ${player.name} has not drawn yet this turn`);
-          throw new Error('Must draw before discarding');
-        }
-        gameAction.tile = findTileById(player.hand.concealedTiles, tileId!);
-        await this.handleDiscard(game, player, tileId!);
-        break;
-
-      case ActionType.DRAW:
-        {
-          const freezeUntil = Number((game as any)._freezeUntil ?? 0);
-          if (freezeUntil > Date.now()) {
-            console.warn(`[DRAW] Blocked: ${player.name} is still in hesitation freeze until ${freezeUntil}`);
-            throw new Error('Draw is locked until the hesitation window ends');
-          }
-          if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now() && game.thinkFreezePlayerId !== player.id) {
-            console.warn(`[DRAW] Blocked: ${player.name} is waiting for ${game.thinkFreezePlayerId} think freeze to end`);
-            throw new Error('Draw is locked while another player is thinking');
-          }
-          if (this.hasActiveHuSelectionLock(game, player.id)) {
-            console.warn(`[DRAW] Blocked: ${player.name} is waiting for another player's HU selection lock`);
-            throw new Error('Draw is locked while another player is selecting a HU option');
-          }
-          if (game.pendingActions.length > 0 && !this.canExecuteCurrentTurnPlayerDrawDuringPending(game, player.id)) {
-            console.warn(
-              `[DRAW] Deferred: ${player.name} must wait for pending window to end before drawing`
-            );
-            throw new Error('Draw is not available until the current response window ends');
-          }
-        }
-        {
-          const currentTurnPlayer = game.players[game.currentPlayerIndex];
-          if (!currentTurnPlayer || currentTurnPlayer.id !== player.id) {
-            console.warn(
-              `[DRAW] Blocked: ${player.name} is not current player (current=${currentTurnPlayer?.name ?? 'none'} index=${game.currentPlayerIndex})`
-            );
-            throw new Error('Not your turn to draw');
-          }
-          const unreplacedFlowers = player.hand.exposedMelds.filter(
-            m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0]) && !(m as any).replacementDone
-          );
-          const hasPendingDrawWork = unreplacedFlowers.length > 0 || this.canPlayerDrawOnCurrentTurn(game, player);
-          if (!hasPendingDrawWork) {
-            console.warn(
-              `[DRAW] Blocked: ${player.name} is not eligible to draw (drawn=${game.drawnThisTurn}, playable=${this.getPlayableTileCount(player)}, wall=${game.wall.length})`
-            );
-            throw new Error('Cannot draw in current state');
-          }
-        }
-        // 【状态机修复】每回合最多摸一次，防同回合连续摸牌
-        if (game.drawnThisTurn) {
-          console.warn(`[DRAW] Blocked: ${player.name} already drew this turn (double-draw attempt)`);
-          throw new Error('Already drew this turn');
-        }
-        // 先处理门口的花牌替换(花牌在门口占坑,需先补到手牌)
-        if (game.pendingActions.length > 0 && this.canExecuteCurrentTurnPlayerDrawDuringPending(game, player.id)) {
-          this.clearCurrentTurnPendingActions(game, player.id);
-        }
-        this.replaceInitialFlowers(game, player);
-        // 替换后检查手牌+门口是否已满14张
-        {
-          const totalTileCount = this.getPlayableTileCount(player);
-          if (totalTileCount >= 14) {
-            console.warn(`[DRAW] Flower replacement already filled hand: player ${player.id} has ${totalTileCount} playable tiles`);
-          game.drawnThisTurn = true; // 吃/碰/杠后手牌已满或即将满，标记已摸牌状态
-            break;
-          }
-        }
-        // 正常摸牌(摸到花牌会递归补花)
-        this.handleDraw(game, player);
-        game.drawnThisTurn = true;
-        break;
-
-      case ActionType.PENG:
-        // 防止超限:碰牌至少需要2张手牌
-        {
-          if (player.hand.concealedTiles.length < 2) {
-            console.warn(`[PENG] Blocked: player ${player.id} needs 2 tiles in hand`);
-            break;
-          }
-        }
-        this.handlePeng(game, player);
-        break;
-
-      case ActionType.CHOW:
-        // 防止超限:吃牌至少需要2张手牌
-        {
-          if (player.hand.concealedTiles.length < 2) {
-            console.warn(`[CHOW] Blocked: player ${player.id} needs 2 tiles in hand`);
-            break;
-          }
-        }
-        this.handleChow(game, player, tileIds);
-        break;
-
-      case ActionType.KONG:
-        {
-          if (player.hand.concealedTiles.length < 3) {
-            console.warn(`[KONG] Blocked: player ${player.id} needs 3 tiles in hand`);
-            break;
-          }
-        }
-        this.handleKong(game, player, tileId!);
-        break;
-
-      case ActionType.CONCEALED_KONG:
-        this.handleConcealedKong(game, player, tileIds!);
-        break;
-
-      case ActionType.EXTENDED_KONG:
-        this.handleExtendedKong(game, player, tileId!);
-        break;
-
-      case ActionType.HU:
-        await this.handleHu(game, player, winOptionLabel);
-        break;
-
-      case ActionType.CHEAT_HU:
-        this.handleCheatHu(game, player);
-        break;
-
-      case ActionType.REBEL:
-        this.handleRebel(game, player);
-        break;
-
-      case ActionType.LIANG_SHAN:
-        this.handleLiangShan(game, player);
-        break;
-
-      case ActionType.THINK:
-        this.handleThink(game, player);
-        break;
-
-      case ActionType.PASS:
-        this.handlePass(game, player);
-        break;
-    }
-
-    game.actionHistory.push(gameAction);
-    game.lastActionTime = Date.now();
-
-    // Claim/杠动作执行后,当前玩家接管回合。
-    // 吃/碰后应直接出牌,不能补摸；各类杠完成补牌后再出牌。
-    if (game.pendingActions.length === 0) {
-      const currentP = game.players[game.currentPlayerIndex];
-      if (currentP && this.isPlayerBotControlled(currentP) && currentP.status === PlayerStatus.PLAYING) {
-        if (
-          action === ActionType.PENG ||
-          action === ActionType.CHOW ||
-          action === ActionType.KONG ||
-          action === ActionType.CONCEALED_KONG ||
-          action === ActionType.EXTENDED_KONG
-        ) {
-          game.drawnThisTurn = true; // 吃/碰/杠后手牌已满或即将满，标记已摸牌状态
-          this.scheduleBotDiscard(gameId, currentP.id);
-        }
-      }
-      if (action === ActionType.HU && game.phase === GamePhase.PLAYING) {
-        await this.moveToNextPlayer(game);
-      } else if (action === ActionType.PASS && this.shouldAdvanceTurnAfterPass(game)) {
-        await this.moveToNextPlayer(game);
-      } else {
-        this.schedulePendingActionTimeout(gameId);
-      }
-    }
-
-    this.invalidateWinEvaluationCache(gameId);
-    if (game.phase === GamePhase.PLAYING) {
-      const currentP = game.players[game.currentPlayerIndex];
-      if (currentP && currentP.status === PlayerStatus.PLAYING && game.drawnThisTurn) {
-        this.prewarmWinEvaluation(game, currentP, 'self_draw');
-      }
-      for (const pending of game.pendingActions) {
-        if (!pending.availableActions.includes(ActionType.HU) || !pending.tile) continue;
-        const targetPlayer = game.players.find(p => p.id === pending.playerId);
-        if (!targetPlayer) continue;
-        this.prewarmWinEvaluation(game, targetPlayer, 'discard', pending.tile);
-      }
-      if (!this.isTrainingFastMode(game)) {
-        for (const candidate of game.players) {
-          if (candidate.status === PlayerStatus.PLAYING && candidate.isTing) {
-            this.getCachedTingPreview(game, candidate);
-          }
-        }
-      }
-    }
-
-    // Broadcast game state update
-    await this.persistGame(game);
-    this.broadcastGameState(gameId);
-  }
-
-  private async handleDiscard(game: GameState, player: Player, tileId: string): Promise<void> {
-    const tile = findTileById(player.hand.concealedTiles, tileId);
-    if (!tile) throw new Error('Tile not found');
-    const discarderIndex = game.currentPlayerIndex;
-    game.lastDiscardPlayerId = player.id;
-    game.lastDiscardPosition = player.position;
-
-    player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tileId);
-    (player as any).lastDrawnTile = null;
-    player.hand.discardedTiles.push(tile);
-    game.discardPile.push(tile);
-
-    this.checkLeadingBrother(game, tile, player);
-    this.updateRoundNumber(game);
-
-    const missing = isMissingOneSuit(player.hand.concealedTiles);
-    if (missing.missing) {
-      player.missingSuit = missing.missingSuit;
-    }
-
-    player.isTing = isTing(
-      player.hand.concealedTiles,
-      player.hand.exposedMelds.length,
-      game.customScoringMode || null,
-      game.wildTileGroup
-    );
-
-    if (this.isWildTile(game, tile)) {
-      game.freezePlayerId = player.id;
-      game.freezeComplete = false;
-      game.pendingActions = [];
-      if (this.wsManager) {
-        this.broadcastService.broadcastQuickMessage(game.gameId, `🃏 ${player.name}打出了百搭，本轮不能吃碰捉冲！`, 'warn');
-      }
       await this.persistGame(game);
       this.broadcastGameState(game.gameId);
       await this.moveToNextPlayer(game);
@@ -2603,53 +2149,7 @@ class GameManager {
    * 第一个打出该牌的玩家,结算时额外赔付其余三家每家10分
    */
   private checkLeadingBrother(game: GameState, tile: Tile, currentPlayer: Player): void {
-    const tileKey = `${tile.suit}-${tile.value}`;
-
-    // 初始化或重置追踪(换了一种牌)
-    if (!game.consecutiveDiscards || game.consecutiveDiscards.suit !== tile.suit || game.consecutiveDiscards.value !== tile.value) {
-      game.consecutiveDiscards = { suit: tile.suit, value: tile.value, playerIds: [currentPlayer.id] };
-      return;
-    }
-
-    // 同一牌型继续追加
-    const cd = game.consecutiveDiscards;
-    if (cd.playerIds.includes(currentPlayer.id)) {
-      game.consecutiveDiscards = { suit: tile.suit, value: tile.value, playerIds: [currentPlayer.id] };
-      return;
-    }
-
-    // 追加当前玩家(允许同一玩家重复出现,统计4个不同玩家即可)
-    cd.playerIds.push(currentPlayer.id);
-
-    // 统计不同玩家数量
-    const uniquePlayerIds = new Set(cd.playerIds);
-
-    // 检查是否4个不同玩家都出过同一张牌(不要求连续/相邻)
-    // 必须四名玩家都齐全且未胡牌(status === PLAYING)
-    const activePlayerIds = new Set(
-      game.players.filter(p => p.status === PlayerStatus.PLAYING).map(p => p.id)
-    );
-    // 只统计仍在游戏中(未胡牌)的玩家
-    const activeDiscarders = new Set(cd.playerIds.filter(id => activePlayerIds.has(id)));
-    if (activePlayerIds.size >= 4 && cd.playerIds.length === 4 && activeDiscarders.size === 4) {
-      // 触发!第一个出该牌的玩家是带头大哥
-      const firstPlayerId = cd.playerIds[0]!;
-      game.leadingBrotherEvent = { firstPlayerId, tileKey };
-
-      const firstPlayer = game.players.find(p => p.id === firstPlayerId);
-      console.log(`[LeadingBrother] ${firstPlayer?.name} 是带头大哥!连续出 ${tileKey}`);
-
-      // 广播给所有客户端显示弹窗
-      if (this.wsManager) {
-        this.wsManager.broadcast(game.gameId, 'leadingBrother', {
-          firstPlayerName: firstPlayer?.name || '未知',
-          tileKey
-        });
-      }
-
-      // 重置追踪
-      game.consecutiveDiscards = null;
-    }
+    this.settlementEngine.checkLeadingBrother(game, tile, currentPlayer);
   }
 
   private hasTenPointClaimExemption(handTypes: HandType[], isDaDiao: boolean): boolean {
@@ -3256,7 +2756,7 @@ class GameManager {
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
 
     // 广播吃牌到牌局快讯
-    const _bc = this.mutualBailout.get(game.gameId)?.get(player.id)?.get(sourcePlayerId) || 0;
+    const _bc = 0 || 0;
     console.log(`[CHOW-BC] wsManager=${!!this.wsManager} player=${player.name} source=${sourcePlayerId} bailoutCount=${_bc} gameId=${game.gameId}`);
     if (this.wsManager) {
       const _suffix = _bc >= 2 ? ` (${_bc}口)` : '';
@@ -4203,41 +3703,15 @@ class GameManager {
    * 通过 matchHistory 计算
    */
   private getPlayerCumulativeScore(gameId: string, playerId: string): number {
-    // 从当前内存中的游戏历史计算
-    // 注意:这里简化处理,通过当前游戏的 roundStats 追踪
-    // 如果没有 roundStats,返回 0
-    const game = this.games.get(gameId);
-    if (!game || !game.roundStats) return 0;
-
-    let cumulative = 0;
-    for (const round of game.roundStats) {
-      const score = round.scores[playerId] ?? 0;
-      if (score > 0) {
-        cumulative += score;
-      }
-    }
-    return cumulative;
+    return this.settlementEngine.getPlayerCumulativeScore(gameId, playerId, this.games);
   }
 
   /**
    * 检查各玩家是否突破被聚义QJ线,更新 qjAlerts(每局独立刷新)
    */
   private checkQJThresholdAlerts(game: GameState): void {
-    const threshold = game.liangShanThreshold ?? 4000;
-    const alerts: { playerId: string; playerName: string; score: number }[] = [];
-
-    for (const player of game.players) {
-      if (this.isPlayerBotControlled(player)) continue; // 跳过AI
-      const cumulativeScore = this.getPlayerCumulativeScore(game.gameId, player.id);
-      if (cumulativeScore > threshold) {
-        alerts.push({ playerId: player.id, playerName: player.name, score: cumulativeScore });
-      }
-    }
-
-    game.qjAlerts = alerts;
-    if (alerts.length > 0) {
-      console.log(`[QJ Alert] ${alerts.map(a => `${a.playerName}(${a.score})`).join(', ')} 已突破被聚义QJ线${threshold}`);
-    }
+    this.settlementEngine.checkQJThresholdAlerts(game, p => this.isPlayerBotControlled(p), this.games);
+  }
   }
 
   /**
@@ -4246,11 +3720,7 @@ class GameManager {
    * 默认QJ线4000:输4000→1次,输8000→2次,输12000→3次
    */
   private computeSwapChances(game: GameState, playerId: string): number {
-    const threshold = game.liangShanThreshold ?? 4000;
-    const cumulativeScore = this.getPlayerCumulativeScore(game.gameId, playerId);
-    if (cumulativeScore >= 0) return 0;
-    const absScore = Math.abs(cumulativeScore);
-    return Math.min(Math.floor(absScore / threshold), 10);
+    return this.settlementEngine.computeSwapChances(game, playerId, this.games);
   }
 
   /**
