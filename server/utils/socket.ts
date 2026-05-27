@@ -248,6 +248,14 @@ export async function initializeSocketIO(server: HTTPServer) {
           return
         }
 
+        // 广播“xxx加入房间”给房间内其他人（不发给自己）
+        socket.to(roomId).emit('broadcastMessage', {
+          id: Date.now() + '-' + Math.floor(Math.random() * 1000),
+          text: `👤 ${userName}加入房间`,
+          type: 'info',
+          timestamp: Date.now()
+        })
+
         // Join the Socket.IO room
         await socket.join(roomId)
         

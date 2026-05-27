@@ -902,7 +902,13 @@ function scoreTileForDiscard(
       score += 5
       if (isOfficialOpening) {
         const hasWeakNumberWaste = hasWeakNumberWasteCandidate(hand, tile.id)
-        score += hasWeakNumberWaste ? -7.2 : -0.8
+        if (hasWeakNumberWaste) {
+          score += -7.2 // 有弱数牌可出时，风箭不急着打
+        } else if (honorFocus) {
+          score += -0.8 // 风一色路线，保留风箭
+        } else {
+          score += -5.5 // 无弱数牌时，优先打风箭（比出数牌更亏）
+        }
       }
       // allHonorsPungsPursuit：风一色/碰碰胡路线时，单张风箭也要保留
       if (honorFocus && (policy.allHonorsPungsPursuit || 0) > 0) {

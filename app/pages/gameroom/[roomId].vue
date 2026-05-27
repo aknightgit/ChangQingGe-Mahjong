@@ -291,7 +291,7 @@
                 </template>
               </div>
               <div class="winner-reveal-method">
-                {{ w.isSelfDrawn ? '自摸' : (w.discarderName ? w.discarderName + ' 放冲' : '捉冲') }}
+                {{ w.isSelfDrawn ? `自摸${w.winningTileName ? '-' + w.winningTileName : ''}` : (w.discarderName ? `捉冲${w.discarderName}${w.winningTileName ? '-' + w.winningTileName : ''}` : `捉冲${w.winningTileName ? '-' + w.winningTileName : ''}`) }}
               </div>
             </div>
             <!-- 所有玩家手牌明牌展示 -->
@@ -797,6 +797,11 @@
               房间 #{{ gameState?.roomNumber || '????' }}
             </p>
             <button
+              v-if="gameState?.phase === 'playing' && !isAIControlled && !isSpectator"
+              class="settle-btn-header ai-takeover-btn"
+              @click="onBotModeDirect"
+            >🤖 AI托管</button>
+            <button
               v-if="gameState?.phase === GamePhase.WAITING
                 ? canManualStartWaitingGame
                 : (gameState?.phase === 'playing' && !isAIControlled) || gameState?.phase === 'ended'"
@@ -930,7 +935,6 @@
                   <!--🏆 胡</button>-->
                   <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
                     ⏱ {{ turnTimer }}s
-                    <span v-if="turnTimer <= 10" class="takeover-warning">⚠️ 即将被AI接管</span>
                   </span>
                 </div>
               </div>
@@ -2096,7 +2100,9 @@ const canManualStartWaitingGame = computed(() =>
 const overlayReason = computed(() => roomDismissedReason.value || gameState.value?.endReason || null)
 const isOverlayVisible = computed(() => {
   if (roomDismissedReason.value) return true
-  if (!isGameEnded.value) return false
+  if (phase === GamePhase.REVEAL) {
+    return false; // 亮牌阶段禁止出牌
+  }
   if (isWallExhaustedSettlement.value) return false
   return overlayReason.value !== GameEndReason.LAST_PLAYER
 })
@@ -2383,7 +2389,7 @@ const playerResults = computed(() => {
         winOrder: player.winOrder,
         rankLabel: isWinner && player.winOrder ? formatOrdinal(player.winOrder) : '未胡牌',
         statusLabel: isWinner ? '赢家' : player.status === 'lost' ? '输了' : '未胡牌',
-        winRoundLabel: isWinner && player.winRound ? `第${player.winRound}轮` : null,
+        winRoundLabel: isWinner ? (player.isSelfDrawn ? `自摸${player.winningTileName ? '-' + player.winningTileName : ''}` : (player.discarderName ? `捉冲${player.discarderName}${player.winningTileName ? '-' + player.winningTileName : ''}` : `捉冲${player.winningTileName ? '-' + player.winningTileName : ''}`)) : '' ,
         scoreLabel: formatScore(finalScore),
         scoreClass: getScoreClass(finalScore)
       }
@@ -4079,6 +4085,8 @@ watch(
   () => [gameState.value?.phase, (gameState.value as any)?.roundStats?.length ?? 0, gameState.value?.gameId, (gameState.value as any)?.endReason],
   async ([phase, roundCount, gameId, endReason]) => {
     if (phase !== GamePhase.ENDED || !gameId || !currentPlayer.value?.id) return
+    // REVEAL phase: don't trigger settlement here, let 5s timer trigger ENDED
+    if (phase === GamePhase.REVEAL) return
 
     const settlementKey = `${gameId}-${roundCount}`
     if (lastAutoSettlementKey.value === settlementKey) return
@@ -4294,14 +4302,18 @@ watch(() => gameState.value, (newState, oldState) => {
     )
     const bailoutRels = (newState as any).bailoutRelations || []
     for (const w of newWinners) {
-      const method = w.winRound ? `第${w.winRound}轮` : ''
       const handType = w.winHandType ? `·${w.winHandType}` : ''
+      const discarderPlayer = w.discarderId ? (newState.players || []).find((p: any) => p.id === w.discarderId) : null
+      const tileLabel = w.winningTileName ? `-${w.winningTileName}` : ''
+      const winMethod = w.isSelfDrawn
+        ? `${w.name}自摸${tileLabel}`
+        : (discarderPlayer ? `${w.name}捉冲${discarderPlayer.name}${tileLabel}` : `${w.name}捉冲${tileLabel}`)
       // 检查三口/四口关系
       const rel = bailoutRels.find((r: any) => r.player1 === w.id || r.player2 === w.id)
       const partnerId = rel ? (rel.player1 === w.id ? rel.player2 : rel.player1) : null
       const partner = partnerId ? (newState.players || []).find((p: any) => p.id === partnerId) : null
       const bailInfo = rel && partner ? ` · ${rel.type}包${partner.name}` : ''
-      addBroadcast(`🏆 ${w.name} ${method}胡牌${handType}${bailInfo}`, 'win')
+      addBroadcast(`🏆 ${winMethod}${bailInfo}`, 'win')
     }
     playSound('round-end')
   }
@@ -4732,6 +4744,15 @@ const forceDiscard = async (p: Player) => {
   min-width: 108px;
 }
 .settle-btn-header:hover { background: rgba(25, 118, 210, 0.8); color: #fff; }
+.ai-takeover-btn {
+  background: rgba(76, 175, 80, 0.8);
+  border-color: rgba(255, 255, 255, 0.25);
+  min-width: auto;
+  padding: 2px 10px;
+}
+.ai-takeover-btn:hover {
+  background: rgba(76, 175, 80, 1);
+}
 .settle-btn--grayed { background: rgba(120, 120, 120, 0.4) !important; color: #aaa !important; border-color: rgba(255, 255, 255, 0.1) !important; box-shadow: none !important; }
 
 /* 开始牌局按钮金色呼吸光晕 — 4人到齐时亮起 */
@@ -6606,7 +6627,8 @@ const forceDiscard = async (p: Player) => {
   border: 1px solid rgba(255, 215, 0, 0.25);
   border-radius: 18px;
   padding: 24px 28px;
-  width: min(520px, 92%);
+  width: 95vw;
+  max-width: 95vw;
   max-height: 80vh;
   overflow-y: auto;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
@@ -6670,9 +6692,8 @@ const forceDiscard = async (p: Player) => {
   font-size: 0.85rem;
   font-weight: 700;
   color: #fff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-all;
   flex-shrink: 1;
   min-width: 28px;
 }

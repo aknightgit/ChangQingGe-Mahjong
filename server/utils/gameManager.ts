@@ -12,7 +12,7 @@
   TileSuit,
   GameEndReason
 } from '../types/game';
-import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isFivePoison } from './tiles';
+import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isFivePoison, getTileDisplayName } from './tiles';
 import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
 import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier, calculateSettlementBreakdownByRules, generateWinOptions, type WinOption } from './scoring';
 import { randomUUID } from 'crypto';
@@ -983,10 +983,11 @@ class GameManager {
         if (!game || game.phase !== GamePhase.PLAYING) return;
         if (!game.pendingActions.length) return;
 
-        if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now()) {
-        // [FIX] 先处理所有机器人 pending action（吃/碰/杠/胡）
+        // [FIX] 先处理所有机器人 pending action（吃/碰/杠/胡），无论是否在冻结期
         const botProcessed = await this.handleBotPendingActions(gameId);
         if (botProcessed) return;
+
+        if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now()) {
           this.schedulePendingActionTimeout(gameId);
           return;
         }
@@ -2117,6 +2118,7 @@ class GameManager {
       player.winHandType = undefined;
       player.isSelfDrawn = undefined;
       player.discarderId = undefined;
+      (player as any).winningTileName = undefined;
       player.winningScoreBreakdown = undefined;
       player.score = 0;
     }
@@ -3943,6 +3945,15 @@ class GameManager {
     const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
     const winningTile = pendingAction?.tile;
 
+    // 记录胡牌的牌名（用于客户端显示“捉冲xxx-四条”或“自摸-四条”）
+    if (winningTile) {
+      (player as any).winningTileName = getTileDisplayName(winningTile);
+    } else {
+      // 自摸：用 lastDrawnTile 获取摸到的牌名
+      const lastDrawn = (player as any).lastDrawnTile;
+      (player as any).winningTileName = lastDrawn ? getTileDisplayName(lastDrawn) : '';
+    }
+
     if (winningTile) {
       player.hand.concealedTiles.push(winningTile);
       player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
@@ -3982,6 +3993,7 @@ class GameManager {
       throw new Error('Invalid Hu declaration');
     }
     const isKongFlower = this.isWinAfterKong(game, player.id);
+    console.log(`[handleHu] ${player.name} isSelfDrawn=${isSelfDrawn} isKongFlower=${isKongFlower} lastActions=${game.actionHistory.slice(-5).map(a => a.type + ':' + a.playerId.substring(0,4)).join(',')}`);
     const isRobbingKong = !!pendingAction?.tile && !!game.pendingKongClaim;
     const preferredWinType = isSelfDrawn ? 'self_draw' : 'discard';
     const filteredWinOptions = this.getCachedWinOptions(game, player, preferredWinType, {
@@ -4087,20 +4099,22 @@ class GameManager {
       pa => pa.playerId !== player.id && pa.availableActions.includes(ActionType.HU)
     );
 
-    if (remainingActive <= 1) {
-      this.endRound(game, GameEndReason.LAST_PLAYER);
+    // 剩余1人 → 触发亮牌 → 结算
+    if (remainingActive <= 1 || game.winnersCount >= 3) {
+      game.phase = GamePhase.REVEAL;
+      this.broadcastGameState(game.gameId);
+      const gameId = game.gameId;
+      this.detachTimer(setTimeout(async () => {
+        try {
+          const fresh = await this.getGame(gameId);
+          if (!fresh || fresh.phase !== GamePhase.REVEAL) return;
+          this.endRound(fresh, GameEndReason.LAST_PLAYER);
+        } catch (e) { console.warn('[handleHu] reveal end error', e); }
+      }, 5000));
       return;
     }
 
-    // 胡牌后解冻:清除其他家的pending(保留可胡的pending给一炮多响)
-    game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
-    if (game.multiHuStarterIndex === undefined) {
-      (game as any).multiHuDiscarderIndex = game.currentPlayerIndex;
-      game.multiHuStarterIndex = game.players.findIndex(p => p.id === player.id);
-    }
-    if (isRobbingKong && game.pendingKongClaim) {
-      game.pendingKongClaim.cancelledByHu = true;
-    }
+    // 一炮多响后继续 → 也走亮牌流程
     if (!hadPendingForMultiHu) {
       // 不结束牌局：继续让剩余玩家打牌，直到三人胡或牌墙摸光
       game.pendingActions = [];
@@ -4114,8 +4128,19 @@ class GameManager {
           break;
         }
       }
-      if (searched >= game.players.length || game.players[nextIdx].status !== PlayerStatus.PLAYING) {
-        this.endRound(game, GameEndReason.LAST_PLAYER);
+      if (searched >= game.players.length || game.players[nextIdx].status !== PlayerStatus.PLAYING
+        || game.winnersCount >= 3) {
+        // 所有人都已胡/出局 或 已满3人胡牌 → 触发亮牌 → 结算
+        game.phase = GamePhase.REVEAL;
+        this.broadcastGameState(game.gameId);
+        const gameId = game.gameId;
+        this.detachTimer(setTimeout(async () => {
+          try {
+            const fresh = await this.getGame(gameId);
+            if (!fresh || fresh.phase !== GamePhase.REVEAL) return;
+            this.endRound(fresh, GameEndReason.LAST_PLAYER);
+          } catch (e) { console.warn('[handleHu] reveal end error', e); }
+        }, 5000));
         return;
       }
       game.currentPlayerIndex = nextIdx;
@@ -4218,10 +4243,6 @@ class GameManager {
     // 全局倍数已达8倍上限时,禁止梁山聚义
     if ((game.inheritMultiplier ?? 1) >= 8) return;
 
-    // 只有4人全是真人时才允许
-    const allHuman = game.players.length >= 4 && game.players.every(p => !this.isPlayerBotControlled(p));
-    if (!allHuman) return;
-
     // 初始化投票列表
     if (!game.liangShanVotes) {
       game.liangShanVotes = [];
@@ -4236,8 +4257,9 @@ class GameManager {
       this.broadcastQuickMessage(game.gameId, `🔥 ${player.name}发起了梁山聚义！`, 'special');
     }
 
-    // 活跃玩家总数
+    // 活跃玩家总数（只统计真人）
     const activePlayers = game.players.filter(p => p.status === PlayerStatus.PLAYING);
+    const activeHumans = activePlayers.filter(p => !this.isPlayerBotControlled(p));
 
     // 计算有效投票数:手动投票 + 超过被QJ线的玩家自动同意
     // 被QJ线检查:玩家在本房间的累积有效输赢(去掉与AI的战绩)
@@ -4247,7 +4269,7 @@ class GameManager {
     // 广播投票进度，让所有客户端刷新聚义状态
     this.broadcastGameState(game.gameId);
 
-    for (const ap of activePlayers) {
+    for (const ap of activeHumans) {
       // 已经手动投票的跳过
       if (game.liangShanVotes.includes(ap.id)) continue;
       // 检查累积有效输赢是否超过被QJ线
@@ -4265,10 +4287,10 @@ class GameManager {
       }
     }
 
-    console.log(`[LiangShan] ${player.name} voted (${effectiveVoteCount}/${activePlayers.length}, threshold: ${threshold})`);
+    console.log(`[LiangShan] ${player.name} voted (${effectiveVoteCount}/${activeHumans.length}, threshold: ${threshold})`);
 
-    // 全员投票 → 结束本局,下把翻倍
-    if (effectiveVoteCount >= activePlayers.length) {
+    // 全部真人投票 → 结束本局,下把翻倍
+    if (effectiveVoteCount >= activeHumans.length) {
       console.log(`[LiangShan] All players agreed! Ending round with ×2 multiplier.`);
 
       // 所有未胡牌玩家标记为输
@@ -5534,7 +5556,7 @@ class GameManager {
 
   public endRound(game: GameState, reason: GameEndReason): void {
     this.clearPendingActionTimer(game.gameId);
-    game.phase = GamePhase.CHA_JIAO;
+    game.phase = GamePhase.ENDED;
     // 回合结束立即刷盘
     this.store.flushGameNow(game.gameId).catch(() => {});
     this.broadcastGameState(game.gameId);
@@ -5927,6 +5949,7 @@ class GameManager {
           p.winRound = null;
           p.winTimestamp = null;
           p.isSelfDrawn = undefined;
+          (p as any).winningTileName = undefined;
           p.discarderId = undefined;
           p.winningScoreBreakdown = undefined;
           p.score = 0;

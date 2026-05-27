@@ -53,9 +53,10 @@ export class RoomGameBridge {
     game: GameState,
     player: Player
   ): void {
+    console.log(`[RoomGameBridge] broadcastRoomJoin: ${player.name} joining ${game.gameId}`);
     broadcastFn(game.gameId, 'broadcastMessage', {
       id: Date.now() + Math.floor(Math.random() * 1000),
-      text: `👤 ${player.name}进入到了房间`,
+      text: `👤 ${player.name}加入房间`,
       actionKind: 'roomJoin',
       type: 'info',
       timestamp: Date.now(),

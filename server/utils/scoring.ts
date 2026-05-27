@@ -717,21 +717,15 @@ function calculateFormulaFan(
   }
 
   // 计算组合牌点数（使用虚拟分配后的手牌）
+  // 真正的暗杠/加杠已在 exposedMelds 中
   const allMelds = [...exposedMelds];
-  const actualConcealedGroups = groupTiles(handTiles);
-  
-  // 只统计真实手牌里的暗杠，避免百搭虚拟补位后被重复当作杠牌加分。
-  for (const [, group] of actualConcealedGroups) {
-    if (group.length === 4) {
-      // 检查：如果门口已经有该牌的刻子/杠，则这张牌的4张不是暗杠（玩家选择不杠）
-      const alreadyExposed = exposedMelds.some(m =>
-        (m.type === MeldType.TRIPLET || m.type === MeldType.KONG) &&
-        tilesEqual(m.tiles[0], group[0])
-      );
-      if (alreadyExposed) continue;
+  const concealedGroups = groupTiles(virtualHand);
+  // 手牌中的刻子（3张同牌）也要算组合牌点
+  for (const [, group] of concealedGroups) {
+    if (group.length >= 3) {
       allMelds.push({
-        type: MeldType.CONCEALED_KONG,
-        tiles: group,
+        type: MeldType.TRIPLET,
+        tiles: group.slice(0, 3),
         isConcealed: true
       });
     }
@@ -780,6 +774,7 @@ function calculateFormulaFan(
   fan = Math.min(fan, MAX_FORMULA_FAN);
 
   details.unshift(`公式: 2 + ${flowerCount}花 + ${comboPoints}组合 = ${fan}番`);
+  console.log(`[Scoring] calculateFormulaFan: flowers=${flowerCount} comboPoints=${comboPoints} fan=${fan} allMelds=${allMelds.length} details=${details.join('; ')}`);
 
   return { fan, details };
 }

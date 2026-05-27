@@ -154,6 +154,7 @@ export enum GamePhase {
   WAITING = 'waiting',     // Waiting for players
   STARTING = 'starting',   // Initializing game
   PLAYING = 'playing',     // Active game
+  REVEAL = 'reveal',       // Revealing winning hands (5s)
   CHA_JIAO = 'cha_jiao',  // Checking ting
   ENDED = 'ended'
 }

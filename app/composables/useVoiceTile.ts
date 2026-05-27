@@ -118,7 +118,7 @@ const speakTextFallback = (text?: string) => {
     utterance.rate = 1
     utterance.pitch = 1
     utterance.volume = _volume.value
-    window.speechSynthesis.cancel()
+    // 不要 cancel，让队列自然排队
     window.speechSynthesis.speak(utterance)
   } catch {}
 }
