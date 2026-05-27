@@ -15,6 +15,7 @@
 import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isFivePoison, getTileDisplayName } from './tiles';
 import * as tileHelper from './tileHelper';
 import { BroadcastService } from './broadcastService';
+import { TimerManager } from './timerManager';
 import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
 import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier, calculateSettlementBreakdownByRules, generateWinOptions, type WinOption } from './scoring';
 import { randomUUID } from 'crypto';
@@ -36,6 +37,7 @@ class GameManager {
   private playerToGame: Map<string, string> = new Map();
   private wsManager: any = null;
   private broadcastService = new BroadcastService();
+  private timerManager = new TimerManager();
   private isHydrated = false;
 
   // ---- Public accessors for RoomGameBridge ----
@@ -64,16 +66,9 @@ class GameManager {
   // recentBroadcasts moved to BroadcastService
 
   // Pending action超时处理(自动推进)
-  private pendingActionTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
-
-  // 原子锁：防止同一游戏并发重复消费 pending actions
-  private actionResolutionLocks: Set<string> = new Set();
-
-  private detachTimer<T extends ReturnType<typeof setTimeout>>(timer: T): T {
-    (timer as any)?.unref?.();
-    return timer;
-  }
-
+  
+  
+  
   private isConcealedDiscardState = isConcealedDiscardState;
 
   private tileLabel = tileLabel;
@@ -213,7 +208,7 @@ class GameManager {
     });
     game.pengChowConflict = null;
     if (game.pendingActions.length === 0) {
-      this.clearPendingActionTimer(game.gameId);
+      this.timerManager.clearPendingActionTimer(game.gameId);
     }
   }
 
@@ -237,7 +232,7 @@ class GameManager {
     });
     if (before !== game.pendingActions.length) {
       game.pengChowConflict = null;
-      this.clearPendingActionTimer(game.gameId);
+      this.timerManager.clearPendingActionTimer(game.gameId);
       return true;
     }
     return false;
@@ -248,7 +243,7 @@ class GameManager {
     game.pendingActions = game.pendingActions.filter(pendingAction => !this.shouldRetainCurrentPlayerChowPending(game, pendingAction));
     if (before !== game.pendingActions.length) {
       game.pengChowConflict = null;
-      this.clearPendingActionTimer(game.gameId);
+      this.timerManager.clearPendingActionTimer(game.gameId);
       return true;
     }
     return false;
@@ -263,7 +258,7 @@ class GameManager {
     });
     game.pengChowConflict = null;
     if (game.pendingActions.length === 0) {
-      this.clearPendingActionTimer(game.gameId);
+      this.timerManager.clearPendingActionTimer(game.gameId);
     }
   }
 
@@ -272,7 +267,7 @@ class GameManager {
     game.pendingActions = game.pendingActions.filter(pendingAction => pendingAction.playerId !== playerId);
     if (before !== game.pendingActions.length) {
       game.pengChowConflict = null;
-      this.clearPendingActionTimer(game.gameId);
+      this.timerManager.clearPendingActionTimer(game.gameId);
       return true;
     }
     return false;
@@ -348,8 +343,7 @@ class GameManager {
   }
 
   // Freeze/dealer auto-draw timers(需要在新局开始时清除)
-  private freezeTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
-
+  
   // AI托管模式:玩家ID集合,被标记的玩家由AI自动出牌
   private botModePlayers: Set<string> = new Set();
   private winEvaluationCache: Map<string, Map<string, {
@@ -771,22 +765,18 @@ class GameManager {
   private getHesitationWaitMs(gameId: string): number {
     const game = this.games.get(gameId);
     if (!game) return 5000;
-    return this.getHesitationWindow(game);
+    return this.timerManager.getHesitationWindow(game);
   }
 
   private getBotDrawFreezeMs(game: GameState): number {
-    const base = this.getHesitationWindow(game);
-    if (this.isTrainingFastMode(game)) {
-      return Math.min(30, Math.max(0, base));
-    }
+    return this.timerManager.getBotDrawFreezeMs(game);
+  }
     return base;
   }
 
   private getBotDiscardDelayMs(game: GameState): number {
-    const base = this.getHesitationWindow(game);
-    if (this.isTrainingFastMode(game)) {
-      return Math.min(30, Math.max(0, base));
-    }
+    return this.timerManager.getBotDiscardDelayMs(game);
+  }
     const reducedBase = Math.max(250, Math.floor(base / 2));
     return reducedBase + Math.floor(Math.random() * 250);
   }
@@ -803,23 +793,15 @@ class GameManager {
   }
 
   private getPendingActionExpiresAt(game: GameState, actions: ActionType[]): number {
-    return Date.now() + this.getHesitationWindow(game);
+    return this.timerManager.getPendingActionExpiresAt(game, actions);
   }
 
   private getHumanClaimDecisionTimeoutMs(game: GameState, player: Player, actions: ActionType[]): number {
-    return this.getHesitationWindow(game);
+    return this.timerManager.getHumanClaimDecisionTimeoutMs(game, player, actions);
   }
 
   private getPendingActionWaitMs(gameId: string): number {
-    const game = this.games.get(gameId);
-    if (!game?.pendingActions.length) return this.getHesitationWaitMs(gameId);
-    const now = Date.now();
-    const nextExpiresAt = Math.min(
-      ...game.pendingActions.map(pa =>
-        typeof pa.expiresAt === 'number' ? pa.expiresAt : now + this.getHesitationWindow(game)
-      )
-    );
-    return Math.max(0, nextExpiresAt - now);
+    return this.timerManager.getPendingActionWaitMs(gameId);
   }
 
   setWebSocketManager(manager: any) {
@@ -863,9 +845,9 @@ class GameManager {
   disableBotMode(playerId: string): void {
     this.botModePlayers.delete(playerId);
     // ★ 回来时重置连续超时计数，避免下次超时从累积值继续
-    for (const [key, _] of this.consecutiveTimeouts) {
+    for (const [key, _] of this.timerManager.consecutiveTimeouts) {
       if (key.endsWith(`-${playerId}`)) {
-        this.consecutiveTimeouts.delete(key);
+        this.timerManager.consecutiveTimeouts.delete(key);
       }
     }
   }
@@ -878,11 +860,8 @@ class GameManager {
   }
 
   private clearPendingActionTimer(gameId: string): void {
-    const timer = this.pendingActionTimers.get(gameId);
-    if (timer) {
-      clearTimeout(timer);
-      this.pendingActionTimers.delete(gameId);
-    }
+    this.timerManager.clearPendingActionTimer(gameId);
+  }
   }
 
   private currentTurnPlayerHasPendingClaims(game: GameState): boolean {
@@ -896,7 +875,7 @@ class GameManager {
     now = Date.now(),
     predicate?: (pendingAction: PendingAction) => boolean
   ): void {
-    const nextExpiresAt = now + this.getHesitationWindow(game);
+    const nextExpiresAt = now + this.timerManager.getHesitationWindow(game);
     for (const pendingAction of game.pendingActions) {
       if (predicate && !predicate(pendingAction)) continue;
       pendingAction.expiresAt = Math.max(
@@ -907,14 +886,14 @@ class GameManager {
   }
 
   private schedulePendingActionTimeout(gameId: string): void {
-    this.clearPendingActionTimer(gameId);
+    this.timerManager.clearPendingActionTimer(gameId);
 
     // 等freeze延迟(1000ms)结束后才开始pending计时
     // 这样human玩家在freeze期间看清UI后,还有完整的1s反应时间
-    const timer = this.detachTimer(setTimeout(async () => {
+    const timer = this.timerManager.detachTimer(setTimeout(async () => {
       // 原子保护：若已在消费中则忽略本次触发
-      if (this.actionResolutionLocks.has(gameId)) return;
-      this.actionResolutionLocks.add(gameId);
+      if (this.timerManager.actionResolutionLocks.has(gameId)) return;
+      this.timerManager.actionResolutionLocks.add(gameId);
       try {
         const game = await this.getGame(gameId);
         if (!game || game.phase !== GamePhase.PLAYING) return;
@@ -984,7 +963,7 @@ class GameManager {
         }
 
         if (hasTriggeredAction) {
-          this.refreshPendingActionExpirations(game, now);
+          this.timerManager.refreshPendingActionExpirations(game, now);
           await this.persistGame(game);
           this.broadcastGameState(gameId);
           this.schedulePendingActionTimeout(gameId);
@@ -1038,14 +1017,14 @@ class GameManager {
       } catch (err) {
         console.error('Failed to auto-resolve pending actions:', err);
       } finally {
-        this.actionResolutionLocks.delete(gameId);
-        if (this.pendingActionTimers.get(gameId) === timer) {
-          this.pendingActionTimers.delete(gameId);
+        this.timerManager.actionResolutionLocks.delete(gameId);
+        if (this.timerManager.pendingActionTimers.get(gameId) === timer) {
+          this.timerManager.pendingActionTimers.delete(gameId);
         }
       }
-    }, this.getPendingActionWaitMs(gameId))); // 决策犹豫期(训练模式可加速)
+    }, this.timerManager.getPendingActionWaitMs(gameId))); // 决策犹豫期(训练模式可加速)
 
-    this.pendingActionTimers.set(gameId, timer);
+    this.timerManager.pendingActionTimers.set(gameId, timer);
   }
 
   /**
@@ -1509,11 +1488,11 @@ class GameManager {
             }
           } else if (currentPlayer && this.isPlayerBotControlled(currentPlayer)) {
             // ⭐ 修复核心: bot 轮到但没有 freeze timer → 模拟 beginCurrentPlayerTurn 的 freeze
-            const freezeMs = this.getHesitationWindow(stored);
+            const freezeMs = this.timerManager.getHesitationWindow(stored);
             console.log('[Recovery] Restoring bot freeze timer for', currentPlayer.name, 'delay:', freezeMs);
-            const botFreezeTimer = this.detachTimer(setTimeout(async () => {
+            const botFreezeTimer = this.timerManager.detachTimer(setTimeout(async () => {
               try {
-                this.freezeTimers.delete(gameId);
+                this.timerManager.freezeTimers.delete(gameId);
                 const freshGame = await this.getGame(gameId);
                 if (!freshGame || freshGame.phase !== 'playing') return;
                 if (freshGame.currentPlayerIndex !== stored.currentPlayerIndex) return;
@@ -1538,7 +1517,7 @@ class GameManager {
                 console.warn('[Recovery] Bot freeze handler error:', err);
               }
             }, freezeMs));
-            this.freezeTimers.set(gameId, botFreezeTimer);
+            this.timerManager.freezeTimers.set(gameId, botFreezeTimer);
           } else if (currentPlayer) {
             // 人类玩家: 调度 pending 超时等待操作
             this.schedulePendingActionTimeout(gameId);
@@ -1895,10 +1874,10 @@ class GameManager {
     (game as any).bailoutRelations = [];
 
     // 清除上一局残留的freeze/dealer auto-draw timer,防止旧timer覆盖新游戏状态
-    const oldFreezeTimer = this.freezeTimers.get(gameId);
+    const oldFreezeTimer = this.timerManager.freezeTimers.get(gameId);
     if (oldFreezeTimer) {
       clearTimeout(oldFreezeTimer);
-      this.freezeTimers.delete(gameId);
+      this.timerManager.freezeTimers.delete(gameId);
       console.log(`[WallDebug] Cleared stale freeze timer for game ${gameId}`);
     }
     // 每局重置百搭冷冻状态
@@ -2092,14 +2071,14 @@ class GameManager {
     this.broadcastGameState(gameId);
 
     // 庄家首轮自动摸牌(模拟 moveToNextPlayer 的 freeze 机制)
-    const freezeMs = this.getHesitationWindow(game);  // 决策犹豫期同时控制人类和AI
+    const freezeMs = this.timerManager.getHesitationWindow(game);  // 决策犹豫期同时控制人类和AI
     const dealer = game.players[game.currentPlayerIndex];
     if (dealer) {
       if (this.isPlayerBotControlled(dealer)) {
         // Bot 庄家:freeze 后自动摸+出牌
-        const botTimer = this.detachTimer(setTimeout(async () => {
+        const botTimer = this.timerManager.detachTimer(setTimeout(async () => {
           try {
-            this.freezeTimers.delete(gameId);
+            this.timerManager.freezeTimers.delete(gameId);
             const freshGame = await this.getGame(gameId);
             if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
             if (freshGame.currentPlayerIndex !== game.currentPlayerIndex) return;
@@ -2119,17 +2098,17 @@ class GameManager {
           } catch (err) {
             console.error('[start-bot-freeze] Error:', err);
           }
-        }, this.getBotDrawFreezeMs(game)));
-        this.freezeTimers.set(gameId, botTimer);
+        }, this.timerManager.getBotDrawFreezeMs(game)));
+        this.timerManager.freezeTimers.set(gameId, botTimer);
       } else {
         // Human 庄家:设置 freeze 让客户端显示冻结进度,到期自动摸
         (game as any)._freezeUntil = Date.now() + freezeMs;
         await this.persistGame(game);
         this.broadcastGameState(gameId);
 
-        const humanTimer = this.detachTimer(setTimeout(async () => {
+        const humanTimer = this.timerManager.detachTimer(setTimeout(async () => {
           try {
-            this.freezeTimers.delete(gameId);
+            this.timerManager.freezeTimers.delete(gameId);
             const freshGame = await this.getGame(gameId);
             if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
             if (freshGame.currentPlayerIndex !== game.currentPlayerIndex) return;
@@ -2154,7 +2133,7 @@ class GameManager {
             console.error('[start-freeze] Error:', err);
           }
         }, freezeMs));
-        this.freezeTimers.set(gameId, humanTimer);
+        this.timerManager.freezeTimers.set(gameId, humanTimer);
       }
     }
   }
@@ -2478,9 +2457,9 @@ class GameManager {
     if (!player) throw new Error('Player not found');
 
     // 玩家已响应,取消当前自动超时推进
-    this.clearPendingActionTimer(gameId);
+    this.timerManager.clearPendingActionTimer(gameId);
     // 取消超时自动接管(玩家已操作)
-    this.clearAutoTakeover(gameId, playerId);
+    this.timerManager.clearAutoTakeover(gameId, playerId);
 
     const gameAction: GameAction = {
       playerId,
@@ -2773,10 +2752,10 @@ class GameManager {
     await this.beginCurrentPlayerTurn(game);
 
     if (game.pendingActions.length > 0) {
-      const existingBotTimer = this.botTimers.get(game.gameId);
+      const existingBotTimer = this.timerManager.botTimers.get(game.gameId);
       if (existingBotTimer) {
         clearTimeout(existingBotTimer);
-        this.botTimers.delete(game.gameId);
+        this.timerManager.botTimers.delete(game.gameId);
       }
       this.schedulePendingActionTimeout(game.gameId);
     }
@@ -3069,7 +3048,7 @@ class GameManager {
     const queue = conflict.approvalQueue || [];
     if (queue.length === 0) {
       game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== conflict.requesterId);
-      this.clearPendingActionTimer(game.gameId);
+      this.timerManager.clearPendingActionTimer(game.gameId);
       this.executeRequesterApprovalAction(game);
       game.pengChowConflict = null;
       return;
@@ -3085,9 +3064,9 @@ class GameManager {
     conflict.approvalQueue = queue.filter(candidate => !stage.some(current => current.playerId === candidate.playerId));
     conflict.currentStagePlayerIds = stage.map(candidate => candidate.playerId);
     conflict.timestamp = Date.now();
-    conflict.expiresAt = Date.now() + this.getHesitationWindow(game);
+    conflict.expiresAt = Date.now() + this.timerManager.getHesitationWindow(game);
 
-    this.clearPendingActionTimer(game.gameId);
+    this.timerManager.clearPendingActionTimer(game.gameId);
 
     const requester = game.players.find(p => p.id === conflict.requesterId);
     if (!requester || !this.wsManager) return;
@@ -3096,7 +3075,7 @@ class GameManager {
     for (const candidate of stage) {
       const candidatePlayer = game.players.find(p => p.id === candidate.playerId);
       if (!candidatePlayer) continue;
-      const expiresAt = Date.now() + this.getHumanClaimDecisionTimeoutMs(
+      const expiresAt = Date.now() + this.timerManager.getHumanClaimDecisionTimeoutMs(
         game,
         candidatePlayer,
         candidate.availableActions as ActionType[]
@@ -3131,7 +3110,7 @@ class GameManager {
 
     const expectedTimestamp = conflict.timestamp;
     const gid = game.gameId;
-    this.detachTimer(setTimeout(async () => {
+    this.timerManager.detachTimer(setTimeout(async () => {
       try {
         const freshGame = await this.getGame(gid);
         const freshConflict = freshGame?.pengChowConflict;
@@ -3233,7 +3212,7 @@ class GameManager {
     game.pengChowConflict = { requesterId: requesterPlayerId, requesterAction, tile, requesterTileIds, timestamp: Date.now() };
 
     // 审批开始时清理旧的pending超时,避免2秒自动PASS抢跑破坏5秒审批
-    this.clearPendingActionTimer(game.gameId);
+    this.timerManager.clearPendingActionTimer(game.gameId);
 
     const requester = game.players.find(p => p.id === requesterPlayerId);
     if (!requester) return;
@@ -3246,7 +3225,7 @@ class GameManager {
       const existingPending = game.pendingActions.find(pa => pa.playerId === c.playerId);
       if (!existingPending) {
         const label = requesterAction === 'chow' ? '吃' : requesterAction === 'peng' ? '碰' : '杠';
-        const expiresAt = Date.now() + this.getHumanClaimDecisionTimeoutMs(game, candPlayer, c.availableActions);
+        const expiresAt = Date.now() + this.timerManager.getHumanClaimDecisionTimeoutMs(game, candPlayer, c.availableActions);
         game.pendingActions.push({
           playerId: c.playerId,
           availableActions: c.availableActions,
@@ -3272,11 +3251,11 @@ class GameManager {
       ...candidates.map((candidate) => {
         const player = game.players.find(p => p.id === candidate.playerId);
         return player
-          ? this.getHumanClaimDecisionTimeoutMs(game, player, candidate.availableActions as ActionType[])
+          ? this.timerManager.getHumanClaimDecisionTimeoutMs(game, player, candidate.availableActions as ActionType[])
           : this.getHesitationWaitMs(game.gameId);
       })
     );
-    this.detachTimer(setTimeout(async () => {
+    this.timerManager.detachTimer(setTimeout(async () => {
       try {
         const fg = await this.getGame(gid);
         if (!fg || !fg.pengChowConflict || fg.pengChowConflict.timestamp !== ts) return;
@@ -3596,7 +3575,7 @@ class GameManager {
       const candPlayer = game.players.find(p => p.id === playerId);
       if (!candPlayer || !pending) return;
 
-      this.clearPendingActionTimer(gameId);
+      this.timerManager.clearPendingActionTimer(gameId);
       game.pendingActions = game.pendingActions.filter(pa =>
         pa.playerId === playerId ||
         (
@@ -3794,7 +3773,7 @@ class GameManager {
         playerId: candidate.id,
         availableActions: [ActionType.HU, ActionType.PASS],
         tile,
-        expiresAt: Date.now() + this.getHumanClaimDecisionTimeoutMs(game, candidate, [ActionType.HU, ActionType.PASS])
+        expiresAt: Date.now() + this.timerManager.getHumanClaimDecisionTimeoutMs(game, candidate, [ActionType.HU, ActionType.PASS])
       });
     }
 
@@ -4021,7 +4000,7 @@ class GameManager {
       game.phase = GamePhase.REVEAL;
       this.broadcastGameState(game.gameId);
       const gameId = game.gameId;
-      this.detachTimer(setTimeout(async () => {
+      this.timerManager.detachTimer(setTimeout(async () => {
         try {
           const fresh = await this.getGame(gameId);
           if (!fresh || fresh.phase !== GamePhase.REVEAL) return;
@@ -4051,7 +4030,7 @@ class GameManager {
         game.phase = GamePhase.REVEAL;
         this.broadcastGameState(game.gameId);
         const gameId = game.gameId;
-        this.detachTimer(setTimeout(async () => {
+        this.timerManager.detachTimer(setTimeout(async () => {
           try {
             const fresh = await this.getGame(gameId);
             if (!fresh || fresh.phase !== GamePhase.REVEAL) return;
@@ -4125,7 +4104,7 @@ class GameManager {
 
     // 5秒后自动结束本局+进入下一局
     const gameId = game.gameId;
-    this.detachTimer(setTimeout(async () => {
+    this.timerManager.detachTimer(setTimeout(async () => {
       try {
         const freshGame = await this.getGame(gameId);
         if (!freshGame || !freshGame.rebelEndTime) return;
@@ -4290,15 +4269,15 @@ class GameManager {
     // 冻结8秒
     game.thinkFreezeUntil = Date.now() + 8000;
     game.thinkFreezePlayerId = player.id;
-    const freezeTimer = this.freezeTimers.get(game.gameId);
+    const freezeTimer = this.timerManager.freezeTimers.get(game.gameId);
     if (freezeTimer) {
       clearTimeout(freezeTimer);
-      this.freezeTimers.delete(game.gameId);
+      this.timerManager.freezeTimers.delete(game.gameId);
     }
-    const botTimer = this.botTimers.get(game.gameId);
+    const botTimer = this.timerManager.botTimers.get(game.gameId);
     if (botTimer) {
       clearTimeout(botTimer);
-      this.botTimers.delete(game.gameId);
+      this.timerManager.botTimers.delete(game.gameId);
     }
 
     for (const pending of game.pendingActions) {
@@ -4316,7 +4295,7 @@ class GameManager {
     // 8秒后自动解冻
     const gameId = game.gameId;
     const expectedPlayerId = player.id;
-    this.detachTimer(setTimeout(async () => {
+    this.timerManager.detachTimer(setTimeout(async () => {
       try {
         const freshGame = await this.getGame(gameId);
         if (!freshGame) return;
@@ -4745,7 +4724,7 @@ class GameManager {
           playerId: player.id,
           availableActions: actions,
           tile: discardedTile,
-          expiresAt: Date.now() + this.getHumanClaimDecisionTimeoutMs(game, player, actions)
+          expiresAt: Date.now() + this.timerManager.getHumanClaimDecisionTimeoutMs(game, player, actions)
         });
       }
     }
@@ -4784,7 +4763,7 @@ class GameManager {
             selectedChowTileIds: this.isPlayerBotControlled(chowPlayer)
               ? selectBotChowTileIds(chowPlayer, game, discardedTile, chowOptions)
               : undefined,
-            expiresAt: Date.now() + this.getHumanClaimDecisionTimeoutMs(game, chowPlayer, [ActionType.CHOW, ActionType.PASS])
+            expiresAt: Date.now() + this.timerManager.getHumanClaimDecisionTimeoutMs(game, chowPlayer, [ActionType.CHOW, ActionType.PASS])
           });
         }
       }
@@ -4802,7 +4781,7 @@ class GameManager {
     }
 
     if (game.pendingActions.length === 0) {
-      this.clearPendingActionTimer(game.gameId);
+      this.timerManager.clearPendingActionTimer(game.gameId);
     }
   }
 
@@ -5019,7 +4998,7 @@ class GameManager {
       throw new Error('No current player available');
     }
 
-    const freezeMs = this.getHesitationWindow(game);  // 决策犹豫期同时控制人类和AI
+    const freezeMs = this.timerManager.getHesitationWindow(game);  // 决策犹豫期同时控制人类和AI
 
     console.log(`[moveToNextPlayer] → ${nextPlayer.name} (${this.isPlayerBotControlled(nextPlayer) ? 'BOT' : 'HUMAN'}), freeze: ${freezeMs}ms`);
 
@@ -5052,9 +5031,9 @@ class GameManager {
 
     if (this.isPlayerBotControlled(nextPlayer)) {
       const freezeBotIndex = game.currentPlayerIndex;
-      const botFreezeTimer = this.detachTimer(setTimeout(async () => {
+      const botFreezeTimer = this.timerManager.detachTimer(setTimeout(async () => {
         try {
-          this.freezeTimers.delete(game.gameId);
+          this.timerManager.freezeTimers.delete(game.gameId);
           const freshGame = await this.getGame(game.gameId);
           if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
           if (freshGame.currentPlayerIndex !== freezeBotIndex) return; // 已被 claim 接管
@@ -5121,17 +5100,17 @@ class GameManager {
         } catch (err) {
           console.error('[bot-freeze] Error:', err);
         }
-      }, this.getBotDrawFreezeMs(game)));
-      this.freezeTimers.set(game.gameId, botFreezeTimer);
+      }, this.timerManager.getBotDrawFreezeMs(game)));
+      this.timerManager.freezeTimers.set(game.gameId, botFreezeTimer);
     } else {
       (game as any)._freezeUntil = Date.now() + freezeMs;
       await this.persistGame(game);
       this.broadcastGameState(game.gameId);
 
       const freezeCurrentIndex = game.currentPlayerIndex;
-      const humanFreezeTimer = this.detachTimer(setTimeout(async () => {
+      const humanFreezeTimer = this.timerManager.detachTimer(setTimeout(async () => {
         try {
-          this.freezeTimers.delete(game.gameId);
+          this.timerManager.freezeTimers.delete(game.gameId);
           const freshGame = await this.getGame(game.gameId);
           if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
           if (freshGame.currentPlayerIndex !== freezeCurrentIndex) return; // 已被 claim 接管
@@ -5191,7 +5170,7 @@ class GameManager {
           console.error('[freeze] Error clearing freeze:', err);
         }
       }, freezeMs));
-      this.freezeTimers.set(game.gameId, humanFreezeTimer);
+      this.timerManager.freezeTimers.set(game.gameId, humanFreezeTimer);
     }
   }
 
@@ -5199,26 +5178,23 @@ class GameManager {
    * 超时自动接管:人类玩家连续2回合60秒未操作 → 自动AI托管
    * 仅本局结算减半,玩家回来后下一局恢复正常
    */
-  private autoTakeoverTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
-  private autoTakeoverWarnings: Map<string, ReturnType<typeof setTimeout>> = new Map();
-  // 追踪每个玩家连续超时次数(gameId-playerId → count)
-  private consecutiveTimeouts: Map<string, number> = new Map();
-
+    // 追踪每个玩家连续超时次数(gameId-playerId → count)
+  
   private getAutoTakeoverTimeoutMs(): number {
-    return 60000;
+    return this.timerManager.getAutoTakeoverTimeoutMs();
   }
 
   private scheduleAutoTakeover(gameId: string, playerId: string, expectedIndex: number): void {
     const key = `${gameId}-${playerId}`;
     // 清除已有计时器
-    const existing = this.autoTakeoverTimers.get(key);
+    const existing = this.timerManager.autoTakeoverTimers.get(key);
     if (existing) clearTimeout(existing);
-    const existingWarning = this.autoTakeoverWarnings.get(key);
+    const existingWarning = this.timerManager.autoTakeoverWarnings.get(key);
     if (existingWarning) clearTimeout(existingWarning);
 
     // ★ 50秒时发预警：即将被AI接管
-    const warningTimer = this.detachTimer(setTimeout(async () => {
-      this.autoTakeoverWarnings.delete(key);
+    const warningTimer = this.timerManager.detachTimer(setTimeout(async () => {
+      this.timerManager.autoTakeoverWarnings.delete(key);
       try {
         const game = await this.getGame(gameId);
         if (!game || game.phase !== GamePhase.PLAYING) return;
@@ -5229,10 +5205,10 @@ class GameManager {
         this.broadcastGameState(gameId);
       } catch (_) {}
     }, 50000));
-    this.autoTakeoverWarnings.set(key, warningTimer);
+    this.timerManager.autoTakeoverWarnings.set(key, warningTimer);
 
-    const timer = this.detachTimer(setTimeout(async () => {
-      this.autoTakeoverTimers.delete(key);
+    const timer = this.timerManager.detachTimer(setTimeout(async () => {
+      this.timerManager.autoTakeoverTimers.delete(key);
       try {
         const game = await this.getGame(gameId);
         if (!game || game.phase !== GamePhase.PLAYING) return;
@@ -5243,15 +5219,15 @@ class GameManager {
         if (this.isPlayerBotControlled(player)) return; // 已经是AI控制了
 
         // 累加连续超时次数
-        const currentCount = (this.consecutiveTimeouts.get(key) || 0) + 1;
-        this.consecutiveTimeouts.set(key, currentCount);
+        const currentCount = (this.timerManager.consecutiveTimeouts.get(key) || 0) + 1;
+        this.timerManager.consecutiveTimeouts.set(key, currentCount);
 
         // ★ K哥规则：超时后强制摸牌+出牌，不管pendingActions
         // 先清除所有pendingActions（吃/碰/胡/杠选项）
         if (game.pendingActions.length > 0) {
           console.log(`[AutoTakeover] ${player.name} 超时60秒,清除所有pendingActions(${game.pendingActions.length}个)`);
           game.pendingActions = [];
-          this.clearPendingActionTimer(gameId);
+          this.timerManager.clearPendingActionTimer(gameId);
         }
 
         // 强制摸牌（如果未摸牌）
@@ -5276,12 +5252,12 @@ class GameManager {
             await this.executeAction(gameId, playerId, ActionType.DISCARD, forcedTileId);
           }
         }
-        this.consecutiveTimeouts.set(key, currentCount);
+        this.timerManager.consecutiveTimeouts.set(key, currentCount);
 
         if (currentCount >= 2) {
           // 连续2回合超时 → 触发AI接管
           console.log(`[AutoTakeover] ${player.name} 连续${currentCount}回合超时60秒,自动AI接管`);
-          this.consecutiveTimeouts.delete(key);
+          this.timerManager.consecutiveTimeouts.delete(key);
           // 启用AI托管模式(会自动加入 botTakeoverPlayers → 本局减半)
           this.enableBotMode(gameId, playerId);
           await this.persistGame(game);
@@ -5294,39 +5270,34 @@ class GameManager {
       }
     }, 60000)); // 60秒超时
 
-    this.autoTakeoverTimers.set(key, timer);
+    this.timerManager.autoTakeoverTimers.set(key, timer);
   }
 
   /**
    * 取消超时自动接管(玩家已操作),重置连续超时计数
    */
   private clearAutoTakeover(gameId: string, playerId: string): void {
-    const key = `${gameId}-${playerId}`;
-    const timer = this.autoTakeoverTimers.get(key);
-    if (timer) {
-      clearTimeout(timer);
-      this.autoTakeoverTimers.delete(key);
-    }
-    const warning = this.autoTakeoverWarnings.get(key);
+    this.timerManager.clearAutoTakeover(gameId, playerId);
+  }
+    const warning = this.timerManager.autoTakeoverWarnings.get(key);
     if (warning) {
       clearTimeout(warning);
-      this.autoTakeoverWarnings.delete(key);
+      this.timerManager.autoTakeoverWarnings.delete(key);
     }
     // 玩家已操作,重置连续超时计数
-    this.consecutiveTimeouts.delete(key);
+    this.timerManager.consecutiveTimeouts.delete(key);
   }
 
   /**
    * 调度 bot 玩家延迟出牌
    */
-  private botTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
-
+  
   private scheduleBotDiscard(gameId: string, playerId: string): void {
-    const existing = this.botTimers.get(gameId);
+    const existing = this.timerManager.botTimers.get(gameId);
     if (existing) clearTimeout(existing);
 
-    const timer = this.detachTimer(setTimeout(async () => {
-      this.botTimers.delete(gameId);
+    const timer = this.timerManager.detachTimer(setTimeout(async () => {
+      this.timerManager.botTimers.delete(gameId);
       try {
         const game = await this.getGame(gameId);
         if (!game || game.phase !== GamePhase.PLAYING) {
@@ -5337,7 +5308,7 @@ class GameManager {
         if (currentP.id !== playerId) {
           // 当前玩家已更换——可能是审批流执行后 currentPlayerIndex 已更新为碰牌bot
           // 如果当前玩家是另一个bot且没有出牌定时器在跑，重新调度
-          if (this.isPlayerBotControlled(currentP) && !this.botTimers.has(gameId)) {
+          if (this.isPlayerBotControlled(currentP) && !this.timerManager.botTimers.has(gameId)) {
             console.log(`[bot-discard] Current player changed to bot ${currentP.name}, rescheduling`);
             this.scheduleBotDiscard(gameId, currentP.id);
           }
@@ -5406,10 +5377,10 @@ class GameManager {
     }, (() => {
       const g = this.games.get(gameId);
       if (!g) return 500;
-      return this.getBotDiscardDelayMs(g);
+      return this.timerManager.getBotDiscardDelayMs(g);
     })()));  // 训练模式极速响应,实战保留随机人性化延迟
 
-    this.botTimers.set(gameId, timer);
+    this.timerManager.botTimers.set(gameId, timer);
   }
 
   /**
@@ -5472,7 +5443,7 @@ class GameManager {
   }
 
   public endRound(game: GameState, reason: GameEndReason): void {
-    this.clearPendingActionTimer(game.gameId);
+    this.timerManager.clearPendingActionTimer(game.gameId);
     game.phase = GamePhase.ENDED;
     // 回合结束立即刷盘
     this.store.flushGameNow(game.gameId).catch(() => {});
@@ -5801,7 +5772,7 @@ class GameManager {
    * 自动进入下一局（延时后设置STARTING阶段）
    */
   private autoStartNextRound(gameId: string, delayMs: number = 2000): void {
-    const timer = this.detachTimer(setTimeout(async () => {
+    const timer = this.timerManager.detachTimer(setTimeout(async () => {
       try {
         await this.setStartingPhase(gameId);
       } catch (err) {
