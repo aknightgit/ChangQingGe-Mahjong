@@ -639,8 +639,12 @@ function detectTypes(
     types.push(HandType.FENG_PENG);
   }
 
-  // 大吊：不做为胡牌前置判断，只在算分阶段检测（见calcScore）
-  // 大吊 = 手牌剩1张时自摸或捉冲，胡牌判断按正常牌型走
+  // 大吊：手牌仅剩1张（非花牌）时，直接标记 DA_DIAO
+  if (concealedNonFlower.length === 1) {
+    if (!types.includes(HandType.DA_DIAO)) {
+      types.push(HandType.DA_DIAO);
+    }
+  }
 
   // ---- 垃圾胡过滤（K哥规则）----
   // 规则：多门(>=2门) + 含顺子（不能全刻子）= 禁止的普通3n+2，直接判不能胡
@@ -1427,9 +1431,11 @@ export function canWin(
   const exactCanWin = wildTileId
     ? canWinByProjectRuleWithWildExact(concealed, exposed, wildTileId)
     : canWinByProjectRuleNoWild(concealed, exposed);
-  const finalCanWin = types.length > 0 || exactCanWin;
+  // 大吊（1张手牌）：即使 detectTypes 返回空，只要 exactCanWin 就应该允许胡
+  const isDaDiaoState = concealedNonFlower.length === 1;
+  const finalCanWin = types.length > 0 || exactCanWin || isDaDiaoState;
   const validTypes = finalCanWin
-    ? (types.length > 0 ? types : [HandType.STANDARD])
+    ? (types.length > 0 ? types : isDaDiaoState ? [HandType.DA_DIAO] : [HandType.STANDARD])
     : [];
 
   const result = { canWin: finalCanWin, types: validTypes }

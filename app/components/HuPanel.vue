@@ -74,8 +74,8 @@ const cleanLabel = (label: string) => String(label || '').replace(/路鑷懜|路鎹
   z-index: 100; backdrop-filter: blur(6px);
 }
 .hu-panel {
-  width: min(520px, 90vw);
-  max-height: 70vh;
+  width: min(900px, 96vw);
+  max-height: 80vh;
   overflow-y: auto;
   background: linear-gradient(180deg, rgba(15,30,22,0.96), rgba(6,15,11,0.98));
   border: 1px solid rgba(255,215,0,0.2);
@@ -97,11 +97,12 @@ const cleanLabel = (label: string) => String(label || '').replace(/路鑷懜|路鎹
 .hu-combo:hover { border-color: rgba(255,215,0,0.3); }
 .hu-combo--selected { border-color: rgba(255,215,0,0.6); background: rgba(255,215,0,0.06); }
 .hu-combo-row {
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;
+  white-space: nowrap;
 }
 .hu-groups { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
 .hu-combo-rank { font-size: 0.72rem; font-weight: 800; color: rgba(255,230,150,0.88); min-width: 20px; }
-.hu-combo-label { font-size: 0.92rem; font-weight: 800; color: #fff; flex: 1; }
+.hu-combo-label { font-size: 0.92rem; font-weight: 800; color: #fff; flex: 1; overflow: visible; text-overflow: unset; white-space: nowrap; }
 .hu-combo-method {
   font-size: 0.7rem; font-weight: 700; color: rgba(255,255,255,0.6);
   background: rgba(255,255,255,0.08); border-radius: 999px; padding: 2px 8px;
@@ -111,6 +112,8 @@ const cleanLabel = (label: string) => String(label || '').replace(/路鑷懜|路鎹
   display: inline-flex; align-items: center; gap: 2px;
   background: rgba(255,255,255,0.05); border-radius: 6px; padding: 3px 7px;
   font-size: 0.82rem; line-height: 1.3;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .hu-group-kind { font-weight: 800; color: rgba(255,230,150,0.88); margin-right: 2px; }
 .hu-tile-text { font-weight: 700; color: #e8e0d0; }

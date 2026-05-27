@@ -277,11 +277,32 @@
                 <span class="winner-reveal-type">{{ w.handTypeName }}</span>
                 <span class="winner-reveal-points">{{ w.finalPoints }}点</span>
               </div>
-              <div class="winner-reveal-tiles">
-                <span v-for="(tile, ti) in w.tileFaces" :key="ti" class="winner-reveal-tile">{{ tile }}</span>
+              <!-- 手牌用真实牌图 -->
+              <div class="winner-reveal-tiles-visual">
+                <template v-for="(group, gi) in getRevealGroups(w)" :key="`rg-${gi}`">
+                  <span v-if="gi > 0" class="winner-reveal-meld-sep">/</span>
+                  <div
+                    v-for="(tile, ti) in group"
+                    :key="`rt-${gi}-${ti}`"
+                    class="winner-reveal-tile-wrap"
+                  >
+                    <MahjongTile :tile="tile" />
+                  </div>
+                </template>
               </div>
               <div class="winner-reveal-method">
                 {{ w.isSelfDrawn ? '自摸' : (w.discarderName ? w.discarderName + ' 放冲' : '捉冲') }}
+              </div>
+            </div>
+            <!-- 所有玩家手牌明牌展示 -->
+            <div class="winner-reveal-all-hands">
+              <div v-for="p in revealAllPlayers" :key="p.id" class="winner-reveal-player-hand">
+                <span class="winner-reveal-player-name" :class="{ 'winner-reveal-player-name--winner': p.isWinner }">{{ p.name }}</span>
+                <div class="winner-reveal-player-tiles">
+                  <div v-for="tile in p.tiles" :key="tile.id" class="winner-reveal-tile-wrap--small">
+                    <MahjongTile :tile="tile" />
+                  </div>
+                </div>
               </div>
             </div>
             <div class="winner-reveal-hint">3秒后显示结算...</div>
@@ -3221,6 +3242,44 @@ const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); playVoiceActio
 const showSettlement = ref(false)
 const showWinnerReveal = ref(false)
 const winnerRevealData = ref<any[]>([])
+
+// 亮牌阶段：把 winnerRevealData 中的 handTiles/exposedMeldGroups 转为牌图分组
+const getRevealGroups = (w: any): Tile[][] => {
+  const handTiles = Array.isArray(w.handTiles)
+    ? w.handTiles.filter((t: any) => t?.suit !== 'hua' && t?.suit !== 'flower')
+    : []
+  const exposedMeldGroups = Array.isArray(w.exposedMeldGroups)
+    ? w.exposedMeldGroups.map((g: any) => Array.isArray(g) ? g.filter((t: any) => t?.suit !== 'hua' && t?.suit !== 'flower') : []).filter((g: any[]) => g.length > 0)
+    : []
+  // 尝试用 arrangeWinningHand 分解手牌
+  const combos = arrangeWinningHand(handTiles, [])
+  if (combos.length > 0 && combos[0].groups?.length) {
+    const concealedGroups = combos[0].groups.map((g: any) => Array.isArray(g?.tiles) ? g.tiles : (Array.isArray(g) ? g : []))
+    return [...concealedGroups, ...exposedMeldGroups]
+  }
+  // fallback: 全部手牌作为一组
+  return [handTiles, ...exposedMeldGroups]
+}
+
+// 亮牌阶段：所有玩家手牌（明牌）
+const revealAllPlayers = computed(() => {
+  if (!showWinnerReveal.value || !gameState.value?.players?.length) return []
+  const winnerNames = new Set(winnerRevealData.value.map((w: any) => w.playerName))
+  return gameState.value.players
+    .filter((p: any) => p.status === 'playing' || winnerNames.has(p.name))
+    .map((p: any) => {
+      const hand = p.hand?.concealedTiles || []
+      const exposed = (p.hand?.exposedMelds || []).flatMap((m: any) => m.tiles || [])
+      const allTiles = [...hand, ...exposed].filter((t: any) => t?.suit !== 'hua' && t?.suit !== 'flower')
+      return {
+        id: p.id,
+        name: p.name,
+        isWinner: winnerNames.has(p.name),
+        tiles: allTiles
+      }
+    })
+})
+
 const settlementData = ref<any>(null)
 const lastAutoSettlementKey = ref('')
 const wallExhaustedCountdown = ref(10)
@@ -6969,9 +7028,12 @@ const forceDiscard = async (p: Player) => {
   border-radius: 16px;
   padding: 24px 32px;
   min-width: 320px;
-  max-width: 90vw;
+  max-width: 96vw;
+  width: min(900px, 96vw);
   text-align: center;
   box-shadow: 0 8px 40px rgba(255, 215, 0, 0.3);
+  max-height: 90vh;
+  overflow-y: auto;
 }
 .winner-reveal-title {
   font-size: 1.3rem;
@@ -7006,18 +7068,61 @@ const forceDiscard = async (p: Player) => {
   color: #ff9800;
   font-weight: 600;
 }
-.winner-reveal-tiles {
+.winner-reveal-tiles-visual {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 4px;
+  align-items: flex-end;
+  gap: 2px;
   margin-bottom: 8px;
 }
-.winner-reveal-tile {
-  font-size: 1.4rem;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 4px 6px;
-  border-radius: 6px;
+.winner-reveal-meld-sep {
+  display: inline-flex;
+  align-items: center;
+  font-size: 1.2rem;
+  color: rgba(255,215,0,0.5);
+  margin: 0 4px;
+  font-weight: 700;
+}
+.winner-reveal-tile-wrap {
+  --tile-w: 32px;
+  --tile-h: 44px;
+}
+.winner-reveal-tile-wrap--small {
+  --tile-w: 24px;
+  --tile-h: 34px;
+}
+.winner-reveal-all-hands {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,215,0,0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.winner-reveal-player-hand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+}
+.winner-reveal-player-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
+  min-width: 60px;
+  text-align: right;
+}
+.winner-reveal-player-name--winner {
+  color: #ffd700;
+}
+.winner-reveal-player-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  align-items: flex-end;
 }
 .winner-reveal-method {
   font-size: 0.85rem;
