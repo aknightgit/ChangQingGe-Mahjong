@@ -16,6 +16,7 @@ import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqu
 import * as tileHelper from './tileHelper';
 import { BroadcastService } from './broadcastService';
 import { TimerManager } from './timerManager';
+import { WinEvaluator } from './winEvaluator';
 import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
 import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier, calculateSettlementBreakdownByRules, generateWinOptions, type WinOption } from './scoring';
 import { randomUUID } from 'crypto';
@@ -38,6 +39,7 @@ class GameManager {
   private wsManager: any = null;
   private broadcastService = new BroadcastService();
   private timerManager = new TimerManager();
+  private winEvaluator = new WinEvaluator();
   private isHydrated = false;
 
   // ---- Public accessors for RoomGameBridge ----
@@ -346,50 +348,14 @@ class GameManager {
   
   // AI托管模式:玩家ID集合,被标记的玩家由AI自动出牌
   private botModePlayers: Set<string> = new Set();
-  private winEvaluationCache: Map<string, Map<string, {
-    fast: Map<string, { canWin: boolean; types: HandType[] }>;
-    options: Map<string, WinOption[]>;
-    ting: Map<string, {
-      isTing: boolean;
-      winningTiles: Array<{
-        tile: Tile;
-        remainingCount: number;
-        bestDiscardOption: WinOption | null;
-        bestSelfDrawOption: WinOption | null;
-        bestOverallOption: WinOption | null;
-      }>;
-    }>;
-  }>> = new Map();
+  // winEvaluationCache moved to WinEvaluator
 
   private getPlayerWinCache(gameId: string, playerId: string) {
-    if (!this.winEvaluationCache.has(gameId)) {
-      this.winEvaluationCache.set(gameId, new Map());
-    }
-    const gameCache = this.winEvaluationCache.get(gameId)!;
-    if (!gameCache.has(playerId)) {
-      gameCache.set(playerId, {
-        fast: new Map(),
-        options: new Map(),
-        ting: new Map()
-      });
-    }
-    return gameCache.get(playerId)!;
+    return (this.winEvaluator as any).getPlayerCache(gameId, playerId);
   }
 
   private invalidateWinEvaluationCache(gameId: string, playerIds?: string[]): void {
-    if (!playerIds || playerIds.length === 0) {
-      this.winEvaluationCache.delete(gameId);
-      return;
-    }
-
-    const gameCache = this.winEvaluationCache.get(gameId);
-    if (!gameCache) return;
-    for (const playerId of playerIds) {
-      gameCache.delete(playerId);
-    }
-    if (gameCache.size === 0) {
-      this.winEvaluationCache.delete(gameId);
-    }
+    this.winEvaluator.invalidateCache(gameId, playerIds);
   }
 
   private buildTileSignature(tiles: Tile[]): string {
@@ -413,29 +379,16 @@ class GameManager {
   }
 
   private getPlayerWinContextKey(game: GameState, player: Player): string {
-    return [
-      `concealed=${this.buildTileSignature(player.hand.concealedTiles)}`,
-      `melds=${this.buildMeldSignature(player.hand.exposedMelds)}`,
-      `flowers=${this.getPlayerFlowerTiles(player).length}`,
-      `wild=${game.customScoringMode || ''}`,
-      `wildGroup=${(game.wildTileGroup || []).join(',')}`,
-      `round=${game.roundMultiplier ?? 1}`,
-      `inherit=${game.inheritMultiplier ?? 1}`,
-      `settlement=${game.settlementMultiplier ?? 1}`
-    ].join('|');
+    return (this.winEvaluator as any).getContextKey(game, player);
   }
 
   private getWinWildArg(game: GameState): string | null {
-    return (game.customScoringMode || null);
+    return this.winEvaluator.getWinWildArg(game);
   }
 
   private getCachedWinCheck(game: GameState, player: Player): { canWin: boolean; types: HandType[] } {
-    const playerCache = this.getPlayerWinCache(game.gameId, player.id);
-    const cacheKey = this.getPlayerWinContextKey(game, player);
-    const cached = playerCache.fast.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
+    return this.winEvaluator.getCachedWinCheck(game, player);
+  }
 
     const result = canWin(player.hand.concealedTiles, player.hand.exposedMelds, this.getWinWildArg(game));
     playerCache.fast.set(cacheKey, result);
@@ -503,24 +456,13 @@ class GameManager {
     context: 'self_draw' | 'discard',
     extraTile?: Tile
   ): void {
-    if (player.status !== PlayerStatus.PLAYING) return;
-    const winCheck = extraTile
-      ? canWin([...player.hand.concealedTiles, extraTile], player.hand.exposedMelds, this.getWinWildArg(game))
-      : this.getCachedWinCheck(game, player);
-    if (!winCheck.canWin) return;
-    this.getCachedWinOptions(game, player, context, {
-      isKongFlower: context === 'self_draw' && !!player.isSelfDrawn,
-      isRobbingKong: context === 'discard' && !!game.pendingKongClaim,
-      extraTile
-    });
+    this.winEvaluator.prewarm(game, player, context, extraTile);
+  });
   }
 
   private getWinningTileCandidates(): Array<{ suit: TileSuit; value: number }> {
-    const candidates: Array<{ suit: TileSuit; value: number }> = [];
-    for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
-      for (let value = 1; value <= 9; value++) {
-        candidates.push({ suit, value });
-      }
+    return this.winEvaluator.getWinningTileCandidates();
+  }
     }
     for (let value = 1; value <= 4; value++) {
       candidates.push({ suit: TileSuit.WIND, value });
@@ -532,13 +474,8 @@ class GameManager {
   }
 
   private getTingPreviewCandidates(game: GameState, player: Player): Array<{ suit: TileSuit; value: number }> {
-    const candidates = this.getWinningTileCandidates();
-    if (game.customScoringMode?.startsWith(`${TileSuit.FLOWER}-`) && Array.isArray(game.wildTileGroup)) {
-      for (const valueText of game.wildTileGroup) {
-        const value = parseInt(valueText, 10);
-        if (!Number.isNaN(value) && value >= 1 && value <= 8) {
-          candidates.push({ suit: TileSuit.FLOWER, value });
-        }
+    return this.winEvaluator.getTingPreviewCandidates(game, player);
+  }
       }
     }
     // 根据玩家手牌过滤：只保留玩家当前持有花色+风牌+箭牌的候选，避免列出所有牌面
@@ -643,107 +580,7 @@ class GameManager {
   }
 
   private getCachedTingPreview(game: GameState, player: Player, options?: { skipQuickPrecheck?: boolean }) {
-    const playerCache = this.getPlayerWinCache(game.gameId, player.id);
-    const cacheKey = `${this.getPlayerWinContextKey(game, player)}|ting-preview`;
-    const cached = playerCache.ting.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    // 快速粗筛：巡目门槛 + 孤牌检查
-    if (!options?.skipQuickPrecheck && !this.quickPrecheckTenpai(game, player)) {
-      const emptyResult = { isTing: false, winningTiles: [] as Array<{
-        tile: Tile;
-        remainingCount: number;
-        bestDiscardOption: WinOption | null;
-        bestSelfDrawOption: WinOption | null;
-        bestOverallOption: WinOption | null;
-      }> };
-      playerCache.ting.set(cacheKey, emptyResult);
-      return emptyResult;
-    }
-
-    const candidates = this.getTingPreviewCandidates(game, player);
-    const wildChecker = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
-    const winWildArg = (game.customScoringMode || null);
-    const winningTileMap = new Map<string, {
-      tile: Tile;
-      remainingCount: number;
-      bestDiscardOption: WinOption | null;
-      bestSelfDrawOption: WinOption | null;
-      bestOverallOption: WinOption | null;
-    }>();
-
-    if (!this.isListeningPreviewState(game, player)) {
-      const emptyResult = { isTing: false, winningTiles: [] as Array<{
-        tile: Tile;
-        remainingCount: number;
-        bestDiscardOption: WinOption | null;
-        bestSelfDrawOption: WinOption | null;
-        bestOverallOption: WinOption | null;
-      }> };
-      playerCache.ting.set(cacheKey, emptyResult);
-      return emptyResult;
-    }
-
-    for (const { suit, value } of candidates) {
-      const testTile: Tile = {
-        id: `ting-preview-${suit}-${value}`,
-        suit,
-        value,
-        isFlower: suit === TileSuit.FLOWER
-      };
-      const winCheck = canWin([...player.hand.concealedTiles, testTile], player.hand.exposedMelds, winWildArg, undefined, game.wildTileGroup);
-      if (!winCheck.canWin) continue;
-
-      const discardOptions = this.getCachedWinOptions(game, player, 'discard', {
-        extraTile: testTile,
-        isRobbingKong: false
-      });
-      const selfDrawOptions = this.getCachedWinOptions(game, player, 'self_draw', {
-        extraTile: testTile,
-        isKongFlower: false
-      });
-      const bestDiscardOption = discardOptions[0] || null;
-      const bestSelfDrawOption = selfDrawOptions[0] || null;
-      const bestOverallOption = [bestDiscardOption, bestSelfDrawOption]
-        .filter(Boolean)
-        .sort((a, b) => (b!.score ?? 0) - (a!.score ?? 0))[0] || null;
-
-      winningTileMap.set(`${suit}-${value}`, {
-        tile: testTile,
-        remainingCount: 0,
-        bestDiscardOption,
-        bestSelfDrawOption,
-        bestOverallOption
-      });
-    }
-
-    const winningTiles = this.filterBigDiaoPreviewTiles(game, player, [...winningTileMap.values()])
-      // ★ K哥规则：百搭牌也应该出现在听牌提示中（花牌百搭可以替代任何牌）
-      // .filter(entry => !wildChecker(entry.tile))  // 原代码：过滤掉所有百搭牌
-      .sort((a, b) => {
-        const suitOrder: Record<string, number> = {
-          [TileSuit.CHARACTERS]: 0,
-          [TileSuit.BAMBOOS]: 1,
-          [TileSuit.DOTS]: 2,
-          [TileSuit.WIND]: 3,
-          [TileSuit.DRAGON]: 4,
-          [TileSuit.FLOWER]: 5
-        };
-        const suitDelta = (suitOrder[a.tile.suit] ?? 99) - (suitOrder[b.tile.suit] ?? 99);
-        if (suitDelta !== 0) return suitDelta;
-        const valueDelta = a.tile.value - b.tile.value;
-        if (valueDelta !== 0) return valueDelta;
-        return 0;
-      });
-
-    const result = {
-      isTing: winningTiles.length > 0,
-      winningTiles
-    };
-    playerCache.ting.set(cacheKey, result);
-    return result;
+    return this.winEvaluator.getCachedTingPreview(game, player, options);
   }
 
   /** 训练快速模式: TRAINING_FAST_MODE=true 或 allClaimMode */
