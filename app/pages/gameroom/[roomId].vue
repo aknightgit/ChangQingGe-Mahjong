@@ -267,6 +267,27 @@
           {{ drawBlockedNoticeText }}
         </div>
 
+        <!-- 亮牌展示阶段 -->
+        <div v-if="showWinnerReveal" class="winner-reveal-overlay">
+          <div class="winner-reveal-card">
+            <h2 class="winner-reveal-title">🀄 胡牌亮牌</h2>
+            <div v-for="(w, idx) in winnerRevealData" :key="idx" class="winner-reveal-item">
+              <div class="winner-reveal-header">
+                <span class="winner-reveal-name">{{ w.playerName }}</span>
+                <span class="winner-reveal-type">{{ w.handTypeName }}</span>
+                <span class="winner-reveal-points">{{ w.finalPoints }}点</span>
+              </div>
+              <div class="winner-reveal-tiles">
+                <span v-for="(tile, ti) in w.tileFaces" :key="ti" class="winner-reveal-tile">{{ tile }}</span>
+              </div>
+              <div class="winner-reveal-method">
+                {{ w.isSelfDrawn ? '自摸' : (w.discarderName ? w.discarderName + ' 放冲' : '捉冲') }}
+              </div>
+            </div>
+            <div class="winner-reveal-hint">3秒后显示结算...</div>
+          </div>
+        </div>
+
         <div v-if="showSettlement" class="settle-overlay">
   <div class="settle-panel">
     <template v-if="!settleFinalMode">
@@ -285,6 +306,7 @@
                 <tr>
                   <th>玩家</th>
                   <th>胡序</th>
+                  <th>牌型</th>
                   <th>胡牌牌面</th>
                   <th>花</th>
                   <th>番数</th>
@@ -302,6 +324,7 @@
                 >
                   <td>{{ row.playerName }}</td>
                   <td>{{ row.winSequence }}</td>
+                  <td>{{ row.handType }}</td>
                   <td class="settle-round-tiles">{{ row.tiles }}</td>
                   <td>{{ row.flowerCount }}</td>
                   <td>{{ row.baseFan }}</td>
@@ -3196,6 +3219,8 @@ const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); playVoiceActio
 
 // 退房结算
 const showSettlement = ref(false)
+const showWinnerReveal = ref(false)
+const winnerRevealData = ref<any[]>([])
 const settlementData = ref<any>(null)
 const lastAutoSettlementKey = ref('')
 const wallExhaustedCountdown = ref(10)
@@ -4019,11 +4044,33 @@ watch(
     }
     isRoundWallExhausted.value = isWallExhausted
 
-    // 1s后显示结算弹窗，启动倒计时自动下一局
-    window.setTimeout(() => {
-      showSettlement.value = true
-      startWallExhaustedCountdown()
-    }, 1000)
+    // ★ 胡牌时先显示赢家亮牌 3 秒，再过渡到结算面板
+    if (!isWallExhausted && lastRound?.winnerDetails?.length) {
+      winnerRevealData.value = lastRound.winnerDetails.map((w: any) => ({
+        playerName: w.playerName,
+        handTypeName: w.handTypeName || '胡牌',
+        tileFaces: w.tileFaces || [],
+        isSelfDrawn: w.isSelfDrawn,
+        discarderName: w.discarderName,
+        finalPoints: w.finalPoints,
+        baseFan: w.baseFan,
+        handTiles: w.handTiles || [],
+        exposedTiles: w.exposedTiles || [],
+        exposedMeldGroups: w.exposedMeldGroups || []
+      }))
+      showWinnerReveal.value = true
+      window.setTimeout(() => {
+        showWinnerReveal.value = false
+        showSettlement.value = true
+        startWallExhaustedCountdown()
+      }, 3000)
+    } else {
+      // 流局直接显示结算
+      window.setTimeout(() => {
+        showSettlement.value = true
+        startWallExhaustedCountdown()
+      }, 1000)
+    }
   }
 )
 
@@ -6902,6 +6949,84 @@ const forceDiscard = async (p: Player) => {
 .settle-btn:hover {
   background: rgba(255, 152, 0, 0.15);
   border-color: rgba(255, 152, 0, 0.5);
+}
+
+/* 亮牌展示 */
+.winner-reveal-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
+  z-index: 10000;
+  animation: fadeIn 0.3s ease;
+}
+.winner-reveal-card {
+  background: linear-gradient(135deg, #1a2a1a, #0d1f0d);
+  border: 2px solid #ffd700;
+  border-radius: 16px;
+  padding: 24px 32px;
+  min-width: 320px;
+  max-width: 90vw;
+  text-align: center;
+  box-shadow: 0 8px 40px rgba(255, 215, 0, 0.3);
+}
+.winner-reveal-title {
+  font-size: 1.3rem;
+  color: #ffd700;
+  margin: 0 0 16px;
+}
+.winner-reveal-item {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+.winner-reveal-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.winner-reveal-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+}
+.winner-reveal-type {
+  font-size: 1rem;
+  color: #ffd700;
+  font-weight: 600;
+}
+.winner-reveal-points {
+  font-size: 1rem;
+  color: #ff9800;
+  font-weight: 600;
+}
+.winner-reveal-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.winner-reveal-tile {
+  font-size: 1.4rem;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.winner-reveal-method {
+  font-size: 0.85rem;
+  color: #aaa;
+}
+.winner-reveal-hint {
+  font-size: 0.75rem;
+  color: #666;
+  margin-top: 8px;
 }
 
 /* 结算面板 */
