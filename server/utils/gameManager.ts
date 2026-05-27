@@ -13,6 +13,7 @@
   GameEndReason
 } from '../types/game';
 import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isFivePoison, getTileDisplayName } from './tiles';
+import * as tileHelper from './tileHelper';
 import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
 import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier, calculateSettlementBreakdownByRules, generateWinOptions, type WinOption } from './scoring';
 import { randomUUID } from 'crypto';
@@ -353,8 +354,7 @@ class GameManager {
   }
 
   private getConcealedPlayableTiles(game: GameState, player: Player): Tile[] {
-    const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
-    return player.hand.concealedTiles.filter(tile => !isFlower(tile) || isWildTile(tile));
+    return tileHelper.getConcealedPlayableTiles(game, player);
   }
 
   private isListeningPreviewState(game: GameState, player: Player): boolean {
@@ -447,23 +447,15 @@ class GameManager {
   }
 
   private buildTileSignature(tiles: Tile[]): string {
-    return tiles
-      .map(tile => `${tile.suit}:${tile.value}`)
-      .sort()
-      .join(',');
+    return tileHelper.buildTileSignature(tiles);
   }
 
   private buildMeldSignature(melds: Meld[]): string {
-    return melds
-      .map(meld => `${meld.type}:${meld.isConcealed ? '1' : '0'}:${this.buildTileSignature(meld.tiles)}`)
-      .sort()
-      .join('|');
+    return tileHelper.buildMeldSignature(melds);
   }
 
   private getPlayerFlowerTiles(player: Player): Tile[] {
-    return player.hand.exposedMelds
-      .flatMap(meld => meld.tiles)
-      .filter(tile => isFlower(tile));
+    return tileHelper.getPlayerFlowerTiles(player);
   }
 
   private isPlayerMenQing(player: Player): boolean {
@@ -628,15 +620,11 @@ class GameManager {
   }
 
   private getTileMaxCopies(suit: TileSuit): number {
-    return suit === TileSuit.FLOWER ? 1 : 4;
+    return tileHelper.getTileMaxCopies(suit);
   }
 
   private getVisibleRemainingCount(game: GameState, player: Player, suit: TileSuit, value: number): number {
-    const visibleCount =
-      player.hand.concealedTiles.filter(tile => tile.suit === suit && tile.value === value).length +
-      game.discardPile.filter(tile => tile.suit === suit && tile.value === value).length +
-      game.players.flatMap(p => p.hand.exposedMelds).flatMap(meld => meld.tiles).filter(tile => tile.suit === suit && tile.value === value).length;
-    return Math.max(0, this.getTileMaxCopies(suit) - visibleCount);
+    return tileHelper.getVisibleRemainingCount(game, player, suit, value);
   }
 
   private quickPrecheckTenpai(game: GameState, player: Player): boolean {
@@ -1141,15 +1129,12 @@ class GameManager {
   /** bot 训练模式专用 */
 
   private countExposedTilesExcludingFlowerMelds(player: Player): number {
-    return player.hand.exposedMelds.reduce((sum, m) => {
-      if (m.tiles.length === 1 && isFlower(m.tiles[0])) return sum;
-      if (m.type === MeldType.KONG || m.type === MeldType.CONCEALED_KONG) return sum + 3;
-      return sum + m.tiles.length;
-    }, 0);
+    return tileHelper.countExposedTilesExcludingFlowerMelds(player);
+  }, 0);
   }
 
   private getPlayableTileCount(player: Player): number {
-    return player.hand.concealedTiles.length + this.countExposedTilesExcludingFlowerMelds(player);
+    return tileHelper.getPlayableTileCount(player);
   }
 
   /**
@@ -2913,9 +2898,7 @@ class GameManager {
   }
 
   private countFlowerTiles(player: Player): number {
-    return player.hand.exposedMelds
-      .flatMap(m => m.tiles)
-      .filter(t => isFlower(t)).length;
+    return tileHelper.countFlowerTiles(player);
   }
 
   private handleDraw(game: GameState, player: Player, options?: { allowFullHand?: boolean }): void {
@@ -3023,10 +3006,8 @@ class GameManager {
    * - 含边界保护(空牌/缺字段时不抛异常)
    */
   private sortHandWithWildFront(tiles: Tile[], game: GameState): Tile[] {
-    if (!tiles || tiles.length === 0) return [];
-    const suitOrder: Record<string, number> = {
-      dots: 0, wan: 1, tiao: 2, feng: 3, jian: 4, hua: 5
-    };
+    return tileHelper.sortHandWithWildFront(tiles, game);
+  };
     return [...tiles].sort((a, b) => {
       if (!a || !a.suit || a.value == null) return 1;
       if (!b || !b.suit || b.value == null) return -1;
@@ -3045,19 +3026,8 @@ class GameManager {
    * 检查牌是否是百搭
    */
   private isWildTile(game: GameState, tile: Tile): boolean {
-    if (!game.customScoringMode) return false;
-    const parts = game.customScoringMode.split('-');
-    if (parts.length < 2) return false;
-    const wildSuit = parts[0] as TileSuit;
-    const wildValue = parseInt(parts[1]);
-
-    // 普通百搭
-    if (tile.suit === wildSuit && tile.value === wildValue) return true;
-
-    // 花牌百搭: 一组花牌全部为百搭
-    if (tile.suit === TileSuit.FLOWER && wildSuit === TileSuit.FLOWER && game.wildTileGroup) {
-      return game.wildTileGroup.includes(String(tile.value));
-    }
+    return tileHelper.isWildTile(game, tile);
+  }
 
     return false;
   }
