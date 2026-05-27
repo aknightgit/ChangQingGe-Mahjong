@@ -683,12 +683,6 @@
                     @click="onPlayerBack"
                   >我回来了</button>
                 </div>
-                <div v-else-if="isMyTurn && !isSpectator" class="takeover-float-bar">
-                  <button
-                    class="inline-action-btn inline-action-btn--bot-mode"
-                    @click="onBotModeDirect"
-                  >🤖 托管</button>
-                </div>
                 <div class="inline-action-buttons" v-else-if="isConnected && !isInteractionLocked" style="display:none">
                   <div v-if="actionWindowText" class="inline-action-timer">{{ actionWindowText }}</div>
                   <button
@@ -717,6 +711,11 @@
                     :disabled="isInteractionLocked || thinkFreezeActive"
                     @click="onRebel"
                   >🚨造反</button>
+                  <button
+                    v-if="!isSpectator && !isAIControlled"
+                    class="inline-action-btn inline-action-btn--bot-mode"
+                    @click="onBotModeDirect"
+                  >🤖托管</button>
                   <button
                     v-if="showLiangShanButton"
                     class="inline-action-btn inline-action-btn--liangshan"
