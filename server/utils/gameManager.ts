@@ -14,6 +14,7 @@
 } from '../types/game';
 import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isFivePoison, getTileDisplayName } from './tiles';
 import * as tileHelper from './tileHelper';
+import { BroadcastService } from './broadcastService';
 import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
 import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier, calculateSettlementBreakdownByRules, generateWinOptions, type WinOption } from './scoring';
 import { randomUUID } from 'crypto';
@@ -34,6 +35,7 @@ class GameManager {
   private games: Map<string, GameState> = new Map();
   private playerToGame: Map<string, string> = new Map();
   private wsManager: any = null;
+  private broadcastService = new BroadcastService();
   private isHydrated = false;
 
   // ---- Public accessors for RoomGameBridge ----
@@ -59,7 +61,7 @@ class GameManager {
   private bailoutRelationsCache: Map<string, { result: any[]; timestamp: number }> = new Map();
 
   // 广播消息缓存: gameId -> BroadcastMsg[]（供HTTP API兜底，避免依赖WebSocket）
-  private recentBroadcasts: Map<string, { id: number; text: string; type: string; timestamp: number; timeLabel: string }[]> = new Map();
+  // recentBroadcasts moved to BroadcastService
 
   // Pending action超时处理(自动推进)
   private pendingActionTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
@@ -76,70 +78,20 @@ class GameManager {
 
   private tileLabel = tileLabel;
 
-  public broadcastQuickMessage(
-    gameId: string,
-    text: string,
-    type: 'info' | 'warn' | 'special' = 'info',
-    actionKind?: string
-  ): void {
-    // 【加强去重】检查3秒内所有同文本消息(不只是最后一条)
-    const existing = this.recentBroadcasts.get(gameId);
-    if (existing && existing.length > 0) {
-      const now = Date.now();
-      for (let i = existing.length - 1; i >= Math.max(0, existing.length - 10); i--) {
-        const msg = existing[i];
-        if (msg.text === text && (now - msg.timestamp) < 3000) {
-          console.log(`[BC-DIAG] SERVER DEDUP: text="${text.slice(0,30)}" last=${msg.timestamp} now=${now}`);
-          return;
-        }
-      }
-    }
-    const msg = {
-      id: Date.now() + Math.floor(Math.random() * 1000),
-      text,
-      actionKind,
-      type,
-      timestamp: Date.now(),
-      timeLabel: formatBeijingTime()
-    };
-    if (this.wsManager) {
-      this.wsManager.broadcast(gameId, 'broadcastMessage', msg);
-    }
-    // 缓存到内存供HTTP API兜底（最多保留20条）
-    let list = this.recentBroadcasts.get(gameId);
-    console.log(`[BC-DIAG] broadcastQuickMessage: gameId=${gameId.slice(0,8)} text="${text.slice(0,30)}" id=${msg.id} cached=${list ? list.length + 1 : 1}`)
-    if (!list) {
-      list = [];
-      this.recentBroadcasts.set(gameId, list);
-    }
-    list.push({ id: msg.id, text: msg.text, type: msg.type, timestamp: msg.timestamp, timeLabel: msg.timeLabel });
-    if (list.length > 20) list.splice(0, list.length - 20);
+  public broadcastQuickMessage(gameId: string, text: string, type: 'info' | 'warn' | 'special' = 'info', actionKind?: string): void {
+    this.broadcastService.broadcastQuickMessage(gameId, text, type, actionKind);
   }
 
   private broadcastFlowerReplacement(game: GameState, player: Player): void {
-    if (!this.wsManager) {
-      console.log(`[broadcast] SKIP flowerReplace for ${player.name}: wsManager not set`);
-      return;
-    }
-    console.log(`[broadcast] flowerReplace: ${player.name} 补花`);
-    this.broadcastQuickMessage(game.gameId, `🌸 ${player.name}补花`, 'special', 'flowerReplace');
+    this.broadcastService.broadcastFlowerReplacement(game, player);
   }
 
   private broadcastKongSupplement(game: GameState, player: Player, kind: 'ming' | 'an' | 'jia'): void {
-    if (!this.wsManager) return;
-    const label = kind === 'an' ? '暗杠' : kind === 'jia' ? '补杠' : '明杠';
-    this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
-      id: Date.now() + Math.floor(Math.random() * 1000),
-      text: `🀄 ${player.name}${label}后补牌`,
-      actionKind: 'kongSupplement',
-      type: 'info',
-      timestamp: Date.now(),
-      timeLabel: formatBeijingTime()
-    });
+    this.broadcastService.broadcastKongSupplement(game, player, kind);
   }
 
   private broadcastRoomJoin(_game: GameState, _player: Player): void {
-    // 已移至 socket.ts room:join 处理，避免 REST API 时序问题（Socket 连接前广播不到）
+    this.broadcastService.broadcastRoomJoin(_game, _player);
   }
 
   private canPlayerDrawOnCurrentTurn(game: GameState, player: Player): boolean {
@@ -872,11 +824,12 @@ class GameManager {
 
   setWebSocketManager(manager: any) {
     this.wsManager = manager;
+    this.broadcastService.setWsManager(manager);
   }
 
   /** 获取广播消息缓存（供HTTP API兜底） */
   getRecentBroadcasts(gameId: string): { id: number; text: string; type: string; timestamp: number; timeLabel: string }[] {
-    return this.recentBroadcasts.get(gameId) || [];
+    return this.broadcastService.getRecentBroadcasts(gameId) || [];
   }
 
   // ===== AI托管模式控制 =====
@@ -1425,7 +1378,7 @@ class GameManager {
 
     const msg = msgByCount[currentCount];
     if (msg) {
-      this.broadcastQuickMessage(game.gameId, msg, 'special', 'bailout');
+      this.broadcastService.broadcastQuickMessage(game.gameId, msg, 'special', 'bailout');
     }
   }
 
@@ -1854,7 +1807,7 @@ class GameManager {
     // Broadcast update so lobby sees new player
     await this.persistGame(game);
     if (!isBotJoin) {
-      this.broadcastRoomJoin(game, player);
+      this.broadcastService.broadcastRoomJoin(game, player);
     }
     this.broadcastGameState(gameId);
 
@@ -2799,7 +2752,7 @@ class GameManager {
       game.freezeComplete = false;
       game.pendingActions = [];
       if (this.wsManager) {
-        this.broadcastQuickMessage(game.gameId, `🃏 ${player.name}打出了百搭，本轮不能吃碰捉冲！`, 'warn');
+        this.broadcastService.broadcastQuickMessage(game.gameId, `🃏 ${player.name}打出了百搭，本轮不能吃碰捉冲！`, 'warn');
       }
       await this.persistGame(game);
       this.broadcastGameState(game.gameId);
@@ -2991,7 +2944,7 @@ class GameManager {
         player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
       }
 
-      this.broadcastFlowerReplacement(game, player);
+      this.broadcastService.broadcastFlowerReplacement(game, player);
     }
   }
 
@@ -3610,7 +3563,7 @@ class GameManager {
     // 广播杠牌到牌局快讯
     if (this.wsManager) {
       const label = pendingAction.type === 'kong_an' ? '暗杠' : pendingAction.type === 'kong_bu' ? '补杠' : '明杠';
-      this.broadcastQuickMessage(game.gameId, `ⓘ ${player.name}${label}`, 'info', 'kong');
+      this.broadcastService.broadcastQuickMessage(game.gameId, `ⓘ ${player.name}${label}`, 'info', 'kong');
     }
     const discarder = game.players.find(p => p.id === sourcePlayerId);
     if (discarder) {
@@ -3626,7 +3579,7 @@ class GameManager {
     if (this.isPlayerBotControlled(player)) {
       this.scheduleBotDiscard(game.gameId, currentPlayer.id);
     }
-    this.broadcastKongSupplement(game, player, 'ming');
+    this.broadcastService.broadcastKongSupplement(game, player, 'ming');
   }
 
   /**
@@ -3776,7 +3729,7 @@ class GameManager {
     if (this.isPlayerBotControlled(player)) {
       this.scheduleBotDiscard(game.gameId, currentPlayer.id);
     }
-    this.broadcastKongSupplement(game, player, 'an');
+    this.broadcastService.broadcastKongSupplement(game, player, 'an');
   }
 
   private handleExtendedKong(game: GameState, player: Player, tileId: string): void {
@@ -3880,7 +3833,7 @@ class GameManager {
     if (this.isPlayerBotControlled(player)) {
       this.scheduleBotDiscard(game.gameId, currentPlayer.id);
     }
-    this.broadcastKongSupplement(game, player, 'jia');
+    this.broadcastService.broadcastKongSupplement(game, player, 'jia');
   }
 
   private resolveRobKongIfNeeded(game: GameState): boolean {
@@ -4167,7 +4120,7 @@ class GameManager {
         hand: player.hand.concealedTiles,
         rebelEndTime: game.rebelEndTime
       });
-      this.broadcastQuickMessage(game.gameId, `⚔️ ${player.name}造反了！！`, 'special');
+      this.broadcastService.broadcastQuickMessage(game.gameId, `⚔️ ${player.name}造反了！！`, 'special');
     }
 
     // 5秒后自动结束本局+进入下一局
@@ -4218,7 +4171,7 @@ class GameManager {
     // 记录投票
     game.liangShanVotes.push(player.id);
     if (this.wsManager) {
-      this.broadcastQuickMessage(game.gameId, `🔥 ${player.name}发起了梁山聚义！`, 'special');
+      this.broadcastService.broadcastQuickMessage(game.gameId, `🔥 ${player.name}发起了梁山聚义！`, 'special');
     }
 
     // 活跃玩家总数（只统计真人）
@@ -4244,7 +4197,7 @@ class GameManager {
         if (!game.liangShanVotes.includes(ap.id)) {
           game.liangShanVotes.push(ap.id); // 标记为已投票
           if (this.wsManager) {
-            this.broadcastQuickMessage(game.gameId, `🔥 ${ap.name}响应了${player.name}的梁山聚义！`, 'special');
+            this.broadcastService.broadcastQuickMessage(game.gameId, `🔥 ${ap.name}响应了${player.name}的梁山聚义！`, 'special');
           }
         }
         console.log(`[LiangShan] ${ap.name} 累积赢分${cumulativeScore}超过QJ线${threshold},自动同意`);
@@ -5086,7 +5039,7 @@ class GameManager {
         game.freezePlayerId = null;
         game.freezeComplete = false;
         if (this.wsManager) {
-          this.broadcastQuickMessage(game.gameId, `🃏 冷冻解除，现在可以正常吃碰捉冲了！`, 'info');
+          this.broadcastService.broadcastQuickMessage(game.gameId, `🃏 冷冻解除，现在可以正常吃碰捉冲了！`, 'info');
         }
       }
     }
@@ -5498,7 +5451,7 @@ class GameManager {
         // 补到普通牌,加入手牌(替换原来花牌的位置)
         player.hand.concealedTiles.push(replacement);
         (player as any).lastDrawnTile = replacement;
-        this.broadcastFlowerReplacement(game, player);
+        this.broadcastService.broadcastFlowerReplacement(game, player);
       }
     }
 
