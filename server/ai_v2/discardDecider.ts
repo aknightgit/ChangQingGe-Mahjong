@@ -72,13 +72,15 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
     nearby === 0
       ? 12 + Math.max(0, shortSuitGap - 1)
       : 0
+  // ★ K哥规则：短门的邻接张（含顺子潜力）一律优先打，不留
+  // 原来 +10~+16 是错的 → 短门留顺子等于留垃圾，改成不给分或给负分
   const shortestSeenConnector =
     shortestSuit &&
     input.tile.suit === shortestSuit &&
     nearby > 0 &&
     visibleCopies >= 1 &&
     shortSuitGap >= 4
-      ? 10 + Math.min(4, visibleCopies) + Math.max(0, shortSuitGap - 3)
+      ? -3.0  // 短门邻接熟张：打掉，不留
       : 0
   const seenHonorWaste =
     isHonor(input.tile) &&
@@ -287,7 +289,7 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
       ? (
         getObserveBucketScore(input) +
         (input.routeState.features.shortestSuit && input.tile.suit === input.routeState.features.shortestSuit && sameTypeCount(input) === 1 ? 2.3 : 0) +
-        (input.routeState.features.shortestSuit && input.tile.suit === input.routeState.features.shortestSuit && adjacentCount(input) > 0 ? 5.4 : 0) +
+        (input.routeState.features.shortestSuit && input.tile.suit === input.routeState.features.shortestSuit && adjacentCount(input) > 0 ? -3.0 : 0) +  // 短门邻接张：打掉，不留
         (input.routeState.features.shortestSuitCount > 0 &&
           input.routeState.features.longestSuitCount - input.routeState.features.shortestSuitCount >= 4 &&
           input.routeState.features.shortestSuit &&
