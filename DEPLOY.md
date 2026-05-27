@@ -261,6 +261,23 @@ pm2 restart mahjong
 - ❌ 不要把 tar 包解压到 `/home/`（会导致目录结构混乱）
 - ❌ 不要手动 `node /home/ak/.output/...` 启动
 
+### ⚠️ 部署前必须 git stash（2026-05-28 确立）
+
+**问题**：反复调试后服务器可能残留未提交的本地改动（冲突文件、临时修改等），导致 build 产物不一致、Nuxt 缓存混乱，表现为两台设备（如小米14Pro/17Ultra）加载速度差异巨大。
+
+**标准部署流程**：
+```bash
+sshpass -p 'ak' ssh -p 2222 -o StrictHostKeyChecking=no ak@192.168.3.241
+
+cd /home/ak/myworkspace/ChangQingGe-Mahjong
+git stash          # 清除本地改动
+git pull           # 拉取最新代码
+npm run build      # 从干净源码构建
+pm2 restart mahjong
+```
+
+**铁律**：部署时必须 `git stash && git pull`，不要直接 `git pull`，避免本地残留污染 build。
+
 ---
 
 ## 数据库
