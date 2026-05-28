@@ -621,6 +621,7 @@ export class ActionHandler {
     if (effectiveVoteCount >= activeHumans.length) {
       console.log(`[LiangShan] All players agreed! Ending round with ×2 multiplier.`);
 
+
       // 所有未胡牌玩家标记为输
       for (const p of game.players) {
         if (p.status !== PlayerStatus.WON) {
@@ -637,11 +638,9 @@ export class ActionHandler {
       // 聚义成功标记（客户端据此显示弹窗而非结算）
       game.liangShanSuccess = true;
 
-      // 结束本局
-      endRound(game, GameEndReason.LAST_PLAYER);
 
-      // 清除广播缓存避免客户端重复显示（socket + HTTP 两次）
-      this.deps.clearBroadcasts(game.gameId);
+      // 结束本局（broadcastGameState 在 endRound 内部，会把 gameMessage 推送给客户端）
+      endRound(game, GameEndReason.LAST_PLAYER);
 
       // 聚义成功：庄家不变
       if (!game.nextDealerId) {
