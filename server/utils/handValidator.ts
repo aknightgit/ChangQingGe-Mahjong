@@ -1313,6 +1313,14 @@ export function canWin(
     ? (typeof wildTileIdOrChecker === 'string' ? wildTileIdOrChecker : null)
     : (typeof wildTileIdOrChecker === 'string' ? wildTileIdOrChecker : null);
 
+  // 【修复】花牌百搭自动推断：wildTileGroup 缺失但 customScoringMode 是花牌时自动补全
+  if (!wildTileGroup && wildTileId && wildTileId.startsWith('hua-')) {
+    const flowerValue = parseInt(wildTileId.split('-')[1], 10);
+    if (!Number.isNaN(flowerValue)) {
+      wildTileGroup = flowerValue <= 4 ? ['1', '2', '3', '4'] : ['5', '6', '7', '8'];
+    }
+  }
+
   // [TEMP DISABLED] 防御性检查临时禁用——阻止了正确的胡牌判定
   // const totalExposedTiles = exposed.reduce(
   //   (sum, m) => sum + (m.type === MeldType.KONG ? 3 : m.tiles.length), 0
@@ -1551,6 +1559,13 @@ export function isTing(
   wildTileIdOrChecker: string | null | WildTileChecker = () => false,
   wildTileGroup?: string[]
 ): boolean {
+  // 【修复】花牌百搭自动推断 wildTileGroup
+  if (!wildTileGroup && typeof wildTileIdOrChecker === 'string' && wildTileIdOrChecker.startsWith('hua-')) {
+    const flowerValue = parseInt(wildTileIdOrChecker.split('-')[1], 10);
+    if (!Number.isNaN(flowerValue)) {
+      wildTileGroup = flowerValue <= 4 ? ['1', '2', '3', '4'] : ['5', '6', '7', '8'];
+    }
+  }
   const isWildTile =
     typeof wildTileIdOrChecker === 'function'
       ? wildTileIdOrChecker
