@@ -3,8 +3,8 @@
  * 负责：出牌、摸牌、吃、碰、杠、胡、造反、聚义、想一想、过
  */
 import { GameState, Player, GamePhase, PlayerStatus, ActionType, PendingAction, MeldType, Tile, GameEndReason } from '../types/game';
-import { findTileById, removeTile, isFlower, tilesEqual } from './tiles';
-import { buildWildTileChecker, HandType } from './handValidator';
+import { findTileById, removeTile, isFlower, tilesEqual, isMissingOneSuit } from './tiles';
+import { buildWildTileChecker, HandType, isTing } from './handValidator';
 import { calculateGameResult, generateWinOptions, type WinOption } from './scoring';
 import * as tileHelper from './tileHelper';
 
@@ -42,6 +42,9 @@ export interface ActionHandlerDeps {
   enableBotMode(gameId: string, playerId: string): void;
   autoStartNextRound(gameId: string, delayMs: number): void;
   advanceApprovalConflict(game: GameState): Promise<void>;
+  beginCurrentPlayerTurn(game: GameState): Promise<void>;
+  checkLeadingBrother(game: GameState, tile: Tile, currentPlayer: Player): void;
+  updateRoundNumber(game: GameState): void;
   resolveRobKongIfNeeded(game: GameState): boolean;
   clearBroadcasts(gameId: string): void;
   store: any;
@@ -58,7 +61,7 @@ export class ActionHandler {
    * 处理出牌
    */
   async handleDiscard(game: GameState, player: Player, tileId: string): Promise<void> {
-    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store } = this.deps;
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, beginCurrentPlayerTurn, store } = this.deps;
 
     const tile = findTileById(player.hand.concealedTiles, tileId);
     if (!tile) {
@@ -71,17 +74,38 @@ export class ActionHandler {
       throw new Error('Cannot discard wild tile');
     }
 
+    const discarderIndex = game.currentPlayerIndex;
+    game.lastDiscardPlayerId = player.id;
+    game.lastDiscardPosition = player.position;
+
     // 从手牌移除
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile.id);
-    
+    (player as any).lastDrawnTile = null;
+
+    // 加入玩家个人弃牌区 + 全局弃牌堆
+    player.hand.discardedTiles.push(tile);
+    game.discardPile.push(tile);
+
     // 排序手牌（百搭放最前面）
     player.hand.concealedTiles = sortHandWithWildFront(player.hand.concealedTiles, game);
 
-    // 加入弃牌堆
-    game.discardPile.push(tile);
+    // 带头大哥检查
+    this.checkLeadingBrother(game, tile, player);
+    this.updateRoundNumber(game);
 
-    // 记录出牌者
-    game.lastDiscardPlayerId = player.id;
+    // 缺门检测
+    const missing = isMissingOneSuit(player.hand.concealedTiles);
+    if (missing.missing) {
+      player.missingSuit = missing.missingSuit;
+    }
+
+    // 更新听牌状态
+    player.isTing = isTing(
+      player.hand.concealedTiles,
+      player.hand.exposedMelds.length,
+      game.customScoringMode || null,
+      game.wildTileGroup
+    );
 
     // 清除摸牌标记
     game.drawnThisTurn = false;
@@ -97,11 +121,29 @@ export class ActionHandler {
     // 清除该玩家的超时自动接管计时器
     clearAutoTakeover(game.gameId, player.id);
 
+    // 百搭冷冻逻辑
+    if (isWildTile(game, tile)) {
+      game.freezePlayerId = player.id;
+      game.freezeComplete = false;
+      game.pendingActions = [];
+      broadcastQuickMessage(game.gameId, `🃏 ${player.name}打出了百搭，本轮不能吃碰捉冲！`, 'warn');
+      await persistGame(game);
+      broadcastGameState(game.gameId);
+      await beginCurrentPlayerTurn(game);
+      return;
+    }
+
     // 检查其他玩家是否可以碰/杠/胡
     this.checkPendingActions(game, tile);
 
     // 如果有pending actions，等待其他玩家响应
     if (game.pendingActions.length > 0) {
+      // 清除 bot 计时器
+      const existingBotTimer = timerManager.botTimers?.get(game.gameId);
+      if (existingBotTimer) {
+        clearTimeout(existingBotTimer);
+        timerManager.botTimers.delete(game.gameId);
+      }
       await persistGame(game);
       broadcastGameState(game.gameId);
       schedulePendingActionTimeout(game.gameId);
@@ -109,20 +151,12 @@ export class ActionHandler {
     }
 
     // 没有人响应，推进到下一个玩家
-    const nextPlayer = getNextActivePlayer(game, game.currentPlayerIndex);
-    if (!nextPlayer) {
-      // 没有下一个玩家，牌局结束
-      endRound(game, GameEndReason.LAST_PLAYER);
-      return;
+    const nextPlayer = getNextActivePlayer(game, discarderIndex);
+    if (nextPlayer) {
+      game.currentPlayerIndex = game.players.findIndex(p => p.id === nextPlayer.id);
     }
 
-    game.currentPlayerIndex = game.players.findIndex(p => p.id === nextPlayer.id);
-    replaceFlowers(game, nextPlayer);
-    handleDraw(game, nextPlayer);
-    game.drawnThisTurn = true;
-
-    await persistGame(game);
-    broadcastGameState(game.gameId);
+    await beginCurrentPlayerTurn(game);
   }
 
   /**

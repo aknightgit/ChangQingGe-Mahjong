@@ -122,6 +122,9 @@ class GameManager {
       enableBotMode: (id, pid) => this.enableBotMode(id, pid),
       autoStartNextRound: (id, delay) => this.autoStartNextRound(id, delay),
       advanceApprovalConflict: (g) => this.advanceApprovalConflict(g),
+      beginCurrentPlayerTurn: (g) => this.beginCurrentPlayerTurn(g),
+      checkLeadingBrother: (g, t, p) => this.checkLeadingBrother(g, t, p),
+      updateRoundNumber: (g) => this.updateRoundNumber(g),
       resolveRobKongIfNeeded: (g) => this.resolveRobKongIfNeeded(g),
       clearBroadcasts: (id) => this.broadcastService.clearBroadcasts(id),
       store: this.store
