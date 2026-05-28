@@ -28,6 +28,7 @@ import { isConcealedDiscardState, tileLabel } from './gameHelpers';
 import { RoomGameBridge } from '../services/roomGameBridge';
 import { GameStore } from '../services/gameStore';
 import { BotController, type BotControllerDeps } from './botController';
+import { ActionHandler, type ActionHandlerDeps } from './actionHandler';
 
 
 /**
@@ -49,11 +50,13 @@ class GameManager {
 
   private store: GameStore;
   private botController: BotController;
+  private actionHandler: ActionHandler;
 
   constructor() {
     this.store = new GameStore();
     this.store._inject(this);
     this.botController = new BotController(this.createBotControllerDeps());
+    this.actionHandler = new ActionHandler(this.createActionHandlerDeps());
   }
 
   private createBotControllerDeps(): BotControllerDeps {
@@ -82,6 +85,42 @@ class GameManager {
       isChowChoiceOnlyActions: (a) => this.isChowChoiceOnlyActions(a),
       shouldAdvanceTurnAfterPass: (g) => this.shouldAdvanceTurnAfterPass(g),
       timerManager: this.timerManager
+    };
+  }
+
+  private createActionHandlerDeps(): ActionHandlerDeps {
+    return {
+      games: this.games,
+      endRound: (g, r) => this.endRound(g, r),
+      broadcastGameState: (id) => this.broadcastGameState(id),
+      broadcastQuickMessage: (id, text, type, actionKind) => this.broadcastQuickMessage(id, text, type as any, actionKind),
+      persistGame: (g) => this.persistGame(g),
+      handleDraw: (g, p, opts) => this.handleDraw(g, p, opts),
+      replaceFlowers: (g, p) => this.replaceFlowers(g, p),
+      isPlayerBotControlled: (p) => this.isPlayerBotControlled(p),
+      timerManager: this.timerManager,
+      getNextActivePlayer: (g, idx) => this.getNextActivePlayer(g, idx),
+      getPreviousActivePlayer: (g, idx) => this.getPreviousActivePlayer(g, idx),
+      moveToNextPlayer: (g) => this.moveToNextPlayer(g),
+      isWildTile: (g, t) => this.isWildTile(g, t),
+      sortHandWithWildFront: (t, g) => this.sortHandWithWildFront(t, g),
+      getPlayerFlowerTiles: (p) => this.getPlayerFlowerTiles(p),
+      isPlayerMenQing: (p) => this.isPlayerMenQing(p),
+      getLastDiscardPlayerId: (g) => this.getLastDiscardPlayerId(g),
+      getLastDiscardPosition: (g) => this.getLastDiscardPosition(g),
+      isWinAfterKong: (g, pid) => this.isWinAfterKong(g, pid),
+      getCachedWinOptions: (g, p, c, f) => this.getCachedWinOptions(g, p, c, f),
+      getCachedWinCheck: (g, p) => this.getCachedWinCheck(g, p),
+      invalidateWinEvaluationCache: (id, pids) => this.invalidateWinEvaluationCache(id, pids),
+      schedulePendingActionTimeout: (id) => this.schedulePendingActionTimeout(id),
+      scheduleBotDiscard: (id, pid) => this.scheduleBotDiscard(id, pid),
+      clearAutoTakeover: (id, pid) => this.clearAutoTakeover(id, pid),
+      recordBailoutAction: (id, pid, src, meld) => this.recordBailoutAction(id, pid, src, meld),
+      checkAndBroadcastBailout: (g, pid, src) => this.checkAndBroadcastBailout(g, pid, src),
+      getPlayerCumulativeScore: (id, pid) => this.getPlayerCumulativeScore(id, pid),
+      checkQJThresholdAlerts: (g) => this.checkQJThresholdAlerts(g),
+      enableBotMode: (id, pid) => this.enableBotMode(id, pid),
+      store: this.store
     };
   }
 
@@ -2561,6 +2600,10 @@ class GameManager {
   }
 
   private async handleDiscard(game: GameState, player: Player, tileId: string): Promise<void> {
+    return this.actionHandler.handleDiscard(game, player, tileId);
+  }
+
+  private async _handleDiscard_original(game: GameState, player: Player, tileId: string): Promise<void> {
     const tile = findTileById(player.hand.concealedTiles, tileId);
     if (!tile) throw new Error('Tile not found');
     const discarderIndex = game.currentPlayerIndex;
@@ -2695,6 +2738,10 @@ class GameManager {
   }
 
   private handleDraw(game: GameState, player: Player, options?: { allowFullHand?: boolean }): void {
+    this.actionHandler.handleDraw(game, player, options);
+  }
+
+  private _handleDraw_original(game: GameState, player: Player, options?: { allowFullHand?: boolean }): void {
     if (game.wall.length === 0) {
       this.endRound(game, GameEndReason.WALL_EXHAUSTED);
       return;
@@ -3125,6 +3172,10 @@ class GameManager {
   }
 
   private async handleChow(game: GameState, player: Player, tileIds?: string[]): Promise<void> {
+    return this.actionHandler.handleChow(game, player, tileIds);
+  }
+
+  private async _handleChow_original(game: GameState, player: Player, tileIds?: string[]): Promise<void> {
     let pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
     // Bug修复: pending被timeout清空后,从discardPile重建
     if (!pendingAction || !pendingAction.tile) {
@@ -3495,6 +3546,10 @@ class GameManager {
   }
 
   private async handlePeng(game: GameState, player: Player): Promise<void> {
+    return this.actionHandler.handlePeng(game, player);
+  }
+
+  private async _handlePeng_original(game: GameState, player: Player): Promise<void> {
     const lastDiscard = game.discardPile[game.discardPile.length - 1];
     if (!lastDiscard) return;
 
@@ -3510,6 +3565,10 @@ class GameManager {
   }
 
   private async handleKong(game: GameState, player: Player, tileId: string): Promise<void> {
+    return this.actionHandler.handleKong(game, player, tileId);
+  }
+
+  private async _handleKong_original(game: GameState, player: Player, tileId: string): Promise<void> {
     const lastDiscard = game.discardPile[game.discardPile.length - 1];
     if (!lastDiscard) return;
 
@@ -3525,6 +3584,10 @@ class GameManager {
   }
 
   private handleConcealedKong(game: GameState, player: Player, tileIds: string[]): void {
+    this.actionHandler.handleConcealedKong(game, player, tileIds);
+  }
+
+  private _handleConcealedKong_original(game: GameState, player: Player, tileIds: string[]): void {
     if (tileIds.length !== 4) return;
 
     const tiles = tileIds.map(id => findTileById(player.hand.concealedTiles, id)).filter(t => t) as Tile[];
@@ -3557,6 +3620,10 @@ class GameManager {
   }
 
   private handleExtendedKong(game: GameState, player: Player, tileId: string): void {
+    this.actionHandler.handleExtendedKong(game, player, tileId);
+  }
+
+  private _handleExtendedKong_original(game: GameState, player: Player, tileId: string): void {
     const tile = findTileById(player.hand.concealedTiles, tileId);
     if (!tile) return;
 
@@ -3679,6 +3746,10 @@ class GameManager {
   }
 
   private async handleHu(game: GameState, player: Player, selectedWinOptionLabel?: string): Promise<void> {
+    return this.actionHandler.handleHu(game, player, selectedWinOptionLabel);
+  }
+
+  private async _handleHu_original(game: GameState, player: Player, selectedWinOptionLabel?: string): Promise<void> {
     // 大吊检测：必须在 winningTile 加到手牌之前检查
     const concealedNonFlowerBefore = player.hand.concealedTiles.filter(t => !isFlower(t));
     const isDaDiao = concealedNonFlowerBefore.length === 1;
@@ -3910,6 +3981,10 @@ class GameManager {
    * 效果: 本局结束,下局倍数×2,造反者成为庄家
    */
   private async handleRebel(game: GameState, player: Player): Promise<void> {
+    return this.actionHandler.handleRebel(game, player);
+  }
+
+  private async _handleRebel_original(game: GameState, player: Player): Promise<void> {
     // 验证是否满足五毒散
     const wildParts = game.customScoringMode?.split('-');
     const wildSuit = wildParts ? wildParts[0] as TileSuit : undefined;
@@ -3978,6 +4053,10 @@ class GameManager {
    * - 全部活跃玩家都同意 → 本局结束,下把翻倍
    */
   private handleLiangShan(game: GameState, player: Player): void {
+    this.actionHandler.handleLiangShan(game, player);
+  }
+
+  private _handleLiangShan_original(game: GameState, player: Player): void {
     if (game.phase !== GamePhase.PLAYING) return;
     if (player.status !== PlayerStatus.PLAYING) return;
 
@@ -4078,7 +4157,12 @@ class GameManager {
    * - 冻结期间其他家不能操作
    */
   private handleThink(game: GameState, player: Player): void {
+    this.actionHandler.handleThink(game, player);
+  }
+
+  private _handleThink_original(game: GameState, player: Player): void {
     if (game.phase !== GamePhase.PLAYING) return;
+
 
     const maxChances = game.thinkChances ?? 3;
     if (!game.thinkUsage) game.thinkUsage = {};
@@ -4422,6 +4506,10 @@ class GameManager {
   }
 
   private handleCheatHu(game: GameState, player: Player): void {
+    this.actionHandler.handleCheatHu(game, player);
+  }
+
+  private _handleCheatHu_original(game: GameState, player: Player): void {
     const currentPlayer = game.players[game.currentPlayerIndex];
     if (!currentPlayer || currentPlayer.id !== player.id) {
       throw new Error('Cheat Hu is only available on your turn');
@@ -4443,6 +4531,9 @@ class GameManager {
   }
 
   private async handlePass(game: GameState, player: Player): Promise<void> {
+    return this.actionHandler.handlePass(game, player);
+  }
+  private async _handlePass_original(game: GameState, player: Player): Promise<void> {
     // Remove player's pending action
     game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
 

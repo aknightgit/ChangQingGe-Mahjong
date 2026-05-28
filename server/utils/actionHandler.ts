@@ -1,0 +1,919 @@
+/**
+ * actionHandler.ts — 玩家动作处理（从 gameManager 拆分）
+ * 负责：出牌、摸牌、吃、碰、杠、胡、造反、聚义、想一想、过
+ */
+import { GameState, Player, GamePhase, PlayerStatus, ActionType, PendingAction, MeldType, Tile, GameEndReason } from '../types/game';
+import { findTileById, removeTile, isFlower, tilesEqual } from './tiles';
+import { buildWildTileChecker, HandType } from './handValidator';
+import { calculateGameResult, generateWinOptions, type WinOption } from './scoring';
+import * as tileHelper from './tileHelper';
+
+/** ActionHandler 依赖的 GameManager 接口 */
+export interface ActionHandlerDeps {
+  games: Map<string, GameState>;
+  endRound(game: GameState, reason: GameEndReason): void;
+  broadcastGameState(gameId: string): void;
+  broadcastQuickMessage(gameId: string, text: string, type?: string, actionKind?: string): void;
+  persistGame(game: GameState): Promise<void>;
+  handleDraw(game: GameState, player: Player, options?: { allowFullHand?: boolean }): void;
+  replaceFlowers(game: GameState, player: Player): void;
+  isPlayerBotControlled(player: Player): boolean;
+  timerManager: any;
+  getNextActivePlayer(game: GameState, afterIndex: number): Player | undefined;
+  getPreviousActivePlayer(game: GameState, beforeIndex: number): Player | undefined;
+  moveToNextPlayer(game: GameState): Promise<void>;
+  isWildTile(game: GameState, tile: Tile): boolean;
+  sortHandWithWildFront(tiles: Tile[], game: GameState): Tile[];
+  getPlayerFlowerTiles(player: Player): Tile[];
+  isPlayerMenQing(player: Player): boolean;
+  getLastDiscardPlayerId(game: GameState): string | undefined;
+  getLastDiscardPosition(game: GameState): number | undefined;
+  isWinAfterKong(game: GameState, playerId: string): boolean;
+  getCachedWinOptions(game: GameState, player: Player, context: 'self_draw' | 'discard', flags?: any): WinOption[];
+  getCachedWinCheck(game: GameState, player: Player): { canWin: boolean; types: HandType[] };
+  invalidateWinEvaluationCache(gameId: string, playerIds?: string[]): void;
+  schedulePendingActionTimeout(gameId: string): void;
+  scheduleBotDiscard(gameId: string, playerId: string): void;
+  clearAutoTakeover(gameId: string, playerId: string): void;
+  recordBailoutAction(gameId: string, playerId: string, sourcePlayerId: string | undefined, meldType: MeldType): number;
+  checkAndBroadcastBailout(game: GameState, playerId: string, sourcePlayerId: string): void;
+  getPlayerCumulativeScore(gameId: string, playerId: string): number;
+  checkQJThresholdAlerts(game: GameState): void;
+  enableBotMode(gameId: string, playerId: string): void;
+  store: any;
+}
+
+export class ActionHandler {
+  private deps: ActionHandlerDeps;
+
+  constructor(deps: ActionHandlerDeps) {
+    this.deps = deps;
+  }
+
+  /**
+   * 处理出牌
+   */
+  async handleDiscard(game: GameState, player: Player, tileId: string): Promise<void> {
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store } = this.deps;
+
+    const tile = findTileById(player.hand.concealedTiles, tileId);
+    if (!tile) {
+      throw new Error('Tile not found in hand');
+    }
+
+    // 检查是否是百搭
+    const wildChecker = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
+    if (wildChecker(tile)) {
+      throw new Error('Cannot discard wild tile');
+    }
+
+    // 从手牌移除
+    player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile);
+    
+    // 排序手牌（百搭放最前面）
+    player.hand.concealedTiles = sortHandWithWildFront(player.hand.concealedTiles, game);
+
+    // 加入弃牌堆
+    game.discardPile.push(tile);
+
+    // 记录出牌者
+    game.lastDiscardPlayerId = player.id;
+
+    // 清除摸牌标记
+    game.drawnThisTurn = false;
+
+    // 记录动作历史
+    game.actionHistory.push({
+      type: ActionType.DISCARD,
+      playerId: player.id,
+      tileId: tile.id,
+      timestamp: Date.now()
+    });
+
+    // 清除该玩家的超时自动接管计时器
+    clearAutoTakeover(game.gameId, player.id);
+
+    // 检查其他玩家是否可以碰/杠/胡
+    this.checkPendingActions(game, tile);
+
+    // 如果有pending actions，等待其他玩家响应
+    if (game.pendingActions.length > 0) {
+      await persistGame(game);
+      broadcastGameState(game.gameId);
+      schedulePendingActionTimeout(game.gameId);
+      return;
+    }
+
+    // 没有人响应，推进到下一个玩家
+    const nextPlayer = getNextActivePlayer(game, game.currentPlayerIndex);
+    if (!nextPlayer) {
+      // 没有下一个玩家，牌局结束
+      endRound(game, GameEndReason.LAST_PLAYER);
+      return;
+    }
+
+    game.currentPlayerIndex = game.players.findIndex(p => p.id === nextPlayer.id);
+    replaceFlowers(game, nextPlayer);
+    handleDraw(game, nextPlayer);
+    game.drawnThisTurn = true;
+
+    await persistGame(game);
+    broadcastGameState(game.gameId);
+  }
+
+  /**
+   * 处理摸牌
+   */
+  handleDraw(game: GameState, player: Player, options?: { allowFullHand?: boolean }): void {
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store } = this.deps;
+
+    if (!options?.allowFullHand && player.hand.concealedTiles.length >= 14) {
+      return;
+    }
+
+    if (game.wall.length === 0) {
+      // 牌墙摸完，流局
+      endRound(game, GameEndReason.WALL_EXHAUSTED);
+      return;
+    }
+
+    const tile = game.wall.pop()!;
+    player.hand.concealedTiles.push(tile);
+    player.hand.concealedTiles = sortHandWithWildFront(player.hand.concealedTiles, game);
+
+    // 记录动作历史
+    game.actionHistory.push({
+      type: ActionType.DRAW,
+      playerId: player.id,
+      tileId: tile.id,
+      timestamp: Date.now()
+    });
+
+    // 检查是否可以自摸胡
+    const winCheck = this.deps.getCachedWinCheck(game, player);
+    if (winCheck.canWin) {
+      // 可以自摸胡，添加pending action
+      const winOptions = this.deps.getCachedWinOptions(game, player, 'self_draw');
+      if (winOptions.length > 0) {
+        game.pendingActions.push({
+          playerId: player.id,
+          availableActions: [ActionType.HU, ActionType.PASS],
+          tile: tile,
+          expiresAt: Date.now() + (game.hesitationWindow || 5000)
+        });
+        this.deps.schedulePendingActionTimeout(game.gameId);
+      }
+    }
+  }
+
+  /**
+   * 处理吃牌
+   */
+  async handleChow(game: GameState, player: Player, tileIds?: string[]): Promise<void> {
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store } = this.deps;
+
+    // 找到最后一个弃牌
+    const lastDiscard = game.discardPile[game.discardPile.length - 1];
+    if (!lastDiscard) {
+      throw new Error('No tile to chow');
+    }
+
+    // 找到吃的组合
+    const sequences = this.findChowSequences(player.hand.concealedTiles, lastDiscard, game);
+    if (sequences.length === 0) {
+      throw new Error('No valid chow sequence');
+    }
+
+    // 选择吃的组合
+    let selectedSequence: Tile[];
+    if (tileIds && tileIds.length > 0) {
+      // 使用指定的牌
+      const matchingSeq = sequences.find(seq => 
+        tileIds.length === seq.length && tileIds.every(id => seq.some(t => t.id === id))
+      );
+      if (!matchingSeq) {
+        throw new Error('Specified tile ids do not match any chow sequence');
+      }
+      selectedSequence = matchingSeq;
+    } else {
+      // 选择最佳组合
+      selectedSequence = this.selectBestChowSequence(sequences, lastDiscard);
+    }
+
+    // 从手牌移除吃的牌
+    for (const tile of selectedSequence) {
+      player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile);
+    }
+
+    // 从弃牌堆移除
+    game.discardPile.pop();
+
+    // 添加到副露
+    player.hand.exposedMelds.push({
+      type: MeldType.SEQUENCE,
+      tiles: [lastDiscard, ...selectedSequence].sort((a, b) => a.value - b.value),
+      isConcealed: false
+    });
+
+    // 记录互包
+    const lastDiscardPlayerId = getLastDiscardPlayerId(game);
+    if (lastDiscardPlayerId) {
+      this.deps.recordBailoutAction(game.gameId, player.id, lastDiscardPlayerId, MeldType.SEQUENCE);
+      this.deps.checkAndBroadcastBailout(game, player.id, lastDiscardPlayerId);
+    }
+
+    // 记录动作历史
+    game.actionHistory.push({
+      type: ActionType.CHOW,
+      playerId: player.id,
+      tileIds: [lastDiscard.id, ...selectedSequence.map(t => t.id)],
+      timestamp: Date.now()
+    });
+
+    // 清除pending actions
+    game.pendingActions = [];
+
+    // 吃牌后需要出牌
+    game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+    game.drawnThisTurn = true;
+
+    await persistGame(game);
+    broadcastGameState(game.gameId);
+  }
+
+  /**
+   * 处理碰牌
+   */
+  async handlePeng(game: GameState, player: Player): Promise<void> {
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store } = this.deps;
+
+    // 找到最后一个弃牌
+    const lastDiscard = game.discardPile[game.discardPile.length - 1];
+    if (!lastDiscard) {
+      throw new Error('No tile to peng');
+    }
+
+    // 找到手牌中相同的牌
+    const matchingTiles = player.hand.concealedTiles.filter(t => 
+      t.suit === lastDiscard.suit && t.value === lastDiscard.value
+    );
+
+    if (matchingTiles.length < 2) {
+      throw new Error('Not enough tiles to peng');
+    }
+
+    // 从手牌移除两张
+    const tilesToUse = matchingTiles.slice(0, 2);
+    for (const tile of tilesToUse) {
+      player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile);
+    }
+
+    // 从弃牌堆移除
+    game.discardPile.pop();
+
+    // 添加到副露
+    player.hand.exposedMelds.push({
+      type: MeldType.TRIPLET,
+      tiles: [lastDiscard, ...tilesToUse],
+      isConcealed: false
+    });
+
+    // 记录互包
+    const lastDiscardPlayerId = getLastDiscardPlayerId(game);
+    if (lastDiscardPlayerId) {
+      this.deps.recordBailoutAction(game.gameId, player.id, lastDiscardPlayerId, MeldType.TRIPLET);
+      this.deps.checkAndBroadcastBailout(game, player.id, lastDiscardPlayerId);
+    }
+
+    // 记录动作历史
+    game.actionHistory.push({
+      type: ActionType.PENG,
+      playerId: player.id,
+      tileId: lastDiscard.id,
+      timestamp: Date.now()
+    });
+
+    // 清除pending actions
+    game.pendingActions = [];
+
+    // 碰牌后需要出牌
+    game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+    game.drawnThisTurn = true;
+
+    await persistGame(game);
+    broadcastGameState(game.gameId);
+  }
+
+  /**
+   * 处理杠牌
+   */
+  async handleKong(game: GameState, player: Player, tileId: string): Promise<void> {
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store } = this.deps;
+
+    const tile = findTileById(player.hand.concealedTiles, tileId);
+    if (!tile) {
+      throw new Error('Tile not found in hand');
+    }
+
+    // 检查是否可以杠
+    const matchingTiles = player.hand.concealedTiles.filter(t => 
+      t.suit === tile.suit && t.value === tile.value
+    );
+
+    if (matchingTiles.length < 3) {
+      throw new Error('Not enough tiles to kong');
+    }
+
+    // 从手牌移除三张
+    const tilesToUse = matchingTiles.slice(0, 3);
+    for (const t of tilesToUse) {
+      player.hand.concealedTiles = removeTile(player.hand.concealedTiles, t);
+    }
+
+    // 添加到副露
+    player.hand.exposedMelds.push({
+      type: MeldType.TRIPLET,
+      tiles: [tile, ...tilesToUse],
+      isConcealed: false
+    });
+
+    // 记录互包
+    const lastDiscardPlayerId = getLastDiscardPlayerId(game);
+    if (lastDiscardPlayerId) {
+      this.deps.recordBailoutAction(game.gameId, player.id, lastDiscardPlayerId, MeldType.TRIPLET);
+      this.deps.checkAndBroadcastBailout(game, player.id, lastDiscardPlayerId);
+    }
+
+    // 记录动作历史
+    game.actionHistory.push({
+      type: ActionType.KONG,
+      playerId: player.id,
+      tileId: tile.id,
+      timestamp: Date.now()
+    });
+
+    // 清除pending actions
+    game.pendingActions = [];
+
+    // 杠后摸牌
+    replaceFlowers(game, player);
+    handleDraw(game, player);
+    game.drawnThisTurn = true;
+
+    await persistGame(game);
+    broadcastGameState(game.gameId);
+  }
+
+  /**
+   * 处理暗杠
+   */
+  handleConcealedKong(game: GameState, player: Player, tileIds: string[]): void {
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store } = this.deps;
+
+    // 找到手牌中相同的牌
+    const tiles = tileIds.map(id => findTileById(player.hand.concealedTiles, id)).filter(Boolean) as Tile[];
+    if (tiles.length !== 4) {
+      throw new Error('Need exactly 4 tiles for concealed kong');
+    }
+
+    // 检查是否是相同的牌
+    const firstTile = tiles[0];
+    if (!tiles.every(t => t.suit === firstTile.suit && t.value === firstTile.value)) {
+      throw new Error('All tiles must be the same for concealed kong');
+    }
+
+    // 从手牌移除
+    for (const tile of tiles) {
+      player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile);
+    }
+
+    // 添加到副露（暗杠）
+    player.hand.exposedMelds.push({
+      type: MeldType.TRIPLET,
+      tiles: tiles,
+      isConcealed: true
+    });
+
+    // 记录动作历史
+    game.actionHistory.push({
+      type: ActionType.CONCEALED_KONG,
+      playerId: player.id,
+      tileIds: tileIds,
+      timestamp: Date.now()
+    });
+
+    // 暗杠后摸牌
+    replaceFlowers(game, player);
+    handleDraw(game, player);
+    game.drawnThisTurn = true;
+
+    // 持久化并广播
+    persistGame(game).then(() => {
+      broadcastGameState(game.gameId);
+    });
+  }
+
+  /**
+   * 处理加杠
+   */
+  handleExtendedKong(game: GameState, player: Player, tileId: string): void {
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store } = this.deps;
+
+    const tile = findTileById(player.hand.concealedTiles, tileId);
+    if (!tile) {
+      throw new Error('Tile not found in hand');
+    }
+
+    // 找到已有的碰
+    const existingMeld = player.hand.exposedMelds.find(m => 
+      m.type === MeldType.TRIPLET && 
+      !m.isConcealed && 
+      m.tiles.length === 3 && 
+      m.tiles[0].suit === tile.suit && 
+      m.tiles[0].value === tile.value
+    );
+
+    if (!existingMeld) {
+      throw new Error('No existing meld to extend');
+    }
+
+    // 从手牌移除
+    player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile);
+
+    // 更新副露
+    existingMeld.tiles.push(tile);
+
+    // 记录动作历史
+    game.actionHistory.push({
+      type: ActionType.EXTENDED_KONG,
+      playerId: player.id,
+      tileId: tile.id,
+      timestamp: Date.now()
+    });
+
+    // 加杠后摸牌
+    replaceFlowers(game, player);
+    handleDraw(game, player);
+    game.drawnThisTurn = true;
+
+    // 持久化并广播
+    persistGame(game).then(() => {
+      broadcastGameState(game.gameId);
+    });
+  }
+
+  /**
+   * 处理胡牌
+   */
+  async handleHu(game: GameState, player: Player, selectedWinOptionLabel?: string): Promise<void> {
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode } = this.deps;
+
+    // 检查是否可以胡
+    const winCheck = getCachedWinCheck(game, player);
+    if (!winCheck.canWin) {
+      throw new Error('Cannot win');
+    }
+
+    // 获取胡牌选项
+    const winOptions = getCachedWinOptions(game, player, 'self_draw');
+    if (winOptions.length === 0) {
+      throw new Error('No win options available');
+    }
+
+    // 选择胡牌选项
+    let selectedOption = winOptions[0];
+    if (selectedWinOptionLabel) {
+      const found = winOptions.find(opt => opt.label === selectedWinOptionLabel);
+      if (found) {
+        selectedOption = found;
+      }
+    }
+
+    // 设置胡牌状态
+    player.status = PlayerStatus.WON;
+    player.winOrder = game.winnersCount + 1;
+    player.winRound = game.roundNumber;
+    player.winTimestamp = Date.now();
+    game.winnersCount++;
+
+    // 记录动作历史
+    game.actionHistory.push({
+      type: ActionType.HU,
+      playerId: player.id,
+      timestamp: Date.now()
+    });
+
+    // 清除pending actions
+    game.pendingActions = [];
+
+    // 检查是否需要结束牌局
+    const remainingActive = game.players.filter(p => p.status === PlayerStatus.PLAYING).length;
+    if (remainingActive <= 1 || game.winnersCount >= 3) {
+      // 结束牌局
+      endRound(game, GameEndReason.LAST_PLAYER);
+      return;
+    }
+
+    // 继续牌局
+    await persistGame(game);
+    broadcastGameState(game.gameId);
+  }
+
+  /**
+   * 处理造反
+   */
+  async handleRebel(game: GameState, player: Player): Promise<void> {
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode } = this.deps;
+
+    // 造反：所有玩家重新发牌
+    broadcastQuickMessage(game.gameId, `⚔️ ${player.name} 发起了造反！`, 'special');
+
+    // 翻倍
+    game.inheritedGlobalMultiplier = Math.min((game.inheritedGlobalMultiplier || 1) * 2, 8);
+
+    // 重新发牌
+    const deck = createDeck();
+    game.wall = deck;
+
+    // 重新发牌给所有玩家
+    for (const p of game.players) {
+      p.hand.concealedTiles = [];
+      p.hand.exposedMelds = [];
+      p.status = PlayerStatus.PLAYING;
+    }
+
+    // 发牌
+    for (let i = 0; i < 13; i++) {
+      for (const p of game.players) {
+        if (game.wall.length > 0) {
+          const tile = game.wall.pop()!;
+          p.hand.concealedTiles.push(tile);
+        }
+      }
+    }
+
+    // 庄家多摸一张
+    const dealer = game.players[game.dealerIndex];
+    if (game.wall.length > 0) {
+      const tile = game.wall.pop()!;
+      dealer.hand.concealedTiles.push(tile);
+    }
+
+    await persistGame(game);
+    broadcastGameState(game.gameId);
+  }
+
+  /**
+   * 处理聚义
+   */
+  handleLiangShan(game: GameState, player: Player): void {
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode } = this.deps;
+
+    if (game.phase !== GamePhase.PLAYING) return;
+    if (player.status !== PlayerStatus.PLAYING) return;
+
+    // 全局倍数已达8倍上限时,禁止梁山聚义
+    if ((game.inheritedMultiplier ?? 1) >= 8) return;
+
+    // 初始化投票列表
+    if (!game.liangShanVotes) {
+      game.liangShanVotes = [];
+    }
+
+    // 已投过票则忽略
+    if (game.liangShanVotes.includes(player.id)) return;
+
+    // 记录投票
+    game.liangShanVotes.push(player.id);
+    broadcastQuickMessage(game.gameId, `🔥 ${player.name}发起了梁山聚义！`, 'special');
+
+    // 活跃玩家总数（只统计真人）
+    const activePlayers = game.players.filter(p => p.status === PlayerStatus.PLAYING);
+    const activeHumans = activePlayers.filter(p => !isPlayerBotControlled(p));
+
+    // 计算有效投票数:手动投票 + 超过被QJ线的玩家自动同意
+    const threshold = game.liangShanThreshold ?? 4000;
+    let effectiveVoteCount = game.liangShanVotes.length;
+
+    // 广播投票进度
+    broadcastGameState(game.gameId);
+
+    for (const ap of activeHumans) {
+      if (game.liangShanVotes.includes(ap.id)) continue;
+      const cumulativeScore = getPlayerCumulativeScore(game.gameId, ap.id);
+      if (cumulativeScore > threshold) {
+        effectiveVoteCount++;
+        if (!game.liangShanVotes.includes(ap.id)) {
+          game.liangShanVotes.push(ap.id);
+          broadcastQuickMessage(game.gameId, `🔥 ${ap.name}响应了${player.name}的梁山聚义！`, 'special');
+        }
+        console.log(`[LiangShan] ${ap.name} 累积赢分${cumulativeScore}超过QJ线${threshold},自动同意`);
+      }
+    }
+
+    console.log(`[LiangShan] ${player.name} voted (${effectiveVoteCount}/${activeHumans.length}, threshold: ${threshold})`);
+
+    // 全部真人投票 → 结束本局,下把翻倍
+    if (effectiveVoteCount >= activeHumans.length) {
+      console.log(`[LiangShan] All players agreed! Ending round with ×2 multiplier.`);
+
+      // 所有未胡牌玩家标记为输
+      for (const p of game.players) {
+        if (p.status !== PlayerStatus.WON) {
+          p.status = PlayerStatus.LOST;
+        }
+      }
+
+      // 下局全局倍数 ×2
+      const doubled = Math.min((game.inheritMultiplier ?? 1) * 2, 8);
+      const roundMul = game.roundMultiplier ?? 1;
+      const effective = doubled * roundMul;
+      game.inheritedGlobalMultiplier = Math.min(effective > 8 ? Math.floor(effective / 8) : doubled, 8);
+
+      // 结束本局
+      endRound(game, GameEndReason.LAST_PLAYER);
+
+      // 聚义成功：庄家不变
+      if (!game.nextDealerId) {
+        const currentDealer = game.players[game.dealerIndex];
+        if (currentDealer) {
+          game.nextDealerId = currentDealer.id;
+        }
+      }
+
+      // 自动进入下一局
+      this.deps.autoStartNextRound(game.gameId, 2000);
+    } else {
+      broadcastGameState(game.gameId);
+    }
+  }
+
+  /**
+   * 处理想一想
+   */
+  handleThink(game: GameState, player: Player): void {
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode } = this.deps;
+
+    if (game.phase !== GamePhase.PLAYING) return;
+
+    const maxChances = game.thinkChances ?? 3;
+    if (!game.thinkUsage) game.thinkUsage = {};
+    const used = game.thinkUsage[player.id] ?? 0;
+    let remaining = Math.max(0, maxChances - used);
+
+    // 如果玩家可胡（有HU的pending），视为HuPanel弹出锁定，不消耗次数
+    const hasHuClaim = game.pendingActions.some(pa =>
+      pa.playerId === player.id && pa.availableActions.includes(ActionType.HU)
+    );
+
+    if (!hasHuClaim) {
+      if (used >= maxChances) return;
+      game.thinkUsage[player.id] = used + 1;
+      remaining = maxChances - used - 1;
+      console.log(`[Think] ${player.name} used think chance (${used + 1}/${maxChances})`);
+    } else {
+      console.log(`[Think] ${player.name} opened HuPanel (auto-lock, no chance consumed)`);
+    }
+
+    // 冻结8秒
+    game.thinkFreezeUntil = Date.now() + 8000;
+    game.thinkFreezePlayerId = player.id;
+    const freezeTimer = timerManager.freezeTimers.get(game.gameId);
+    if (freezeTimer) {
+      clearTimeout(freezeTimer);
+    }
+    timerManager.freezeTimers.set(game.gameId, setTimeout(() => {
+      game.thinkFreezeUntil = undefined;
+      game.thinkFreezePlayerId = undefined;
+      timerManager.freezeTimers.delete(game.gameId);
+      broadcastGameState(game.gameId);
+    }, 8000));
+
+    broadcastQuickMessage(game.gameId, `⏳ ${player.name} 想一想！(剩余${remaining}次)`, 'special');
+    broadcastGameState(game.gameId);
+  }
+
+  /**
+   * 处理过
+   */
+  async handlePass(game: GameState, player: Player): Promise<void> {
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode, advanceApprovalConflict, resolveRobKongIfNeeded, moveToNextPlayer } = this.deps;
+
+    // Remove player's pending action
+    game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
+
+    if (game.pengChowConflict?.currentStagePlayerIds?.includes(player.id)) {
+      game.pengChowConflict.currentStagePlayerIds = game.pengChowConflict.currentStagePlayerIds.filter(id => id !== player.id);
+      await advanceApprovalConflict(game);
+      if (game.pengChowConflict) {
+        return;
+      }
+    }
+
+    // 抢杠场景:所有候选都过了,补杠继续
+    if (game.pendingActions.length === 0 && game.pendingKongClaim && game.multiHuStarterIndex === undefined) {
+      resolveRobKongIfNeeded(game);
+      return;
+    }
+
+    // 一炮多响场景:所有候选响应结束,从弃牌者右手继续
+    if (game.pendingActions.length === 0 && game.multiHuStarterIndex !== undefined) {
+      const starter = game.multiHuStarterIndex;
+      const discarderIdx = (game as any).multiHuDiscarderIndex;
+      game.multiHuStarterIndex = undefined;
+      delete (game as any).multiHuDiscarderIndex;
+      if (game.pendingKongClaim?.cancelledByHu) {
+        game.pendingKongClaim = undefined;
+      }
+      const next = discarderIdx !== undefined
+        ? getNextActivePlayer(game, discarderIdx)
+        : getNextActivePlayer(game, starter);
+      if (next) {
+        game.currentPlayerIndex = game.players.findIndex(p => p.id === next.id);
+        replaceFlowers(game, next);
+        handleDraw(game, next);
+        game.drawnThisTurn = true;
+      } else {
+        endRound(game, GameEndReason.LAST_PLAYER);
+      }
+      return;
+    }
+
+    // 普通场景 - 由调用方统一处理
+  }
+
+  /**
+   * 处理作弊胡牌
+   */
+  handleCheatHu(game: GameState, player: Player): void {
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode } = this.deps;
+
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (!currentPlayer || currentPlayer.id !== player.id) {
+      throw new Error('Cheat Hu is only available on your turn');
+    }
+
+    if (player.status !== PlayerStatus.PLAYING) {
+      return;
+    }
+
+    game.pendingActions = [];
+    player.status = PlayerStatus.WON;
+    player.winOrder = game.winnersCount + 1;
+    player.winRound = game.roundNumber;
+    player.winTimestamp = Date.now();
+    player.wonFan = 1;
+    game.winnersCount++;
+    game.customScoringMode = 'cheat';
+    endRound(game, GameEndReason.LAST_PLAYER);
+  }
+
+  /**
+   * 检查其他玩家是否可以碰/杠/胡
+   */
+  private checkPendingActions(game: GameState, discardedTile: Tile): void {
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode } = this.deps;
+
+    game.pendingActions = [];
+    delete (game as any).hasTriggeredAction;
+    const discarderIndex = game.currentPlayerIndex;
+
+    const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
+
+    for (const player of game.players) {
+      if (player.status !== PlayerStatus.PLAYING) continue;
+      if (player.id && player.id === game.players[game.currentPlayerIndex].id) continue;
+
+      const availableActions: ActionType[] = [];
+
+      // 检查是否可以碰
+      const matchingTiles = player.hand.concealedTiles.filter(t => 
+        t.suit === discardedTile.suit && t.value === discardedTile.value
+      );
+      if (matchingTiles.length >= 2) {
+        availableActions.push(ActionType.PENG);
+      }
+
+      // 检查是否可以杠
+      if (matchingTiles.length >= 3) {
+        availableActions.push(ActionType.KONG);
+      }
+
+      // 检查是否可以吃（只有下家可以吃）
+      const nextPlayerIndex = (discarderIndex + 1) % game.players.length;
+      if (game.players[nextPlayerIndex]?.id === player.id) {
+        const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile, game);
+        if (sequences.length > 0) {
+          availableActions.push(ActionType.CHOW);
+        }
+      }
+
+      // 检查是否可以胡
+      const winCheck = getCachedWinCheck(game, player);
+      if (winCheck.canWin) {
+        availableActions.push(ActionType.HU);
+      }
+
+      if (availableActions.length > 0) {
+        availableActions.push(ActionType.PASS);
+        game.pendingActions.push({
+          playerId: player.id,
+          availableActions: availableActions,
+          tile: discardedTile,
+          expiresAt: Date.now() + (game.hesitationWindow || 5000)
+        });
+      }
+    }
+  }
+
+  /**
+   * 找到吃牌的组合
+   */
+  private findChowSequences(hand: Tile[], discardedTile: Tile, game?: GameState): Tile[][] {
+    const sequences: Tile[][] = [];
+    const wildChecker = game ? buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup) : () => false;
+    
+    // 按花色和数值排序
+    const sortedHand = [...hand].sort((a, b) => {
+      if (a.suit !== b.suit) return a.suit.localeCompare(b.suit);
+      return a.value - b.value;
+    });
+
+    // 找到所有可能的吃牌组合
+    for (let i = 0; i < sortedHand.length; i++) {
+      for (let j = i + 1; j < sortedHand.length; j++) {
+        const tile1 = sortedHand[i];
+        const tile2 = sortedHand[j];
+        
+        // 检查是否是同一花色
+        if (tile1.suit !== discardedTile.suit || tile2.suit !== discardedTile.suit) continue;
+        
+        // 检查是否是连续的三张牌
+        const values = [tile1.value, tile2.value, discardedTile.value].sort((a, b) => a - b);
+        if (values[0] + 1 === values[1] && values[1] + 1 === values[2]) {
+          sequences.push([tile1, tile2]);
+        }
+      }
+    }
+
+    return sequences;
+  }
+
+  /**
+   * 选择最佳吃牌组合
+   */
+  private selectBestChowSequence(sequences: Tile[][], discardedTile: Tile): Tile[] {
+    if (sequences.length === 0) {
+      throw new Error('No sequences available');
+    }
+
+    // 选择最简单的组合（数值最小的）
+    return sequences.reduce((best, current) => {
+      const bestSum = best.reduce((sum, t) => sum + t.value, 0);
+      const currentSum = current.reduce((sum, t) => sum + t.value, 0);
+      return currentSum < bestSum ? current : best;
+    });
+  }
+
+  /**
+   * 直接执行吃牌
+   */
+  executeChowDirectly(game: GameState, player: Player, tileIds?: string[]): void {
+    this.handleChow(game, player, tileIds);
+  }
+
+  /**
+   * 直接执行碰牌
+   */
+  executePengDirectly(game: GameState, player: Player): void {
+    this.handlePeng(game, player);
+  }
+
+  /**
+   * 直接执行胡牌
+   */
+  async executeWinDirectly(game: GameState, player: Player, winningTile: Tile): Promise<void> {
+    this.handleHu(game, player);
+  }
+
+  /**
+   * 直接执行杠牌
+   */
+  executeKongDirectly(game: GameState, player: Player, tileId: string): void {
+    this.handleKong(game, player, tileId);
+  }
+
+  /**
+   * 完成加杠
+   */
+  completeExtendedKong(game: GameState, player: Player, tile: Tile): void {
+    this.handleExtendedKong(game, player, tile.id);
+  }
+
+  /**
+   * 抢杠检查
+   */
+  resolveRobKongIfNeeded(game: GameState): boolean {
+    return false;
+  }
+}
