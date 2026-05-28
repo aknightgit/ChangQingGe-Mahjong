@@ -27,6 +27,7 @@ type PersistedMahjongGame = MahjongGame & {
   rebelEvent?: { playerId: string; playerName: string; newDealerIndex: number }
   hesitationWindow?: number
   diceRollCount?: number
+  drawnThisTurn?: boolean
   trainingRoundStartSnapshot?: any
 }
 
@@ -147,6 +148,7 @@ const gameStateToDocument = (game: GameState): PersistedMahjongGame => ({
   rebelEvent: game.rebelEvent,
   hesitationWindow: game.hesitationWindow,
   diceRollCount: game.diceRollCount,
+  drawnThisTurn: game.drawnThisTurn,
   trainingRoundStartSnapshot: (game as any).trainingRoundStartSnapshot
 })
 
@@ -176,6 +178,7 @@ const documentToGameState = (doc: PersistedMahjongGame): GameState => ({
   rebelEvent: doc.rebelEvent,
   hesitationWindow: doc.hesitationWindow,
   diceRollCount: doc.diceRollCount,
+  drawnThisTurn: doc.drawnThisTurn,
   trainingRoundStartSnapshot: doc.trainingRoundStartSnapshot
 })
 
