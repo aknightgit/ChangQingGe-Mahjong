@@ -1758,6 +1758,7 @@ class GameManager {
     game.endedAt = undefined;
     game.finalScores = undefined;
     game.customScoringMode = null;
+    game.liangShanSuccess = undefined;  // 清除聚义成功标记
     // 清空上一局残留状态
     game.discardPile = [];
     game.pendingActions = [];
@@ -2009,7 +2010,7 @@ class GameManager {
           } catch (err) {
             console.error('[start-bot-freeze] Error:', err);
           }
-        }, this.timerManager.getBotDrawFreezeMs(game)));
+        }, this.timerManager.getHesitationWindow(game)));
         this.timerManager.freezeTimers.set(gameId, botTimer);
       } else {
         // Human 庄家:设置 freeze 让客户端显示冻结进度,到期自动摸
@@ -5036,7 +5037,7 @@ class GameManager {
         } catch (err) {
           console.error('[bot-freeze] Error:', err);
         }
-      }, this.timerManager.getBotDrawFreezeMs(game)));
+      }, this.timerManager.getHesitationWindow(game)));
       this.timerManager.freezeTimers.set(game.gameId, botFreezeTimer);
     } else {
       (game as any)._freezeUntil = Date.now() + freezeMs;

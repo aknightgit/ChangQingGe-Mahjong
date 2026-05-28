@@ -672,8 +672,8 @@ export class ActionHandler {
       // 聚义成功标记（客户端据此显示弹窗而非结算）
       game.liangShanSuccess = true;
 
-
       // 结束本局（broadcastGameState 在 endRound 内部，会把 gameMessage 推送给客户端）
+      // endRound 内部已有 autoStartNextRound，不需要重复调用
       endRound(game, GameEndReason.LAST_PLAYER);
 
       // 聚义成功：庄家不变
@@ -683,9 +683,6 @@ export class ActionHandler {
           game.nextDealerId = currentDealer.id;
         }
       }
-
-      // 自动进入下一局
-      this.deps.autoStartNextRound(game.gameId, 3000);
     } else {
       broadcastGameState(game.gameId);
     }

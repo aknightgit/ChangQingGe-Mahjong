@@ -4260,7 +4260,7 @@ const checkOtherPlayerSounds = (newState: any) => {
     }
   }
 }
-const activePlayerCount = (state: any) => (state?.players || []).filter((p: any) => p.status === 'playing').length
+const activePlayerCount = (state: any) => (state?.players || []).filter((p: any) => p.status === 'playing' && !p.isBot).length
 
 watch(() => gameState.value, (newState, oldState) => {
   if (!newState) return
