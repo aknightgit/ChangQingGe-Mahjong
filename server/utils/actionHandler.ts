@@ -170,23 +170,21 @@ export class ActionHandler {
    * 处理摸牌
    */
   handleDraw(game: GameState, player: Player, options?: { allowFullHand?: boolean }): void {
-    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store } = this.deps;
+    const { endRound, broadcastQuickMessage, replaceFlowers, isPlayerBotControlled, timerManager, sortHandWithWildFront, getLastDiscardPlayerId, schedulePendingActionTimeout, store } = this.deps;
 
     // 【状态机守卫】已摸牌则禁止再摸（防止同回合多次摸牌）
     if (!options?.allowFullHand && game.drawnThisTurn) {
       return;
     }
 
-    if (!options?.allowFullHand && player.hand.concealedTiles.length >= 14) {
+    // 牌墙为空 → 流局（和老代码一致，先检查牌墙）
+    if (game.wall.length === 0) {
+      endRound(game, GameEndReason.WALL_EXHAUSTED);
       return;
     }
 
-    // 【关键修复】在牌墙检查之前设置flag，防止牌墙为空时return导致二次摸牌
-    game.drawnThisTurn = true;
-
-    if (game.wall.length === 0) {
-      // 牌墙摸完，流局
-      endRound(game, GameEndReason.WALL_EXHAUSTED);
+    // 牌数上限检查（和老代码一致）
+    if (!options?.allowFullHand && player.hand.concealedTiles.length >= 14) {
       return;
     }
 
@@ -332,12 +330,16 @@ export class ActionHandler {
     // 清除pending actions
     game.pendingActions = [];
 
-    // 吃牌后需要出牌
+    // 吃牌后需要出牌（和老代码 executeChowDirectly 一致）
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+    this.deps.replaceInitialFlowers(game, player);
     game.drawnThisTurn = true;
-
+    if (this.deps.isPlayerBotControlled(player)) {
+      this.deps.scheduleBotDiscard(game.gameId, player.id);
+    }
+    player.hand.concealedTiles = this.deps.sortHandWithWildFront(player.hand.concealedTiles, game);
     await persistGame(game);
-    broadcastGameState(game.gameId);
+    this.deps.broadcastGameState(game.gameId);
   }
 
   /**
@@ -416,12 +418,16 @@ export class ActionHandler {
     // 清除pending actions
     game.pendingActions = [];
 
-    // 碰牌后需要出牌
+    // 碰牌后需要出牌（和老代码 executePengDirectly 一致）
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+    this.deps.replaceInitialFlowers(game, player);
     game.drawnThisTurn = true;
-
+    if (this.deps.isPlayerBotControlled(player)) {
+      this.deps.scheduleBotDiscard(game.gameId, player.id);
+    }
+    player.hand.concealedTiles = this.deps.sortHandWithWildFront(player.hand.concealedTiles, game);
     await persistGame(game);
-    broadcastGameState(game.gameId);
+    this.deps.broadcastGameState(game.gameId);
   }
 
   /**
