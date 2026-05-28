@@ -4730,6 +4730,7 @@ class GameManager {
         const hasPendingForChowPlayer = game.pendingActions.some(pa => pa.playerId === chowPlayer.id);
         if (hasPendingForChowPlayer) {
           game.currentPlayerIndex = chowPlayerIndex;
+          console.log(`[handleDiscard] CHOW player ${chowPlayer.name} resetting drawnThisTurn=false`);
           game.drawnThisTurn = false;
         }
       }
@@ -4960,6 +4961,7 @@ class GameManager {
     // 【状态机修复】新回合:重置摸牌状态
     // 每次轮到新玩家时重置drawnThisTurn，让该玩家能正常摸牌。
     // 这修复了"在别人回合中声称PENG/KONG后该玩家无法摸牌"的bug。
+    console.log(`[beginCurrentPlayerTurn] ${nextPlayer.name} resetting drawnThisTurn=false`);
     game.drawnThisTurn = false;
     game.huSelectionLocks = undefined;
 

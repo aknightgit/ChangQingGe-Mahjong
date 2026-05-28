@@ -111,6 +111,7 @@ export class ActionHandler {
     );
 
     // 清除摸牌标记
+    console.log(`[handleDiscard] ${player.name} resetting drawnThisTurn=false`);
     game.drawnThisTurn = false;
 
     // 记录动作历史
@@ -172,8 +173,11 @@ export class ActionHandler {
   handleDraw(game: GameState, player: Player, options?: { allowFullHand?: boolean }): void {
     const { endRound, broadcastQuickMessage, replaceFlowers, isPlayerBotControlled, timerManager, sortHandWithWildFront, getLastDiscardPlayerId, schedulePendingActionTimeout, store } = this.deps;
 
+    console.log(`[handleDraw] ${player.name} drawnThisTurn=${game.drawnThisTurn} wall=${game.wall.length} concealed=${player.hand.concealedTiles.length} allowFull=${options?.allowFullHand}`);
+
     // 【状态机守卫】已摸牌则禁止再摸（防止同回合多次摸牌）
     if (!options?.allowFullHand && game.drawnThisTurn) {
+      console.warn(`[handleDraw] BLOCKED: ${player.name} already drew this turn`);
       return;
     }
 
