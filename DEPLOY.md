@@ -21,7 +21,7 @@
 
 #### 应用实际监听
 - **Mahjong 服务本体**：`127.0.0.1:8899`
-  - 进程：`node /home/.output/server/index.mjs`
+  - 进程：`node /home/ak/myworkspace/ChangQingGe-Mahjong/.output/server/index.mjs`（ak 账号运行）
 - **MyIsland 服务本体**：`127.0.0.1:3100`
 
 #### Nginx 入口
@@ -167,9 +167,21 @@ node .output/server/index.mjs
 
 ---
 
+## ⚠️ 部署铁律
+
+> **禁止在 root 账号下部署或运行麻将服务！**
+> 
+> - 麻将服务**只能在 `ak` 账号下运行**
+> - root 的 PM2 daemon 下**绝对不能**有 mahjong 进程
+> - 如果发现 root 下有旧进程，必须先删除：`sudo PM2_HOME=/root/.pm2 pm2 delete mahjong`
+> - 检查命令：`sudo PM2_HOME=/root/.pm2 pm2 list`（应该为空或无 mahjong）
+> - 正确的 PM2 daemon 路径：`/home/ak/.pm2/`（不是 `/root/.pm2/`）
+> - 正确的服务目录：`/home/ak/myworkspace/ChangQingGe-Mahjong/`（不是 `/home/` 或 `/root/`）
+> 
+> **2026-05-29 教训**：root PM2 占了 8899 端口，ak PM2 绑不上，导致新版代码始终不生效
+
 ## 部署到服务器
 
-> ⚠️ **关键约束**：麻将服务运行路径是 `/home/.output/`（不是 `/home/ak/`）
 > ⚠️ **只允许一个部署实例**，不允许在多个目录部署多个进程
 
 ### 正确的 PM2 进程配置
