@@ -61,7 +61,7 @@ export class ActionHandler {
    * 处理出牌
    */
   async handleDiscard(game: GameState, player: Player, tileId: string): Promise<void> {
-    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, beginCurrentPlayerTurn, store } = this.deps;
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, beginCurrentPlayerTurn, checkLeadingBrother, updateRoundNumber, store } = this.deps;
 
     const tile = findTileById(player.hand.concealedTiles, tileId);
     if (!tile) {
@@ -90,8 +90,8 @@ export class ActionHandler {
     player.hand.concealedTiles = sortHandWithWildFront(player.hand.concealedTiles, game);
 
     // 带头大哥检查
-    this.checkLeadingBrother(game, tile, player);
-    this.updateRoundNumber(game);
+    checkLeadingBrother(game, tile, player);
+    updateRoundNumber(game);
 
     // 缺门检测
     const missing = isMissingOneSuit(player.hand.concealedTiles);
