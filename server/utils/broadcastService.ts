@@ -3,7 +3,7 @@
  * 负责所有 WebSocket 广播和消息去重
  */
 import { GameState, Player } from '../types/game';
-import { formatBeijingTime } from './format';
+import { formatBeijingTime } from './beijingTime';
 
 export interface WsManager {
   broadcast(gameId: string, event: string, data: any): void;
