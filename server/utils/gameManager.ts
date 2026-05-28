@@ -1970,6 +1970,10 @@ class GameManager {
     game.currentPlayerIndex = game.dealerIndex;
     game.phase = GamePhase.PLAYING;
     game.lastActionTime = Date.now();
+
+    // 广播开局消息
+    this.broadcastQuickMessage(gameId, '🀄 房间满员了，正式开干！', 'special');
+
     TrainingRecordService.captureRoundStart(game);
 
     console.log(`[WallDebug] after dealing: wall=${game.wall.length} tiles, PLAYING phase`);
