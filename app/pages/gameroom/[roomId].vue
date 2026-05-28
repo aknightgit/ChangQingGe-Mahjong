@@ -1286,6 +1286,7 @@ const actionButtonsVisibleUntil = ref(0)
 const isGameStarting = ref(false)
 const showDiceOverlay = ref(false)
 const diceValues = ref<[number, number]>([1, 1])
+const diceExtra = ref<[number, number] | undefined>(undefined)
 const hasDicePreview = ref(false)
 /** 服务器广播骰子结果时递增，触发DiceAnimation自动播放动画 */
 const diceRollTriggerKey = ref(0)
@@ -1658,6 +1659,7 @@ onMounted(async () => {
     const detail = event.detail
     if (!detail) return
     diceValues.value = [detail.dice1, detail.dice2]
+    diceExtra.value = detail.dice3 !== undefined ? [detail.dice3, detail.dice4] : undefined
     // 不设 hasDicePreview，让 STARTING phase watcher 统一控制 overlay 显示
     diceRollTriggerKey.value++
     playSound('dice-roll')
@@ -1794,16 +1796,35 @@ const playerDiscards = computed(() => {
   return getVisiblePlayerDiscards(currentPlayer.value)
 })
 const roundDisplay = computed(() => `第${currentRound.value}局`)
-const getDiceRoundMultiplier = (dice1: number, dice2: number) => {
+const getDiceRoundMultiplier = (dice1: number, dice2: number, dice3?: number, dice4?: number) => {
   const isDouble = dice1 === dice2
   const isOneFourCombo = (dice1 === 1 && dice2 === 4) || (dice1 === 4 && dice2 === 1)
 
+  let singleMultiplier = 1
   if (isDouble) {
-    if (dice1 === 1 || dice1 === 4) return 4
-    return 2
+    singleMultiplier = (dice1 === 1 || dice1 === 4) ? 4 : 2
+  } else if (isOneFourCombo) {
+    singleMultiplier = 2
   }
-  if (isOneFourCombo) return 2
-  return 1
+
+  // 两次掷骰子：比较两次结果
+  if (dice3 !== undefined && dice4 !== undefined) {
+    const sum1 = dice1 + dice2
+    const sum2 = dice3 + dice4
+    const combo1 = [Math.min(dice1, dice2), Math.max(dice1, dice2)]
+    const combo2 = [Math.min(dice3, dice4), Math.max(dice3, dice4)]
+
+    // 完全相同组合（顺序无关）→ ×4
+    if (combo1[0] === combo2[0] && combo1[1] === combo2[1]) {
+      return Math.max(singleMultiplier, 4)
+    }
+    // 点数之和相同 → ×2
+    if (sum1 === sum2) {
+      return Math.max(singleMultiplier, 2)
+    }
+  }
+
+  return singleMultiplier
 }
 const effectiveMaxRolls = computed(() => {
   const raw = Number(gameState.value?.diceRollCount ?? route.query.dice ?? 2)
@@ -1813,7 +1834,7 @@ const roundMultiplier = computed(() => {
   const actualRound = Number(gameState.value?.roundMultiplier ?? 0)
   if (actualRound > 0) return actualRound
   if (showDiceOverlay.value && hasDicePreview.value) {
-    return getDiceRoundMultiplier(diceValues.value[0], diceValues.value[1])
+    return getDiceRoundMultiplier(diceValues.value[0], diceValues.value[1], diceExtra.value?.[0], diceExtra.value?.[1])
   }
   return 1
 })
@@ -1828,7 +1849,7 @@ const globalMultiplier = computed(() => {
   }
 
   if (showDiceOverlay.value && hasDicePreview.value) {
-    return Math.min(inherit * getDiceRoundMultiplier(diceValues.value[0], diceValues.value[1]), 8)
+    return Math.min(inherit * getDiceRoundMultiplier(diceValues.value[0], diceValues.value[1], diceExtra.value?.[0], diceExtra.value?.[1]), 8)
   }
 
   return game.globalMultiplier ?? inherit

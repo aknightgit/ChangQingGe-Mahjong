@@ -259,6 +259,7 @@ export interface GameState {
   freezeComplete?: boolean;
   // 倍数/继承状态
   dice?: [number, number];
+  diceRolls?: [[number, number], [number, number]]; // 两次掷骰子结果
   roundMultiplier?: number;
   inheritMultiplier?: number;
   inheritedGlobalMultiplier?: number;

@@ -226,6 +226,7 @@ export class GameStore {
       pendingKongClaim: undefined,
       multiHuStarterIndex: undefined,
       dice: undefined,
+      diceRolls: undefined,
       roundMultiplier: undefined,
       inheritMultiplier: undefined,
       inheritedGlobalMultiplier: options?.firstRoundDouble ? 2 : 1,

@@ -1169,18 +1169,36 @@ export function calculateSettlementByRules(
 /**
  * 计算回合倍数
  */
-export function calculateRoundMultiplier(dice1: number, dice2: number): number {
+export function calculateRoundMultiplier(dice1: number, dice2: number, dice3?: number, dice4?: number): number {
+  // 单次掷骰子规则
   const isDouble = dice1 === dice2;
   const isOneFourCombo = (dice1 === 1 && dice2 === 4) || (dice1 === 4 && dice2 === 1);
 
+  let singleMultiplier = 1;
   if (isDouble) {
-    if (dice1 === 1 || dice1 === 4) return 4; // 1+1=×4, 4+4=×4
-    return 2; // 其他对子=×2
+    singleMultiplier = (dice1 === 1 || dice1 === 4) ? 4 : 2;
+  } else if (isOneFourCombo) {
+    singleMultiplier = 2;
   }
-  if (isOneFourCombo) {
-    return 2; // 1+4 / 4+1 = ×2
+
+  // 两次掷骰子：比较两次结果
+  if (dice3 !== undefined && dice4 !== undefined) {
+    const sum1 = dice1 + dice2;
+    const sum2 = dice3 + dice4;
+    const combo1 = [Math.min(dice1, dice2), Math.max(dice1, dice2)];
+    const combo2 = [Math.min(dice3, dice4), Math.max(dice3, dice4)];
+
+    // 完全相同组合（顺序无关）→ ×4
+    if (combo1[0] === combo2[0] && combo1[1] === combo2[1]) {
+      return Math.max(singleMultiplier, 4);
+    }
+    // 点数之和相同 → ×2
+    if (sum1 === sum2) {
+      return Math.max(singleMultiplier, 2);
+    }
   }
-  return 1; // 非对子=×1
+
+  return singleMultiplier;
 }
 
 /**

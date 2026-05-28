@@ -1952,20 +1952,30 @@ class GameManager {
       player.score = 0;
     }
 
-    // 掷骰初始化倍数
+    // 掷骰初始化倍数（支持两次掷骰子）
+    const rollCount = game.diceRollCount ?? 2;
     const d1 = Math.min(6, Math.max(1, Math.round(options?.fixedDice?.[0] ?? (Math.floor(Math.random() * 6) + 1))));
     const d2 = Math.min(6, Math.max(1, Math.round(options?.fixedDice?.[1] ?? (Math.floor(Math.random() * 6) + 1))));
+    let d3: number | undefined;
+    let d4: number | undefined;
+    if (rollCount >= 2) {
+      d3 = Math.min(6, Math.max(1, Math.floor(Math.random() * 6) + 1));
+      d4 = Math.min(6, Math.max(1, Math.floor(Math.random() * 6) + 1));
+    }
     game.dice = [d1, d2];
+    game.diceRolls = d3 !== undefined ? [[d1, d2], [d3, d4!]] : undefined;
 
     // Broadcast dice roll to trigger animation on all clients
     if (this.wsManager) {
       this.wsManager.broadcast(gameId, 'diceRoll', {
         dice1: d1,
         dice2: d2,
+        dice3: d3,
+        dice4: d4,
         timestamp: Date.now()
       });
     }
-    game.roundMultiplier = calculateRoundMultiplier(d1, d2);
+    game.roundMultiplier = calculateRoundMultiplier(d1, d2, d3, d4);
     // 继承上局全局倍数(或从造反事件继承)
     const prevGlobal = game.inheritedGlobalMultiplier ?? 1;
     if (game.rebelEvent) {
