@@ -2193,6 +2193,7 @@ const tingPreviewItems = computed(() => {
 const getHuOptionBasePoints = (opt: any) => Number(opt?.summary?.finalPoints ?? opt?.score ?? 0)
 // finalPoints = 自摸时单个输家应付的点数，或捉冲时放冲者独自应付的点数
 const getHuOptionPayerCount = (opt: any) => {
+  if (opt?._cachedPayerCount != null) return opt._cachedPayerCount
   if (opt?.type !== 'self_draw') return 1
   const players = Array.isArray(gameState.value?.players) ? gameState.value.players : []
   const losers = players.filter(player => player.id !== playerId.value && player.status !== 'won')
@@ -2840,7 +2841,14 @@ const fetchWinOptions = async () => {
     const res = await $fetch<any>('/api/game/win-options', {
       query: { gameId: roomId.value, playerId: currentPlayer.value?.id }
     })
-    winOptions.value = (res.winOptions || []).slice(0, 3)
+    const options = (res.winOptions || []).slice(0, 3)
+    // 快照当前输家人数，避免后续牌局进展导致总赢变动
+    const players = Array.isArray(gameState.value?.players) ? gameState.value.players : []
+    const loserCount = Math.max(1, players.filter(p => p.id !== playerId.value && p.status !== 'won').length)
+    for (const opt of options) {
+      opt._cachedPayerCount = opt.type === 'self_draw' ? loserCount : 1
+    }
+    winOptions.value = options
   } catch (err) {
     console.error('Failed to fetch win options:', err)
     winOptions.value = []
