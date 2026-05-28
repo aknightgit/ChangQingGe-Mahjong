@@ -4280,26 +4280,8 @@ watch(() => gameState.value, (newState, oldState) => {
     prevQjAlertIds.value = new Set<string>(existingAlerts.map((a: any) => a.playerId))
   }
 
-  // 有人胡牌
+  // 有人胡牌（广播消息由服务端 actionHandler.ts 中 broadcastQuickMessage 统一处理，此处不再重复）
   if (newState.winnersCount > prevWinnersCount.value && prevPhase.value === 'playing') {
-    const newWinners = (newState.players || []).filter(
-      (p: any) => p.status === 'won' && p.winOrder === newState.winnersCount
-    )
-    const bailoutRels = (newState as any).bailoutRelations || []
-    for (const w of newWinners) {
-      const handType = w.winHandType ? `·${w.winHandType}` : ''
-      const discarderPlayer = w.discarderId ? (newState.players || []).find((p: any) => p.id === w.discarderId) : null
-      const tileLabel = w.winningTileName ? `-${w.winningTileName}` : ''
-      const winMethod = w.isSelfDrawn
-        ? `${w.name}自摸${tileLabel}`
-        : (discarderPlayer ? `${w.name}捉冲${discarderPlayer.name}${tileLabel}` : `${w.name}捉冲${tileLabel}`)
-      // 检查三口/四口关系
-      const rel = bailoutRels.find((r: any) => r.player1 === w.id || r.player2 === w.id)
-      const partnerId = rel ? (rel.player1 === w.id ? rel.player2 : rel.player1) : null
-      const partner = partnerId ? (newState.players || []).find((p: any) => p.id === partnerId) : null
-      const bailInfo = rel && partner ? ` · ${rel.type}包${partner.name}` : ''
-      addBroadcast(`🏆 ${winMethod}${bailInfo}`, 'win')
-    }
     playSound('round-end')
   }
 
