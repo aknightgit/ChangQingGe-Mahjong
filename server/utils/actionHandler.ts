@@ -288,7 +288,9 @@ export class ActionHandler {
     player.hand.exposedMelds.push({
       type: MeldType.SEQUENCE,
       tiles: [lastDiscard, ...selectedSequence].sort((a, b) => a.value - b.value),
-      isConcealed: false
+      isConcealed: false,
+      sourcePosition: game.lastDiscardPosition,
+      sourceTileId: lastDiscard.id
     });
 
     // 记录互包
@@ -370,7 +372,9 @@ export class ActionHandler {
     player.hand.exposedMelds.push({
       type: MeldType.TRIPLET,
       tiles: [lastDiscard, ...tilesToUse],
-      isConcealed: false
+      isConcealed: false,
+      sourcePosition: game.lastDiscardPosition,
+      sourceTileId: lastDiscard.id
     });
 
     // 记录互包
@@ -434,7 +438,9 @@ export class ActionHandler {
     player.hand.exposedMelds.push({
       type: MeldType.TRIPLET,
       tiles: [tile, ...tilesToUse],
-      isConcealed: false
+      isConcealed: false,
+      sourcePosition: game.lastDiscardPosition,
+      sourceTileId: lastDiscard.id
     });
 
     // 记录互包
