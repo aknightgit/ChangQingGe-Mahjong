@@ -265,6 +265,7 @@ export interface GameState {
   globalMultiplier?: number;
   rebelEvent?: RebelEvent;
   liangShanVotes?: string[];  // 梁山聚义投票者ID列表
+  liangShanSuccess?: boolean;  // 聚义成功标记（客户端据此显示弹窗而非结算）
   pendingRemovals?: string[];  // 下局要移除的AI玩家ID
   pendingReplacements?: { spectatorId: string; aiPlayerId: string; spectatorName?: string }[];  // 下局替换AI的请求
   settleRequested?: boolean;  // 是否已请求退房结算

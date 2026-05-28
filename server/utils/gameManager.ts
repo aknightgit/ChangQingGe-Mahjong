@@ -123,6 +123,7 @@ class GameManager {
       autoStartNextRound: (id, delay) => this.autoStartNextRound(id, delay),
       advanceApprovalConflict: (g) => this.advanceApprovalConflict(g),
       resolveRobKongIfNeeded: (g) => this.resolveRobKongIfNeeded(g),
+      clearBroadcasts: (id) => this.broadcastService.clearBroadcasts(id),
       store: this.store
     };
   }

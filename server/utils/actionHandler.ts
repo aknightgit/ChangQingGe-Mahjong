@@ -43,6 +43,7 @@ export interface ActionHandlerDeps {
   autoStartNextRound(gameId: string, delayMs: number): void;
   advanceApprovalConflict(game: GameState): Promise<void>;
   resolveRobKongIfNeeded(game: GameState): boolean;
+  clearBroadcasts(gameId: string): void;
   store: any;
 }
 
@@ -633,8 +634,14 @@ export class ActionHandler {
       const effective = doubled * roundMul;
       game.inheritedGlobalMultiplier = Math.min(effective > 8 ? Math.floor(effective / 8) : doubled, 8);
 
+      // 聚义成功标记（客户端据此显示弹窗而非结算）
+      game.liangShanSuccess = true;
+
       // 结束本局
       endRound(game, GameEndReason.LAST_PLAYER);
+
+      // 清除广播缓存避免客户端重复显示（socket + HTTP 两次）
+      this.deps.clearBroadcasts(game.gameId);
 
       // 聚义成功：庄家不变
       if (!game.nextDealerId) {
@@ -645,7 +652,7 @@ export class ActionHandler {
       }
 
       // 自动进入下一局
-      this.deps.autoStartNextRound(game.gameId, 2000);
+      this.deps.autoStartNextRound(game.gameId, 3000);
     } else {
       broadcastGameState(game.gameId);
     }

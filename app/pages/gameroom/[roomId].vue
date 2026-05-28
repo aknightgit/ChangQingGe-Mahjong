@@ -4111,6 +4111,13 @@ watch(
     }
     isRoundWallExhausted.value = isWallExhausted
 
+    // 聚义成功：显示弹窗，不显示结算
+    const isLiangShanSuccess = !!(gameState.value as any)?.liangShanSuccess
+    if (isLiangShanSuccess) {
+      // 聚义成功，不显示结算面板，弹窗已由 liangShanVotes 逻辑触发
+      return
+    }
+
     // 流局或胡牌：5秒后显示结算（REVEAL阶段由服务端控制，手牌自动翻开）
     window.setTimeout(() => {
       showSettlement.value = true
@@ -4333,11 +4340,11 @@ watch(() => gameState.value, (newState, oldState) => {
       addBroadcast(`🔥 ${voter?.name || '某玩家'} 发起了梁山聚义！`, 'special')
     } else if (currentVotes >= activePlayerCount(newState)) {
       addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
-      // 显示梁山聚义成功弹窗，0.2s 后消失
+      // 显示梁山聚义成功弹窗，3s 后消失（服务端 autoStartNextRound 延迟 3s）
       showLiangShanOverlay.value = true
       setTimeout(() => {
         showLiangShanOverlay.value = false
-      }, 200)
+      }, 3000)
     } else {
       const newResponderIds = currentVoteIds.filter(id => !prevLiangShanVoteIds.value.includes(id))
       const initiatorId = currentVoteIds[0]
