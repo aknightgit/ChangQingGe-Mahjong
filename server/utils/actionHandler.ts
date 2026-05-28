@@ -72,7 +72,7 @@ export class ActionHandler {
     }
 
     // 从手牌移除
-    player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile);
+    player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile.id);
     
     // 排序手牌（百搭放最前面）
     player.hand.concealedTiles = sortHandWithWildFront(player.hand.concealedTiles, game);
@@ -206,7 +206,7 @@ export class ActionHandler {
 
     // 从手牌移除吃的牌
     for (const tile of selectedSequence) {
-      player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile);
+      player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile.id);
     }
 
     // 从弃牌堆移除
@@ -269,7 +269,7 @@ export class ActionHandler {
     // 从手牌移除两张
     const tilesToUse = matchingTiles.slice(0, 2);
     for (const tile of tilesToUse) {
-      player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile);
+      player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile.id);
     }
 
     // 从弃牌堆移除
@@ -331,7 +331,7 @@ export class ActionHandler {
     // 从手牌移除三张
     const tilesToUse = matchingTiles.slice(0, 3);
     for (const t of tilesToUse) {
-      player.hand.concealedTiles = removeTile(player.hand.concealedTiles, t);
+      player.hand.concealedTiles = removeTile(player.hand.concealedTiles, t.id);
     }
 
     // 添加到副露
@@ -388,7 +388,7 @@ export class ActionHandler {
 
     // 从手牌移除
     for (const tile of tiles) {
-      player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile);
+      player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile.id);
     }
 
     // 添加到副露（暗杠）
@@ -442,7 +442,7 @@ export class ActionHandler {
     }
 
     // 从手牌移除
-    player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile);
+    player.hand.concealedTiles = removeTile(player.hand.concealedTiles, tile.id);
 
     // 更新副露
     existingMeld.tiles.push(tile);
