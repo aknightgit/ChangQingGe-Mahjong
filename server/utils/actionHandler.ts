@@ -4,7 +4,7 @@
  */
 import { GameState, Player, GamePhase, PlayerStatus, ActionType, PendingAction, MeldType, Tile, GameEndReason } from '../types/game';
 import { findTileById, removeTile, isFlower, tilesEqual, isMissingOneSuit } from './tiles';
-import { buildWildTileChecker, HandType, isTing } from './handValidator';
+import { buildWildTileChecker, HandType, isTing, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
 import { calculateGameResult, generateWinOptions, type WinOption } from './scoring';
 import * as tileHelper from './tileHelper';
 
@@ -216,6 +216,14 @@ export class ActionHandler {
       throw new Error('No tile to chow');
     }
 
+    // ---- 异门吃碰互斥检查 ----
+    const exclusion = game.chowPongExclusion?.[player.id];
+    const exclusionState = exclusion || { firstActionSuit: null, firstActionType: null };
+    if (!checkChowPongExclusion(exclusionState, 'chow', lastDiscard.suit)) {
+      console.warn(`[CHOW] Player ${player.name} blocked by exclusion rule (firstAction=${exclusionState.firstActionSuit})`);
+      throw new Error('异门吃碰互斥：不能吃不同门的牌');
+    }
+
     // 找到吃的组合
     const sequences = this.findChowSequences(player.hand.concealedTiles, lastDiscard, game);
     if (sequences.length === 0) {
@@ -268,6 +276,11 @@ export class ActionHandler {
       timestamp: Date.now()
     });
 
+    // 更新异门吃碰互斥状态
+    if (!game.chowPongExclusion) game.chowPongExclusion = {};
+    const prevState = game.chowPongExclusion[player.id] || { firstActionSuit: null, firstActionType: null };
+    game.chowPongExclusion[player.id] = updateChowPongExclusion(prevState, 'chow', lastDiscard.suit);
+
     // 清除pending actions
     game.pendingActions = [];
 
@@ -289,6 +302,14 @@ export class ActionHandler {
     const lastDiscard = game.discardPile[game.discardPile.length - 1];
     if (!lastDiscard) {
       throw new Error('No tile to peng');
+    }
+
+    // ---- 异门吃碰互斥检查 ----
+    const exclusion = game.chowPongExclusion?.[player.id];
+    const exclusionState = exclusion || { firstActionSuit: null, firstActionType: null };
+    if (!checkChowPongExclusion(exclusionState, 'pong', lastDiscard.suit)) {
+      console.warn(`[PENG] Player ${player.name} blocked by exclusion rule (firstAction=${exclusionState.firstActionSuit})`);
+      throw new Error('异门吃碰互斥：不能碰不同门的牌');
     }
 
     // 找到手牌中相同的牌
@@ -330,6 +351,11 @@ export class ActionHandler {
       tileId: lastDiscard.id,
       timestamp: Date.now()
     });
+
+    // 更新异门吃碰互斥状态
+    if (!game.chowPongExclusion) game.chowPongExclusion = {};
+    const prevState = game.chowPongExclusion[player.id] || { firstActionSuit: null, firstActionType: null };
+    game.chowPongExclusion[player.id] = updateChowPongExclusion(prevState, 'pong', lastDiscard.suit);
 
     // 清除pending actions
     game.pendingActions = [];
@@ -826,11 +852,15 @@ export class ActionHandler {
 
       const availableActions: ActionType[] = [];
 
+      // 异门吃碰互斥状态
+      const exclusion = game.chowPongExclusion?.[player.id];
+      const exclusionState = exclusion || { firstActionSuit: null, firstActionType: null };
+
       // 检查是否可以碰
       const matchingTiles = player.hand.concealedTiles.filter(t => 
         t.suit === discardedTile.suit && t.value === discardedTile.value
       );
-      if (matchingTiles.length >= 2) {
+      if (matchingTiles.length >= 2 && checkChowPongExclusion(exclusionState, 'pong', discardedTile.suit)) {
         availableActions.push(ActionType.PENG);
       }
 
@@ -842,9 +872,11 @@ export class ActionHandler {
       // 检查是否可以吃（只有下家可以吃）
       const nextPlayerIndex = (discarderIndex + 1) % game.players.length;
       if (game.players[nextPlayerIndex]?.id === player.id) {
-        const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile, game);
-        if (sequences.length > 0) {
-          availableActions.push(ActionType.CHOW);
+        if (checkChowPongExclusion(exclusionState, 'chow', discardedTile.suit)) {
+          const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile, game);
+          if (sequences.length > 0) {
+            availableActions.push(ActionType.CHOW);
+          }
         }
       }
 
