@@ -202,6 +202,7 @@ export class ActionHandler {
     }
     player.hand.concealedTiles = sortHandWithWildFront(player.hand.concealedTiles, game);
     (player as any).lastDrawnTile = tile;
+    game.drawnThisTurn = true;
 
     // 记录动作历史
     game.actionHistory.push({
