@@ -3,7 +3,7 @@
  * 负责：出牌、摸牌、吃、碰、杠、胡、造反、聚义、想一想、过
  */
 import { GameState, Player, GamePhase, PlayerStatus, ActionType, PendingAction, MeldType, Tile, GameEndReason } from '../types/game';
-import { findTileById, removeTile, isFlower, tilesEqual, isMissingOneSuit } from './tiles';
+import { findTileById, removeTile, isFlower, tilesEqual, isMissingOneSuit, getTileDisplayName } from './tiles';
 import { buildWildTileChecker, HandType, isTing, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
 import { calculateGameResult, generateWinOptions, type WinOption } from './scoring';
 import * as tileHelper from './tileHelper';
@@ -164,6 +164,11 @@ export class ActionHandler {
    */
   handleDraw(game: GameState, player: Player, options?: { allowFullHand?: boolean }): void {
     const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store } = this.deps;
+
+    // 【状态机守卫】已摸牌则禁止再摸（防止同回合多次摸牌）
+    if (!options?.allowFullHand && game.drawnThisTurn) {
+      return;
+    }
 
     if (!options?.allowFullHand && player.hand.concealedTiles.length >= 14) {
       return;
@@ -609,6 +614,18 @@ export class ActionHandler {
       playerId: player.id,
       timestamp: Date.now()
     });
+
+    // 胡牌广播
+    const huPlayerIdx = game.players.findIndex(p => p.id === player.id);
+    const isSelfDrawn = game.currentPlayerIndex === huPlayerIdx;
+    const lastDrawn = (player as any).lastDrawnTile;
+    const winningTileName = lastDrawn ? getTileDisplayName(lastDrawn) : '';
+    const handTypeLabel = (player as any).winHandType || '';
+    const discarderName = isSelfDrawn ? '' : (game.players[game.currentPlayerIndex]?.name || '');
+    const huMsg = isSelfDrawn
+      ? `🎉 ${player.name} 自摸${winningTileName ? '-' + winningTileName : ''}${handTypeLabel ? '·' + handTypeLabel : ''}`
+      : `🎉 ${player.name} 捉冲${discarderName}${winningTileName ? '-' + winningTileName : ''}${handTypeLabel ? '·' + handTypeLabel : ''}`;
+    broadcastQuickMessage(game.gameId, huMsg, 'special');
 
     // 清除pending actions
     game.pendingActions = [];
