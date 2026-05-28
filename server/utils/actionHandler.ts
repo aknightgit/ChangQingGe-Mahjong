@@ -240,6 +240,12 @@ export class ActionHandler {
       throw new Error('No tile to chow');
     }
 
+    // 百搭牌不能被吃
+    const wildChecker = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
+    if (wildChecker(lastDiscard)) {
+      throw new Error('百搭牌不能被吃');
+    }
+
     // ---- 异门吃碰互斥检查 ----
     const exclusion = game.chowPongExclusion?.[player.id];
     const exclusionState = exclusion || { firstActionSuit: null, firstActionType: null };
@@ -326,6 +332,12 @@ export class ActionHandler {
     const lastDiscard = game.discardPile[game.discardPile.length - 1];
     if (!lastDiscard) {
       throw new Error('No tile to peng');
+    }
+
+    // 百搭牌不能被碰
+    const wildChecker = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
+    if (wildChecker(lastDiscard)) {
+      throw new Error('百搭牌不能被碰');
     }
 
     // ---- 异门吃碰互斥检查 ----
@@ -870,6 +882,25 @@ export class ActionHandler {
 
     const wildChecker = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
 
+    // 百搭牌不能被吃/碰/杠
+    if (wildChecker(discardedTile)) {
+      // 百搭牌只能被胡
+      for (const player of game.players) {
+        if (player.status !== PlayerStatus.PLAYING) continue;
+        if (player.id && player.id === game.players[game.currentPlayerIndex].id) continue;
+        const winCheck = getCachedWinCheck(game, player);
+        if (winCheck.canWin) {
+          game.pendingActions.push({
+            playerId: player.id,
+            availableActions: [ActionType.HU, ActionType.PASS],
+            tile: discardedTile,
+            expiresAt: Date.now() + (game.hesitationWindow || 5000)
+          });
+        }
+      }
+      return;
+    }
+
     for (const player of game.players) {
       if (player.status !== PlayerStatus.PLAYING) continue;
       if (player.id && player.id === game.players[game.currentPlayerIndex].id) continue;
@@ -928,9 +959,17 @@ export class ActionHandler {
   private findChowSequences(hand: Tile[], discardedTile: Tile, game?: GameState): Tile[][] {
     const sequences: Tile[][] = [];
     const wildChecker = game ? buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup) : () => false;
+
+    // 如果弃牌本身是百搭,不能被吃
+    if (game && wildChecker(discardedTile)) return [];
+
+    // 过滤掉手牌中的百搭牌(百搭不能参与吃牌)
+    const eligibleHand = game
+      ? hand.filter(t => !wildChecker(t))
+      : hand;
     
     // 按花色和数值排序
-    const sortedHand = [...hand].sort((a, b) => {
+    const sortedHand = [...eligibleHand].sort((a, b) => {
       if (a.suit !== b.suit) return a.suit.localeCompare(b.suit);
       return a.value - b.value;
     });
