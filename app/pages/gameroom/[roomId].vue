@@ -1658,7 +1658,7 @@ onMounted(async () => {
     const detail = event.detail
     if (!detail) return
     diceValues.value = [detail.dice1, detail.dice2]
-    hasDicePreview.value = true
+    // 不设 hasDicePreview，让 STARTING phase watcher 统一控制 overlay 显示
     diceRollTriggerKey.value++
     playSound('dice-roll')
   }) as EventListener)
@@ -4417,10 +4417,10 @@ watch(
         const serverDice = gameState.value?.dice
         if (serverDice && Array.isArray(serverDice) && serverDice.length >= 2) {
           diceValues.value = [serverDice[0], serverDice[1]]
-          hasDicePreview.value = true
-        } else {
-          diceValues.value = [1, 1]
+        } else if (diceValues.value[0] === 1 && diceValues.value[1] === 1) {
+          // socket 事件还没到，用默认值，等 socket 事件更新
         }
+        hasDicePreview.value = true
       }
       showDiceOverlay.value = true
       console.log('[DiceOverlay] SET to true (STARTING)')
