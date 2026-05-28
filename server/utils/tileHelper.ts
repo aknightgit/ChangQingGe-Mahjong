@@ -3,8 +3,8 @@
  * 纯函数，无状态依赖，可独立测试
  */
 import { Tile, Meld, MeldType, TileSuit, GameState, Player, PlayerStatus } from '../types/game';
-import { isFlower, buildWildTileChecker } from './handValidator';
-import { tilesEqual } from './tiles';
+import { buildWildTileChecker } from './handValidator';
+import { isFlower, tilesEqual } from './tiles';
 
 // ==================== 牌面基础 ====================
 
