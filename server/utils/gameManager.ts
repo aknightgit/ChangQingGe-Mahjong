@@ -771,14 +771,9 @@ class GameManager {
   private getBotDrawFreezeMs(game: GameState): number {
     return this.timerManager.getBotDrawFreezeMs(game);
   }
-    return base;
-  }
 
   private getBotDiscardDelayMs(game: GameState): number {
     return this.timerManager.getBotDiscardDelayMs(game);
-  }
-    const reducedBase = Math.max(250, Math.floor(base / 2));
-    return reducedBase + Math.floor(Math.random() * 250);
   }
 
   private isChowChoiceOnlyActions(actions: ActionType[]): boolean {
@@ -861,7 +856,6 @@ class GameManager {
 
   private clearPendingActionTimer(gameId: string): void {
     this.timerManager.clearPendingActionTimer(gameId);
-  }
   }
 
   private currentTurnPlayerHasPendingClaims(game: GameState): boolean {
@@ -1062,7 +1056,6 @@ class GameManager {
 
   private countExposedTilesExcludingFlowerMelds(player: Player): number {
     return tileHelper.countExposedTilesExcludingFlowerMelds(player);
-  }, 0);
   }
 
   private getPlayableTileCount(player: Player): number {
@@ -2940,28 +2933,12 @@ class GameManager {
   private sortHandWithWildFront(tiles: Tile[], game: GameState): Tile[] {
     return tileHelper.sortHandWithWildFront(tiles, game);
   };
-    return [...tiles].sort((a, b) => {
-      if (!a || !a.suit || a.value == null) return 1;
-      if (!b || !b.suit || b.value == null) return -1;
-      const aIsWild = this.isWildTile(game, a);
-      const bIsWild = this.isWildTile(game, b);
-      if (aIsWild && !bIsWild) return -1;
-      if (!aIsWild && bIsWild) return 1;
-      if (aIsWild && bIsWild) return 0;
-      // 非百搭:按花色数值排序
-      if (a.suit !== b.suit) return (suitOrder[a.suit] ?? 99) - (suitOrder[b.suit] ?? 99);
-      return a.value - b.value;
-    });
-  }
 
   /**
    * 检查牌是否是百搭
    */
   private isWildTile(game: GameState, tile: Tile): boolean {
     return tileHelper.isWildTile(game, tile);
-  }
-
-    return false;
   }
 
   /**
@@ -5278,14 +5255,6 @@ class GameManager {
    */
   private clearAutoTakeover(gameId: string, playerId: string): void {
     this.timerManager.clearAutoTakeover(gameId, playerId);
-  }
-    const warning = this.timerManager.autoTakeoverWarnings.get(key);
-    if (warning) {
-      clearTimeout(warning);
-      this.timerManager.autoTakeoverWarnings.delete(key);
-    }
-    // 玩家已操作,重置连续超时计数
-    this.timerManager.consecutiveTimeouts.delete(key);
   }
 
   /**
