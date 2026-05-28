@@ -106,18 +106,6 @@
 
     <!-- 第二列：特殊操作按钮 -->
     <div class="action-grid-secondary" v-if="hasSecondaryActionRow">
-      <!-- 梁山聚义 -->
-      <button
-        v-if="hasLiangShan"
-        class="action-btn action-btn--small action-btn--liangshan"
-        :class="{
-          'action-btn--active': hasLiangShan,
-          'action-btn--highlight': hasLiangShan && !isDelaying,
-          'action-btn--voted': hasVotedLiangShan
-        }"
-        :disabled="!hasLiangShan || isInteractionLocked || !!isPaused || !isConnected || effectiveHasVotedLiangShan"
-        @click="$emit('action', 'liangshan')"
-      >义</button>
 
 
     </div>
