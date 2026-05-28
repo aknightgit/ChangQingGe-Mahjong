@@ -622,6 +622,11 @@ export class ActionHandler {
     // 胡牌广播
     const huPlayerIdx = game.players.findIndex(p => p.id === player.id);
     const isSelfDrawn = game.currentPlayerIndex === huPlayerIdx;
+    player.isSelfDrawn = isSelfDrawn;
+    if (!isSelfDrawn) {
+      player.discarderId = game.players[game.currentPlayerIndex]?.id;
+      player.discarderName = game.players[game.currentPlayerIndex]?.name;
+    }
     const lastDrawn = (player as any).lastDrawnTile;
     const winningTileName = lastDrawn ? getTileDisplayName(lastDrawn) : '';
     const handTypeLabel = (player as any).winHandType || '';
