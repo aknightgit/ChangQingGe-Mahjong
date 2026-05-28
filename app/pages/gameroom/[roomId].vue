@@ -328,7 +328,6 @@
                   <th>玩家</th>
                   <th>胡序</th>
                   <th>牌型</th>
-                  <th>胡牌牌面</th>
                   <th>花</th>
                   <th>番数</th>
                   <th>门清</th>
@@ -346,7 +345,6 @@
                   <td>{{ row.playerName }}</td>
                   <td>{{ row.winSequence }}</td>
                   <td>{{ row.handType }}</td>
-                  <td class="settle-round-tiles">{{ row.tiles }}</td>
                   <td>{{ row.flowerCount }}</td>
                   <td>{{ row.baseFan }}</td>
                   <td>{{ row.menQing }}</td>
