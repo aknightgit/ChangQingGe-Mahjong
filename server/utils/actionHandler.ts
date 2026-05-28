@@ -713,7 +713,6 @@ export class ActionHandler {
 
     // 记录投票
     game.liangShanVotes.push(player.id);
-    broadcastQuickMessage(game.gameId, `🔥 ${player.name}发起了梁山聚义！`, 'special');
 
     // 活跃玩家总数（只统计真人）
     const activePlayers = game.players.filter(p => p.status === PlayerStatus.PLAYING);
