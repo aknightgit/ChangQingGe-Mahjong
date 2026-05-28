@@ -3440,7 +3440,7 @@ const getRoundSettlementRows = (round: any) => {
       finalPoints: winner?.finalPoints ?? '-',
       winMode: winner
         ? (winner.discarderId
-          ? (winner.discarderName || '未知')
+          ? `捉冲 ${winner.discarderName || '未知'}`
           : `自摸 ${getSettlementPayerCount(round, winner)}家`)
         : '-',
       score,
