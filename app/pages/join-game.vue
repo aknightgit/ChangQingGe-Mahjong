@@ -78,9 +78,9 @@
       </section>
 
       <!-- 空闲牌桌 -->
-      <section class="mahjong-available">
+      <section class="mahjong-available my-games-section">
         <div class="available-header">
-          <h2>空闲牌桌</h2>
+          <h2>🪑 空闲牌桌</h2>
           <button class="mahjong-button small" :disabled="isWaitingLoading" @click="fetchWaitingGames">
             {{ isWaitingLoading ? '加载中…' : '刷新' }}
           </button>
@@ -90,6 +90,9 @@
         <p v-else-if="!isWaitingLoading && waitingGames.length === 0" class="available-empty">
           暂无空闲牌桌，去大厅创建一个吧！
         </p>
+        <div v-if="waitingGames.length > 0" class="idle-chart-container">
+          <canvas ref="idleChartRef" style="max-height:100px"></canvas>
+        </div>
 
         <ul v-else class="available-list">
           <li v-for="game in waitingGames" :key="game.gameId" class="available-item">
@@ -118,7 +121,7 @@
 <!-- 快速加入：从 localStorage 读取最近离开的房间 -->
       <section v-if="quickJoinGames.length > 0" class="my-games-section">
         <div class="available-header">
-          <h2>⚡ 快速加入</h2>
+          <h2>⚡ 回到房间</h2>
         </div>
         <ul class="available-list">
           <li v-for="game in quickJoinGames" :key="game.roomNumber + '-' + game.playerId" class="available-item my-game-item">
@@ -142,7 +145,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, nextTick, watch } from 'vue'
+import { Chart, DoughnutController, ArcElement, Tooltip, Legend } from 'chart.js'
+
+Chart.register(DoughnutController, ArcElement, Tooltip, Legend)
 
 const buildGameRoomPath = (gameId: string, playerId: string, spectator = false) => {
   const params = new URLSearchParams({ playerId })
@@ -163,6 +169,8 @@ const isJoining = ref(false)
 const QUICK_JOIN_KEY = 'mahjong_recent_rooms'
 const quickJoinGames = ref<{ roomNumber: string; playerId: string; gameId: string }[]>([])
 const isQuickJoining = ref(false)
+const idleChartRef = ref<HTMLCanvasElement | null>(null)
+let idleChartInstance: Chart | null = null
 
 const loadQuickJoinGames = () => {
   try {
@@ -335,6 +343,37 @@ const joinGame = async (gameId: string) => {
   }
 }
 
+const renderIdleChart = () => {
+  if (!idleChartRef.value || waitingGames.value.length === 0) return
+  if (idleChartInstance) idleChartInstance.destroy()
+
+  const waiting = waitingGames.value.filter(g => g.phase === 'waiting').length
+  const playing = waitingGames.value.filter(g => g.phase === 'playing').length
+  const other = waitingGames.value.length - waiting - playing
+
+  idleChartInstance = new Chart(idleChartRef.value, {
+    type: 'doughnut',
+    data: {
+      labels: ['等待中', '进行中', '其他'].filter((_, i) => [waiting, playing, other][i] > 0),
+      datasets: [{
+        data: [waiting, playing, other].filter(v => v > 0),
+        backgroundColor: ['#4ade80', '#fbbf24', '#94a3b8'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#f5f5f5', font: { size: 11 } } }
+      }
+    }
+  })
+}
+
+watch(waitingGames, () => { nextTick(renderIdleChart) })
+
 onMounted(() => {
   loadQuickJoinGames()
   fetchMyGames()
@@ -387,6 +426,17 @@ onMounted(() => {
 
 .my-game-item {
   border-left: 3px solid rgba(255, 215, 0, 0.3);
+}
+
+.idle-chart-container {
+  margin-top: 12px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  max-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .bot-badge {
