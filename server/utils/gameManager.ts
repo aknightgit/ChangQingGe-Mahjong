@@ -27,6 +27,7 @@ import { formatBeijingTime } from './beijingTime';
 import { isConcealedDiscardState, tileLabel } from './gameHelpers';
 import { RoomGameBridge } from '../services/roomGameBridge';
 import { GameStore } from '../services/gameStore';
+import { BotController, type BotControllerDeps } from './botController';
 
 
 /**
@@ -47,10 +48,41 @@ class GameManager {
   getWsManager(): any { return this.wsManager; }
 
   private store: GameStore;
+  private botController: BotController;
 
   constructor() {
     this.store = new GameStore();
     this.store._inject(this);
+    this.botController = new BotController(this.createBotControllerDeps());
+  }
+
+  private createBotControllerDeps(): BotControllerDeps {
+    return {
+      games: this.games,
+      isPlayerBotControlled: (p) => this.isPlayerBotControlled(p),
+      getCachedWinOptions: (g, p, c, f) => this.getCachedWinOptions(g, p, c, f),
+      handlePass: (g, p) => this.handlePass(g, p),
+      handlePeng: (g, p) => this.handlePeng(g, p),
+      handleKong: (g, p, t) => this.handleKong(g, p, t),
+      handleHu: (g, p, l) => this.handleHu(g, p, l),
+      handleChow: (g, p, t) => this.handleChow(g, p, t),
+      resolvePendingAction: (g, p, pa) => this.resolvePendingAction(g, p, pa),
+      countExposedTilesExcludingFlowerMelds: (p) => this.countExposedTilesExcludingFlowerMelds(p),
+      persistGame: (g) => this.persistGame(g),
+      broadcastGameState: (id) => this.broadcastGameState(id),
+      schedulePendingActionTimeout: (id) => this.schedulePendingActionTimeout(id),
+      clearCurrentTurnPendingActions: (g, pid) => this.clearCurrentTurnPendingActions(g, pid),
+      moveToNextPlayer: (g) => this.moveToNextPlayer(g),
+      executeAction: (id, pid, a, t) => this.executeAction(id, pid, a, t),
+      getAvailableActions: (id, pid) => this.getAvailableActions(id, pid),
+      getGame: (id) => this.getGame(id),
+      enableBotMode: (id, pid) => this.enableBotMode(id, pid),
+      canPlayerDrawOnCurrentTurn: (g, p) => this.canPlayerDrawOnCurrentTurn(g, p),
+      isConcealedDiscardState: (p) => this.isConcealedDiscardState(p),
+      isChowChoiceOnlyActions: (a) => this.isChowChoiceOnlyActions(a),
+      shouldAdvanceTurnAfterPass: (g) => this.shouldAdvanceTurnAfterPass(g),
+      timerManager: this.timerManager
+    };
   }
 
   getStore(): GameStore { return this.store; }
@@ -1072,7 +1104,11 @@ class GameManager {
    * 4. 人类的胡按钮必须在 hesitationWindow 内保持可用，等人类自己响应或超时
    */
   private async handleBotPendingActions(gameId: string): Promise<boolean> {
-    // 由 schedulePendingActionTimeout 调用，外层已持有锁
+    return this.botController.handleBotPendingActions(gameId);
+  }
+
+  // @deprecated - 原始实现已移至 botController.ts，保留签名用于向后兼容
+  private async _handleBotPendingActions_original(gameId: string): Promise<boolean> {
     const game = this.games.get(gameId);
     if (!game) return false;
 
@@ -1232,17 +1268,7 @@ class GameManager {
    * ⭐【修复】Bot自动决策吃牌：选择吃牌组合后resolve，或自动pass
    */
   private async resolveBotChowNow(game: GameState, player: Player, pa: PendingAction): Promise<void> {
-    if (!pa.tile || !pa.chowOptions || pa.chowOptions.length === 0) {
-      await this.handlePass(game, player);
-      return;
-    }
-    pa.selectedChowTileIds = selectBotChowTileIds(player, game, pa.tile, pa.chowOptions);
-    if (pa.selectedChowTileIds && pa.selectedChowTileIds.length > 0) {
-      await this.resolvePendingAction(game, player, pa);
-      game.pendingActions = game.pendingActions.filter(p => p.playerId !== player.id);
-    } else {
-      await this.handlePass(game, player);
-    }
+    return this.botController.resolveBotChowNow(game, player, pa);
   }
   private invalidateBailoutCache(gameId: string): void {
     this.bailoutRelationsCache.delete(gameId);
@@ -5151,8 +5177,11 @@ class GameManager {
   }
 
   private scheduleAutoTakeover(gameId: string, playerId: string, expectedIndex: number): void {
+    this.botController.scheduleAutoTakeover(gameId, playerId, expectedIndex);
+  }
+
+  private _scheduleAutoTakeover_original(gameId: string, playerId: string, expectedIndex: number): void {
     const key = `${gameId}-${playerId}`;
-    // 清除已有计时器
     const existing = this.timerManager.autoTakeoverTimers.get(key);
     if (existing) clearTimeout(existing);
     const existingWarning = this.timerManager.autoTakeoverWarnings.get(key);
@@ -5243,7 +5272,7 @@ class GameManager {
    * 取消超时自动接管(玩家已操作),重置连续超时计数
    */
   private clearAutoTakeover(gameId: string, playerId: string): void {
-    this.timerManager.clearAutoTakeover(gameId, playerId);
+    this.botController.clearAutoTakeover(gameId, playerId);
   }
 
   /**
@@ -5251,6 +5280,10 @@ class GameManager {
    */
   
   private scheduleBotDiscard(gameId: string, playerId: string): void {
+    this.botController.scheduleBotDiscard(gameId, playerId);
+  }
+
+  private _scheduleBotDiscard_original(gameId: string, playerId: string): void {
     const existing = this.timerManager.botTimers.get(gameId);
     if (existing) clearTimeout(existing);
 
