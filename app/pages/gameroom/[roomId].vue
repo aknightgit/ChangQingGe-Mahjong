@@ -4207,8 +4207,7 @@ const handleRealtimeState = (e: Event) => {
     }
     lastFastDiscardAt.value = Date.now()
     playSound('tile-discard')
-    // 念其他玩家出的牌
-    if (lastTile?.suit) playVoiceTile(lastTile.suit, lastTile.value)
+    // 语音由 state watcher 统一播放（避免重复）
     markDiscardAudioPlayed(lastTile)
   }
   prevRealtimeDiscardCount.value = discardCount
@@ -4240,12 +4239,12 @@ const checkOtherPlayerSounds = (newState: any) => {
     const replacedFlowerCount = replacedFlowerMelds.length
     if (prev) {
       const isSelf = player.id === playerId.value
-      // [Fix] own actions also broadcast to news feed, skip sound only
+      const isBotCtrl = !!(player as any).isBotControlled || isBotPlayer(player)
+      const shouldPlayVoice = !isSelf || isBotCtrl  // AI托管时自己的动作也要播放语音
       if (replacedFlowerCount > prev.replacedFlowerCount) {
-        if (!isSelf) { playSound('tile-draw'); playVoiceAction('flowerReplace') }
-        // 补花消息由服务端 broadcastQuickMessage 统一广播,客户端不再重复添加
+        if (shouldPlayVoice) { playSound('tile-draw'); playVoiceAction('flowerReplace') }
       }
-      if (!isSelf && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
+      if (shouldPlayVoice && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
         const newDiscards = (player.hand?.discardedTiles || []).slice(prev.discardCount)
         const lastNew = newDiscards[newDiscards.length - 1]
         if (!recentlyPlayedDiscardAudio(lastNew)) {
@@ -4261,11 +4260,11 @@ const checkOtherPlayerSounds = (newState: any) => {
           const isFlowerReplacementMeld = m.tiles?.length === 1 && firstTile?.suit === 'hua'
           if (isFlowerReplacementMeld) continue
           if (m.type === 'kong' || m.tiles?.length === 4) {
-            if (!isSelf) pendingMeldVoices.push('kong')
+            if (shouldPlayVoice) pendingMeldVoices.push('kong')
           } else if (m.type === 'triplet') {
-            if (!isSelf) pendingMeldVoices.push('pong')
+            if (shouldPlayVoice) pendingMeldVoices.push('pong')
           } else {
-            if (!isSelf) pendingMeldVoices.push('chow')
+            if (shouldPlayVoice) pendingMeldVoices.push('chow')
           }
         }
       }

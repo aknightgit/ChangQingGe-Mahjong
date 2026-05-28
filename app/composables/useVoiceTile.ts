@@ -158,6 +158,7 @@ const playAudioQueued = (url: string, fallbackText?: string): Promise<void> => n
   el.currentTime = 0
   timeoutId = setTimeout(() => {
     fallback()
+    try { el.pause(); el.currentTime = 0 } catch {}  // 超时后立即停止音频，防止重叠
     finish()
   }, 5000)
   el.play().catch(() => {

@@ -699,8 +699,7 @@ export class ActionHandler {
     this.deps.replaceInitialFlowers(game, nextPlayer);
     const totalTiles = this.deps.getPlayableTileCount(nextPlayer);
     if (totalTiles < 14) {
-      handleDraw(game, nextPlayer);
-      game.drawnThisTurn = true;
+      handleDraw(game, nextPlayer);  // handleDraw 内部已设置 drawnThisTurn = true
     } else {
       game.drawnThisTurn = true;
     }
