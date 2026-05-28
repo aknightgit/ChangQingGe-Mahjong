@@ -48,6 +48,9 @@ export interface ActionHandlerDeps {
   resolveRobKongIfNeeded(game: GameState): boolean;
   clearBroadcasts(gameId: string): void;
   store: any;
+  getGame(gameId: string): Promise<GameState | undefined>;
+  replaceInitialFlowers(game: GameState, player: Player): void;
+  getPlayableTileCount(player: Player): number;
 }
 
 export class ActionHandler {
@@ -177,6 +180,9 @@ export class ActionHandler {
     if (!options?.allowFullHand && player.hand.concealedTiles.length >= 14) {
       return;
     }
+
+    // 【关键修复】在牌墙检查之前设置flag，防止牌墙为空时return导致二次摸牌
+    game.drawnThisTurn = true;
 
     if (game.wall.length === 0) {
       // 牌墙摸完，流局
@@ -627,8 +633,12 @@ export class ActionHandler {
       player.discarderId = game.players[game.currentPlayerIndex]?.id;
       player.discarderName = game.players[game.currentPlayerIndex]?.name;
     }
+    // 捉冲：从pendingAction.tile获取放冲牌名；自摸：从lastDrawnTile获取摸到的牌名
+    const pendingTile = game.pendingActions.find(pa => pa.playerId === player.id)?.tile;
     const lastDrawn = (player as any).lastDrawnTile;
-    const winningTileName = lastDrawn ? getTileDisplayName(lastDrawn) : '';
+    const winningTileName = isSelfDrawn
+      ? (lastDrawn ? getTileDisplayName(lastDrawn) : '')
+      : (pendingTile ? getTileDisplayName(pendingTile) : (lastDrawn ? getTileDisplayName(lastDrawn) : ''));
     const handTypeLabel = (player as any).winHandType || '';
     const discarderName = isSelfDrawn ? '' : (game.players[game.currentPlayerIndex]?.name || '');
     const huMsg = isSelfDrawn
@@ -642,14 +652,63 @@ export class ActionHandler {
     // 检查是否需要结束牌局
     const remainingActive = game.players.filter(p => p.status === PlayerStatus.PLAYING).length;
     if (remainingActive <= 1 || game.winnersCount >= 3) {
-      // 结束牌局
-      endRound(game, GameEndReason.LAST_PLAYER);
+      // 【修复】进入5秒亮牌阶段，再进入结算
+      game.phase = GamePhase.REVEAL;
+      await persistGame(game);
+      broadcastGameState(game.gameId);
+      const gameId = game.gameId;
+      const { timerManager: tm } = this.deps;
+      tm.detachTimer(setTimeout(async () => {
+        try {
+          const fresh = await this.deps.getGame(gameId);
+          if (!fresh || fresh.phase !== GamePhase.REVEAL) return;
+          endRound(fresh, GameEndReason.LAST_PLAYER);
+        } catch (e) { console.warn('[handleHu] reveal end error', e); }
+      }, 5000));
       return;
     }
 
-    // 继续牌局
+    // 继续牌局：检查牌墙是否已空
+    if (game.wall.length === 0) {
+      game.phase = GamePhase.REVEAL;
+      await persistGame(game);
+      broadcastGameState(game.gameId);
+      const gameId = game.gameId;
+      const { timerManager: tm } = this.deps;
+      tm.detachTimer(setTimeout(async () => {
+        try {
+          const fresh = await this.deps.getGame(gameId);
+          if (!fresh || fresh.phase !== GamePhase.REVEAL) return;
+          endRound(fresh, GameEndReason.LAST_PLAYER);
+        } catch (e) { console.warn('[handleHu] reveal end error', e); }
+      }, 5000));
+      return;
+    }
+
+    // 牌墙未空，找下一个未胡牌玩家继续
+    let nextIdx = game.currentPlayerIndex;
+    let searched = 0;
+    while (searched < game.players.length) {
+      nextIdx = (nextIdx + 1) % game.players.length;
+      searched++;
+      if (game.players[nextIdx].status === PlayerStatus.PLAYING) break;
+    }
+    game.currentPlayerIndex = nextIdx;
+    game.drawnThisTurn = false;
+    const nextPlayer = game.players[nextIdx];
+    this.deps.replaceInitialFlowers(game, nextPlayer);
+    const totalTiles = this.deps.getPlayableTileCount(nextPlayer);
+    if (totalTiles < 14) {
+      handleDraw(game, nextPlayer);
+      game.drawnThisTurn = true;
+    } else {
+      game.drawnThisTurn = true;
+    }
     await persistGame(game);
     broadcastGameState(game.gameId);
+    if (this.deps.isPlayerBotControlled(nextPlayer)) {
+      this.deps.scheduleBotDiscard(game.gameId, nextPlayer.id);
+    }
   }
 
   /**

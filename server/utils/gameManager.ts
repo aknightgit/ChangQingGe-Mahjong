@@ -127,7 +127,10 @@ class GameManager {
       updateRoundNumber: (g) => this.updateRoundNumber(g),
       resolveRobKongIfNeeded: (g) => this.resolveRobKongIfNeeded(g),
       clearBroadcasts: (id) => this.broadcastService.clearBroadcasts(id),
-      store: this.store
+      store: this.store,
+      getGame: (id) => this.getGame(id),
+      replaceInitialFlowers: (g, p) => this.replaceInitialFlowers(g, p),
+      getPlayableTileCount: (p) => this.getPlayableTileCount(p)
     };
   }
 
@@ -355,6 +358,11 @@ class GameManager {
     const currentPlayer = game.players[game.currentPlayerIndex];
     if (!currentPlayer || currentPlayer.status !== PlayerStatus.PLAYING) return false;
     if (!this.canPlayerDrawOnCurrentTurn(game, currentPlayer)) return false;
+
+    // 【修复】遵守决策犹豫期冻结，不绕过 freeze 检查
+    const freezeUntil = Number((game as any)._freezeUntil ?? 0);
+    if (freezeUntil > Date.now()) return false;
+    if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now() && game.thinkFreezePlayerId !== currentPlayer.id) return false;
 
     this.replaceInitialFlowers(game, currentPlayer);
     const totalTileCount = this.getPlayableTileCount(currentPlayer);
@@ -5523,7 +5531,7 @@ class GameManager {
       finalReason === GameEndReason.LAST_PLAYER ||
       finalReason === GameEndReason.WALL_EXHAUSTED
     ) {
-      this.autoStartNextRound(game.gameId, 2000);
+      this.autoStartNextRound(game.gameId, 10000);
     }
   }
 
