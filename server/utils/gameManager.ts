@@ -4181,18 +4181,7 @@ class GameManager {
       game.inheritedGlobalMultiplier = Math.min(effective > 8 ? Math.floor(effective / 8) : doubled, 8);
 
       // 结束本局
-      game.phase = GamePhase.CHA_JIAO;
-      game.endReason = GameEndReason.LAST_PLAYER;
-      game.endedAt = Date.now();
-      game.lastActionTime = Date.now();
-
-      // 计算最终分数
-      const winners = game.players.filter(p => p.status === PlayerStatus.WON);
-      const finalScores = calculateGameResult(game.players, winners);
-      game.finalScores = finalScores;
-      for (const p of game.players) {
-        p.score = finalScores[p.id] ?? 0;
-      }
+      this.endRound(game, GameEndReason.LAST_PLAYER);
 
       // 聚义成功：庄家不变，保留当前庄家
       if (!game.nextDealerId) {
