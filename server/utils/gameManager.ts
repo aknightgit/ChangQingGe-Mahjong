@@ -120,6 +120,9 @@ class GameManager {
       getPlayerCumulativeScore: (id, pid) => this.getPlayerCumulativeScore(id, pid),
       checkQJThresholdAlerts: (g) => this.checkQJThresholdAlerts(g),
       enableBotMode: (id, pid) => this.enableBotMode(id, pid),
+      autoStartNextRound: (id, delay) => this.autoStartNextRound(id, delay),
+      advanceApprovalConflict: (g) => this.advanceApprovalConflict(g),
+      resolveRobKongIfNeeded: (g) => this.resolveRobKongIfNeeded(g),
       store: this.store
     };
   }

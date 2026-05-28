@@ -40,6 +40,9 @@ export interface ActionHandlerDeps {
   getPlayerCumulativeScore(gameId: string, playerId: string): number;
   checkQJThresholdAlerts(game: GameState): void;
   enableBotMode(gameId: string, playerId: string): void;
+  autoStartNextRound(gameId: string, delayMs: number): void;
+  advanceApprovalConflict(game: GameState): Promise<void>;
+  resolveRobKongIfNeeded(game: GameState): boolean;
   store: any;
 }
 
@@ -778,7 +781,7 @@ export class ActionHandler {
     delete (game as any).hasTriggeredAction;
     const discarderIndex = game.currentPlayerIndex;
 
-    const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
+    const wildChecker = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
 
     for (const player of game.players) {
       if (player.status !== PlayerStatus.PLAYING) continue;
