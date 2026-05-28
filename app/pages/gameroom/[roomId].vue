@@ -1445,6 +1445,8 @@ const evaluateViewport = () => {
 const isHiddenTile = (tile: any) => String(tile?.id || '').startsWith('hidden-') || tile?.value === 0
 const isOpponentHandRevealed = (player?: Player | null) => {
   if (!player || player.id === currentPlayer.value?.id) return false
+  // REVEAL 阶段：所有玩家手牌翻开
+  if (gameState.value?.phase === GamePhase.REVEAL) return true
   const hand = player.hand?.concealedTiles || []
   return hand.length > 0 && hand.some(tile => !isHiddenTile(tile))
 }
@@ -4109,33 +4111,11 @@ watch(
     }
     isRoundWallExhausted.value = isWallExhausted
 
-    // ★ 胡牌时先显示赢家亮牌 3 秒，再过渡到结算面板
-    if (!isWallExhausted && lastRound?.winnerDetails?.length) {
-      winnerRevealData.value = lastRound.winnerDetails.map((w: any) => ({
-        playerName: w.playerName,
-        handTypeName: w.handTypeName || '胡牌',
-        tileFaces: w.tileFaces || [],
-        isSelfDrawn: w.isSelfDrawn,
-        discarderName: w.discarderName,
-        finalPoints: w.finalPoints,
-        baseFan: w.baseFan,
-        handTiles: w.handTiles || [],
-        exposedTiles: w.exposedTiles || [],
-        exposedMeldGroups: w.exposedMeldGroups || []
-      }))
-      showWinnerReveal.value = true
-      window.setTimeout(() => {
-        showWinnerReveal.value = false
-        showSettlement.value = true
-        startWallExhaustedCountdown()
-      }, 3000)
-    } else {
-      // 流局直接显示结算
-      window.setTimeout(() => {
-        showSettlement.value = true
-        startWallExhaustedCountdown()
-      }, 1000)
-    }
+    // 流局或胡牌：5秒后显示结算（REVEAL阶段由服务端控制，手牌自动翻开）
+    window.setTimeout(() => {
+      showSettlement.value = true
+      startWallExhaustedCountdown()
+    }, isWallExhausted ? 1000 : 5000)
   }
 )
 
