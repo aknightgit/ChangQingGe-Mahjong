@@ -156,6 +156,10 @@ export class ActionHandler {
       game.currentPlayerIndex = game.players.findIndex(p => p.id === nextPlayer.id);
     }
 
+    // 立即广播出牌结果（不等 freeze timer）
+    await persistGame(game);
+    broadcastGameState(game.gameId);
+
     await beginCurrentPlayerTurn(game);
   }
 
