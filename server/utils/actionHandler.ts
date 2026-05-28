@@ -175,9 +175,33 @@ export class ActionHandler {
       return;
     }
 
-    const tile = game.wall.pop()!;
-    player.hand.concealedTiles.push(tile);
+    let tile = game.wall.pop()!;
+
+    // 循环补花:摸到普通花牌就放门口继续摸,直到摸到非花牌
+    while (isFlower(tile) && !isWildTile(game, tile)) {
+      player.hand.exposedMelds.push({
+        type: MeldType.TRIPLET,
+        tiles: [tile],
+        isConcealed: false,
+        replacementDone: true as any
+      } as any);
+      console.log(`[FLOWER] ${player.name} 摸到花牌: ${tile.id}, 门口花牌数: ${player.hand.exposedMelds.filter(m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !isWildTile(game, m.tiles[0])).length}`);
+      if (game.wall.length === 0) {
+        endRound(game, GameEndReason.WALL_EXHAUSTED);
+        return;
+      }
+      tile = game.wall.pop()!;
+    }
+
+    // 花牌百搭 → 进手牌
+    if (isFlower(tile) && isWildTile(game, tile)) {
+      player.hand.concealedTiles.push(tile);
+    } else {
+      // 普通牌 → 进手牌
+      player.hand.concealedTiles.push(tile);
+    }
     player.hand.concealedTiles = sortHandWithWildFront(player.hand.concealedTiles, game);
+    (player as any).lastDrawnTile = tile;
 
     // 记录动作历史
     game.actionHistory.push({
