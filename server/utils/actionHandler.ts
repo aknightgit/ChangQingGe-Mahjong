@@ -154,15 +154,23 @@ export class ActionHandler {
       return;
     }
 
-    // 没有人响应，推进到下一个玩家
+    // 没有人响应，推进到下一个玩家（和老代码 _handleDiscard_original 一致）
     const nextPlayer = getNextActivePlayer(game, discarderIndex);
     if (nextPlayer) {
       game.currentPlayerIndex = game.players.findIndex(p => p.id === nextPlayer.id);
     }
 
-    // 立即广播出牌结果（不等 freeze timer）
-    await persistGame(game);
-    broadcastGameState(game.gameId);
+    // 【关键】调用 beginCurrentPlayerTurn：重置 drawnThisTurn、调度 freeze timer、调度 autoTakeover
+    await beginCurrentPlayerTurn(game);
+
+    if (game.pendingActions.length > 0) {
+      const existingBotTimer = timerManager.botTimers?.get(game.gameId);
+      if (existingBotTimer) {
+        clearTimeout(existingBotTimer);
+        timerManager.botTimers.delete(game.gameId);
+      }
+      schedulePendingActionTimeout(game.gameId);
+    }
 
     await beginCurrentPlayerTurn(game);
   }
