@@ -4248,12 +4248,12 @@ const getReplacedFlowerMelds = (player: any) =>
     const tile = meld?.tiles?.[0]
     return meld?.tiles?.length === 1 && tile?.suit === 'hua' && !!meld?.replacementDone
   })
-  if ((newState as any)?.roundNumber !== _flowerVoicePlayedRound) {
-    _flowerVoicePlayed.clear()
-    _flowerVoicePlayedRound = (newState as any)?.roundNumber ?? _flowerVoicePlayedRound
-  }
 const checkOtherPlayerSounds = (newState: any) => {
   if (!gameState.value?.players) return
+  if (newState?.roundNumber !== _flowerVoicePlayedRound) {
+    _flowerVoicePlayed.clear()
+    _flowerVoicePlayedRound = newState?.roundNumber ?? _flowerVoicePlayedRound
+  }
   const pendingMeldVoices: Array<'kong' | 'pong' | 'chow'> = []
   for (const player of newState.players) {
     const prev = prevOtherPlayerState.get(player.id)

@@ -14,8 +14,8 @@ export class RoomService {
     isPrivate?: boolean;
     password?: string;
     allowSpectators?: boolean;
-  }): Promise<Room> {
     hesitationWindow?: number;
+  }): Promise<Room> {
     const collection = await getCollection<Room>(this.COLLECTION_NAME);
     
     const room: Room = {
