@@ -350,7 +350,7 @@ export class ActionHandler {
    * 处理碰牌
    */
   async handlePeng(game: GameState, player: Player): Promise<void> {
-    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store } = this.deps;
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, beginCurrentPlayerTurn } = this.deps;
 
     // 找到最后一个弃牌
     const lastDiscard = game.discardPile[game.discardPile.length - 1];
@@ -448,7 +448,7 @@ export class ActionHandler {
    * 处理杠牌
    */
   async handleKong(game: GameState, player: Player, tileId: string): Promise<void> {
-    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store } = this.deps;
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, beginCurrentPlayerTurn } = this.deps;
 
     const tile = findTileById(player.hand.concealedTiles, tileId);
     if (!tile) {
