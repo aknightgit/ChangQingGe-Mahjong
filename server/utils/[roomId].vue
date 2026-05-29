@@ -1973,6 +1973,10 @@ const tileLabel = (tile: Partial<Tile> | null | undefined): string => {
 
 const tileSuitOrder: Record<string, number> = { wan: 0, tiao: 1, dots: 2, feng: 3, jian: 4, hua: 5 }
 const compareTilesForDisplay = (a: Partial<Tile>, b: Partial<Tile>): number => {
+  const aWild = isWildPreviewTile(a)
+  const bWild = isWildPreviewTile(b)
+  if (aWild && !bWild) return 1   // wild goes last
+  if (!aWild && bWild) return -1
   const suitDelta = (tileSuitOrder[a.suit || ''] ?? 99) - (tileSuitOrder[b.suit || ''] ?? 99)
   if (suitDelta !== 0) return suitDelta
   return Number(a.value ?? 0) - Number(b.value ?? 0)
@@ -1992,7 +1996,7 @@ const isWildPreviewTile = (tile: Partial<Tile> | null | undefined): boolean => {
 const knownVisibleTileCounts = computed(() => {
   const counts = new Map<string, number>()
   const pushTile = (tile: Partial<Tile> | null | undefined) => {
-    if (!tile || !tile.suit || isWildPreviewTile(tile)) return
+    if (!tile || !tile.suit) return
     const key = tileCountKey(tile)
     if (!key) return
     counts.set(key, (counts.get(key) || 0) + 1)
@@ -2017,7 +2021,7 @@ const tingPreviewItems = computed(() => {
   const deduped = new Map<string, { key: string; label: string; tile: Tile; isExhausted: boolean }>()
   for (const entry of winningTiles) {
     const tile = entry?.tile as Tile | undefined
-    if (!tile || isWildPreviewTile(tile)) continue
+    if (!tile) continue
     const key = tileCountKey(tile)
     if (!key || deduped.has(key)) continue
     const knownCount = knownVisibleTileCounts.value.get(key) || 0
