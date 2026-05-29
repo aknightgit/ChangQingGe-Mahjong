@@ -730,8 +730,6 @@ class GameManager {
     return this.botController.resolveBotChowNow(game, player, pa);
   }
 
-    return { multiplier: 1, type: null };
-  }
 
   /**
    * 获取最后一张弃牌的玩家ID
@@ -1436,6 +1434,7 @@ class GameManager {
     if (dealer) {
       if (this.isPlayerBotControlled(dealer)) {
         // Bot 庄家:freeze 后自动摸+出牌
+        (game as any)._freezeUntil = Date.now() + freezeMs;
         const botTimer = this.timerManager.detachTimer(setTimeout(async () => {
           try {
             this.timerManager.freezeTimers.delete(gameId);
