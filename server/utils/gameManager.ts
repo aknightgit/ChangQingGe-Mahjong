@@ -19,6 +19,7 @@ import { TimerManager } from './timerManager';
 import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
 import { WinEvaluator } from './winEvaluator';
 import { BailoutTracker } from './bailoutTracker';
+import { SwapManager } from './swapManager';
 import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier, calculateSettlementBreakdownByRules, generateWinOptions, type WinOption } from './scoring';
 import { randomUUID } from 'crypto';
 import { saveGameState, loadGameState, loadAllGameStates, loadActiveGameStates, deleteGameState } from './gamePersistence';
@@ -55,6 +56,11 @@ class GameManager {
   private actionHandler: ActionHandler;
   private winEvaluator = new WinEvaluator();
   private bailoutTracker = new BailoutTracker();
+  private swapManager = new SwapManager(
+    (id) => this.games.get(id),
+    (gid, pid) => this.getPlayerCumulativeScore(gid, pid),
+    (p) => this.isPlayerBotControlled(p)
+  );
 
   constructor() {
     this.store = new GameStore();
@@ -1226,10 +1232,10 @@ class GameManager {
     game.freezeRound = undefined;
 
     // 🔄 换位置请求:每局都可以生效
-    this.applySwapRequests(game);
+    this.swapManager.applySwapRequests(game);
 
     // 🔄 观赛者替换AI请求:每局生效
-    this.applyBotReplacement(game);
+    this.swapManager.applyBotReplacement(game);
     console.log('[timing-startGame] setup+swap+replace:', Date.now() - Date.now(), 'ms');
 
     // 🎲 随机选位置:仅首次开局时随机,后续座位固定(除非换位置)
@@ -2601,10 +2607,10 @@ class GameManager {
       return;
     }
 
-    const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile, game);
+    const sequences = tileHelper.findChowSequences(player.hand.concealedTiles, discardedTile, game);
     if (sequences.length === 0) { console.warn('[CHOW] No sequence'); return; }
 
-    const sequence = this.selectChowSequence(sequences, discardedTile, tileIds);
+    const sequence = tileHelper.selectChowSequence(sequences, discardedTile, tileIds);
     const handTiles = sequence.filter(t => t.id !== discardedTile.id);
 
     const _bailoutCount = this.bailoutTracker.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.SEQUENCE);
@@ -3030,18 +3036,10 @@ class GameManager {
    * 每输一个QJ线距离,获得1次机会
    * 默认QJ线4000:输4000→1次,输8000→2次,输12000→3次
    */
-  private computeSwapChances(game: GameState, playerId: string): number {
-    const threshold = game.liangShanThreshold ?? 4000;
-    const cumulativeScore = this.getPlayerCumulativeScore(game.gameId, playerId);
-    if (cumulativeScore >= 0) return 0;
-    const absScore = Math.abs(cumulativeScore);
-    return Math.min(Math.floor(absScore / threshold), 10);
-  }
 
   /**
    * 请求换位置
    */
-  public requestSwapPosition(gameId: string, playerId: string, targetId: string): { success: boolean; message: string } {
     const game = this.games.get(gameId);
     if (!game) throw new Error('Game not found');
     if (game.phase !== GamePhase.PLAYING && game.phase !== GamePhase.ENDED) {
@@ -3057,7 +3055,7 @@ class GameManager {
     if (this.isPlayerBotControlled(player)) throw new Error('AI players cannot swap positions');
 
     // 计算剩余机会
-    const totalChances = this.computeSwapChances(game, playerId);
+    const totalChances = this.swapManager.computeSwapChances(game, playerId);
     const usedChances = (game.swapRequests || []).filter(r => r.playerId === playerId).length;
     const remainingChances = totalChances - usedChances;
 
@@ -3088,123 +3086,21 @@ class GameManager {
   /**
    * 应用待生效的换位请求(在startGame中调用)
    */
-  private applySwapRequests(game: GameState): void {
-    if (!game.swapRequests || game.swapRequests.length === 0) return;
-
-    for (const req of game.swapRequests) {
-      const p1Idx = game.players.findIndex(p => p.id === req.playerId);
-      const p2Idx = game.players.findIndex(p => p.id === req.targetId);
-      if (p1Idx < 0 || p2Idx < 0) continue;
-
-      const p1 = game.players[p1Idx];
-      const p2 = game.players[p2Idx];
-
-      // 交换 position
-      const tmpPos = p1.position;
-      p1.position = p2.position;
-      p2.position = tmpPos;
-
-      // 交换在数组中的位置
-      game.players[p1Idx] = p2;
-      game.players[p2Idx] = p1;
-
-      console.log(`[Swap] ${p1.name} ↔ ${p2.name} 位置已互换`);
-    }
-
-    // 清空已生效的请求
-    game.swapRequests = [];
-  }
 
   /**
    * 观赛者请求下局替换某个AI
    */
-  public requestBotReplacement(gameId: string, spectatorId: string, targetBotId: string, playerName: string, userId?: string): void {
-    const game = this.games.get(gameId);
-    if (!game) throw new Error('Game not found');
-
-    // 验证观赛者在房间中
-    const spectator = game.players.find(p => p.id === spectatorId && p.status === PlayerStatus.SPECTATING);
-    if (!spectator) throw new Error('Spectator not found');
-
-    // 验证目标玩家是AI且在房间中
-    const bot = game.players.find(p => p.id === targetBotId && (p.name.startsWith('AI-') || p.name.startsWith('电脑')));
-    if (!bot) throw new Error('Target bot not found');
-
-    if (!game.botReplacementQueue) game.botReplacementQueue = [];
-    // 移除该观赛者之前的替换请求(防止重复)
-    game.botReplacementQueue = game.botReplacementQueue.filter(r => r.spectatorId !== spectatorId);
-    game.botReplacementQueue.push({
-      spectatorId,
-      spectatorName: playerName,
-      targetBotId,
-      userId,
-      requestedAt: Date.now()
-    });
-
-    console.log(`[BotReplace] ${playerName}(观赛) 请求下局替换 ${bot.name}`);
-  }
 
   /**
    * 应用待生效的替换AI请求(在startGame中调用)
    */
-  private applyBotReplacement(game: GameState): void {
-    if (!game.botReplacementQueue || game.botReplacementQueue.length === 0) return;
-
-    for (const req of game.botReplacementQueue) {
-      const botIdx = game.players.findIndex(p => p.id === req.targetBotId);
-      if (botIdx < 0) {
-        console.warn(`[BotReplace] 目标AI ${req.targetBotId} 已不在房间,跳过`);
-        continue;
-      }
-
-      const spectatorIdx = game.players.findIndex(p => p.id === req.spectatorId);
-      if (spectatorIdx < 0) {
-        console.warn(`[BotReplace] 观赛者 ${req.spectatorId} 已不在房间,跳过`);
-        continue;
-      }
-
-      const bot = game.players[botIdx];
-      const oldSpectator = game.players[spectatorIdx];
-
-      // 生成新playerId替换AI
-      const newPlayerId = randomUUID();
-      const newPlayer: Player = {
-        id: newPlayerId,
-        userId: req.userId,
-        name: req.spectatorName,
-        position: bot.position,
-        hand: { concealedTiles: [], exposedMelds: [], discardedTiles: [] },
-        status: PlayerStatus.WAITING,
-        isDealer: false,
-        isTing: false,
-        missingSuit: null,
-        windScore: 0,
-        rainScore: 0,
-        wonFan: 0,
-      };
-
-      game.players[botIdx] = newPlayer;
-      // 移除观赛者记录
-      game.players.splice(spectatorIdx, 1);
-
-      // 清理观赛者的 spectatorView
-      if (game.spectatorViews) {
-        delete game.spectatorViews[req.spectatorId];
-      }
-
-      console.log(`[BotReplace] ${oldSpectator.name} → 替换 ${bot.name} 成功, 新玩家ID: ${newPlayerId}`);
-    }
-
-    game.botReplacementQueue = [];
-  }
 
   /**
    * 获取玩家剩余换位置次数信息
    */
-  public getSwapInfo(gameId: string, playerId: string): { totalChances: number; usedChances: number; remaining: number } {
     const game = this.games.get(gameId);
     if (!game) return { totalChances: 0, usedChances: 0, remaining: 0 };
-    const totalChances = this.computeSwapChances(game, playerId);
+    const totalChances = this.swapManager.computeSwapChances(game, playerId);
     const usedChances = (game.swapRequests || []).filter(r => r.playerId === playerId).length;
     return { totalChances, usedChances, remaining: totalChances - usedChances };
   }
@@ -3303,9 +3199,9 @@ class GameManager {
 
     const chowPlayer = this.getNextActivePlayer(game, discarderIndex);
     if (chowPlayer) {
-      const sequences = this.findChowSequences(chowPlayer.hand.concealedTiles, discardedTile, game);
+      const sequences = tileHelper.findChowSequences(chowPlayer.hand.concealedTiles, discardedTile, game);
       if (sequences.length > 0) {
-        const chowOptions = this.buildChowOptionIds(sequences, discardedTile);
+        const chowOptions = tileHelper.buildChowOptionIds(sequences, discardedTile);
         // 检查该玩家是否已有碰/杠/胡的pending(如果有,追加吃选项)
         const existing = game.pendingActions.find(pa => pa.playerId === chowPlayer.id);
         if (existing) {
@@ -3381,67 +3277,6 @@ class GameManager {
    * Only works for number suits (筒万条)
    * 百搭牌不能用于吃牌
    */
-  private findChowSequences(hand: Tile[], discardedTile: Tile, game?: GameState): Tile[][] {
-    const numberSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-    if (!numberSuits.includes(discardedTile.suit)) return [];
-
-    // 如果弃牌本身是百搭,不能被吃
-    if (game && this.isWildTile(game, discardedTile)) return [];
-
-    // 过滤掉手牌中的百搭牌(百搭不能参与吃牌)
-    const eligibleHand = game
-      ? hand.filter(t => !this.isWildTile(game, t))
-      : hand;
-
-    const sequences: Tile[][] = [];
-    const v = discardedTile.value;
-    const suit = discardedTile.suit;
-
-    // Case 1: discarded tile is the smallest (e.g. 5, need 6+7)
-    if (v <= 7) {
-      const t2 = eligibleHand.find(t => t.suit === suit && t.value === v + 1);
-      const t3 = eligibleHand.find(t => t.suit === suit && t.value === v + 2);
-      if (t2 && t3) {
-        sequences.push([discardedTile, t2, t3]);
-      }
-    }
-
-    // Case 2: discarded tile is the middle (e.g. 5, need 4+6)
-    if (v >= 2 && v <= 8) {
-      const t1 = eligibleHand.find(t => t.suit === suit && t.value === v - 1);
-      const t3 = eligibleHand.find(t => t.suit === suit && t.value === v + 1);
-      if (t1 && t3) {
-        sequences.push([t1, discardedTile, t3]);
-      }
-    }
-
-    // Case 3: discarded tile is the largest (e.g. 5, need 3+4)
-    if (v >= 3) {
-      const t1 = eligibleHand.find(t => t.suit === suit && t.value === v - 2);
-      const t2 = eligibleHand.find(t => t.suit === suit && t.value === v - 1);
-      if (t1 && t2) {
-        sequences.push([t1, t2, discardedTile]);
-      }
-    }
-
-    return sequences;
-  }
-
-  private buildChowOptionIds(sequences: Tile[][], discardedTile: Tile): string[][] {
-    const seen = new Set<string>();
-    const options: string[][] = [];
-    for (const sequence of sequences) {
-      const ids = sequence
-        .filter(tile => tile.id !== discardedTile.id)
-        .map(tile => tile.id)
-        .sort();
-      const key = ids.join('|');
-      if (seen.has(key)) continue;
-      seen.add(key);
-      options.push(ids);
-    }
-    return options;
-  }
 
   /**
    * 对吃牌组合评分,选择最优吃法
@@ -3450,83 +3285,10 @@ class GameManager {
    * - 单边(弃牌在边且手牌是1,2或8,9):次优先,完成边搭
    * - 两面(弃牌在边且手牌连号):最低优先,留下灵活搭子
    */
-  private scoreChowSequence(sequence: Tile[], discardedTile: Tile): number {
-    const sorted = [...sequence].sort((a, b) => a.value - b.value);
-    const values = sorted.map(t => t.value);
-    const discardIdx = sorted.findIndex(t => t.id === discardedTile.id);
-
-    let score = 0;
-
-    // 夹张:弃牌在中间 [1,2吃3] 不是夹张,[1,3吃2] 是夹张
-    if (discardIdx === 1) {
-      // 弃牌在中间位置
-      const gap = values[2] - values[0];
-      if (gap === 2) {
-        // 真正的夹张:如 [1,3吃2],[2,4吃3]
-        score += 10;
-      }
-    }
-
-    // 单边:弃牌在边缘,且剩余牌在边角(1,2 或 8,9)
-    if (discardIdx === 0 || discardIdx === 2) {
-      const remaining = discardIdx === 0 ? [values[1], values[2]] : [values[0], values[1]];
-      if ((remaining[0] === 1 && remaining[1] === 2) ||
-          (remaining[0] === 8 && remaining[1] === 9)) {
-        // 单边搭子:如 吃3留下1,2 或 吃7留下8,9
-        score += 8;
-      } else {
-        // 两面搭子:如 吃1留下2,3 → 留下灵活搭子,不太想吃
-        score += 2;
-      }
-    }
-
-    // 附加:如果完成的顺子在手牌中形成更大组合(如 1,2,3,4),加分
-    const hand = [...sequence].filter(t => t.id !== discardedTile.id);
-    if (hand.length === 2 && Math.abs(hand[0].value - hand[1].value) === 1) {
-      score += 1; // 手牌本身是连号,吃完后更完整
-    }
-
-    return score;
-  }
 
   /**
    * 从多个吃牌组合中选择最优组合
    */
-  private selectBestChowSequence(sequences: Tile[][], discardedTile: Tile): Tile[] {
-    if (sequences.length === 1) return sequences[0];
-
-    let best = sequences[0];
-    let bestScore = this.scoreChowSequence(sequences[0], discardedTile);
-
-    for (let i = 1; i < sequences.length; i++) {
-      const score = this.scoreChowSequence(sequences[i], discardedTile);
-      if (score > bestScore) {
-        bestScore = score;
-        best = sequences[i];
-      }
-    }
-
-    return best;
-  }
-
-  private selectChowSequence(sequences: Tile[][], discardedTile: Tile, tileIds?: string[]): Tile[] {
-    if (tileIds?.length) {
-      const requested = [...tileIds].sort().join('|');
-      const matched = sequences.find(sequence => {
-        const ids = sequence
-          .filter(tile => tile.id !== discardedTile.id)
-          .map(tile => tile.id)
-          .sort()
-          .join('|');
-        return ids === requested;
-      });
-      if (!matched) {
-        throw new Error('Invalid chow selection');
-      }
-      return matched;
-    }
-    return this.selectBestChowSequence(sequences, discardedTile);
-  }
 
   private async moveToNextPlayer(game: GameState): Promise<void> {
     if (game.phase !== GamePhase.PLAYING) {
