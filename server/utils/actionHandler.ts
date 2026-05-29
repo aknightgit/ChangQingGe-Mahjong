@@ -587,6 +587,16 @@ export class ActionHandler {
     // 更新副露
     existingMeld.tiles.push(tile);
 
+    // 加杠也记录互包（老代码 executeExtendedKongDirectly 有此逻辑）
+    const existingSourceTileId = existingMeld.sourceTileId;
+    if (existingSourceTileId) {
+      const sourcePlayer = game.players.find(p => p.hand.discardedTiles.some(t => t.id === existingSourceTileId));
+      if (sourcePlayer) {
+        this.deps.recordBailoutAction(game.gameId, player.id, sourcePlayer.id, MeldType.KONG);
+        this.deps.checkAndBroadcastBailout(game.gameId, player.id, sourcePlayer.id);
+      }
+    }
+
     // 记录动作历史
     game.actionHistory.push({
       type: ActionType.EXTENDED_KONG,
