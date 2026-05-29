@@ -3329,9 +3329,8 @@ const startWallExhaustedCountdown = () => {
         // 退房申请中 → 切到最终结算视图
         settleFinalMode.value = true
       } else {
-        // 倒计时结束 → 关闭弹窗，等服务端 STARTING 广播自动进下一局
-        showSettlement.value = false
-        settlementData.value = null
+        // 倒计时结束 → 主动调API推进到STARTING，不被动等广播
+        void startNextRound()
       }
     }
   }, 1000)
