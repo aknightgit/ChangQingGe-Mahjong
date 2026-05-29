@@ -840,7 +840,7 @@ class GameManager {
 
   /** 获取决策犹豫期(毫秒):训练模式0~30ms,实战默认5000ms */
   private getHesitationWindow(game: GameState): number {
-    const raw = game.hesitationWindow ?? 5000;
+    const raw = game.hesitationWindow ?? 4000;
     if (this.isTrainingFastMode(game)) {
       return Math.min(30, Math.max(0, raw));
     }
