@@ -114,7 +114,7 @@ export class TimerManager {
   }
 
   getHesitationWindow(game: GameState): number {
-    return game.hesitationWindow ?? 1000;
+    return game.hesitationWindow ?? 5000;
   }
 
   /** 刷新 pending action 过期时间 */
