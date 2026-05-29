@@ -2,10 +2,10 @@
  * actionHandler.ts — 玩家动作处理（从 gameManager 拆分）
  * 负责：出牌、摸牌、吃、碰、杠、胡、造反、聚义、想一想、过
  */
-import { GameState, Player, GamePhase, PlayerStatus, ActionType, PendingAction, MeldType, Tile, GameEndReason } from '../types/game';
+import { GameState, Player, GamePhase, PlayerStatus, ActionType, PendingAction, MeldType, Tile, GameEndReason, TileSuit } from '../types/game';
 import { findTileById, removeTile, isFlower, tilesEqual, isMissingOneSuit, getTileDisplayName } from './tiles';
-import { buildWildTileChecker, HandType, isTing, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
-import { calculateGameResult, generateWinOptions, type WinOption } from './scoring';
+import { buildWildTileChecker, HandType, isTing, checkChowPongExclusion, updateChowPongExclusion, detectHandTypes } from './handValidator';
+import { calculateGameResult, generateWinOptions, calculateScore, type WinOption } from './scoring';
 import * as tileHelper from './tileHelper';
 
 /** ActionHandler 依赖的 GameManager 接口 */
@@ -638,6 +638,64 @@ export class ActionHandler {
     player.winTimestamp = Date.now();
     game.winnersCount++;
 
+    // 【修复】计算番数和最终点数（老代码 _handleHu_original 有，新代码漏了）
+    const huPlayerIdx = game.players.findIndex(p => p.id === player.id);
+    const isSelfDrawn = game.currentPlayerIndex === huPlayerIdx;
+    const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
+    const isKongFlower = isSelfDrawn && !!(player as any).isSelfDrawn;
+    const isRobbingKong = !!pendingAction?.tile && !!(game as any).pendingKongClaim;
+    const flowerTiles = player.hand.exposedMelds
+      .flatMap((m: any) => m.tiles)
+      .filter((t: any) => isFlower(t));
+    const concealedNonFlower = player.hand.concealedTiles.filter(t => !isFlower(t));
+    const isDaDiao = concealedNonFlower.length === 1;
+    const isMenQing = !player.hand.exposedMelds.some((m: any) =>
+      m.type === MeldType.TRIPLET ||
+      m.type === MeldType.SEQUENCE ||
+      (m.type === MeldType.KONG && !m.isConcealed)
+    );
+    const handTypes = detectHandTypes(
+      player.hand.concealedTiles,
+      player.hand.exposedMelds,
+      isSelfDrawn,
+      flowerTiles.length,
+      game.customScoringMode,
+      game.wildTileGroup
+    );
+    const wildParts = game.customScoringMode?.split('-');
+    const wildSuit = wildParts && wildParts[0] ? wildParts[0] as TileSuit : undefined;
+    const wildValue = wildParts && wildParts[1] ? parseInt(wildParts[1], 10) : undefined;
+    const scoreResult = calculateScore({
+      handTiles: player.hand.concealedTiles,
+      exposedMelds: player.hand.exposedMelds,
+      flowerTiles,
+      handTypes,
+      isSelfDrawn,
+      isKongFlower,
+      isRobbingKong,
+      isMenQing,
+      isDaDiao,
+      wildTileSuit: wildSuit,
+      wildTileValue: wildValue,
+      wildTileGroup: game.wildTileGroup,
+      rawRoundMultiplier: game.roundMultiplier ?? 1,
+      rawInheritMultiplier: game.inheritMultiplier ?? 1,
+      globalIncludesRound: true,
+      settlementMultiplier: game.settlementMultiplier ?? 1
+    });
+    player.wonFan = selectedOption?.score ?? scoreResult.finalPoints;
+    player.winHandType = selectedOption?.handTypeName ?? scoreResult.handTypeName;
+    player.winningScoreBreakdown = {
+      baseFan: scoreResult.baseFan,
+      extraMultipliers: scoreResult.extraMultipliers,
+      diceMultiplier: scoreResult.roundMultiplier,
+      inheritMultiplier: scoreResult.inheritMultiplier,
+      effectiveMultiplier: scoreResult.globalMultiplier,
+      settlementMultiplier: scoreResult.settlementMultiplier,
+      finalPoints: player.wonFan,
+      details: [...scoreResult.details]
+    };
+
     // 记录动作历史
     game.actionHistory.push({
       type: ActionType.HU,
@@ -646,8 +704,6 @@ export class ActionHandler {
     });
 
     // 胡牌广播
-    const huPlayerIdx = game.players.findIndex(p => p.id === player.id);
-    const isSelfDrawn = game.currentPlayerIndex === huPlayerIdx;
     player.isSelfDrawn = isSelfDrawn;
     if (!isSelfDrawn) {
       player.discarderId = game.players[game.currentPlayerIndex]?.id;
@@ -1069,6 +1125,9 @@ export class ActionHandler {
   private findChowSequences(hand: Tile[], discardedTile: Tile, game?: GameState): Tile[][] {
     const sequences: Tile[][] = [];
     const wildChecker = game ? buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup) : () => false;
+
+    // 字牌（风/箭/花）不能被吃，只有数牌（万/条/筒）可以组成顺子
+    if (discardedTile.suit === TileSuit.WIND || discardedTile.suit === TileSuit.DRAGON || discardedTile.suit === TileSuit.FLOWER) return [];
 
     // 如果弃牌本身是百搭,不能被吃
     if (game && wildChecker(discardedTile)) return [];

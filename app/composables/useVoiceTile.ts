@@ -97,6 +97,7 @@ let _audioEl: HTMLAudioElement | null = null
 let _voiceQueue: Promise<void> = Promise.resolve()
 let _voicePrimed = false
 let _lastSpokenAt = 0
+let _playSeq = 0
 
 const getAudioEl = (): HTMLAudioElement => {
   if (!_audioEl) {
@@ -128,6 +129,7 @@ const playAudioQueued = (url: string, fallbackText?: string): Promise<void> => n
   let settled = false
   let timeoutId: ReturnType<typeof setTimeout> | null = null
   let fallbackTriggered = false
+  const mySeq = ++_playSeq  // 每次播放分配唯一序号
 
   const finish = () => {
     if (settled) return
@@ -158,7 +160,10 @@ const playAudioQueued = (url: string, fallbackText?: string): Promise<void> => n
   el.currentTime = 0
   timeoutId = setTimeout(() => {
     fallback()
-    try { el.pause(); el.currentTime = 0 } catch {}  // 超时后立即停止音频，防止重叠
+    // 只在自己仍是当前播放序列时才 pause，避免杀掉后续新播放
+    if (_playSeq === mySeq) {
+      try { el.pause(); el.currentTime = 0 } catch {}
+    }
     finish()
   }, 5000)
   el.play().catch(() => {
