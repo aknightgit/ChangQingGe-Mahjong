@@ -331,17 +331,19 @@
     <div class="settle-actions">
       <!-- 第一阶段：本局输赢（独面板） -->
       <div v-if="!settleFinalMode">
-        <div class="auto-next-countdown" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;justify-content:center;font-size:0.85rem;opacity:0.8">
-          <span class="auto-next-spinner"></span>
-          <span>倒计时 {{ wallExhaustedCountdown }}s 后{{ isSettleRequested ? '显示最终结算' : '自动下一局' }}</span>
-        </div>
-        <div style="display:flex;gap:8px;justify-content:center;width:100%">
-          <button v-if="canReviewHuSelection" class="settle-save-btn settle-save-btn--secondary" @click="openHuReviewPanel">
-            回看胡牌选择
-          </button>
-          <button class="settle-save-btn" @click="isSettleRequested ? finishSettleToFinal() : startNextRound()">
-            {{ isSettleRequested ? '查看最终结算' : '下一局' }}{{ wallExhaustedCountdown > 0 ? ' (' + wallExhaustedCountdown + 's)' : '' }}
-          </button>
+        <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:8px">
+          <div class="auto-next-countdown" style="display:flex;align-items:center;gap:8px;font-size:0.85rem;opacity:0.8">
+            <span class="auto-next-spinner"></span>
+            <span>倒计时 {{ wallExhaustedCountdown }}s 后{{ isSettleRequested ? '显示最终结算' : '自动下一局' }}</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button v-if="canReviewHuSelection" class="settle-save-btn settle-save-btn--secondary" @click="openHuReviewPanel">
+              回看胡牌选择
+            </button>
+            <button class="settle-save-btn" @click="isSettleRequested ? finishSettleToFinal() : startNextRound()">
+              {{ isSettleRequested ? '查看最终结算' : '下一局' }}{{ wallExhaustedCountdown > 0 ? ' (' + wallExhaustedCountdown + 's)' : '' }}
+            </button>
+          </div>
         </div>
       </div>
       <!-- 第二阶段：最终结算（独面板，表格化列对齐） -->
