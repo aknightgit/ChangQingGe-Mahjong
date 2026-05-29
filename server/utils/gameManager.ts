@@ -44,6 +44,7 @@ class GameManager {
   private broadcastService = new BroadcastService();
   private timerManager = new TimerManager();
   private isHydrated = false;
+  private botModePlayers: Set<string> = new Set();
 
   // ---- Public accessors for RoomGameBridge ----
   /** @internal */
