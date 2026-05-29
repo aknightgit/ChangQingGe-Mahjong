@@ -44,7 +44,7 @@ export default defineEventHandler(async (event) => {
 
     console.log('[timing-api] before gameManager.startGame:', Date.now() - startTime, 'ms');
     await gameManager.startGame(gameId, {
-      hesitationWindow: hesitationWindow ?? 5000,
+      hesitationWindow: hesitationWindow,
       fixedDice: Array.isArray(dice) && dice.length === 2
         ? [Number(dice[0]) || 1, Number(dice[1]) || 1]
         : undefined

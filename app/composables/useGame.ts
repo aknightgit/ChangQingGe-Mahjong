@@ -555,7 +555,7 @@ export const useGame = () => {
         body: {
           gameId: gameId.value,
           playerId: playerId.value,
-          hesitationWindow: Math.max(1000, options?.hesitationWindow ?? 5000),
+          hesitationWindow: options?.hesitationWindow ?? 5000,
           dice: options?.fixedDice
         }
       })

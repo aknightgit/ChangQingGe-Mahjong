@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = await readBody(event);
-  const { name, isPrivate, password, allowSpectators } = body;
+  const { name, isPrivate, password, allowSpectators, hesitationWindow } = body;
 
   if (!name) {
     throw createError({

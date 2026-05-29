@@ -80,7 +80,7 @@ export default defineEventHandler(async (event) => {
     const game = await GameService.createGame(
       roomId,
       players,
-      room.settings.hesitationWindow ?? 2000
+      room.settings.hesitationWindow
     );
 
     // Update room status

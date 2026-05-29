@@ -841,7 +841,7 @@ class GameManager {
 
   /** 获取决策犹豫期(毫秒):训练模式0~30ms,实战默认5000ms */
   private getHesitationWindow(game: GameState): number {
-    const raw = game.hesitationWindow ?? 4000;
+    const raw = game.hesitationWindow ?? 0;
     if (this.isTrainingFastMode(game)) {
       return Math.min(30, Math.max(0, raw));
     }
@@ -1541,10 +1541,10 @@ class GameManager {
       maxBots: options?.maxBots ?? 3,  // 默认允许最多3个AI
       minPlayers: options?.minPlayers ?? 4,  // 默认最少4人开局
       hesitationWindow: (() => {
-        const raw = options?.hesitationWindow ?? 5000;
+        const raw = options?.hesitationWindow;
         const fastByEnv = String(process.env.TRAINING_FAST_MODE || '').toLowerCase() === 'true';
         const fastMode = fastByEnv || !!options?.allClaimMode;
-        return fastMode ? Math.min(30, Math.max(0, raw)) : raw;
+        return fastMode ? Math.min(30, Math.max(0, raw ?? 0)) : (raw ?? 0);
       })(), // 决策犹豫期:训练模式0~30ms,实战默认5秒
       thinkUsage: {},
       allClaimMode: options?.allClaimMode,
@@ -1772,14 +1772,10 @@ class GameManager {
     game.discardPile = [];
     game.pendingActions = [];
     game.drawnThisTurn = false;
-    // 统一使用 hesitationWindow（决策犹豫期），所有冻结/等待时间都基于此参数
-    if (typeof options?.hesitationWindow === 'number') {
-      const fastMode = this.isTrainingFastMode(game);
-      game.hesitationWindow = fastMode
-        ? Math.min(30, Math.max(0, options.hesitationWindow))
-        : Math.max(1000, options.hesitationWindow);
+    // 统一使用 hesitationWindow（决策犹豫期），仅从建房参数传入，不做二次裁剪
+    if (typeof options?.hesitationWindow === "number") {
+      game.hesitationWindow = options.hesitationWindow;
     }
-    game.thinkUsage = {};  // 每局重置「等我想一想」使用次数
     game.thinkFreezeUntil = undefined;
     game.thinkFreezePlayerId = undefined;
     game.spectatorMode = null;

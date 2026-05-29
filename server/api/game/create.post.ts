@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
       settlementMultiplier: body.settlementMultiplier ?? 10,
       maxBots: body.maxBots ?? 3,
       minPlayers: body.minPlayers ?? 4,
-      hesitationWindow: body.hesitationWindow ?? 5000,
+      hesitationWindow: body.hesitationWindow,
       selectedBots: body.selectedBots ?? []
     });
     

@@ -238,10 +238,10 @@ export class GameStore {
       maxBots: options?.maxBots ?? 3,
       minPlayers: options?.minPlayers ?? 4,
       hesitationWindow: (() => {
-        const raw = options?.hesitationWindow ?? 5000;
+        const raw = options?.hesitationWindow;
         const fastByEnv = String(process.env.TRAINING_FAST_MODE || '').toLowerCase() === 'true';
         const fastMode = fastByEnv || !!options?.allClaimMode;
-        return fastMode ? Math.min(30, Math.max(0, raw)) : raw;
+        return fastMode ? Math.min(30, Math.max(0, raw ?? 0)) : (raw ?? 0);
       })(),
       thinkUsage: {},
       allClaimMode: options?.allClaimMode,

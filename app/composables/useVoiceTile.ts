@@ -105,9 +105,9 @@ const getAudioEl = (): HTMLAudioElement => {
   el.volume = _volume.value
   // 清理旧元素（保留最多3个以防残留）
   _audioEls.push(el)
-  if (_audioEls.length > 3) {
+  if (_audioEls.length > 5) {
     const old = _audioEls.shift()
-    if (old) { old.pause(); old.src = '' }
+    if (old) { old.onended = null; old.pause(); old.src = '' }
   }
   return el
 }
@@ -176,7 +176,7 @@ const playAudioQueued = (url: string, fallbackText?: string): Promise<void> => n
       try { el.pause(); el.currentTime = 0 } catch {}
     }
     finish()
-  }, 5000)
+  }, 15000)
   el.play().catch(() => {
     fallback()
     finish()

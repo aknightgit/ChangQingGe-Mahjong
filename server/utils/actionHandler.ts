@@ -192,6 +192,7 @@ export class ActionHandler {
     // 循环补花:摸到普通花牌就放门口继续摸,直到摸到非花牌
     while (isFlower(tile) && !isWildTile(game, tile)) {
       player.hand.exposedMelds.push({
+      type: MeldType.TRIPLET,
         type: MeldType.TRIPLET,
         tiles: [tile],
         isConcealed: false,
@@ -234,7 +235,7 @@ export class ActionHandler {
           playerId: player.id,
           availableActions: [ActionType.HU, ActionType.PASS],
           tile: tile,
-          expiresAt: Date.now() + (game.hesitationWindow || 5000)
+          expiresAt: Date.now() + (game.hesitationWindow || 0)
         });
         this.deps.schedulePendingActionTimeout(game.gameId);
       }
@@ -245,11 +246,9 @@ export class ActionHandler {
    * 处理吃牌
    */
   async handleChow(game: GameState, player: Player, tileIds?: string[]): Promise<void> {
-    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store } = this.deps;
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, beginCurrentPlayerTurn } = this.deps;
 
     // 找到最后一个弃牌
-    const lastDiscard = game.discardPile[game.discardPile.length - 1];
-    if (!lastDiscard) {
       throw new Error('No tile to chow');
     }
 
@@ -299,6 +298,7 @@ export class ActionHandler {
 
     // 添加到副露
     player.hand.exposedMelds.push({
+      type: MeldType.TRIPLET,
       type: MeldType.SEQUENCE,
       tiles: [lastDiscard, ...selectedSequence].sort((a, b) => a.value - b.value),
       isConcealed: false,
@@ -340,7 +340,7 @@ export class ActionHandler {
     await persistGame(game);
     this.deps.broadcastGameState(game.gameId);
     // 【修复】吃牌后开启该玩家回合：调度 freeze timer + 更新 pendingExpiresAt
-    await beginCurrentPlayerTurn(game);
+    (game as any)._freezeUntil = Date.now() + timerManager.getHesitationWindow(game); // 碰吃后同一玩家直接进出牌
     if (game.pendingActions.length > 0) {
       schedulePendingActionTimeout(game.gameId);
     }
@@ -354,8 +354,6 @@ export class ActionHandler {
     const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, beginCurrentPlayerTurn } = this.deps;
 
     // 找到最后一个弃牌
-    const lastDiscard = game.discardPile[game.discardPile.length - 1];
-    if (!lastDiscard) {
       throw new Error('No tile to peng');
     }
 
@@ -393,6 +391,7 @@ export class ActionHandler {
 
     // 添加到副露
     player.hand.exposedMelds.push({
+      type: MeldType.TRIPLET,
       type: MeldType.TRIPLET,
       tiles: [lastDiscard, ...tilesToUse],
       isConcealed: false,
@@ -436,7 +435,7 @@ export class ActionHandler {
     // 【修复】碰牌后开启该玩家回合：调度 freeze timer + 更新 pendingExpiresAt
     // 老代码 executePengDirectly 之后不调用 beginCurrentPlayerTurn（静默开启），
     // 但新代码需要广播 gameState 后显式调用，让下家能看到新的 pending timer
-    await beginCurrentPlayerTurn(game);
+    (game as any)._freezeUntil = Date.now() + timerManager.getHesitationWindow(game); // 碰吃后同一玩家直接进出牌
 
     // 如果有 pending actions（不太可能，但保险），调度超时
     if (game.pendingActions.length > 0) {
@@ -474,6 +473,7 @@ export class ActionHandler {
     }
 
     // 添加到副露（明杠）
+    const lastDiscard = game.discardPile[game.discardPile.length - 1];
     const sourcePos = getLastDiscardPosition(game);
     player.hand.exposedMelds.push({
       type: MeldType.KONG,
@@ -552,6 +552,7 @@ export class ActionHandler {
 
     // 添加到副露（暗杠）
     player.hand.exposedMelds.push({
+      type: MeldType.TRIPLET,
       type: MeldType.CONCEALED_KONG,
       tiles: tiles,
       isConcealed: true
@@ -1132,7 +1133,7 @@ export class ActionHandler {
             playerId: player.id,
             availableActions: [ActionType.HU, ActionType.PASS],
             tile: discardedTile,
-            expiresAt: Date.now() + (game.hesitationWindow || 5000)
+            expiresAt: Date.now() + (game.hesitationWindow || 0)
           });
         }
       }
@@ -1188,7 +1189,7 @@ export class ActionHandler {
           playerId: player.id,
           availableActions: availableActions,
           tile: discardedTile,
-          expiresAt: Date.now() + (game.hesitationWindow || 5000)
+          expiresAt: Date.now() + (game.hesitationWindow || 0)
         });
       }
     }

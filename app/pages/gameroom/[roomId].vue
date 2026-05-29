@@ -1732,7 +1732,7 @@ onUnmounted(() => {
   resumeListener = null
 })
 
-const hesitationWindow = computed(() => Math.max(1000, Number(gameState.value?.hesitationWindow ?? 5000)))
+const hesitationWindow = computed(() => { const v = Number(gameState.value?.hesitationWindow); return Number.isFinite(v) && v > 0 ? v : 5000 })
 const currentFreezeUntil = computed(() => Number((gameState.value as any)?._freezeUntil ?? 0))
 const playerHand = computed(() => currentPlayer.value?.hand?.concealedTiles || [])
 const playerMelds = computed(() => currentPlayer.value?.hand?.exposedMelds || [])

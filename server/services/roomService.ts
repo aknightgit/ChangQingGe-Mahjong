@@ -15,6 +15,7 @@ export class RoomService {
     password?: string;
     allowSpectators?: boolean;
   }): Promise<Room> {
+    hesitationWindow?: number;
     const collection = await getCollection<Room>(this.COLLECTION_NAME);
     
     const room: Room = {
@@ -28,7 +29,7 @@ export class RoomService {
         isPrivate: data.isPrivate || false,
         password: data.password,
         allowSpectators: data.allowSpectators || true,
-        hesitationWindow: 4000 // 决策犹豫期（毫秒），默认4秒
+        hesitationWindow: data.hesitationWindow
       },
       createdAt: new Date()
     };

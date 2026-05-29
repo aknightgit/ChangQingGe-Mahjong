@@ -58,7 +58,7 @@ export class GameService {
       createdAt: new Date(),
       lastActionTime: new Date(),
       updatedAt: new Date(),
-      hesitationWindow: hesitationWindow ?? 4000 // 决策犹豫期，默认4秒
+      hesitationWindow: hesitationWindow // 决策犹豫期，默认4秒
     };
 
     await collection.insertOne(game);
