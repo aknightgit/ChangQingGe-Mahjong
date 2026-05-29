@@ -130,7 +130,8 @@ class GameManager {
       store: this.store,
       getGame: (id) => this.getGame(id),
       replaceInitialFlowers: (g, p) => this.replaceInitialFlowers(g, p),
-      getPlayableTileCount: (p) => this.getPlayableTileCount(p)
+      getPlayableTileCount: (p) => this.getPlayableTileCount(p),
+      broadcastKongSupplement: (g, p, kind) => this.broadcastService.broadcastKongSupplement(g, p, kind)
     };
   }
 
@@ -3597,6 +3598,16 @@ class GameManager {
   }
 
   private async handleKong(game: GameState, player: Player, tileId: string): Promise<void> {
+    // 【修复】明杠前先检查其他玩家是否可以胡（审批流程）
+    const lastDiscard = game.discardPile[game.discardPile.length - 1];
+    if (lastDiscard) {
+      const { huCandidates } = this.checkHighPriorityCandidates(game, player.id, lastDiscard);
+      if (huCandidates.length > 0) {
+        const candidates = huCandidates.map(pid => ({ playerId: pid, availableActions: ['hu'] as ActionType[] }));
+        await this.startApproval(game, player.id, 'kong', candidates, lastDiscard);
+        return;
+      }
+    }
     return this.actionHandler.handleKong(game, player, tileId);
   }
 

@@ -51,6 +51,7 @@ export interface ActionHandlerDeps {
   getGame(gameId: string): Promise<GameState | undefined>;
   replaceInitialFlowers(game: GameState, player: Player): void;
   getPlayableTileCount(player: Player): number;
+  broadcastKongSupplement(game: GameState, player: Player, kind: 'ming' | 'an' | 'jia'): void;
 }
 
 export class ActionHandler {
@@ -448,59 +449,79 @@ export class ActionHandler {
    * 处理杠牌
    */
   async handleKong(game: GameState, player: Player, tileId: string): Promise<void> {
-    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, beginCurrentPlayerTurn } = this.deps;
+    const { broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, getLastDiscardPlayerId, getLastDiscardPosition, store, beginCurrentPlayerTurn, broadcastKongSupplement } = this.deps;
 
-    const tile = findTileById(player.hand.concealedTiles, tileId);
-    if (!tile) {
-      throw new Error('Tile not found in hand');
-    }
+    // 【修复】明杠：从弃牌堆取 lastDiscard（和老代码 executeKongDirectly 一致）
+    const lastDiscard = game.discardPile[game.discardPile.length - 1];
+    if (!lastDiscard) return;
 
-    // 检查是否可以杠
-    const matchingTiles = player.hand.concealedTiles.filter(t => 
-      t.suit === tile.suit && t.value === tile.value
-    );
+    const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
+    if (!pendingAction || !pendingAction.tile) return;
 
-    if (matchingTiles.length < 3) {
-      throw new Error('Not enough tiles to kong');
+    const matchingTiles = player.hand.concealedTiles.filter(t => tilesEqual(t, lastDiscard));
+    if (matchingTiles.length < 3) return;
+
+    // 互包记录
+    const sourcePlayerId = getLastDiscardPlayerId(game);
+    this.deps.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.KONG);
+    if (sourcePlayerId) {
+      this.deps.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
     }
 
     // 从手牌移除三张
-    const tilesToUse = matchingTiles.slice(0, 3);
-    for (const t of tilesToUse) {
+    for (const t of matchingTiles) {
       player.hand.concealedTiles = removeTile(player.hand.concealedTiles, t.id);
     }
 
-    // 添加到副露
+    // 添加到副露（明杠）
+    const sourcePos = getLastDiscardPosition(game);
     player.hand.exposedMelds.push({
-      type: MeldType.TRIPLET,
-      tiles: [tile, ...tilesToUse],
+      type: MeldType.KONG,
+      tiles: [lastDiscard, ...matchingTiles],
       isConcealed: false,
-      sourcePosition: game.lastDiscardPosition,
+      ...(sourcePos !== undefined && { sourcePosition: sourcePos }),
       sourceTileId: lastDiscard.id
     });
 
-    // 记录互包
-    const lastDiscardPlayerId = getLastDiscardPlayerId(game);
-    if (lastDiscardPlayerId) {
-      this.deps.recordBailoutAction(game.gameId, player.id, lastDiscardPlayerId, MeldType.TRIPLET);
-      this.deps.checkAndBroadcastBailout(game, player.id, lastDiscardPlayerId);
+    // 从弃牌堆移除被杠的牌
+    const kgIdx = game.discardPile.findIndex(t => t.id === lastDiscard.id);
+    if (kgIdx >= 0) game.discardPile.splice(kgIdx, 1);
+
+    // 从弃牌者的 discardedTiles 中也移除
+    const discarder = game.players.find(p => p.id === sourcePlayerId);
+    if (discarder) {
+      discarder.hand.discardedTiles = discarder.hand.discardedTiles.filter(t => t.id !== lastDiscard.id);
     }
+
+    // 点杠积分：出牌者付2分
+    player.windScore += 2;
 
     // 记录动作历史
     game.actionHistory.push({
       type: ActionType.KONG,
       playerId: player.id,
-      tileId: tile.id,
+      tileId: lastDiscard.id,
       timestamp: Date.now()
     });
 
-    // 清除pending actions
+    // 清除pending actions 和冲突状态
     game.pendingActions = [];
+    (game as any).pengChowConflict = null;
+
+    // 杠牌广播（牌局快讯）
+    broadcastKongSupplement(game, player, 'ming');
+
+    // 设置当前玩家
+    game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
 
     // 杠后摸牌
     replaceFlowers(game, player);
-    handleDraw(game, player);
+    handleDraw(game, player, { allowFullHand: true });
     game.drawnThisTurn = true;
+
+    if (isPlayerBotControlled(player)) {
+      this.deps.scheduleBotDiscard(game.gameId, player.id);
+    }
 
     await persistGame(game);
     broadcastGameState(game.gameId);
@@ -509,8 +530,8 @@ export class ActionHandler {
   /**
    * 处理暗杠
    */
-  handleConcealedKong(game: GameState, player: Player, tileIds: string[]): void {
-    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store } = this.deps;
+  async handleConcealedKong(game: GameState, player: Player, tileIds: string[]): Promise<void> {
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, beginCurrentPlayerTurn } = this.deps;
 
     // 找到手牌中相同的牌
     const tiles = tileIds.map(id => findTileById(player.hand.concealedTiles, id)).filter(Boolean) as Tile[];
@@ -544,6 +565,13 @@ export class ActionHandler {
       timestamp: Date.now()
     });
 
+    // 【修复】暗杠积分：每个未胡玩家付2分
+    const nonWinners = game.players.filter(p => p.status === PlayerStatus.PLAYING && p.id !== player.id);
+    player.rainScore += nonWinners.length * 2;
+
+    // 【修复】杠牌广播（牌局快讯）
+    this.deps.broadcastKongSupplement(game, player, 'an');
+
     // 暗杠后补牌（allowFullHand=true）
     replaceFlowers(game, player);
     handleDraw(game, player, { allowFullHand: true });
@@ -554,14 +582,19 @@ export class ActionHandler {
       this.deps.scheduleBotDiscard(game.gameId, player.id);
     }
 
-    persistGame(game).then(() => broadcastGameState(game.gameId));
+    // 【修复】暗杠后开启该玩家回合（freeze timer）
+    game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+    await beginCurrentPlayerTurn(game);
+
+    await persistGame(game);
+    broadcastGameState(game.gameId);
   }
 
   /**
    * 处理加杠
    */
-  handleExtendedKong(game: GameState, player: Player, tileId: string): void {
-    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store } = this.deps;
+  async handleExtendedKong(game: GameState, player: Player, tileId: string): Promise<void> {
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, beginCurrentPlayerTurn } = this.deps;
 
     const tile = findTileById(player.hand.concealedTiles, tileId);
     if (!tile) {
@@ -605,6 +638,13 @@ export class ActionHandler {
       timestamp: Date.now()
     });
 
+    // 【修复】加杠积分：每个未胡玩家付1分
+    const nonWinners = game.players.filter(p => p.status === PlayerStatus.PLAYING && p.id !== player.id);
+    player.windScore += nonWinners.length * 1;
+
+    // 【修复】杠牌广播（牌局快讯）
+    this.deps.broadcastKongSupplement(game, player, 'jia');
+
     // 加杠后补牌（allowFullHand=true）
     replaceFlowers(game, player);
     handleDraw(game, player, { allowFullHand: true });
@@ -615,7 +655,12 @@ export class ActionHandler {
       this.deps.scheduleBotDiscard(game.gameId, player.id);
     }
 
-    persistGame(game).then(() => broadcastGameState(game.gameId));
+    // 【修复】加杠后开启该玩家回合（freeze timer）
+    game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+    await beginCurrentPlayerTurn(game);
+
+    await persistGame(game);
+    broadcastGameState(game.gameId);
   }
 
   /**
