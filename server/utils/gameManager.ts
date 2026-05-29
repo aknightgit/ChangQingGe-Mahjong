@@ -4963,10 +4963,13 @@ class GameManager {
     // 【状态机修复】新回合:重置摸牌状态
     // 每次轮到新玩家时重置drawnThisTurn，让该玩家能正常摸牌。
     // 这修复了"在别人回合中声称PENG/KONG后该玩家无法摸牌"的bug。
-    console.log(`[beginCurrentPlayerTurn] ${nextPlayer.name} resetting drawnThisTurn=false`);
-    game.drawnThisTurn = false;
-    game.huSelectionLocks = undefined;
-
+    // 但如果玩家手牌已达14张（吃碰杠后进入出牌状态），不重置以防再摸导致超限
+    if (this.getPlayableTileCount(nextPlayer) < 14) {
+      console.log(`[beginCurrentPlayerTurn] ${nextPlayer.name} resetting drawnThisTurn=false`);
+      game.drawnThisTurn = false;
+    } else {
+      console.log(`[beginCurrentPlayerTurn] ${nextPlayer.name} hand full (${this.getPlayableTileCount(nextPlayer)} tiles), keeping drawnThisTurn=true`);
+    }
     // 百搭冷冻一圈完成检查：当再次轮到打出百搭的玩家时，解除冷冻
     // 冷冻从打出百搭开始，经过上家、对家、下家各一出牌后（即该玩家再次轮到）解除
     if (game.freezePlayerId) {

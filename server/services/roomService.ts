@@ -28,7 +28,7 @@ export class RoomService {
         isPrivate: data.isPrivate || false,
         password: data.password,
         allowSpectators: data.allowSpectators || true,
-        hesitationWindow: 2000 // 决策犹豫期（毫秒），默认2秒
+        hesitationWindow: 4000 // 决策犹豫期（毫秒），默认4秒
       },
       createdAt: new Date()
     };

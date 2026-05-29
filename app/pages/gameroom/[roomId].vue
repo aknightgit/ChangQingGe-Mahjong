@@ -413,7 +413,7 @@
         </div>
         <p style="text-align:center;font-size:0.72rem;opacity:0.5;margin-top:10px">有效输赢 = 仅统计纯真人局的输赢，排除与AI对战的部分</p>
         <div style="display:flex;gap:8px;justify-content:center;margin-top:14px">
-          <button class="settle-save-btn" @click="onSaveSettle">保存并退出</button>
+          <button class="settle-save-btn" @click="onExitSettle">退出</button>
         </div>
       </div>
     </div>
@@ -3332,9 +3332,22 @@ const cancelWallExhaustedCountdown = () => {
   wallExhaustedCountdown.value = 0
 }
 
-const finishSettleToFinal = () => {
+const finishSettleToFinal = async () => {
   cancelWallExhaustedCountdown()
   settleFinalMode.value = true
+  try {
+    await $fetch('/mahjong/api/game/settle', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: currentPlayer.value?.id,
+        action: 'save',
+        debugAccessToken: typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
+      }
+    })
+  } catch (e) {
+    console.error('[Auto Save] Failed:', e)
+  }
 }
 
 const startWallExhaustedCountdown = () => {
@@ -3570,6 +3583,11 @@ const onSaveSettle = async () => {
   } catch (e) {
     console.error('[Settle Save] Failed:', e)
   }
+}
+
+const onExitSettle = () => {
+  showSettlement.value = false
+  backToLobby()
 }
 
 // 玩家操作卡片
@@ -4220,6 +4238,8 @@ watch(isMyTurn, (isMe) => {
 })
 // ---- 追踪其他玩家动作（用于触发音效）----
 const prevOtherPlayerState = new Map<string, { meldCount: number; discardCount: number; replacedFlowerCount: number }>()
+const _flowerVoicePlayed = new Set<string>()
+let _flowerVoicePlayedRound = 0
 const prevBailoutMap = new Map<string, Map<number, number>>()
 const getOtherMeldCount = (player: any) => (player?.hand?.exposedMelds?.length ?? 0)
 const getOtherDiscardCount = (player: any) => (player?.hand?.discardedTiles?.length ?? 0)
@@ -4228,6 +4248,10 @@ const getReplacedFlowerMelds = (player: any) =>
     const tile = meld?.tiles?.[0]
     return meld?.tiles?.length === 1 && tile?.suit === 'hua' && !!meld?.replacementDone
   })
+  if ((newState as any)?.roundNumber !== _flowerVoicePlayedRound) {
+    _flowerVoicePlayed.clear()
+    _flowerVoicePlayedRound = (newState as any)?.roundNumber ?? _flowerVoicePlayedRound
+  }
 const checkOtherPlayerSounds = (newState: any) => {
   if (!gameState.value?.players) return
   const pendingMeldVoices: Array<'kong' | 'pong' | 'chow'> = []
@@ -4241,8 +4265,11 @@ const checkOtherPlayerSounds = (newState: any) => {
       const isSelf = player.id === playerId.value
       const isBotCtrl = !!(player as any).isBotControlled || isBotPlayer(player)
       const shouldPlayVoice = !isSelf || isBotCtrl  // AI托管时自己的动作也要播放语音
-      if (replacedFlowerCount > prev.replacedFlowerCount) {
-        if (shouldPlayVoice) { playSound('tile-draw'); playVoiceAction('flowerReplace') }
+if (replacedFlowerCount > prev.replacedFlowerCount) {
+        if (shouldPlayVoice && !_flowerVoicePlayed.has(player.id)) {
+          _flowerVoicePlayed.add(player.id)
+          playSound('tile-draw'); playVoiceAction('flowerReplace')
+        }
       }
       if (shouldPlayVoice && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
         const newDiscards = (player.hand?.discardedTiles || []).slice(prev.discardCount)
