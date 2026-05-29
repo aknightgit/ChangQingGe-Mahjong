@@ -1210,6 +1210,7 @@ class GameManager {
     game.finalScores = undefined;
     game.customScoringMode = null;
     game.liangShanSuccess = undefined;  // 清除聚义成功标记
+    game.liangShanVotes = [];  // 重置聚义投票，新局允许再次发起
     // 清空上一局残留状态
     game.discardPile = [];
     game.pendingActions = [];
@@ -1616,7 +1617,8 @@ class GameManager {
     const discardCount = game.actionHistory.filter(a => a.type === ActionType.DISCARD).length;
     if (game.phase === GamePhase.PLAYING && player.status === PlayerStatus.PLAYING && discardCount < 3) {
       // 全局倍数已达8倍上限时,禁止梁山聚义
-      const atMultiplierCap = (game.inheritMultiplier ?? 1) >= 8;
+      const effectiveGlobal = Math.min((game.inheritMultiplier ?? 1) * (game.roundMultiplier ?? 1), 8);
+      const atMultiplierCap = effectiveGlobal >= 8;
       if (!atMultiplierCap) {
         const votes = game.liangShanVotes || [];
         if (!votes.includes(playerId)) {
@@ -2042,6 +2044,11 @@ class GameManager {
     }
 
     this.winEvaluator.invalidateCache(gameId);
+
+    // 先广播状态（让客户端尽快收到 pendingActions），再异步预热缓存
+    await this.persistGame(game);
+    this.broadcastGameState(gameId);
+
     if (game.phase === GamePhase.PLAYING) {
       const currentP = game.players[game.currentPlayerIndex];
       if (currentP && currentP.status === PlayerStatus.PLAYING && game.drawnThisTurn) {
@@ -2061,10 +2068,6 @@ class GameManager {
         }
       }
     }
-
-    // Broadcast game state update
-    await this.persistGame(game);
-    this.broadcastGameState(gameId);
   }
 
   private async handleDiscard(game: GameState, player: Player, tileId: string): Promise<void> {

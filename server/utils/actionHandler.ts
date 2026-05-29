@@ -239,7 +239,7 @@ export class ActionHandler {
           playerId: player.id,
           availableActions: [ActionType.HU, ActionType.PASS],
           tile: tile,
-          expiresAt: Date.now() + (game.hesitationWindow || 0)
+          expiresAt: Date.now() + (game.claimDecisionTimeout ?? game.hesitationWindow ?? 5000)
         });
         this.deps.schedulePendingActionTimeout(game.gameId);
       }
@@ -1137,7 +1137,7 @@ export class ActionHandler {
             playerId: player.id,
             availableActions: [ActionType.HU, ActionType.PASS],
             tile: discardedTile,
-            expiresAt: Date.now() + (game.hesitationWindow || 0)
+            expiresAt: Date.now() + (game.claimDecisionTimeout ?? game.hesitationWindow ?? 5000)
           });
         }
       }
@@ -1193,7 +1193,7 @@ export class ActionHandler {
           playerId: player.id,
           availableActions: availableActions,
           tile: discardedTile,
-          expiresAt: Date.now() + (game.hesitationWindow || 0)
+          expiresAt: Date.now() + (game.claimDecisionTimeout ?? game.hesitationWindow ?? 5000)
         });
       }
     }
