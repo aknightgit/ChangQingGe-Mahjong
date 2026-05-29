@@ -192,7 +192,6 @@ export class ActionHandler {
     // 循环补花:摸到普通花牌就放门口继续摸,直到摸到非花牌
     while (isFlower(tile) && !isWildTile(game, tile)) {
       player.hand.exposedMelds.push({
-      type: MeldType.TRIPLET,
         type: MeldType.TRIPLET,
         tiles: [tile],
         isConcealed: false,
@@ -249,6 +248,8 @@ export class ActionHandler {
     const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, beginCurrentPlayerTurn } = this.deps;
 
     // 找到最后一个弃牌
+    const lastDiscard = game.discardPile[game.discardPile.length - 1];
+    if (!lastDiscard) {
       throw new Error('No tile to chow');
     }
 
@@ -298,7 +299,6 @@ export class ActionHandler {
 
     // 添加到副露
     player.hand.exposedMelds.push({
-      type: MeldType.TRIPLET,
       type: MeldType.SEQUENCE,
       tiles: [lastDiscard, ...selectedSequence].sort((a, b) => a.value - b.value),
       isConcealed: false,
@@ -354,6 +354,8 @@ export class ActionHandler {
     const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, beginCurrentPlayerTurn } = this.deps;
 
     // 找到最后一个弃牌
+    const lastDiscard = game.discardPile[game.discardPile.length - 1];
+    if (!lastDiscard) {
       throw new Error('No tile to peng');
     }
 
@@ -391,7 +393,6 @@ export class ActionHandler {
 
     // 添加到副露
     player.hand.exposedMelds.push({
-      type: MeldType.TRIPLET,
       type: MeldType.TRIPLET,
       tiles: [lastDiscard, ...tilesToUse],
       isConcealed: false,
@@ -473,7 +474,6 @@ export class ActionHandler {
     }
 
     // 添加到副露（明杠）
-    const lastDiscard = game.discardPile[game.discardPile.length - 1];
     const sourcePos = getLastDiscardPosition(game);
     player.hand.exposedMelds.push({
       type: MeldType.KONG,
@@ -552,7 +552,6 @@ export class ActionHandler {
 
     // 添加到副露（暗杠）
     player.hand.exposedMelds.push({
-      type: MeldType.TRIPLET,
       type: MeldType.CONCEALED_KONG,
       tiles: tiles,
       isConcealed: true
