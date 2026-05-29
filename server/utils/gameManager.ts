@@ -17,6 +17,8 @@ import * as tileHelper from './tileHelper';
 import { BroadcastService } from './broadcastService';
 import { TimerManager } from './timerManager';
 import { canWin, isTing, detectHandTypes, buildWildTileChecker, HandType, checkChowPongExclusion, updateChowPongExclusion } from './handValidator';
+import { WinEvaluator } from './winEvaluator';
+import { BailoutTracker } from './bailoutTracker';
 import { calculateScore, calculateRoundMultiplier, calculateGameResult, calculateGlobalMultiplier, calculateSettlementBreakdownByRules, generateWinOptions, type WinOption } from './scoring';
 import { randomUUID } from 'crypto';
 import { saveGameState, loadGameState, loadAllGameStates, loadActiveGameStates, deleteGameState } from './gamePersistence';
@@ -51,6 +53,8 @@ class GameManager {
   private store: GameStore;
   private botController: BotController;
   private actionHandler: ActionHandler;
+  private winEvaluator = new WinEvaluator();
+  private bailoutTracker = new BailoutTracker();
 
   constructor() {
     this.store = new GameStore();
@@ -63,7 +67,7 @@ class GameManager {
     return {
       games: this.games,
       isPlayerBotControlled: (p) => this.isPlayerBotControlled(p),
-      getCachedWinOptions: (g, p, c, f) => this.getCachedWinOptions(g, p, c, f),
+      getCachedWinOptions: (g, p, c, f) => this.winEvaluator.getCachedWinOptions(g, p, c, f),
       handlePass: (g, p) => this.handlePass(g, p),
       handlePeng: (g, p) => this.handlePeng(g, p),
       handleKong: (g, p, t) => this.handleKong(g, p, t),
@@ -104,19 +108,19 @@ class GameManager {
       moveToNextPlayer: (g) => this.moveToNextPlayer(g),
       isWildTile: (g, t) => this.isWildTile(g, t),
       sortHandWithWildFront: (t, g) => this.sortHandWithWildFront(t, g),
-      getPlayerFlowerTiles: (p) => this.getPlayerFlowerTiles(p),
-      isPlayerMenQing: (p) => this.isPlayerMenQing(p),
+      getPlayerFlowerTiles: (p) => tileHelper.getPlayerFlowerTiles(p),
+      isPlayerMenQing: (p) => tileHelper.isPlayerMenQing(p),
       getLastDiscardPlayerId: (g) => this.getLastDiscardPlayerId(g),
       getLastDiscardPosition: (g) => this.getLastDiscardPosition(g),
       isWinAfterKong: (g, pid) => this.isWinAfterKong(g, pid),
-      getCachedWinOptions: (g, p, c, f) => this.getCachedWinOptions(g, p, c, f),
-      getCachedWinCheck: (g, p) => this.getCachedWinCheck(g, p),
-      invalidateWinEvaluationCache: (id, pids) => this.invalidateWinEvaluationCache(id, pids),
+      getCachedWinOptions: (g, p, c, f) => this.winEvaluator.getCachedWinOptions(g, p, c, f),
+      getCachedWinCheck: (g, p) => this.winEvaluator.getCachedWinCheck(g, p),
+      invalidateWinEvaluationCache: (id, pids) => this.winEvaluator.invalidateCache(id, pids),
       schedulePendingActionTimeout: (id) => this.schedulePendingActionTimeout(id),
       scheduleBotDiscard: (id, pid) => this.scheduleBotDiscard(id, pid),
       clearAutoTakeover: (id, pid) => this.clearAutoTakeover(id, pid),
-      recordBailoutAction: (id, pid, src, meld) => this.recordBailoutAction(id, pid, src, meld),
-      checkAndBroadcastBailout: (g, pid, src) => this.checkAndBroadcastBailout(g, pid, src),
+      recordBailoutAction: (id, pid, src, meld) => this.bailoutTracker.recordBailoutAction(id, pid, src, meld),
+      checkAndBroadcastBailout: (g, pid, src) => this.bailoutTracker.checkAndBroadcastBailout(g, pid, src, (id, text, type, kind) => this.broadcastQuickMessage(id, text, type as any, kind)),
       getPlayerCumulativeScore: (id, pid) => this.getPlayerCumulativeScore(id, pid),
       checkQJThresholdAlerts: (g) => this.checkQJThresholdAlerts(g),
       enableBotMode: (id, pid) => this.enableBotMode(id, pid),
@@ -139,10 +143,8 @@ class GameManager {
 
   // 互包跟踪: gameId -> Map<playerId, Map<partnerId, count>>
   // 记录每个玩家从另一个玩家吃/碰/杠了多少口
-  private mutualBailout: Map<string, Map<string, Map<string, number>>> = new Map();
 
   // 互包关系缓存（500ms TTL，避免每次 state.get 重算）
-  private bailoutRelationsCache: Map<string, { result: any[]; timestamp: number }> = new Map();
 
   // 广播消息缓存: gameId -> BroadcastMsg[]（供HTTP API兜底，避免依赖WebSocket）
   // recentBroadcasts moved to BroadcastService
@@ -432,407 +434,6 @@ class GameManager {
   // Freeze/dealer auto-draw timers(需要在新局开始时清除)
   
   // AI托管模式:玩家ID集合,被标记的玩家由AI自动出牌
-  private botModePlayers: Set<string> = new Set();
-  private winEvaluationCache: Map<string, Map<string, {
-    fast: Map<string, { canWin: boolean; types: HandType[] }>;
-    options: Map<string, WinOption[]>;
-    ting: Map<string, {
-      isTing: boolean;
-      winningTiles: Array<{
-        tile: Tile;
-        remainingCount: number;
-        bestDiscardOption: WinOption | null;
-        bestSelfDrawOption: WinOption | null;
-        bestOverallOption: WinOption | null;
-      }>;
-    }>;
-  }>> = new Map();
-
-  private getPlayerWinCache(gameId: string, playerId: string) {
-    if (!this.winEvaluationCache.has(gameId)) {
-      this.winEvaluationCache.set(gameId, new Map());
-    }
-    const gameCache = this.winEvaluationCache.get(gameId)!;
-    if (!gameCache.has(playerId)) {
-      gameCache.set(playerId, {
-        fast: new Map(),
-        options: new Map(),
-        ting: new Map()
-      });
-    }
-    return gameCache.get(playerId)!;
-  }
-
-  private invalidateWinEvaluationCache(gameId: string, playerIds?: string[]): void {
-    if (!playerIds || playerIds.length === 0) {
-      this.winEvaluationCache.delete(gameId);
-      return;
-    }
-
-    const gameCache = this.winEvaluationCache.get(gameId);
-    if (!gameCache) return;
-    for (const playerId of playerIds) {
-      gameCache.delete(playerId);
-    }
-    if (gameCache.size === 0) {
-      this.winEvaluationCache.delete(gameId);
-    }
-  }
-
-  private buildTileSignature(tiles: Tile[]): string {
-    return tileHelper.buildTileSignature(tiles);
-  }
-
-  private buildMeldSignature(melds: Meld[]): string {
-    return tileHelper.buildMeldSignature(melds);
-  }
-
-  private getPlayerFlowerTiles(player: Player): Tile[] {
-    return tileHelper.getPlayerFlowerTiles(player);
-  }
-
-  private isPlayerMenQing(player: Player): boolean {
-    return !player.hand.exposedMelds.some(meld =>
-      meld.type === MeldType.TRIPLET ||
-      meld.type === MeldType.SEQUENCE ||
-      (meld.type === MeldType.KONG && !meld.isConcealed)
-    );
-  }
-
-  private getPlayerWinContextKey(game: GameState, player: Player): string {
-    return [
-      `concealed=${this.buildTileSignature(player.hand.concealedTiles)}`,
-      `melds=${this.buildMeldSignature(player.hand.exposedMelds)}`,
-      `flowers=${this.getPlayerFlowerTiles(player).length}`,
-      `wild=${game.customScoringMode || ''}`,
-      `wildGroup=${(game.wildTileGroup || []).join(',')}`,
-      `round=${game.roundMultiplier ?? 1}`,
-      `inherit=${game.inheritMultiplier ?? 1}`,
-      `settlement=${game.settlementMultiplier ?? 1}`
-    ].join('|');
-  }
-
-  private getWinWildArg(game: GameState): string | null {
-    return (game.customScoringMode || null);
-  }
-
-  private getCachedWinCheck(game: GameState, player: Player): { canWin: boolean; types: HandType[] } {
-    const playerCache = this.getPlayerWinCache(game.gameId, player.id);
-    const cacheKey = this.getPlayerWinContextKey(game, player);
-    const cached = playerCache.fast.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    const result = canWin(player.hand.concealedTiles, player.hand.exposedMelds, this.getWinWildArg(game));
-    playerCache.fast.set(cacheKey, result);
-    return result;
-  }
-
-  private getCachedWinOptions(
-    game: GameState,
-    player: Player,
-    context: 'self_draw' | 'discard',
-    flags?: { isKongFlower?: boolean; isRobbingKong?: boolean; extraTile?: Tile }
-  ): WinOption[] {
-    const playerCache = this.getPlayerWinCache(game.gameId, player.id);
-    const cacheKey = [
-      this.getPlayerWinContextKey(game, player),
-      `ctx=${context}`,
-      `kongFlower=${flags?.isKongFlower ? 1 : 0}`,
-      `robKong=${flags?.isRobbingKong ? 1 : 0}`,
-      `extra=${flags?.extraTile ? `${flags.extraTile.suit}-${flags.extraTile.value}` : ''}`
-    ].join('|');
-    const cached = playerCache.options.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    const handTiles = flags?.extraTile
-      ? [...player.hand.concealedTiles, flags.extraTile]
-      : player.hand.concealedTiles;
-    const winCheck = flags?.extraTile
-      ? canWin(handTiles, player.hand.exposedMelds, this.getWinWildArg(game))
-      : this.getCachedWinCheck(game, player);
-    const wildParts = game.customScoringMode?.split('-');
-    const wildSuit = wildParts?.[0] ? wildParts[0] as TileSuit : undefined;
-    const wildValue = wildParts?.[1] ? parseInt(wildParts[1], 10) : undefined;
-    const isDaDiao = player.hand.concealedTiles.filter(t => !isFlower(t)).length === 1;
-    const allOptions = generateWinOptions({
-      handTiles,
-      exposedMelds: player.hand.exposedMelds,
-      flowerTiles: this.getPlayerFlowerTiles(player),
-      handTypes: winCheck.types,
-      isKongFlower: !!flags?.isKongFlower,
-      isRobbingKong: !!flags?.isRobbingKong,
-      isMenQing: this.isPlayerMenQing(player),
-      isDaDiao,
-      wildTileSuit: wildSuit,
-      wildTileValue: wildValue,
-      wildTileGroup: game.wildTileGroup,
-      rawRoundMultiplier: game.roundMultiplier ?? 1,
-      rawInheritMultiplier: game.inheritMultiplier ?? 1,
-      settlementMultiplier: game.settlementMultiplier ?? 1
-    });
-
-    const topOptions = allOptions
-      .filter(option => option.type === context)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
-
-    playerCache.options.set(cacheKey, topOptions);
-    return topOptions;
-  }
-
-  private prewarmWinEvaluation(
-    game: GameState,
-    player: Player,
-    context: 'self_draw' | 'discard',
-    extraTile?: Tile
-  ): void {
-    if (player.status !== PlayerStatus.PLAYING) return;
-    const winCheck = extraTile
-      ? canWin([...player.hand.concealedTiles, extraTile], player.hand.exposedMelds, this.getWinWildArg(game))
-      : this.getCachedWinCheck(game, player);
-    if (!winCheck.canWin) return;
-    this.getCachedWinOptions(game, player, context, {
-      isKongFlower: context === 'self_draw' && !!player.isSelfDrawn,
-      isRobbingKong: context === 'discard' && !!game.pendingKongClaim,
-      extraTile
-    });
-  }
-
-  private getWinningTileCandidates(): Array<{ suit: TileSuit; value: number }> {
-    const candidates: Array<{ suit: TileSuit; value: number }> = [];
-    for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
-      for (let value = 1; value <= 9; value++) {
-        candidates.push({ suit, value });
-      }
-    }
-    for (let value = 1; value <= 4; value++) {
-      candidates.push({ suit: TileSuit.WIND, value });
-    }
-    for (let value = 1; value <= 3; value++) {
-      candidates.push({ suit: TileSuit.DRAGON, value });
-    }
-    return candidates;
-  }
-
-  private getTingPreviewCandidates(game: GameState, player: Player): Array<{ suit: TileSuit; value: number }> {
-    const candidates = this.getWinningTileCandidates();
-    if (game.customScoringMode?.startsWith(`${TileSuit.FLOWER}-`) && Array.isArray(game.wildTileGroup)) {
-      for (const valueText of game.wildTileGroup) {
-        const value = parseInt(valueText, 10);
-        if (!Number.isNaN(value) && value >= 1 && value <= 8) {
-          candidates.push({ suit: TileSuit.FLOWER, value });
-        }
-      }
-    }
-    // 根据玩家手牌过滤：只保留玩家当前持有花色+风牌+箭牌的候选，避免列出所有牌面
-    const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
-    const playerSuits = new Set<TileSuit>();
-    for (const tile of player.hand.concealedTiles) {
-      if (!isFlower(tile) && !isWildTile(tile)) playerSuits.add(tile.suit);
-    }
-    for (const meld of player.hand.exposedMelds) {
-      for (const tile of meld.tiles) {
-        if (!isFlower(tile) && !isWildTile(tile)) playerSuits.add(tile.suit);
-      }
-    }
-    // 多花色（2+数字花色）则不限制,否则只保留匹配花色+风牌+箭牌
-    const numberSuits = [...playerSuits].filter(s => s !== TileSuit.WIND && s !== TileSuit.DRAGON);
-    const multiNumberSuit = numberSuits.length >= 2;
-    if (!multiNumberSuit) {
-      return candidates.filter(c => {
-        if (c.suit === TileSuit.WIND || c.suit === TileSuit.DRAGON) return true;
-        if (c.suit === TileSuit.FLOWER) return true;
-        return playerSuits.has(c.suit);
-      });
-    }
-    return candidates;
-  }
-
-  private getTileMaxCopies(suit: TileSuit): number {
-    return tileHelper.getTileMaxCopies(suit);
-  }
-
-  private getVisibleRemainingCount(game: GameState, player: Player, suit: TileSuit, value: number): number {
-    return tileHelper.getVisibleRemainingCount(game, player, suit, value);
-  }
-
-  private quickPrecheckTenpai(game: GameState, player: Player): boolean {
-    // 1) 巡目门槛：前 3 巡几乎不可能听牌，跳过计算
-    const discardCount = game.discardPile.length;
-    const playerCount = game.players.filter(p => p.status === PlayerStatus.PLAYING).length;
-    const calculatedRound = Math.max(1, Math.ceil(discardCount / Math.max(1, playerCount)));
-    if (calculatedRound < 3) {
-      return false;
-    }
-
-    // 2) 特殊牌型始终计算（不跳过）
-    const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
-    const concealed = player.hand.concealedTiles;
-    // 统计四百搭和八花
-    const wildCount = concealed.filter(t => isWildTile(t)).length;
-    const flowerCount = concealed.filter(t => isFlower(t)).length;
-    if (wildCount >= 4) return true;   // 四百搭，跳过粗筛
-    if (flowerCount >= 8) return true; // 八花，跳过粗筛
-
-    // 3) 孤牌检测——只针对非百搭非花牌的数字牌
-    // 先过滤出有效牌：不花牌且非百搭的数字牌、风牌、箭牌
-    const nonWildNonFlower = concealed.filter(t => !isFlower(t) && !isWildTile(t));
-
-    // 统计每张牌出现次数（找对子）
-    const valueCounts = new Map<string, number>();
-    for (const t of nonWildNonFlower) {
-      const key = `${t.suit}-${t.value}`;
-      valueCounts.set(key, (valueCounts.get(key) || 0) + 1);
-    }
-
-    // 统计有几门数字牌
-    const numberSuits = new Set<string>();
-    for (const t of nonWildNonFlower) {
-      if (t.suit !== TileSuit.WIND && t.suit !== TileSuit.DRAGON) {
-        numberSuits.add(t.suit);
-      }
-    }
-    const hasMultipleNumberSuits = numberSuits.size >= 2;
-
-    // 计算孤牌数
-    let orphanCount = 0;
-    for (const t of nonWildNonFlower) {
-      const key = `${t.suit}-${t.value}`;
-      if (valueCounts.get(key)! >= 2) continue; // 有对子 → 不是孤牌
-      if (t.suit === TileSuit.WIND || t.suit === TileSuit.DRAGON) {
-        orphanCount++; // 风牌/箭牌无对子即孤牌
-        continue;
-      }
-      // 数牌：检查 ±1 有无同花色邻牌
-      const prevKey = `${t.suit}-${t.value - 1}`;
-      const nextKey = `${t.suit}-${t.value + 1}`;
-      if (!valueCounts.has(prevKey) && !valueCounts.has(nextKey)) {
-        orphanCount++;
-      }
-    }
-
-    if (wildCount === 0) {
-      // 无百搭：任意 2+ 孤牌即可跳过
-      if (orphanCount >= 2) return false;
-      if (hasMultipleNumberSuits && orphanCount >= 1) return false;
-      return true;
-    }
-
-    // wildCount 为 1 的情况（>=4 的已经在上面 return true 了）
-    // 1百搭 + 有两门数字牌 + 有 2+ 孤牌 → 跳过
-    if (hasMultipleNumberSuits && orphanCount >= 2) return false;
-
-    return true;
-  }
-
-  private getCachedTingPreview(game: GameState, player: Player, options?: { skipQuickPrecheck?: boolean }) {
-    const playerCache = this.getPlayerWinCache(game.gameId, player.id);
-    const cacheKey = `${this.getPlayerWinContextKey(game, player)}|ting-preview`;
-    const cached = playerCache.ting.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    // 快速粗筛：巡目门槛 + 孤牌检查
-    if (!options?.skipQuickPrecheck && !this.quickPrecheckTenpai(game, player)) {
-      const emptyResult = { isTing: false, winningTiles: [] as Array<{
-        tile: Tile;
-        remainingCount: number;
-        bestDiscardOption: WinOption | null;
-        bestSelfDrawOption: WinOption | null;
-        bestOverallOption: WinOption | null;
-      }> };
-      playerCache.ting.set(cacheKey, emptyResult);
-      return emptyResult;
-    }
-
-    const candidates = this.getTingPreviewCandidates(game, player);
-    const wildChecker = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
-    const winWildArg = (game.customScoringMode || null);
-    const winningTileMap = new Map<string, {
-      tile: Tile;
-      remainingCount: number;
-      bestDiscardOption: WinOption | null;
-      bestSelfDrawOption: WinOption | null;
-      bestOverallOption: WinOption | null;
-    }>();
-
-    if (!this.isListeningPreviewState(game, player)) {
-      const emptyResult = { isTing: false, winningTiles: [] as Array<{
-        tile: Tile;
-        remainingCount: number;
-        bestDiscardOption: WinOption | null;
-        bestSelfDrawOption: WinOption | null;
-        bestOverallOption: WinOption | null;
-      }> };
-      playerCache.ting.set(cacheKey, emptyResult);
-      return emptyResult;
-    }
-
-    for (const { suit, value } of candidates) {
-      const testTile: Tile = {
-        id: `ting-preview-${suit}-${value}`,
-        suit,
-        value,
-        isFlower: suit === TileSuit.FLOWER
-      };
-      const winCheck = canWin([...player.hand.concealedTiles, testTile], player.hand.exposedMelds, winWildArg, undefined, game.wildTileGroup);
-      if (!winCheck.canWin) continue;
-
-      const discardOptions = this.getCachedWinOptions(game, player, 'discard', {
-        extraTile: testTile,
-        isRobbingKong: false
-      });
-      const selfDrawOptions = this.getCachedWinOptions(game, player, 'self_draw', {
-        extraTile: testTile,
-        isKongFlower: false
-      });
-      const bestDiscardOption = discardOptions[0] || null;
-      const bestSelfDrawOption = selfDrawOptions[0] || null;
-      const bestOverallOption = [bestDiscardOption, bestSelfDrawOption]
-        .filter(Boolean)
-        .sort((a, b) => (b!.score ?? 0) - (a!.score ?? 0))[0] || null;
-
-      winningTileMap.set(`${suit}-${value}`, {
-        tile: testTile,
-        remainingCount: 0,
-        bestDiscardOption,
-        bestSelfDrawOption,
-        bestOverallOption
-      });
-    }
-
-    const winningTiles = this.filterBigDiaoPreviewTiles(game, player, [...winningTileMap.values()])
-      // ★ K哥规则：百搭牌也应该出现在听牌提示中（花牌百搭可以替代任何牌）
-      // .filter(entry => !wildChecker(entry.tile))  // 原代码：过滤掉所有百搭牌
-      .sort((a, b) => {
-        const suitOrder: Record<string, number> = {
-          [TileSuit.CHARACTERS]: 0,
-          [TileSuit.BAMBOOS]: 1,
-          [TileSuit.DOTS]: 2,
-          [TileSuit.WIND]: 3,
-          [TileSuit.DRAGON]: 4,
-          [TileSuit.FLOWER]: 5
-        };
-        const suitDelta = (suitOrder[a.tile.suit] ?? 99) - (suitOrder[b.tile.suit] ?? 99);
-        if (suitDelta !== 0) return suitDelta;
-        const valueDelta = a.tile.value - b.tile.value;
-        if (valueDelta !== 0) return valueDelta;
-        return 0;
-      });
-
-    const result = {
-      isTing: winningTiles.length > 0,
-      winningTiles
-    };
-    playerCache.ting.set(cacheKey, result);
-    return result;
-  }
-
   /** 训练快速模式: TRAINING_FAST_MODE=true 或 allClaimMode */
   private isTrainingFastMode(game: GameState): boolean {
     const fastByEnv = String(process.env.TRAINING_FAST_MODE || '').toLowerCase() === 'true';
@@ -1166,136 +767,6 @@ class GameManager {
       private async resolveBotChowNow(game: GameState, player: Player, pa: PendingAction): Promise<void> {
     return this.botController.resolveBotChowNow(game, player, pa);
   }
-
-  private invalidateBailoutCache(gameId: string): void {
-    this.bailoutRelationsCache.delete(gameId);
-  }
-
-  private recordBailoutAction(
-    gameId: string,
-    playerId: string,
-    sourcePlayerId: string | undefined,
-    meldType: MeldType
-  ): number {
-    if (!sourcePlayerId) {
-      this.invalidateBailoutCache(gameId);
-      console.warn(`[BAILOUT] recordBailoutAction SKIP: no sourcePlayerId for playerId=${playerId} meldType=${meldType}`);
-      return 0;
-    }
-    if (meldType !== MeldType.TRIPLET && meldType !== MeldType.SEQUENCE && meldType !== MeldType.KONG) return 0;
-
-    if (!this.mutualBailout.has(gameId)) {
-      this.mutualBailout.set(gameId, new Map());
-    }
-    const gameBailout = this.mutualBailout.get(gameId)!;
-
-    if (!gameBailout.has(playerId)) {
-      gameBailout.set(playerId, new Map());
-    }
-    const playerBailout = gameBailout.get(playerId)!;
-
-    const currentCount = playerBailout.get(sourcePlayerId) || 0;
-    const nextCount = currentCount + 1;
-    playerBailout.set(sourcePlayerId, nextCount);
-    console.log(`[BAILOUT] game=${gameId} ${playerId} ate ${nextCount}x from ${sourcePlayerId} (meldType=${meldType})`);
-    this.invalidateBailoutCache(gameId);
-    return nextCount;
-  }
-
-  /**
-   * 获取互包关系
-   * @returns 三口/四口关系列表
-   */
-  getMutualBailoutRelations(gameId: string): Array<{
-    player1: string;
-    player2: string;
-    type: '三口' | '四口';
-  }> {
-    // 缓存命中（500ms TTL）
-    const cached = this.bailoutRelationsCache.get(gameId);
-    if (cached && Date.now() - cached.timestamp < 500) {
-      return cached.result;
-    }
-    const relations: Array<{ player1: string; player2: string; type: '三口' | '四口' }> = [];
-    const gameBailout = this.mutualBailout.get(gameId);
-    if (!gameBailout) {
-      this.bailoutRelationsCache.set(gameId, { result: relations, timestamp: Date.now() });
-      return relations;
-    }
-
-    const checked = new Set<string>();
-
-    for (const [playerId, partnerCounts] of gameBailout) {
-      for (const [partnerId, count] of partnerCounts) {
-        const key = [playerId, partnerId].sort().join('-');
-        if (checked.has(key)) continue;
-        checked.add(key);
-
-        // 检查双方互相的口数
-        const countAtoB = gameBailout.get(playerId)?.get(partnerId) || 0;
-        const countBtoA = gameBailout.get(partnerId)?.get(playerId) || 0;
-
-        // 互包定义:单向三口或四口
-        if (countAtoB >= 4 || countBtoA >= 4) {
-          relations.push({ player1: playerId, player2: partnerId, type: '四口' });
-        } else if (countAtoB >= 3 || countBtoA >= 3) {
-          relations.push({ player1: playerId, player2: partnerId, type: '三口' });
-        }
-      }
-    }
-
-    this.bailoutRelationsCache.set(gameId, { result: relations, timestamp: Date.now() });
-    return relations;
-  }
-
-  /** 检测新形成的互包关系并广播到牌局快讯 */
-  checkAndBroadcastBailout(
-    game: GameState,
-    playerId: string,
-    sourcePlayerId: string,
-  ): void {
-    const player = game.players.find(p => p.id === playerId);
-    const source = game.players.find(p => p.id === sourcePlayerId);
-    if (!player || !source) {
-      console.log(`[BAILOUT] SKIP: player=${!!player} source=${!!source} playerId=${playerId} sourcePlayerId=${sourcePlayerId}`);
-      return;
-    }
-
-    const rawCount = this.mutualBailout.get(game.gameId)?.get(playerId)?.get(sourcePlayerId);
-    const currentCount = rawCount || 0;
-    console.log(`[BAILOUT] game=${game.gameId} player=${player.name} source=${source.name} count=${currentCount} wsManager=${!!this.wsManager}`);
-
-    const msgByCount: Record<number, string> = {
-      2: `📣 ${player.name}搞了${source.name}两口了！`,
-      3: `📣 ${player.name}搞了${source.name}三口了！！`,
-      4: `📣 ${player.name}搞了${source.name}四口了！！！`
-    };
-
-    const msg = msgByCount[currentCount];
-    if (msg) {
-      this.broadcastService.broadcastQuickMessage(game.gameId, msg, 'special', 'bailout');
-    }
-  }
-
-  /**
-   * 检查两个玩家之间是否有互包关系
-   */
-  getBailoutMultiplier(
-    gameId: string,
-    payerId: string,
-    winnerId: string
-  ): { multiplier: number; type: string | null } {
-    const relations = this.getMutualBailoutRelations(gameId);
-
-    for (const rel of relations) {
-      if ((rel.player1 === payerId && rel.player2 === winnerId) ||
-          (rel.player1 === winnerId && rel.player2 === payerId)) {
-        return {
-          multiplier: rel.type === '四口' ? 5 : 3,
-          type: rel.type
-        };
-      }
-    }
 
     return { multiplier: 1, type: null };
   }
@@ -1783,7 +1254,7 @@ class GameManager {
     game.spectatorApprovalRequests = [];
     game.consecutiveDiscards = null;  // 每局重置「谢谢带头大哥」追踪
     game.leadingBrotherEvent = null;  // 每局重置「谢谢带头大哥」事件
-    this.mutualBailout.delete(gameId);
+    this.bailoutTracker.clearGame(gameId);
     (game as any).bailoutRelations = [];
 
     // 清除上一局残留的freeze/dealer auto-draw timer,防止旧timer覆盖新游戏状态
@@ -2248,7 +1719,7 @@ class GameManager {
 
       // 摸牌:手牌+门口(不含花牌)< 14张时可以摸;每回合只能摸一次
       const totalTileCount = this.getPlayableTileCount(player);
-      const winCheck = this.getCachedWinCheck(game, player);
+      const winCheck = this.winEvaluator.getCachedWinCheck(game, player);
       if (this.isDaDiaoReadyState(game, player) && winCheck.canWin && winCheck.types.length > 0) {
         actions.push(ActionType.HU);
       } else if (totalTileCount < 14 && game.wall.length > 0 && !game.drawnThisTurn) {
@@ -2330,7 +1801,7 @@ class GameManager {
     // 2. 没有pending（自摸自己摸到的牌）→ 自摸
     const isDiscardContext = !!pendingAction?.tile;
     const context: 'self_draw' | 'discard' = isDiscardContext ? 'discard' : 'self_draw';
-    return this.getCachedWinOptions(game, player, context, {
+    return this.winEvaluator.getCachedWinOptions(game, player, context, {
       isKongFlower: false,
       isRobbingKong: !!pendingAction?.tile && !!game.pendingKongClaim,
       extraTile: pendingAction?.tile
@@ -2362,7 +1833,7 @@ class GameManager {
       return { isTing: false, winningTiles: [] };
     }
 
-    const preview = this.getCachedTingPreview(game, player, options);
+    const preview = this.winEvaluator.getCachedTingPreview(game, player, options);
     if (!preview.isTing && !player.isTing) {
       return { isTing: false, winningTiles: [] };
     }
@@ -2600,22 +2071,22 @@ class GameManager {
       }
     }
 
-    this.invalidateWinEvaluationCache(gameId);
+    this.winEvaluator.invalidateCache(gameId);
     if (game.phase === GamePhase.PLAYING) {
       const currentP = game.players[game.currentPlayerIndex];
       if (currentP && currentP.status === PlayerStatus.PLAYING && game.drawnThisTurn) {
-        this.prewarmWinEvaluation(game, currentP, 'self_draw');
+        this.winEvaluator.prewarm(game, currentP, 'self_draw');
       }
       for (const pending of game.pendingActions) {
         if (!pending.availableActions.includes(ActionType.HU) || !pending.tile) continue;
         const targetPlayer = game.players.find(p => p.id === pending.playerId);
         if (!targetPlayer) continue;
-        this.prewarmWinEvaluation(game, targetPlayer, 'discard', pending.tile);
+        this.winEvaluator.prewarm(game, targetPlayer, 'discard', pending.tile);
       }
       if (!this.isTrainingFastMode(game)) {
         for (const candidate of game.players) {
           if (candidate.status === PlayerStatus.PLAYING && candidate.isTing) {
-            this.getCachedTingPreview(game, candidate);
+            this.winEvaluator.getCachedTingPreview(game, candidate);
           }
         }
       }
@@ -3302,8 +2773,8 @@ class GameManager {
     const sequence = this.selectChowSequence(sequences, discardedTile, tileIds);
     const handTiles = sequence.filter(t => t.id !== discardedTile.id);
 
-    const _bailoutCount = this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.SEQUENCE);
-    this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
+    const _bailoutCount = this.bailoutTracker.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.SEQUENCE);
+    this.bailoutTracker.checkAndBroadcastBailout(game, player.id, sourcePlayerId, (id, text, type, kind) => this.broadcastQuickMessage(id, text, type as any, kind));
     // 广播吃牌到牌局快讯（所有吃都会显示，不限于口数）
 
     for (const tile of handTiles) {
@@ -3344,7 +2815,7 @@ class GameManager {
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
 
     // 广播吃牌到牌局快讯
-    const _bc = this.mutualBailout.get(game.gameId)?.get(player.id)?.get(sourcePlayerId) || 0;
+    const _bc = this.bailoutTracker.getGameBailout(game.gameId)?.get(player.id)?.get(sourcePlayerId) || 0;
     console.log(`[CHOW-BC] wsManager=${!!this.wsManager} player=${player.name} source=${sourcePlayerId} bailoutCount=${_bc} gameId=${game.gameId}`);
     if (this.wsManager) {
       const _suffix = _bc >= 2 ? ` (${_bc}口)` : '';
@@ -3375,8 +2846,8 @@ class GameManager {
     const matchingTiles = player.hand.concealedTiles.filter(t => tilesEqual(t, lastDiscard));
     if (matchingTiles.length < 2) return;
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
-    const _bailoutCount2 = this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.TRIPLET);
-    this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
+    const _bailoutCount2 = this.bailoutTracker.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.TRIPLET);
+    this.bailoutTracker.checkAndBroadcastBailout(game, player.id, sourcePlayerId, (id, text, type, kind) => this.broadcastQuickMessage(id, text, type as any, kind));
     // 碰牌广播已合并到上方bailout逻辑中
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[0].id);
     player.hand.concealedTiles = removeTile(player.hand.concealedTiles, matchingTiles[1].id);
@@ -3446,9 +2917,9 @@ class GameManager {
     if (matchingTiles.length < 3) return;
 
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
-    this.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.KONG);
+    this.bailoutTracker.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.KONG);
     if (sourcePlayerId) {
-      this.checkAndBroadcastBailout(game, player.id, sourcePlayerId);
+      this.bailoutTracker.checkAndBroadcastBailout(game, player.id, sourcePlayerId, (id, text, type, kind) => this.broadcastQuickMessage(id, text, type as any, kind));
     }
     for (const t of matchingTiles) player.hand.concealedTiles = removeTile(player.hand.concealedTiles, t.id);
 
@@ -3839,7 +3310,7 @@ class GameManager {
     }
 
     // 【P0-7修复】canWin当exposedOrCount为number时，第三个参数必须是wildTileId字符串而非函数
-    const winCheck = this.getCachedWinCheck(game, player);
+    const winCheck = this.winEvaluator.getCachedWinCheck(game, player);
     if (!winCheck.canWin) {
       throw new Error('Invalid Hu declaration');
     }
@@ -3847,7 +3318,7 @@ class GameManager {
     console.log(`[handleHu] ${player.name} isSelfDrawn=${isSelfDrawn} isKongFlower=${isKongFlower} lastActions=${game.actionHistory.slice(-5).map(a => a.type + ':' + a.playerId.substring(0,4)).join(',')}`);
     const isRobbingKong = !!pendingAction?.tile && !!game.pendingKongClaim;
     const preferredWinType = isSelfDrawn ? 'self_draw' : 'discard';
-    const filteredWinOptions = this.getCachedWinOptions(game, player, preferredWinType, {
+    const filteredWinOptions = this.winEvaluator.getCachedWinOptions(game, player, preferredWinType, {
       isKongFlower,
       isRobbingKong
     });
@@ -4699,8 +4170,8 @@ class GameManager {
       if (!pending.availableActions.includes(ActionType.HU) || !pending.tile) continue;
       const targetPlayer = game.players.find(player => player.id === pending.playerId);
       if (!targetPlayer) continue;
-      this.invalidateWinEvaluationCache(game.gameId, [targetPlayer.id]);
-      this.prewarmWinEvaluation(game, targetPlayer, 'discard', pending.tile);
+      this.winEvaluator.invalidateCache(game.gameId, [targetPlayer.id]);
+      this.winEvaluator.prewarm(game, targetPlayer, 'discard', pending.tile);
     }
 
     const chowPlayer = this.getNextActivePlayer(game, discarderIndex);
@@ -5286,7 +4757,7 @@ class GameManager {
         finalScores[p.id] = 0;
       }
 
-      const mutualBailoutRelations = this.getMutualBailoutRelations(game.gameId);
+      const mutualBailoutRelations = this.bailoutTracker.getMutualBailoutRelations(game.gameId);
       console.log(`[SETTLEMENT] game=${game.gameId} bailoutRelations=${JSON.stringify(mutualBailoutRelations)} players=${game.players.map(p => p.name).join(',')}`);
       // 构建 mutualBailout Map<playerIndex, {partnerIndex, type}>
       const mutualBailout = new Map<number, { partnerIndex: number; type: '三口' | '四口' }>();
@@ -5508,7 +4979,7 @@ class GameManager {
       effectiveMultiplier: Math.min((game.inheritMultiplier ?? 1) * (game.roundMultiplier ?? 1), 8),
       settlementMultiplier: game.settlementMultiplier ?? 1,
       overflowCarryMultiplierNextRound: game.inheritedGlobalMultiplier ?? 1,
-      bailoutRelations: this.getMutualBailoutRelations(game.gameId).map(rel => ({
+      bailoutRelations: this.bailoutTracker.getMutualBailoutRelations(game.gameId).map(rel => ({
         ...rel,
         player1Name: game.players.find(player => player.id === rel.player1)?.name,
         player2Name: game.players.find(player => player.id === rel.player2)?.name
@@ -5536,12 +5007,12 @@ class GameManager {
           settlementMultiplier: winner.winningScoreBreakdown?.settlementMultiplier ?? (game.settlementMultiplier ?? 1),
           finalPoints: winner.winningScoreBreakdown?.finalPoints ?? winner.wonFan,
           details: winner.winningScoreBreakdown?.details ?? [],
-          flowerCount: this.getPlayerFlowerTiles(winner).length,
+          flowerCount: tileHelper.getPlayerFlowerTiles(winner).length,
           handTiles: concealedTiles,
           exposedTiles,
           exposedMeldGroups: winner.hand.exposedMelds.map(meld => meld.tiles.map(tile => ({ ...tile }))),
           tileFaces: allWinnerTiles.map(tile => this.tileLabel(tile)),
-          isMenQing: this.isPlayerMenQing(winner),
+          isMenQing: tileHelper.isPlayerMenQing(winner),
           hasWild: allWinnerTiles.some(tile => isWildTile(tile))
         };
       }),
