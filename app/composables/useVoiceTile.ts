@@ -93,19 +93,23 @@ const _currentScheme = ref<VoiceScheme>('bingtang')
 const _manifest = ref<Manifest | null>(null)
 const _audioMap = ref<Map<string, string>>(new Map())
 const _volume = ref(0.50)
-let _audioEl: HTMLAudioElement | null = null
+let _audioEls: HTMLAudioElement[] = []
 let _voiceQueue: Promise<void> = Promise.resolve()
 let _voicePrimed = false
 let _lastSpokenAt = 0
 let _playSeq = 0
 
 const getAudioEl = (): HTMLAudioElement => {
-  if (!_audioEl) {
-    _audioEl = new Audio()
-    _audioEl.preload = 'auto'
-    _audioEl.volume = _volume.value
+  const el = new Audio()
+  el.preload = 'auto'
+  el.volume = _volume.value
+  // 清理旧元素（保留最多3个以防残留）
+  _audioEls.push(el)
+  if (_audioEls.length > 3) {
+    const old = _audioEls.shift()
+    if (old) { old.pause(); old.src = '' }
   }
-  return _audioEl
+  return el
 }
 
 const speakTextFallback = (text?: string) => {
@@ -125,6 +129,13 @@ const speakTextFallback = (text?: string) => {
 }
 
 const playAudioQueued = (url: string, fallbackText?: string): Promise<void> => new Promise((resolve) => {
+  // 无 URL 时直接用 speech fallback
+  if (!url) {
+    speakTextFallback(fallbackText)
+    setTimeout(resolve, 200)
+    return
+  }
+
   const el = getAudioEl()
   let settled = false
   let timeoutId: ReturnType<typeof setTimeout> | null = null
@@ -190,10 +201,9 @@ const playVoiceKey = (key: string, fallbackText: string) => {
 
 export const primeVoiceAudio = (): void => {
   if (!process.client || _voicePrimed) return
-  const el = getAudioEl()
-  const prevMuted = el.muted
-  const prevVolume = el.volume
-  const prevSrc = el.src
+  const el = new Audio()
+  el.preload = 'auto'
+  el.volume = 0
   _voicePrimed = true
   el.muted = true
   el.volume = 0
@@ -201,9 +211,6 @@ export const primeVoiceAudio = (): void => {
   const restore = () => {
     el.pause()
     el.currentTime = 0
-    el.muted = prevMuted
-    el.volume = prevVolume
-    el.src = prevSrc
   }
   el.play()
     .then(() => restore())
@@ -216,9 +223,7 @@ export const primeVoiceAudio = (): void => {
 export const setVoiceVolume = (volume: number): void => {
   const normalized = Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 0.85
   _volume.value = normalized
-  if (_audioEl) {
-    _audioEl.volume = normalized
-  }
+  // 新创建的 Audio 元素会在 getAudioEl 中继承当前 volume
   if (process.client) {
     try {
       localStorage.setItem('mahjong.voiceVolume', String(normalized))
