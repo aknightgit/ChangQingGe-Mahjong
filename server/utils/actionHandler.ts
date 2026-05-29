@@ -177,7 +177,7 @@ export class ActionHandler {
    * 处理摸牌
    */
   handleDraw(game: GameState, player: Player, options?: { allowFullHand?: boolean }): void {
-    const { endRound, broadcastQuickMessage, replaceFlowers, isPlayerBotControlled, timerManager, sortHandWithWildFront, getLastDiscardPlayerId, schedulePendingActionTimeout, store } = this.deps;
+    const { endRound, broadcastQuickMessage, replaceFlowers, isPlayerBotControlled, timerManager, isWildTile, sortHandWithWildFront, getLastDiscardPlayerId, schedulePendingActionTimeout, store } = this.deps;
 
     console.log(`[handleDraw] ${player.name} drawnThisTurn=${game.drawnThisTurn} wall=${game.wall.length} concealed=${player.hand.concealedTiles.length} allowFull=${options?.allowFullHand}`);
 
