@@ -3056,7 +3056,8 @@ class GameManager {
       const testHand = [...player.hand.concealedTiles, discardedTile];
       // 传实际 melds 对象（非 length），确保 canWin 正确识别包含门口牌的完整牌型
       const wildTileId = typeof game.customScoringMode === 'string' ? game.customScoringMode : null;
-      const winCheck = canWin(testHand, player.hand.exposedMelds, wildTileId || (game.wildTileGroup ?? null));
+      const wildChecker = buildWildTileChecker(wildTileId, game.wildTileGroup);
+      const winCheck = canWin(testHand, player.hand.exposedMelds, wildChecker, undefined, game.wildTileGroup);
       if (winCheck.canWin) {
         // 规则:门口无花不能捉冲(所有非豁免牌型);豁免:风碰/风一色/清碰/混碰/八花/四百搭/清一色/大吊
         const flowerCount = player.hand.exposedMelds

@@ -6,6 +6,7 @@ import { GameState, Player, GamePhase, PlayerStatus, ActionType, PendingAction, 
 import { findTileById, removeTile, isFlower, tilesEqual, isMissingOneSuit, getTileDisplayName } from './tiles';
 import { buildWildTileChecker, canWin, HandType, isTing, checkChowPongExclusion, updateChowPongExclusion, detectHandTypes } from './handValidator';
 import { calculateGameResult, generateWinOptions, calculateScore, type WinOption } from './scoring';
+import { selectBotChowTileIds } from '../services/botService';
 import * as tileHelper from './tileHelper';
 
 /** ActionHandler 依赖的 GameManager 接口 */
@@ -71,12 +72,6 @@ export class ActionHandler {
     const tile = findTileById(player.hand.concealedTiles, tileId);
     if (!tile) {
       throw new Error('Tile not found in hand');
-    }
-
-    // 检查是否是百搭
-    const wildChecker = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
-    if (wildChecker(tile)) {
-      throw new Error('Cannot discard wild tile');
     }
 
     const discarderIndex = game.currentPlayerIndex;
@@ -1173,11 +1168,13 @@ export class ActionHandler {
 
       // 检查是否可以吃（只有下家可以吃）
       const nextPlayerIndex = (discarderIndex + 1) % game.players.length;
+      let chowOptions: string[][] | undefined;
       if (game.players[nextPlayerIndex]?.id === player.id) {
         if (checkChowPongExclusion(exclusionState, 'chow', discardedTile.suit)) {
           const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile, game);
           if (sequences.length > 0) {
             availableActions.push(ActionType.CHOW);
+            chowOptions = tileHelper.buildChowOptionIds(sequences, discardedTile);
           }
         }
       }
@@ -1195,8 +1192,14 @@ export class ActionHandler {
         availableActions.push(ActionType.PASS);
         game.pendingActions.push({
           playerId: player.id,
-          availableActions: availableActions,
+          availableActions,
           tile: discardedTile,
+          ...(chowOptions ? {
+            chowOptions,
+            selectedChowTileIds: this.deps.isPlayerBotControlled(player)
+              ? selectBotChowTileIds(player, game, discardedTile, chowOptions)
+              : undefined
+          } : {}),
           expiresAt: Date.now() + (game.hesitationWindow || 0)
         });
       }
