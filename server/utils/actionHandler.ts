@@ -171,8 +171,6 @@ export class ActionHandler {
       }
       schedulePendingActionTimeout(game.gameId);
     }
-
-    await beginCurrentPlayerTurn(game);
   }
 
   /**
