@@ -52,6 +52,7 @@ export interface ActionHandlerDeps {
   replaceInitialFlowers(game: GameState, player: Player): void;
   getPlayableTileCount(player: Player): number;
   broadcastKongSupplement(game: GameState, player: Player, kind: 'ming' | 'an' | 'jia'): void;
+  broadcastFlowerReplacement(game: GameState, player: Player): void;
 }
 
 export class ActionHandler {
@@ -190,6 +191,7 @@ export class ActionHandler {
     let tile = game.wall.pop()!;
 
     // 循环补花:摸到普通花牌就放门口继续摸,直到摸到非花牌
+    let flowerCount = 0
     while (isFlower(tile) && !isWildTile(game, tile)) {
       player.hand.exposedMelds.push({
         type: MeldType.TRIPLET,
@@ -197,13 +199,16 @@ export class ActionHandler {
         isConcealed: false,
         replacementDone: true as any
       } as any);
+      flowerCount++
       console.log(`[FLOWER] ${player.name} 摸到花牌: ${tile.id}, 门口花牌数: ${player.hand.exposedMelds.filter(m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !isWildTile(game, m.tiles[0])).length}`);
       if (game.wall.length === 0) {
+        if (flowerCount > 0) this.deps.broadcastFlowerReplacement(game, player);
         endRound(game, GameEndReason.WALL_EXHAUSTED);
         return;
       }
       tile = game.wall.pop()!;
     }
+    if (flowerCount > 0) this.deps.broadcastFlowerReplacement(game, player);
 
     // 花牌百搭 → 进手牌
     if (isFlower(tile) && isWildTile(game, tile)) {

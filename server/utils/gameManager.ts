@@ -142,7 +142,8 @@ class GameManager {
       getGame: (id) => this.getGame(id),
       replaceInitialFlowers: (g, p) => this.replaceInitialFlowers(g, p),
       getPlayableTileCount: (p) => this.getPlayableTileCount(p),
-      broadcastKongSupplement: (g, p, kind) => this.broadcastService.broadcastKongSupplement(g, p, kind)
+      broadcastKongSupplement: (g, p, kind) => this.broadcastService.broadcastKongSupplement(g, p, kind),
+      broadcastFlowerReplacement: (g, p) => this.broadcastService.broadcastFlowerReplacement(g, p)
     };
   }
 
