@@ -554,8 +554,7 @@ export class ActionHandler {
       this.deps.scheduleBotDiscard(game.gameId, player.id);
     }
 
-    await persistGame(game);
-    broadcastGameState(game.gameId);
+    persistGame(game).then(() => broadcastGameState(game.gameId));
   }
 
   /**
@@ -606,8 +605,7 @@ export class ActionHandler {
       this.deps.scheduleBotDiscard(game.gameId, player.id);
     }
 
-    await persistGame(game);
-    broadcastGameState(game.gameId);
+    persistGame(game).then(() => broadcastGameState(game.gameId));
   }
 
   /**
