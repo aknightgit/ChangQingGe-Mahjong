@@ -2044,11 +2044,6 @@ class GameManager {
     }
 
     this.winEvaluator.invalidateCache(gameId);
-
-    // 先广播状态（让客户端尽快收到 pendingActions），再异步预热缓存
-    await this.persistGame(game);
-    this.broadcastGameState(gameId);
-
     if (game.phase === GamePhase.PLAYING) {
       const currentP = game.players[game.currentPlayerIndex];
       if (currentP && currentP.status === PlayerStatus.PLAYING && game.drawnThisTurn) {
@@ -2068,6 +2063,10 @@ class GameManager {
         }
       }
     }
+
+    // Broadcast game state update
+    await this.persistGame(game);
+    this.broadcastGameState(gameId);
   }
 
   private async handleDiscard(game: GameState, player: Player, tileId: string): Promise<void> {
