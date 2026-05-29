@@ -2029,9 +2029,7 @@ class GameManager {
           this.scheduleBotDiscard(gameId, currentP.id);
         }
       }
-      if (action === ActionType.HU && game.phase === GamePhase.PLAYING) {
-        await this.moveToNextPlayer(game);
-      } else if (action === ActionType.PASS && this.shouldAdvanceTurnAfterPass(game)) {
+      if (action === ActionType.PASS && this.shouldAdvanceTurnAfterPass(game)) {
         await this.moveToNextPlayer(game);
       } else {
         this.schedulePendingActionTimeout(gameId);

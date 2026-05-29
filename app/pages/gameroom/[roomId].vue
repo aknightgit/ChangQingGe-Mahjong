@@ -4217,7 +4217,9 @@ watch(isMyTurn, (isMe) => {
 // ---- 追踪其他玩家动作（用于触发音效）----
 const prevOtherPlayerState = new Map<string, { meldCount: number; discardCount: number; replacedFlowerCount: number }>()
 const _flowerVoicePlayed = new Set<string>()
-let _flowerVoicePlayedTurnKey = ''  // roundNumber-currentPlayerIndex
+let _flowerVoicePlayedTurnKey = ''  // roundNumber-turnCounter
+let _flowerVoiceTurnCounter = 0
+let _flowerVoicePrevPlayerIndex = -1
 const prevBailoutMap = new Map<string, Map<number, number>>()
 const getOtherMeldCount = (player: any) => (player?.hand?.exposedMelds?.length ?? 0)
 const getOtherDiscardCount = (player: any) => (player?.hand?.discardedTiles?.length ?? 0)
@@ -4228,7 +4230,12 @@ const getReplacedFlowerMelds = (player: any) =>
   })
 const checkOtherPlayerSounds = (newState: any) => {
   if (!gameState.value?.players) return
-  const turnKey = String(newState?.roundNumber ?? 0) + "-" + String(newState?.currentPlayerIndex ?? 0)
+  const cpIdx = newState?.currentPlayerIndex ?? 0
+  if (cpIdx !== _flowerVoicePrevPlayerIndex) {
+    _flowerVoiceTurnCounter++
+    _flowerVoicePrevPlayerIndex = cpIdx
+  }
+  const turnKey = String(newState?.roundNumber ?? 0) + "-" + String(_flowerVoiceTurnCounter)
   if (turnKey !== _flowerVoicePlayedTurnKey) {
     _flowerVoicePlayed.clear()
     _flowerVoicePlayedTurnKey = turnKey
