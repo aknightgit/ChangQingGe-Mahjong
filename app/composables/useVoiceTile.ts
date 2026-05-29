@@ -100,15 +100,15 @@ let _lastSpokenAt = 0
 let _playSeq = 0
 
 const getAudioEl = (): HTMLAudioElement => {
+  // 暂停所有正在播放的旧音频，确保同一时刻只有一段语音
+  for (const old of _audioEls) {
+    try { old.pause(); old.onended = null; old.onerror = null; old.src = ''; } catch {}
+  }
+  _audioEls = []
   const el = new Audio()
   el.preload = 'auto'
   el.volume = _volume.value
-  // 清理旧元素（保留最多3个以防残留）
   _audioEls.push(el)
-  if (_audioEls.length > 5) {
-    const old = _audioEls.shift()
-    if (old) { old.onended = null; old.pause(); old.src = '' }
-  }
   return el
 }
 

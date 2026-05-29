@@ -263,11 +263,14 @@ export class WinEvaluator {
       return emptyResult;
     }
 
+    const wildChecker = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
+
     for (const { suit, value } of candidates) {
+      const isWildCandidate = wildChecker({ suit, value, id: '', isFlower: false });
       const testTile: Tile = {
         id: `ting-preview-${suit}-${value}`,
         suit, value,
-        isFlower: suit === TileSuit.FLOWER
+        isFlower: suit === TileSuit.FLOWER && !isWildCandidate
       };
       const winCheck = canWin([...player.hand.concealedTiles, testTile], player.hand.exposedMelds, winWildArg, undefined, game.wildTileGroup);
       if (!winCheck.canWin) continue;

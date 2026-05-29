@@ -114,7 +114,10 @@ export class TimerManager {
   }
 
   getHesitationWindow(game: GameState): number {
-    return game.hesitationWindow ?? 0;
+    // Safety: if hesitationWindow is 0 or undefined, use 3000ms minimum
+    const hw = game.hesitationWindow;
+    if (typeof hw === 'number' && hw > 0) return hw;
+    return 3000;
   }
 
   /** 刷新 pending action 过期时间 */

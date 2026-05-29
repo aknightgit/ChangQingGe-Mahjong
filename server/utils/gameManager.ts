@@ -359,8 +359,12 @@ class GameManager {
 
     // 【修复】遵守决策犹豫期冻结，不绕过 freeze 检查
     const freezeUntil = Number((game as any)._freezeUntil ?? 0);
-    if (freezeUntil > Date.now()) return false;
-    if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now() && game.thinkFreezePlayerId !== currentPlayer.id) return false;
+    const now = Date.now();
+    if (freezeUntil > now) {
+      console.log('[autoDraw] blocked by freeze:', freezeUntil - now, 'ms remaining');
+      return false;
+    }
+    if (game.thinkFreezeUntil && game.thinkFreezeUntil > now && game.thinkFreezePlayerId !== currentPlayer.id) return false;
 
     this.replaceInitialFlowers(game, currentPlayer);
     const totalTileCount = this.getPlayableTileCount(currentPlayer);
