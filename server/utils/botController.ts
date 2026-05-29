@@ -62,20 +62,6 @@ export class BotController {
       let hasBotAction = false;
       let claimedHigherPriority = false;
 
-      // 如果人类玩家还有未过期的高优先级 pending（碰/杠/胡），bot 不能抢先处理
-      // 吃（CHOW）是低优先级，不影响
-      const now = Date.now();
-      const humanHasHighPriorityClaim = game.pendingActions.some(pa => {
-        const p = game.players.find(pl => pl.id === pa.playerId);
-        if (!p || isPlayerBotControlled(p)) return false;
-        if (!pa.expiresAt || pa.expiresAt <= now) return false;
-        return pa.availableActions.some(a =>
-          a === ActionType.HU || a === ActionType.PENG || a === ActionType.KONG ||
-          a === ActionType.CONCEALED_KONG || a === ActionType.EXTENDED_KONG
-        );
-      });
-      if (humanHasHighPriorityClaim) return false;
-
       // 保存人类玩家的 pending（bot 的 claim 不应清除人类的犹豫窗口）
       const humanPendingActions = game.pendingActions.filter(pa => {
         const p = game.players.find(pl => pl.id === pa.playerId);
