@@ -34,7 +34,17 @@ export default defineEventHandler(async (event) => {
 
     return {
       success: true,
-      data: { games: activeGames }
+      data: {
+        games: activeGames.map((game: any) => ({
+          gameId: game.gameId,
+          roomNumber: game.roomNumber,
+          phase: game.phase,
+          playerCount: game.players?.length ?? 0,
+          dealerName: game.players?.find((p: any) => p.isDealer)?.name || null,
+          createdAt: game.createdAt,
+          hesitationWindow: game.hesitationWindow
+        }))
+      }
     };
   } catch (error: any) {
     statusCode = 500;

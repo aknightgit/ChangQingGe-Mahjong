@@ -917,7 +917,8 @@ export class ActionHandler {
     if (player.status !== PlayerStatus.PLAYING) return;
 
     // 全局倍数已达8倍上限时,禁止梁山聚义
-    if ((game.inheritedMultiplier ?? 1) >= 8) return;
+    const effectiveGlobal = Math.min((game.inheritedGlobalMultiplier ?? game.inheritMultiplier ?? 1) * (game.roundMultiplier ?? 1), 8);
+    if (effectiveGlobal >= 8) return;
 
     // 初始化投票列表
     if (!game.liangShanVotes) {
@@ -929,6 +930,9 @@ export class ActionHandler {
 
     // 记录投票
     game.liangShanVotes.push(player.id);
+
+    // 广播投票消息
+    broadcastQuickMessage(game.gameId, `🔥 ${player.name}响应了梁山聚义！`, 'special');
 
     // 活跃玩家总数（只统计真人）
     const activePlayers = game.players.filter(p => p.status === PlayerStatus.PLAYING);
