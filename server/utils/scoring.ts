@@ -524,7 +524,7 @@ export function generateWinOptions(params: {
   // 检查是否有任何选项使用了固定点数
   const hasFixedPointOption = uniqueOptions.some(opt =>
     opt.handTypes?.some(type => {
-      const name = getFixedFanName(type, opt.type === 'self_draw', false, opt.handTypes);
+      const name = getFixedFanName(type, opt.type === 'self_draw', false, opt.handTypes, params.isDaDiao);
       return !!name && !!FIXED_FAN[name];
     })
   );
@@ -532,7 +532,7 @@ export function generateWinOptions(params: {
     // 提取所有固定点数选项
     const fixedOptions = uniqueOptions.filter(opt =>
       opt.handTypes?.some(type => {
-        const name = getFixedFanName(type, opt.type === 'self_draw', false, opt.handTypes);
+        const name = getFixedFanName(type, opt.type === 'self_draw', false, opt.handTypes, params.isDaDiao);
         return !!name && !!FIXED_FAN[name];
       })
     );
@@ -540,7 +540,7 @@ export function generateWinOptions(params: {
 
     uniqueOptions = uniqueOptions.filter(opt => {
       const hasFixed = opt.handTypes?.some(type => {
-        const name = getFixedFanName(type, opt.type === 'self_draw', false, opt.handTypes);
+        const name = getFixedFanName(type, opt.type === 'self_draw', false, opt.handTypes, params.isDaDiao);
         return !!name && !!FIXED_FAN[name];
       });
 

@@ -724,7 +724,7 @@ export class ActionHandler {
     const handTypeLabel = (player as any).winHandType || '';
     const discarderName = isSelfDrawn ? '' : (game.players[game.currentPlayerIndex]?.name || '');
     const huMsg = isSelfDrawn
-      ? `🎉 ${player.name} 自摸${winningTileName ? '-' + winningTileName : ''}${handTypeLabel ? '·' + handTypeLabel : ''}`
+      ? `🎉 ${player.name} 自摸${winningTileName ? '-' + winningTileName : ''}`
       : `🎉 ${player.name} 捉冲${discarderName}${winningTileName ? '-' + winningTileName : ''}${handTypeLabel ? '·' + handTypeLabel : ''}`;
     broadcastQuickMessage(game.gameId, huMsg, 'special');
 
