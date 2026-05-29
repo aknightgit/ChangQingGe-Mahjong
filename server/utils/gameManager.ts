@@ -4988,6 +4988,9 @@ class GameManager {
       game.drawnThisTurn = true;
     }
 
+    // 设置 freezeUntil 同时控制人类和 Bot，让 autoDrawForCurrentPlayer 都能检查
+    (game as any)._freezeUntil = Date.now() + freezeMs;
+
     if (this.isPlayerBotControlled(nextPlayer)) {
       const freezeBotIndex = game.currentPlayerIndex;
       const botFreezeTimer = this.timerManager.detachTimer(setTimeout(async () => {
@@ -5062,7 +5065,6 @@ class GameManager {
       }, this.timerManager.getHesitationWindow(game)));
       this.timerManager.freezeTimers.set(game.gameId, botFreezeTimer);
     } else {
-      (game as any)._freezeUntil = Date.now() + freezeMs;
       await this.persistGame(game);
       this.broadcastGameState(game.gameId);
 
