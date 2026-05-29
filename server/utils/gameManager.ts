@@ -2137,46 +2137,6 @@ class GameManager {
   private handleDraw(game: GameState, player: Player, options?: { allowFullHand?: boolean }): void {
     this.actionHandler.handleDraw(game, player, options);
   }
-    if (game.wall.length === 0) {
-      this.endRound(game, GameEndReason.WALL_EXHAUSTED);
-      return;
-    }
-
-    // 牌数上限检查(不含花牌的门口牌+手牌 < 14 才能摸)
-    const playableTileCount = this.getPlayableTileCount(player);
-    if (!options?.allowFullHand && playableTileCount >= 14) {
-      console.warn(`[DRAW] Skipped: ${player.name} already has ${playableTileCount} playable tiles`);
-      return;
-    }
-
-    let tile = game.wall.pop()!;
-
-    // 循环补花:摸到普通花牌就放门口继续摸,直到摸到非花牌
-    while (isFlower(tile) && !this.isWildTile(game, tile)) {
-      player.hand.exposedMelds.push({
-        type: MeldType.TRIPLET,
-        tiles: [tile],
-        isConcealed: false,
-        replacementDone: true as any
-      } as any);
-      console.log(`[FLOWER] ${player.name} 摸到花牌: ${tile.id}, 门口花牌数: ${player.hand.exposedMelds.filter(m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !this.isWildTile(game, m.tiles[0])).length}`);
-      if (game.wall.length === 0) {
-        this.endRound(game, GameEndReason.WALL_EXHAUSTED);
-        return;
-      }
-      tile = game.wall.pop()!;
-    }
-
-    // 花牌百搭 → 进手牌
-    if (isFlower(tile) && this.isWildTile(game, tile)) {
-      player.hand.concealedTiles.push(tile);
-    } else {
-      // 普通牌 → 进手牌
-      player.hand.concealedTiles.push(tile);
-    }
-    (player as any).lastDrawnTile = tile;
-    player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
-  }
 
   /**
    * 替换门口的初始花牌(发牌时放门口但未补花的)
@@ -3036,51 +2996,6 @@ class GameManager {
    * 默认QJ线4000:输4000→1次,输8000→2次,输12000→3次
    */
 
-  /**
-   * 请求换位置
-   */
-    const game = this.games.get(gameId);
-    if (!game) throw new Error('Game not found');
-    if (game.phase !== GamePhase.PLAYING && game.phase !== GamePhase.ENDED) {
-      throw new Error('Can only swap during or after a round');
-    }
-
-    // 找到两个玩家
-    const player = game.players.find(p => p.id === playerId);
-    const target = game.players.find(p => p.id === targetId);
-    if (!player || !target) throw new Error('Player not found');
-
-    // 检查是否真人玩家
-    if (this.isPlayerBotControlled(player)) throw new Error('AI players cannot swap positions');
-
-    // 计算剩余机会
-    const totalChances = this.swapManager.computeSwapChances(game, playerId);
-    const usedChances = (game.swapRequests || []).filter(r => r.playerId === playerId).length;
-    const remainingChances = totalChances - usedChances;
-
-    if (remainingChances <= 0) {
-      throw new Error('没有换位置机会了(积分未达标或已用完)');
-    }
-
-    // 检查是否已有待生效的换位请求
-    if (!game.swapRequests) game.swapRequests = [];
-    const existing = game.swapRequests.find(r => r.playerId === playerId && r.targetId === targetId);
-    if (existing) throw new Error('已提交过换位请求,等待生效中');
-
-    // 记录请求
-    game.swapRequests.push({
-      playerId,
-      targetId,
-      requestedAt: Date.now()
-    });
-
-    console.log(`[Swap] ${player.name} 请求与 ${target.name} 换位置 (剩余${remainingChances - 1}次)`);
-
-    return {
-      success: true,
-      message: `${player.name} 下一局开始将与 ${target.name} 互换位置`
-    };
-  }
 
   /**
    * 应用待生效的换位请求(在startGame中调用)
@@ -3094,15 +3009,6 @@ class GameManager {
    * 应用待生效的替换AI请求(在startGame中调用)
    */
 
-  /**
-   * 获取玩家剩余换位置次数信息
-   */
-    const game = this.games.get(gameId);
-    if (!game) return { totalChances: 0, usedChances: 0, remaining: 0 };
-    const totalChances = this.swapManager.computeSwapChances(game, playerId);
-    const usedChances = (game.swapRequests || []).filter(r => r.playerId === playerId).length;
-    return { totalChances, usedChances, remaining: totalChances - usedChances };
-  }
 
   private handleCheatHu(game: GameState, player: Player): void {
     this.actionHandler.handleCheatHu(game, player);
