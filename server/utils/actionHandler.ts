@@ -626,7 +626,7 @@ export class ActionHandler {
       const sourcePlayer = game.players.find(p => p.hand.discardedTiles.some(t => t.id === existingSourceTileId));
       if (sourcePlayer) {
         this.deps.recordBailoutAction(game.gameId, player.id, sourcePlayer.id, MeldType.KONG);
-        this.deps.checkAndBroadcastBailout(game.gameId, player.id, sourcePlayer.id);
+        this.deps.checkAndBroadcastBailout(game, player.id, sourcePlayer.id);
       }
     }
 
