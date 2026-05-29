@@ -158,8 +158,8 @@ class GameManager {
     this.broadcastService.broadcastQuickMessage(gameId, text, type, actionKind);
   }
 
-  private broadcastFlowerReplacement(game: GameState, player: Player): void {
-    this.broadcastService.broadcastFlowerReplacement(game, player);
+  private broadcastFlowerReplacement(game: GameState, player: Player, tile?: Tile): void {
+    this.broadcastService.broadcastFlowerReplacement(game, player, tile);
   }
 
   private broadcastKongSupplement(game: GameState, player: Player, kind: 'ming' | 'an' | 'jia'): void {
@@ -2861,7 +2861,7 @@ class GameManager {
         player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
       }
 
-      this.broadcastService.broadcastFlowerReplacement(game, player);
+      this.broadcastService.broadcastFlowerReplacement(game, player, replacement);
     }
   }
 
@@ -5201,7 +5201,7 @@ class GameManager {
         // 补到普通牌,加入手牌(替换原来花牌的位置)
         player.hand.concealedTiles.push(replacement);
         (player as any).lastDrawnTile = replacement;
-        this.broadcastService.broadcastFlowerReplacement(game, player);
+        this.broadcastService.broadcastFlowerReplacement(game, player, replacement);
       }
     }
 

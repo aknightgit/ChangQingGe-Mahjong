@@ -83,9 +83,12 @@ export class BroadcastService {
   }
 
   /** 补花广播 */
-  broadcastFlowerReplacement(game: GameState, player: Player): void {
+  broadcastFlowerReplacement(game: GameState, player: Player, tile?: Tile): void {
     if (!this.wsManager) return;
-    this.broadcastQuickMessage(game.gameId, `🌸 ${player.name}补花`, 'special', 'flowerReplace');
+    // 每次补花用不同文本（含牌名），避免 3 秒去重吞掉后续补花
+    const tileName = tile ? getTileDisplayName(tile) : '';
+    const text = tileName ? `🌸 ${player.name}补花-${tileName}` : `🌸 ${player.name}补花`;
+    this.broadcastQuickMessage(game.gameId, text, 'special', 'flowerReplace');
   }
 
   /** 杠后补牌广播 */
