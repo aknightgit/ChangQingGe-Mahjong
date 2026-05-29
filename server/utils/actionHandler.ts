@@ -624,16 +624,14 @@ export class ActionHandler {
   async handleHu(game: GameState, player: Player, selectedWinOptionLabel?: string): Promise<void> {
     const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode } = this.deps;
 
-    // 【修复】不检查 getCachedWinCheck — 捉冲时手牌不含弃牌，检查会失败
-    // 老代码 _handleHu_original 直接从 pendingAction 获取弃牌，不做 canWin 检查
-    // canWin 检查已在 checkPendingActions 中完成（包含弃牌的手牌）
+    // 检查是否可以胡
+    const winCheck = getCachedWinCheck(game, player);
+    if (!winCheck.canWin) {
+      throw new Error('Cannot win');
+    }
 
-    // 获取胡牌选项（捉冲时用 'discard' context）
-    const pendingActionForTile = game.pendingActions.find(pa => pa.playerId === player.id);
-    const winningTile = pendingActionForTile?.tile;
-    const isSelfDrawnHu = !winningTile && game.currentPlayerIndex === game.players.findIndex(p => p.id === player.id);
-    const winContext = winningTile ? 'discard' : 'self_draw';
-    const winOptions = getCachedWinOptions(game, player, winContext);
+    // 获取胡牌选项
+    const winOptions = getCachedWinOptions(game, player, 'self_draw');
     if (winOptions.length === 0) {
       throw new Error('No win options available');
     }
@@ -1083,7 +1081,6 @@ export class ActionHandler {
       return;
     }
 
-    // Phase 1: 检查碰/杠/胡（所有玩家）
     for (const player of game.players) {
       if (player.status !== PlayerStatus.PLAYING) continue;
       if (player.id && player.id === game.players[game.currentPlayerIndex].id) continue;
@@ -1107,6 +1104,17 @@ export class ActionHandler {
         availableActions.push(ActionType.KONG);
       }
 
+      // 检查是否可以吃（只有下家可以吃）
+      const nextPlayerIndex = (discarderIndex + 1) % game.players.length;
+      if (game.players[nextPlayerIndex]?.id === player.id) {
+        if (checkChowPongExclusion(exclusionState, 'chow', discardedTile.suit)) {
+          const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile, game);
+          if (sequences.length > 0) {
+            availableActions.push(ActionType.CHOW);
+          }
+        }
+      }
+
       // 检查是否可以胡（把弃牌加入手牌后能否胡）
       const wildArg = (game.customScoringMode || null);
       const wildGroup = game.wildTileGroup || [];
@@ -1125,50 +1133,6 @@ export class ActionHandler {
           expiresAt: Date.now() + (game.hesitationWindow || 5000)
         });
       }
-    }
-
-    // Phase 2: 检查吃（只有下家可以吃，且需要构建 chowOptions 让玩家选择）
-    const chowPlayerIndex = (discarderIndex + 1) % game.players.length;
-    const chowPlayer = game.players[chowPlayerIndex];
-    if (chowPlayer && chowPlayer.status === PlayerStatus.PLAYING) {
-      const exclusion = game.chowPongExclusion?.[chowPlayer.id];
-      const exclusionState = exclusion || { firstActionSuit: null, firstActionType: null };
-      if (checkChowPongExclusion(exclusionState, 'chow', discardedTile.suit)) {
-        const sequences = this.findChowSequences(chowPlayer.hand.concealedTiles, discardedTile, game);
-        if (sequences.length > 0) {
-          const chowOptions = this.buildChowOptionIds(sequences, discardedTile);
-          // 检查该玩家是否已有碰/杠/胡的pending（如果有，追加吃选项）
-          const existing = game.pendingActions.find(pa => pa.playerId === chowPlayer.id);
-          if (existing) {
-            if (!existing.availableActions.includes(ActionType.CHOW)) {
-              existing.availableActions.push(ActionType.CHOW);
-            }
-            existing.chowOptions = chowOptions;
-          } else {
-            game.pendingActions.push({
-              playerId: chowPlayer.id,
-              availableActions: [ActionType.CHOW, ActionType.PASS],
-              tile: discardedTile,
-              chowOptions,
-              expiresAt: Date.now() + (game.hesitationWindow || 5000)
-            });
-          }
-        }
-      }
-    }
-
-    // 按座位距离弃牌者排序 HU pending actions（近的先赢）
-    const huPending = game.pendingActions.filter(pa => pa.availableActions.includes(ActionType.HU));
-    if (huPending.length > 1) {
-      const playerCount = game.players.length;
-      const getDistance = (playerId: string) => {
-        const idx = game.players.findIndex(p => p.id === playerId);
-        if (idx < 0) return 999;
-        return (idx - discarderIndex + playerCount) % playerCount;
-      };
-      huPending.sort((a, b) => getDistance(a.playerId) - getDistance(b.playerId));
-      const nonHuPending = game.pendingActions.filter(pa => !pa.availableActions.includes(ActionType.HU));
-      game.pendingActions = [...huPending, ...nonHuPending];
     }
   }
 
@@ -1230,25 +1194,6 @@ export class ActionHandler {
       const currentSum = current.reduce((sum, t) => sum + t.value, 0);
       return currentSum < bestSum ? current : best;
     });
-  }
-
-  /**
-   * 构建吃牌选项ID列表（与老代码 buildChowOptionIds 一致）
-   */
-  private buildChowOptionIds(sequences: Tile[][], discardedTile: Tile): string[][] {
-    const seen = new Set<string>();
-    const options: string[][] = [];
-    for (const sequence of sequences) {
-      const ids = sequence
-        .filter(tile => tile.id !== discardedTile.id)
-        .map(tile => tile.id)
-        .sort();
-      const key = ids.join('|');
-      if (seen.has(key)) continue;
-      seen.add(key);
-      options.push(ids);
-    }
-    return options;
   }
 
   /**

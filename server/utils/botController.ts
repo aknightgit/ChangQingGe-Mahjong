@@ -220,12 +220,6 @@ export class BotController {
   scheduleBotDiscard(gameId: string, playerId: string): void {
     const { games, timerManager, isPlayerBotControlled, getGame, executeAction, getAvailableActions, clearCurrentTurnPendingActions, schedulePendingActionTimeout, enableBotMode, persistGame, broadcastGameState, canPlayerDrawOnCurrentTurn, isConcealedDiscardState, getGame: getGameFn } = this.deps;
 
-    // 【修复】如果有活跃的 freeze timer，不要覆盖它（让犹豫期生效）
-    if (timerManager.freezeTimers?.has(gameId)) {
-      console.log(`[bot-discard] Skipping: freeze timer active for ${gameId}`);
-      return;
-    }
-
     const existing = timerManager.botTimers.get(gameId);
     if (existing) clearTimeout(existing);
 
