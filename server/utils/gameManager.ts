@@ -393,6 +393,11 @@ class GameManager {
     return [1, 2, 4, 5, 7, 8, 10, 11, 13, 14].includes(concealedPlayableCount);
   }
 
+  // Proxy for state.get.ts
+  getMutualBailoutRelations(gameId: string) {
+    return this.bailoutTracker.getMutualBailoutRelations(gameId);
+  }
+
   private isDaDiaoReadyState(game: GameState, player: Player): boolean {
     return this.getConcealedPlayableTiles(game, player).length === 1;
   }
