@@ -4,7 +4,7 @@
  */
 import { GameState, Player, GamePhase, PlayerStatus, ActionType, PendingAction, MeldType, Tile, GameEndReason, TileSuit } from '../types/game';
 import { findTileById, removeTile, isFlower, tilesEqual, isMissingOneSuit, getTileDisplayName } from './tiles';
-import { buildWildTileChecker, HandType, isTing, checkChowPongExclusion, updateChowPongExclusion, detectHandTypes } from './handValidator';
+import { buildWildTileChecker, canWin, HandType, isTing, checkChowPongExclusion, updateChowPongExclusion, detectHandTypes } from './handValidator';
 import { calculateGameResult, generateWinOptions, calculateScore, type WinOption } from './scoring';
 import * as tileHelper from './tileHelper';
 
@@ -1115,9 +1115,12 @@ export class ActionHandler {
         }
       }
 
-      // 检查是否可以胡
-      const winCheck = getCachedWinCheck(game, player);
-      if (winCheck.canWin) {
+      // 检查是否可以胡（把弃牌加入手牌后能否胡）
+      const wildArg = (game.customScoringMode || null);
+      const wildGroup = game.wildTileGroup || [];
+      const handWithDiscard = [...player.hand.concealedTiles, discardedTile];
+      const huCheck = canWin(handWithDiscard, player.hand.exposedMelds, wildArg, undefined, wildGroup);
+      if (huCheck.canWin) {
         availableActions.push(ActionType.HU);
       }
 
