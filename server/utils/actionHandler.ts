@@ -624,14 +624,27 @@ export class ActionHandler {
   async handleHu(game: GameState, player: Player, selectedWinOptionLabel?: string): Promise<void> {
     const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode } = this.deps;
 
-    // 检查是否可以胡
-    const winCheck = getCachedWinCheck(game, player);
+    // 判断是自摸还是捉冲（有pendingAction且含HU = 捉冲）
+    const huPendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
+    const huIsSelfDraw = !huPendingAction;
+    const huPendingTile = huPendingAction?.tile;
+
+    // 用正确的手牌检测胡牌（捉冲时加入弃牌）
+    const handForCheck = huPendingTile
+      ? [...player.hand.concealedTiles, huPendingTile]
+      : player.hand.concealedTiles;
+    const winCheck = canWin(handForCheck, player.hand.exposedMelds, game.customScoringMode || null);
     if (!winCheck.canWin) {
       throw new Error('Cannot win');
     }
 
-    // 获取胡牌选项
-    const winOptions = getCachedWinOptions(game, player, 'self_draw');
+    // 获取胡牌选项（捉冲用 discard context + extraTile）
+    const context = huIsSelfDraw ? 'self_draw' : 'discard';
+    const winOptions = getCachedWinOptions(game, player, context, {
+      extraTile: huPendingTile,
+      isKongFlower: false,
+      isRobbingKong: !!huPendingAction?.tile && !!(game as any).pendingKongClaim
+    });
     if (winOptions.length === 0) {
       throw new Error('No win options available');
     }

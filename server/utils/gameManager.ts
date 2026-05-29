@@ -2860,7 +2860,9 @@ class GameManager {
         (player as any).lastDrawnTile = replacement;
         player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
       }
-
+    }
+    // 有补花时只广播一条消息（避免同文本去重导致丢失）
+    if (flowerMelds.length > 0) {
       this.broadcastService.broadcastFlowerReplacement(game, player);
     }
   }
@@ -5201,8 +5203,11 @@ class GameManager {
         // 补到普通牌,加入手牌(替换原来花牌的位置)
         player.hand.concealedTiles.push(replacement);
         (player as any).lastDrawnTile = replacement;
-        this.broadcastService.broadcastFlowerReplacement(game, player);
       }
+    }
+    // 有补花时只广播一条消息（避免同文本去重导致丢失）
+    if (flowerMelds.length > 0) {
+      this.broadcastService.broadcastFlowerReplacement(game, player);
     }
 
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
@@ -5442,7 +5447,7 @@ class GameManager {
 
     // 记录本局统计
     if (!game.roundStats) game.roundStats = [];
-    const roundWinners = game.players.filter(p => p.status === PlayerStatus.WON);
+    const roundWinners = game.players.filter(p => p.status === PlayerStatus.WON).sort((a, b) => (a.winOrder ?? 99) - (b.winOrder ?? 99));
 
     // 检查被聚义QJ线(每局刷新)
     this.checkQJThresholdAlerts(game);

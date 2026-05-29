@@ -461,7 +461,7 @@ onUnmounted(() => {
 }
 
 .action-btn--hu.action-btn--highlight-pulse {
-  animation: action-breathe-strong 0.92s ease-in-out infinite, heartbeat 1.2s ease-in-out infinite, hu-glow-strong 0.92s ease-in-out infinite;
+  animation: pop 0.3s ease, action-breathe-strong 0.92s ease-in-out infinite, heartbeat 1.2s ease-in-out infinite, hu-glow-strong 0.92s ease-in-out infinite;
 }
 
 .action-btn--kong.action-btn--highlight {
@@ -601,18 +601,6 @@ onUnmounted(() => {
 .draw-label {
   position: relative;
   z-index: 1;
-}
-
-/* 胡牌高亮色 */
-.action-grid > .action-btn:nth-child(3).action-btn--highlight {
-  background: linear-gradient(135deg, #c62828, #ef5350);
-  border-color: rgba(239, 83, 80, 0.8);
-  box-shadow: 0 0 14px rgba(239, 83, 80, 0.4);
-  animation: pop 0.3s ease, hu-glow 1s infinite;
-}
-@keyframes hu-glow {
-  0%, 100% { box-shadow: 0 0 14px rgba(239, 83, 80, 0.4); }
-  50% { box-shadow: 0 0 24px rgba(239, 83, 80, 0.7); }
 }
 
 @keyframes pop {
