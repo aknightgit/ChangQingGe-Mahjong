@@ -62,6 +62,14 @@ export class BotController {
       let hasBotAction = false;
       let claimedHigherPriority = false;
 
+      // 如果人类玩家还有未过期的 pending（碰/杠/胡/吃），bot 不能抢先处理
+      const now = Date.now();
+      const humanHasActiveClaim = game.pendingActions.some(pa => {
+        const p = game.players.find(pl => pl.id === pa.playerId);
+        return p && !isPlayerBotControlled(p) && pa.expiresAt && pa.expiresAt > now;
+      });
+      if (humanHasActiveClaim) return false;
+
       // 保存人类玩家的 pending（bot 的 claim 不应清除人类的犹豫窗口）
       const humanPendingActions = game.pendingActions.filter(pa => {
         const p = game.players.find(pl => pl.id === pa.playerId);
