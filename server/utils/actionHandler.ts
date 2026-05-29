@@ -531,7 +531,7 @@ export class ActionHandler {
 
     // 添加到副露（暗杠）
     player.hand.exposedMelds.push({
-      type: MeldType.TRIPLET,
+      type: MeldType.CONCEALED_KONG,
       tiles: tiles,
       isConcealed: true
     });
@@ -544,15 +544,18 @@ export class ActionHandler {
       timestamp: Date.now()
     });
 
-    // 暗杠后摸牌
+    // 暗杠后补牌（allowFullHand=true）
     replaceFlowers(game, player);
-    handleDraw(game, player);
+    handleDraw(game, player, { allowFullHand: true });
     game.drawnThisTurn = true;
+    player.hand.concealedTiles = sortHandWithWildFront(player.hand.concealedTiles, game);
 
-    // 持久化并广播
-    persistGame(game).then(() => {
-      broadcastGameState(game.gameId);
-    });
+    if (isPlayerBotControlled(player)) {
+      this.deps.scheduleBotDiscard(game.gameId, player.id);
+    }
+
+    await persistGame(game);
+    broadcastGameState(game.gameId);
   }
 
   /**
@@ -593,15 +596,18 @@ export class ActionHandler {
       timestamp: Date.now()
     });
 
-    // 加杠后摸牌
+    // 加杠后补牌（allowFullHand=true）
     replaceFlowers(game, player);
-    handleDraw(game, player);
+    handleDraw(game, player, { allowFullHand: true });
     game.drawnThisTurn = true;
+    player.hand.concealedTiles = sortHandWithWildFront(player.hand.concealedTiles, game);
 
-    // 持久化并广播
-    persistGame(game).then(() => {
-      broadcastGameState(game.gameId);
-    });
+    if (isPlayerBotControlled(player)) {
+      this.deps.scheduleBotDiscard(game.gameId, player.id);
+    }
+
+    await persistGame(game);
+    broadcastGameState(game.gameId);
   }
 
   /**
