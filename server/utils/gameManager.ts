@@ -5282,6 +5282,27 @@ class GameManager {
         }
       }
 
+      // 【修复】一炮多响时，按座位距离弃牌者重排 winners 并重分配 winOrder
+      // 根因：handleHu 按数组索引顺序分配 winOrder，与实际胡牌顺序（座位距离）无关
+      // 修复后：近者先赢（距离弃牌者最近的座位先得 winOrder=1）
+      if (winners.length > 1) {
+        const discarderIdx = game.lastDiscardPosition != null
+          ? game.players.findIndex(p => p.position === game.lastDiscardPosition)
+          : -1;
+        if (discarderIdx >= 0) {
+          const playerCount = game.players.length;
+          const sortedWinners = [...winners].sort((a, b) => {
+            const aIdx = game.players.findIndex(p => p.id === a.id);
+            const bIdx = game.players.findIndex(p => p.id === b.id);
+            const aDist = (aIdx - discarderIdx + playerCount) % playerCount;
+            const bDist = (bIdx - discarderIdx + playerCount) % playerCount;
+            return aDist - bDist;
+          });
+          sortedWinners.forEach((w, i) => { w.winOrder = i + 1; });
+          console.log(`[SETTLEMENT] winOrder by seating: ${sortedWinners.map(w => `${w.name}=${w.winOrder}`).join(', ')}`);
+        }
+      }
+
       for (const winner of winners) {
         const winnerIdx = game.players.findIndex(p => p.id === winner.id);
         if (winnerIdx < 0) continue;
