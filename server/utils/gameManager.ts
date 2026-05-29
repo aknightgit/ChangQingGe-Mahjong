@@ -3600,6 +3600,32 @@ class GameManager {
 
   public endRound(game: GameState, reason: GameEndReason): void {
     this.timerManager.clearPendingActionTimer(game.gameId);
+    // 【2026-05-29 验牌阶段】如果还不是REVEAL阶段，先进入REVEAL并延迟5秒
+    if (game.phase !== GamePhase.REVEAL) {
+      game.phase = GamePhase.REVEAL;
+      game.endReason = reason;
+      const winners = game.players.filter(p => p.status === PlayerStatus.WON);
+      const winnerIds = new Set(winners.map(w => w.id));
+      for (const player of game.players) {
+        if (!winnerIds.has(player.id) && player.status === PlayerStatus.PLAYING) {
+          player.status = PlayerStatus.LOST;
+        }
+      }
+      this.store.flushGameNow(game.gameId).catch(() => {});
+      this.broadcastGameState(game.gameId);
+      const gameId = game.gameId;
+      this.timerManager.detachTimer(setTimeout(async () => {
+        try {
+          const fresh = await this.getGame(gameId);
+          if (!fresh || fresh.phase !== GamePhase.REVEAL) return;
+          this.endRound(fresh, reason);
+        } catch (e) {
+          console.warn("[enterReveal] end error:", e);
+        }
+      }, 5000));
+      return;
+    }
+    // 已处于REVEAL阶段，执行结算
     game.phase = GamePhase.ENDED;
     // 回合结束立即刷盘
     this.store.flushGameNow(game.gameId).catch(() => {});

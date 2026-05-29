@@ -267,46 +267,10 @@
           {{ drawBlockedNoticeText }}
         </div>
 
-        <!-- 亮牌展示阶段 -->
-        <div v-if="showWinnerReveal" class="winner-reveal-overlay">
-          <div class="winner-reveal-card">
-            <h2 class="winner-reveal-title">🀄 胡牌亮牌</h2>
-            <div v-for="(w, idx) in winnerRevealData" :key="idx" class="winner-reveal-item">
-              <div class="winner-reveal-header">
-                <span class="winner-reveal-name">{{ w.playerName }}</span>
-                <span class="winner-reveal-type">{{ w.handTypeName }}</span>
-                <span class="winner-reveal-points">{{ w.finalPoints }}点</span>
-              </div>
-              <!-- 手牌用真实牌图 -->
-              <div class="winner-reveal-tiles-visual">
-                <template v-for="(group, gi) in getRevealGroups(w)" :key="`rg-${gi}`">
-                  <span v-if="gi > 0" class="winner-reveal-meld-sep">/</span>
-                  <div
-                    v-for="(tile, ti) in group"
-                    :key="`rt-${gi}-${ti}`"
-                    class="winner-reveal-tile-wrap"
-                  >
-                    <MahjongTile :tile="tile" />
-                  </div>
-                </template>
-              </div>
-              <div class="winner-reveal-method">
-                {{ w.isSelfDrawn ? `自摸${w.winningTileName ? '-' + w.winningTileName : ''}` : (w.discarderName ? `捉冲${w.discarderName}${w.winningTileName ? '-' + w.winningTileName : ''}` : `捉冲${w.winningTileName ? '-' + w.winningTileName : ''}`) }}
-              </div>
-            </div>
-            <!-- 所有玩家手牌明牌展示 -->
-            <div class="winner-reveal-all-hands">
-              <div v-for="p in revealAllPlayers" :key="p.id" class="winner-reveal-player-hand">
-                <span class="winner-reveal-player-name" :class="{ 'winner-reveal-player-name--winner': p.isWinner }">{{ p.name }}</span>
-                <div class="winner-reveal-player-tiles">
-                  <div v-for="tile in p.tiles" :key="tile.id" class="winner-reveal-tile-wrap--small">
-                    <MahjongTile :tile="tile" />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="winner-reveal-hint">3秒后显示结算...</div>
-          </div>
+        <!-- [2026-05-29] 验牌亮牌阶段 -->
+        <div v-if="showWinnerReveal" class="reveal-phase-overlay">
+          <div class="reveal-phase-text">客官请验牌！</div>
+          <div class="reveal-phase-countdown">{{ revealCountdown }}s</div>
         </div>
 
         <div v-if="showSettlement" class="settle-overlay">
@@ -1672,9 +1636,7 @@ onMounted(async () => {
     })
     // 根据广播内容播放音效和语音
     const text = detail.text || ''
-    if (text.includes('补花')) { playSound('tile-draw'); playVoiceAction('flowerReplace') }
-    else if (text.includes('自摸')) playVoiceAction('selfHu')
-    else if (text.includes('胡')) playVoiceAction('hu')
+    // [2026-05-29] 音效/语音已在 action handler / checkOtherPlayerSounds 触发，不再重复
   }) as EventListener)
 
   if (process.client) {
@@ -3277,6 +3239,12 @@ const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); playVoiceActio
 const showSettlement = ref(false)
 const showWinnerReveal = ref(false)
 const winnerRevealData = ref<any[]>([])
+const _revealPhaseStartedAt = ref(0)
+const revealCountdown = computed(() => {
+  if (!showWinnerReveal.value || !_revealPhaseStartedAt.value) return 5
+  const elapsed = Math.floor((Date.now() - _revealPhaseStartedAt.value) / 1000)
+  return Math.max(0, 5 - elapsed)
+})
 
 // 亮牌阶段：把 winnerRevealData 中的 handTiles/exposedMeldGroups 转为牌图分组
 const getRevealGroups = (w: any): Tile[][] => {
@@ -3907,9 +3875,19 @@ watch([isMyTurn, hasPriorityActions], ([myTurn, hasActions]) => {
 }, { immediate: true })
 
 // 监听游戏进入PLAYING阶段，强制触发倒计时
-watch(() => gameState.value?.phase, (phase) => {
+watch(() => gameState.value?.phase, (phase, oldPhase) => {
   if (phase === GamePhase.PLAYING && isMyTurn.value && !isAIControlled.value) {
     startTurnTimer()
+  }
+  // [2026-05-29] 验牌阶段：显示"客官请验牌！"倒计时
+  if (phase === GamePhase.REVEAL && oldPhase !== GamePhase.REVEAL) {
+    if (!showWinnerReveal.value) {
+      _revealPhaseStartedAt.value = Date.now()
+      showWinnerReveal.value = true
+    }
+  }
+  if (phase === GamePhase.ENDED && oldPhase === GamePhase.REVEAL) {
+    showWinnerReveal.value = false
   }
 })
 
@@ -8350,5 +8328,34 @@ const forceDiscard = async (p: Player) => {
 /* extra-action-btn--hu removed - Hu is in CircularActionButtons only */
 
 
+
+
+/* ===== [2026-05-29] 验牌阶段 ===== */
+.reveal-phase-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  animation: fadeIn 0.4s ease;
+}
+.reveal-phase-text {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #ffd700;
+  text-shadow: 0 0 20px rgba(255, 215, 0, 0.6), 0 2px 4px rgba(0,0,0,0.5);
+  margin-bottom: 16px;
+  letter-spacing: 4px;
+}
+.reveal-phase-countdown {
+  font-size: 3rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255,255,255,0.5);
+}
 
 </style>
