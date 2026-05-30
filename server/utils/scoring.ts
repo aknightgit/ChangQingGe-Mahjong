@@ -810,7 +810,7 @@ function getFixedFanName(type: HandType, isSelfDrawn: boolean, isKongFlower: boo
       if (handTypes.includes(HandType.HALF_FLUSH)) return '大吊混一色';
       if (handTypes.includes(HandType.FULL_FLUSH)) return '大吊清一色';
     }
-    // Standalone大吊 (no other special types, 手牌剩1张) = 固定10点
+    // Standalone大吊 (no other special types) = 固定10点
     return '大吊';
   }
   switch (type) {
@@ -1115,6 +1115,7 @@ export function calculateSettlementBreakdownByRules(
     }
 
     // 再检查其他玩家是否有互包关系（第三方互包补赔）
+    // 规则：第三方放冲 → 放冲者赔1倍 + 互包输家补赔1倍
     const bailoutLoser = allPlayerIndices.find(idx => {
       if (idx === winnerIndex || idx === discarderId) return false;
       const bailout = mutualBailout?.get(idx);
@@ -1122,7 +1123,9 @@ export function calculateSettlementBreakdownByRules(
     });
 
     if (bailoutLoser !== undefined) {
+      const bailoutInfo = mutualBailout!.get(bailoutLoser)!;
       addTransfer(discarderId, winnerIndex, winnerFinalPoints, '放冲赔付');
+      addTransfer(bailoutLoser, winnerIndex, winnerFinalPoints, '互包补赔×1', bailoutInfo.type);
       return { deltas, transfers };
     }
 

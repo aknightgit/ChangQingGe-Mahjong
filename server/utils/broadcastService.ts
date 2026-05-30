@@ -83,9 +83,10 @@ export class BroadcastService {
   }
 
   /** 补花广播 */
-  broadcastFlowerReplacement(game: GameState, player: Player): void {
+  broadcastFlowerReplacement(game: GameState, player: Player, count?: number): void {
     if (!this.wsManager) return;
-    this.broadcastQuickMessage(game.gameId, `🌸 ${player.name}补花`, 'special', 'flowerReplace');
+    const label = count && count > 1 ? `🌸 ${player.name}补了${count}朵花` : `🌸 ${player.name}补花`;
+    this.broadcastQuickMessage(game.gameId, label, 'special', 'flowerReplace');
   }
 
   /** 杠后补牌广播 */

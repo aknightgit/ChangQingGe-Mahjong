@@ -1640,7 +1640,14 @@ onMounted(async () => {
     })
     // 根据广播内容播放音效和语音
     const text = detail.text || ''
-    // [2026-05-29] 音效/语音已在 action handler / checkOtherPlayerSounds 触发，不再重复
+    const actionKind = detail.actionKind || ''
+    // 吃碰杠胡：所有玩家都播放语音（包括操作者）
+    if (actionKind === 'chow') { playVoiceAction('chow') }
+    else if (actionKind === 'pong') { playVoiceAction('pong') }
+    else if (actionKind === 'kong') { playVoiceAction('kong') }
+    else if (actionKind === 'hu') { playVoiceAction('hu') }
+    else if (actionKind === 'selfHu') { playVoiceAction('selfHu') }
+    else if (actionKind === 'flowerReplace') { playVoiceAction('flowerReplace') }
   }) as EventListener)
 
   if (process.client) {
@@ -2294,10 +2301,8 @@ const enterStartingPhaseWithDiceOverlay = async () => {
         phaseOnly: true
       }
     })
-    diceValues.value = [
-      Math.floor(Math.random() * 6) + 1,
-      Math.floor(Math.random() * 6) + 1
-    ]
+    // 🔥 不再生成随机骰子 — 服务端 setStartingPhase 已预计算并通过 diceRoll 事件广播
+    // gameState.dice 也会包含真实值，phase watcher 会读取
     playSound('dice-roll')
     playVoiceAction('diceRoll')
     showDiceOverlay.value = true
@@ -2319,10 +2324,10 @@ const maybeAutoDealForBotDealer = () => {
 /** 自动掷骰子+发牌（AI庄家） */
 const autoRollAndDeal = () => {
   onRerollDice()
-  // 等掷骰子动画完成（约850ms）+ 结果展示（500ms）+ 过渡
+  // 🔥 缩短等待：rolling 600ms + result 300ms + buffer 200ms = 1100ms（原1800ms）
   window.setTimeout(() => {
     void onDealTiles()
-  }, 1800)
+  }, 1100)
 }
 
 /** 仅自动掷骰子（人类庄家） */
@@ -2874,9 +2879,9 @@ const onConfirmHu = async (index: number) => {
   playSound('tile-hu')
   const selectedOption: any = displayWinOptions.value[index]
   if (selectedOption?.type === 'self_draw') {
-    playVoiceAction('selfHu')
+    // 语音由快讯广播触发
   } else {
-    playVoiceAction('hu')
+    // 语音由快讯广播触发
   }
   lastHuReviewOptions.value = displayWinOptions.value.map((option: any) => ({ ...option }))
   lastSelectedHuCombo.value = index
@@ -3206,7 +3211,7 @@ const submitChow = (tileIds?: string[]) => {
   hideActionButtonsNow()
   resetAutoCount()
   playSound('tile-chow')
-  playVoiceAction('chow')
+  // 语音由快讯广播触发
   showChowPicker.value = false
   selectedChowOption.value = null
   executeAction(ActionType.CHOW, undefined, tileIds)
@@ -3227,7 +3232,7 @@ const onCancelChowPicker = () => {
   showChowPicker.value = false
   selectedChowOption.value = null
 }
-const onPeng = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-pong'); playVoiceAction('pong'); executeAction(ActionType.PENG) }
+const onPeng = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-pong'); /* 语音由快讯广播触发 */ executeAction(ActionType.PENG) }
 const onKong = () => {
   hideActionButtonsNow()
   resetAutoCount()
@@ -3237,7 +3242,7 @@ const onKong = () => {
 }
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); playVoiceAction('rebel'); executeAction(ActionType.REBEL) }
 const onThink = () => { resetAutoCount(); executeAction(ActionType.THINK) }
-const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); playVoiceAction('hu'); executeAction(ActionType.CHEAT_HU) }
+const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); /* 语音由快讯广播触发 */ executeAction(ActionType.CHEAT_HU) }
 
 // 退房结算
 const showSettlement = ref(false)
@@ -4257,7 +4262,8 @@ const checkOtherPlayerSounds = (newState: any) => {
 if (replacedFlowerCount > prev.replacedFlowerCount) {
         if (shouldPlayVoice && !_flowerVoicePlayed.has(player.id)) {
           _flowerVoicePlayed.add(player.id)
-          playSound('tile-draw'); playVoiceAction('flowerReplace')
+          playSound('tile-draw')
+          // 补花语音由快讯广播触发
         }
       }
       if (shouldPlayVoice && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
@@ -4294,13 +4300,13 @@ if (replacedFlowerCount > prev.replacedFlowerCount) {
   for (const action of pendingMeldVoices) {
     if (action === 'kong') {
       playSound('tile-kong')
-      playVoiceAction('kong')
+      // 语音由快讯广播触发
     } else if (action === 'pong') {
       playSound('tile-pong')
-      playVoiceAction('pong')
+      // 语音由快讯广播触发
     } else {
       playSound('tile-chow')
-      playVoiceAction('chow')
+      // 语音由快讯广播触发
     }
   }
 }
@@ -4440,40 +4446,33 @@ watch(
       showHuPanel.value = false
       confirmedWinner.value = false
       if (!hasDicePreview.value) {
-        // 使用服务端的骰子值(让后加入的B也能看到实际骰子结果)
+        // 🔥 优先使用服务端预计算的骰子值（setStartingPhase已广播）
         const serverDice = gameState.value?.dice
         if (serverDice && Array.isArray(serverDice) && serverDice.length >= 2) {
           diceValues.value = [serverDice[0], serverDice[1]]
-        } else if (diceValues.value[0] === 1 && diceValues.value[1] === 1) {
-          // socket 事件还没到，用默认值，等 socket 事件更新
         }
+        // 服务端骰子值可能还在路上，diceRoll socket事件会更新
         hasDicePreview.value = true
       }
       showDiceOverlay.value = true
       console.log('[DiceOverlay] SET to true (STARTING)')
 
       // 🔄 自动下一局：来自结算/流局后，自动走掷骰子+发牌
-      // STARTING时立即 refresh state，然后等骰子组件就绪后自动操作
+      // 🔥 立即触发，不等500ms（骰子值已由setStartingPhase预计算并广播）
       if (prevPhase === GamePhase.ENDED) {
         if (isSettleRequested.value) {
-          // 房主已申请退房结算：跳过下一局，直接显示总结算
           showDiceOverlay.value = false
           showSettlement.value = true
           return
         }
-        window.setTimeout(() => {
-          const dealer = dealerPlayer.value
-          if (dealer && isBotPlayer(dealer)) {
-            // AI庄家：自动掷骰子+发牌
-            autoRollAndDeal()
-          } else if (dealer && !isBotPlayer(dealer)) {
-            // 人类头胡庄家：自动掷骰子，等他手动发牌
-            // 或者直接自动掷骰子+等发牌（当前先自动掷骰子）
-            autoRollOnly()
-          } else {
-            // 没有庄家——不可能
-          }
-        }, 500)
+        const dealer = dealerPlayer.value
+        if (dealer && isBotPlayer(dealer)) {
+          // AI庄家：骰子值已在gameState中，直接发牌
+          autoRollAndDeal()
+        } else if (dealer && !isBotPlayer(dealer)) {
+          // 人类庄家：骰子值已知，等他手动点发牌
+          autoRollOnly()
+        }
       }
       return
     }

@@ -143,7 +143,7 @@ class GameManager {
       replaceInitialFlowers: (g, p) => this.replaceInitialFlowers(g, p),
       getPlayableTileCount: (p) => this.getPlayableTileCount(p),
       broadcastKongSupplement: (g, p, kind) => this.broadcastService.broadcastKongSupplement(g, p, kind),
-      broadcastFlowerReplacement: (g, p) => this.broadcastService.broadcastFlowerReplacement(g, p)
+      broadcastFlowerReplacement: (g, p, c) => this.broadcastService.broadcastFlowerReplacement(g, p, c)
     };
   }
 
@@ -1156,10 +1156,18 @@ class GameManager {
    * Called when dealer clicks "开始游戏" in waiting room, before actual dealing
    */
   async setStartingPhase(gameId: string): Promise<void> {
+    console.log(`[setStartingPhase] CALLED gameId=${gameId.substring(0,8)}`);
     await this.hydrateFromDatabase();
     const game = await this.ensureGameLoaded(gameId);
-    if (!game) throw new Error('Game not found');
-    if (game.phase !== GamePhase.WAITING && game.phase !== GamePhase.ENDED && game.phase !== GamePhase.CHA_JIAO && game.phase !== GamePhase.STARTING) return;
+    if (!game) {
+      console.error(`[setStartingPhase] Game ${gameId.substring(0,8)} not found!`);
+      throw new Error('Game not found');
+    }
+    console.log(`[setStartingPhase] game phase=${game.phase} players=${game.players.length}`);
+    if (game.phase !== GamePhase.WAITING && game.phase !== GamePhase.ENDED && game.phase !== GamePhase.CHA_JIAO && game.phase !== GamePhase.STARTING) {
+      console.warn(`[setStartingPhase] SKIP: invalid phase ${game.phase} for game ${gameId.substring(0,8)}`);
+      return;
+    }
     if (game.players.length < 4) throw new Error('Need 4 players to start');
 
     game.endReason = null;
@@ -1185,8 +1193,32 @@ class GameManager {
     (game as any)._preheatedWild = wildType;
     console.log(`[WallDebug] preheated wild: suit=${wildType.suit} value=${wildType.value}`);
 
+    // 🎲 预计算骰子值，广播给所有客户端（消除客户端随机骰子与服务端不一致问题）
+    const rollCount = game.diceRollCount ?? 2;
+    const pd1 = Math.floor(Math.random() * 6) + 1;
+    const pd2 = Math.floor(Math.random() * 6) + 1;
+    let pd3: number | undefined;
+    let pd4: number | undefined;
+    if (rollCount >= 2) {
+      pd3 = Math.floor(Math.random() * 6) + 1;
+      pd4 = Math.floor(Math.random() * 6) + 1;
+    }
+    game.dice = [pd1, pd2];
+    game.diceRolls = pd3 !== undefined ? [[pd1, pd2], [pd3, pd4!]] : undefined;
+    (game as any)._preheatedDice = [pd1, pd2, pd3, pd4];
+    console.log(`[setStartingPhase] pre-computed dice: ${pd1},${pd2}${pd3 !== undefined ? ` + ${pd3},${pd4}` : ''}`);
+
     await this.persistGame(game);
     this.broadcastGameState(gameId);
+
+    // 立即广播骰子值（客户端可以提前显示骰子结果）
+    if (this.wsManager) {
+      this.wsManager.broadcast(gameId, 'diceRoll', {
+        dice1: pd1, dice2: pd2,
+        dice3: pd3, dice4: pd4,
+        timestamp: Date.now()
+      });
+    }
   }
 
   /**
@@ -1278,6 +1310,37 @@ class GameManager {
       game.dealerIndex = Math.floor(Math.random() * game.players.length);
     }
     game.players.forEach((p, i) => { p.isDealer = (i === game.dealerIndex); });
+
+    // 🎲 提前掷骰子+广播（在牌墙/发牌之前，让客户端骰子动画与服务端发牌并行）
+    const rollCount = game.diceRollCount ?? 2;
+    const preheatedDice = (game as any)._preheatedDice as [number, number, number?, number?] | undefined;
+    let d1: number, d2: number, d3: number | undefined, d4: number | undefined;
+    if (options?.fixedDice) {
+      d1 = Math.min(6, Math.max(1, Math.round(options.fixedDice[0])));
+      d2 = Math.min(6, Math.max(1, Math.round(options.fixedDice[1])));
+    } else if (preheatedDice) {
+      [d1, d2, d3, d4] = preheatedDice;
+    } else {
+      d1 = Math.floor(Math.random() * 6) + 1;
+      d2 = Math.floor(Math.random() * 6) + 1;
+    }
+    if (rollCount >= 2 && d3 === undefined) {
+      d3 = Math.floor(Math.random() * 6) + 1;
+      d4 = Math.floor(Math.random() * 6) + 1;
+    }
+    game.dice = [d1, d2];
+    game.diceRolls = d3 !== undefined ? [[d1, d2], [d3, d4!]] : undefined;
+    delete (game as any)._preheatedDice;
+
+    // 🔥 立即广播骰子（客户端马上播放动画，与后续牌墙创建+发牌并行）
+    if (this.wsManager) {
+      this.wsManager.broadcast(gameId, 'diceRoll', {
+        dice1: d1, dice2: d2,
+        dice3: d3, dice4: d4,
+        timestamp: Date.now()
+      });
+    }
+    game.roundMultiplier = calculateRoundMultiplier(d1, d2, d3, d4);
 
     // 🔥 优先使用 setStartingPhase 阶段的预热数据
     const preheatedWall = (game as any)._preheatedWall;
@@ -1392,30 +1455,6 @@ class GameManager {
       player.score = 0;
     }
 
-    // 掷骰初始化倍数（支持两次掷骰子）
-    const rollCount = game.diceRollCount ?? 2;
-    const d1 = Math.min(6, Math.max(1, Math.round(options?.fixedDice?.[0] ?? (Math.floor(Math.random() * 6) + 1))));
-    const d2 = Math.min(6, Math.max(1, Math.round(options?.fixedDice?.[1] ?? (Math.floor(Math.random() * 6) + 1))));
-    let d3: number | undefined;
-    let d4: number | undefined;
-    if (rollCount >= 2) {
-      d3 = Math.min(6, Math.max(1, Math.floor(Math.random() * 6) + 1));
-      d4 = Math.min(6, Math.max(1, Math.floor(Math.random() * 6) + 1));
-    }
-    game.dice = [d1, d2];
-    game.diceRolls = d3 !== undefined ? [[d1, d2], [d3, d4!]] : undefined;
-
-    // Broadcast dice roll to trigger animation on all clients
-    if (this.wsManager) {
-      this.wsManager.broadcast(gameId, 'diceRoll', {
-        dice1: d1,
-        dice2: d2,
-        dice3: d3,
-        dice4: d4,
-        timestamp: Date.now()
-      });
-    }
-    game.roundMultiplier = calculateRoundMultiplier(d1, d2, d3, d4);
     // 继承上局全局倍数(或从造反事件继承)
     const prevGlobal = game.inheritedGlobalMultiplier ?? 1;
     if (game.rebelEvent) {
@@ -1436,9 +1475,9 @@ class GameManager {
     TrainingRecordService.captureRoundStart(game);
 
     console.log(`[WallDebug] after dealing: wall=${game.wall.length} tiles, PLAYING phase`);
-        console.log('[timing-startGame] before persist:', Date.now() - Date.now(), 'ms');
-    await this.persistGame(game);
+    // 🔥 先广播再持久化（广播触发客户端HTTP fetch取完整状态，不等MongoDB写入）
     this.broadcastGameState(gameId);
+    this.persistGame(game).catch(err => console.error('[startGame] async persistGame error:', err));
 
     // 庄家首轮自动摸牌(模拟 moveToNextPlayer 的 freeze 机制)
     const freezeMs = this.timerManager.getHesitationWindow(game);  // 决策犹豫期同时控制人类和AI
@@ -2199,7 +2238,7 @@ class GameManager {
     }
     // 有补花时只广播一条消息（避免同文本去重导致丢失）
     if (flowerMelds.length > 0) {
-      this.broadcastService.broadcastFlowerReplacement(game, player);
+      this.broadcastService.broadcastFlowerReplacement(game, player, flowerMelds.length);
     }
   }
 
@@ -3496,7 +3535,7 @@ class GameManager {
     }
     // 有补花时只广播一条消息（避免同文本去重导致丢失）
     if (flowerMelds.length > 0) {
-      this.broadcastService.broadcastFlowerReplacement(game, player);
+      this.broadcastService.broadcastFlowerReplacement(game, player, flowerMelds.length);
     }
 
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
@@ -3533,8 +3572,13 @@ class GameManager {
       const gameId = game.gameId;
       this.timerManager.detachTimer(setTimeout(async () => {
         try {
+          console.log(`[enterReveal] 5s timer FIRED gameId=${gameId.substring(0,8)}`);
           const fresh = await this.getGame(gameId);
-          if (!fresh || fresh.phase !== GamePhase.REVEAL) return;
+          console.log(`[enterReveal] game=${!!fresh} phase=${fresh?.phase}`);
+          if (!fresh || fresh.phase !== GamePhase.REVEAL) {
+            console.warn(`[enterReveal] Game not in REVEAL (phase=${fresh?.phase}), aborting.`);
+            return;
+          }
           this.endRound(fresh, reason);
         } catch (e) {
           console.warn("[enterReveal] end error:", e);
@@ -3892,9 +3936,22 @@ class GameManager {
    * 自动进入下一局（延时后设置STARTING阶段）
    */
   private autoStartNextRound(gameId: string, delayMs: number = 2000): void {
+    console.log(`[autoStartNextRound] SCHEDULED gameId=${gameId.substring(0,8)} delay=${delayMs}ms`);
     const timer = this.timerManager.detachTimer(setTimeout(async () => {
       try {
+        console.log(`[autoStartNextRound] FIRING gameId=${gameId.substring(0,8)}`);
+        const game = await this.getGame(gameId);
+        console.log(`[autoStartNextRound] game=${!!game} phase=${game?.phase} players=${game?.players?.length}`);
+        if (!game) {
+          console.error(`[autoStartNextRound] Game ${gameId.substring(0,8)} not found! Aborting.`);
+          return;
+        }
+        if (game.phase !== GamePhase.ENDED) {
+          console.warn(`[autoStartNextRound] Game ${gameId.substring(0,8)} not ENDED (phase=${game.phase}), skipping.`);
+          return;
+        }
         await this.setStartingPhase(gameId);
+        console.log(`[autoStartNextRound] setStartingPhase DONE gameId=${gameId.substring(0,8)} newPhase=${game.phase}`);
       } catch (err) {
         console.error('[autoStartNextRound] Error:', err);
       }

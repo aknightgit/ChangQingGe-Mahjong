@@ -53,7 +53,7 @@ export interface ActionHandlerDeps {
   replaceInitialFlowers(game: GameState, player: Player): void;
   getPlayableTileCount(player: Player): number;
   broadcastKongSupplement(game: GameState, player: Player, kind: 'ming' | 'an' | 'jia'): void;
-  broadcastFlowerReplacement(game: GameState, player: Player): void;
+  broadcastFlowerReplacement(game: GameState, player: Player, count?: number): void;
 }
 
 export class ActionHandler {
@@ -197,13 +197,13 @@ export class ActionHandler {
       flowerCount++
       console.log(`[FLOWER] ${player.name} 摸到花牌: ${tile.id}, 门口花牌数: ${player.hand.exposedMelds.filter(m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !isWildTile(game, m.tiles[0])).length}`);
       if (game.wall.length === 0) {
-        if (flowerCount > 0) this.deps.broadcastFlowerReplacement(game, player);
+        if (flowerCount > 0) this.deps.broadcastFlowerReplacement(game, player, flowerCount);
         endRound(game, GameEndReason.WALL_EXHAUSTED);
         return;
       }
       tile = game.wall.pop()!;
     }
-    if (flowerCount > 0) this.deps.broadcastFlowerReplacement(game, player);
+    if (flowerCount > 0) this.deps.broadcastFlowerReplacement(game, player, flowerCount);
 
     // 花牌百搭 → 进手牌
     if (isFlower(tile) && isWildTile(game, tile)) {
@@ -306,6 +306,11 @@ export class ActionHandler {
       sourceTileId: lastDiscard.id
     });
 
+    // 吃牌广播（牌局快讯+语音）
+    const chowTileName = getTileDisplayName(lastDiscard);
+    const chowSourceName = game.players.find(p => p.id === lastDiscardPlayerId)?.name || '';
+    broadcastQuickMessage(game.gameId, `🍽️ ${player.name}吃了${chowSourceName}的${chowTileName}`, 'info', 'chow');
+
     // 记录互包
     const lastDiscardPlayerId = getLastDiscardPlayerId(game);
     if (lastDiscardPlayerId) {
@@ -399,6 +404,11 @@ export class ActionHandler {
       sourcePosition: game.lastDiscardPosition,
       sourceTileId: lastDiscard.id
     });
+
+    // 碰牌广播（牌局快讯+语音）
+    const pengTileName = getTileDisplayName(lastDiscard);
+    const pengSourceName = game.players.find(p => p.id === getLastDiscardPlayerId(game))?.name || '';
+    broadcastQuickMessage(game.gameId, `碰！ ${player.name}碰了${pengSourceName}的${pengTileName}`, 'info', 'pong');
 
     // 记录互包
     const lastDiscardPlayerId = getLastDiscardPlayerId(game);
@@ -508,7 +518,10 @@ export class ActionHandler {
     game.pendingActions = [];
     (game as any).pengChowConflict = null;
 
-    // 杠牌广播（牌局快讯）
+    // 杠牌广播（牌局快讯+语音，含牌名）
+    const kongTileName = getTileDisplayName(lastDiscard);
+    const kongSourceName = game.players.find(p => p.id === sourcePlayerId)?.name || '';
+    broadcastQuickMessage(game.gameId, `杠！ ${player.name}杠了${kongSourceName}的${kongTileName}`, 'info', 'kong');
     broadcastKongSupplement(game, player, 'ming');
 
     // 设置当前玩家
@@ -792,7 +805,7 @@ export class ActionHandler {
     const huMsg = isSelfDrawn
       ? `🎉 ${player.name} 自摸${winningTileName ? '-' + winningTileName : ''}`
       : `🎉 ${player.name} 捉冲${discarderName}${winningTileName ? '-' + winningTileName : ''}${handTypeLabel ? '·' + handTypeLabel : ''}`;
-    broadcastQuickMessage(game.gameId, huMsg, 'special');
+    broadcastQuickMessage(game.gameId, huMsg, 'special', isSelfDrawn ? 'selfHu' : 'hu');
 
     // 清除pending actions
     game.pendingActions = [];
@@ -808,8 +821,13 @@ export class ActionHandler {
       const { timerManager: tm } = this.deps;
       tm.detachTimer(setTimeout(async () => {
         try {
+          console.log(`[handleHu-reveal] 5s timer FIRED gameId=${gameId.substring(0,8)}`);
           const fresh = await this.deps.getGame(gameId);
-          if (!fresh || fresh.phase !== GamePhase.REVEAL) return;
+          console.log(`[handleHu-reveal] game=${!!fresh} phase=${fresh?.phase}`);
+          if (!fresh || fresh.phase !== GamePhase.REVEAL) {
+            console.warn(`[handleHu-reveal] Game not in REVEAL (phase=${fresh?.phase}), aborting.`);
+            return;
+          }
           endRound(fresh, GameEndReason.LAST_PLAYER);
         } catch (e) { console.warn('[handleHu] reveal end error', e); }
       }, 5000));
@@ -825,6 +843,7 @@ export class ActionHandler {
       const { timerManager: tm } = this.deps;
       tm.detachTimer(setTimeout(async () => {
         try {
+          console.log(`[handleHu-wall] 5s timer FIRED gameId=${gameId.substring(0,8)}`);
           const fresh = await this.deps.getGame(gameId);
           if (!fresh || fresh.phase !== GamePhase.REVEAL) return;
           endRound(fresh, GameEndReason.LAST_PLAYER);
