@@ -301,7 +301,14 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       }
 
     case 'ALL_PUNGS':
+      // ★ V2: 碰碰胡路线下允许有价值的吃牌（有顺子能更快碰碰胡时）
       if (action === ActionType.CHOW) {
+        if (candidateShanten < passShanten) {
+          return { allowed: true, tuneDelta: 0.3, reason: 'all_pungs_chow_shanten_gain' }
+        }
+        if (candidateEffective >= passEffective - 2) {
+          return { allowed: true, tuneDelta: -0.8, reason: 'all_pungs_chow_marginal' }
+        }
         return { allowed: false, tuneDelta: -2, reason: 'all_pungs_blocks_chow' }
       }
       const _apPursuit = (policy?.allPungsPursuit || 0)

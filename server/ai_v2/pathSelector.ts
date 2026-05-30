@@ -263,8 +263,8 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       if (features.honorCount >= 6) score += getPolicyValue(policy, 'allHonorsPursuit') * 2.2
       score += getPolicyValue(policy, 'flushVsPungsBalance') * ((qingPengReady ? 2.4 : 0) - (features.secondSuitCount > 0 ? 0.8 : 0))
       if (earlyPairHeavy) { reasons.push('early_four_pairs_push'); score += 8.5 }
-      // ★ V2: 4+对子无条件推高碰碰胡路线（不限回合数）
-      if (features.pairCount >= 4) { reasons.push('four_pairs_commit'); score += 6.0 }
+      // ★ V2: 4+对子推高碰碰胡路线（不限回合数，但不过度推高避免压制吃牌）
+      if (features.pairCount >= 4) { reasons.push('four_pairs_commit'); score += 3.5 }
       if (_ap_isAgg && features.pairCount + features.tripletCount >= 3) { reasons.push('aggressive_pungs_commit'); score += 12 }
       if (_ap_isAgg && features.wildCount > 0 && features.pairCount + features.tripletCount >= 2) { reasons.push('wild_pungs_push'); score += 7 }
       if (noWildOpenPush) score += 1.4
