@@ -914,7 +914,7 @@
           :dice2="diceValues[1]"
           :dealer-name="dealerName"
           :max-rolls="effectiveMaxRolls"
-          :is-dealer="isDealer"
+          :is-dealer="dealerPlayer && isBotPlayer(dealerPlayer)"
           :roll-trigger-key="diceRollTriggerKey"
           @deal="onDealTiles"
           @roll="onRerollDice"

@@ -1687,6 +1687,23 @@ class GameManager {
         if (this.canExposeCurrentTurnPlayerDrawDuringPending(game, playerId) && !actions.includes(ActionType.DRAW)) {
           actions.push(ActionType.DRAW);
         }
+        // 五毒散造反在 pending 期间也应检查（摸牌后的 pending 不影响造反资格）
+        const rebellionTurns = game.actionHistory.filter(a => a.type === ActionType.DISCARD).length;
+        const isFirstTurn = rebellionTurns === 0;
+        const hasEatenBefore = player.hand.exposedMelds.some(m => m.type === MeldType.SEQUENCE);
+        if (game.roundNumber <= 1 && isFirstTurn && !hasEatenBefore) {
+          const wildParts = game.customScoringMode?.split('-');
+          const wildSuit = wildParts ? wildParts[0] as TileSuit : undefined;
+          const wildValue = wildParts && wildParts[1] ? parseInt(wildParts[1]) : undefined;
+          if (isFivePoison(
+            player.hand.concealedTiles,
+            wildSuit,
+            wildValue,
+            player.hand.exposedMelds.flatMap(meld => meld.tiles || [])
+          )) {
+            actions.push(ActionType.REBEL);
+          }
+        }
         return actions;
       }
 
