@@ -3600,7 +3600,7 @@ class GameManager {
         } catch (e) {
           console.warn("[enterReveal] end error:", e);
         }
-      }, 5000));
+      }, 3000));
       return;
     }
     // 已处于REVEAL阶段，执行结算
@@ -3945,7 +3945,7 @@ class GameManager {
       finalReason === GameEndReason.LAST_PLAYER ||
       finalReason === GameEndReason.WALL_EXHAUSTED
     ) {
-      this.autoStartNextRound(game.gameId, 10000);
+      this.autoStartNextRound(game.gameId, 5000);
     }
   }
 
