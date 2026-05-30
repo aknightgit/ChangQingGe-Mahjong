@@ -2323,8 +2323,8 @@ const maybeAutoDealForBotDealer = () => {
 
 /** 自动掷骰子+发牌（AI庄家） */
 const autoRollAndDeal = () => {
-  onRerollDice()
-  // 🔥 缩短等待：rolling 600ms + result 300ms + buffer 200ms = 1100ms（原1800ms）
+  // 骰子值已由服务端 setStartingPhase 预计算并广播（mahjong-dice-roll 事件触发 DiceAnimation）
+  // 无需调用 onRerollDice()，避免覆盖服务端骰子值 + 重复触发动画
   window.setTimeout(() => {
     void onDealTiles()
   }, 1100)
