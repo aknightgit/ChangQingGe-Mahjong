@@ -234,7 +234,7 @@ export class ActionHandler {
           playerId: player.id,
           availableActions: [ActionType.HU, ActionType.PASS],
           tile: tile,
-          expiresAt: Date.now() + (game.hesitationWindow || 0)
+          expiresAt: Date.now() + timerManager.getHesitationWindow(game)
         });
         this.deps.schedulePendingActionTimeout(game.gameId);
       }
@@ -1136,7 +1136,7 @@ export class ActionHandler {
             playerId: player.id,
             availableActions: [ActionType.HU, ActionType.PASS],
             tile: discardedTile,
-            expiresAt: Date.now() + (game.hesitationWindow || 0)
+            expiresAt: Date.now() + timerManager.getHesitationWindow(game)
           });
         }
       }
@@ -1200,7 +1200,7 @@ export class ActionHandler {
               ? selectBotChowTileIds(player, game, discardedTile, chowOptions)
               : undefined
           } : {}),
-          expiresAt: Date.now() + (game.hesitationWindow || 0)
+          expiresAt: Date.now() + timerManager.getHesitationWindow(game)
         });
       }
     }

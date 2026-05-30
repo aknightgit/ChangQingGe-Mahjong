@@ -124,7 +124,7 @@ export class BotController {
           const kongExposedCount = countExposedTilesExcludingFlowerMelds(player);
           const kongTotalCount = player.hand.concealedTiles.length + kongExposedCount;
           if (kongTotalCount - 3 + 4 <= 14) {
-            handleKong(game, player, pa.tile?.id || '');
+            await handleKong(game, player, pa.tile?.id || '');
             claimedHigherPriority = true;
             hasBotAction = true;
           } else {

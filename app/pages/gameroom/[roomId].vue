@@ -1626,8 +1626,10 @@ onMounted(async () => {
     if (!detail) return
     diceValues.value = [detail.dice1, detail.dice2]
     diceExtra.value = detail.dice3 !== undefined ? [detail.dice3, detail.dice4] : undefined
-    // 不设 hasDicePreview，让 STARTING phase watcher 统一控制 overlay 显示
-    diceRollTriggerKey.value++
+    // overlay已显示时不重新触发滚动画，防server端diceRoll二次渲染
+    if (!showDiceOverlay.value) {
+      diceRollTriggerKey.value++
+    }
     playSound('dice-roll')
   }) as EventListener)
 

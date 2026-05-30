@@ -2243,7 +2243,7 @@ class GameManager {
       // 检查能否胡(必须有有效牌型)
       const testHand = [...p.hand.concealedTiles, discardedTile];
       const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
-      const winCheck = canWin(testHand, p.hand.exposedMelds.length, this.getWinWildArg(game));
+      const winCheck = canWin(testHand, p.hand.exposedMelds.length, this.winEvaluator.getWinWildArg(game));
       if (winCheck.canWin) {
         const handTypes = detectHandTypes(testHand, p.hand.exposedMelds, false, this.countFlowerTiles(p), null, game.wildTileGroup);
         if (handTypes.length > 0) {
