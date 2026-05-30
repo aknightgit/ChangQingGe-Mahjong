@@ -190,8 +190,13 @@ function scoreByRoute(input: RouteDiscardInput): number {
       ? -(6.4 + Math.max(0, suitGap - 1) * 1.2 + (shortSuitGapTrap && count === 1 ? 3.6 : 0))
       : 0
   const shortestSuitPairReserveBias =
-    shortSuitGapTrap && count >= 2 && estimatedRound <= 6
-      ? 3.2 + Math.max(0, 6 - estimatedRound) * 0.25
+    isShortestSuitTile && count >= 2
+      ? (8.0 + Math.max(0, suitGap - 1) * 1.4 + (suitGap >= 4 ? 3.0 : 0))
+      : 0
+  // ★ 全局对子保护：4+对子时，对子不可拆（不管走哪条路线）
+  const globalPairProtection =
+    count >= 2 && (routeState.features.pairCount + (routeState.features.tripletCount || 0)) >= 4
+      ? 6.0
       : 0
   const longestSuitSingletonKeepBias =
     isLongestSuitTile && count === 1
@@ -207,7 +212,8 @@ function scoreByRoute(input: RouteDiscardInput): number {
         (count === 1 ? 1.2 : -2.6) +
         (nearby === 0 ? 1.8 : -0.65 * nearby) +
         (isLongestSuitTile ? -longestSuitSingletonKeepBias : 0) +
-        (isHonor(tile) && count === 1 ? (isOfficialOpening ? -2.4 : 1.2) : 0)
+        (isHonor(tile) && count === 1 ? (isOfficialOpening ? -2.4 : 1.2) : 0) +
+        (count >= 2 ? -globalPairProtection : 0)
       )
 
     case 'OPEN_SPEED':
@@ -220,12 +226,13 @@ function scoreByRoute(input: RouteDiscardInput): number {
         (isLongestSuitTile ? -Math.max(0.8, longestSuitSingletonKeepBias * 0.85) : 0) +
         (routeState.targetSuit && tile.suit !== routeState.targetSuit && !isHonor(tile) ? 4.8 : 0) +
         (routeState.targetSuit && tile.suit === routeState.targetSuit && !isHonor(tile) ? -2.6 : 0) +
-        (isHonor(tile) && count === 1 ? 0.4 : 0)
+        (isHonor(tile) && count === 1 ? 0.4 : 0) +
+        (count >= 2 ? -globalPairProtection : 0)
       )
 
     case 'HALF_FLUSH':
       if (tile.suit === routeState.targetSuit) {
-        return (count >= 2 ? -4.4 : -3.2) + (nearby > 0 ? -1.6 : -0.3)
+        return (count >= 2 ? -4.4 : -3.2) + (nearby > 0 ? -1.6 : -0.3) + (count >= 2 ? -globalPairProtection : 0)
       }
       if (isHonor(tile)) {
         if (routeState.features.pureFlushUpgradeReady) {
@@ -267,7 +274,7 @@ function scoreByRoute(input: RouteDiscardInput): number {
       if (isHonor(tile)) {
         return count >= 2 ? -4.2 : -1.4
       }
-      return 3.8 + (longestSuit && tile.suit !== longestSuit ? 0.6 : 0)
+      return 3.8 + (longestSuit && tile.suit !== longestSuit ? 0.6 : 0) + (count >= 2 ? -globalPairProtection : 0)
 
     case 'STRIVE_DRAW':
       // ★ V2: 争取流局 → 打熟张优先，留安全牌
