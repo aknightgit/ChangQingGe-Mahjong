@@ -183,20 +183,23 @@ function scoreByRoute(input: RouteDiscardInput): number {
   const isLongestSuitTile = !!longestSuit && tile.suit === longestSuit
   const suitGap = Math.max(0, longestSuitCount - shortestSuitCount)
   const shortSuitGapTrap = isShortestSuitTile && suitGap >= 4
-  // ★ K哥规则：短门的顺子/邻接张不值钱，优先打掉！
-  // 正分=保留，负分=打掉。短门有邻接张 → 负分鼓励拆门
+  // ★ K哥规则：短门的单张和顺子极不值钱，优先打掉！
+  // 正分=打掉，负分=保留。短门单张/顺子给高正分，强制丢弃
   const shortestSuitSequenceBreakBias =
-    isShortestSuitTile && nearby > 0
-      ? -(6.4 + Math.max(0, suitGap - 1) * 1.2 + (shortSuitGapTrap && count === 1 ? 3.6 : 0))
-      : 0
+    isShortestSuitTile && count === 1 && nearby > 0
+      ? (10.0 + Math.max(0, suitGap - 1) * 1.6)  // 短门顺子单张：极高正分，必打
+      : isShortestSuitTile && count === 1 && nearby === 0
+        ? (8.0 + Math.max(0, suitGap - 1) * 1.2)  // 短门孤张：高正分，优先打
+        : 0
+  // 短门对子保护：短门有对子时不要轻易拆（负分=保留）
   const shortestSuitPairReserveBias =
-    isShortestSuitTile && count >= 2
-      ? (8.0 + Math.max(0, suitGap - 1) * 1.4 + (suitGap >= 4 ? 3.0 : 0))
+    isShortestSuitTile && count >= 2 && suitGap >= 3
+      ? (4.0 + Math.max(0, suitGap - 1) * 0.8)
       : 0
-  // ★ 全局对子保护：4+对子时，对子不可拆（不管走哪条路线）
+  // 全局对子保护：4+对子时，对子不可拆（不管走哪条路线）
   const globalPairProtection =
     count >= 2 && (routeState.features.pairCount + (routeState.features.tripletCount || 0)) >= 4
-      ? 6.0
+      ? 5.0
       : 0
   const longestSuitSingletonKeepBias =
     isLongestSuitTile && count === 1
