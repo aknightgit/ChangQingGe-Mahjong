@@ -2309,6 +2309,7 @@ const enterStartingPhaseWithDiceOverlay = async () => {
     if (res?.success) {
       if (res.humanRollPending) {
         // 人类庄家：显示 idle 状态，等玩家自己点击掷骰子
+        diceValues.value = [0, 0]  // 清除默认值，防止 DiceAnimation 误判为已掷
         showDiceOverlay.value = true
       } else {
         // AI 庄家：先设骰子值 → 再显示 overlay → 再触发动画（防止默认值触发错误倍数）
