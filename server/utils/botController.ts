@@ -287,6 +287,22 @@ export class BotController {
           await executeAction(gameId, playerId, ActionType.HU);
           return;
         }
+        // 摸牌后检查加杠/暗杠
+        if (availableActions.includes(ActionType.EXTENDED_KONG)) {
+          console.log(`[bot-discard] ${refreshedPlayer.name} executing EXTENDED_KONG`);
+          const kongTile = refreshedPlayer.hand.concealedTiles.find(t =>
+            refreshedPlayer.hand.exposedMelds.some(m => m.type === 'triplet' && m.tiles[0].suit === t.suit && m.tiles[0].value === t.value)
+          );
+          if (kongTile) {
+            await executeAction(gameId, playerId, ActionType.EXTENDED_KONG, kongTile.id);
+            return;
+          }
+        }
+        if (availableActions.includes(ActionType.CONCEALED_KONG)) {
+          console.log(`[bot-discard] ${refreshedPlayer.name} executing CONCEALED_KONG`);
+          await executeAction(gameId, playerId, ActionType.CONCEALED_KONG);
+          return;
+        }
         if (!isConcealedDiscardState(refreshedPlayer)) {
           console.warn(
             `[bot-discard] ${refreshedPlayer.name} is not in discard state: concealed=${refreshedPlayer.hand.concealedTiles.length}, drawn=${refreshedGame.drawnThisTurn}`
