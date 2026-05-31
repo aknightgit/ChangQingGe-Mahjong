@@ -2297,31 +2297,37 @@ const dealerPlayer = computed(() => {
 /** 新开局流程 - 点击"开始牌局"：调用 beginGame，服务端原子完成洗牌+发牌+第一次掷骰子 */
 const enterStartingPhaseWithDiceOverlay = async () => {
   try {
+    // 🔥 立即显示骰子 overlay，不等 API 响应（骰子值由 WebSocket diceRoll 事件更新）
+    diceFromWebSocket.value = false
     hasDicePreview.value = true
+    diceRollTriggerKey.value++
+    playSound('dice-roll')
+    playVoiceAction('diceRoll')
+    showDiceOverlay.value = true
+    // 异步调用 beginGame API（服务端原子完成洗牌+发牌+骰子）
     const response = await beginGame({ hesitationWindow: hesitationWindow.value })
-    if ((response as any)?.success) {
-      // WebSocket diceRoll 事件可能已经显示了 overlay
-      if (!showDiceOverlay.value) {
-        diceRollTriggerKey.value++
-        playSound('dice-roll')
-        playVoiceAction('diceRoll')
-        showDiceOverlay.value = true
-      }
+    if (!(response as any)?.success) {
+      hasDicePreview.value = false
+      showDiceOverlay.value = false
+      diceFromWebSocket.value = false
     }
   } catch (e: any) {
     console.error('[enterStartingPhaseWithDiceOverlay] Failed:', e)
     addBroadcast(e?.data?.message || e?.message || '进入下一局失败', 'warn')
     hasDicePreview.value = false
+    showDiceOverlay.value = false
+    diceFromWebSocket.value = false
   }
 }
 
 /** 新开局流程 - 第二次掷骰子（仅当 diceRollCount>=2 且第一次未翻倍时） */
 const onRollSecondDice = async () => {
   try {
-    await rollSecondDice()
+    // 🔥 先触发动画+音效，再调 API（WebSocket 事件会更新 diceValues）
     diceRollTriggerKey.value++
     playSound('dice-roll')
     playVoiceAction('diceRoll')
+    await rollSecondDice()
   } catch (e: any) {
     console.error('[onRollSecondDice] Failed:', e)
     addBroadcast(e?.data?.message || e?.message || '掷骰子失败', 'warn')
@@ -3988,6 +3994,7 @@ const onDealTiles = async () => {
   if (isGameStarting.value) return
   isGameStarting.value = true
   hasDicePreview.value = false
+  diceFromWebSocket.value = false
   showDoubleReminder.value = false
   if (doubleReminderTimer) {
     clearTimeout(doubleReminderTimer)
@@ -4427,12 +4434,14 @@ watch(
       showHuPanel.value = false
       confirmedWinner.value = false
       if (!hasDicePreview.value) {
-        // 🔥 优先使用服务端预计算的骰子值（setStartingPhase已广播）
-        const serverDice = gameState.value?.dice
-        if (serverDice && Array.isArray(serverDice) && serverDice.length >= 2) {
-          diceValues.value = [serverDice[0], serverDice[1]]
+        // 🔥 仅当 WebSocket diceRoll 事件尚未更新 diceValues 时，才从 gameState 取值
+        // 防止 HTTP 刷新延迟导致用旧骰子覆盖 WebSocket 已设置的新骰子
+        if (!diceFromWebSocket.value) {
+          const serverDice = gameState.value?.dice
+          if (serverDice && Array.isArray(serverDice) && serverDice.length >= 2) {
+            diceValues.value = [serverDice[0], serverDice[1]]
+          }
         }
-        // 服务端骰子值可能还在路上，diceRoll socket事件会更新
         hasDicePreview.value = true
       }
       showDiceOverlay.value = true
@@ -4473,6 +4482,7 @@ watch(
     if (newPhase !== GamePhase.STARTING) {
       showDiceOverlay.value = false
       hasDicePreview.value = false
+      diceFromWebSocket.value = false
       console.log('[DiceOverlay] SET to false (phase=', newPhase, ')')
     }
   },
@@ -4486,6 +4496,7 @@ watch(gameState, (newVal) => {
     console.log('[DiceOverlay] FALLBACK: closing dice overlay (phase=', newVal.phase, ')')
     showDiceOverlay.value = false
     hasDicePreview.value = false
+    diceFromWebSocket.value = false
   }
 }, { deep: false })
 

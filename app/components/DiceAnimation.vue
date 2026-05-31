@@ -195,12 +195,17 @@ const onRollAndDeal = () => {
 onMounted(() => {
   currentRoll.value = 0
   if (props.rollTriggerKey && props.rollTriggerKey > 0) {
+    // 🔥 rollTriggerKey 已递增（客户端触发），播放 rolling → result 动画
     rollingSeed.value = Date.now() % 100000
     phase.value = 'rolling'
     setTimeout(() => {
       phase.value = 'result'
       flashResultBurst()
     }, 600)
+  } else if (props.dice1 > 0 && props.dice2 > 0 && props.dice1 <= 6 && props.dice2 <= 6) {
+    // 🔥 骰子已由服务端预计算（beginGame），直接显示结果
+    phase.value = 'result'
+    flashResultBurst()
   } else {
     phase.value = 'idle'
   }

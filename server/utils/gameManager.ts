@@ -4334,7 +4334,15 @@ class GameManager {
         await this.beginGame(gameId);
         console.log(`[autoStartNextRound] beginGame DONE gameId=${gameId.substring(0,8)} phase=${game.phase}`);
 
-        // 等骰子动画后自动发牌
+        // 检查庄家是否是真实玩家 — 真实玩家需要自己掷骰子+确认发牌
+        const dealer = game.players[game.dealerIndex];
+        const isHumanDealer = dealer && !isBotPlayer(dealer);
+        if (isHumanDealer) {
+          console.log(`[autoStartNextRound] Human dealer (${dealer.name}), skipping auto-deal — waiting for player action`);
+          return;
+        }
+
+        // AI 庄家：等骰子动画后自动发牌
         const diceAnimMs = 2500;
         const dealTimer = this.timerManager.detachTimer(setTimeout(async () => {
           try {
