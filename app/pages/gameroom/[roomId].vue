@@ -2299,11 +2299,10 @@ const dealerPlayer = computed(() => {
 /** 新开局流程 - 点击"开始牌局"：调用 beginGame，服务端原子完成洗牌+发牌+第一次掷骰子 */
 const enterStartingPhaseWithDiceOverlay = async () => {
   try {
-    // 先显示 overlay（idle 状态，骰子不动），等 API 返回真实骰子值再触发动画
+    // 不预显示 overlay，等 API 返回后再显示（防止默认 dice 值触发动画）
     diceFromWebSocket.value = false
     hasDicePreview.value = false
     diceRollTriggerKey.value = 0  // 重置，确保后续 ++ 能触发 watch
-    showDiceOverlay.value = true
     // 调用 beginGame API（服务端原子完成洗牌+发牌+骰子）
     const response = await beginGame({ hesitationWindow: hesitationWindow.value })
     const res = response as any
@@ -2312,15 +2311,16 @@ const enterStartingPhaseWithDiceOverlay = async () => {
         // 人类庄家：显示 idle 状态，等玩家自己点击掷骰子
         showDiceOverlay.value = true
       } else {
-        // AI 庄家：骰子值已就位，触发动画，动画播完后自动发牌
+        // AI 庄家：先设骰子值 → 再显示 overlay → 再触发动画（防止默认值触发错误倍数）
         if (res.dice && Array.isArray(res.dice) && res.dice.length >= 2) {
           diceValues.value = [res.dice[0], res.dice[1]]
         }
         // 立即更新倍数，不等 polling
-        if (res.roundMultiplier && gameState.value) {
+        if (typeof res.roundMultiplier === 'number' && gameState.value) {
           (gameState.value as any).roundMultiplier = res.roundMultiplier
         }
         hasDicePreview.value = true
+        showDiceOverlay.value = true  // DiceAnimation 挂载时读到正确的 diceValues
         diceRollTriggerKey.value++
         playSound('dice-roll')
         playVoiceAction('diceRoll')
