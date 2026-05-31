@@ -2,8 +2,96 @@
  * botController.ts — Bot AI 决策与调度（从 gameManager 拆分）
  * 负责：bot pending 动作处理、吃牌决策、出牌调度、超时自动接管
  */
-import { GameState, Player, GamePhase, PlayerStatus, ActionType, PendingAction } from '../types/game';
+import { GameState, Player, GamePhase, PlayerStatus, ActionType, PendingAction, MeldType, Tile } from '../types/game';
 import { shouldClaimPendingAction, selectBotChowTileIds, selectDiscardTile } from '../services/botService';
+import { AI_policies } from '../ai_v2/policies';
+
+/**
+ * AI 自杠决策：加杠/暗杠是否值得执行
+ * 考虑因素：牌是否有用（对子/顺子）、杠后损失、政策偏好
+ */
+function evaluateSelfKong(
+  player: Player,
+  game: GameState,
+  availableActions: ActionType[]
+): { shouldKong: boolean; type: 'extended' | 'concealed'; reason: string } {
+  const policy = AI_policies[player.name] || AI_policies['default'] || {};
+  const kongChance = policy.kongChance ?? 0.7;
+  const kakanAggression = policy.kakanAggression ?? 0;
+  const anKongAggression = policy.anKongAggression ?? 0;
+
+  // 检查加杠
+  if (availableActions.includes(ActionType.EXTENDED_KONG)) {
+    // 找到可加杠的牌
+    for (const meld of player.hand.exposedMelds) {
+      if (meld.type === MeldType.TRIPLET) {
+        const fourth = player.hand.concealedTiles.find(
+          t => t.suit === meld.tiles[0].suit && t.value === meld.tiles[0].value
+        );
+        if (!fourth) continue;
+
+        // 检查这张牌在手中是否还有用（组成对子或顺子）
+        const sameTiles = player.hand.concealedTiles.filter(
+          t => t.suit === fourth.suit && t.value === fourth.value
+        );
+        // 如果手里还有同牌（除了要杠的这张），说明有对子，可能有用
+        if (sameTiles.length > 1) {
+          return { shouldKong: false, type: 'extended', reason: 'tile-pair-useful' };
+        }
+
+        // 检查是否靠近顺子（左右相邻牌）
+        const nearChow = player.hand.concealedTiles.some(t =>
+          t.suit === fourth.suit && t.id !== fourth.id && Math.abs(t.value - fourth.value) <= 2
+        );
+        if (nearChow) {
+          return { shouldKong: false, type: 'extended', reason: 'tile-near-chow' };
+        }
+
+        // 加杠决策：基于 kongChance + kakanAggression
+        const score = kongChance + kakanAggression * 0.5;
+        if (Math.random() < score) {
+          return { shouldKong: true, type: 'extended', reason: `score=${score.toFixed(2)}` };
+        } else {
+          return { shouldKong: false, type: 'extended', reason: `score-low=${score.toFixed(2)}` };
+        }
+      }
+    }
+  }
+
+  // 检查暗杠
+  if (availableActions.includes(ActionType.CONCEALED_KONG)) {
+    // 找到可暗杠的4张牌
+    const counts = new Map<string, Tile[]>();
+    for (const t of player.hand.concealedTiles) {
+      const key = `${t.suit}-${t.value}`;
+      if (!counts.has(key)) counts.set(key, []);
+      counts.get(key)!.push(t);
+    }
+    for (const [key, tiles] of counts) {
+      if (tiles.length === 4) {
+        // 检查这4张牌是否都孤立（无相邻牌）
+        const suit = tiles[0].suit;
+        const value = tiles[0].value;
+        const nearTiles = player.hand.concealedTiles.filter(t =>
+          t.suit === suit && t.id !== tiles[0].id && t.id !== tiles[1].id && t.id !== tiles[2].id && t.id !== tiles[3].id && Math.abs(t.value - value) <= 2
+        );
+        if (nearTiles.length > 0) {
+          return { shouldKong: false, type: 'concealed', reason: 'tile-near-chow' };
+        }
+
+        // 暗杠决策：基于 kongChance + anKongAggression
+        const score = kongChance + anKongAggression * 0.5;
+        if (Math.random() < score) {
+          return { shouldKong: true, type: 'concealed', reason: `score=${score.toFixed(2)}` };
+        } else {
+          return { shouldKong: false, type: 'concealed', reason: `score-low=${score.toFixed(2)}` };
+        }
+      }
+    }
+  }
+
+  return { shouldKong: false, type: 'concealed', reason: 'no-kong-available' };
+}
 
 /** BotController 依赖的 GameManager 接口 */
 export interface BotControllerDeps {
@@ -287,21 +375,24 @@ export class BotController {
           await executeAction(gameId, playerId, ActionType.HU);
           return;
         }
-        // 摸牌后检查加杠/暗杠
-        if (availableActions.includes(ActionType.EXTENDED_KONG)) {
-          console.log(`[bot-discard] ${refreshedPlayer.name} executing EXTENDED_KONG`);
-          const kongTile = refreshedPlayer.hand.concealedTiles.find(t =>
-            refreshedPlayer.hand.exposedMelds.some(m => m.type === 'triplet' && m.tiles[0].suit === t.suit && m.tiles[0].value === t.value)
-          );
-          if (kongTile) {
-            await executeAction(gameId, playerId, ActionType.EXTENDED_KONG, kongTile.id);
-            return;
+        // 摸牌后检查加杠/暗杠（需AI决策，非无条件执行）
+        if (availableActions.includes(ActionType.EXTENDED_KONG) || availableActions.includes(ActionType.CONCEALED_KONG)) {
+          const kongDecision = evaluateSelfKong(refreshedPlayer, refreshedGame, availableActions);
+          if (kongDecision.shouldKong) {
+            console.log(`[bot-discard] ${refreshedPlayer.name} executing ${kongDecision.type} (reason: ${kongDecision.reason})`);
+            if (kongDecision.type === 'extended') {
+              const kongTile = refreshedPlayer.hand.concealedTiles.find(t =>
+                refreshedPlayer.hand.exposedMelds.some(m => m.type === 'triplet' && m.tiles[0].suit === t.suit && m.tiles[0].value === t.value)
+              );
+              if (kongTile) {
+                await executeAction(gameId, playerId, ActionType.EXTENDED_KONG, kongTile.id);
+                return;
+              }
+            } else {
+              await executeAction(gameId, playerId, ActionType.CONCEALED_KONG);
+              return;
+            }
           }
-        }
-        if (availableActions.includes(ActionType.CONCEALED_KONG)) {
-          console.log(`[bot-discard] ${refreshedPlayer.name} executing CONCEALED_KONG`);
-          await executeAction(gameId, playerId, ActionType.CONCEALED_KONG);
-          return;
         }
         if (!isConcealedDiscardState(refreshedPlayer)) {
           console.warn(
