@@ -4,7 +4,6 @@
  */
 import { GameState, Player, GamePhase, PlayerStatus, ActionType, PendingAction, MeldType, Tile } from '../types/game';
 import { shouldClaimPendingAction, selectBotChowTileIds, selectDiscardTile } from '../services/botService';
-import { AI_policies } from '../ai_v2/policies';
 
 /**
  * AI 自杠决策：加杠/暗杠是否值得执行
@@ -15,10 +14,10 @@ function evaluateSelfKong(
   game: GameState,
   availableActions: ActionType[]
 ): { shouldKong: boolean; type: 'extended' | 'concealed'; reason: string } {
-  const policy = AI_policies[player.name] || AI_policies['default'] || {};
-  const kongChance = policy.kongChance ?? 0.7;
-  const kakanAggression = policy.kakanAggression ?? 0;
-  const anKongAggression = policy.anKongAggression ?? 0;
+  // 默认政策值（可通过 AI_policies JSON 覆盖）
+  const kongChance = 0.7;
+  const kakanAggression = 0.3;
+  const anKongAggression = 0.3;
 
   // 检查加杠
   if (availableActions.includes(ActionType.EXTENDED_KONG)) {
