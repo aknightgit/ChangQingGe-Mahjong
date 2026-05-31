@@ -2316,6 +2316,10 @@ const enterStartingPhaseWithDiceOverlay = async () => {
         if (res.dice && Array.isArray(res.dice) && res.dice.length >= 2) {
           diceValues.value = [res.dice[0], res.dice[1]]
         }
+        // 立即更新倍数，不等 polling
+        if (res.roundMultiplier && gameState.value) {
+          (gameState.value as any).roundMultiplier = res.roundMultiplier
+        }
         hasDicePreview.value = true
         diceRollTriggerKey.value++
         playSound('dice-roll')
@@ -2325,7 +2329,7 @@ const enterStartingPhaseWithDiceOverlay = async () => {
           if (gameState.value?.phase === GamePhase.STARTING) {
             void onDealTiles()
           }
-        }, 800)
+        }, 2500)
       }
     } else {
       hasDicePreview.value = false
