@@ -2298,20 +2298,32 @@ const dealerPlayer = computed(() => {
 /** 新开局流程 - 点击"开始牌局"：调用 beginGame，服务端原子完成洗牌+发牌+第一次掷骰子 */
 const enterStartingPhaseWithDiceOverlay = async () => {
   try {
-    // 🔥 立即显示骰子 overlay，不等 API 响应（骰子值由 WebSocket diceRoll 事件更新）
+    // 先显示 overlay（idle 状态，骰子不动），等 API 返回真实骰子值再触发动画
     diceFromWebSocket.value = false
-    hasDicePreview.value = true
-    diceRollTriggerKey.value++
-    playSound('dice-roll')
-    playVoiceAction('diceRoll')
+    hasDicePreview.value = false
+    diceRollTriggerKey.value = 0  // 重置，确保后续 ++ 能触发 watch
     showDiceOverlay.value = true
-    // 异步调用 beginGame API（服务端原子完成洗牌+发牌+骰子）
+    // 调用 beginGame API（服务端原子完成洗牌+发牌+骰子）
     const response = await beginGame({ hesitationWindow: hesitationWindow.value })
     const res = response as any
     if (res?.success) {
-      // 🔥 用 API 返回的骰子值更新显示（兜底，防止 WebSocket 事件丢失）
+      // 用 API 返回的真实骰子值更新显示
       if (res.dice && Array.isArray(res.dice) && res.dice.length >= 2) {
         diceValues.value = [res.dice[0], res.dice[1]]
+      }
+      // 🔥 骰子值已就位，现在触发动画
+      hasDicePreview.value = true
+      diceRollTriggerKey.value++
+      playSound('dice-roll')
+      playVoiceAction('diceRoll')
+      // AI 庄家：骰子动画播完后自动发牌（人类庄家等玩家点击）
+      const dealer = dealerPlayer.value
+      if (dealer && isBotPlayer(dealer)) {
+        setTimeout(() => {
+          if (gameState.value?.phase === GamePhase.STARTING) {
+            void onDealTiles()
+          }
+        }, 800)
       }
     } else {
       hasDicePreview.value = false
