@@ -43,6 +43,7 @@ export default defineEventHandler(async (event) => {
       diceRolls: game.diceRolls,
       roundMultiplier: game.roundMultiplier,
       diceRollCount: game.diceRollCount ?? 2,
+      humanRollPending: !!(game as any)._humanRollPending,
     };
   } catch (error: any) {
     await apiLog(event, { endpoint: 'begin', gameId, playerId, statusCode: 400, durationMs: Date.now() - startTime, error: error.message || 'Failed to begin game' });

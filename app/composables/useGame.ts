@@ -629,6 +629,29 @@ export const useGame = () => {
     }
   }
 
+  const rollFirstDice = async () => {
+    if (!gameId.value || !playerId.value) return
+    console.log('[rollFirstDice] Rolling:', gameId.value)
+    try {
+      const response = await $fetch('/mahjong/api/game/roll-first-dice', {
+        method: 'POST',
+        body: {
+          gameId: gameId.value,
+          playerId: playerId.value,
+        }
+      })
+      if ((response as any)?.success) {
+        refreshState()
+        socket.value?.emit('game:state-update', { gameId: gameId.value })
+        console.log('[rollFirstDice] Done')
+      }
+      return response
+    } catch (e) {
+      console.error('[rollFirstDice] Failed:', e)
+      throw e
+    }
+  }
+
   const dealGame = async () => {
     if (!gameId.value || !playerId.value) return
     console.log('[dealGame] Dealing:', gameId.value)
@@ -699,6 +722,7 @@ export const useGame = () => {
     executeAction,
     startGame,
     beginGame,
+    rollFirstDice,
     rollSecondDice,
     dealGame,
     refreshState,

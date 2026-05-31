@@ -917,7 +917,7 @@
           :is-dealer="isDealer"
           :roll-trigger-key="diceRollTriggerKey"
           @deal="onDealTiles"
-          @roll="onRollSecondDice"
+          @roll="onRollDice"
         />
       </Teleport>
 
@@ -1128,6 +1128,7 @@ const {
     disconnect,
     executeAction,
     beginGame,
+    rollFirstDice,
     rollSecondDice,
     dealGame,
     refreshState,
@@ -2311,20 +2312,20 @@ const enterStartingPhaseWithDiceOverlay = async () => {
       if (res.dice && Array.isArray(res.dice) && res.dice.length >= 2) {
         diceValues.value = [res.dice[0], res.dice[1]]
       }
-      // 🔥 骰子值已就位，现在触发动画
-      hasDicePreview.value = true
-      diceRollTriggerKey.value++
-      playSound('dice-roll')
-      playVoiceAction('diceRoll')
-      // AI 庄家：骰子动画播完后自动发牌（人类庄家等玩家点击）
       const dealer = dealerPlayer.value
       if (dealer && isBotPlayer(dealer)) {
+        // AI 庄家：骰子值已就位，触发动画，动画播完后自动发牌
+        hasDicePreview.value = true
+        diceRollTriggerKey.value++
+        playSound('dice-roll')
+        playVoiceAction('diceRoll')
         setTimeout(() => {
           if (gameState.value?.phase === GamePhase.STARTING) {
             void onDealTiles()
           }
         }, 800)
       }
+      // 人类庄家：不触发动画，显示 idle 状态等玩家自己点击掷骰子
     } else {
       hasDicePreview.value = false
       showDiceOverlay.value = false
@@ -2340,15 +2341,24 @@ const enterStartingPhaseWithDiceOverlay = async () => {
 }
 
 /** 新开局流程 - 第二次掷骰子（仅当 diceRollCount>=2 且第一次未翻倍时） */
-const onRollSecondDice = async () => {
+const onRollDice = async () => {
   try {
-    // 🔥 先触发动画+音效，再调 API（WebSocket 事件会更新 diceValues）
+    // 先触发动画+音效
     diceRollTriggerKey.value++
     playSound('dice-roll')
     playVoiceAction('diceRoll')
-    await rollSecondDice()
+    // 判断是第一次掷还是第二次掷：_humanRollPending 表示第一次
+    const needsFirstRoll = (gameState.value as any)?._humanRollPending
+    if (needsFirstRoll) {
+      const res = await rollFirstDice() as any
+      if (res?.success && res.dice1 && res.dice2) {
+        diceValues.value = [res.dice1, res.dice2]
+      }
+    } else {
+      await rollSecondDice()
+    }
   } catch (e: any) {
-    console.error('[onRollSecondDice] Failed:', e)
+    console.error('[onRollDice] Failed:', e)
     addBroadcast(e?.data?.message || e?.message || '掷骰子失败', 'warn')
   }
 }
@@ -4453,45 +4463,47 @@ watch(
       showHuPanel.value = false
       confirmedWinner.value = false
       if (!hasDicePreview.value) {
-        // 🔥 仅当 WebSocket diceRoll 事件尚未更新 diceValues 时，才从 gameState 取值
-        // 防止 HTTP 刷新延迟导致用旧骰子覆盖 WebSocket 已设置的新骰子
-        if (!diceFromWebSocket.value) {
+        const humanRollPending = (gameState.value as any)?._humanRollPending
+        if (!humanRollPending && !diceFromWebSocket.value) {
+          // AI 庄家：从 gameState 取骰子值
           const serverDice = gameState.value?.dice
           if (serverDice && Array.isArray(serverDice) && serverDice.length >= 2) {
             diceValues.value = [serverDice[0], serverDice[1]]
           }
         }
+        // 人类庄家：dice=[0,0] 不覆盖，保持默认等玩家点击
         hasDicePreview.value = true
       }
       showDiceOverlay.value = true
       console.log('[DiceOverlay] SET to true (STARTING)')
 
-      // 🔄 自动下一局：来自结算/流局后，自动走掷骰子+发牌
-      // 🔥 立即触发，不等500ms（骰子值已由setStartingPhase预计算并广播）
+      // 🔄 自动下一局：来自结算/流局后
       if (prevPhase === GamePhase.ENDED) {
         if (isSettleRequested.value) {
           showDiceOverlay.value = false
           showSettlement.value = true
           return
         }
-        // 新流程：beginGame 已处理骰子，客户端只显示骰子动画
-        // 自动发牌（AI庄家 + 人类庄家都自动走，骰子只是动画展示）
-        setTimeout(() => {
-          // 第一掷已翻倍则跳过第二次掷骰子
-          const needsSecondRoll = gameState.value?.roundMultiplier === 1 &&
-            (gameState.value?.diceRollCount ?? 2) >= 2
-          const doDeal = () => {
-            if (gameState.value?.phase === GamePhase.STARTING) {
-              void onDealTiles()
+        const aiDealer = dealerPlayer.value
+        if (aiDealer && isBotPlayer(aiDealer)) {
+          // AI 庄家：自动发牌
+          setTimeout(() => {
+            const needsSecondRoll = gameState.value?.roundMultiplier === 1 &&
+              (gameState.value?.diceRollCount ?? 2) >= 2
+            const doDeal = () => {
+              if (gameState.value?.phase === GamePhase.STARTING) {
+                void onDealTiles()
+              }
             }
-          }
-          if (needsSecondRoll) {
-            void onRollSecondDice()
-            setTimeout(doDeal, 700)
-          } else {
-            doDeal()
-          }
-        }, 800)
+            if (needsSecondRoll) {
+              void onRollSecondDice()
+              setTimeout(doDeal, 700)
+            } else {
+              doDeal()
+            }
+          }, 800)
+        }
+        // 人类庄家：显示 idle 状态，等玩家点击掷骰子
       }
       return
     }

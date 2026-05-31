@@ -1355,33 +1355,46 @@ class GameManager {
     }
     game.inheritedGlobalMultiplier = undefined;
 
-    // ── 第一次掷骰子 ──
-    const d1 = Math.floor(Math.random() * 6) + 1;
-    const d2 = Math.floor(Math.random() * 6) + 1;
-    game.dice = [d1, d2];
-    game.diceRolls = undefined;
+    // ── 掷骰子：人类庄家不预先掷，等玩家自己点击 ──
+    const dealer = game.players[game.dealerIndex];
+    const humanDealer = dealer && !isBotPlayer(dealer);
 
-    // 计算单次骰子倍数
-    const singleMult = (() => {
-      const isDouble = d1 === d2;
-      const isOneFour = (d1 === 1 && d2 === 4) || (d1 === 4 && d2 === 1);
-      if (isDouble) return (d1 === 1 || d1 === 4) ? 4 : 2;
-      if (isOneFour) return 2;
-      return 1;
-    })();
-    game.roundMultiplier = singleMult;
+    if (!humanDealer) {
+      // AI 庄家：服务端预先掷骰子
+      const d1 = Math.floor(Math.random() * 6) + 1;
+      const d2 = Math.floor(Math.random() * 6) + 1;
+      game.dice = [d1, d2];
+      game.diceRolls = undefined;
 
-    // 标记是否需要第二次掷骰子
-    const rollCount = game.diceRollCount ?? 2;
-    const needSecondRoll = rollCount >= 2 && singleMult === 1;
-    (game as any)._needSecondRoll = needSecondRoll;
+      const singleMult = (() => {
+        const isDouble = d1 === d2;
+        const isOneFour = (d1 === 1 && d2 === 4) || (d1 === 4 && d2 === 1);
+        if (isDouble) return (d1 === 1 || d1 === 4) ? 4 : 2;
+        if (isOneFour) return 2;
+        return 1;
+      })();
+      game.roundMultiplier = singleMult;
 
-    // 广播骰子
-    if (this.wsManager) {
-      this.wsManager.broadcast(gameId, 'diceRoll', {
-        dice1: d1, dice2: d2,
-        timestamp: Date.now()
-      });
+      const rollCount = game.diceRollCount ?? 2;
+      const needSecondRoll = rollCount >= 2 && singleMult === 1;
+      (game as any)._needSecondRoll = needSecondRoll;
+
+      if (this.wsManager) {
+        this.wsManager.broadcast(gameId, 'diceRoll', {
+          dice1: d1, dice2: d2,
+          timestamp: Date.now()
+        });
+      }
+
+      console.log(`[beginGame] AI dealer: dice=${d1}+${d2} mult=${singleMult} needSecond=${needSecondRoll}`);
+    } else {
+      // 人类庄家：不掷骰子，等玩家自己点击
+      game.dice = [0, 0];
+      game.diceRolls = undefined;
+      game.roundMultiplier = 1;
+      (game as any)._needSecondRoll = false;
+      (game as any)._humanRollPending = true;
+      console.log(`[beginGame] Human dealer: waiting for player to roll dice`);
     }
 
     // 切换到 STARTING 阶段
@@ -1392,7 +1405,54 @@ class GameManager {
 
     await this.persistGame(game);
     this.broadcastGameState(gameId);
-    console.log(`[beginGame] STARTING: dice=${d1}+${d2} mult=${singleMult} needSecond=${needSecondRoll} total=${Date.now() - _bgTimer}ms`);
+    console.log(`[beginGame] STARTING total=${Date.now() - _bgTimer}ms`);
+  }
+
+  /**
+   * 新开局流程 - 人类庄家掷骰子（客户端触发，随机生成）
+   */
+  public async rollFirstDice(gameId: string): Promise<{ dice1: number; dice2: number; roundMultiplier: number }> {
+    await this.hydrateFromDatabase();
+    const game = await this.ensureGameLoaded(gameId);
+    if (!game) throw new Error('Game not found');
+    if (game.phase !== GamePhase.STARTING) {
+      throw new Error('Game is not in STARTING phase');
+    }
+    if (!(game as any)._humanRollPending) {
+      throw new Error('Dice already rolled');
+    }
+
+    const d1 = Math.floor(Math.random() * 6) + 1;
+    const d2 = Math.floor(Math.random() * 6) + 1;
+    game.dice = [d1, d2];
+    game.diceRolls = undefined;
+
+    const singleMult = (() => {
+      const isDouble = d1 === d2;
+      const isOneFour = (d1 === 1 && d2 === 4) || (d1 === 4 && d2 === 1);
+      if (isDouble) return (d1 === 1 || d1 === 4) ? 4 : 2;
+      if (isOneFour) return 2;
+      return 1;
+    })();
+    game.roundMultiplier = singleMult;
+
+    const rollCount = game.diceRollCount ?? 2;
+    const needSecondRoll = rollCount >= 2 && singleMult === 1;
+    (game as any)._needSecondRoll = needSecondRoll;
+    delete (game as any)._humanRollPending;
+
+    if (this.wsManager) {
+      this.wsManager.broadcast(gameId, 'diceRoll', {
+        dice1: d1, dice2: d2,
+        timestamp: Date.now()
+      });
+    }
+
+    await this.persistGame(game);
+    this.broadcastGameState(gameId);
+    console.log(`[rollFirstDice] dice=${d1}+${d2} mult=${singleMult} needSecond=${needSecondRoll}`);
+
+    return { dice1: d1, dice2: d2, roundMultiplier: singleMult };
   }
 
   /**
