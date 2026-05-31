@@ -1160,71 +1160,23 @@ class GameManager {
    * Set game to STARTING phase (broadcast to all clients for dice animation)
    * Called when dealer clicks "开始游戏" in waiting room, before actual dealing
    */
+  /**
+   * @deprecated 已废弃 — 新流程使用 beginGame + rollSecondDice + dealGame
+   * 保留函数签名以防外部调用报错，但不再执行预热逻辑
+   */
   async setStartingPhase(gameId: string): Promise<void> {
-    console.log(`[setStartingPhase] CALLED gameId=${gameId.substring(0,8)}`);
+    console.warn(`[setStartingPhase] DEPRECATED — use beginGame instead. gameId=${gameId.substring(0,8)}`);
     await this.hydrateFromDatabase();
     const game = await this.ensureGameLoaded(gameId);
-    if (!game) {
-      console.error(`[setStartingPhase] Game ${gameId.substring(0,8)} not found!`);
-      throw new Error('Game not found');
-    }
-    console.log(`[setStartingPhase] game phase=${game.phase} players=${game.players.length}`);
+    if (!game) throw new Error('Game not found');
     if (game.phase !== GamePhase.WAITING && game.phase !== GamePhase.ENDED && game.phase !== GamePhase.CHA_JIAO && game.phase !== GamePhase.STARTING) {
-      console.warn(`[setStartingPhase] SKIP: invalid phase ${game.phase} for game ${gameId.substring(0,8)}`);
+      console.warn(`[setStartingPhase] SKIP: invalid phase ${game.phase}`);
       return;
     }
     if (game.players.length < 4) throw new Error('Need 4 players to start');
-
-    game.endReason = null;
-    game.endedAt = undefined;
-    game.finalScores = undefined;
     game.phase = GamePhase.STARTING;
-
-    // 🔥 预热：后台创建牌墙+选百搭，消除 startGame 的等待延迟
-    const preheatWall = shuffleTiles(createDeck());
-    console.log(`[WallDebug] preheated deck: ${preheatWall.length} tiles`);
-
-    const allTileTypes: Array<{ suit: TileSuit; value: number }> = [];
-    for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
-      for (let v = 1; v <= 9; v++) allTileTypes.push({ suit, value: v });
-    }
-    for (let v = 1; v <= 4; v++) allTileTypes.push({ suit: TileSuit.WIND, value: v });
-    for (let v = 1; v <= 3; v++) allTileTypes.push({ suit: TileSuit.DRAGON, value: v });
-    for (let v = 1; v <= 8; v++) allTileTypes.push({ suit: TileSuit.FLOWER, value: v });
-    const wildIndex = Math.floor(Math.random() * allTileTypes.length);
-    const wildType = allTileTypes[wildIndex];
-
-    (game as any)._preheatedWall = preheatWall;
-    (game as any)._preheatedWild = wildType;
-    console.log(`[WallDebug] preheated wild: suit=${wildType.suit} value=${wildType.value}`);
-
-    // 🎲 预计算骰子值，广播给所有客户端（消除客户端随机骰子与服务端不一致问题）
-    const rollCount = game.diceRollCount ?? 2;
-    const pd1 = Math.floor(Math.random() * 6) + 1;
-    const pd2 = Math.floor(Math.random() * 6) + 1;
-    let pd3: number | undefined;
-    let pd4: number | undefined;
-    if (rollCount >= 2) {
-      pd3 = Math.floor(Math.random() * 6) + 1;
-      pd4 = Math.floor(Math.random() * 6) + 1;
-    }
-    game.dice = [pd1, pd2];
-    game.diceRolls = pd3 !== undefined ? [[pd1, pd2], [pd3, pd4!]] : undefined;
-    (game as any)._preheatedDice = [pd1, pd2, pd3, pd4];
-    console.log(`[setStartingPhase] pre-computed dice: ${pd1},${pd2}${pd3 !== undefined ? ` + ${pd3},${pd4}` : ''}`);
-
     await this.persistGame(game);
     this.broadcastGameState(gameId);
-
-    // 立即广播骰子值（客户端可以提前显示骰子结果）
-    if (this.wsManager) {
-      this.wsManager.broadcast(gameId, 'diceRoll', {
-        dice1: pd1, dice2: pd2,
-        dice3: pd3, dice4: pd4,
-        timestamp: Date.now()
-      });
-    }
-
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1669,26 +1621,22 @@ class GameManager {
     }
     game.players.forEach((p, i) => { p.isDealer = (i === game.dealerIndex); });
 
-    // 🎲 提前掷骰子+广播（在牌墙/发牌之前，让客户端骰子动画与服务端发牌并行）
+    // 🎲 掷骰子+广播
     const rollCount = game.diceRollCount ?? 2;
-    const preheatedDice = (game as any)._preheatedDice as [number, number, number?, number?] | undefined;
     let d1: number, d2: number, d3: number | undefined, d4: number | undefined;
     if (options?.fixedDice) {
       d1 = Math.min(6, Math.max(1, Math.round(options.fixedDice[0])));
       d2 = Math.min(6, Math.max(1, Math.round(options.fixedDice[1])));
-    } else if (preheatedDice) {
-      [d1, d2, d3, d4] = preheatedDice;
     } else {
       d1 = Math.floor(Math.random() * 6) + 1;
       d2 = Math.floor(Math.random() * 6) + 1;
     }
-    if (rollCount >= 2 && d3 === undefined) {
+    if (rollCount >= 2) {
       d3 = Math.floor(Math.random() * 6) + 1;
       d4 = Math.floor(Math.random() * 6) + 1;
     }
     game.dice = [d1, d2];
     game.diceRolls = d3 !== undefined ? [[d1, d2], [d3, d4!]] : undefined;
-    delete (game as any)._preheatedDice;
 
     // 🔥 立即广播骰子（客户端马上播放动画，与后续牌墙创建+发牌并行）
     if (this.wsManager) {
@@ -1700,50 +1648,26 @@ class GameManager {
     }
     game.roundMultiplier = calculateRoundMultiplier(d1, d2, d3, d4);
 
-    // 🔥 优先使用 setStartingPhase 阶段的预热数据
-    const preheatedWall = (game as any)._preheatedWall;
-    const preheatedWild = (game as any)._preheatedWild;
-    if (preheatedWall && preheatedWild) {
-      game.wall = preheatedWall;
-      const wildType = preheatedWild;
-      game.customScoringMode = `${wildType.suit}-${wildType.value}`;
-      console.log(`[WallDebug] used preheated: ${game.wall.length} tiles, wild=${game.customScoringMode}`);
+    // ── 创建牌墙(144张) + 选百搭 ──
+    const deck = createDeck();
+    game.wall = shuffleTiles(deck);
 
-      // 花牌百搭: 一组花牌(春夏秋冬或梅兰竹菊)全部为百搭
-      if (wildType.suit === TileSuit.FLOWER) {
-        if (wildType.value <= 4) {
-          game.wildTileGroup = ['1', '2', '3', '4'];
-        } else {
-          game.wildTileGroup = ['5', '6', '7', '8'];
-        }
-      }
+    const allTileTypes: Array<{ suit: TileSuit; value: number }> = [];
+    for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+      for (let v = 1; v <= 9; v++) allTileTypes.push({ suit, value: v });
+    }
+    for (let v = 1; v <= 4; v++) allTileTypes.push({ suit: TileSuit.WIND, value: v });
+    for (let v = 1; v <= 3; v++) allTileTypes.push({ suit: TileSuit.DRAGON, value: v });
+    for (let v = 1; v <= 8; v++) allTileTypes.push({ suit: TileSuit.FLOWER, value: v });
+    const wildIndex = Math.floor(Math.random() * allTileTypes.length);
+    const wildType = allTileTypes[wildIndex];
+    game.customScoringMode = `${wildType.suit}-${wildType.value}`;
 
-      delete (game as any)._preheatedWall;
-      delete (game as any)._preheatedWild;
-    } else {
-      // Fallback: 实时创建（理论上不应该走到这里）
-      const deck = createDeck();
-      console.log(`[WallDebug] createDeck (fallback): ${deck.length} tiles`);
-      game.wall = shuffleTiles(deck);
-      console.log(`[WallDebug] after shuffle (fallback): ${game.wall.length} tiles`);
-
-      const allTileTypes: Array<{ suit: TileSuit; value: number }> = [];
-      for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
-        for (let v = 1; v <= 9; v++) allTileTypes.push({ suit, value: v });
-      }
-      for (let v = 1; v <= 4; v++) allTileTypes.push({ suit: TileSuit.WIND, value: v });
-      for (let v = 1; v <= 3; v++) allTileTypes.push({ suit: TileSuit.DRAGON, value: v });
-      for (let v = 1; v <= 8; v++) allTileTypes.push({ suit: TileSuit.FLOWER, value: v });
-      const wildIndex = Math.floor(Math.random() * allTileTypes.length);
-      const wildType = allTileTypes[wildIndex];
-      game.customScoringMode = `${wildType.suit}-${wildType.value}`;
-
-      if (wildType.suit === TileSuit.FLOWER) {
-        if (wildType.value <= 4) {
-          game.wildTileGroup = ['1', '2', '3', '4'];
-        } else {
-          game.wildTileGroup = ['5', '6', '7', '8'];
-        }
+    if (wildType.suit === TileSuit.FLOWER) {
+      if (wildType.value <= 4) {
+        game.wildTileGroup = ['1', '2', '3', '4'];
+      } else {
+        game.wildTileGroup = ['5', '6', '7', '8'];
       }
     }
 

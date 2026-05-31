@@ -228,6 +228,8 @@ export const useGame = () => {
         })
         isConnected.value = true
         error.value = null
+        // Socket.IO 已连接，停止轮询（减少无谓请求）
+        stopPolling()
 
         // Authenticate
         socket.value?.emit('auth:login', {
@@ -270,6 +272,8 @@ export const useGame = () => {
         if (!gameState.value) {
           isConnected.value = false
         }
+        // Socket.IO 断开，恢复轮询兜底
+        startPolling()
       })
 
       // Room Events

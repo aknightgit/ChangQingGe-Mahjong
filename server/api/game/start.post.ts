@@ -5,7 +5,7 @@ import { apiLog } from '../../utils/apiLogService';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
-  const { gameId, playerId, hesitationWindow, phaseOnly, dice } = body;
+  const { gameId, playerId, hesitationWindow, dice } = body;
   const startTime = Date.now();
 
   if (!gameId || !playerId) {
@@ -35,13 +35,6 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    // phaseOnly=true: 只设 STARTING 阶段（等待房间点"开始"），不发牌
-    if (phaseOnly) {
-      await gameManager.setStartingPhase(gameId);
-      await apiLog(event, { endpoint: 'start-phaseOnly', gameId, playerId, statusCode: 200, durationMs: Date.now() - startTime });
-      return { success: true, phase: 'starting' };
-    }
-
     console.log('[timing-api] before gameManager.startGame:', Date.now() - startTime, 'ms');
     await gameManager.startGame(gameId, {
       hesitationWindow: hesitationWindow,
