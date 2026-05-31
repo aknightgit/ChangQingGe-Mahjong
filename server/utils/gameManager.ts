@@ -1239,8 +1239,352 @@ class GameManager {
     }, 1100);
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // 新开局流程: beginGame → rollSecondDice → dealGame
+  // ═══════════════════════════════════════════════════════════
+
   /**
-   * Start the game
+   * 新开局流程 - 第一步: 洗牌 + 发牌 + 第一次掷骰子
+   * 服务端原子完成，客户端只需等广播显示骰子动画
+   */
+  public async beginGame(gameId: string, options?: { hesitationWindow?: number }): Promise<void> {
+    await this.hydrateFromDatabase();
+    const game = await this.ensureGameLoaded(gameId);
+    if (!game) throw new Error('Game not found');
+    if (game.phase === GamePhase.PLAYING) {
+      console.log('[beginGame] Already PLAYING, skipping');
+      return;
+    }
+    if (game.players.length < 4) {
+      throw new Error('Need 4 players to start');
+    }
+
+    // ── 重置上一局残留状态 ──
+    game.endReason = null;
+    game.endedAt = undefined;
+    game.finalScores = undefined;
+    game.customScoringMode = null;
+    game.liangShanSuccess = undefined;
+    game.liangShanVotes = [];
+    game.discardPile = [];
+    game.pendingActions = [];
+    game.drawnThisTurn = false;
+    if (typeof options?.hesitationWindow === 'number') {
+      game.hesitationWindow = options.hesitationWindow;
+    }
+    game.thinkFreezeUntil = undefined;
+    game.thinkFreezePlayerId = undefined;
+    game.spectatorMode = null;
+    game.spectatorViews = {};
+    game.spectatorApprovalRequests = [];
+    game.consecutiveDiscards = null;
+    game.leadingBrotherEvent = null;
+    this.bailoutTracker.clearGame(gameId);
+    (game as any).bailoutRelations = [];
+
+    // 清除残留 timer
+    const oldFreezeTimer = this.timerManager.freezeTimers.get(gameId);
+    if (oldFreezeTimer) {
+      clearTimeout(oldFreezeTimer);
+      this.timerManager.freezeTimers.delete(gameId);
+    }
+    game.freezePlayerId = null;
+    game.freezeComplete = false;
+    game.freezeRound = undefined;
+
+    // ── 换位 + 观赛替换AI ──
+    this.swapManager.applySwapRequests(game);
+    this.swapManager.applyBotReplacement(game);
+
+    // ── 首局随机座位 ──
+    const isFirstRound = (game.roundStats || []).length === 0;
+    if (isFirstRound) {
+      const shuffledIndices = Array.from({ length: game.players.length }, (_, i) => i);
+      for (let i = shuffledIndices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledIndices[i], shuffledIndices[j]] = [shuffledIndices[j], shuffledIndices[i]];
+      }
+      game.players = shuffledIndices.map((origIdx, newPos) => {
+        const p = game.players[origIdx];
+        p.position = newPos;
+        return p;
+      });
+    }
+
+    // ── 选庄家: 上局首胡者坐庄，首局建房者坐庄 ──
+    if (game.nextDealerId) {
+      const nextDealer = game.players.find(p => p.id === game.nextDealerId);
+      if (nextDealer) {
+        game.dealerIndex = nextDealer.position;
+        console.log(`[beginGame] 上局指定庄家: ${nextDealer.name}`);
+      } else {
+        game.dealerIndex = Math.floor(Math.random() * game.players.length);
+      }
+      game.nextDealerId = null;
+    } else {
+      game.dealerIndex = 0;  // 首局 = 建房者(position 0)
+    }
+    game.players.forEach((p, i) => { p.isDealer = (i === game.dealerIndex); });
+
+    // ── 创建牌墙(144张) + 选百搭 ──
+    const deck = createDeck();
+    game.wall = shuffleTiles(deck);
+    console.log(`[beginGame] wall: ${game.wall.length} tiles`);
+
+    const allTileTypes: Array<{ suit: TileSuit; value: number }> = [];
+    for (const suit of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]) {
+      for (let v = 1; v <= 9; v++) allTileTypes.push({ suit, value: v });
+    }
+    for (let v = 1; v <= 4; v++) allTileTypes.push({ suit: TileSuit.WIND, value: v });
+    for (let v = 1; v <= 3; v++) allTileTypes.push({ suit: TileSuit.DRAGON, value: v });
+    for (let v = 1; v <= 8; v++) allTileTypes.push({ suit: TileSuit.FLOWER, value: v });
+    const wildIndex = Math.floor(Math.random() * allTileTypes.length);
+    const wildType = allTileTypes[wildIndex];
+    game.customScoringMode = `${wildType.suit}-${wildType.value}`;
+    if (wildType.suit === TileSuit.FLOWER) {
+      game.wildTileGroup = wildType.value <= 4 ? ['1', '2', '3', '4'] : ['5', '6', '7', '8'];
+    }
+
+    // ── 重置吃碰排斥 ──
+    game.chowPongExclusion = {};
+
+    // ── 发牌: 每人13张，庄家14张 ──
+    for (const player of game.players) {
+      player.hand.concealedTiles = [];
+      player.hand.exposedMelds = [];
+      player.hand.discardedTiles = [];
+      for (let i = 0; i < 13; i++) {
+        const tile = game.wall.pop()!;
+        if (isFlower(tile) && !this.isWildTile(game, tile)) {
+          // 普通花牌放到门口,等回合补花
+          player.hand.exposedMelds.push({
+            type: MeldType.TRIPLET,
+            tiles: [tile],
+            isConcealed: false,
+            replacementDone: false as any
+          } as any);
+        } else {
+          player.hand.concealedTiles.push(tile);
+        }
+      }
+      player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
+      player.status = PlayerStatus.PLAYING;
+      player.score = 0;
+    }
+    // 庄家摸第14张
+    {
+      const tile = game.wall.pop()!;
+      if (isFlower(tile) && !this.isWildTile(game, tile)) {
+        game.players[game.dealerIndex].hand.exposedMelds.push({
+          type: MeldType.TRIPLET,
+          tiles: [tile],
+          isConcealed: false,
+          replacementDone: false as any
+        } as any);
+      } else {
+        game.players[game.dealerIndex].hand.concealedTiles.push(tile);
+      }
+      game.players[game.dealerIndex].hand.concealedTiles = this.sortHandWithWildFront(
+        game.players[game.dealerIndex].hand.concealedTiles, game
+      );
+    }
+    console.log(`[beginGame] after dealing: wall=${game.wall.length} tiles`);
+
+    // ── 重置玩家赢牌状态 ──
+    for (const player of game.players) {
+      player.winOrder = null;
+      player.winRound = null;
+      player.winTimestamp = null;
+      player.wonFan = 0;
+      player.winHandType = undefined;
+      player.isSelfDrawn = undefined;
+      player.discarderId = undefined;
+      (player as any).winningTileName = undefined;
+      player.winningScoreBreakdown = undefined;
+      player.score = 0;
+    }
+
+    // ── 继承上局全局倍数 ──
+    const prevGlobal = game.inheritedGlobalMultiplier ?? 1;
+    if (game.rebelEvent) {
+      game.inheritMultiplier = calculateGlobalMultiplier(prevGlobal, '造反');
+      game.rebelEvent = undefined;
+    } else {
+      game.inheritMultiplier = prevGlobal;
+    }
+    game.inheritedGlobalMultiplier = undefined;
+
+    // ── 第一次掷骰子 ──
+    const d1 = Math.floor(Math.random() * 6) + 1;
+    const d2 = Math.floor(Math.random() * 6) + 1;
+    game.dice = [d1, d2];
+    game.diceRolls = undefined;
+
+    // 计算单次骰子倍数
+    const singleMult = (() => {
+      const isDouble = d1 === d2;
+      const isOneFour = (d1 === 1 && d2 === 4) || (d1 === 4 && d2 === 1);
+      if (isDouble) return (d1 === 1 || d1 === 4) ? 4 : 2;
+      if (isOneFour) return 2;
+      return 1;
+    })();
+    game.roundMultiplier = singleMult;
+
+    // 标记是否需要第二次掷骰子
+    const rollCount = game.diceRollCount ?? 2;
+    const needSecondRoll = rollCount >= 2 && singleMult === 1;
+    (game as any)._needSecondRoll = needSecondRoll;
+
+    // 广播骰子
+    if (this.wsManager) {
+      this.wsManager.broadcast(gameId, 'diceRoll', {
+        dice1: d1, dice2: d2,
+        timestamp: Date.now()
+      });
+    }
+
+    // 切换到 STARTING 阶段
+    game.phase = GamePhase.STARTING;
+    game.lastActionTime = Date.now();
+    game.currentPlayerIndex = game.dealerIndex;
+
+    await this.persistGame(game);
+    this.broadcastGameState(gameId);
+    console.log(`[beginGame] STARTING: dice=${d1}+${d2} mult=${singleMult} needSecond=${needSecondRoll}`);
+  }
+
+  /**
+   * 新开局流程 - 第二步(可选): 第二次掷骰子
+   * 仅当 diceRollCount>=2 且第一次骰子未翻倍时调用
+   */
+  public async rollSecondDice(gameId: string): Promise<void> {
+    await this.hydrateFromDatabase();
+    const game = await this.ensureGameLoaded(gameId);
+    if (!game) throw new Error('Game not found');
+    if (game.phase !== GamePhase.STARTING) {
+      throw new Error('Game is not in STARTING phase');
+    }
+    if (game.diceRolls) {
+      throw new Error('Already rolled twice');
+    }
+
+    const d1 = game.dice![0];
+    const d2 = game.dice![1];
+    const d3 = Math.floor(Math.random() * 6) + 1;
+    const d4 = Math.floor(Math.random() * 6) + 1;
+
+    game.diceRolls = [[d1, d2], [d3, d4]];
+    game.roundMultiplier = calculateRoundMultiplier(d1, d2, d3, d4);
+
+    // 广播第二次骰子
+    if (this.wsManager) {
+      this.wsManager.broadcast(gameId, 'diceRoll', {
+        dice1: d1, dice2: d2,
+        dice3: d3, dice4: d4,
+        timestamp: Date.now()
+      });
+    }
+
+    (game as any)._needSecondRoll = false;
+
+    await this.persistGame(game);
+    this.broadcastGameState(gameId);
+    console.log(`[rollSecondDice] dice=${d1}+${d2} / ${d3}+${d4} mult=${game.roundMultiplier}`);
+  }
+
+  /**
+   * 新开局流程 - 第三步: 点击发牌，切换到 PLAYING 阶段
+   */
+  public async dealGame(gameId: string): Promise<void> {
+    await this.hydrateFromDatabase();
+    const game = await this.ensureGameLoaded(gameId);
+    if (!game) throw new Error('Game not found');
+    if (game.phase !== GamePhase.STARTING) {
+      throw new Error('Game is not in STARTING phase');
+    }
+
+    // 清除临时标记
+    delete (game as any)._needSecondRoll;
+
+    // 切换到 PLAYING
+    game.phase = GamePhase.PLAYING;
+    game.lastActionTime = Date.now();
+
+    // 广播开局消息
+    this.broadcastQuickMessage(gameId, '🀄 房间满员了，正式开干！', 'special');
+    TrainingRecordService.captureRoundStart(game);
+
+    console.log(`[dealGame] PLAYING: wall=${game.wall.length} tiles, dealer=${game.players[game.dealerIndex]?.name}`);
+
+    this.broadcastGameState(gameId);
+    await this.persistGame(game);
+
+    // 庄家首轮 freeze 后自动摸牌
+    const freezeMs = this.timerManager.getHesitationWindow(game);
+    const dealer = game.players[game.currentPlayerIndex];
+    if (dealer) {
+      if (this.isPlayerBotControlled(dealer)) {
+        (game as any)._freezeUntil = Date.now() + freezeMs;
+        const botTimer = this.timerManager.detachTimer(setTimeout(async () => {
+          try {
+            this.timerManager.freezeTimers.delete(gameId);
+            const freshGame = await this.getGame(gameId);
+            if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
+            if (freshGame.currentPlayerIndex !== game.currentPlayerIndex) return;
+            const liveDealer = freshGame.players[freshGame.currentPlayerIndex];
+            if (!liveDealer || liveDealer.id !== dealer.id || liveDealer.status !== PlayerStatus.PLAYING) return;
+            this.replaceFlowers(freshGame, liveDealer);
+            if (this.getPlayableTileCount(liveDealer) >= 14) {
+              freshGame.drawnThisTurn = true;
+            } else {
+              this.handleDraw(freshGame, liveDealer);
+              freshGame.drawnThisTurn = true;
+            }
+            this.scheduleBotDiscard(gameId, liveDealer.id);
+            await this.persistGame(freshGame);
+            this.broadcastGameState(gameId);
+          } catch (err) {
+            console.error('[dealGame-bot-freeze] Error:', err);
+          }
+        }, this.timerManager.getHesitationWindow(game)));
+        this.timerManager.freezeTimers.set(gameId, botTimer);
+      } else {
+        (game as any)._freezeUntil = Date.now() + freezeMs;
+        await this.persistGame(game);
+        this.broadcastGameState(gameId);
+
+        const humanTimer = this.timerManager.detachTimer(setTimeout(async () => {
+          try {
+            this.timerManager.freezeTimers.delete(gameId);
+            const freshGame = await this.getGame(gameId);
+            if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
+            if (freshGame.currentPlayerIndex !== game.currentPlayerIndex) return;
+            if (freshGame.pendingActions.length > 0) return;
+
+            delete (freshGame as any)._freezeUntil;
+            const nextPlayer = freshGame.players[freshGame.currentPlayerIndex];
+            if (nextPlayer && nextPlayer.status === PlayerStatus.PLAYING) {
+              this.replaceFlowers(freshGame, nextPlayer);
+              if (this.getPlayableTileCount(nextPlayer) >= 14) {
+                freshGame.drawnThisTurn = true;
+              } else {
+                this.handleDraw(freshGame, nextPlayer);
+                freshGame.drawnThisTurn = true;
+              }
+              await this.persistGame(freshGame);
+              this.broadcastGameState(gameId);
+            }
+          } catch (err) {
+            console.error('[dealGame-human-freeze] Error:', err);
+          }
+        }, this.timerManager.getHesitationWindow(game)));
+        this.timerManager.freezeTimers.set(gameId, humanTimer);
+      }
+    }
+  }
+
+  /**
+   * Start the game (旧流程，兼容)
    */
   public async startGame(gameId: string, options?: { hesitationWindow?: number; fixedDice?: [number, number] }): Promise<void> {
     const _startGameTimer = Date.now();

@@ -574,6 +574,80 @@ export const useGame = () => {
     }
   }
 
+  // ═══ 新开局流程 API ═══
+
+  const beginGame = async (options?: { hesitationWindow?: number }) => {
+    if (!gameId.value || !playerId.value) return
+    console.log('[beginGame] Starting:', gameId.value)
+    try {
+      const response = await $fetch('/mahjong/api/game/begin', {
+        method: 'POST',
+        body: {
+          gameId: gameId.value,
+          playerId: playerId.value,
+          hesitationWindow: options?.hesitationWindow ?? 5000,
+        }
+      })
+      if ((response as any)?.success) {
+        roomDismissedReason.value = null
+        await refreshState()
+        socket.value?.emit('game:state-update', { gameId: gameId.value })
+        console.log('[beginGame] Done, phase:', gameState.value?.phase)
+      }
+      return response
+    } catch (e) {
+      console.error('[beginGame] Failed:', e)
+      throw e
+    }
+  }
+
+  const rollSecondDice = async () => {
+    if (!gameId.value || !playerId.value) return
+    console.log('[rollSecondDice] Rolling:', gameId.value)
+    try {
+      const response = await $fetch('/mahjong/api/game/roll-dice', {
+        method: 'POST',
+        body: {
+          gameId: gameId.value,
+          playerId: playerId.value,
+        }
+      })
+      if ((response as any)?.success) {
+        await refreshState()
+        socket.value?.emit('game:state-update', { gameId: gameId.value })
+        console.log('[rollSecondDice] Done')
+      }
+      return response
+    } catch (e) {
+      console.error('[rollSecondDice] Failed:', e)
+      throw e
+    }
+  }
+
+  const dealGame = async () => {
+    if (!gameId.value || !playerId.value) return
+    console.log('[dealGame] Dealing:', gameId.value)
+    try {
+      const response = await $fetch('/mahjong/api/game/deal', {
+        method: 'POST',
+        body: {
+          gameId: gameId.value,
+          playerId: playerId.value,
+        }
+      })
+      if ((response as any)?.success) {
+        roomDismissedReason.value = null
+        await refreshState()
+        socket.value?.emit('game:state-update', { gameId: gameId.value })
+        console.log('[dealGame] Done, phase:', gameState.value?.phase)
+      }
+      return response
+    } catch (e) {
+      console.error('[dealGame] Failed:', e)
+      throw e
+    }
+  }
+
   // 强制刷新（绕过debounce），用于关键操作后（如startGame）
   const forceRefreshState = async () => {
     if (!gameId.value || !playerId.value) return
@@ -619,6 +693,9 @@ export const useGame = () => {
     disconnect,
     executeAction,
     startGame,
+    beginGame,
+    rollSecondDice,
+    dealGame,
     refreshState,
     forceRefreshState,
     refreshTingPreview,

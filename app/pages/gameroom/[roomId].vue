@@ -917,7 +917,7 @@
           :is-dealer="isDealer"
           :roll-trigger-key="diceRollTriggerKey"
           @deal="onDealTiles"
-          @roll="onRerollDice"
+          @roll="onRollSecondDice"
         />
       </Teleport>
 
@@ -1128,6 +1128,9 @@ const {
     disconnect,
     executeAction,
     startGame,
+    beginGame,
+    rollSecondDice,
+    dealGame,
     refreshState,
     forceRefreshState,
     refreshTingPreview,
@@ -2289,58 +2292,36 @@ const dealerPlayer = computed(() => {
   return players.find(player => player.isDealer) || null
 })
 
+/** 新开局流程 - 点击"开始牌局"：调用 beginGame，服务端原子完成洗牌+发牌+第一次掷骰子 */
 const enterStartingPhaseWithDiceOverlay = async () => {
-    try {
-    // 在 API 调用前就设标记，防止 socket.io 广播先到导致 watcher 重复触发
+  try {
     hasDicePreview.value = true
-    await $fetch('/mahjong/api/game/start', {
-      method: 'POST',
-      body: {
-        gameId: roomId.value,
-        playerId: playerId.value,
-        phaseOnly: true
-      }
-    })
-    // 🔥 不再生成随机骰子 — 服务端 setStartingPhase 已预计算并通过 diceRoll 事件广播
-    // gameState.dice 也会包含真实值，phase watcher 会读取
-    playSound('dice-roll')
-    playVoiceAction('diceRoll')
-    showDiceOverlay.value = true
+    const response = await beginGame({ hesitationWindow: hesitationWindow.value })
+    if ((response as any)?.success) {
+      // 骰子值已通过 diceRoll 事件广播，触发动画
+      diceRollTriggerKey.value++
+      playSound('dice-roll')
+      playVoiceAction('diceRoll')
+      showDiceOverlay.value = true
+    }
   } catch (e: any) {
     console.error('[enterStartingPhaseWithDiceOverlay] Failed:', e)
     addBroadcast(e?.data?.message || e?.message || '进入下一局失败', 'warn')
+    hasDicePreview.value = false
   }
 }
 
-const maybeAutoDealForBotDealer = () => {
-  const dealer = dealerPlayer.value
-  if (!dealer || !isBotPlayer(dealer)) return
-  onRerollDice()
-  window.setTimeout(() => {
-    void onDealTiles()
-  }, 420)
-}
-
-/** 自动掷骰子+发牌（AI庄家） */
-const autoRollAndDeal = () => {
-  // ★ 性能优化：服务端 setStartingPhase 已自动延迟调用 startGame（省掉客户端第二次HTTP请求）
-  // 客户端只需播放骰子动画，等服务端广播 PLAYING 阶段后自动显示手牌
-  // 保留 onDealTiles 作为兜底（如果服务端未自动发牌，1100ms后客户端补调）
-  window.setTimeout(() => {
-    // 如果服务端已经发牌（phase已变为PLAYING），跳过客户端调用
-    if (gameState.value?.phase === GamePhase.PLAYING) {
-      console.log('[autoRollAndDeal] Server already dealt tiles, skipping client API call')
-      showDiceOverlay.value = false
-      return
-    }
-    void onDealTiles()
-  }, 1200)
-}
-
-/** 仅自动掷骰子（人类庄家） */
-const autoRollOnly = () => {
-  onRerollDice()
-  // 骰子掷完，等人发牌
+/** 新开局流程 - 第二次掷骰子（仅当 diceRollCount>=2 且第一次未翻倍时） */
+const onRollSecondDice = async () => {
+  try {
+    await rollSecondDice()
+    diceRollTriggerKey.value++
+    playSound('dice-roll')
+    playVoiceAction('diceRoll')
+  } catch (e: any) {
+    console.error('[onRollSecondDice] Failed:', e)
+    addBroadcast(e?.data?.message || e?.message || '掷骰子失败', 'warn')
+  }
 }
 
 const startNextRound = async () => {
@@ -4007,9 +3988,9 @@ const onRerollDice = () => {
   playSound('dice-roll')
 }
 
+/** 新开局流程 - 点击"发牌"：调用 dealGame，切换到 PLAYING 阶段 */
 const onDealTiles = async () => {
-  // 防止重复调用：只有当 overlay 可见时才处理
-  if (!showDiceOverlay.value || isGameStarting.value) return
+  if (isGameStarting.value) return
   isGameStarting.value = true
   hasDicePreview.value = false
   showDoubleReminder.value = false
@@ -4017,11 +3998,9 @@ const onDealTiles = async () => {
     clearTimeout(doubleReminderTimer)
     doubleReminderTimer = null
   }
-  // 💡 先调API发牌（牌已经到内存），再关遮罩 → 秒见牌，消除空窗期
-  console.log('[onDealTiles] Calling startGame API...')
+  console.log('[onDealTiles] Calling dealGame API...')
   try {
-    await startGame({ hesitationWindow: hesitationWindow.value, fixedDice: diceValues.value })
-    // API成功了，牌已经在client state里，立即关遮罩
+    await dealGame()
     showDiceOverlay.value = false
     console.log('[onDealTiles] Done, phase:', gameState.value?.phase)
   } finally {
@@ -4472,14 +4451,7 @@ watch(
           showSettlement.value = true
           return
         }
-        const dealer = dealerPlayer.value
-        if (dealer && isBotPlayer(dealer)) {
-          // AI庄家：骰子值已在gameState中，直接发牌
-          autoRollAndDeal()
-        } else if (dealer && !isBotPlayer(dealer)) {
-          // 人类庄家：骰子值已知，等他手动点发牌
-          autoRollOnly()
-        }
+        // 新流程：beginGame 已处理骰子，客户端只显示骰子动画，等玩家点"发牌"
       }
       return
     }
