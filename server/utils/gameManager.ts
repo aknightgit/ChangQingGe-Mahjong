@@ -1208,6 +1208,7 @@ class GameManager {
     game.liangShanSuccess = undefined;
     game.liangShanVotes = [];
     game.discardPile = [];
+    game.actionHistory = [];
     game.pendingActions = [];
     game.drawnThisTurn = false;
     if (typeof options?.hesitationWindow === 'number') {
