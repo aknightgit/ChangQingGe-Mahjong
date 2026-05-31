@@ -1630,7 +1630,10 @@ onMounted(async () => {
     diceExtra.value = detail.dice3 !== undefined ? [detail.dice3, detail.dice4] : undefined
     // overlay已显示时不重新触发滚动画，防server端diceRoll二次渲染
     if (!showDiceOverlay.value) {
+      // WebSocket 事件先于 HTTP 响应到达 - 立即显示 overlay
       diceRollTriggerKey.value++
+      showDiceOverlay.value = true
+      playVoiceAction('diceRoll')
     }
     playSound('dice-roll')
   }) as EventListener)
@@ -2297,11 +2300,13 @@ const enterStartingPhaseWithDiceOverlay = async () => {
     hasDicePreview.value = true
     const response = await beginGame({ hesitationWindow: hesitationWindow.value })
     if ((response as any)?.success) {
-      // 骰子值已通过 diceRoll 事件广播，触发动画
-      diceRollTriggerKey.value++
-      playSound('dice-roll')
-      playVoiceAction('diceRoll')
-      showDiceOverlay.value = true
+      // WebSocket diceRoll 事件可能已经显示了 overlay
+      if (!showDiceOverlay.value) {
+        diceRollTriggerKey.value++
+        playSound('dice-roll')
+        playVoiceAction('diceRoll')
+        showDiceOverlay.value = true
+      }
     }
   } catch (e: any) {
     console.error('[enterStartingPhaseWithDiceOverlay] Failed:', e)
