@@ -1236,6 +1236,7 @@ class GameManager {
    * 服务端原子完成，客户端只需等广播显示骰子动画
    */
   public async beginGame(gameId: string, options?: { hesitationWindow?: number }): Promise<void> {
+    const _bgTimer = Date.now();
     await this.hydrateFromDatabase();
     const game = await this.ensureGameLoaded(gameId);
     if (!game) throw new Error('Game not found');
@@ -1435,10 +1436,11 @@ class GameManager {
     game.phase = GamePhase.STARTING;
     game.lastActionTime = Date.now();
     game.currentPlayerIndex = game.dealerIndex;
+    console.log(`[timing-beginGame] prep done: ${Date.now() - _bgTimer}ms`);
 
     await this.persistGame(game);
     this.broadcastGameState(gameId);
-    console.log(`[beginGame] STARTING: dice=${d1}+${d2} mult=${singleMult} needSecond=${needSecondRoll}`);
+    console.log(`[beginGame] STARTING: dice=${d1}+${d2} mult=${singleMult} needSecond=${needSecondRoll} total=${Date.now() - _bgTimer}ms`);
   }
 
   /**
@@ -1467,8 +1469,8 @@ class GameManager {
     // 广播第二次骰子
     if (this.wsManager) {
       this.wsManager.broadcast(gameId, 'diceRoll', {
-        dice1: d1, dice2: d2,
-        dice3: d3, dice4: d4,
+        dice1: d3, dice2: d4,
+        dice3: d1, dice4: d2,
         timestamp: Date.now()
       });
     }

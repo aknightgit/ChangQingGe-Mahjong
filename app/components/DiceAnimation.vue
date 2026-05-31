@@ -22,8 +22,8 @@
               :class="{ 'dice-row--clickable': isDealer }"
               @click="isDealer && onRoll()"
             >
-              <Dice3D :value="1" :state="'idle'" />
-              <Dice3D :value="1" :state="'idle'" />
+              <Dice3D :value="dice1" :state="'idle'" />
+              <Dice3D :value="dice2" :state="'idle'" />
             </div>
             <p v-if="maxRollsLimit > 1" class="dice-hint dice-hint--sub">{{ currentRoll }}/{{ maxRollsLimit }}</p>
             <button
