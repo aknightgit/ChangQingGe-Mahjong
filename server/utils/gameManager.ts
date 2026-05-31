@@ -1584,7 +1584,7 @@ class GameManager {
     console.log('[timing-startGame] ensureGameLoaded:', Date.now() - Date.now(), 'ms');
 
     // ★ 防重复调用：setStartingPhase 已自动延迟调用 startGame，如果已经 PLAYING 则跳过
-    if (game.phase === GamePhase.PLAYING || game.phase === GamePhase.STARTING) {
+    if (game.phase === GamePhase.PLAYING) {
       console.log('[startGame] Already PLAYING, skipping duplicate call');
       return;
     }
@@ -2456,7 +2456,7 @@ class GameManager {
     }
 
     this.winEvaluator.invalidateCache(gameId);
-    if (game.phase === GamePhase.PLAYING || game.phase === GamePhase.STARTING) {
+    if (game.phase === GamePhase.PLAYING) {
       const currentP = game.players[game.currentPlayerIndex];
       if (currentP && currentP.status === PlayerStatus.PLAYING && game.drawnThisTurn) {
         this.winEvaluator.prewarm(game, currentP, 'self_draw');

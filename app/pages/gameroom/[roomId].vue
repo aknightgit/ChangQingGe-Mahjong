@@ -1127,7 +1127,6 @@ const {
     connect,
     disconnect,
     executeAction,
-    startGame,
     beginGame,
     rollSecondDice,
     dealGame,
