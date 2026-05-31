@@ -1256,6 +1256,7 @@ const showDiceOverlay = ref(false)
 const diceValues = ref<[number, number]>([1, 1])
 const diceExtra = ref<[number, number] | undefined>(undefined)
 const hasDicePreview = ref(false)
+const diceFromWebSocket = ref(false)
 /** 服务器广播骰子结果时递增，触发DiceAnimation自动播放动画 */
 const diceRollTriggerKey = ref(0)
 const showDoubleReminder = ref(false)
