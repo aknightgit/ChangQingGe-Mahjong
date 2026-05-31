@@ -3979,15 +3979,6 @@ const onStartGame = async () => {
   }
 }
 
-const onRerollDice = () => {
-  diceValues.value = [
-    Math.floor(Math.random() * 6) + 1,
-    Math.floor(Math.random() * 6) + 1
-  ]
-  hasDicePreview.value = true
-  playSound('dice-roll')
-}
-
 /** 新开局流程 - 点击"发牌"：调用 dealGame，切换到 PLAYING 阶段 */
 const onDealTiles = async () => {
   if (isGameStarting.value) return

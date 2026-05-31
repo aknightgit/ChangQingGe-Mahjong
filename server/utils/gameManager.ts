@@ -1251,8 +1251,8 @@ class GameManager {
     await this.hydrateFromDatabase();
     const game = await this.ensureGameLoaded(gameId);
     if (!game) throw new Error('Game not found');
-    if (game.phase === GamePhase.PLAYING) {
-      console.log('[beginGame] Already PLAYING, skipping');
+    if (game.phase === GamePhase.PLAYING || game.phase === GamePhase.STARTING) {
+      console.log('[beginGame] Already STARTING or PLAYING, skipping');
       return;
     }
     if (game.players.length < 4) {
@@ -1596,7 +1596,7 @@ class GameManager {
     console.log('[timing-startGame] ensureGameLoaded:', Date.now() - Date.now(), 'ms');
 
     // ★ 防重复调用：setStartingPhase 已自动延迟调用 startGame，如果已经 PLAYING 则跳过
-    if (game.phase === GamePhase.PLAYING) {
+    if (game.phase === GamePhase.PLAYING || game.phase === GamePhase.STARTING) {
       console.log('[startGame] Already PLAYING, skipping duplicate call');
       return;
     }
@@ -2468,7 +2468,7 @@ class GameManager {
     }
 
     this.winEvaluator.invalidateCache(gameId);
-    if (game.phase === GamePhase.PLAYING) {
+    if (game.phase === GamePhase.PLAYING || game.phase === GamePhase.STARTING) {
       const currentP = game.players[game.currentPlayerIndex];
       if (currentP && currentP.status === PlayerStatus.PLAYING && game.drawnThisTurn) {
         this.winEvaluator.prewarm(game, currentP, 'self_draw');

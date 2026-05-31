@@ -348,7 +348,7 @@ export const useGame = () => {
         window.dispatchEvent(new CustomEvent('mahjong-broadcast', { detail: data }))
       })
 
-      socket.value.on('diceRoll', (data: { dice1: number; dice2: number; timestamp: number }) => {
+      socket.value.on('diceRoll', (data: { dice1: number; dice2: number; dice3?: number; dice4?: number; timestamp: number }) => {
         console.log('🎲 骰子广播:', data)
         window.dispatchEvent(new CustomEvent('mahjong-dice-roll', { detail: data }))
       })
