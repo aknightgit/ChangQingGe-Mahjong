@@ -2323,11 +2323,18 @@ const maybeAutoDealForBotDealer = () => {
 
 /** 自动掷骰子+发牌（AI庄家） */
 const autoRollAndDeal = () => {
-  // 骰子值已由服务端 setStartingPhase 预计算并广播（mahjong-dice-roll 事件触发 DiceAnimation）
-  // 无需调用 onRerollDice()，避免覆盖服务端骰子值 + 重复触发动画
+  // ★ 性能优化：服务端 setStartingPhase 已自动延迟调用 startGame（省掉客户端第二次HTTP请求）
+  // 客户端只需播放骰子动画，等服务端广播 PLAYING 阶段后自动显示手牌
+  // 保留 onDealTiles 作为兜底（如果服务端未自动发牌，1100ms后客户端补调）
   window.setTimeout(() => {
+    // 如果服务端已经发牌（phase已变为PLAYING），跳过客户端调用
+    if (gameState.value?.phase === GamePhase.PLAYING) {
+      console.log('[autoRollAndDeal] Server already dealt tiles, skipping client API call')
+      showDiceOverlay.value = false
+      return
+    }
     void onDealTiles()
-  }, 1100)
+  }, 1200)
 }
 
 /** 仅自动掷骰子（人类庄家） */

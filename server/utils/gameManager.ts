@@ -1224,6 +1224,19 @@ class GameManager {
         timestamp: Date.now()
       });
     }
+
+    // ★ 性能优化：服务端延迟后直接调 startGame，省掉客户端第二次 HTTP 请求
+    // 骰子动画 ~1100ms，服务端并行等待后直接发牌
+    setTimeout(async () => {
+      try {
+        const g = await this.ensureGameLoaded(gameId);
+        if (g && g.phase === GamePhase.STARTING) {
+          await this.startGame(gameId);
+        }
+      } catch (err) {
+        console.error('[setStartingPhase] auto startGame failed:', err);
+      }
+    }, 1100);
   }
 
   /**
@@ -1237,6 +1250,12 @@ class GameManager {
     const game = await this.ensureGameLoaded(gameId);
     if (!game) return;
     console.log('[timing-startGame] ensureGameLoaded:', Date.now() - Date.now(), 'ms');
+
+    // ★ 防重复调用：setStartingPhase 已自动延迟调用 startGame，如果已经 PLAYING 则跳过
+    if (game.phase === GamePhase.PLAYING) {
+      console.log('[startGame] Already PLAYING, skipping duplicate call');
+      return;
+    }
 
     if (game.players.length < 4) {
       throw new Error('Need 4 players to start');
