@@ -4332,7 +4332,7 @@ if (replacedFlowerCount > prev.replacedFlowerCount) {
     }
   }
 }
-const activePlayerCount = (state: any) => (state?.players || []).filter((p: any) => p.status === 'playing' && !p.isBot).length
+const activePlayerCount = (state: any) => (state?.players || []).filter((p: any) => p.status === 'playing' && !p.isBotControlled).length
 
 watch(() => gameState.value, (newState, oldState) => {
   if (!newState) return
