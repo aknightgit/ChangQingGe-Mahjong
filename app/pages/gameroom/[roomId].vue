@@ -4441,7 +4441,27 @@ watch(
           showSettlement.value = true
           return
         }
-        // 新流程：beginGame 已处理骰子，客户端只显示骰子动画，等玩家点"发牌"
+        // 新流程：beginGame 已处理骰子，客户端只显示骰子动画
+        // AI 庄家：自动发牌
+        const aiDealer = dealerPlayer.value
+        if (aiDealer && isBotPlayer(aiDealer)) {
+          setTimeout(() => {
+            // 第一掷已翻倍则跳过第二次掷骰子
+            const needsSecondRoll = gameState.value?.roundMultiplier === 1 &&
+              (gameState.value?.diceRollCount ?? 2) >= 2
+            const doDeal = () => {
+              if (gameState.value?.phase === GamePhase.STARTING) {
+                void onDealTiles()
+              }
+            }
+            if (needsSecondRoll) {
+              void onRollSecondDice()
+              setTimeout(doDeal, 700)
+            } else {
+              doDeal()
+            }
+          }, 800)
+        }
       }
       return
     }

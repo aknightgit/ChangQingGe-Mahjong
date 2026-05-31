@@ -590,7 +590,8 @@ export const useGame = () => {
       })
       if ((response as any)?.success) {
         roomDismissedReason.value = null
-        await refreshState()
+        // Don't block overlay - refreshState runs in background
+        refreshState()
         socket.value?.emit('game:state-update', { gameId: gameId.value })
         console.log('[beginGame] Done, phase:', gameState.value?.phase)
       }
@@ -613,7 +614,7 @@ export const useGame = () => {
         }
       })
       if ((response as any)?.success) {
-        await refreshState()
+        refreshState()
         socket.value?.emit('game:state-update', { gameId: gameId.value })
         console.log('[rollSecondDice] Done')
       }
@@ -637,7 +638,7 @@ export const useGame = () => {
       })
       if ((response as any)?.success) {
         roomDismissedReason.value = null
-        await refreshState()
+        refreshState()
         socket.value?.emit('game:state-update', { gameId: gameId.value })
         console.log('[dealGame] Done, phase:', gameState.value?.phase)
       }
