@@ -1161,26 +1161,8 @@ class GameManager {
    * Called when dealer clicks "开始游戏" in waiting room, before actual dealing
    */
   /**
-   * @deprecated 已废弃 — 新流程使用 beginGame + rollSecondDice + dealGame
-   * 保留函数签名以防外部调用报错，但不再执行预热逻辑
-   */
-  async setStartingPhase(gameId: string): Promise<void> {
-    console.warn(`[setStartingPhase] DEPRECATED — use beginGame instead. gameId=${gameId.substring(0,8)}`);
-    await this.hydrateFromDatabase();
-    const game = await this.ensureGameLoaded(gameId);
-    if (!game) throw new Error('Game not found');
-    if (game.phase !== GamePhase.WAITING && game.phase !== GamePhase.ENDED && game.phase !== GamePhase.CHA_JIAO && game.phase !== GamePhase.STARTING) {
-      console.warn(`[setStartingPhase] SKIP: invalid phase ${game.phase}`);
-      return;
-    }
-    if (game.players.length < 4) throw new Error('Need 4 players to start');
-    game.phase = GamePhase.STARTING;
-    await this.persistGame(game);
-    this.broadcastGameState(gameId);
-  }
-
   // ═══════════════════════════════════════════════════════════
-  // 新开局流程: beginGame → rollSecondDice → dealGame
+  // 新开局流程: beginGame → rollFirstDice(人类庄家) → rollSecondDice → dealGame
   // ═══════════════════════════════════════════════════════════
 
   /**
@@ -1598,7 +1580,7 @@ class GameManager {
     if (!game) return;
     console.log('[timing-startGame] ensureGameLoaded:', Date.now() - Date.now(), 'ms');
 
-    // ★ 防重复调用：setStartingPhase 已自动延迟调用 startGame，如果已经 PLAYING 则跳过
+    // ★ 防重复调用：如果已经 PLAYING 则跳过
     if (game.phase === GamePhase.PLAYING) {
       console.log('[startGame] Already PLAYING, skipping duplicate call');
       return;
