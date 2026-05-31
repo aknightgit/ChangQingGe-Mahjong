@@ -36,6 +36,10 @@ import { evaluateRouteClaim } from '../server/ai/route/claimPlanner'
 import { scoreRouteDiscardCandidate } from '../server/ai/route/discardPlanner'
 import { evaluateRouteState } from '../server/ai/route/routeEvaluator'
 import type { RouteState as LiveRouteState } from '../server/ai/route/types'
+// ★ V2 引擎
+import { evaluateRouteStateV2 } from '../server/ai_v2/pathSelector'
+import { evaluateRouteClaim as evaluateRouteClaimV2 } from '../server/ai_v2/claimDecider'
+import { scoreRouteDiscardCandidate as scoreRouteDiscardCandidateV2 } from '../server/ai_v2/discardDecider'
 import * as fs from 'fs'
 import * as path from 'path'
 import { fileURLToPath } from 'url'
@@ -159,6 +163,7 @@ interface BotPolicy {
   anKongAggression: number; minkanAggression: number; kakanAggression: number; robKongAwareness: number
   noWildDoubleAwareness: number; menqingDoubleAwareness: number
   flushVsPungsBalance: number; honorVsSuitedBalance: number; sequenceVsTripletBias: number
+  engineVersion: 'v1' | 'v2'  // 引擎版本：v1=旧路由引擎, v2=ai_v2引擎
 }
 
 const DEFAULT_POLICY: BotPolicy = {
@@ -204,6 +209,7 @@ const DEFAULT_POLICY: BotPolicy = {
   anKongAggression: 0.95, minkanAggression: 0.3, kakanAggression: 0.5, robKongAwareness: 0.6,
   noWildDoubleAwareness: 0.5, menqingDoubleAwareness: 0.5,
   flushVsPungsBalance: -0.45, honorVsSuitedBalance: -0.45, sequenceVsTripletBias: 1.3,
+  engineVersion: 'v1',
 }
 
 // ========== Mutatable parameters for AI-AK (长清阁规则) ==========
@@ -1045,7 +1051,7 @@ export function shouldAkTakeClaim(
       const routeAllowed = candidateHands.some(candidateHand => {
         const candidateShanten = computeTrainingShantenLite(candidateHand, player.exposedMelds.length + 1, tile => !!wildTileId && `${tile.suit}-${tile.value}` === wildTileId)
         const candidateEffective = countTrainingEffectiveTilesLite(candidateHand, player.exposedMelds.length + 1, tile => !!wildTileId && `${tile.suit}-${tile.value}` === wildTileId)
-        return evaluateRouteClaim({
+        const claimInput = {
           action: mode === 'peng' ? ActionType.PENG : ActionType.CHOW,
           player: livePlayer,
           game: liveGame,
@@ -1058,7 +1064,11 @@ export function shouldAkTakeClaim(
           passEffective,
           tableThreat: estimateTrainingTableThreat(context.game, context.playerIndex),
           wallRemaining: liveGame.wall.length,
-        }).allowed
+        }
+        return (player.policy.engineVersion === 'v2'
+          ? evaluateRouteClaimV2(claimInput)
+          : evaluateRouteClaim(claimInput)
+        ).allowed
       })
 
       if (!routeAllowed) return false
@@ -1139,7 +1149,7 @@ function evaluateAkDiscardDecision(
     const routeState = evaluateTrainingRouteState(player, context, handTiles, exposedMelds, player._routeMemory)
     const afterRouteState = evaluateTrainingRouteState(player, context, nextHand, exposedMelds, routeState)
     const discardDanger = estimateTrainingTableThreat(context.game, context.playerIndex)
-    const routeScore = scoreRouteDiscardCandidate({
+    const discardInput = {
       tile: discardTile,
       hand: handTiles,
       player: livePlayer,
@@ -1151,7 +1161,10 @@ function evaluateAkDiscardDecision(
       winningTiles: readyWaits,
       legacyScore: score,
       afterRouteState,
-    })
+    }
+    const routeScore = player.policy.engineVersion === 'v2'
+      ? scoreRouteDiscardCandidateV2(discardInput)
+      : scoreRouteDiscardCandidate(discardInput)
     const topOpponentScore = Math.max(...context.game.players.filter((_, idx) => idx !== context.playerIndex).map(candidate => candidate.score ?? 0), 0)
     const scoreLead = (player.score ?? 0) - topOpponentScore
     const waitWeight = scoreLead < -1000 ? 1.15 : 1
@@ -1336,6 +1349,7 @@ function formatWaitTiles(tiles: Tile[]): string {
 
 // ========== Config ==========
 const AI_NAMES = ['AI-AK', 'AI-小胖', 'AI-阿水', 'AI-老赵']
+const AI_AK_ENGINE: 'v1' | 'v2' = 'v2'  // AI-AK 使用的引擎版本
 const SHARED_POLICY_TARGETS = ['AI-AK', 'AI-阿水', 'AI-小胖', 'AI-老赵', 'AI-小猪']
 const AK_IDX = 0
 const SHARED_TRAINING_ROUTE_NAMES = new Set(AI_NAMES)
@@ -1595,7 +1609,7 @@ function evaluateTrainingRouteState(
   const wildChecker = (tile: Tile) => !!wildTileId && `${tile.suit}-${tile.value}` === wildTileId
   const shanten = computeTrainingShantenLite(playerHand.concealedTiles, playerHand.exposedMelds.length, wildChecker)
   const effectiveTiles = countTrainingEffectiveTilesLite(playerHand.concealedTiles, playerHand.exposedMelds.length, wildChecker)
-  return evaluateRouteState({
+  const routeInput = {
     game: liveGame,
     player: livePlayer,
     hand: playerHand.concealedTiles,
@@ -1604,7 +1618,11 @@ function evaluateTrainingRouteState(
     tableThreat: estimateTrainingTableThreat(context.game, context.playerIndex),
     wallRemaining: liveGame.wall.length,
     previousRouteState,
-  })
+  }
+  if (player.policy.engineVersion === 'v2') {
+    return evaluateRouteStateV2({ ...routeInput, policy: player.policy }) as any
+  }
+  return evaluateRouteState(routeInput)
 }
 
 function getTrainingCurrentRouteState(player: BotPlayer, context?: TrainingPlannerContext | null): LiveRouteState | null {
@@ -1865,7 +1883,7 @@ function nextGameMultiplier(meta: GameMeta): number {
 
 function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean, gameMultiplier: number): { finalPoints: number; baseFan: number; handTypeName: string } {
   const wildTileId = p.wildSuit && p.wildValue ? `${p.wildSuit}-${p.wildValue}` : null
-  const types = detectHandTypes(p.hand, p.exposedMelds, wildTileId, isSelfDraw, p.flowerTiles.length)
+  const types = detectHandTypes(p.hand, p.exposedMelds, isSelfDraw, p.flowerTiles.length, wildTileId)
   const result = calculateScore({
     handTiles: p.hand, exposedMelds: p.exposedMelds,
     flowerTiles: p.flowerTiles, handTypes: types,
@@ -1972,7 +1990,7 @@ function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
 
   if (wildCount === 0) {
     // 无百搭时：手牌本身即无百搭，肯定有×2
-    const types = detectHandTypes(hand, [], null, false, flowerCount)
+    const types = detectHandTypes(hand, [], false, flowerCount)
     const base = types.length > 0 ? (typeBaseScore[types[0]] || 0) : 0
     // 无百搭×2 × globalMult（门清由调用方另外判断，这里只处理无百搭）
     const final = base * 2 * globalMult
@@ -1983,7 +2001,7 @@ function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
   const nonWild = hand.filter(t => !isWild(t, undefined, undefined))
 
   // 评估1：保留百搭不使用 → 无百搭×2；门清存在时再×2
-  const typesNoWild = detectHandTypes(nonWild, [], null, false, flowerCount)
+  const typesNoWild = detectHandTypes(nonWild, [], false, flowerCount)
   const baseNoWild = typesNoWild.length > 0 ? (typeBaseScore[typesNoWild[0]] || 0) : 0
   const keepWildScore = baseNoWild * calcExtra(false, isMenqing) * globalMult
 
@@ -4393,6 +4411,7 @@ function main() {
 
   // Load current AI-AK as starting point
   let bestPolicy = loadCharacter('AI-AK')
+  bestPolicy.engineVersion = AI_AK_ENGINE  // 强制使用指定引擎版本
   let bestScore = -Infinity
   let logLines: string[] = []
 
