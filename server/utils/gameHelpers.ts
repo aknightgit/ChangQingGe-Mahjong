@@ -6,8 +6,11 @@ import { Player, Tile, TileSuit } from '../types/game'
  */
 export function isConcealedDiscardState(player: Player): boolean {
   const concealedCount = player.hand.concealedTiles.length
+  const exposedMeldCount = player.hand.exposedMelds.length
   // 正常状态: 2/5/8/11/14张(已摸牌未出牌)
   // 补花后: 可能15/16张(花牌补入后手牌数异常), 只要>=14张也可出牌
+  // 吃/碰后: 12张暗牌+1个副露 → 12%3=0, 但有副露所以是合法出牌状态
+  if (concealedCount >= 2 && exposedMeldCount > 0 && concealedCount % 3 === 0) return true
   return concealedCount >= 2 && (concealedCount % 3 === 2 || concealedCount >= 14)
 }
 
