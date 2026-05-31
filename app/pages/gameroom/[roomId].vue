@@ -2307,7 +2307,13 @@ const enterStartingPhaseWithDiceOverlay = async () => {
     showDiceOverlay.value = true
     // 异步调用 beginGame API（服务端原子完成洗牌+发牌+骰子）
     const response = await beginGame({ hesitationWindow: hesitationWindow.value })
-    if (!(response as any)?.success) {
+    const res = response as any
+    if (res?.success) {
+      // 🔥 用 API 返回的骰子值更新显示（兜底，防止 WebSocket 事件丢失）
+      if (res.dice && Array.isArray(res.dice) && res.dice.length >= 2) {
+        diceValues.value = [res.dice[0], res.dice[1]]
+      }
+    } else {
       hasDicePreview.value = false
       showDiceOverlay.value = false
       diceFromWebSocket.value = false
