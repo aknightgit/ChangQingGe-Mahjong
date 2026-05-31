@@ -50,7 +50,7 @@ export class BotController {
    * 4. 人类的胡按钮必须在 hesitationWindow 内保持可用，等人类自己响应或超时
    */
   async handleBotPendingActions(gameId: string): Promise<boolean> {
-    const { games, isPlayerBotControlled, getCachedWinOptions, handlePass, handlePeng, handleKong, handleHu, handleChow, resolvePendingAction, countExposedTilesExcludingFlowerMelds, persistGame, broadcastGameState, schedulePendingActionTimeout, clearCurrentTurnPendingActions, moveToNextPlayer, timerManager } = this.deps;
+    const { games, isPlayerBotControlled, getCachedWinOptions, handlePass, handlePeng, handleKong, handleHu, handleChow, resolvePendingAction, countExposedTilesExcludingFlowerMelds, persistGame, broadcastGameState, schedulePendingActionTimeout, clearCurrentTurnPendingActions, moveToNextPlayer, timerManager, beginCurrentPlayerTurn } = this.deps;
 
     const game = games.get(gameId);
     if (!game) return false;
@@ -120,6 +120,10 @@ export class BotController {
             console.warn(`[BotPeng] ${player.name} blocked: would exceed 14 tiles`);
             handlePass(game, player);
           }
+        } else if (action === ActionType.PASS && pa.availableActions.includes(ActionType.CHOW)) {
+          // ★ 修复：bot 有 PENG+CHOW 但决定不碰 → 评估 CHOW 而非直接 PASS
+          await this.resolveBotChowNow(game, player, pa);
+          hasBotAction = true;
         } else if (action === ActionType.KONG) {
           const kongExposedCount = countExposedTilesExcludingFlowerMelds(player);
           const kongTotalCount = player.hand.concealedTiles.length + kongExposedCount;
@@ -200,15 +204,20 @@ export class BotController {
    * Bot自动决策吃牌：选择吃牌组合后resolve，或自动pass
    */
   async resolveBotChowNow(game: GameState, player: Player, pa: PendingAction): Promise<void> {
-    const { handlePass, resolvePendingAction } = this.deps;
+    const { handlePass, handleChow, beginCurrentPlayerTurn } = this.deps;
     if (!pa.tile || !pa.chowOptions || pa.chowOptions.length === 0) {
       handlePass(game, player);
       return;
     }
     pa.selectedChowTileIds = selectBotChowTileIds(player, game, pa.tile, pa.chowOptions);
     if (pa.selectedChowTileIds && pa.selectedChowTileIds.length > 0) {
-      await resolvePendingAction(game, player, pa);
-      game.pendingActions = game.pendingActions.filter(p => p.playerId !== player.id);
+      // ★ 修复：直接调用 handleChow，不通过 resolvePendingAction（避免 shouldClaimPendingAction 的随机概率推翻已做出的吃牌决策）
+      if (player.hand.concealedTiles.length >= 2) {
+        await handleChow(game, player, pa.selectedChowTileIds);
+        game.pendingActions = game.pendingActions.filter(p => p.playerId !== player.id);
+      } else {
+        handlePass(game, player);
+      }
     } else {
       handlePass(game, player);
     }

@@ -647,7 +647,12 @@ class GameManager {
               chowPa.selectedChowTileIds = chowPa.tile
                 ? selectBotChowTileIds(currentPlayer, game, chowPa.tile, chowPa.chowOptions)
                 : undefined;
-              await this.resolvePendingAction(game, currentPlayer, chowPa);
+              // ★ 修复：直接调用 handleChow，避免 resolvePendingAction 中 shouldClaimPendingAction 的随机概率推翻已做出的吃牌决策
+              if (chowPa.selectedChowTileIds && chowPa.selectedChowTileIds.length > 0 && currentPlayer.hand.concealedTiles.length >= 2) {
+                await this.handleChow(game, currentPlayer, chowPa.selectedChowTileIds);
+              } else {
+                this.handlePass(game, currentPlayer);
+              }
               game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== currentPlayer.id);
               await this.persistGame(game);
               this.broadcastGameState(gameId);
@@ -3364,7 +3369,12 @@ class GameManager {
                   chowPa.selectedChowTileIds = chowPa.tile
                     ? selectBotChowTileIds(livePlayer, freshGame, chowPa.tile, chowPa.chowOptions)
                     : undefined;
-                  await this.resolvePendingAction(freshGame, livePlayer, chowPa);
+                  // ★ 修复：直接调用 handleChow，避免 resolvePendingAction 中 shouldClaimPendingAction 的随机概率推翻已做出的吃牌决策
+                  if (chowPa.selectedChowTileIds && chowPa.selectedChowTileIds.length > 0 && livePlayer.hand.concealedTiles.length >= 2) {
+                    await this.handleChow(freshGame, livePlayer, chowPa.selectedChowTileIds);
+                  } else {
+                    this.handlePass(freshGame, livePlayer);
+                  }
                   freshGame.pendingActions = freshGame.pendingActions.filter(pa => pa.playerId !== livePlayer.id);
                   await this.persistGame(freshGame);
                   this.broadcastGameState(game.gameId);
