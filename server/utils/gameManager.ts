@@ -1225,18 +1225,6 @@ class GameManager {
       });
     }
 
-    // ★ 性能优化：服务端延迟后直接调 startGame，省掉客户端第二次 HTTP 请求
-    // 骰子动画 ~1100ms，服务端并行等待后直接发牌
-    setTimeout(async () => {
-      try {
-        const g = await this.ensureGameLoaded(gameId);
-        if (g && g.phase === GamePhase.STARTING) {
-          await this.startGame(gameId);
-        }
-      } catch (err) {
-        console.error('[setStartingPhase] auto startGame failed:', err);
-      }
-    }, 1100);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -4340,8 +4328,23 @@ class GameManager {
           console.warn(`[autoStartNextRound] Game ${gameId.substring(0,8)} not ENDED (phase=${game.phase}), skipping.`);
           return;
         }
-        await this.setStartingPhase(gameId);
-        console.log(`[autoStartNextRound] setStartingPhase DONE gameId=${gameId.substring(0,8)} newPhase=${game.phase}`);
+        // 新流程：beginGame 原子完成洗牌+发牌+骰子
+        await this.beginGame(gameId);
+        console.log(`[autoStartNextRound] beginGame DONE gameId=${gameId.substring(0,8)} phase=${game.phase}`);
+
+        // 等骰子动画后自动发牌
+        const diceAnimMs = 2500;
+        const dealTimer = this.timerManager.detachTimer(setTimeout(async () => {
+          try {
+            const g = await this.getGame(gameId);
+            if (g && g.phase === GamePhase.STARTING) {
+              await this.dealGame(gameId);
+              console.log(`[autoStartNextRound] dealGame DONE gameId=${gameId.substring(0,8)}`);
+            }
+          } catch (err) {
+            console.error('[autoStartNextRound] dealGame Error:', err);
+          }
+        }, diceAnimMs)));
       } catch (err) {
         console.error('[autoStartNextRound] Error:', err);
       }
