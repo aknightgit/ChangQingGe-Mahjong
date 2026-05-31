@@ -2308,24 +2308,25 @@ const enterStartingPhaseWithDiceOverlay = async () => {
     const response = await beginGame({ hesitationWindow: hesitationWindow.value })
     const res = response as any
     if (res?.success) {
-      // 用 API 返回的真实骰子值更新显示
-      if (res.dice && Array.isArray(res.dice) && res.dice.length >= 2) {
-        diceValues.value = [res.dice[0], res.dice[1]]
-      }
-      const dealer = dealerPlayer.value
-      if (dealer && isBotPlayer(dealer)) {
+      if (res.humanRollPending) {
+        // 人类庄家：显示 idle 状态，等玩家自己点击掷骰子
+        showDiceOverlay.value = true
+      } else {
         // AI 庄家：骰子值已就位，触发动画，动画播完后自动发牌
+        if (res.dice && Array.isArray(res.dice) && res.dice.length >= 2) {
+          diceValues.value = [res.dice[0], res.dice[1]]
+        }
         hasDicePreview.value = true
         diceRollTriggerKey.value++
         playSound('dice-roll')
         playVoiceAction('diceRoll')
         setTimeout(() => {
+          console.log('[autoDeal] Timer fired, phase:', gameState.value?.phase)
           if (gameState.value?.phase === GamePhase.STARTING) {
             void onDealTiles()
           }
         }, 800)
       }
-      // 人类庄家：不触发动画，显示 idle 状态等玩家自己点击掷骰子
     } else {
       hasDicePreview.value = false
       showDiceOverlay.value = false
