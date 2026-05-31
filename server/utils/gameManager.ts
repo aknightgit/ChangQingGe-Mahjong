@@ -4346,7 +4346,7 @@ class GameManager {
           } catch (err) {
             console.error('[autoStartNextRound] dealGame Error:', err);
           }
-        }, diceAnimMs)));
+        }, diceAnimMs));
       } catch (err) {
         console.error('[autoStartNextRound] Error:', err);
       }
