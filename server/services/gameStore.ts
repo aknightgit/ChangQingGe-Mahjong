@@ -127,7 +127,9 @@ export class GameStore {
       discardPile: game.discardPile,
       wallCount: game.wall.length,
       winnersCount: game.winnersCount,
-      _freezeUntil: (game as any)._freezeUntil || 0
+      _freezeUntil: (game as any)._freezeUntil || 0,
+      liangShanSuccess: game.liangShanSuccess,
+      liangShanVotes: game.liangShanVotes
     });
   }
 

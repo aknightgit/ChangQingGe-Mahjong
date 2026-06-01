@@ -2343,18 +2343,12 @@ const enterStartingPhaseWithDiceOverlay = async () => {
         setTimeout(() => {
           console.log('[autoDeal] Timer fired, phase:', gameState.value?.phase)
           if (gameState.value?.phase !== GamePhase.STARTING) return
-          const needsSecondRoll = (gameState.value?.diceRollCount ?? 2) >= 2 &&
-            (gameState.value?.roundMultiplier ?? 1) === 1
-          if (needsSecondRoll) {
-            void onRollSecondDice()
-            setTimeout(() => {
-              if (gameState.value?.phase === GamePhase.STARTING) {
-                void onDealTiles()
-              }
-            }, 1500)
-          } else {
+          // 翻倍了 → 直接发牌；未翻倍 → 等玩家点击二次掷骰按钮
+          const isDoubled = (gameState.value?.roundMultiplier ?? 1) > 1
+          if (isDoubled || (gameState.value?.diceRollCount ?? 2) < 2) {
             void onDealTiles()
           }
+          // 未翻倍且需要二次掷骰：不自动发牌，等玩家点击“再掷一次”
         }, 2500)
       }
     } else {
@@ -3661,7 +3655,7 @@ const onAILeave = async () => {
         targetPlayerId: playerCardPlayer.value.id
       }
     })
-    addBroadcast(`🚪 ${aiName} 下局将被移除！`, 'warn')
+    addBroadcast(`🚪 【${aiName}】 下局将被移除！`, 'warn')
     await refreshState()
   } catch (e) {
     console.error('[AI Leave] Failed:', e)
@@ -3682,7 +3676,7 @@ const onAIReplace = async () => {
         spectatorName: myName
       }
     })
-    addBroadcast(`🙋 ${myName} 下局将接替 ${aiName}！`, 'info')
+    addBroadcast(`🙋 【${myName}】 下局将接替 【${aiName}】！`, 'info')
     await refreshState()
   } catch (e) {
     console.error('[AI Replace] Failed:', e)
@@ -3704,7 +3698,7 @@ const onRequestBotReplace = async (botPlayer: any) => {
         playerName: myName
       }
     })
-    addBroadcast(`🙋 ${myName} 已申请下局替换 ${botPlayer.name}，掷骰时生效！`, 'info')
+    addBroadcast(`🙋 【${myName}】 已申请下局替换 【${botPlayer.name}】，掷骰时生效！`, 'info')
     await refreshState()
   } catch (e: any) {
     addBroadcast(e?.data?.message || e?.message || '替换申请失败', 'warn')
@@ -3727,7 +3721,7 @@ const onTempLeave = async () => {
         targetPlayerId: currentPlayer.value?.id
       }
     })
-    addBroadcast(`🪑 ${currentPlayer.value?.name} 下局暂时离席`, 'info')
+    addBroadcast(`🪑 【${currentPlayer.value?.name}】 下局暂时离席`, 'info')
     await refreshState()
   } catch (e) {
     console.error('[TempLeave] Failed:', e)
@@ -3747,7 +3741,7 @@ const onBotMode = async () => {
         enabled: true
       }
     })
-    addBroadcast(`🤖 ${currentPlayer.value?.name} 已托管给AI！`, 'warn')
+    addBroadcast(`🤖 【${currentPlayer.value?.name}】 已托管给AI！`, 'warn')
     await refreshState()
   } catch (e) {
     console.error('[BotMode] Failed:', e)
@@ -3766,7 +3760,7 @@ const onPlayerBack = async () => {
       }
     })
     isAIControlled.value = false
-    addBroadcast(`👋 ${currentPlayer.value.name} 已回到牌桌！`, 'success')
+    addBroadcast(`👋 【${currentPlayer.value.name}】 已回到牌桌！`, 'success')
     await refreshState()
   } catch (e) {
     console.error('[Comeback] Failed:', e)
@@ -3786,7 +3780,7 @@ const onBotModeDirect = async () => {
       }
     })
     isAIControlled.value = true
-    addBroadcast(`🤖 ${currentPlayer.value.name} 已托管给AI！`, 'warn')
+    addBroadcast(`🤖 【${currentPlayer.value.name}】 已托管给AI！`, 'warn')
     await refreshState()
   } catch (e) {
     console.error('[BotMode] Failed:', e)
@@ -3809,7 +3803,7 @@ const onSwapPosition = async () => {
       }
     }) as any
     if (resp?.success) {
-      addBroadcast(`🔄 ${myName} 下一局开始将与 ${targetName} 互换位置！`, 'special')
+      addBroadcast(`🔄 【${myName}】 下一局开始将与 【${targetName}】 互换位置！`, 'special')
       await refreshState()
       await updateSwapInfo()
     }
@@ -4374,7 +4368,7 @@ watch(() => gameState.value, (newState, oldState) => {
   if (newState.phase === 'playing' && prevPhase.value !== 'playing') {
     const existingAlerts = (newState as any).qjAlerts || []
     for (const alert of existingAlerts) {
-      addBroadcast(`📢 ${alert.playerName} 已达被聚义QJ线，特此广而告之！`, 'special')
+      addBroadcast(`📢 【${alert.playerName}】 已达被聚义QJ线，特此广而告之！`, 'special')
     }
     // 重置 prevQjAlertIds，确保后续结算时能再次检测新增
     prevQjAlertIds.value = new Set<string>(existingAlerts.map((a: any) => a.playerId))
@@ -4408,7 +4402,7 @@ watch(() => gameState.value, (newState, oldState) => {
     if (now - lastTs < 3000) {
       if (lastAction.type === 'rebel') {
         const player = newState.players?.find((p: any) => p.id === lastAction.playerId)
-        if (player) addBroadcast(`⚔️ ${player.name} 提议梁山聚义！造反！`, 'special')
+        if (player) addBroadcast(`⚔️ 【${player.name}】 提议梁山聚义！造反！`, 'special')
       }
     }
   }
@@ -4419,7 +4413,7 @@ watch(() => gameState.value, (newState, oldState) => {
   if (currentVotes > prevLiangShanVoteCount.value) {
     if (currentVotes === 1 && !(newState as any).liangShanSuccess) {
       const voter = newState.players?.find((p: any) => p.id === currentVoteIds[0])
-      addBroadcast(`🔥 ${voter?.name || '某玩家'} 发起了梁山聚义！`, 'special')
+      addBroadcast(`🔥 【${voter?.name || '某玩家'}】 发起了梁山聚义！`, 'special')
     } else if ((newState as any).liangShanSuccess) {
       console.log('[LiangShan] Popup triggered:', { currentVotes, activeCount: activePlayerCount(newState), liangShanSuccess: (newState as any).liangShanSuccess })
       addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
@@ -4438,7 +4432,7 @@ watch(() => gameState.value, (newState, oldState) => {
         .map(id => newState.players?.find((p: any) => p.id === id)?.name)
         .filter(Boolean)
       for (const responderName of responderNames) {
-        addBroadcast(`🔥 ${responderName} 响应了${initiator?.name || '发起者'}的梁山聚义！`, 'special')
+        addBroadcast(`🔥 【${responderName}】 响应了${initiator}?.name || '发起者'}的梁山聚义！`, 'special')
       }
       addBroadcast(`🔥 有${currentVotes}名玩家响应了梁山聚义！`, 'special')
     }
@@ -4451,7 +4445,7 @@ watch(() => gameState.value, (newState, oldState) => {
   const currentAlertIds = new Set<string>(currentAlerts.map((a: any) => a.playerId))
   for (const alert of currentAlerts) {
     if (!prevQjAlertIds.value.has(alert.playerId)) {
-      addBroadcast(`📢 ${alert.playerName} 已达被聚义QJ线，特此广而告之！`, 'special')
+      addBroadcast(`📢 【${alert.playerName}】 已达被聚义QJ线，特此广而告之！`, 'special')
     }
   }
   prevQjAlertIds.value = currentAlertIds as Set<string>
@@ -4464,7 +4458,7 @@ watch(() => gameState.value, (newState, oldState) => {
     if (!prevSwapRequestIds.value.has(key)) {
       const from = (newState.players || []).find((p: any) => p.id === req.playerId)
       const to = (newState.players || []).find((p: any) => p.id === req.targetId)
-      if (from && to) addBroadcast(`🔄 ${from.name} 下一局开始将与 ${to.name} 互换位置`, 'special')
+      if (from && to) addBroadcast(`🔄 【${from.name}】 下一局开始将与 【${to.name}】 互换位置`, 'special')
     }
   }
   prevSwapRequestIds.value = currentSwapIds as Set<string>
