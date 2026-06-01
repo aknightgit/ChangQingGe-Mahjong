@@ -3843,9 +3843,14 @@ const dealerDiscardCount = computed(() => {
   return history.filter((action: any) => action?.type === ActionType.DISCARD && action?.playerId === dealerId).length
 })
 
-// 梁山聚义：只在庄家打出前3张牌前可点，第4张前开始置灰
+// 梁山聚义：庄家前3张可点、全局倍数未满8倍、未投过票
 const canLiangShan = computed(() => {
-  return gameState.value?.phase === 'playing' && dealerDiscardCount.value < 3
+  if (gameState.value?.phase !== 'playing') return false
+  if (dealerDiscardCount.value >= 3) return false
+  const inherit = (gameState.value as any)?.inheritMultiplier ?? 1
+  const round = (gameState.value as any)?.roundMultiplier ?? 1
+  if (Math.min(inherit * round, 8) >= 8) return false
+  return true
 })
 const hasVotedLiangShan = computed(() => {
   const votes = (gameState.value as any)?.liangShanVotes || []
