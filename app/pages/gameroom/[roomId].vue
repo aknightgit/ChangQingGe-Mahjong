@@ -2342,7 +2342,17 @@ const enterStartingPhaseWithDiceOverlay = async () => {
         playVoiceAction('diceRoll')
         setTimeout(() => {
           console.log('[autoDeal] Timer fired, phase:', gameState.value?.phase)
-          if (gameState.value?.phase === GamePhase.STARTING) {
+          if (gameState.value?.phase !== GamePhase.STARTING) return
+          const needsSecondRoll = (gameState.value?.diceRollCount ?? 2) >= 2 &&
+            (gameState.value?.roundMultiplier ?? 1) === 1
+          if (needsSecondRoll) {
+            void onRollSecondDice()
+            setTimeout(() => {
+              if (gameState.value?.phase === GamePhase.STARTING) {
+                void onDealTiles()
+              }
+            }, 1500)
+          } else {
             void onDealTiles()
           }
         }, 2500)
@@ -4407,10 +4417,10 @@ watch(() => gameState.value, (newState, oldState) => {
   const currentVoteIds = ((newState as any).liangShanVotes || []) as string[]
   const currentVotes = currentVoteIds.length
   if (currentVotes > prevLiangShanVoteCount.value) {
-    if (currentVotes === 1) {
+    if (currentVotes === 1 && !(newState as any).liangShanSuccess) {
       const voter = newState.players?.find((p: any) => p.id === currentVoteIds[0])
       addBroadcast(`🔥 ${voter?.name || '某玩家'} 发起了梁山聚义！`, 'special')
-    } else if (currentVotes >= activePlayerCount(newState) || (newState as any).liangShanSuccess) {
+    } else if ((newState as any).liangShanSuccess) {
       console.log('[LiangShan] Popup triggered:', { currentVotes, activeCount: activePlayerCount(newState), liangShanSuccess: (newState as any).liangShanSuccess })
       addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
       // 显示梁山聚义成功弹窗，3s 后主动推进到下一局
@@ -4512,7 +4522,8 @@ watch(
         if (aiDealer && isBotPlayer(aiDealer)) {
           // AI 庄家：自动发牌
           setTimeout(() => {
-            const needsSecondRoll = gameState.value?.roundMultiplier === 1 &&
+            if (gameState.value?.phase !== GamePhase.STARTING) return
+            const needsSecondRoll = (gameState.value?.roundMultiplier ?? 1) === 1 &&
               (gameState.value?.diceRollCount ?? 2) >= 2
             const doDeal = () => {
               if (gameState.value?.phase === GamePhase.STARTING) {
@@ -4521,7 +4532,7 @@ watch(
             }
             if (needsSecondRoll) {
               void onRollSecondDice()
-              setTimeout(doDeal, 700)
+              setTimeout(doDeal, 1500)
             } else {
               doDeal()
             }

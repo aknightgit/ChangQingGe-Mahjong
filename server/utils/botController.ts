@@ -136,6 +136,14 @@ export class BotController {
    * 3. 人类玩家的吃按钮可以被清除（因为碰/杠/胡优先级更高）
    * 4. 人类的胡按钮必须在 hesitationWindow 内保持可用，等人类自己响应或超时
    */
+  /** AI 吃碰随机延迟（0.5-2s），仅有人类玩家时生效 */
+  private async randomClaimDelay(game: GameState): Promise<void> {
+    const hasHuman = game.players.some(p => !this.deps.isPlayerBotControlled(p));
+    if (!hasHuman) return;
+    const delay = 500 + Math.random() * 1500;
+    await new Promise(resolve => setTimeout(resolve, delay));
+  }
+
   async handleBotPendingActions(gameId: string): Promise<boolean> {
     const { games, isPlayerBotControlled, getCachedWinOptions, handlePass, handlePeng, handleKong, handleHu, handleChow, resolvePendingAction, countExposedTilesExcludingFlowerMelds, persistGame, broadcastGameState, schedulePendingActionTimeout, clearCurrentTurnPendingActions, moveToNextPlayer, timerManager, beginCurrentPlayerTurn } = this.deps;
 
@@ -206,6 +214,11 @@ export class BotController {
 
         const action = await shouldClaimPendingAction(player, filteredHigherActions, game);
         console.log(`[BotService] ${player.name} priority action: ${action} (from ${filteredHigherActions})`);
+
+        // AI 吃碰随机延迟
+        if (action !== ActionType.PASS && action !== ActionType.HU) {
+          await this.randomClaimDelay(game);
+        }
 
         if (action === ActionType.PENG) {
           const pengExposedCount = countExposedTilesExcludingFlowerMelds(player);
@@ -307,6 +320,8 @@ export class BotController {
       handlePass(game, player);
       return;
     }
+    // AI 吃牌随机延迟
+    await this.randomClaimDelay(game);
     pa.selectedChowTileIds = selectBotChowTileIds(player, game, pa.tile, pa.chowOptions);
     if (pa.selectedChowTileIds && pa.selectedChowTileIds.length > 0) {
       // ★ 修复：直接调用 handleChow，不通过 resolvePendingAction（避免 shouldClaimPendingAction 的随机概率推翻已做出的吃牌决策）
