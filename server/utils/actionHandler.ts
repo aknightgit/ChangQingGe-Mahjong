@@ -306,13 +306,13 @@ export class ActionHandler {
       sourceTileId: lastDiscard.id
     });
 
-    // 吃牌广播（牌局快讯+语音）
-    const chowTileName = getTileDisplayName(lastDiscard);
-    const chowSourceName = game.players.find(p => p.id === lastDiscardPlayerId)?.name || '';
-    broadcastQuickMessage(game.gameId, `🍽️ ${player.name}吃了${chowSourceName}的${chowTileName}`, 'info', 'chow');
-
     // 记录互包
     const lastDiscardPlayerId = getLastDiscardPlayerId(game);
+
+    // 吃牌广播（牌局快讯+语音）
+    const chowTileName = getTileDisplayName(lastDiscard);
+    const chowSourceName = lastDiscardPlayerId ? (game.players.find(p => p.id === lastDiscardPlayerId)?.name || '') : '';
+    broadcastQuickMessage(game.gameId, `🍽️ ${player.name}吃了${chowSourceName}的${chowTileName}`, 'info', 'chow');
     if (lastDiscardPlayerId) {
       this.deps.recordBailoutAction(game.gameId, player.id, lastDiscardPlayerId, MeldType.SEQUENCE);
       this.deps.checkAndBroadcastBailout(game, player.id, lastDiscardPlayerId);
