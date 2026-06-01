@@ -2320,23 +2320,31 @@ const dealerPlayer = computed(() => {
 /** 新开局流程 - 点击"开始牌局":调用 beginGame,服务端原子完成洗牌+发牌+第一次掷骰子 */
 const enterStartingPhaseWithDiceOverlay = async () => {
   try {
+    // 不预显示 overlay,等 API 返回后再显示(防止默认 dice 值触发动画)
     diceFromWebSocket.value = false
     hasDicePreview.value = false
     diceRollTriggerKey.value = 0
-
-    // 【修复】立即显示骰子overlay(idle状态),不等API返回
-    diceValues.value = [0, 0]
-    showDiceOverlay.value = true
-
     // 调用 beginGame API(服务端原子完成洗牌+发牌+骰子)
     const response = await beginGame({ hesitationWindow: hesitationWindow.value })
     const res = response as any
     if (res?.success) {
       if (res.humanRollPending) {
-        // 人类庄家:overlay已显示idle状态,无需额外操作
+        // 人类庄家:显示 idle 状态,等玩家自己点击掷骰子
+        diceValues.value = [0, 0]
+        showDiceOverlay.value = true
         hasDicePreview.value = true
       } else {
-        // AI 庄家:设骰子值 → 触发动画
+        // AI 庄家:先设骰子值→再显示 overlay→再触发动画(防止默认值触发错误倍数)
+        if (res.dice && Array.isArray(res.dice) && res.dice.length >= 2) {
+          diceValues.value = [res.dice[0], res.dice[1]]
+        }
+        // 立即更新倍数,不等 polling
+        if (typeof res.roundMultiplier === 'number' && gameState.value) {
+          (gameState.value as any).roundMultiplier = res.roundMultiplier
+        }
+        hasDicePreview.value = true
+        showDiceOverlay.value = true
+        diceRollTriggerKey.value++
         playSound('dice-roll')
         playVoiceAction('diceRoll')
         setTimeout(() => {
@@ -2360,29 +2368,26 @@ const enterStartingPhaseWithDiceOverlay = async () => {
   }
 }
 
-/** 新开局流程 - 掷骰子（父组件全权控制） */
+/** 新开局流程 - 掷骰子（恢复25ca001逻辑：先触发动画再调API） */
 const onRollDice = async () => {
   try {
+    // 【修复】先触发动画+音效（25ca001顺序），再调API
+    diceRollTriggerKey.value++
     playSound('dice-roll')
     playVoiceAction('diceRoll')
+    // 判断是第一次掷还是第二次掷：_humanRollPending 表示第一次
     const needsFirstRoll = (gameState.value as any)?._humanRollPending
     if (needsFirstRoll) {
       const res = await rollFirstDice() as any
       if (res?.success && res.dice1 && res.dice2) {
-        // 先触发动画，延迟设值让滚动动画先播放
-        diceRollTriggerKey.value++
-        setTimeout(() => {
-          diceValues.value = [res.dice1, res.dice2]
-        }, 600)
+        diceValues.value = [res.dice1, res.dice2]
       }
     } else {
       await rollSecondDice()
-      diceRollTriggerKey.value++
     }
   } catch (e: any) {
     console.error('[onRollDice] Failed:', e)
     addBroadcast(e?.data?.message || e?.message || '掷骰子失败', 'warn')
-    diceResetTrigger.value++
   }
 }
 
