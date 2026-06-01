@@ -22,8 +22,8 @@
               :class="{ 'dice-row--clickable': isDealer }"
               @click="isDealer && onRoll()"
             >
-              <Dice3D :value="1" :state="'idle'" />
-              <Dice3D :value="1" :state="'idle'" />
+              <Dice3D :value="dice1" :state="'idle'" />
+              <Dice3D :value="dice2" :state="'idle'" />
             </div>
             <p v-if="maxRollsLimit > 1" class="dice-hint dice-hint--sub">{{ currentRoll }}/{{ maxRollsLimit }}</p>
             <button
@@ -93,6 +93,8 @@ const props = defineProps<{
   isDealer?: boolean
   /** 服务器广播的骰子结果 - 非庄家玩家通过此prop接收并自动播放动画 */
   rollTriggerKey?: number
+  /** 父组件递增此值可强制重置到 idle（如 API 失败） */
+  resetTrigger?: number
 }>()
 
 const emit = defineEmits<{
@@ -105,7 +107,7 @@ const phase = ref<'idle' | 'rolling' | 'result'>('idle')
 const rollingSeed = ref(Date.now() % 997)
 const currentRoll = ref(0)
 const showResultBurst = ref(false)
-const RESULT_HOLD_MS = 500
+const RESULT_HOLD_MS = 300
 const maxRollsLimit = computed(() => props.maxRolls || 1)
 const canReroll = computed(() => currentRoll.value < maxRollsLimit.value && phase.value === 'result')
 const isQuadCombo = computed(() => {
@@ -166,11 +168,7 @@ const onRoll = () => {
   phase.value = 'rolling'
   showResultBurst.value = false
   clearBurstTimer()
-
-  setTimeout(() => {
-    phase.value = 'result'
-    flashResultBurst()
-  }, 850)
+  // 不再自动跳到 result — 等 dice1/dice2 prop 拿到真实值后由 watch 触发
 }
 
 const onReroll = () => onRoll()
@@ -182,29 +180,57 @@ const onRollAndDeal = () => {
   phase.value = 'rolling'
   showResultBurst.value = false
   clearBurstTimer()
-
+  // 骰子值更新后由 watch 触发 result，然后自动发牌
+  const unwatch = watch(() => [props.dice1, props.dice2], ([d1, d2]) => {
+    if (d1 > 0 && d2 > 0 && d1 <= 6 && d2 <= 6) {
+      unwatch()
+      setTimeout(() => {
+        phase.value = 'result'
+        flashResultBurst()
+        setTimeout(() => {
+          onDeal()
+        }, Math.max(500, RESULT_HOLD_MS + 200))
+      }, 500)
+    }
+  }, { deep: true })
+  // 超时保护：5秒后如果还没拿到值，强制发牌
   setTimeout(() => {
-    phase.value = 'result'
-    flashResultBurst()
-    setTimeout(() => {
+    unwatch()
+    if (phase.value === 'rolling') {
+      phase.value = 'result'
       onDeal()
-    }, Math.max(800, RESULT_HOLD_MS + 300))
-  }, 850)
+    }
+  }, 5000)
 }
 
 onMounted(() => {
   currentRoll.value = 0
   if (props.rollTriggerKey && props.rollTriggerKey > 0) {
+    // 🔥 rollTriggerKey 已递增（客户端触发），播放 rolling → result 动画
     rollingSeed.value = Date.now() % 100000
     phase.value = 'rolling'
     setTimeout(() => {
       phase.value = 'result'
       flashResultBurst()
-    }, 850)
+    }, 600)
+  } else if (props.dice1 > 0 && props.dice2 > 0 && props.dice1 <= 6 && props.dice2 <= 6) {
+    // 🔥 骰子已由服务端预计算（beginGame），直接显示结果
+    phase.value = 'result'
+    flashResultBurst()
   } else {
     phase.value = 'idle'
   }
 })
+
+// 当骰子值更新为真实值（>0）时，自动进入 result 展示
+watch(() => [props.dice1, props.dice2], ([d1, d2]) => {
+  if (phase.value === 'rolling' && d1 > 0 && d2 > 0 && d1 <= 6 && d2 <= 6) {
+    setTimeout(() => {
+      phase.value = 'result'
+      flashResultBurst()
+    }, 500)
+  }
+}, { deep: true })
 
 // 监听服务器广播的骰子事件 - 自动播放动画（非庄家玩家）
 watch(() => props.rollTriggerKey, (key) => {
@@ -214,14 +240,18 @@ watch(() => props.rollTriggerKey, (key) => {
   phase.value = 'rolling'
   showResultBurst.value = false
   clearBurstTimer()
-  setTimeout(() => {
-    phase.value = 'result'
-    flashResultBurst()
-  }, 850)
+  // 等 dice1/dice2 拿到真实值后由上面的 watch 触发 result
 })
 
 onBeforeUnmount(() => {
   clearBurstTimer()
+})
+
+// API失败时父组件递增 resetTrigger，重置到 idle
+watch(() => props.resetTrigger, () => {
+  phase.value = 'idle'
+  clearBurstTimer()
+  showResultBurst.value = false
 })
 
 const onDeal = () => {

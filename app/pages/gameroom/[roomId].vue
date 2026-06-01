@@ -267,8 +267,15 @@
           {{ drawBlockedNoticeText }}
         </div>
 
+        <!-- [2026-05-29] 验牌亮牌阶段 -->
+        <div v-if="showWinnerReveal" class="reveal-phase-overlay">
+          <div class="reveal-phase-text">客官请验牌！</div>
+          <div class="reveal-phase-countdown">{{ revealCountdown }}s</div>
+        </div>
+
         <div v-if="showSettlement" class="settle-overlay">
   <div class="settle-panel">
+    <template v-if="!settleFinalMode">
     <h2 class="settle-title-center">{{ isWallExhaustedSettlement ? '💨 流局了，下把翻倍！！' : '本局输赢' }}</h2>
 
     <div class="settle-rounds settle-rounds--single">
@@ -284,7 +291,7 @@
                 <tr>
                   <th>玩家</th>
                   <th>胡序</th>
-                  <th>胡牌牌面</th>
+                  <th>牌型</th>
                   <th>花</th>
                   <th>番数</th>
                   <th>门清</th>
@@ -301,7 +308,7 @@
                 >
                   <td>{{ row.playerName }}</td>
                   <td>{{ row.winSequence }}</td>
-                  <td class="settle-round-tiles">{{ row.tiles }}</td>
+                  <td>{{ row.handType }}</td>
                   <td>{{ row.flowerCount }}</td>
                   <td>{{ row.baseFan }}</td>
                   <td>{{ row.menQing }}</td>
@@ -317,51 +324,69 @@
         </div>
       </div>
     </div>
+    </template>
 
-    <!-- 总结算统计（退房结算时显示） -->
-    <div v-if="isSettleRequested && settlementData?.playerStats" class="settle-details" style="border-top:1px solid rgba(255,215,0,0.15);padding-top:16px;margin-top:10px">
-      <h3 class="settle-title-center" style="font-size:1.1rem;margin-bottom:14px">📊 总成绩单</h3>
-      <div class="settle-detail-header">
-        <span class="settle-detail-name"></span>
-        <span class="settle-detail-stat settle-detail-stat--record">总输赢</span>
-        <span class="settle-detail-stat settle-detail-stat--record">有效输赢</span>
-        <span class="settle-detail-stat">🤖 vs AI</span>
-        <span class="settle-detail-stat">🀄 自摸</span>
-        <span class="settle-detail-stat">🎯 捉冲</span>
-        <span class="settle-detail-stat settle-detail-stat--win">最大赢</span>
-        <span class="settle-detail-stat settle-detail-stat--loss">最大输</span>
-      </div>
-      <div class="settle-detail-grid">
-        <div v-for="stat in sortedSettleStats" :key="stat.id" class="settle-detail-row">
-          <span class="settle-detail-name">{{ stat.name }}</span>
-          <span class="settle-detail-stat settle-detail-stat--record">{{ (stat.totalScore ?? 0) > 0 ? '+' : '' }}{{ stat.totalScore ?? 0 }}</span>
-          <span class="settle-detail-stat settle-detail-stat--record">{{ stat.effectiveScore ?? stat.totalScore ?? 0 }}</span>
-          <span class="settle-detail-stat">{{ stat.vsAiScore ?? 0 }}</span>
-          <span class="settle-detail-stat">{{ stat.selfDraws ?? 0 }}</span>
-          <span class="settle-detail-stat">{{ stat.discards ?? 0 }}</span>
-          <span class="settle-detail-stat settle-detail-stat--win">+{{ stat.maxWin ?? 0 }}</span>
-          <span class="settle-detail-stat settle-detail-stat--loss">{{ stat.maxLoss ?? 0 }}</span>
-        </div>
-      </div>
-      <p style="text-align:center;font-size:0.72rem;opacity:0.5;margin-top:10px">有效输赢 = 仅统计纯真人局的输赢，排除与AI对战的部分</p>
-    </div>
+
 
     <div class="settle-actions">
-      <div v-if="isWallExhaustedSettlement" class="auto-next-countdown" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;justify-content:center;font-size:0.85rem;opacity:0.8">
-        <span class="auto-next-spinner"></span>
-        <span>倒计时 {{ wallExhaustedCountdown }}s 后自动下一局</span>
+      <!-- 第一阶段：本局输赢（独面板） -->
+      <div v-if="!settleFinalMode">
+        <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:8px">
+          <div class="auto-next-countdown" style="display:flex;align-items:center;gap:8px;font-size:0.85rem;opacity:0.8">
+            <span class="auto-next-spinner"></span>
+            <span>倒计时 {{ wallExhaustedCountdown }}s 后{{ isSettleRequested ? '显示最终结算' : '自动下一局' }}</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button v-if="canReviewHuSelection" class="settle-save-btn settle-save-btn--secondary" @click="openHuReviewPanel">
+              回看胡牌选择
+            </button>
+            <button class="settle-save-btn" @click="isSettleRequested ? finishSettleToFinal() : startNextRound()">
+              {{ isSettleRequested ? '查看最终结算' : '下一局' }}{{ wallExhaustedCountdown > 0 ? ' (' + wallExhaustedCountdown + 's)' : '' }}
+            </button>
+          </div>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;justify-content:center;width:100%">
-        <button v-if="canReviewHuSelection" class="settle-save-btn settle-save-btn--secondary" @click="openHuReviewPanel">
-          回看胡牌选择
-        </button>
-        <button class="settle-save-btn" @click="startNextRound">
-          下一局{{ wallExhaustedCountdown > 0 ? ' (' + wallExhaustedCountdown + 's)' : '' }}
-        </button>
+      <!-- 第二阶段：最终结算（独面板，表格化列对齐） -->
+      <div v-if="settleFinalMode" class="final-settle-panel">
+        <h3 class="settle-title-center" style="font-size:1.1rem;margin-bottom:14px;color:#ffd700">🎯 最终结算</h3>
+        <div class="settle-table-wrap">
+          <table class="settle-round-table settle-round-table--compact settle-round-table--final">
+            <thead>
+              <tr>
+                <th>玩家</th>
+                <th style="color:#ffd700;font-weight:800">总输赢</th>
+                <th style="color:#ffd700;font-weight:800">有效输赢</th>
+                <th>🤖 vs AI</th>
+                <th>🀄 自摸</th>
+                <th>🎯 捉冲</th>
+                <th class="settle-detail-stat--win">最大赢</th>
+                <th class="settle-detail-stat--loss">最大输</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="stat in sortedSettleStats" :key="stat.id">
+                <td>{{ stat.name }}</td>
+                <td :style="{ color: (stat.totalScore ?? 0) > 0 ? '#4caf50' : (stat.totalScore ?? 0) < 0 ? '#ff6b6b' : '#fff' }">{{ (stat.totalScore ?? 0) > 0 ? '+' : '' }}{{ stat.totalScore ?? 0 }}</td>
+                <td :style="{ color: (stat.effectiveScore ?? 0) > 0 ? '#ffd700' : (stat.effectiveScore ?? 0) < 0 ? '#ff6b6b' : '#fff', fontWeight: 800 }">{{ (stat.effectiveScore ?? stat.totalScore ?? 0) > 0 ? '+' : '' }}{{ stat.effectiveScore ?? stat.totalScore ?? 0 }}</td>
+                <td>{{ stat.vsAiScore ?? 0 }}</td>
+                <td>{{ stat.selfDraws ?? 0 }}</td>
+                <td>{{ stat.discards ?? 0 }}</td>
+                <td style="color:#4caf50">+{{ stat.maxWin ?? 0 }}</td>
+                <td style="color:#ff6b6b">{{ stat.maxLoss ?? 0 }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="text-align:center;font-size:0.72rem;opacity:0.5;margin-top:10px">有效输赢 = 仅统计纯真人局的输赢，排除与AI对战的部分</p>
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:14px">
+          <button class="settle-save-btn" @click="onExitSettle">退出</button>
+        </div>
       </div>
     </div>
   </div>
 </div>
+
+        <!-- 胡牌玩家手牌展示已移除，直接进本局输赢 -->
 
         <!-- 设置面板（悬浮玻璃态，定位在设置按钮下方） -->
         <Teleport to="body">
@@ -659,10 +684,8 @@
                     @click="openHuReviewPanel"
                   >回看胡牌选项</button>
                 </div>
-                <div v-else-if="isAIControlled" class="inline-action-buttons">
-                  <div class="ai-controlled-notice">
-                    🤖 已由AI自动出牌
-                  </div>
+                <div v-if="isAIControlled" class="comeback-floating-bar">
+                  <span class="comeback-label">🤖 AI托管中</span>
                   <button
                     class="inline-action-btn inline-action-btn--comeback"
                     @click="onPlayerBack"
@@ -696,6 +719,11 @@
                     :disabled="isInteractionLocked || thinkFreezeActive"
                     @click="onRebel"
                   >🚨造反</button>
+                  <button
+                    v-if="!isSpectator && !isAIControlled"
+                    class="inline-action-btn inline-action-btn--bot-mode"
+                    @click="onBotModeDirect"
+                  >🤖托管</button>
                   <button
                     v-if="showLiangShanButton"
                     class="inline-action-btn inline-action-btn--liangshan"
@@ -733,11 +761,16 @@
               房间 #{{ gameState?.roomNumber || '????' }}
             </p>
             <button
+              v-if="gameState?.phase === 'playing' && !isAIControlled && !isSpectator"
+              class="settle-btn-header ai-takeover-btn"
+              @click="onBotModeDirect"
+            >🤖 AI托管</button>
+            <button
               v-if="gameState?.phase === GamePhase.WAITING
                 ? canManualStartWaitingGame
-                : (gameState?.phase === 'playing' && !!currentPlayer?.isDealer) || gameState?.phase === 'ended'"
+                : (gameState?.phase === 'playing' && !isAIControlled) || gameState?.phase === 'ended'"
               class="settle-btn-header"
-              :class="{ 'start-game-glow': canManualStartWaitingGame }"
+              :class="{ 'start-game-glow': canManualStartWaitingGame, 'settle-btn--grayed': isSettleRequested }"
               :disabled="isGameStarting && gameState?.phase === GamePhase.WAITING"
               @click="gameState?.phase === GamePhase.WAITING ? onStartGame() : onRequestSettle()"
             >
@@ -829,14 +862,11 @@
               </div>
 
               <!-- 状态提示 -->
-              <div v-if="thinkFreezeActive || isAIControlled" class="turn-status-text">
+              <div v-if="thinkFreezeActive" class="turn-status-text">
                 <template v-if="thinkFreezeActive">
                   🧠 {{ thinkFreezePlayerName }} 在思考中... {{ thinkFreezeCountdown }}s
                 </template>
-                <template v-else-if="isAIControlled">
-                  🤖 AI托管中
-                </template>
-              </div>
+                </div>
               <CircularActionButtons
                 :available-actions="filteredCircularAvailableActions"
                 :is-connected="isConnected"
@@ -854,7 +884,6 @@
               />
               <!-- 更多特殊操作：常驻显示聚义/造反/倒计时 -->
               <div class="extra-actions-bar">
-                <span class="extra-actions-label">更多操作</span>
                 <div class="extra-actions-group">
                   <button
                     class="extra-action-btn extra-action-btn--liangshan"
@@ -866,13 +895,8 @@
                     :disabled="showRebel === false || isInteractionLocked || !isConnected || thinkFreezeActive"
                     @click="onRebel"
                   >🚨 造反</button>
-                  <button
-                    v-if="showHu"
-                    class="extra-action-btn extra-action-btn--hu"
-                    :disabled="isInteractionLocked || isAIControlled"
-                    @click="onHu"
-                  >🏆 您胡了</button>
-                  <span v-if="isWinner && confirmedWinner" class="turn-timer-inline turn-timer--winner">🎉 你赢了！</span>
+                  <!-- 胡按钮已整合到 CircularActionButtons -->
+                  <!--🏆 胡</button>-->
                   <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
                     ⏱ {{ turnTimer }}s
                   </span>
@@ -892,8 +916,9 @@
           :max-rolls="effectiveMaxRolls"
           :is-dealer="isDealer"
           :roll-trigger-key="diceRollTriggerKey"
+          :reset-trigger="diceResetTrigger"
           @deal="onDealTiles"
-          @roll="onRerollDice"
+          @roll="onRollDice"
         />
       </Teleport>
 
@@ -1103,7 +1128,10 @@ const {
     connect,
     disconnect,
     executeAction,
-    startGame,
+    beginGame,
+    rollFirstDice,
+    rollSecondDice,
+    dealGame,
     refreshState,
     forceRefreshState,
     refreshTingPreview,
@@ -1228,9 +1256,12 @@ const actionButtonsVisibleUntil = ref(0)
 const isGameStarting = ref(false)
 const showDiceOverlay = ref(false)
 const diceValues = ref<[number, number]>([1, 1])
+const diceExtra = ref<[number, number] | undefined>(undefined)
 const hasDicePreview = ref(false)
+const diceFromWebSocket = ref(false)
 /** 服务器广播骰子结果时递增，触发DiceAnimation自动播放动画 */
 const diceRollTriggerKey = ref(0)
+const diceResetTrigger = ref(0)  // API失败时递增，重置骰子组件到idle
 const showDoubleReminder = ref(false)
 const flowerReplacementNotice = ref<Tile | null>(null)
 const showLiangShanOverlay = ref(false)
@@ -1387,6 +1418,8 @@ const evaluateViewport = () => {
 const isHiddenTile = (tile: any) => String(tile?.id || '').startsWith('hidden-') || tile?.value === 0
 const isOpponentHandRevealed = (player?: Player | null) => {
   if (!player || player.id === currentPlayer.value?.id) return false
+  // REVEAL 阶段：所有玩家手牌翻开
+  if (gameState.value?.phase === GamePhase.REVEAL) return true
   const hand = player.hand?.concealedTiles || []
   return hand.length > 0 && hand.some(tile => !isHiddenTile(tile))
 }
@@ -1598,8 +1631,14 @@ onMounted(async () => {
     const detail = event.detail
     if (!detail) return
     diceValues.value = [detail.dice1, detail.dice2]
-    hasDicePreview.value = true
-    diceRollTriggerKey.value++
+    diceExtra.value = detail.dice3 !== undefined ? [detail.dice3, detail.dice4] : undefined
+    // overlay已显示时不重新触发滚动画，防server端diceRoll二次渲染
+    if (!showDiceOverlay.value) {
+      // WebSocket 事件先于 HTTP 响应到达 - 立即显示 overlay
+      diceRollTriggerKey.value++
+      showDiceOverlay.value = true
+      playVoiceAction('diceRoll')
+    }
     playSound('dice-roll')
   }) as EventListener)
 
@@ -1610,9 +1649,14 @@ onMounted(async () => {
     })
     // 根据广播内容播放音效和语音
     const text = detail.text || ''
-    if (text.includes('补花')) { playSound('tile-draw'); playVoiceAction('flowerReplace') }
-    else if (text.includes('自摸')) playVoiceAction('selfHu')
-    else if (text.includes('胡')) playVoiceAction('hu')
+    const actionKind = detail.actionKind || ''
+    // 吃碰杠胡：所有玩家都播放语音（包括操作者）
+    if (actionKind === 'chow') { playVoiceAction('chow') }
+    else if (actionKind === 'pong') { playVoiceAction('pong') }
+    else if (actionKind === 'kong') { playVoiceAction('kong') }
+    else if (actionKind === 'hu') { playVoiceAction('hu') }
+    else if (actionKind === 'selfHu') { playVoiceAction('selfHu') }
+    else if (actionKind === 'flowerReplace') { playVoiceAction('flowerReplace') }
   }) as EventListener)
 
   if (process.client) {
@@ -1670,7 +1714,7 @@ onUnmounted(() => {
   resumeListener = null
 })
 
-const hesitationWindow = computed(() => Math.max(1000, Number(gameState.value?.hesitationWindow ?? 5000)))
+const hesitationWindow = computed(() => { const v = Number(gameState.value?.hesitationWindow); return Number.isFinite(v) && v > 0 ? v : 5000 })
 const currentFreezeUntil = computed(() => Number((gameState.value as any)?._freezeUntil ?? 0))
 const playerHand = computed(() => currentPlayer.value?.hand?.concealedTiles || [])
 const playerMelds = computed(() => currentPlayer.value?.hand?.exposedMelds || [])
@@ -1734,16 +1778,35 @@ const playerDiscards = computed(() => {
   return getVisiblePlayerDiscards(currentPlayer.value)
 })
 const roundDisplay = computed(() => `第${currentRound.value}局`)
-const getDiceRoundMultiplier = (dice1: number, dice2: number) => {
+const getDiceRoundMultiplier = (dice1: number, dice2: number, dice3?: number, dice4?: number) => {
   const isDouble = dice1 === dice2
   const isOneFourCombo = (dice1 === 1 && dice2 === 4) || (dice1 === 4 && dice2 === 1)
 
+  let singleMultiplier = 1
   if (isDouble) {
-    if (dice1 === 1 || dice1 === 4) return 4
-    return 2
+    singleMultiplier = (dice1 === 1 || dice1 === 4) ? 4 : 2
+  } else if (isOneFourCombo) {
+    singleMultiplier = 2
   }
-  if (isOneFourCombo) return 2
-  return 1
+
+  // 两次掷骰子：比较两次结果
+  if (dice3 !== undefined && dice4 !== undefined) {
+    const sum1 = dice1 + dice2
+    const sum2 = dice3 + dice4
+    const combo1 = [Math.min(dice1, dice2), Math.max(dice1, dice2)]
+    const combo2 = [Math.min(dice3, dice4), Math.max(dice3, dice4)]
+
+    // 完全相同组合（顺序无关）→ ×4
+    if (combo1[0] === combo2[0] && combo1[1] === combo2[1]) {
+      return Math.max(singleMultiplier, 4)
+    }
+    // 点数之和相同 → ×2
+    if (sum1 === sum2) {
+      return Math.max(singleMultiplier, 2)
+    }
+  }
+
+  return singleMultiplier
 }
 const effectiveMaxRolls = computed(() => {
   const raw = Number(gameState.value?.diceRollCount ?? route.query.dice ?? 2)
@@ -1753,7 +1816,7 @@ const roundMultiplier = computed(() => {
   const actualRound = Number(gameState.value?.roundMultiplier ?? 0)
   if (actualRound > 0) return actualRound
   if (showDiceOverlay.value && hasDicePreview.value) {
-    return getDiceRoundMultiplier(diceValues.value[0], diceValues.value[1])
+    return getDiceRoundMultiplier(diceValues.value[0], diceValues.value[1], diceExtra.value?.[0], diceExtra.value?.[1])
   }
   return 1
 })
@@ -1768,7 +1831,7 @@ const globalMultiplier = computed(() => {
   }
 
   if (showDiceOverlay.value && hasDicePreview.value) {
-    return Math.min(inherit * getDiceRoundMultiplier(diceValues.value[0], diceValues.value[1]), 8)
+    return Math.min(inherit * getDiceRoundMultiplier(diceValues.value[0], diceValues.value[1], diceExtra.value?.[0], diceExtra.value?.[1]), 8)
   }
 
   return game.globalMultiplier ?? inherit
@@ -1879,6 +1942,7 @@ const statsPlayers = computed(() => {
       id: p.id,
       name: p.name,
       score: p.score || 0,
+      isBotControlled: !!(p as any).isBotControlled,
       wins: p.status === 'won' ? 1 : 0,
       losses: p.status === 'lost' ? 1 : 0,
       color: positionColors[p.position] || 'south',
@@ -2039,7 +2103,9 @@ const canManualStartWaitingGame = computed(() =>
 const overlayReason = computed(() => roomDismissedReason.value || gameState.value?.endReason || null)
 const isOverlayVisible = computed(() => {
   if (roomDismissedReason.value) return true
-  if (!isGameEnded.value) return false
+  if (phase === GamePhase.REVEAL) {
+    return false; // 亮牌阶段禁止出牌
+  }
   if (isWallExhaustedSettlement.value) return false
   return overlayReason.value !== GameEndReason.LAST_PLAYER
 })
@@ -2130,6 +2196,7 @@ const tingPreviewItems = computed(() => {
 const getHuOptionBasePoints = (opt: any) => Number(opt?.summary?.finalPoints ?? opt?.score ?? 0)
 // finalPoints = 自摸时单个输家应付的点数，或捉冲时放冲者独自应付的点数
 const getHuOptionPayerCount = (opt: any) => {
+  if (opt?._cachedPayerCount != null) return opt._cachedPayerCount
   if (opt?.type !== 'self_draw') return 1
   const players = Array.isArray(gameState.value?.players) ? gameState.value.players : []
   const losers = players.filter(player => player.id !== playerId.value && player.status !== 'won')
@@ -2231,53 +2298,79 @@ const dealerPlayer = computed(() => {
   return players.find(player => player.isDealer) || null
 })
 
+/** 新开局流程 - 点击"开始牌局"：调用 beginGame，服务端原子完成洗牌+发牌+第一次掷骰子 */
 const enterStartingPhaseWithDiceOverlay = async () => {
-    try {
-    // 在 API 调用前就设标记，防止 socket.io 广播先到导致 watcher 重复触发
-    hasDicePreview.value = true
-    await $fetch('/mahjong/api/game/start', {
-      method: 'POST',
-      body: {
-        gameId: roomId.value,
-        playerId: playerId.value,
-        phaseOnly: true
+  try {
+    // 不预显示 overlay，等 API 返回后再显示（防止默认 dice 值触发动画）
+    diceFromWebSocket.value = false
+    hasDicePreview.value = false
+    diceRollTriggerKey.value = 0  // 重置，确保后续 ++ 能触发 watch
+    // 调用 beginGame API（服务端原子完成洗牌+发牌+骰子）
+    const response = await beginGame({ hesitationWindow: hesitationWindow.value })
+    const res = response as any
+    if (res?.success) {
+      if (res.humanRollPending) {
+        // 人类庄家：显示 idle 状态，等玩家自己点击掷骰子
+        diceValues.value = [0, 0]  // 清除默认值，防止 DiceAnimation 误判为已掷
+        showDiceOverlay.value = true
+      } else {
+        // AI 庄家：先设骰子值 → 再显示 overlay → 再触发动画（防止默认值触发错误倍数）
+        if (res.dice && Array.isArray(res.dice) && res.dice.length >= 2) {
+          diceValues.value = [res.dice[0], res.dice[1]]
+        }
+        // 立即更新倍数，不等 polling
+        if (typeof res.roundMultiplier === 'number' && gameState.value) {
+          (gameState.value as any).roundMultiplier = res.roundMultiplier
+        }
+        hasDicePreview.value = true
+        showDiceOverlay.value = true  // DiceAnimation 挂载时读到正确的 diceValues
+        diceRollTriggerKey.value++
+        playSound('dice-roll')
+        playVoiceAction('diceRoll')
+        setTimeout(() => {
+          console.log('[autoDeal] Timer fired, phase:', gameState.value?.phase)
+          if (gameState.value?.phase === GamePhase.STARTING) {
+            void onDealTiles()
+          }
+        }, 2500)
       }
-    })
-    diceValues.value = [
-      Math.floor(Math.random() * 6) + 1,
-      Math.floor(Math.random() * 6) + 1
-    ]
-    playSound('dice-roll')
-    playVoiceAction('diceRoll')
-    showDiceOverlay.value = true
+    } else {
+      hasDicePreview.value = false
+      showDiceOverlay.value = false
+      diceFromWebSocket.value = false
+    }
   } catch (e: any) {
     console.error('[enterStartingPhaseWithDiceOverlay] Failed:', e)
     addBroadcast(e?.data?.message || e?.message || '进入下一局失败', 'warn')
+    hasDicePreview.value = false
+    showDiceOverlay.value = false
+    diceFromWebSocket.value = false
   }
 }
 
-const maybeAutoDealForBotDealer = () => {
-  const dealer = dealerPlayer.value
-  if (!dealer || !isBotPlayer(dealer)) return
-  onRerollDice()
-  window.setTimeout(() => {
-    void onDealTiles()
-  }, 420)
-}
-
-/** 自动掷骰子+发牌（AI庄家） */
-const autoRollAndDeal = () => {
-  onRerollDice()
-  // 等掷骰子动画完成（约850ms）+ 结果展示（500ms）+ 过渡
-  window.setTimeout(() => {
-    void onDealTiles()
-  }, 1800)
-}
-
-/** 仅自动掷骰子（人类庄家） */
-const autoRollOnly = () => {
-  onRerollDice()
-  // 骰子掷完，等人发牌
+/** 新开局流程 - 第二次掷骰子（仅当 diceRollCount>=2 且第一次未翻倍时） */
+const onRollDice = async () => {
+  try {
+    // 先触发动画+音效
+    diceRollTriggerKey.value++
+    playSound('dice-roll')
+    playVoiceAction('diceRoll')
+    // 判断是第一次掷还是第二次掷：_humanRollPending 表示第一次
+    const needsFirstRoll = (gameState.value as any)?._humanRollPending
+    if (needsFirstRoll) {
+      const res = await rollFirstDice() as any
+      if (res?.success && res.dice1 && res.dice2) {
+        diceValues.value = [res.dice1, res.dice2]
+      }
+    } else {
+      await rollSecondDice()
+    }
+  } catch (e: any) {
+    console.error('[onRollDice] Failed:', e)
+    addBroadcast(e?.data?.message || e?.message || '掷骰子失败', 'warn')
+    // API失败，重置骰子动画到idle
+    diceResetTrigger.value++
+  }
 }
 
 const startNextRound = async () => {
@@ -2289,13 +2382,8 @@ const startNextRound = async () => {
   showSettlement.value = false
   settlementData.value = null
   isHuReviewMode.value = false
-  await enterStartingPhaseWithDiceOverlay()
-  await forceRefreshState()
-  window.setTimeout(() => {
-    if (gameState.value?.phase === GamePhase.STARTING && showDiceOverlay.value) {
-      void onDealTiles()
-    }
-  }, 1700)
+  // 不再主动调 API，服务端 autoStartNextRound 会自动切到 STARTING
+  // 客户端只需关闭结算弹窗，等 phase watcher 响应 STARTING 阶段
 }
 const isInteractionLocked = computed(() => isOverlayVisible.value)
 
@@ -2331,7 +2419,7 @@ const playerResults = computed(() => {
         winOrder: player.winOrder,
         rankLabel: isWinner && player.winOrder ? formatOrdinal(player.winOrder) : '未胡牌',
         statusLabel: isWinner ? '赢家' : player.status === 'lost' ? '输了' : '未胡牌',
-        winRoundLabel: isWinner && player.winRound ? `第${player.winRound}轮` : null,
+        winRoundLabel: isWinner ? (player.isSelfDrawn ? `自摸${player.winningTileName ? '-' + player.winningTileName : ''}` : (player.discarderName ? `捉冲${player.discarderName}${player.winningTileName ? '-' + player.winningTileName : ''}` : `捉冲${player.winningTileName ? '-' + player.winningTileName : ''}`)) : '' ,
         scoreLabel: formatScore(finalScore),
         scoreClass: getScoreClass(finalScore)
       }
@@ -2782,7 +2870,14 @@ const fetchWinOptions = async () => {
     const res = await $fetch<any>('/api/game/win-options', {
       query: { gameId: roomId.value, playerId: currentPlayer.value?.id }
     })
-    winOptions.value = (res.winOptions || []).slice(0, 3)
+    const options = (res.winOptions || []).slice(0, 3)
+    // 快照当前输家人数，避免后续牌局进展导致总赢变动
+    const players = Array.isArray(gameState.value?.players) ? gameState.value.players : []
+    const loserCount = Math.max(1, players.filter(p => p.id !== playerId.value && p.status !== 'won').length)
+    for (const opt of options) {
+      opt._cachedPayerCount = opt.type === 'self_draw' ? loserCount : 1
+    }
+    winOptions.value = options
   } catch (err) {
     console.error('Failed to fetch win options:', err)
     winOptions.value = []
@@ -2821,9 +2916,9 @@ const onConfirmHu = async (index: number) => {
   playSound('tile-hu')
   const selectedOption: any = displayWinOptions.value[index]
   if (selectedOption?.type === 'self_draw') {
-    playVoiceAction('selfHu')
+    // 语音由快讯广播触发
   } else {
-    playVoiceAction('hu')
+    // 语音由快讯广播触发
   }
   lastHuReviewOptions.value = displayWinOptions.value.map((option: any) => ({ ...option }))
   lastSelectedHuCombo.value = index
@@ -3153,7 +3248,7 @@ const submitChow = (tileIds?: string[]) => {
   hideActionButtonsNow()
   resetAutoCount()
   playSound('tile-chow')
-  playVoiceAction('chow')
+  // 语音由快讯广播触发
   showChowPicker.value = false
   selectedChowOption.value = null
   executeAction(ActionType.CHOW, undefined, tileIds)
@@ -3174,7 +3269,7 @@ const onCancelChowPicker = () => {
   showChowPicker.value = false
   selectedChowOption.value = null
 }
-const onPeng = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-pong'); playVoiceAction('pong'); executeAction(ActionType.PENG) }
+const onPeng = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-pong'); /* 语音由快讯广播触发 */ executeAction(ActionType.PENG) }
 const onKong = () => {
   hideActionButtonsNow()
   resetAutoCount()
@@ -3184,15 +3279,64 @@ const onKong = () => {
 }
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); playVoiceAction('rebel'); executeAction(ActionType.REBEL) }
 const onThink = () => { resetAutoCount(); executeAction(ActionType.THINK) }
-const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); playVoiceAction('hu'); executeAction(ActionType.CHEAT_HU) }
+const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); /* 语音由快讯广播触发 */ executeAction(ActionType.CHEAT_HU) }
 
 // 退房结算
 const showSettlement = ref(false)
+const showWinnerReveal = ref(false)
+const winnerRevealData = ref<any[]>([])
+const _revealPhaseStartedAt = ref(0)
+const revealCountdown = computed(() => {
+  if (!showWinnerReveal.value || !_revealPhaseStartedAt.value) return 5
+  const elapsed = Math.floor((Date.now() - _revealPhaseStartedAt.value) / 1000)
+  return Math.max(0, 5 - elapsed)
+})
+
+// 亮牌阶段：把 winnerRevealData 中的 handTiles/exposedMeldGroups 转为牌图分组
+const getRevealGroups = (w: any): Tile[][] => {
+  const handTiles = Array.isArray(w.handTiles)
+    ? w.handTiles.filter((t: any) => t?.suit !== 'hua' && t?.suit !== 'flower')
+    : []
+  const exposedMeldGroups = Array.isArray(w.exposedMeldGroups)
+    ? w.exposedMeldGroups.map((g: any) => Array.isArray(g) ? g.filter((t: any) => t?.suit !== 'hua' && t?.suit !== 'flower') : []).filter((g: any[]) => g.length > 0)
+    : []
+  // 尝试用 arrangeWinningHand 分解手牌
+  const combos = arrangeWinningHand(handTiles, [])
+  if (combos.length > 0 && combos[0].groups?.length) {
+    const concealedGroups = combos[0].groups.map((g: any) => Array.isArray(g?.tiles) ? g.tiles : (Array.isArray(g) ? g : []))
+    return [...concealedGroups, ...exposedMeldGroups]
+  }
+  // fallback: 全部手牌作为一组
+  return [handTiles, ...exposedMeldGroups]
+}
+
+// 亮牌阶段：所有玩家手牌（明牌）
+const revealAllPlayers = computed(() => {
+  if (!showWinnerReveal.value || !gameState.value?.players?.length) return []
+  const winnerNames = new Set(winnerRevealData.value.map((w: any) => w.playerName))
+  return gameState.value.players
+    .filter((p: any) => p.status === 'playing' || winnerNames.has(p.name))
+    .map((p: any) => {
+      const hand = p.hand?.concealedTiles || []
+      const exposed = (p.hand?.exposedMelds || []).flatMap((m: any) => m.tiles || [])
+      const allTiles = [...hand, ...exposed].filter((t: any) => t?.suit !== 'hua' && t?.suit !== 'flower')
+      return {
+        id: p.id,
+        name: p.name,
+        isWinner: winnerNames.has(p.name),
+        tiles: allTiles
+      }
+    })
+})
+
 const settlementData = ref<any>(null)
 const lastAutoSettlementKey = ref('')
-const wallExhaustedCountdown = ref(5)
+const wallExhaustedCountdown = ref(10)
 const wallExhaustedTimer = ref(null)
-const isWallExhaustedSettlement = computed(() => wallExhaustedTimer.value !== null)
+
+const settleFinalMode = ref(false)
+const isRoundWallExhausted = ref(false)
+const isWallExhaustedSettlement = computed(() => isRoundWallExhausted.value)
 
 const cancelWallExhaustedCountdown = () => {
   if (wallExhaustedTimer.value !== null) {
@@ -3202,13 +3346,38 @@ const cancelWallExhaustedCountdown = () => {
   wallExhaustedCountdown.value = 0
 }
 
+const finishSettleToFinal = async () => {
+  cancelWallExhaustedCountdown()
+  settleFinalMode.value = true
+  try {
+    await $fetch('/mahjong/api/game/settle', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: currentPlayer.value?.id,
+        action: 'save',
+        debugAccessToken: typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
+      }
+    })
+  } catch (e) {
+    console.error('[Auto Save] Failed:', e)
+  }
+}
+
 const startWallExhaustedCountdown = () => {
-  wallExhaustedCountdown.value = 5
+  wallExhaustedCountdown.value = 10
+  settleFinalMode.value = false
   wallExhaustedTimer.value = window.setInterval(() => {
     wallExhaustedCountdown.value--
     if (wallExhaustedCountdown.value <= 0) {
       cancelWallExhaustedCountdown()
-      void startNextRound()
+      if (isSettleRequested.value) {
+        // 退房申请中 → 切到最终结算视图
+        settleFinalMode.value = true
+      } else {
+        // 倒计时结束 → 主动调API推进到STARTING，不被动等广播
+        void startNextRound()
+      }
     }
   }, 1000)
 }
@@ -3326,7 +3495,7 @@ const getRoundSettlementRows = (round: any) => {
       finalPoints: winner?.finalPoints ?? '-',
       winMode: winner
         ? (winner.discarderId
-          ? (winner.discarderName || '未知')
+          ? `捉冲 ${winner.discarderName || '未知'}`
           : `自摸 ${getSettlementPayerCount(round, winner)}家`)
         : '-',
       score,
@@ -3376,20 +3545,36 @@ const formatScoreSigned = (score: number) => score > 0 ? `+${score}` : `${score}
 
 const onRequestSettle = async () => {
   try {
-    const res = await $fetch('/mahjong/api/game/settle', {
-      method: 'POST',
-      body: {
-        gameId: roomId.value,
-        playerId: currentPlayer.value?.id,
-        action: 'request',
-        debugAccessToken: typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
+    if (isSettleRequested.value) {
+      // 取消退房
+      const res = await $fetch('/mahjong/api/game/settle', {
+        method: 'POST',
+        body: {
+          gameId: roomId.value,
+          playerId: currentPlayer.value?.id,
+          action: 'cancel',
+          debugAccessToken: typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
+        }
+      })
+      if ((res as any)?.success) {
+        isSettleRequested.value = false
+        settlementData.value = null
       }
-    })
-    if ((res as any)?.success) {
-      settlementData.value = (res as any).data
-      isSettleRequested.value = true
-      // 不显示结算面板，改为发广播消息
-      addBroadcast('🏠 房主已申请本局结束后退房，本局结束将自动结算', 'warn')
+    } else {
+      // 申请退房
+      const res = await $fetch('/mahjong/api/game/settle', {
+        method: 'POST',
+        body: {
+          gameId: roomId.value,
+          playerId: currentPlayer.value?.id,
+          action: 'request',
+          debugAccessToken: typeof route.query.debugAccessToken === 'string' ? route.query.debugAccessToken : undefined
+        }
+      })
+      if ((res as any)?.success) {
+        settlementData.value = (res as any).data
+        isSettleRequested.value = true
+      }
     }
   } catch (e) {
     console.error('[Settle] Failed:', e)
@@ -3411,6 +3596,11 @@ const onSaveSettle = async () => {
   } catch (e) {
     console.error('[Settle Save] Failed:', e)
   }
+}
+
+const onExitSettle = () => {
+  showSettlement.value = false
+  backToLobby()
 }
 
 // 玩家操作卡片
@@ -3534,6 +3724,45 @@ const onBotMode = async () => {
       }
     })
     addBroadcast(`🤖 ${currentPlayer.value?.name} 已托管给AI！`, 'warn')
+    await refreshState()
+  } catch (e) {
+    console.error('[BotMode] Failed:', e)
+  }
+}
+
+// 我回来了（取消AI托管）
+const onPlayerBack = async () => {
+  if (!currentPlayer.value) return
+  try {
+    await $fetch('/mahjong/api/game/comeback', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: currentPlayer.value.id
+      }
+    })
+    isAIControlled.value = false
+    addBroadcast(`👋 ${currentPlayer.value.name} 已回到牌桌！`, 'success')
+    await refreshState()
+  } catch (e) {
+    console.error('[Comeback] Failed:', e)
+  }
+}
+
+// 快捷托管（不需要长按玩家卡）
+const onBotModeDirect = async () => {
+  if (!currentPlayer.value) return
+  try {
+    await $fetch('/mahjong/api/game/bot-mode', {
+      method: 'POST',
+      body: {
+        gameId: roomId.value,
+        playerId: currentPlayer.value.id,
+        enabled: true
+      }
+    })
+    isAIControlled.value = true
+    addBroadcast(`🤖 ${currentPlayer.value.name} 已托管给AI！`, 'warn')
     await refreshState()
   } catch (e) {
     console.error('[BotMode] Failed:', e)
@@ -3691,9 +3920,19 @@ watch([isMyTurn, hasPriorityActions], ([myTurn, hasActions]) => {
 }, { immediate: true })
 
 // 监听游戏进入PLAYING阶段，强制触发倒计时
-watch(() => gameState.value?.phase, (phase) => {
+watch(() => gameState.value?.phase, (phase, oldPhase) => {
   if (phase === GamePhase.PLAYING && isMyTurn.value && !isAIControlled.value) {
     startTurnTimer()
+  }
+  // [2026-05-29] 验牌阶段：显示"客官请验牌！"倒计时
+  if (phase === GamePhase.REVEAL && oldPhase !== GamePhase.REVEAL) {
+    if (!showWinnerReveal.value) {
+      _revealPhaseStartedAt.value = Date.now()
+      showWinnerReveal.value = true
+    }
+  }
+  if (phase === GamePhase.ENDED && oldPhase === GamePhase.REVEAL) {
+    showWinnerReveal.value = false
   }
 })
 
@@ -3789,30 +4028,20 @@ const onStartGame = async () => {
   }
 }
 
-const onRerollDice = () => {
-  diceValues.value = [
-    Math.floor(Math.random() * 6) + 1,
-    Math.floor(Math.random() * 6) + 1
-  ]
-  hasDicePreview.value = true
-  playSound('dice-roll')
-}
-
+/** 新开局流程 - 点击"发牌"：调用 dealGame，切换到 PLAYING 阶段 */
 const onDealTiles = async () => {
-  // 防止重复调用：只有当 overlay 可见时才处理
-  if (!showDiceOverlay.value || isGameStarting.value) return
+  if (isGameStarting.value) return
   isGameStarting.value = true
   hasDicePreview.value = false
+  diceFromWebSocket.value = false
   showDoubleReminder.value = false
   if (doubleReminderTimer) {
     clearTimeout(doubleReminderTimer)
     doubleReminderTimer = null
   }
-  // 💡 先调API发牌（牌已经到内存），再关遮罩 → 秒见牌，消除空窗期
-  console.log('[onDealTiles] Calling startGame API...')
+  console.log('[onDealTiles] Calling dealGame API...')
   try {
-    await startGame({ hesitationWindow: hesitationWindow.value, fixedDice: diceValues.value })
-    // API成功了，牌已经在client state里，立即关遮罩
+    await dealGame()
     showDiceOverlay.value = false
     console.log('[onDealTiles] Done, phase:', gameState.value?.phase)
   } finally {
@@ -3916,59 +4145,44 @@ watch(
   () => [gameState.value?.phase, (gameState.value as any)?.roundStats?.length ?? 0, gameState.value?.gameId, (gameState.value as any)?.endReason],
   async ([phase, roundCount, gameId, endReason]) => {
     if (phase !== GamePhase.ENDED || !gameId || !currentPlayer.value?.id) return
-    if (endReason === GameEndReason.WALL_EXHAUSTED) {
-      const lastRound = gameState.value?.roundStats?.[gameState.value.roundStats.length - 1]
-      settlementData.value = {
-        roundDetails: [{
-          ...(lastRound || {}),
-          winnerDetails: []
-        }],
-        playerStats: (gameState.value?.players || []).map(p => ({
-          id: p.id,
-          name: p.name,
-          totalScore: p.score ?? 0
-        }))
-      }
-      // 1s后强制显示结算
-      window.setTimeout(() => {
-        showSettlement.value = true
-        startWallExhaustedCountdown()
-      }, 1000)
-      return
-    }
+    // REVEAL phase: don't trigger settlement here, let 5s timer trigger ENDED
+    if (phase === GamePhase.REVEAL) return
+
     const settlementKey = `${gameId}-${roundCount}`
     if (lastAutoSettlementKey.value === settlementKey) return
     lastAutoSettlementKey.value = settlementKey
-    // 从 gameState 构建本局结算数据
+
+    // 统一从 roundStats 取结算数据（服务端已精确计算，含赢家手牌/牌型/番数）
     const lastRound = gameState.value?.roundStats?.[gameState.value.roundStats.length - 1]
-    if (lastRound) {
-      settlementData.value = {
-        roundDetails: [{
-          ...lastRound,
-          winnerDetails: (gameState.value?.players || []).filter((p: any) => p.status === 'won').map((p: any) => ({
-            playerId: p.id,
-            playerName: p.name,
-            handTypeName: p.winHandType || '',
-            tiles: p.winTiles || [],
-            flowerCount: p.hand?.flowerCount ?? 0,
-            isMenQing: p.hand?.isMenQing ?? false,
-            hasWild: p.hand?.hasWild ?? false,
-            baseFan: p.baseFan ?? 0,
-            finalPoints: p.finalPoints ?? 0,
-          }))
-        }],
-        playerStats: (gameState.value?.players || []).map(p => ({
-          id: p.id,
-          name: p.name,
-          totalScore: p.score ?? 0
-        }))
-      }
-      // 1s后强制显示本局结算
-      window.setTimeout(() => {
-        showSettlement.value = true
-      }, 1000)
-        startWallExhaustedCountdown()
+    if (!lastRound) return
+
+    const isWallExhausted = endReason === GameEndReason.WALL_EXHAUSTED
+
+    settlementData.value = {
+      roundDetails: [{
+        ...lastRound,
+        winnerDetails: lastRound.winnerDetails || []
+      }],
+      playerStats: (gameState.value?.players || []).map(p => ({
+        id: p.id,
+        name: p.name,
+        totalScore: p.score ?? 0
+      }))
     }
+    isRoundWallExhausted.value = isWallExhausted
+
+    // 聚义成功：显示弹窗，不显示结算
+    const isLiangShanSuccess = !!(gameState.value as any)?.liangShanSuccess
+    if (isLiangShanSuccess) {
+      // 聚义成功，不显示结算面板，弹窗已由 liangShanVotes 逻辑触发
+      return
+    }
+
+    // 流局或胡牌：5秒后显示结算（REVEAL阶段由服务端控制，手牌自动翻开）
+    window.setTimeout(() => {
+      showSettlement.value = true
+      startWallExhaustedCountdown()
+    }, isWallExhausted ? 1000 : 5000)
   }
 )
 
@@ -4024,8 +4238,7 @@ const handleRealtimeState = (e: Event) => {
     }
     lastFastDiscardAt.value = Date.now()
     playSound('tile-discard')
-    // 念其他玩家出的牌
-    if (lastTile?.suit) playVoiceTile(lastTile.suit, lastTile.value)
+    // 语音由 state watcher 统一播放（避免重复）
     markDiscardAudioPlayed(lastTile)
   }
   prevRealtimeDiscardCount.value = discardCount
@@ -4038,6 +4251,10 @@ watch(isMyTurn, (isMe) => {
 })
 // ---- 追踪其他玩家动作（用于触发音效）----
 const prevOtherPlayerState = new Map<string, { meldCount: number; discardCount: number; replacedFlowerCount: number }>()
+const _flowerVoicePlayed = new Set<string>()
+let _flowerVoicePlayedTurnKey = ''  // roundNumber-turnCounter
+let _flowerVoiceTurnCounter = 0
+let _flowerVoicePrevPlayerIndex = -1
 const prevBailoutMap = new Map<string, Map<number, number>>()
 const getOtherMeldCount = (player: any) => (player?.hand?.exposedMelds?.length ?? 0)
 const getOtherDiscardCount = (player: any) => (player?.hand?.discardedTiles?.length ?? 0)
@@ -4048,6 +4265,16 @@ const getReplacedFlowerMelds = (player: any) =>
   })
 const checkOtherPlayerSounds = (newState: any) => {
   if (!gameState.value?.players) return
+  const cpIdx = newState?.currentPlayerIndex ?? 0
+  if (cpIdx !== _flowerVoicePrevPlayerIndex) {
+    _flowerVoiceTurnCounter++
+    _flowerVoicePrevPlayerIndex = cpIdx
+  }
+  const turnKey = String(newState?.roundNumber ?? 0) + "-" + String(_flowerVoiceTurnCounter)
+  if (turnKey !== _flowerVoicePlayedTurnKey) {
+    _flowerVoicePlayed.clear()
+    _flowerVoicePlayedTurnKey = turnKey
+  }
   const pendingMeldVoices: Array<'kong' | 'pong' | 'chow'> = []
   for (const player of newState.players) {
     const prev = prevOtherPlayerState.get(player.id)
@@ -4057,12 +4284,16 @@ const checkOtherPlayerSounds = (newState: any) => {
     const replacedFlowerCount = replacedFlowerMelds.length
     if (prev) {
       const isSelf = player.id === playerId.value
-      // [Fix] own actions also broadcast to news feed, skip sound only
-      if (replacedFlowerCount > prev.replacedFlowerCount) {
-        if (!isSelf) { playSound('tile-draw'); playVoiceAction('flowerReplace') }
-        addBroadcast(`🌸 ${player.name}补花`, 'special')
+      const isBotCtrl = !!(player as any).isBotControlled || isBotPlayer(player)
+      const shouldPlayVoice = !isSelf || isBotCtrl  // AI托管时自己的动作也要播放语音
+if (replacedFlowerCount > prev.replacedFlowerCount) {
+        if (shouldPlayVoice && !_flowerVoicePlayed.has(player.id)) {
+          _flowerVoicePlayed.add(player.id)
+          playSound('tile-draw')
+          // 补花语音由快讯广播触发
+        }
       }
-      if (!isSelf && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
+      if (shouldPlayVoice && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
         const newDiscards = (player.hand?.discardedTiles || []).slice(prev.discardCount)
         const lastNew = newDiscards[newDiscards.length - 1]
         if (!recentlyPlayedDiscardAudio(lastNew)) {
@@ -4078,11 +4309,11 @@ const checkOtherPlayerSounds = (newState: any) => {
           const isFlowerReplacementMeld = m.tiles?.length === 1 && firstTile?.suit === 'hua'
           if (isFlowerReplacementMeld) continue
           if (m.type === 'kong' || m.tiles?.length === 4) {
-            if (!isSelf) pendingMeldVoices.push('kong')
+            if (shouldPlayVoice) pendingMeldVoices.push('kong')
           } else if (m.type === 'triplet') {
-            if (!isSelf) pendingMeldVoices.push('pong')
+            if (shouldPlayVoice) pendingMeldVoices.push('pong')
           } else {
-            if (!isSelf) pendingMeldVoices.push('chow')
+            if (shouldPlayVoice) pendingMeldVoices.push('chow')
           }
         }
       }
@@ -4096,17 +4327,17 @@ const checkOtherPlayerSounds = (newState: any) => {
   for (const action of pendingMeldVoices) {
     if (action === 'kong') {
       playSound('tile-kong')
-      playVoiceAction('kong')
+      // 语音由快讯广播触发
     } else if (action === 'pong') {
       playSound('tile-pong')
-      playVoiceAction('pong')
+      // 语音由快讯广播触发
     } else {
       playSound('tile-chow')
-      playVoiceAction('chow')
+      // 语音由快讯广播触发
     }
   }
 }
-const activePlayerCount = (state: any) => (state?.players || []).filter((p: any) => p.status === 'playing').length
+const activePlayerCount = (state: any) => (state?.players || []).filter((p: any) => p.status === 'playing' && !p.isBotControlled).length
 
 watch(() => gameState.value, (newState, oldState) => {
   if (!newState) return
@@ -4126,22 +4357,8 @@ watch(() => gameState.value, (newState, oldState) => {
     prevQjAlertIds.value = new Set<string>(existingAlerts.map((a: any) => a.playerId))
   }
 
-  // 有人胡牌
+  // 有人胡牌（广播消息由服务端 actionHandler.ts 中 broadcastQuickMessage 统一处理，此处不再重复）
   if (newState.winnersCount > prevWinnersCount.value && prevPhase.value === 'playing') {
-    const newWinners = (newState.players || []).filter(
-      (p: any) => p.status === 'won' && p.winOrder === newState.winnersCount
-    )
-    const bailoutRels = (newState as any).bailoutRelations || []
-    for (const w of newWinners) {
-      const method = w.winRound ? `第${w.winRound}轮` : ''
-      const handType = w.winHandType ? `·${w.winHandType}` : ''
-      // 检查三口/四口关系
-      const rel = bailoutRels.find((r: any) => r.player1 === w.id || r.player2 === w.id)
-      const partnerId = rel ? (rel.player1 === w.id ? rel.player2 : rel.player1) : null
-      const partner = partnerId ? (newState.players || []).find((p: any) => p.id === partnerId) : null
-      const bailInfo = rel && partner ? ` · ${rel.type}包${partner.name}` : ''
-      addBroadcast(`🏆 ${w.name} ${method}胡牌${handType}${bailInfo}`, 'win')
-    }
     playSound('round-end')
   }
 
@@ -4182,11 +4399,12 @@ watch(() => gameState.value, (newState, oldState) => {
       addBroadcast(`🔥 ${voter?.name || '某玩家'} 发起了梁山聚义！`, 'special')
     } else if (currentVotes >= activePlayerCount(newState)) {
       addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
-      // 显示梁山聚义成功弹窗，0.2s 后消失
+      // 显示梁山聚义成功弹窗，3s 后主动推进到下一局
       showLiangShanOverlay.value = true
       setTimeout(() => {
         showLiangShanOverlay.value = false
-      }, 200)
+        void startNextRound()
+      }, 3000)
     } else {
       const newResponderIds = currentVoteIds.filter(id => !prevLiangShanVoteIds.value.includes(id))
       const initiatorId = currentVoteIds[0]
@@ -4255,46 +4473,54 @@ watch(
       showHuPanel.value = false
       confirmedWinner.value = false
       if (!hasDicePreview.value) {
-        // 使用服务端的骰子值(让后加入的B也能看到实际骰子结果)
-        const serverDice = gameState.value?.dice
-        if (serverDice && Array.isArray(serverDice) && serverDice.length >= 2) {
-          diceValues.value = [serverDice[0], serverDice[1]]
-          hasDicePreview.value = true
-        } else {
-          diceValues.value = [1, 1]
+        const humanRollPending = (gameState.value as any)?._humanRollPending
+        if (!humanRollPending && !diceFromWebSocket.value) {
+          // AI 庄家：从 gameState 取骰子值
+          const serverDice = gameState.value?.dice
+          if (serverDice && Array.isArray(serverDice) && serverDice.length >= 2) {
+            diceValues.value = [serverDice[0], serverDice[1]]
+          }
         }
+        // 人类庄家：dice=[0,0] 不覆盖，保持默认等玩家点击
+        hasDicePreview.value = true
       }
       showDiceOverlay.value = true
       console.log('[DiceOverlay] SET to true (STARTING)')
 
-      // 🔄 自动下一局：来自结算/流局后，自动走掷骰子+发牌
-      // STARTING时立即 refresh state，然后等骰子组件就绪后自动操作
+      // 🔄 自动下一局：来自结算/流局后
       if (prevPhase === GamePhase.ENDED) {
         if (isSettleRequested.value) {
-          // 房主已申请退房结算：跳过下一局，直接显示总结算
           showDiceOverlay.value = false
           showSettlement.value = true
           return
         }
-        window.setTimeout(() => {
-          const dealer = dealerPlayer.value
-          if (dealer && isBotPlayer(dealer)) {
-            // AI庄家：自动掷骰子+发牌
-            autoRollAndDeal()
-          } else if (dealer && !isBotPlayer(dealer)) {
-            // 人类头胡庄家：自动掷骰子，等他手动发牌
-            // 或者直接自动掷骰子+等发牌（当前先自动掷骰子）
-            autoRollOnly()
-          } else {
-            // 没有庄家——不可能
-          }
-        }, 500)
+        const aiDealer = dealerPlayer.value
+        if (aiDealer && isBotPlayer(aiDealer)) {
+          // AI 庄家：自动发牌
+          setTimeout(() => {
+            const needsSecondRoll = gameState.value?.roundMultiplier === 1 &&
+              (gameState.value?.diceRollCount ?? 2) >= 2
+            const doDeal = () => {
+              if (gameState.value?.phase === GamePhase.STARTING) {
+                void onDealTiles()
+              }
+            }
+            if (needsSecondRoll) {
+              void onRollSecondDice()
+              setTimeout(doDeal, 700)
+            } else {
+              doDeal()
+            }
+          }, 800)
+        }
+        // 人类庄家：显示 idle 状态，等玩家点击掷骰子
       }
       return
     }
     if (newPhase !== GamePhase.STARTING) {
       showDiceOverlay.value = false
       hasDicePreview.value = false
+      diceFromWebSocket.value = false
       console.log('[DiceOverlay] SET to false (phase=', newPhase, ')')
     }
   },
@@ -4303,10 +4529,12 @@ watch(
 
 // 🔧 强力兜底：不管 phase watch 是否触发，每次 gameState 更新都检查
 watch(gameState, (newVal) => {
+  checkAITakeover()
   if (newVal && newVal.phase !== GamePhase.STARTING && showDiceOverlay.value) {
     console.log('[DiceOverlay] FALLBACK: closing dice overlay (phase=', newVal.phase, ')')
     showDiceOverlay.value = false
     hasDicePreview.value = false
+    diceFromWebSocket.value = false
   }
 }, { deep: false })
 
@@ -4336,13 +4564,10 @@ if (typeof window !== 'undefined') {
 
 // AI 接管检测（通过轮询检查 botModePlayers）
 const checkAITakeover = () => {
-  if (!gameState.value?.players) return
-  const currentBotPlayers = new Set<string>()
-  // 检查是否有玩家进入 AI 托管（通过玩家状态推断）
-  for (const p of gameState.value.players) {
-    // 这里通过 isAIControlled 状态检测（如果有的话）
-    // 暂时跳过，因为 bot 状态在客户端不易获取
-  }
+  if (!gameState.value?.players || !currentPlayer.value) return
+  // 检查当前玩家是否被AI托管（从 gameState 的 isBotControlled 字段检测）
+  const me = gameState.value.players.find(p => p.id === currentPlayer.value!.id)
+  isAIControlled.value = !!(me as any)?.isBotControlled
 }
 
 // ---- Admin / Debug Functions ----
@@ -4573,6 +4798,16 @@ const forceDiscard = async (p: Player) => {
   min-width: 108px;
 }
 .settle-btn-header:hover { background: rgba(25, 118, 210, 0.8); color: #fff; }
+.ai-takeover-btn {
+  background: rgba(76, 175, 80, 0.8);
+  border-color: rgba(255, 255, 255, 0.25);
+  min-width: auto;
+  padding: 2px 10px;
+}
+.ai-takeover-btn:hover {
+  background: rgba(76, 175, 80, 1);
+}
+.settle-btn--grayed { background: rgba(120, 120, 120, 0.4) !important; color: #aaa !important; border-color: rgba(255, 255, 255, 0.1) !important; box-shadow: none !important; }
 
 /* 开始牌局按钮金色呼吸光晕 — 4人到齐时亮起 */
 .start-game-glow {
@@ -4944,6 +5179,12 @@ const forceDiscard = async (p: Player) => {
   border-color: rgba(255, 215, 0, 0.4);
   color: #ffd6d6;
   animation: heartbeat 1.2s ease-in-out infinite;
+}
+.extra-action-btn--hu:not(:disabled) {
+  background: rgba(239, 83, 80, 0.3);
+  border-color: rgba(239, 83, 80, 0.5);
+  color: #ffcdd2;
+  animation: heartbeat 1.0s ease-in-out infinite;
 }
 
 /* 桌面端严格 1/4 宽 */
@@ -5718,18 +5959,84 @@ const forceDiscard = async (p: Player) => {
   50% { opacity: 0.6; }
 }
 
+.comeback-floating-bar {
+  position: fixed;
+  bottom: 180px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  border-radius: 16px;
+  background: rgba(7, 19, 14, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(66, 165, 245, 0.5);
+  box-shadow: 0 6px 32px rgba(0, 0, 0, 0.7);
+  animation: comeback-glow 1.5s infinite;
+  pointer-events: auto;
+}
+
+.comeback-label {
+  font-size: 0.8rem;
+  color: #ffd36a;
+  white-space: nowrap;
+}
+
 .inline-action-btn--comeback {
   background: linear-gradient(135deg, #0d6efd, #42a5f5);
   color: #fff;
   border-color: rgba(66, 165, 245, 0.6);
   font-size: 0.85rem;
   padding: 8px 16px;
-  animation: comeback-glow 1.5s infinite;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.inline-action-btn--comeback:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 16px rgba(66, 165, 245, 0.6);
 }
 
 @keyframes comeback-glow {
-  0%, 100% { box-shadow: 0 0 8px rgba(66, 165, 245, 0.4); }
-  50% { box-shadow: 0 0 20px rgba(66, 165, 245, 0.8); }
+  0%, 100% { box-shadow: 0 4px 24px rgba(66, 165, 245, 0.3); }
+  50% { box-shadow: 0 4px 32px rgba(66, 165, 245, 0.7); }
+}
+
+.takeover-float-bar {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.inline-action-btn--bot-mode {
+  background: rgba(100, 100, 100, 0.5);
+  color: #aaa;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 4px 14px;
+  border-radius: 16px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.inline-action-btn--bot-mode:hover {
+  background: rgba(150, 150, 150, 0.6);
+  color: #fff;
+}
+
+.takeover-warning {
+  color: #ff9800;
+  font-size: 0.75rem;
+  font-weight: bold;
+  margin-left: 6px;
+  animation: takeover-blink 1s infinite;
+}
+@keyframes takeover-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 .ai-controlled-notice {
@@ -6374,7 +6681,8 @@ const forceDiscard = async (p: Player) => {
   border: 1px solid rgba(255, 215, 0, 0.25);
   border-radius: 18px;
   padding: 24px 28px;
-  width: min(520px, 92%);
+  width: 95vw;
+  max-width: 95vw;
   max-height: 80vh;
   overflow-y: auto;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
@@ -6438,9 +6746,8 @@ const forceDiscard = async (p: Player) => {
   font-size: 0.85rem;
   font-weight: 700;
   color: #fff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-all;
   flex-shrink: 1;
   min-width: 28px;
 }
@@ -6776,6 +7083,130 @@ const forceDiscard = async (p: Player) => {
 .settle-btn:hover {
   background: rgba(255, 152, 0, 0.15);
   border-color: rgba(255, 152, 0, 0.5);
+}
+
+/* 亮牌展示 */
+.winner-reveal-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
+  z-index: 10000;
+  animation: fadeIn 0.3s ease;
+}
+.winner-reveal-card {
+  background: linear-gradient(135deg, #1a2a1a, #0d1f0d);
+  border: 2px solid #ffd700;
+  border-radius: 16px;
+  padding: 24px 32px;
+  min-width: 320px;
+  max-width: 96vw;
+  width: min(900px, 96vw);
+  text-align: center;
+  box-shadow: 0 8px 40px rgba(255, 215, 0, 0.3);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.winner-reveal-title {
+  font-size: 1.3rem;
+  color: #ffd700;
+  margin: 0 0 16px;
+}
+.winner-reveal-item {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+.winner-reveal-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.winner-reveal-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+}
+.winner-reveal-type {
+  font-size: 1rem;
+  color: #ffd700;
+  font-weight: 600;
+}
+.winner-reveal-points {
+  font-size: 1rem;
+  color: #ff9800;
+  font-weight: 600;
+}
+.winner-reveal-tiles-visual {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.winner-reveal-meld-sep {
+  display: inline-flex;
+  align-items: center;
+  font-size: 1.2rem;
+  color: rgba(255,215,0,0.5);
+  margin: 0 4px;
+  font-weight: 700;
+}
+.winner-reveal-tile-wrap {
+  --tile-w: 32px;
+  --tile-h: 44px;
+}
+.winner-reveal-tile-wrap--small {
+  --tile-w: 24px;
+  --tile-h: 34px;
+}
+.winner-reveal-all-hands {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,215,0,0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.winner-reveal-player-hand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+}
+.winner-reveal-player-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
+  min-width: 60px;
+  text-align: right;
+}
+.winner-reveal-player-name--winner {
+  color: #ffd700;
+}
+.winner-reveal-player-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  align-items: flex-end;
+}
+.winner-reveal-method {
+  font-size: 0.85rem;
+  color: #aaa;
+}
+.winner-reveal-hint {
+  font-size: 0.75rem;
+  color: #666;
+  margin-top: 8px;
 }
 
 /* 结算面板 */
@@ -7948,21 +8379,37 @@ const forceDiscard = async (p: Player) => {
   .inline-action-buttons { gap: 2px !important; }
   .inline-action-btn { font-size: 0.55rem !important; padding: 2px 6px !important; min-width: 32px !important; }
 }
-.extra-action-btn--hu {
-  color: #ff6b35 !important;
-  font-weight: 800 !important;
-  font-size: 0.7rem !important;
-  padding: 2px 8px !important;
-  border-color: #ff6b3544 !important;
-  background: rgba(255, 107, 53, 0.08) !important;
-  animation: hu-glow 1.2s ease-in-out infinite !important;
+/* extra-action-btn--hu removed - Hu is in CircularActionButtons only */
+
+
+
+
+/* ===== [2026-05-29] 验牌阶段 ===== */
+.reveal-phase-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  animation: fadeIn 0.4s ease;
 }
-.extra-action-btn--hu:hover, .extra-action-btn--hu:active {
-  background: rgba(255, 107, 53, 0.25) !important;
-  border-color: #ff6b3588 !important;
+.reveal-phase-text {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #ffd700;
+  text-shadow: 0 0 20px rgba(255, 215, 0, 0.6), 0 2px 4px rgba(0,0,0,0.5);
+  margin-bottom: 16px;
+  letter-spacing: 4px;
 }
-.layout--mobile-landscape .extra-action-btn--hu {
-  font-size: 0.5rem !important;
-  padding: 1px 5px !important;
+.reveal-phase-countdown {
+  font-size: 3rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255,255,255,0.5);
 }
+
 </style>
