@@ -1387,6 +1387,9 @@ const startTurnTimer = () => {
 }
 
 const toggleSettingsPanel = () => {
+  if (!showSettings.value) {
+    updateSettingsPosition()
+  }
   showSettings.value = !showSettings.value
 }
 
