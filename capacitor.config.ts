@@ -5,8 +5,8 @@ const config: CapacitorConfig = {
   appName: '长清阁麻将',
   webDir: '.output/public',
   server: {
-    url: 'https://cv388xr9771.vicp.fun/mahjong/',
-    cleartext: false,
+    url: 'http://180.159.142.59:8888/mahjong/',
+    cleartext: true,
   },
 };
 
