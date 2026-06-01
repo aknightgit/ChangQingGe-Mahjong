@@ -2360,7 +2360,7 @@ const enterStartingPhaseWithDiceOverlay = async () => {
   }
 }
 
-/** 新开局流程 - 掷骰子+发牌（父组件全权控制） */
+/** 新开局流程 - 掷骰子（父组件全权控制） */
 const onRollDice = async () => {
   try {
     playSound('dice-roll')
@@ -2369,24 +2369,15 @@ const onRollDice = async () => {
     if (needsFirstRoll) {
       const res = await rollFirstDice() as any
       if (res?.success && res.dice1 && res.dice2) {
-        // 【修复】先设骰子值，再触发动画（避免0值旋转卡住）
-        diceValues.value = [res.dice1, res.dice2]
-        diceRollTriggerKey.value++  // 触发 rolling → result 动画
-        // 动画+展示完成后自动发牌
+        // 先触发动画，延迟设值让滚动动画先播放
+        diceRollTriggerKey.value++
         setTimeout(() => {
-          if (gameState.value?.phase === GamePhase.STARTING) {
-            void onDealTiles()
-          }
-        }, 3000)
+          diceValues.value = [res.dice1, res.dice2]
+        }, 600)
       }
     } else {
       await rollSecondDice()
       diceRollTriggerKey.value++
-      setTimeout(() => {
-        if (gameState.value?.phase === GamePhase.STARTING) {
-          void onDealTiles()
-        }
-      }, 3000)
     }
   } catch (e: any) {
     console.error('[onRollDice] Failed:', e)

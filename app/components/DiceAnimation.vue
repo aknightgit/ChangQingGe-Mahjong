@@ -17,28 +17,17 @@
             <p class="dice-hint dice-hint--lead">
               {{ dealerName ? `${dealerName} 掷骰子` : '等待掷骰子...' }}
             </p>
-            <div
-              class="dice-row"
-              :class="{ 'dice-row--clickable': isDealer }"
-              @click="isDealer && onRoll()"
-            >
+            <div class="dice-row">
               <Dice3D :value="dice1" :state="'idle'" />
               <Dice3D :value="dice2" :state="'idle'" />
             </div>
             <p v-if="maxRollsLimit > 1" class="dice-hint dice-hint--sub">{{ currentRoll }}/{{ maxRollsLimit }}</p>
             <button
-              v-if="isDealer && maxRollsLimit <= 1"
+              v-if="isDealer"
               class="deal-button"
               @click="onRoll"
             >
-              <span class="deal-icon">🎲🀫</span> 掷骰子+发牌
-            </button>
-            <button
-              v-if="isDealer && maxRollsLimit > 1"
-              class="deal-button"
-              @click="onRoll"
-            >
-              <span class="deal-icon">🎲</span> 掷骰子 ({{ currentRoll }}/{{ maxRollsLimit }})
+              <span class="deal-icon">🎲</span> 掷骰子
             </button>
             <p v-if="!isDealer" class="dice-hint dice-hint--sub">等待庄家掷骰子...</p>
           </div>
@@ -54,11 +43,7 @@
 
         <template v-else>
           <div class="dice-result-phase">
-            <div
-              class="dice-row"
-              :class="{ 'dice-row--clickable': canReroll && isDealer }"
-              @click="canReroll && isDealer && onReroll()"
-            >
+            <div class="dice-row">
               <Dice3D :value="dice1" :state="'landed'" />
               <Dice3D :value="dice2" :state="'landed'" />
             </div>
@@ -67,10 +52,20 @@
               <span class="dice-total-sep">&amp;</span>
               <span class="dice-total-num">{{ dice2 }}</span>
             </p>
+            <!-- 翻倍提醒（红字） -->
+            <p v-if="isQuadCombo" class="dice-multiplier dice-multiplier--quad">🔥 4倍！{{ dice1 }}+{{ dice2 }}</p>
+            <p v-else-if="isDoubleCombo" class="dice-multiplier dice-multiplier--double">⚡ 2倍！{{ dice1 }}+{{ dice2 }}</p>
+            <p v-else-if="isOneFourCombo" class="dice-multiplier dice-multiplier--double">⚡ 2倍！1+4</p>
             <p class="dice-hint">{{ dealerName ? `庄家: ${dealerName}` : '' }}</p>
-            <p v-if="canReroll && isDealer" class="dice-hint dice-hint--sub">
-              点击骰子可重掷（{{ currentRoll }}/{{ maxRollsLimit }}）
-            </p>
+            <!-- 再掷一次（仅非翻倍时可用） -->
+            <button
+              v-if="isDealer && canReroll && !isDouble"
+              class="deal-button deal-button--reroll"
+              @click="onRoll"
+            >
+              <span class="deal-icon">🎲</span> 再掷一次 ({{ currentRoll }}/{{ maxRollsLimit }})
+            </button>
+            <!-- 发牌按钮（常在） -->
             <button v-if="isDealer" class="deal-button deal-button--result" @click="onDeal">
               <span class="deal-icon">🀫</span> 发牌
             </button>
@@ -110,6 +105,7 @@ const showResultBurst = ref(false)
 const RESULT_HOLD_MS = 300
 const maxRollsLimit = computed(() => props.maxRolls || 1)
 const canReroll = computed(() => currentRoll.value < maxRollsLimit.value && phase.value === 'result')
+const isDouble = computed(() => props.dice1 === props.dice2 && props.dice1 > 0)
 const isQuadCombo = computed(() => {
   return (props.dice1 === 1 && props.dice2 === 1) || (props.dice1 === 4 && props.dice2 === 4)
 })
@@ -449,5 +445,29 @@ const onDeal = () => {
 .dice-fade-enter-from,
 .dice-fade-leave-to {
   opacity: 0;
+}
+.dice-multiplier {
+  font-size: 1.4rem;
+  font-weight: 800;
+  text-align: center;
+  margin: 8px 0;
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
+}
+.dice-multiplier--quad {
+  color: #ff2020;
+  font-size: 1.8rem;
+  animation: pulseRed 0.8s ease-in-out infinite;
+}
+.dice-multiplier--double {
+  color: #ff4444;
+  font-size: 1.5rem;
+}
+@keyframes pulseRed {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.08); }
+}
+.deal-button--reroll {
+  background: linear-gradient(135deg, #4a5568, #2d3748);
+  margin-top: 8px;
 }
 </style>
