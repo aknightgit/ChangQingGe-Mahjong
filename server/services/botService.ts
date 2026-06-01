@@ -535,6 +535,7 @@ function loadCharacterPolicy(botName: string): any {
       // Hardcoded fallback
       _policies['default'] = {
         id: 'fallback',
+        useV2Engine: true,
         selfWinChance: 0.95,
         discardHuChance: 0.7,
         discardHuWildPenalty: 0.3,
