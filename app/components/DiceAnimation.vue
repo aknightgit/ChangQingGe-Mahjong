@@ -1,100 +1,80 @@
 <template>
   <Transition name="dice-fade">
     <div v-if="visible" class="dice-overlay">
-      <!-- 粒子背景 -->
       <div class="particles">
         <span v-for="n in 30" :key="n" class="particle" :style="particleStyle(n)" />
       </div>
 
       <div class="dice-container">
-        <!-- 阶段0: 等待庄家点击掷骰 -->
+        <Transition name="quad-pop">
+          <div v-if="showResultBurst" class="quad-burst">
+            <span class="quad-text">{{ resultBurstLabel }}</span>
+          </div>
+        </Transition>
+
         <template v-if="phase === 'idle'">
           <div class="dice-idle-phase">
-            <p class="dice-hint" style="font-size: 1.1rem; margin-bottom: 16px;">
+            <p class="dice-hint dice-hint--lead">
               {{ dealerName ? `${dealerName} 掷骰子` : '等待掷骰子...' }}
             </p>
-            <div class="dice-row">
-              <div class="dice dice--idle"><span class="dice-face">🎲</span></div>
-              <div class="dice dice--idle"><span class="dice-face">🎲</span></div>
+            <div
+              class="dice-row"
+              :class="{ 'dice-row--clickable': isDealer }"
+              @click="isDealer && onRoll()"
+            >
+              <Dice3D :value="1" :state="'idle'" />
+              <Dice3D :value="1" :state="'idle'" />
             </div>
-            <p class="dice-roll-count" v-if="maxRollsLimit > 1" style="margin-top: 12px;">
-              最多可掷 {{ maxRollsLimit }} 次
-            </p>
+            <p v-if="maxRollsLimit > 1" class="dice-hint dice-hint--sub">{{ currentRoll }}/{{ maxRollsLimit }}</p>
             <button
-              v-if="isDealer"
+              v-if="isDealer && maxRollsLimit <= 1"
               class="deal-button"
-              style="margin-top: 20px;"
+              @click="onRollAndDeal"
+            >
+              <span class="deal-icon">🎲🀫</span> 掷骰子+发牌
+            </button>
+            <button
+              v-if="isDealer && maxRollsLimit > 1"
+              class="deal-button"
               @click="onRoll"
             >
-              🎲 掷骰子
+              <span class="deal-icon">🎲</span> 掷骰子 ({{ currentRoll }}/{{ maxRollsLimit }})
             </button>
-            <p v-else class="dice-hint" style="margin-top: 16px;">等待庄家掷骰子...</p>
+            <p v-if="!isDealer" class="dice-hint dice-hint--sub">等待庄家掷骰子...</p>
           </div>
         </template>
 
-        <!-- 阶段1: 掷骰子动画中 -->
-        <template v-if="phase === 'rolling'">
+        <template v-else-if="phase === 'rolling'">
           <div class="dice-row">
-            <div class="dice dice--rolling">
-              <span class="dice-face">{{ dice1Display }}</span>
-              <div class="dice-glow" />
-            </div>
-            <div class="dice dice--rolling" style="animation-delay: 0.12s">
-              <span class="dice-face">{{ dice2Display }}</span>
-              <div class="dice-glow" />
-            </div>
+            <Dice3D :value="dice1" :state="'rolling'" :delay="0" :roll-seed="rollingSeed" />
+            <Dice3D :value="dice2" :state="'rolling'" :delay="0.1" :roll-seed="rollingSeed + 97" />
           </div>
           <p class="dice-rolling-label">🎲 掷骰子...</p>
         </template>
 
-        <!-- 阶段2: 掷骰结果 - 庄家可重掷或发牌 -->
-        <template v-if="phase === 'result'">
+        <template v-else>
           <div class="dice-result-phase">
-            <div class="dice-row">
-              <div class="dice dice--landed">
-                <span class="dice-face">{{ DICE_FACES[dice1] }}</span>
-              </div>
-              <div class="dice dice--landed">
-                <span class="dice-face">{{ DICE_FACES[dice2] }}</span>
-              </div>
+            <div
+              class="dice-row"
+              :class="{ 'dice-row--clickable': canReroll && isDealer }"
+              @click="canReroll && isDealer && onReroll()"
+            >
+              <Dice3D :value="dice1" :state="'landed'" />
+              <Dice3D :value="dice2" :state="'landed'" />
             </div>
             <p class="dice-total">
-              <span class="dice-total-num">{{ dice1 + dice2 }}</span> 点
+              <span class="dice-total-num">{{ dice1 }}</span>
+              <span class="dice-total-sep">&amp;</span>
+              <span class="dice-total-num">{{ dice2 }}</span>
             </p>
             <p class="dice-hint">{{ dealerName ? `庄家: ${dealerName}` : '' }}</p>
-            <p class="dice-roll-count" v-if="maxRollsLimit > 1">第 {{ currentRoll }} / {{ maxRollsLimit }} 次</p>
-            <div class="dice-result-actions" v-if="isDealer">
-              <button v-if="canReroll" class="dice-btn dice-btn--reroll" @click="onReroll">
-                🎲 再掷一次 ({{ currentRoll }}/{{ maxRollsLimit }})
-              </button>
-              <button class="dice-btn dice-btn--proceed" @click="onProceedToDeal">
-                {{ canReroll ? '使用此结果' : '发牌' }} →
-              </button>
-            </div>
-            <p v-else class="dice-hint" style="margin-top: 16px;">等待庄家操作...</p>
-          </div>
-        </template>
-
-        <!-- 阶段2: 发牌确认按钮 -->
-        <template v-if="phase === 'deal'">
-          <div class="deal-phase">
-            <div class="dice-final-row">
-              <div class="dice dice--final">
-                <span class="dice-face">{{ DICE_FACES[dice1] }}</span>
-              </div>
-              <div class="dice dice--final">
-                <span class="dice-face">{{ DICE_FACES[dice2] }}</span>
-              </div>
-            </div>
-            <p class="deal-total">{{ dice1 + dice2 }} 点</p>
-            <p class="deal-hint-row">
-              {{ dealerName ? `庄家: ${dealerName}` : '' }}
+            <p v-if="canReroll && isDealer" class="dice-hint dice-hint--sub">
+              点击骰子可重掷（{{ currentRoll }}/{{ maxRollsLimit }}）
             </p>
-            <button class="deal-button" @click="onDeal">
-              <span class="deal-icon">🃏</span>
-              发牌
+            <button v-if="isDealer" class="deal-button deal-button--result" @click="onDeal">
+              <span class="deal-icon">🀫</span> 发牌
             </button>
-            <p class="deal-hint">点击开始正式发牌</p>
+            <p v-if="!isDealer" class="dice-hint dice-hint--sub">等待庄家发牌...</p>
           </div>
         </template>
       </div>
@@ -103,33 +83,53 @@
 </template>
 
 <script setup lang="ts">
+import Dice3D from './Dice3D.vue'
+
 const props = defineProps<{
   dice1: number
   dice2: number
   dealerName: string
   maxRolls?: number
   isDealer?: boolean
+  /** 服务器广播的骰子结果 - 非庄家玩家通过此prop接收并自动播放动画 */
+  rollTriggerKey?: number
 }>()
 
 const emit = defineEmits<{
-  (e: 'done'): void
   (e: 'deal'): void
   (e: 'roll'): void
 }>()
 
-const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
-
 const visible = ref(true)
-const isRolling = ref(false)
-const phase = ref<'idle' | 'rolling' | 'result' | 'deal'>('idle')
-const dice1Display = ref('🎲')
-const dice2Display = ref('🎲')
+const phase = ref<'idle' | 'rolling' | 'result'>('idle')
+const rollingSeed = ref(Date.now() % 997)
 const currentRoll = ref(0)
+const showResultBurst = ref(false)
+const RESULT_HOLD_MS = 500
 const maxRollsLimit = computed(() => props.maxRolls || 1)
 const canReroll = computed(() => currentRoll.value < maxRollsLimit.value && phase.value === 'result')
+const isQuadCombo = computed(() => {
+  return (props.dice1 === 1 && props.dice2 === 1) || (props.dice1 === 4 && props.dice2 === 4)
+})
+const isOneFourCombo = computed(() => {
+  return (props.dice1 === 1 && props.dice2 === 4) || (props.dice1 === 4 && props.dice2 === 1)
+})
+const isDoubleCombo = computed(() => props.dice1 === props.dice2)
+const resultBurstLabel = computed(() => {
+  if (isQuadCombo.value) return '四倍！'
+  if (isOneFourCombo.value) return '两倍！'
+  if (isDoubleCombo.value) return '双倍！'
+  return ''
+})
+const resultBurstText = computed(() => {
+  if (isQuadCombo.value) return '四倍！'
+  if (isDoubleCombo.value) return '双倍！'
+  return ''
+})
 
-// 粒子样式生成
-const particleStyle = (n: number) => {
+let burstTimer: ReturnType<typeof setTimeout> | null = null
+
+const particleStyle = (_n: number) => {
   const hue = 120 + Math.random() * 60
   return {
     left: `${Math.random() * 100}%`,
@@ -142,45 +142,86 @@ const particleStyle = (n: number) => {
   }
 }
 
-// 当组件显示时（父组件v-if重新为true），重置状态
-watch(() => visible.value, (val) => {
-  if (val) {
-    resetAnimation()
+const clearBurstTimer = () => {
+  if (burstTimer) {
+    clearTimeout(burstTimer)
+    burstTimer = null
   }
-})
+}
+
+const flashResultBurst = () => {
+  clearBurstTimer()
+  if (!resultBurstLabel.value) return
+  showResultBurst.value = true
+  burstTimer = setTimeout(() => {
+    showResultBurst.value = false
+    burstTimer = null
+  }, RESULT_HOLD_MS)
+}
 
 const onRoll = () => {
   currentRoll.value++
+  rollingSeed.value = Date.now() % 100000
   emit('roll')
-  isRolling.value = true
   phase.value = 'rolling'
-
-  const rollInterval = setInterval(() => {
-    dice1Display.value = DICE_FACES[Math.floor(Math.random() * 6) + 1]
-    dice2Display.value = DICE_FACES[Math.floor(Math.random() * 6) + 1]
-  }, 70)
+  showResultBurst.value = false
+  clearBurstTimer()
 
   setTimeout(() => {
-    clearInterval(rollInterval)
-    dice1Display.value = DICE_FACES[props.dice1]
-    dice2Display.value = DICE_FACES[props.dice2]
-    isRolling.value = false
-  }, 1800)
-
-  setTimeout(() => {
-    if (visible.value) phase.value = 'result'
-  }, 2200)
+    phase.value = 'result'
+    flashResultBurst()
+  }, 850)
 }
 
 const onReroll = () => onRoll()
 
-const onProceedToDeal = () => {
-  phase.value = 'deal'
+const onRollAndDeal = () => {
+  currentRoll.value++
+  rollingSeed.value = Date.now() % 100000
+  emit('roll')
+  phase.value = 'rolling'
+  showResultBurst.value = false
+  clearBurstTimer()
+
+  setTimeout(() => {
+    phase.value = 'result'
+    flashResultBurst()
+    setTimeout(() => {
+      onDeal()
+    }, Math.max(800, RESULT_HOLD_MS + 300))
+  }, 850)
 }
 
 onMounted(() => {
   currentRoll.value = 0
-  phase.value = 'idle'
+  if (props.rollTriggerKey && props.rollTriggerKey > 0) {
+    rollingSeed.value = Date.now() % 100000
+    phase.value = 'rolling'
+    setTimeout(() => {
+      phase.value = 'result'
+      flashResultBurst()
+    }, 850)
+  } else {
+    phase.value = 'idle'
+  }
+})
+
+// 监听服务器广播的骰子事件 - 自动播放动画（非庄家玩家）
+watch(() => props.rollTriggerKey, (key) => {
+  if (!key || key === 0) return
+  currentRoll.value++
+  rollingSeed.value = Date.now() % 100000
+  phase.value = 'rolling'
+  showResultBurst.value = false
+  clearBurstTimer()
+  setTimeout(() => {
+    phase.value = 'result'
+    flashResultBurst()
+  }, 850)
+})
+
+onBeforeUnmount(() => {
+  clearBurstTimer()
 })
 
 const onDeal = () => {
@@ -199,9 +240,10 @@ const onDeal = () => {
   justify-content: center;
   z-index: 200;
   backdrop-filter: blur(6px);
+  perspective: 1200px;
+  transform-style: preserve-3d;
 }
 
-/* ===== 粒子 ===== */
 .particles {
   position: absolute;
   inset: 0;
@@ -224,109 +266,72 @@ const onDeal = () => {
   100% { opacity: 0; transform: translateY(-80px) scale(0.3); }
 }
 
-/* ===== 容器 ===== */
 .dice-container {
   text-align: center;
   position: relative;
   z-index: 1;
 }
 
-/* ===== 骰子 ===== */
+.quad-burst {
+  position: absolute;
+  top: -60px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.quad-text {
+  display: block;
+  font-size: 3rem;
+  font-weight: 900;
+  color: #ff4444;
+  text-shadow:
+    0 0 20px rgba(255, 68, 68, 0.8),
+    0 0 40px rgba(255, 68, 68, 0.4),
+    0 2px 0 #cc0000;
+  animation: quad-pulse 0.2s ease-out;
+  letter-spacing: 0.15em;
+}
+
+@keyframes quad-pulse {
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.quad-pop-enter-active {
+  animation: quad-pulse 0.2s ease-out;
+}
+
+.quad-pop-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.quad-pop-leave-to {
+  opacity: 0;
+}
+
 .dice-row {
   display: flex;
-  gap: 32px;
+  gap: 48px;
   justify-content: center;
   margin-bottom: 24px;
+  perspective: 800px;
+  perspective-origin: 50% 50%;
+  transform-style: preserve-3d;
 }
 
-.dice {
-  width: 90px;
-  height: 90px;
-  background: linear-gradient(145deg, #ffffff, #e8e8e8);
-  border-radius: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.5),
-    0 0 0 2px rgba(255, 255, 255, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  position: relative;
-  overflow: hidden;
+.dice-row--clickable {
+  cursor: pointer;
+  transition: transform 0.2s;
 }
 
-.dice-glow {
-  position: absolute;
-  inset: -4px;
-  border-radius: 22px;
-  background: conic-gradient(
-    from 0deg,
-    rgba(70, 197, 116, 0.6),
-    rgba(255, 215, 0, 0.6),
-    rgba(70, 197, 116, 0.6)
-  );
-  z-index: -1;
-  opacity: 0;
-  transition: opacity 0.3s;
+.dice-row--clickable:hover {
+  transform: scale(1.05);
 }
 
-.dice--rolling .dice-glow {
-  opacity: 1;
-  animation: glow-spin 0.8s linear infinite;
-}
-
-@keyframes glow-spin {
-  to { transform: rotate(360deg); }
-}
-
-.dice--rolling {
-  animation: dice-shake 0.12s infinite;
-}
-
-@keyframes dice-shake {
-  0%, 100% { transform: rotate(0deg) scale(1); }
-  20% { transform: rotate(-12deg) scale(1.08); }
-  40% { transform: rotate(10deg) scale(1.05); }
-  60% { transform: rotate(-6deg) scale(1.03); }
-  80% { transform: rotate(8deg) scale(1.06); }
-}
-
-.dice--landed {
-  animation: dice-land 0.4s ease-out;
-}
-
-.dice--idle {
-  opacity: 0.6;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-}
-
-@keyframes dice-land {
-  0% { transform: scale(1.3) rotate(10deg); }
-  50% { transform: scale(0.9) rotate(-3deg); }
-  100% { transform: scale(1) rotate(0deg); }
-}
-
-.dice--final {
-  width: 70px;
-  height: 70px;
-  border-radius: 14px;
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.4),
-    0 0 20px rgba(70, 197, 116, 0.2);
-}
-
-.dice-face {
-  font-size: 3.2rem;
-  line-height: 1;
-  position: relative;
-  z-index: 1;
-}
-
-.dice--final .dice-face {
-  font-size: 2.5rem;
-}
-
-/* ===== 结果文字 ===== */
 .dice-rolling-label {
   color: #ffd36a;
   font-size: 1.2rem;
@@ -338,15 +343,6 @@ const onDeal = () => {
 @keyframes pulse-text {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
-}
-
-.dice-result {
-  animation: result-in 0.5s ease-out;
-}
-
-@keyframes result-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 .dice-total {
@@ -362,145 +358,66 @@ const onDeal = () => {
   text-shadow: 0 0 12px rgba(255, 215, 0, 0.5);
 }
 
+.dice-total-sep {
+  margin: 0 10px;
+  font-size: 1.4rem;
+  color: rgba(255, 255, 255, 0.82);
+}
+
 .dice-hint {
   color: rgba(255, 255, 255, 0.75);
   font-size: 0.95rem;
   margin: 0;
 }
 
-/* ===== 发牌阶段 ===== */
-.deal-phase {
-  animation: deal-phase-in 0.6s ease-out;
+.dice-hint--lead {
+  font-size: 1.1rem;
+  margin-bottom: 16px;
 }
 
-@keyframes deal-phase-in {
-  from { opacity: 0; transform: scale(0.9); }
-  to { opacity: 1; transform: scale(1); }
+.dice-hint--sub {
+  margin-top: 8px;
 }
 
-.dice-final-row {
-  display: flex;
-  gap: 20px;
-  justify-content: center;
-  margin-bottom: 12px;
-}
-
-.deal-total {
-  color: #ffd700;
-  font-size: 1.2rem;
-  font-weight: 700;
-  margin: 0 0 20px;
-  text-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
-}
-
-.deal-button {
-  padding: 16px 48px;
-  border-radius: 16px;
-  border: 2px solid rgba(70, 197, 116, 0.6);
-  background: linear-gradient(135deg, #1f8a52, #2eaa6a);
-  color: #fff;
-  font-size: 1.4rem;
-  font-weight: 800;
-  cursor: pointer;
-  letter-spacing: 0.1em;
-  box-shadow:
-    0 0 30px rgba(70, 197, 116, 0.35),
-    0 8px 24px rgba(0, 0, 0, 0.4);
-  transition: all 0.2s ease;
-  animation: deal-btn-pulse 2s infinite;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.deal-icon {
-  font-size: 1.6rem;
-}
-
-@keyframes deal-btn-pulse {
-  0%, 100% { box-shadow: 0 0 30px rgba(70, 197, 116, 0.35), 0 8px 24px rgba(0, 0, 0, 0.4); }
-  50% { box-shadow: 0 0 50px rgba(70, 197, 116, 0.55), 0 8px 32px rgba(0, 0, 0, 0.5); }
-}
-
-.deal-button:hover {
-  transform: translateY(-2px) scale(1.05);
-  background: linear-gradient(135deg, #2eaa6a, #46c574);
-}
-
-.deal-button:active {
-  transform: translateY(0) scale(0.98);
-}
-
-.deal-hint-row {
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 1rem;
-  margin: 0 0 16px;
-}
-
-.deal-hint {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 0.8rem;
-  margin: 12px 0 0;
-}
-
-/* ===== 掷骰结果阶段 ===== */
 .dice-result-phase {
   animation: result-in 0.5s ease-out;
   text-align: center;
 }
 
-.dice-roll-count {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 0.85rem;
-  margin: 4px 0 16px;
+@keyframes result-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.dice-result-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
+.deal-button {
   margin-top: 16px;
-}
-
-.dice-btn {
-  padding: 10px 24px;
-  border-radius: 12px;
-  border: 1.5px solid rgba(255, 255, 255, 0.15);
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.dice-btn--reroll {
-  background: rgba(255, 193, 7, 0.15);
-  color: #ffd700;
-  border-color: rgba(255, 215, 0, 0.3);
-}
-
-.dice-btn--reroll:hover {
-  background: rgba(255, 193, 7, 0.25);
-  transform: translateY(-1px);
-}
-
-.dice-btn--proceed {
+  padding: 16px 48px;
+  border-radius: 16px;
+  border: 2px solid rgba(70, 197, 116, 0.6);
   background: linear-gradient(135deg, #1f8a52, #2eaa6a);
   color: #fff;
-  border-color: rgba(70, 197, 116, 0.4);
+  font-size: 1.05rem;
+  font-weight: 800;
+  box-shadow: 0 16px 32px rgba(18, 68, 41, 0.35);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
-.dice-btn--proceed:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(70, 197, 116, 0.3);
+.deal-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 36px rgba(18, 68, 41, 0.42);
 }
 
-/* ===== 过渡动画 ===== */
-.dice-fade-enter-active {
-  transition: opacity 0.3s ease;
+.deal-button--result {
+  margin-top: 12px;
 }
 
+.deal-icon {
+  margin-right: 8px;
+}
+
+.dice-fade-enter-active,
 .dice-fade-leave-active {
-  transition: opacity 0.5s ease;
+  transition: opacity 0.28s ease;
 }
 
 .dice-fade-enter-from,
