@@ -1222,6 +1222,8 @@ class GameManager {
 
     // ── 首局随机座位 ──
     const isFirstRound = (game.roundStats || []).length === 0;
+    // 记录建房者ID（首局选庄用）
+    const creatorId = game.ownerId;
     if (isFirstRound) {
       const shuffledIndices = Array.from({ length: game.players.length }, (_, i) => i);
       for (let i = shuffledIndices.length - 1; i > 0; i--) {
@@ -1235,7 +1237,7 @@ class GameManager {
       });
     }
 
-    // ── 选庄家: 上局首胡者坐庄，首局建房者坐庄 ──
+    // ── 选庄家: 首局建房者坐庄，后续上局首胡者坐庄 ──
     if (game.nextDealerId) {
       const nextDealer = game.players.find(p => p.id === game.nextDealerId);
       if (nextDealer) {
@@ -1246,7 +1248,14 @@ class GameManager {
       }
       game.nextDealerId = null;
     } else {
-      game.dealerIndex = 0;  // 首局 = 建房者(position 0)
+      // 【修复】首局：建房者坐庄（按creatorId查找，不受座位打乱影响）
+      if (creatorId) {
+        const creatorPos = game.players.findIndex(p => p.id === creatorId);
+        game.dealerIndex = creatorPos >= 0 ? creatorPos : 0;
+        console.log(`[beginGame] 首局建房者坐庄: ${game.players[game.dealerIndex]?.name} pos=${game.dealerIndex}`);
+      } else {
+        game.dealerIndex = 0;
+      }
     }
     game.players.forEach((p, i) => { p.isDealer = (i === game.dealerIndex); });
 
