@@ -29,7 +29,7 @@
             <button
               v-if="isDealer && maxRollsLimit <= 1"
               class="deal-button"
-              @click="onRollAndDeal"
+              @click="onRoll"
             >
               <span class="deal-icon">🎲🀫</span> 掷骰子+发牌
             </button>

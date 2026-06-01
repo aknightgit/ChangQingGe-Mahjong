@@ -2360,27 +2360,36 @@ const enterStartingPhaseWithDiceOverlay = async () => {
   }
 }
 
-/** 新开局流程 - 第二次掷骰子(仅当 diceRollCount>=2 且第一次未翻倍时) */
+/** 新开局流程 - 掷骰子+发牌（父组件全权控制） */
 const onRollDice = async () => {
   try {
-    // 先触发动画+音效
-    diceRollTriggerKey.value++
     playSound('dice-roll')
     playVoiceAction('diceRoll')
-    // 判断是第一次掷还是第二次掷:_humanRollPending 表示第一次
     const needsFirstRoll = (gameState.value as any)?._humanRollPending
     if (needsFirstRoll) {
       const res = await rollFirstDice() as any
       if (res?.success && res.dice1 && res.dice2) {
+        // API返回真实骰子值 → 触发 DiceAnimation 动画
         diceValues.value = [res.dice1, res.dice2]
+        diceRollTriggerKey.value++
+        // 等动画完成后发牌
+        setTimeout(() => {
+          if (gameState.value?.phase === GamePhase.STARTING) {
+            void onDealTiles()
+          }
+        }, 2000)
       }
     } else {
       await rollSecondDice()
+      setTimeout(() => {
+        if (gameState.value?.phase === GamePhase.STARTING) {
+          void onDealTiles()
+        }
+      }, 2000)
     }
   } catch (e: any) {
     console.error('[onRollDice] Failed:', e)
     addBroadcast(e?.data?.message || e?.message || '掷骰子失败', 'warn')
-    // API失败,重置骰子动画到idle
     diceResetTrigger.value++
   }
 }
