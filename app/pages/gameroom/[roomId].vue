@@ -2369,23 +2369,24 @@ const onRollDice = async () => {
     if (needsFirstRoll) {
       const res = await rollFirstDice() as any
       if (res?.success && res.dice1 && res.dice2) {
-        // API返回真实骰子值 → 触发 DiceAnimation 动画
+        // 【修复】先设骰子值，再触发动画（避免0值旋转卡住）
         diceValues.value = [res.dice1, res.dice2]
-        diceRollTriggerKey.value++
-        // 等动画完成后发牌
+        diceRollTriggerKey.value++  // 触发 rolling → result 动画
+        // 动画+展示完成后自动发牌
         setTimeout(() => {
           if (gameState.value?.phase === GamePhase.STARTING) {
             void onDealTiles()
           }
-        }, 2000)
+        }, 3000)
       }
     } else {
       await rollSecondDice()
+      diceRollTriggerKey.value++
       setTimeout(() => {
         if (gameState.value?.phase === GamePhase.STARTING) {
           void onDealTiles()
         }
-      }, 2000)
+      }, 3000)
     }
   } catch (e: any) {
     console.error('[onRollDice] Failed:', e)

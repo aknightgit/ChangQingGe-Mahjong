@@ -163,12 +163,8 @@ const flashResultBurst = () => {
 
 const onRoll = () => {
   currentRoll.value++
-  rollingSeed.value = Date.now() % 100000
+  // 【修复】不在这里设phase='rolling'，等父组件设好diceValues后通过rollTriggerKey触发
   emit('roll')
-  phase.value = 'rolling'
-  showResultBurst.value = false
-  clearBurstTimer()
-  // 不再自动跳到 result — 等 dice1/dice2 prop 拿到真实值后由 watch 触发
 }
 
 const onReroll = () => onRoll()
