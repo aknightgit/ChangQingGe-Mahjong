@@ -242,6 +242,14 @@ export const loadVoiceScheme = async (scheme: VoiceScheme): Promise<void> => {
       if (tile.mp3) map.set(tile.key, tile.mp3)
       else if (tile.opus) map.set(tile.key, tile.opus)
     }
+    // 加载动作语音（吃/碰/杠/胡/补花）
+    const ACTION_VOICE_KEYS = ['gang', 'wochi', 'peng', 'hule', 'buhua']
+    for (const entry of schemeEntries) {
+      if (entry.scheme !== scheme) continue
+      if (ACTION_VOICE_KEYS.includes(entry.key) && !map.has(entry.key)) {
+        map.set(entry.key, entry.url)
+      }
+    }
     _audioMap.value = map
     console.info(`[VoiceTile] Loaded scheme="${scheme}" voice="${manifest.voice}" tiles=${manifest.tiles.length}`)
   } catch (e) {
