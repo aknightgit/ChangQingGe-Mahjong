@@ -1059,7 +1059,8 @@ class GameManager {
 
     // 满员 → 以观赛者身份加入
     // 注意：未满员但已开局（如A+2个AI已开始），真人玩家仍作为正式玩家加入
-    const isFull = game.players.length >= 4;
+    const minPlayers = (game as any).minPlayers ?? 4;
+    const isFull = game.players.length >= minPlayers;
     if (isFull) {
       const spectatorId = 'spectator-' + randomUUID();
       const spectator: Player = {
@@ -1140,6 +1141,12 @@ class GameManager {
 
     game.players.push(player);
     this.playerToGame.set(playerId, gameId);
+
+    // 【新增】房间满员时第一时间广播
+    const minPlayersForBroadcast = (game as any).minPlayers ?? 4;
+    if (game.players.filter(p => p.status !== 'spectating' && p.status !== 'left').length >= minPlayersForBroadcast) {
+      this.broadcastQuickMessage(gameId, '🀄 房间满员了，正式开干！', 'special');
+    }
 
     // Auto-start removed. Use manual start.
     // if (game.players.length === 4) {
@@ -1504,8 +1511,7 @@ class GameManager {
     game.phase = GamePhase.PLAYING;
     game.lastActionTime = Date.now();
 
-    // 广播开局消息
-    this.broadcastQuickMessage(gameId, '🀄 房间满员了，正式开干！', 'special');
+    // 广播开局消息（已在 joinGame 时广播过，此处不重复）
     TrainingRecordService.captureRoundStart(game);
 
     console.log(`[dealGame] PLAYING: wall=${game.wall.length} tiles, dealer=${game.players[game.dealerIndex]?.name}`);
@@ -1811,8 +1817,7 @@ class GameManager {
     game.phase = GamePhase.PLAYING;
     game.lastActionTime = Date.now();
 
-    // 广播开局消息
-    this.broadcastQuickMessage(gameId, '🀄 房间满员了，正式开干！', 'special');
+    // 补花广播由 replaceFlowers 处理，此处不重复
 
     TrainingRecordService.captureRoundStart(game);
 
@@ -2595,10 +2600,7 @@ class GameManager {
         player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
       }
     }
-    // 有补花时只广播一条消息（避免同文本去重导致丢失）
-    if (flowerMelds.length > 0) {
-      this.broadcastService.broadcastFlowerReplacement(game, player, flowerMelds.length);
-    }
+    // 补花广播由 replaceFlowers 统一处理
   }
 
   /**
@@ -3897,7 +3899,7 @@ class GameManager {
         (player as any).lastDrawnTile = replacement;
       }
     }
-    // 有补花时只广播一条消息（避免同文本去重导致丢失）
+    // 有补花时广播一条消息
     if (flowerMelds.length > 0) {
       this.broadcastService.broadcastFlowerReplacement(game, player, flowerMelds.length);
     }
