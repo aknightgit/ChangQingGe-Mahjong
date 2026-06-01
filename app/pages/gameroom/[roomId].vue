@@ -916,6 +916,7 @@
           :max-rolls="effectiveMaxRolls"
           :is-dealer="isDealer"
           :roll-trigger-key="diceRollTriggerKey"
+          :reset-trigger="diceResetTrigger"
           @deal="onDealTiles"
           @roll="onRollDice"
         />
@@ -1260,6 +1261,7 @@ const hasDicePreview = ref(false)
 const diceFromWebSocket = ref(false)
 /** 服务器广播骰子结果时递增，触发DiceAnimation自动播放动画 */
 const diceRollTriggerKey = ref(0)
+const diceResetTrigger = ref(0)  // API失败时递增，重置骰子组件到idle
 const showDoubleReminder = ref(false)
 const flowerReplacementNotice = ref<Tile | null>(null)
 const showLiangShanOverlay = ref(false)
@@ -2366,6 +2368,8 @@ const onRollDice = async () => {
   } catch (e: any) {
     console.error('[onRollDice] Failed:', e)
     addBroadcast(e?.data?.message || e?.message || '掷骰子失败', 'warn')
+    // API失败，重置骰子动画到idle
+    diceResetTrigger.value++
   }
 }
 

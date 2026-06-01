@@ -54,6 +54,7 @@ const props = defineProps<{
   dealerName: string
   isDealer: boolean
   roundNum: number
+  resetTrigger?: number  // 父组件递增此值可强制重置到 idle
 }>()
 
 const emit = defineEmits<{
@@ -62,18 +63,35 @@ const emit = defineEmits<{
 }>()
 
 const phase = ref<'idle' | 'rolling' | 'result'>('idle')
+const rolling = ref(false)
 
 function doRoll() {
+  if (rolling.value) return  // 防重复点击
+  rolling.value = true
   phase.value = 'rolling'
-  setTimeout(() => { phase.value = 'result' }, 600)
   emit('roll')
+  // 不再自动跳到 result — 等父组件通过 diceValues 变化触发
 }
 
 function doDeal() {
   emit('deal')
 }
 
-watch(() => props.visible, (v) => { if (v) phase.value = 'idle' })
+// 当 diceValues 从服务器拿到真实值（非初始值）时，自动进入 result 展示
+watch(() => props.diceValues, (vals) => {
+  if (vals[0] > 0 && vals[1] > 0) {
+    // 有真实骰子值 → 延迟一小段时间让动画播放，然后展示结果
+    setTimeout(() => {
+      phase.value = 'result'
+      rolling.value = false
+    }, 500)
+  }
+}, { deep: true })
+
+watch(() => props.visible, (v) => { if (v) { phase.value = 'idle'; rolling.value = false } })
+
+// 父组件可通过递增 resetTrigger 强制回到 idle（如 API 失败）
+watch(() => props.resetTrigger, () => { phase.value = 'idle'; rolling.value = false })
 </script>
 
 <style scoped>
