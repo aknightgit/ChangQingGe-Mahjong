@@ -1222,8 +1222,8 @@ class GameManager {
 
     // ── 首局随机座位 ──
     const isFirstRound = (game.roundStats || []).length === 0;
-    // 记录建房者ID（首局选庄用）
-    const creatorId = game.ownerId;
+    // 【修复】记录建房者ID（首局=第一个加入房间的玩家）
+    const creatorId = game.players[0]?.userId || game.players[0]?.id;
     if (isFirstRound) {
       const shuffledIndices = Array.from({ length: game.players.length }, (_, i) => i);
       for (let i = shuffledIndices.length - 1; i > 0; i--) {
@@ -1250,7 +1250,7 @@ class GameManager {
     } else {
       // 【修复】首局：建房者坐庄（按creatorId查找，不受座位打乱影响）
       if (creatorId) {
-        const creatorPos = game.players.findIndex(p => p.id === creatorId);
+        const creatorPos = game.players.findIndex(p => (p.userId && p.userId === creatorId) || p.id === creatorId);
         game.dealerIndex = creatorPos >= 0 ? creatorPos : 0;
         console.log(`[beginGame] 首局建房者坐庄: ${game.players[game.dealerIndex]?.name} pos=${game.dealerIndex}`);
       } else {
@@ -1644,6 +1644,8 @@ class GameManager {
 
     // 🎲 随机选位置:仅首次开局时随机,后续座位固定(除非换位置)
     const isFirstRound = (game.roundStats || []).length === 0;
+    // 【修复】记录建房者ID（首局=第一个加入房间的玩家）
+    const creatorId = game.players[0]?.userId || game.players[0]?.id;
     if (isFirstRound) {
       const shuffledIndices = Array.from({ length: game.players.length }, (_, i) => i);
       for (let i = shuffledIndices.length - 1; i > 0; i--) {
@@ -1668,8 +1670,14 @@ class GameManager {
       }
       game.nextDealerId = null;
     } else {
-      // 首局或无指定 → 随机
-      game.dealerIndex = Math.floor(Math.random() * game.players.length);
+      // 【修复】首局：建房者坐庄（按creatorId查找，不受座位打乱影响）
+      if (creatorId) {
+        const creatorPos = game.players.findIndex(p => (p.userId && p.userId === creatorId) || p.id === creatorId);
+        game.dealerIndex = creatorPos >= 0 ? creatorPos : 0;
+        console.log(`[StartGame] 首局建房者坐庄: ${game.players[game.dealerIndex]?.name} pos=${game.dealerIndex}`);
+      } else {
+        game.dealerIndex = 0;
+      }
     }
     game.players.forEach((p, i) => { p.isDealer = (i === game.dealerIndex); });
 
