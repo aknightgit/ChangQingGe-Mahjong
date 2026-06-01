@@ -338,16 +338,13 @@ export class ActionHandler {
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
     this.deps.replaceInitialFlowers(game, player);
     game.drawnThisTurn = true;
-    if (this.deps.isPlayerBotControlled(player)) {
-      this.deps.scheduleBotDiscard(game.gameId, player.id);
-    }
     player.hand.concealedTiles = this.deps.sortHandWithWildFront(player.hand.concealedTiles, game);
     await persistGame(game);
     this.deps.broadcastGameState(game.gameId);
-    // 【修复】吃牌后开启该玩家回合：调度 freeze timer + 更新 pendingExpiresAt
-    (game as any)._freezeUntil = Date.now() + timerManager.getHesitationWindow(game); // 碰吃后同一玩家直接进出牌
-    if (game.pendingActions.length > 0) {
-      schedulePendingActionTimeout(game.gameId);
+    // 【修复】吃牌后初始化该玩家回合：beginCurrentPlayerTurn 设置 freeze timer + 补花
+    await this.deps.beginCurrentPlayerTurn(game);
+    if (this.deps.isPlayerBotControlled(player)) {
+      this.deps.scheduleBotDiscard(game.gameId, player.id);
     }
   
   }

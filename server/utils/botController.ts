@@ -166,6 +166,17 @@ export class BotController {
         );
         if (higherActions.length === 0) {
           if (pa.availableActions.includes(ActionType.CHOW)) {
+            // ★ 修复：bot 吃牌前检查是否有其他玩家有更高优先级动作（碰/杠/胡）
+            const otherPlayersHaveHigherPriority = game.pendingActions.some(otherPa => {
+              if (otherPa.playerId === pa.playerId) return false;
+              return otherPa.availableActions.some(a =>
+                a === ActionType.PENG || a === ActionType.KONG || a === ActionType.HU
+              );
+            });
+            if (otherPlayersHaveHigherPriority) {
+              // 有更高优先级玩家，跳过吃牌，等审批流程处理
+              continue;
+            }
             await this.resolveBotChowNow(game, player, pa);
             hasBotAction = true;
           } else {
