@@ -180,25 +180,23 @@ const onRollAndDeal = () => {
   phase.value = 'rolling'
   showResultBurst.value = false
   clearBurstTimer()
-  // 骰子值更新后由 watch 触发 result，然后自动发牌
+  // 骰子值更新后由 watch 触发 result
   const unwatch = watch(() => [props.dice1, props.dice2], ([d1, d2]) => {
     if (d1 > 0 && d2 > 0 && d1 <= 6 && d2 <= 6) {
       unwatch()
       setTimeout(() => {
         phase.value = 'result'
         flashResultBurst()
-        setTimeout(() => {
-          onDeal()
-        }, Math.max(500, RESULT_HOLD_MS + 200))
+        // 【修复】人类庄家不自动发牌，等用户手动点击“发牌”按钮
+        // AI庄家由父组件 enterStartingPhaseWithDiceOverlay 的 setTimeout 控制
       }, 500)
     }
   }, { deep: true })
-  // 超时保护：5秒后如果还没拿到值，强制发牌
+  // 超时保护：5秒后如果还没拿到值，强制显示结果（不自动发牌）
   setTimeout(() => {
     unwatch()
     if (phase.value === 'rolling') {
       phase.value = 'result'
-      onDeal()
     }
   }, 5000)
 }

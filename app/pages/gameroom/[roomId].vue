@@ -1563,6 +1563,15 @@ onMounted(async () => {
       if (gameState.value) {
         clearPendingRoomTarget()
         addMountLog('connect successful, cleared pending target')
+
+        // 【新增】进入房间时检查是否满员，显示满员消息
+        const players = gameState.value.players || []
+        const activePlayers = players.filter((p: any) => p.status !== 'spectating' && p.status !== 'left')
+        const minPlayers = (gameState.value as any).minPlayers ?? 4
+        if (activePlayers.length >= minPlayers) {
+          addBroadcast('🀄 房间满员了，正式开干！', 'special')
+        }
+
         // 保存最近房间到 localStorage（gameState 已加载，roomNumber 准确）
         try {
           const QUICK_JOIN_KEY = 'mahjong_recent_rooms'
