@@ -966,8 +966,11 @@ export class ActionHandler {
     // 记录投票
     game.liangShanVotes.push(player.id);
 
-    // 广播投票消息
-    broadcastQuickMessage(game.gameId, `🔥 ${player.name}响应了梁山聚义！`, 'special');
+    // 广播投票消息（第一个是发起，后续是响应）
+    const isFirst = game.liangShanVotes.length === 1;
+    broadcastQuickMessage(game.gameId, isFirst
+      ? `🔥 ${player.name}发起了梁山聚义！`
+      : `🔥 ${player.name}响应了梁山聚义！`, 'special');
 
     // 活跃玩家总数（只统计真人）
     const activePlayers = game.players.filter(p => p.status === PlayerStatus.PLAYING);

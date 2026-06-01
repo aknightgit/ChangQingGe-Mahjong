@@ -3852,13 +3852,7 @@ const onLiangShan = () => {
     addBroadcast('⚠️ 已过三巡，不允许聚义', 'warn')
     return
   }
-  const myName = currentPlayer.value?.name || '玩家'
-  const votes = (gameState.value as any)?.liangShanVotes || []
-  if (votes.length === 0) {
-    addBroadcast(`🔥 ${myName} 发起了梁山聚义！`, 'special')
-  } else {
-    addBroadcast(`🔥 ${myName} 响应了梁山聚义！`, 'special')
-  }
+  // 广播由服务端 handleLiangShan 处理，客户端不重复广播
   resetAutoCount()
   playSound('tile-rebel')
   playVoiceAction('liangShan')
@@ -4407,7 +4401,8 @@ watch(() => gameState.value, (newState, oldState) => {
     if (currentVotes === 1) {
       const voter = newState.players?.find((p: any) => p.id === currentVoteIds[0])
       addBroadcast(`🔥 ${voter?.name || '某玩家'} 发起了梁山聚义！`, 'special')
-    } else if (currentVotes >= activePlayerCount(newState)) {
+    } else if (currentVotes >= activePlayerCount(newState) || (newState as any).liangShanSuccess) {
+      console.log('[LiangShan] Popup triggered:', { currentVotes, activeCount: activePlayerCount(newState), liangShanSuccess: (newState as any).liangShanSuccess })
       addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
       // 显示梁山聚义成功弹窗，3s 后主动推进到下一局
       showLiangShanOverlay.value = true
