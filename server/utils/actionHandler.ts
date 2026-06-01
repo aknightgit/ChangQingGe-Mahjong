@@ -405,7 +405,7 @@ export class ActionHandler {
     // 碰牌广播（牌局快讯+语音）
     const pengTileName = getTileDisplayName(lastDiscard);
     const pengSourceName = game.players.find(p => p.id === getLastDiscardPlayerId(game))?.name || '';
-    broadcastQuickMessage(game.gameId, `碰！ ${player.name}碰了${pengSourceName}的${pengTileName}`, 'info', 'pong');
+    broadcastQuickMessage(game.gameId, `${player.name}碰了${pengSourceName}的${pengTileName}`, 'info', 'pong');
 
     // 记录互包
     const lastDiscardPlayerId = getLastDiscardPlayerId(game);

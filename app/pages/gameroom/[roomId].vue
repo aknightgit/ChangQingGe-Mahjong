@@ -3257,7 +3257,7 @@ const submitChow = (tileIds?: string[]) => {
   hideActionButtonsNow()
   resetAutoCount()
   playSound('tile-chow')
-  // 语音由快讯广播触发
+  playVoiceAction('chow')
   showChowPicker.value = false
   selectedChowOption.value = null
   executeAction(ActionType.CHOW, undefined, tileIds)
@@ -3278,12 +3278,13 @@ const onCancelChowPicker = () => {
   showChowPicker.value = false
   selectedChowOption.value = null
 }
-const onPeng = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-pong'); /* 语音由快讯广播触发 */ executeAction(ActionType.PENG) }
+const onPeng = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-pong'); playVoiceAction('pong'); executeAction(ActionType.PENG) }
 const onKong = () => {
   hideActionButtonsNow()
   resetAutoCount()
   selfPendingSupplementHighlight.value = true
   playSound('tile-kong')
+  playVoiceAction('kong')
   executeAction(ActionType.KONG)
 }
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); playVoiceAction('rebel'); executeAction(ActionType.REBEL) }
