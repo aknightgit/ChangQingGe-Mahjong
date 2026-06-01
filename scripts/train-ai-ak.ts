@@ -1349,7 +1349,7 @@ function formatWaitTiles(tiles: Tile[]): string {
 
 // ========== Config ==========
 const AI_NAMES = ['AI-AK', 'AI-小胖', 'AI-阿水', 'AI-老赵']
-const AI_AK_ENGINE: 'v1' | 'v2' = 'v1'  // AI-AK 使用的引擎版本（v2太慢，暂用v1测试）
+const AI_AK_ENGINE: 'v1' | 'v2' = 'v2'  // AI-AK 使用v2引擎，其他AI用v1
 const SHARED_POLICY_TARGETS = ['AI-AK', 'AI-阿水', 'AI-小胖', 'AI-老赵', 'AI-小猪']
 const AK_IDX = 0
 const SHARED_TRAINING_ROUTE_NAMES = new Set(AI_NAMES)
@@ -1682,7 +1682,7 @@ function canJiaGang(p: BotPlayer): Tile[] {
 // hand = 14 - 3*meldCount（吃碰后，未出牌；例如首口碰后为11张）
 // hand = 13 - 3*meldCount（吃碰后再出牌）
 // 注意：杠也是一口，扣3张（暗杠4张-补1=净3；jiaKong/明杠：碰的3张不变，只补1打1=净3）
-export function expectedHandCountForPhase(meldCount: number, phase: 'draw' | 'discard' | 'claim' | 'claim_discard'): number {
+export function expectedHandCountForPhase(meldCount: number, phase: 'draw' | 'discard' | 'claim' | 'claim_discard', concealedKongCount: number = 0): number {
   let base: number
   switch (phase) {
     case 'draw':          base = 14; break
@@ -1690,13 +1690,15 @@ export function expectedHandCountForPhase(meldCount: number, phase: 'draw' | 'di
     case 'claim':         base = 14; break
     case 'claim_discard': base = 13; break
   }
-  return base - 3 * meldCount
+  // 【修复】暗杠从手牌移除4张但只算1个meld，需要额外扣除
+  return base - 3 * meldCount - concealedKongCount
 }
 
 function checkHandInvariant(p: BotPlayer, phase: 'draw' | 'discard' | 'claim' | 'claim_discard'): boolean {
   const len = normalizeHand(p.hand).length
   const meldCount = p.exposedMelds.length  // 所有面子（顺/刻/杠）都算1口
-  const expected = expectedHandCountForPhase(meldCount, phase)
+  const concealedKongCount = p.exposedMelds.filter(m => m.type === MeldType.CONCEALED_KONG).length
+  const expected = expectedHandCountForPhase(meldCount, phase, concealedKongCount)
   if (len !== expected) {
     const prevPhase = p._lastPhase || '?'
     const prevHand = p._lastHand || '?'
@@ -3043,8 +3045,9 @@ function normalizeHand(hand: Tile[]): Tile[] {
   return hand.filter(t => t && !isFlower(t))
 }
 
-function getWinningHandInvariant(concealedCount: number, meldCount: number): { expected: number; valid: boolean } {
-  const expected = 14 - meldCount * 3
+function getWinningHandInvariant(concealedCount: number, meldCount: number, concealedKongCount: number = 0): { expected: number; valid: boolean } {
+  // 【修复】暗杠从手牌移除4张但只算1个meld，需要额外扣除
+  const expected = 14 - meldCount * 3 - concealedKongCount
   return { expected, valid: concealedCount === expected }
 }
 
@@ -3501,7 +3504,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     }
     if (shouldTraceDetailGame && (player.name === 'AI-AK' || player.name === 'AI-阿水')) {
       const h = player.hand.length, m = player.exposedMelds.length
-      const expected = expectedHandCountForPhase(m, 'draw')
+      const ck = player.exposedMelds.filter(meld => meld.type === MeldType.CONCEALED_KONG).length
+      const expected = expectedHandCountForPhase(m, 'draw', ck)
       console.error(`[INV_TRACE] DRAW ${player.name} h=${h} m=${m} exp=${expected} diff=${h-expected} drawn=${tileStrWithId(drawn)} wall=${g.wallIdx} flowers=${player.flowerTiles.length} hand=[${sortTiles(normalizeHand(player.hand)).map(tileStrWithId).join(' ')}] melds=[${player.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
     }
     if (!checkHandInvariant(player, 'draw')) {  // 摸牌后铁律：14/11/8/5/2张
@@ -3656,8 +3660,9 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
     }
     if (shouldTraceDetailGame && (player.name === 'AI-AK' || player.name === 'AI-阿水')) {
       const h = player.hand.length, m = player.exposedMelds.length
+      const ck = player.exposedMelds.filter(meld => meld.type === MeldType.CONCEALED_KONG).length
       const ids = player.hand.map(t => t.id.slice(-4)).join(',')
-      const expected = expectedHandCountForPhase(m, 'discard')
+      const expected = expectedHandCountForPhase(m, 'discard', ck)
       console.error(`[INV_TRACE] DISC ${player.name} h=${h} m=${m} exp=${expected} diff=${h-expected} discarded=${tileStrWithId(discard)} wall=${g.wallIdx} ids=[${ids}] hand=[${sortTiles(normalizeHand(player.hand)).map(tileStrWithId).join(' ')}] melds=[${player.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
     }
     checkHandInvariant(player, 'discard')  // 出牌后铁律：13/10/7/4/1张
@@ -3839,7 +3844,8 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           }
           if (opp.name === 'AI-AK' || opp.name === 'AI-阿水') {
             const h = opp.hand.length, m = opp.exposedMelds.length
-            const expected = expectedHandCountForPhase(m, 'claim')
+            const ck = opp.exposedMelds.filter(meld => meld.type === MeldType.CONCEALED_KONG).length
+            const expected = expectedHandCountForPhase(m, 'claim', ck)
             if (shouldTraceDetailGame) console.error(`[INV_TRACE] PENG_APPLY ${opp.name} h=${h} m=${m} exp=${expected} diff=${h-expected} removed=${handBeforePeng - h} tile=${tileStrWithId(discard)} wall=${g.wallIdx} hand=[${sortTiles(normalizeHand(opp.hand)).map(tileStrWithId).join(' ')}] melds=[${opp.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
           }
           opp.chowPongExclusion = updateChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)  // K哥铁律：记录碰行动
@@ -3848,8 +3854,9 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           }
           if (opp.name === 'AI-AK' || opp.name === 'AI-阿水') {
             const h = opp.hand.length, m = opp.exposedMelds.length
+            const ck = opp.exposedMelds.filter(meld => meld.type === MeldType.CONCEALED_KONG).length
             const ids = opp.hand.map(t => t.id.slice(-4)).join(',')
-            const expected = expectedHandCountForPhase(m, 'claim')
+            const expected = expectedHandCountForPhase(m, 'claim', ck)
             if (shouldTraceDetailGame) console.error(`[INV_TRACE] CLAIM ${opp.name} h=${h} m=${m} exp=${expected} diff=${h-expected} tile=${tileStrWithId(discard)} wall=${g.wallIdx} ids=[${ids}] hand=[${sortTiles(normalizeHand(opp.hand)).map(tileStrWithId).join(' ')}] melds=[${opp.exposedMelds.map(meldStrWithIds).join(' | ')}]`)
           }
           const pengDiscardEvalStart = PERF_TRACE ? performance.now() : 0
