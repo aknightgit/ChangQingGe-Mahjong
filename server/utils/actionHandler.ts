@@ -877,14 +877,37 @@ export class ActionHandler {
     }
   }
 
+    /** 广播自定义事件（绕开 broadcastService，直接走 wsManager） */
+  broadcastCustomEvent(gameId: string, event: string, data: any): void {
+    const wsManager = (this.deps as any).store?.getWsManager?.();
+    if (wsManager) {
+      wsManager.broadcast(gameId, event, data);
+    }
+  }
+
   /**
    * 处理造反
    */
+  broadcastCustomEvent(gameId: string, event: string, data: any): void {
+    const wsManager = (this.deps as any).store?.getWsManager?.();
+    if (wsManager) {
+      wsManager.broadcast(gameId, event, data);
+    }
+  }
+
   async handleRebel(game: GameState, player: Player): Promise<void> {
-    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode } = this.deps;
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, broadcastCustomEvent, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode } = this.deps;
 
     // 造反：所有玩家重新发牌
     broadcastQuickMessage(game.gameId, `⚔️ ${player.name} 发起了造反！`, 'special');
+
+    // 广播造反亮手牌事件（给所有客户端）
+    broadcastCustomEvent(game.gameId, 'rebel', {
+      playerId: player.id,
+      playerName: player.name,
+      hand: player.hand.concealedTiles,
+      rebelEndTime: Date.now() + 5000
+    });
 
     // 翻倍
     game.inheritedGlobalMultiplier = Math.min((game.inheritedGlobalMultiplier || 1) * 2, 8);
