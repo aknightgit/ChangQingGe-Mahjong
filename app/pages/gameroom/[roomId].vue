@@ -1255,7 +1255,7 @@ let actionWindowTimer: ReturnType<typeof setInterval> | null = null
 const actionButtonsVisibleUntil = ref(0)
 const isGameStarting = ref(false)
 const showDiceOverlay = ref(false)
-const diceValues = ref<[number, number]>([1, 1])
+const diceValues = ref<[number, number]>([0, 0])  // 【修复】默认0,0防止DiceAnimation误触发动画
 const diceExtra = ref<[number, number] | undefined>(undefined)
 const hasDicePreview = ref(false)
 const diceFromWebSocket = ref(false)
@@ -4474,14 +4474,18 @@ watch(
       confirmedWinner.value = false
       if (!hasDicePreview.value) {
         const humanRollPending = (gameState.value as any)?._humanRollPending
-        if (!humanRollPending && !diceFromWebSocket.value) {
-          // AI 庄家：从 gameState 取骰子值
-          const serverDice = gameState.value?.dice
-          if (serverDice && Array.isArray(serverDice) && serverDice.length >= 2) {
-            diceValues.value = [serverDice[0], serverDice[1]]
-          }
+        const serverDice = gameState.value?.dice
+        const hasValidDice = serverDice && Array.isArray(serverDice) && serverDice.length >= 2 && serverDice[0] > 0 && serverDice[1] > 0
+        if (!humanRollPending && !diceFromWebSocket.value && hasValidDice) {
+          // AI 庄家：从 gameState 取骰子值（必须>0才使用，防止默认值触发动画）
+          diceValues.value = [serverDice[0], serverDice[1]]
         }
-        // 人类庄家：dice=[0,0] 不覆盖，保持默认等玩家点击
+        // 人类庄家或骰子未就绪：保持 [0,0] idle 状态
+        // 【修复】骰子值无效时不显示overlay，等 enterStartingPhaseWithDiceOverlay 或 WS 事件设置正确值
+        if (!hasValidDice && !humanRollPending) {
+          console.log('[DiceOverlay] Dice not ready yet, skipping overlay display')
+          return
+        }
         hasDicePreview.value = true
       }
       showDiceOverlay.value = true
