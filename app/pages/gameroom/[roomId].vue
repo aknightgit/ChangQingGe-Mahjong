@@ -1255,6 +1255,10 @@ let actionWindowTimer: ReturnType<typeof setInterval> | null = null
 const actionButtonsVisibleUntil = ref(0)
 const isGameStarting = ref(false)
 const showDiceOverlay = ref(false)
+// DEBUG: trace all showDiceOverlay changes
+watch(showDiceOverlay, (val, oldVal) => {
+  console.log('[DICE-DEBUG] showDiceOverlay:', oldVal, '->', val, 'stack:', new Error().stack?.split('\n').slice(1, 4).map(s => s.trim()).join(' | '))
+})
 const diceValues = ref<[number, number]>([1, 1])
 const diceExtra = ref<[number, number] | undefined>(undefined)
 const hasDicePreview = ref(false)
