@@ -46,7 +46,8 @@ const LANDED_TILT_X = 0
 const LANDED_TILT_Y = 0
 
 function clampValue(value: number) {
-  return Math.min(6, Math.max(1, Math.round(value || 1)))
+  if (value <= 0) return 0  // 0 = 未掷，显示空白
+  return Math.min(6, Math.max(1, Math.round(value)))
 }
 
 function easeOutCubic(t: number) {
@@ -79,6 +80,16 @@ function faceTexture(value: number) {
   ctx.roundRect(12, 12, 232, 232, 34)
   ctx.stroke()
 
+  // 【修复】value=0 时显示 ? 而不是 1
+  if (value <= 0) {
+    ctx.fillStyle = 'rgba(143, 109, 68, 0.35)'
+    ctx.font = 'bold 120px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('?', 128, 128)
+    return canvas
+  }
+
   const positions: Record<number, Array<[number, number]>> = {
     1: [[128, 128]],
     2: [[74, 74], [182, 182]],
@@ -105,6 +116,7 @@ function faceTexture(value: number) {
 
 function orientationForFrontFace(value: number) {
   if (!three) return null
+  if (value <= 0) return new three.Quaternion()  // 0 = 默认朝向（?面）
   const eulerMap: Record<number, [number, number, number]> = {
     1: [Math.PI / 2, 0, 0],
     2: [0, 0, 0],

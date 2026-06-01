@@ -1117,6 +1117,25 @@ const onToggleTingPreview = async () => {
   }
 }
 
+// 【修复】听牌提示自动刷新：手牌变化时自动更新
+let tingRefreshDebounce: ReturnType<typeof setTimeout> | null = null
+watch(
+  () => {
+    const hand = currentPlayer.value?.hand
+    if (!hand) return ''
+    const concealed = (hand.concealedTiles || []).map((t: any) => t.id).sort().join(',')
+    const melds = (hand.exposedMelds || []).map((m: any) => m.type + ':' + (m.tiles || []).map((t: any) => t.id).sort().join(',')).sort().join('|')
+    return `${concealed}|${melds}`
+  },
+  () => {
+    if (!tingPreviewEnabled.value) return
+    if (tingRefreshDebounce) clearTimeout(tingRefreshDebounce)
+    tingRefreshDebounce = setTimeout(() => {
+      void refreshTingPreview()
+    }, 300)
+  }
+)
+
 const {
     gameState,
     currentPlayer,
