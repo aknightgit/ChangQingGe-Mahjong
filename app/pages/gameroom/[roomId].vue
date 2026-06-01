@@ -2929,9 +2929,9 @@ const onConfirmHu = async (index: number) => {
   playSound('tile-hu')
   const selectedOption: any = displayWinOptions.value[index]
   if (selectedOption?.type === 'self_draw') {
-    // 语音由快讯广播触发
+    playVoiceAction('selfHu')
   } else {
-    // 语音由快讯广播触发
+    playVoiceAction('hu')
   }
   lastHuReviewOptions.value = displayWinOptions.value.map((option: any) => ({ ...option }))
   lastSelectedHuCombo.value = index
@@ -3293,7 +3293,7 @@ const onKong = () => {
 }
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); playVoiceAction('rebel'); executeAction(ActionType.REBEL) }
 const onThink = () => { resetAutoCount(); executeAction(ActionType.THINK) }
-const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); /* 语音由快讯广播触发 */ executeAction(ActionType.CHEAT_HU) }
+const onCheatHu = () => { resetAutoCount(); playSound('tile-hu'); playVoiceAction('hu'); executeAction(ActionType.CHEAT_HU) }
 
 // 退房结算
 const showSettlement = ref(false)
@@ -4303,7 +4303,7 @@ if (replacedFlowerCount > prev.replacedFlowerCount) {
         if (shouldPlayVoice && !_flowerVoicePlayed.has(player.id)) {
           _flowerVoicePlayed.add(player.id)
           playSound('tile-draw')
-          // 补花语音由快讯广播触发
+          playVoiceAction('flowerReplace')
         }
       }
       if (shouldPlayVoice && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
@@ -4340,13 +4340,13 @@ if (replacedFlowerCount > prev.replacedFlowerCount) {
   for (const action of pendingMeldVoices) {
     if (action === 'kong') {
       playSound('tile-kong')
-      // 语音由快讯广播触发
+      playVoiceAction('kong')
     } else if (action === 'pong') {
       playSound('tile-pong')
-      // 语音由快讯广播触发
+      playVoiceAction('pong')
     } else {
       playSound('tile-chow')
-      // 语音由快讯广播触发
+      playVoiceAction('chow')
     }
   }
 }

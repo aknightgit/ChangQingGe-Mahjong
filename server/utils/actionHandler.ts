@@ -1274,6 +1274,7 @@ export class ActionHandler {
     });
 
     // 找到所有可能的吃牌组合
+    const seenKeys = new Set<string>();
     for (let i = 0; i < sortedHand.length; i++) {
       for (let j = i + 1; j < sortedHand.length; j++) {
         const tile1 = sortedHand[i];
@@ -1285,6 +1286,10 @@ export class ActionHandler {
         // 检查是否是连续的三张牌
         const values = [tile1.value, tile2.value, discardedTile.value].sort((a, b) => a - b);
         if (values[0] + 1 === values[1] && values[1] + 1 === values[2]) {
+          // 按值组合去重（相同值的重复牌只保留一组）
+          const key = values.join(',');
+          if (seenKeys.has(key)) continue;
+          seenKeys.add(key);
           sequences.push([tile1, tile2]);
         }
       }
