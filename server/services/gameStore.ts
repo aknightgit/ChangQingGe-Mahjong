@@ -360,4 +360,74 @@ export class GameStore {
     }
     return String(Date.now()).slice(-4);
   }
+
+  // ─── 旧房间清理 ───────────────────────
+
+  private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+
+  /** 启动定期清理（每10分钟） */
+  startCleanup(): void {
+    if (this.cleanupTimer) return;
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupExpiredGames().catch(e =>
+        console.warn('[GameStore] cleanup error:', e.message)
+      );
+    }, 10 * 60 * 1000);
+    // 启动后立即执行一次
+    this.cleanupExpiredGames().catch(() => {});
+    console.log('[GameStore] Cleanup scheduler started (every 10min)');
+  }
+
+  /** 清理过期房间 */
+  private async cleanupExpiredGames(): Promise<void> {
+    const now = Date.now();
+    const ENDED_MEMORY_TTL = 2 * 60 * 60 * 1000;   // 内存：结束超过2小时清除
+    const ENDED_DB_TTL = 24 * 60 * 60 * 1000;       // MongoDB：结束超过24小时清除
+    const IDLE_TTL = 6 * 60 * 60 * 1000;             // 闲置超过6小时的非活跃房间清除
+
+    let memoryCleaned = 0;
+    let dbCleaned = 0;
+    const dbDeleteIds: string[] = [];
+
+    for (const [gameId, game] of this.games) {
+      const endedAt = game.endedAt || 0;
+      const lastAction = game.lastActionTime || 0;
+      const isEnded = game.phase === GamePhase.ENDED;
+      
+      // 已结束超过2小时 → 从内存移除
+      if (isEnded && endedAt && now - endedAt > ENDED_MEMORY_TTL) {
+        for (const p of game.players) this.playerToGame.delete(p.id);
+        this.games.delete(gameId);
+        memoryCleaned++;
+        if (now - endedAt > ENDED_DB_TTL) dbDeleteIds.push(gameId);
+        continue;
+      }
+       
+      // 闲置超过6小时的 waiting/starting 房间 → 清除
+      if (!isEnded && (game.phase === 'waiting' || game.phase === 'starting') && lastAction && now - lastAction > IDLE_TTL) {
+        for (const p of game.players) this.playerToGame.delete(p.id);
+        this.games.delete(gameId);
+        dbDeleteIds.push(gameId);
+        memoryCleaned++;
+      }
+    }
+
+    // 批量删除 MongoDB 中过期的记录
+    if (dbDeleteIds.length > 0) {
+      try {
+        const { getCollection } = await import('../utils/mongo');
+        const col = await getCollection('mahjongGames');
+        if (col) {
+          await col.deleteMany({ gameId: { $in: dbDeleteIds } });
+          dbCleaned = dbDeleteIds.length;
+        }
+      } catch (e: any) {
+        console.warn('[GameStore] MongoDB cleanup failed:', e.message);
+      }
+    }
+
+    if (memoryCleaned > 0 || dbCleaned > 0) {
+      console.log(`[GameStore] Cleanup: memory=${memoryCleaned}, db=${dbCleaned}, remaining=${this.games.size}`);
+    }
+  }
 }

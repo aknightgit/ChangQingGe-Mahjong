@@ -521,18 +521,46 @@ export const useGame = () => {
     isActionPending.value = true
 
     try {
+      // 优先走 WebSocket（绕过 vicp.fun 代理延迟）
+      const s = socket.value
+      if (s?.connected) {
+        const result = await new Promise<any>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('WS action timeout')), 15000)
+          s.once('game:action-response', (resp: any) => {
+            clearTimeout(timeout)
+            resolve(resp)
+          })
+          s.emit('game:action', {
+            gameId: gameId.value,
+            playerId: playerId.value,
+            type: action,
+            tileId,
+            tileIds,
+            winOptionLabel
+          })
+        })
+        if (result?.success) {
+          updateState(result.data)
+          return true
+        } else {
+          console.error('WS action failed:', result?.error)
+          return false
+        }
+      }
+
+      // fallback: HTTP POST
       const response = await $fetch('/mahjong/api/game/action', {
         method: 'POST',
         body: {
           gameId: gameId.value,
           playerId: playerId.value,
-        action,
-        type: action,
-        tileId,
-        tileIds,
-        winOptionLabel
-      }
-    })
+          action,
+          type: action,
+          tileId,
+          tileIds,
+          winOptionLabel
+        }
+      })
 
       if ((response as any)?.success) {
         updateState((response as any).data)

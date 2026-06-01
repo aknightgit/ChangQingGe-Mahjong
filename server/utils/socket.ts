@@ -366,25 +366,61 @@ export async function initializeSocketIO(server: HTTPServer) {
     // Game state updates
     socket.on('game:action', async (data: any) => {
       try {
-        const { gameId, playerId, type, tileId, tileIds } = data
+        const { gameId, playerId, type, tileId, tileIds, winOptionLabel } = data
         
         console.log(`🎮 Action received: ${type} from ${playerId} in game ${gameId}`)
 
         if (type === ActionType.CHEAT_HU) {
           const isAdmin = await socketIsAdmin(socket)
           if (!isAdmin) {
-            socket.emit('game:error', { message: 'Admin privileges required' })
+            socket.emit('game:action-response', { success: false, error: 'Admin privileges required' })
             return
           }
         }
         
-        // Execute action in GameManager (the brain)
-        // This will validate the move, update state, and trigger broadcast via setWebSocketManager
-        await gameManager.executeAction(gameId, playerId, type, tileId, tileIds)
+        // Execute action in GameManager
+        await gameManager.executeAction(gameId, playerId, type, tileId, tileIds, winOptionLabel)
+
+        // Build full response (same as HTTP handler)
+        const game = await gameManager.getGame(gameId)
+        const player = game?.players.find(p => p.id === playerId)
+        const availableActions = await gameManager.getAvailableActions(gameId, playerId)
+        const tingPreview = await gameManager.getTingPreviewForPlayer(gameId, playerId).catch(() => ({
+          isTing: false,
+          winningTiles: []
+        }))
+
+        const TileSuit = (await import('../types/game')).TileSuit
+        socket.emit('game:action-response', {
+          success: true,
+          data: {
+            game: {
+              ...game,
+              currentRound: game?.currentRound ?? ((game?.roundStats?.length || 0) + (game?.phase === 'ended' ? 0 : 1)),
+              globalMultiplier: Math.min((game?.inheritMultiplier ?? game?.inheritedGlobalMultiplier ?? 1) * (game?.roundMultiplier ?? 1), 8),
+              players: game!.players.map((p: any) => ({
+                ...p,
+                hand: {
+                  ...p.hand,
+                  concealedTiles: p.id === playerId
+                    ? p.hand.concealedTiles
+                    : p.hand.concealedTiles.map((_: any, index: number) => ({
+                        id: `hidden-${p.id}-${index}`,
+                        suit: TileSuit.CHARACTERS,
+                        value: 0
+                      }))
+                }
+              }))
+            },
+            playerView: player?.hand,
+            availableActions,
+            tingPreview
+          }
+        })
         
       } catch (error: any) {
         console.error('Error in game:action:', error.message)
-        socket.emit('game:error', { message: error.message })
+        socket.emit('game:action-response', { success: false, error: error.message })
       }
     })
 

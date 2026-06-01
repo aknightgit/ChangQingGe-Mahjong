@@ -66,6 +66,7 @@ class GameManager {
   constructor() {
     this.store = new GameStore();
     this.store._inject(this);
+    this.store.startCleanup();
     this.botController = new BotController(this.createBotControllerDeps());
     this.actionHandler = new ActionHandler(this.createActionHandlerDeps());
   }
