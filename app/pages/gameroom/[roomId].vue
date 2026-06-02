@@ -4038,6 +4038,9 @@ watch(() => gameState.value?.phase, (phase, oldPhase) => {
     showLiangShanOverlay.value = false
     showWinnerReveal.value = false
     showDiceOverlay.value = true
+    // 重置聚义投票状态
+    prevLiangShanVoteCount.value = 0
+    prevLiangShanVoteIds.value = []
   }
   // 发牌完成：隐藏骰子界面
   if (phase === GamePhase.PLAYING && oldPhase === GamePhase.STARTING) {
@@ -4529,11 +4532,8 @@ watch(() => gameState.value, (newState, oldState) => {
       addBroadcast(`🔥 [${initiator?.name || '某玩家'}] 发起了梁山聚义！`, 'special')
     }
     if ((newState as any).liangShanSuccess) {
-      console.log('[LiangShan] Popup triggered:', { currentVotes, activeCount: activePlayerCount(newState), liangShanSuccess: (newState as any).liangShanSuccess })
-      // 延迟确保“发起”消息先显示
-      setTimeout(() => {
-        addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
-      }, 300)
+      console.log('[LiangShan] Popup triggered:', { currentVotes, prevCount: prevLiangShanVoteCount.value, liangShanSuccess: (newState as any).liangShanSuccess, broadcastCount: broadcastMessages.value.length })
+      addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
       // 显示梁山聚义成功弹窗，3s 后主动推进到下一局
       showLiangShanOverlay.value = true
       setTimeout(() => {
