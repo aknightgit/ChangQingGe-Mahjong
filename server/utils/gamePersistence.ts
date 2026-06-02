@@ -49,12 +49,14 @@ const meldToStored = (meld: Meld): StoredMeld => ({
   tiles: meld.tiles.map(tileToStored),
   isConcealed: meld.isConcealed,
   sourcePosition: meld.sourcePosition,
-  sourceTileId: meld.sourceTileId
-})
+  sourceTileId: meld.sourceTileId,
+  ...(meld as any).replacementDone ? { replacementDone: true } : {}
+} as any)
 
 const storedToMeld = (meld: StoredMeld): Meld => ({
   type: meld.type,
   tiles: meld.tiles.map(storedToTile),
+  ...((meld as any).replacementDone ? { replacementDone: true } : {}),
   isConcealed: meld.isConcealed,
   sourcePosition: meld.sourcePosition,
   sourceTileId: meld.sourceTileId

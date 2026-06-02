@@ -755,6 +755,9 @@ function getDiscardDangerScore(tile: Tile, game: GameState, player: Player): num
   if (isFlower(tile)) return 0
 
   const visibleCopies = countVisibleCopies(tile, game)
+  const discardPileSize = game.discardPile?.length || 0
+  const estimatedRound = Math.max(1, Math.floor(discardPileSize / 4) + 1)
+  const wallRemaining = game.wall?.length || 0
   let baseDanger = 0.55
 
   if (isHonor(tile)) baseDanger = 0.42
@@ -763,6 +766,25 @@ function getDiscardDangerScore(tile: Tile, game: GameState, player: Player): num
   else baseDanger = 0.68
 
   baseDanger *= Math.max(0.12, 1 - visibleCopies * 0.18)
+
+  // ★ V2.1: 弃牌区未出现过的牌更危险（可能是别人手里握着的）
+  const tileInDiscardPile = (game.discardPile || []).some(d => tilesMatch(d, tile))
+  if (!tileInDiscardPile && isNumberTile(tile)) {
+    // 中张(3-7)弃牌区未出现 → 高概率有人手里有对子/顺子
+    const midBonus = (tile.value >= 3 && tile.value <= 7) ? 0.18 : 0.10
+    baseDanger += midBonus
+  }
+
+  // ★ V2.1: 牌局后段(10巡+)弃牌区越少出现的牌越危险
+  if (estimatedRound >= 10 && isNumberTile(tile)) {
+    const sameSuitInDiscard = (game.discardPile || []).filter(d => d.suit === tile.suit).length
+    const suitDangerFactor = Math.max(0, 1 - sameSuitInDiscard * 0.08)
+    baseDanger += suitDangerFactor * 0.12
+  }
+
+  // ★ V2.1: 下家高概率需要的牌更危险
+  const playerIndex = game.players.findIndex((p: any) => p.id === player.id)
+  const downstreamPlayer = game.players[(playerIndex + 1) % game.players.length]
 
   let danger = 0
   for (const opponent of game.players || []) {
@@ -783,6 +805,20 @@ function getDiscardDangerScore(tile: Tile, game: GameState, player: Player): num
       const sameSuitDiscards = opponentDiscards.filter(discard => discard.suit === tile.suit)
       if (sameSuitDiscards.some(discard => Math.abs(discard.value - tile.value) >= 3)) {
         opponentFactor -= 0.08
+      }
+    }
+
+    // ★ V2.1: 下家加权 — 下家高概率需要的牌危险度翻倍
+    if (opponent.id === downstreamPlayer?.id && isNumberTile(tile)) {
+      const downstreamDiscards = downstreamPlayer.hand.discardedTiles || []
+      const downstreamSameSuit = downstreamDiscards.filter(d => d.suit === tile.suit)
+      // 下家弃过同门少 → 高概率在做这门 → 危险度+50%
+      if (downstreamSameSuit.length <= 1 && downstreamDiscards.length >= 4) {
+        opponentFactor *= 1.5
+      }
+      // 下家是听牌状态 → 所有数牌危险度+80%
+      if ((downstreamPlayer as any).isTing) {
+        opponentFactor *= 1.8
       }
     }
 
@@ -809,6 +845,7 @@ function scoreTileForDiscard(
   const policy = getPolicyForPlayer(player)
   let score = 0
 
+  const discardPileSize = game.discardPile?.length || 0
   const phaseTileCount = hand.length
   const isEarlyPhase = phaseTileCount >= 11
   const isMidPhase = phaseTileCount >= 5 && phaseTileCount <= 10
@@ -1050,6 +1087,15 @@ function scoreTileForDiscard(
   const threatPenalty = discardDanger * ((policy.defenseRiskAversion || 0) * 3.2 + (policy.oppTingDetection || 0) * 2.2 + 0.4)
   score += safetyBonus * threatScale
   score -= threatPenalty * threatScale
+
+  // ★ V2.1: 跟打奖励 — 本轮有其他人打过该牌，安全张优先打
+  const currentRoundStart = Math.max(0, discardPileSize - (discardPileSize % 4))
+  const recentDiscards = (game.discardPile || []).slice(currentRoundStart)
+  const followedThisRound = recentDiscards.some(d => tilesMatch(d, tile))
+  if (followedThisRound) {
+    // 跟打加分：越危险的牌跟打价值越高（安全出掉）
+    score += 1.8 + discardDanger * 2.5
+  }
 
   // === 7. Score-based strategic modifiers ===
   // 使用参数：scoreBehindRiskBoost / scoreLeadDefenseBoost
