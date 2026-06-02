@@ -20,8 +20,6 @@ const FIXED_FAN: Record<string, number> = {
   '风一色': 20,       // 全部风牌
   '清碰': 20,         // 清一色 + 碰碰胡
   '混碰': 10,         // 混一色 + 碰碰胡
-  '碰碰胡': 10,       // 全部刻子/杠子
-  '混一色': 10,       // 一种数牌 + 字牌
   '大吊碰碰胡': 10,    // 碰碰胡 + 大吊
   '大吊混一色': 10,    // 混一色 + 大吊
   '大吊清一色': 10,    // 清一色 + 大吊
@@ -820,8 +818,6 @@ function getFixedFanName(type: HandType, isSelfDrawn: boolean, isKongFlower: boo
     case HandType.ALL_WIND: return '风一色';
     case HandType.QING_PENG: return '清碰';
     case HandType.HUN_PENG: return '混碰';
-    case HandType.HALF_FLUSH: return '混一色';
-    case HandType.ALL_TRIPLETS: return '碰碰胡';
     case HandType.FULL_FLUSH: return '清一色';
     case HandType.EIGHT_FLOWERS: return isSelfDrawn ? '八花自摸' : null;
     case HandType.FOUR_WILD: return '四百搭';

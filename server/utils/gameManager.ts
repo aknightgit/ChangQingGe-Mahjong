@@ -12,7 +12,7 @@
   TileSuit,
   GameEndReason
 } from '../types/game';
-import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isFivePoison, getTileDisplayName } from './tiles';
+import { createDeck, shuffleTiles, findTileById, removeTile, sortTiles, tilesEqual, groupTiles, isMissingOneSuit, isFlower, isWind, isDragon, isFivePoison, getTileDisplayName } from './tiles';
 import * as tileHelper from './tileHelper';
 import { BroadcastService } from './broadcastService';
 import { TimerManager } from './timerManager';
@@ -2653,6 +2653,23 @@ class GameManager {
       if (winCheck.canWin) {
         const handTypes = detectHandTypes(testHand, p.hand.exposedMelds, false, this.countFlowerTiles(p), null, game.wildTileGroup);
         if (handTypes.length > 0) {
+          // 捉冲限制：碰碰胡/混一色要求门口有花/风箭刻/杠（大吊或基础分>=10豁免）
+          const topType = handTypes[0];
+          const needsRestriction = topType === HandType.ALL_TRIPLETS || topType === HandType.HALF_FLUSH;
+          const isExempt = handTypes.includes(HandType.DA_DIAO) ||
+            handTypes.includes(HandType.HUN_PENG) || handTypes.includes(HandType.QING_PENG) ||
+            handTypes.includes(HandType.FENG_PENG) || handTypes.includes(HandType.ALL_WIND) ||
+            handTypes.includes(HandType.FULL_FLUSH) || handTypes.includes(HandType.EIGHT_FLOWERS) ||
+            handTypes.includes(HandType.FOUR_WILD);
+          if (needsRestriction && !isExempt) {
+            const exposed = p.hand.exposedMelds;
+            const hasFlower = exposed.some(m => m.tiles.some(t => isFlower(t)));
+            const hasWindMeld = exposed.some(m => m.tiles.some(t => isWind(t) || isDragon(t)) && (m.type === MeldType.TRIPLET || m.type === MeldType.KONG || m.type === MeldType.CONCEALED_KONG));
+            const hasKong = exposed.some(m => m.type === MeldType.KONG || m.type === MeldType.CONCEALED_KONG);
+            if (!hasFlower && !hasWindMeld && !hasKong) {
+              continue; // 不满足捉冲条件，跳过
+            }
+          }
           huCandidates.push(p.id);
           continue;
         }
