@@ -3998,6 +3998,17 @@ watch(() => gameState.value?.phase, (phase, oldPhase) => {
   if (phase === GamePhase.ENDED && oldPhase === GamePhase.REVEAL) {
     showWinnerReveal.value = false
   }
+  // 新局开始：重置所有弹窗，显示骰子界面
+  if (phase === GamePhase.STARTING) {
+    showSettlement.value = false
+    showLiangShanOverlay.value = false
+    showWinnerReveal.value = false
+    showDiceOverlay.value = true
+  }
+  // 发牌完成：隐藏骰子界面
+  if (phase === GamePhase.PLAYING && oldPhase === GamePhase.STARTING) {
+    showDiceOverlay.value = false
+  }
 })
 
 const actionWindowText = computed(() => {
@@ -4471,10 +4482,13 @@ watch(() => gameState.value, (newState, oldState) => {
   const currentVoteIds = ((newState as any).liangShanVotes || []) as string[]
   const currentVotes = currentVoteIds.length
   if (currentVotes > prevLiangShanVoteCount.value) {
-    if (currentVotes === 1 && !(newState as any).liangShanSuccess) {
-      const voter = newState.players?.find((p: any) => p.id === currentVoteIds[0])
-      addBroadcast(`🔥 【${voter?.name || '某玩家'}】 发起了梁山聚义！`, 'special')
-    } else if ((newState as any).liangShanSuccess) {
+    const initiatorId = currentVoteIds[0]
+    const initiator = newState.players?.find((p: any) => p.id === initiatorId)
+    // 之前没有发起消息 → 先播报发起
+    if (prevLiangShanVoteCount.value === 0) {
+      addBroadcast(`🔥 【${initiator?.name || '某玩家'}】 发起了梁山聚义！`, 'special')
+    }
+    if ((newState as any).liangShanSuccess) {
       console.log('[LiangShan] Popup triggered:', { currentVotes, activeCount: activePlayerCount(newState), liangShanSuccess: (newState as any).liangShanSuccess })
       addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
       // 显示梁山聚义成功弹窗，3s 后主动推进到下一局
@@ -4485,14 +4499,12 @@ watch(() => gameState.value, (newState, oldState) => {
       }, 3000)
     } else {
       const newResponderIds = currentVoteIds.filter(id => !prevLiangShanVoteIds.value.includes(id))
-      const initiatorId = currentVoteIds[0]
-      const initiator = newState.players?.find((p: any) => p.id === initiatorId)
       const responderNames = newResponderIds
         .filter(id => id !== initiatorId)
         .map(id => newState.players?.find((p: any) => p.id === id)?.name)
         .filter(Boolean)
       for (const responderName of responderNames) {
-        addBroadcast(`🔥 【${responderName}】 响应了${initiator}?.name || '发起者'}的梁山聚义！`, 'special')
+        addBroadcast(`🔥 【${responderName}】 响应了${initiator?.name || '发起者'}的梁山聚义！`, 'special')
       }
       addBroadcast(`🔥 有${currentVotes}名玩家响应了梁山聚义！`, 'special')
     }

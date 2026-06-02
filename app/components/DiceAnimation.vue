@@ -112,7 +112,6 @@ const currentRoll = ref(0)
 const showResultBurst = ref(false)
 const RESULT_HOLD_MS = 1000
 const maxRollsLimit = computed(() => props.maxRolls || 1)
-const canReroll = computed(() => currentRoll.value < maxRollsLimit.value && phase.value === 'result')
 const isQuadCombo = computed(() => {
   // 单次：1+1 或 4+4 → 4倍
   const singleQuad = (props.dice1 === 1 && props.dice2 === 1) || (props.dice1 === 4 && props.dice2 === 4)
@@ -141,6 +140,8 @@ const resultBurstLabel = computed(() => {
   if (isDoubleCombo.value) return '双倍！'
   return ''
 })
+const hasMultiplier = computed(() => !!resultBurstLabel.value)
+const canReroll = computed(() => currentRoll.value < maxRollsLimit.value && phase.value === 'result' && !hasMultiplier.value)
 const resultBurstText = computed(() => {
   if (isQuadCombo.value) return '四倍！'
   if (isDoubleCombo.value) return '双倍！'
