@@ -97,8 +97,8 @@ export class SettlementEngine {
     const rawCount = this.mutualBailout.get(game.gameId)?.get(playerId)?.get(sourcePlayerId);
     const currentCount = rawCount || 0;
     const msgByCount: Record<number, string> = {
-      2: `📣 ${player.name}搞了${source.name}两口了！`,
-      3: `📣 ${player.name}搞了${source.name}三口了！！`,
+      2: `📣 [${player.name}]搞了[${source.name}]两口了！`,
+      3: `📣 [${player.name}]搞了[${source.name}]三口了！！`,
       4: `📣 ${player.name}搞了${source.name}四口了！！！`
     };
     const msg = msgByCount[currentCount];
