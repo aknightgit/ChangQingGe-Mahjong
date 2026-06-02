@@ -4450,8 +4450,8 @@ const checkOtherPlayerSounds = (newState: any) => {
     if (prev) {
       const isSelf = player.id === playerId.value
       const isBotCtrl = !!(player as any).isBotControlled || isBotPlayer(player)
-      // 超时AI帮忙摸牌打牌时也播放语音（isSelf但不是自己触发的）
-      const shouldPlayVoice = !isSelf || isBotCtrl || autoDraw.value  // 自动摸牌开启时也播放语音
+      // 所有玩家的动作都播放语音（包括自己——超时AI帮忙/自动摸牌/完全托管）
+      const shouldPlayVoice = true
       // 补花语音也排队，确保出牌语音先于补花语音
       if (replacedFlowerCount > prev.replacedFlowerCount) {
         if (!_flowerVoicePlayed.has(player.id)) {
