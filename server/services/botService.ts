@@ -803,7 +803,8 @@ function scoreTileForDiscard(
   game: GameState,
   player: Player,
   postDiscardShanten?: number,
-  postDiscardEffective?: number
+  postDiscardEffective?: number,
+  routeState?: any
 ): number {
   const policy = getPolicyForPlayer(player)
   let score = 0
@@ -970,6 +971,46 @@ function scoreTileForDiscard(
   if (sameTypeCount >= 2) score -= 1.0 * routeBiasFactor
   if (!isHonor(tile) && sameTypeCount < 2) {
     score += 0.6 * routeBiasFactor
+  }
+
+  // === 4.4 ★ 路线驱动弃牌：弃牌为路线服务！===
+  if (routeState && routeState.current && tile.suit !== TileSuit.FLOWER) {
+    const rs = routeState.current
+    const targetSuit = routeState.targetSuit
+    const shortestSuit = routeState.features?.shortestSuit
+    const isShortSuit = shortestSuit && tile.suit === shortestSuit
+    const isTarget = targetSuit && tile.suit === targetSuit
+
+    if (rs === 'HALF_FLUSH' || rs === 'OPEN_SPEED') {
+      // 清混一色/开放速度：拆短门对子，保留长门
+      if (isTarget && sameTypeCount >= 2) {
+        score -= 4.0 * routeBiasFactor  // 长门对子：坚决保留
+      } else if (isTarget && sameTypeCount === 1) {
+        score -= 2.0 * routeBiasFactor  // 长门单张：保留
+      } else if (!isHonor(tile) && !isTarget) {
+        // 短门/次短门：无论对子还是单张，都优先打掉
+        if (sameTypeCount >= 2) {
+          score += 3.5 * routeBiasFactor  // 短门对子：打掉！为路线服务
+        } else {
+          score += 2.5 * routeBiasFactor  // 短门单张：打掉
+        }
+      }
+    } else if (rs === 'ALL_PUNGS') {
+      // 碰碰胡：保留所有对子，打单张
+      if (sameTypeCount >= 2) {
+        score -= 3.0 * routeBiasFactor  // 对子：坚决保留
+      } else if (sameTypeCount === 1) {
+        score += 2.0 * routeBiasFactor  // 单张：优先打掉
+      }
+    } else if (rs === 'HONOR_HEAVY') {
+      // 风一色：保留风箭，打数牌
+      if (isHonor(tile)) {
+        score -= 3.0 * routeBiasFactor
+      } else {
+        score += 2.5 * routeBiasFactor
+        if (sameTypeCount >= 2) score += 1.5 * routeBiasFactor  // 数牌对子也要打
+      }
+    }
   }
 
   // Late game tie-break: bias toward ready hand speed and safer discards.
@@ -1315,7 +1356,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
 
     const shanten = calculateShanten(remaining, exposedCount, wildChecker)
     const effective = countEffectiveTiles(remaining, exposedCount, wildChecker)
-    let score = scoreTileForDiscard(tile, hand, game, player, shanten, effective)
+    let score = scoreTileForDiscard(tile, hand, game, player, shanten, effective, routeState)
     const discardDanger = getDiscardDangerScore(tile, game, player)
     const winningTiles = shanten === 0 ? countWinningTilesForHand(remaining, exposedCount, game) : 0
     const waitWeight = scoreLead < -1000 ? 1.15 : 1
@@ -1431,6 +1472,18 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         } else if (tilePairCount >= 2) {
           // 对子/刻子：坚决保留（大负分）
           composite -= 45 + tilePairCount * 10
+        }
+      }
+      // ★ 清混一色坚决执行：拆短门对子，保留长门
+      if ((routeState.current === 'HALF_FLUSH' || routeState.current === 'OPEN_SPEED') && routeState.targetSuit) {
+        const _isTarget = tile.suit === routeState.targetSuit
+        const _isShort = routeState.features.shortestSuit && tile.suit === routeState.features.shortestSuit
+        if (!_isTarget && isNumberTile(tile)) {
+          // 短门/次短门：无论对子还是单张，都打掉
+          composite += 40 + tilePairCount * 15 + (_isShort ? 10 : 0)
+        } else if (_isTarget && tilePairCount >= 2) {
+          // 长门对子：坚决保留
+          composite -= 35 + tilePairCount * 8
         }
       }
       if (isPostTurn10 && round10Commitment) {
@@ -2575,17 +2628,17 @@ export async function shouldClaimPendingAction(
             scoreLead,
           }) * (0.055 + routeMetricPolicy.tingQuality * 0.005)
         }
-        bestChow.tune = Math.max(0.05, bestChow.tune)
-        // P0: 排除规则软限制 - 不硬拒绝但大幅降低吃牌概率
-        // 门清时吃A门后只能吃碰A门，若此门不足6张则大概率做不成清混一色
+        // ★ 异门吃碰互斥：硬拒绝，不允许吃
         if (exclusionBlocked) {
-          bestChow.tune *= 0.08
+          actionScores.set(ActionType.CHOW, { shanten: 99, effective: 0, tune: 0 })
+        } else {
+          bestChow.tune = Math.max(0.05, bestChow.tune)
+          actionScores.set(ActionType.CHOW, {
+            shanten: bestChow.shanten,
+            effective: bestChow.effective,
+            tune: bestChow.tune,
+          })
         }
-        actionScores.set(ActionType.CHOW, {
-          shanten: bestChow.shanten,
-          effective: bestChow.effective,
-          tune: bestChow.tune,
-        })
       }
     }
   }

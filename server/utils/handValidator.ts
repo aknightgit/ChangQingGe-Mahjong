@@ -1624,6 +1624,8 @@ export function isTing(
 export interface ChowPongExclusionState {
   firstActionSuit: string | null;
   firstActionType: 'chow' | 'pong' | null;
+  /** 所有碰过的花色集合（用于多门碰后禁止吃） */
+  pongedSuits?: string[];
 }
 
 export function checkChowPongExclusion(
@@ -1641,10 +1643,14 @@ export function checkChowPongExclusion(
       // 吃了A门：A门可吃/碰；BC门禁止一切
       return isSameSuit;
 
-    case 'pong':
-      // 碰了A门：A门可吃/碰；BC门仅禁止吃，允许碰
-      if (actionType === 'chow') return isSameSuit;  // A门可吃，BC门禁吃
-      return true;                                   // 碰任何门均允许
+    case 'pong': {
+      // ★ 碰了多门：禁止一切吃（只能碰）
+      const pongedSuits = state.pongedSuits || []
+      if (actionType === 'chow' && pongedSuits.length >= 2) return false
+      // 碰了A门：A门可吃；BC门禁吃
+      if (actionType === 'chow') return isSameSuit
+      return true  // 碰任何门均允许
+    }
 
     default:
       return true;
@@ -1656,10 +1662,19 @@ export function updateChowPongExclusion(
   actionType: 'chow' | 'pong',
   tileSuit: string
 ): ChowPongExclusionState {
-  if (!state.firstActionSuit) {
-    return { firstActionSuit: tileSuit, firstActionType: actionType };
+  const pongedSuits = state.pongedSuits || []
+  if (actionType === 'pong') {
+    // 记录所有碰过的花色
+    const newPongedSuits = pongedSuits.includes(tileSuit) ? pongedSuits : [...pongedSuits, tileSuit]
+    if (!state.firstActionSuit) {
+      return { firstActionSuit: tileSuit, firstActionType: 'pong', pongedSuits: newPongedSuits }
+    }
+    return { ...state, pongedSuits: newPongedSuits }
   }
-  return state;
+  if (!state.firstActionSuit) {
+    return { firstActionSuit: tileSuit, firstActionType: actionType, pongedSuits }
+  }
+  return { ...state, pongedSuits }
 }
 
 // ============================================================
