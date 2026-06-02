@@ -422,6 +422,18 @@
                         <div class="glass-toggle-knob"></div>
                       </div>
                     </div>
+                    <div class="glass-settings-row glass-settings-row--panel" @click="autoDraw = !autoDraw">
+                      <div class="glass-settings-row-main">
+                        <span class="glass-settings-icon">{{ autoDraw ? '🤖' : '👆' }}</span>
+                        <div class="glass-settings-copy">
+                          <span class="glass-settings-label">自动摸牌</span>
+                          <span class="glass-settings-help">无其他可选操作时，自动摸牌（减少点击）</span>
+                        </div>
+                      </div>
+                      <div class="glass-toggle" :class="{ 'glass-toggle--on': autoDraw }">
+                        <div class="glass-toggle-knob"></div>
+                      </div>
+                    </div>
                     <div class="glass-settings-card">
                       <div class="glass-settings-card-title">出牌方式</div>
                       <div class="glass-settings-card-subtitle">移动端支持双击、点选确认、拖拽出牌</div>
@@ -2740,6 +2752,22 @@ const showDraw = computed(() =>
   shouldExposeSharedDraw.value ||
   shouldPreviewDeferredDraw.value
 )
+// ★ 自动摸牌：无其他可选操作时自动摸牌
+watch(showDraw, (val) => {
+  if (!val || !autoDraw.value) return
+  // 有其他优先操作时不自动摸
+  const hasPriorityAction = showChow.value || showPeng.value || showKong.value || showHu.value
+    || showRebel.value || showConcealedKong.value || showExtendedKong.value
+  if (hasPriorityAction) return
+  // 延迟 500ms 后自动摸牌（给动画和反应时间）
+  setTimeout(() => {
+    if (!showDraw.value || !autoDraw.value) return
+    const hasPriorityNow = showChow.value || showPeng.value || showKong.value || showHu.value
+      || showRebel.value || showConcealedKong.value || showExtendedKong.value
+    if (hasPriorityNow) return
+    void onDraw()
+  }, 500)
+})
 const filteredCircularAvailableActions = computed(() => {
   if ((shouldExposeSharedDraw.value || shouldPreviewDeferredDraw.value) && !availableActions.value.includes(ActionType.DRAW)) {
     return [...availableActions.value, ActionType.DRAW]
