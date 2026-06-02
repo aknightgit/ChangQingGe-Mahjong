@@ -2448,8 +2448,12 @@ const startNextRound = async () => {
   showLiangShanOverlay.value = false
   settlementData.value = null
   isHuReviewMode.value = false
-  // 主动刷新一次状态，确保拿到服务端 STARTING 阶段
-  try { await refreshState('startNextRound') } catch {}
+  // 轮询等待服务端进入 STARTING 阶段（最多 8 秒）
+  for (let i = 0; i < 16; i++) {
+    try { await refreshState('startNextRound') } catch {}
+    if (gameState.value?.phase === GamePhase.STARTING || gameState.value?.phase === GamePhase.PLAYING) break
+    await new Promise(r => setTimeout(r, 500))
+  }
 }
 const isInteractionLocked = computed(() => isOverlayVisible.value)
 
@@ -4271,6 +4275,13 @@ const prevBotPlayers = ref<Set<string>>(new Set())
 const prevRebelEvent = ref<any>(null)
 const prevLiangShanVoteCount = ref(0)
 const prevLiangShanVoteIds = ref<string[]>([])
+// 新局重置聚义投票状态
+watch(() => gameState.value?.phase, (phase) => {
+  if (phase === GamePhase.STARTING) {
+    prevLiangShanVoteCount.value = 0
+    prevLiangShanVoteIds.value = []
+  }
+})
 const prevQjAlertIds = ref<Set<string>>(new Set())
 const prevSwapRequestIds = ref<Set<string>>(new Set())
 const prevIsMyTurn = ref(false)
