@@ -6151,10 +6151,10 @@ const forceDiscard = async (p: Player) => {
   gap: 12px;
   padding: 12px 24px;
   border-radius: 16px;
-  background: rgba(7, 19, 14, 0.92);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(66, 165, 245, 0.5);
-  box-shadow: 0 6px 32px rgba(0, 0, 0, 0.7);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   animation: comeback-glow 1.5s infinite;
   pointer-events: auto;
 }
@@ -6184,8 +6184,8 @@ const forceDiscard = async (p: Player) => {
 }
 
 @keyframes comeback-glow {
-  0%, 100% { box-shadow: 0 4px 24px rgba(66, 165, 245, 0.3); }
-  50% { box-shadow: 0 4px 32px rgba(66, 165, 245, 0.7); }
+  0%, 100% { box-shadow: 0 4px 24px rgba(66, 165, 245, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1); }
+  50% { box-shadow: 0 4px 32px rgba(66, 165, 245, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15); }
 }
 
 .takeover-float-bar {
