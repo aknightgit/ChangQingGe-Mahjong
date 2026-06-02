@@ -3340,7 +3340,7 @@ const submitChow = (tileIds?: string[]) => {
   hideActionButtonsNow()
   resetAutoCount()
   playSound('tile-chow')
-  playVoiceAction('chow')
+  // 语音由广播处理器统一播放，避免重复
   showChowPicker.value = false
   selectedChowOption.value = null
   executeAction(ActionType.CHOW, undefined, tileIds)
@@ -3361,7 +3361,7 @@ const onCancelChowPicker = () => {
   showChowPicker.value = false
   selectedChowOption.value = null
 }
-const onPeng = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-pong'); playVoiceAction('pong'); executeAction(ActionType.PENG) }
+const onPeng = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-pong'); /* 语音由广播处理器统一播放 */ executeAction(ActionType.PENG) }
 const onKong = () => {
   hideActionButtonsNow()
   resetAutoCount()
@@ -4004,10 +4004,14 @@ const canAutoDraw = computed(() => {
   if (showChow.value || showPeng.value || showKong.value || showHu.value || showConcealedKong.value || showExtendedKong.value) return false
   return true
 })
-watch(canAutoDraw, (can) => {
+watch(canAutoDraw, (can, old) => {
   if (!can) return
+  console.log('[AutoDraw] triggered! isMyTurn:', isMyTurn.value, 'autoDraw:', autoDraw.value, 'showDraw:', showDraw.value, 'availableActions:', availableActions.value)
   setTimeout(() => {
-    if (canAutoDraw.value) void executeAction(ActionType.DRAW)
+    if (canAutoDraw.value) {
+      console.log('[AutoDraw] executing DRAW')
+      void executeAction(ActionType.DRAW)
+    }
   }, 500)
 })
 const hasPriorityActions = computed(
@@ -4450,8 +4454,8 @@ const checkOtherPlayerSounds = (newState: any) => {
     if (prev) {
       const isSelf = player.id === playerId.value
       const isBotCtrl = !!(player as any).isBotControlled || isBotPlayer(player)
-      // 所有玩家的动作都播放语音（包括自己——超时AI帮忙/自动摸牌/完全托管）
-      const shouldPlayVoice = true
+      // 非自己的玩家 或 AI托管的自己 → 播放语音（自己的操作由广播处理器处理）
+      const shouldPlayVoice = !isSelf || isBotCtrl
       // 补花语音也排队，确保出牌语音先于补花语音
       if (replacedFlowerCount > prev.replacedFlowerCount) {
         if (!_flowerVoicePlayed.has(player.id)) {

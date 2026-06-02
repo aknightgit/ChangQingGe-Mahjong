@@ -3972,7 +3972,7 @@ class GameManager {
         } catch (e) {
           console.warn("[enterReveal] end error:", e);
         }
-      }, 3000));
+      }, 5000));
       return;
     }
     // 已处于REVEAL阶段，执行结算

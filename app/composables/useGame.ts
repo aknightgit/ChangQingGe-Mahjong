@@ -336,10 +336,10 @@ export const useGame = () => {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('mahjong-realtime-state', { detail: data }))
         }
-        // REVEAL/ENDED 阶段：WebSocket 已含完整 players 数据，直接合并到 gameState
+        // REVEAL/ENDED 阶段：WebSocket 直接合并到 gameState
         // 避免等 HTTP poll 延迟导致亮牌/结算不显示
         if (data?.phase === 'reveal' || data?.phase === 'ended') {
-          if (gameState.value && data.players) {
+          if (gameState.value) {
             gameState.value = { ...gameState.value, ...data }
           }
         }
