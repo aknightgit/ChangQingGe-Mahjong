@@ -312,7 +312,7 @@ export class ActionHandler {
     // 吃牌广播（牌局快讯+语音）
     const chowTileName = getTileDisplayName(lastDiscard);
     const chowSourceName = lastDiscardPlayerId ? (game.players.find(p => p.id === lastDiscardPlayerId)?.name || '') : '';
-    broadcastQuickMessage(game.gameId, `🍽️ [${player.name}]吃了${chowSourceName}的${chowTileName}`, 'info', 'chow');
+    broadcastQuickMessage(game.gameId, `🍽️ [${player.name}]吃了[${chowSourceName}]的${chowTileName}`, 'info', 'chow');
     if (lastDiscardPlayerId) {
       this.deps.recordBailoutAction(game.gameId, player.id, lastDiscardPlayerId, MeldType.SEQUENCE);
       this.deps.checkAndBroadcastBailout(game, player.id, lastDiscardPlayerId);
@@ -406,7 +406,7 @@ export class ActionHandler {
     // 碰牌广播（牌局快讯+语音）
     const pengTileName = getTileDisplayName(lastDiscard);
     const pengSourceName = game.players.find(p => p.id === getLastDiscardPlayerId(game))?.name || '';
-    broadcastQuickMessage(game.gameId, `[${player.name}]碰了${pengSourceName}的${pengTileName}`, 'info', 'pong');
+    broadcastQuickMessage(game.gameId, `[${player.name}]碰了[${pengSourceName}]的${pengTileName}`, 'info', 'pong');
 
     // 记录互包
     const lastDiscardPlayerId = getLastDiscardPlayerId(game);
@@ -519,7 +519,7 @@ export class ActionHandler {
     // 杠牌广播（牌局快讯+语音，含牌名）
     const kongTileName = getTileDisplayName(lastDiscard);
     const kongSourceName = game.players.find(p => p.id === sourcePlayerId)?.name || '';
-    broadcastQuickMessage(game.gameId, `杠！ [${player.name}]杠了${kongSourceName}的${kongTileName}`, 'info', 'kong');
+    broadcastQuickMessage(game.gameId, `杠！ [${player.name}]杠了[${kongSourceName}]的${kongTileName}`, 'info', 'kong');
     broadcastKongSupplement(game, player, 'ming');
 
     // 设置当前玩家
@@ -791,8 +791,8 @@ export class ActionHandler {
     const handTypeLabel = (player as any).winHandType || '';
     const discarderName = isSelfDrawn ? '' : (game.players[game.currentPlayerIndex]?.name || '');
     const huMsg = isSelfDrawn
-      ? `🎉 ${player.name} 自摸${winningTileName ? '-' + winningTileName : ''}`
-      : `🎉 ${player.name} 捉冲${discarderName}${winningTileName ? '-' + winningTileName : ''}${handTypeLabel ? '·' + handTypeLabel : ''}`;
+      ? `🎉 [${player.name}] 自摸${winningTileName ? '-' + winningTileName : ''}`
+      : `🎉 [${player.name}] 捉冲[${discarderName}]${winningTileName ? '-' + winningTileName : ''}${handTypeLabel ? '·' + handTypeLabel : ''}`;
     broadcastQuickMessage(game.gameId, huMsg, 'special', isSelfDrawn ? 'selfHu' : 'hu');
 
     // 清除pending actions

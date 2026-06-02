@@ -95,7 +95,7 @@ export class BroadcastService {
     const label = kind === 'an' ? '暗杠' : kind === 'jia' ? '补杠' : '明杠';
     this.wsManager.broadcast(game.gameId, 'broadcastMessage', {
       id: Date.now() + Math.floor(Math.random() * 1000),
-      text: `🀄 ${player.name}${label}后补牌`,
+      text: `🀄 [${player.name}]${label}后补牌`,
       actionKind: 'kongSupplement',
       type: 'info',
       timestamp: Date.now(),
