@@ -2444,10 +2444,11 @@ const startNextRound = async () => {
     return
   }
   showSettlement.value = false
+  showLiangShanOverlay.value = false
   settlementData.value = null
   isHuReviewMode.value = false
-  // 不再主动调 API，服务端 autoStartNextRound 会自动切到 STARTING
-  // 客户端只需关闭结算弹窗，等 phase watcher 响应 STARTING 阶段
+  // 主动刷新一次状态，确保拿到服务端 STARTING 阶段
+  try { await refreshState('startNextRound') } catch {}
 }
 const isInteractionLocked = computed(() => isOverlayVisible.value)
 
