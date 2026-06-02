@@ -100,9 +100,9 @@ export class BailoutTracker {
     console.log(`[BAILOUT] game=${game.gameId} player=${player.name} source=${source.name} count=${currentCount}`);
 
     const msgByCount: Record<number, string> = {
-      2: `📣 ${player.name}搞了${source.name}两口了！`,
-      3: `📣 ${player.name}搞了${source.name}三口了！！`,
-      4: `📣 ${player.name}搞了${source.name}四口了！！！`
+      2: `📣 [${player.name}]搞了[${source.name}]两口了！`,
+      3: `📣 [${player.name}]搞了[${source.name}]三口了！！`,
+      4: `📣 [${player.name}]搞了[${source.name}]四口了！！！`
     };
 
     const msg = msgByCount[currentCount];

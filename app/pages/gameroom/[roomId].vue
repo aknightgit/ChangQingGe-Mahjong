@@ -267,10 +267,10 @@
           {{ drawBlockedNoticeText }}
         </div>
 
-        <!-- [2026-05-29] 验牌亮牌阶段 -->
-        <div v-if="showWinnerReveal" class="reveal-phase-overlay">
-          <div class="reveal-phase-text">亮牌验牌</div>
-          <div class="reveal-phase-countdown">{{ revealCountdown }}s</div>
+        <!-- [2026-05-29] 验牌亮牌阶段（小提示条，不遮牌面） -->
+        <div v-if="showWinnerReveal" class="reveal-phase-banner">
+          <span class="reveal-phase-label">验牌</span>
+          <span class="reveal-phase-timer">{{ revealCountdown }}s</span>
         </div>
 
         <div v-if="showSettlement" class="settle-overlay">
@@ -4031,6 +4031,8 @@ watch(() => gameState.value?.phase, (phase, oldPhase) => {
     if (!showWinnerReveal.value) {
       _revealPhaseStartedAt.value = Date.now()
       showWinnerReveal.value = true
+      // 5秒后自动隐藏验牌提示条
+      setTimeout(() => { showWinnerReveal.value = false }, 5000)
     }
   }
   if (phase === GamePhase.ENDED && oldPhase === GamePhase.REVEAL) {
@@ -4548,18 +4550,14 @@ watch(() => gameState.value, (newState, oldState) => {
     const initiatorId = currentVoteIds[0]
     const initiator = newState.players?.find((p: any) => p.id === initiatorId)
     // 之前没有发起消息 → 先播报发起
-    // 发起/响应消息由后端 broadcastQuickMessage 推送，前端不再重复广播
+    // 所有聚义消息（发起/响应/汇总）由后端 broadcastQuickMessage 推送，前端不重复广播
     if ((newState as any).liangShanSuccess) {
-      console.log('[LiangShan] Popup triggered:', { currentVotes, activeCount: activePlayerCount(newState), liangShanSuccess: (newState as any).liangShanSuccess })
-      addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
-      // 显示梁山聚义成功弹窗，3s 后主动推进到下一局
       showLiangShanOverlay.value = true
       setTimeout(() => {
         showLiangShanOverlay.value = false
         void startNextRound()
       }, 3000)
     }
-    // 所有聚义消息（发起/响应/汇总）由后端 broadcastQuickMessage 推送，前端不重复广播
   }
   prevLiangShanVoteCount.value = currentVotes
   prevLiangShanVoteIds.value = [...currentVoteIds]
@@ -8532,32 +8530,33 @@ const forceDiscard = async (p: Player) => {
 
 
 
-/* ===== [2026-05-29] 验牌阶段 ===== */
-.reveal-phase-overlay {
+/* ===== [2026-05-29] 验牌阶段（顶部小提示条） ===== */
+.reveal-phase-banner {
   position: absolute;
-  inset: 0;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 215, 0, 0.5);
+  border-radius: 20px;
+  padding: 4px 16px;
   z-index: 9999;
-  animation: fadeIn 0.4s ease;
+  animation: fadeIn 0.3s ease;
+  pointer-events: none;
 }
-.reveal-phase-text {
-  font-size: 2rem;
-  font-weight: 700;
+.reveal-phase-label {
+  font-size: 0.85rem;
+  font-weight: 600;
   color: #ffd700;
-  text-shadow: 0 0 20px rgba(255, 215, 0, 0.6), 0 2px 4px rgba(0,0,0,0.5);
-  margin-bottom: 16px;
-  letter-spacing: 4px;
+  letter-spacing: 2px;
 }
-.reveal-phase-countdown {
-  font-size: 3rem;
+.reveal-phase-timer {
+  font-size: 0.85rem;
   font-weight: 700;
   color: #fff;
-  text-shadow: 0 0 10px rgba(255,255,255,0.5);
 }
 
 </style>

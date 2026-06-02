@@ -958,11 +958,7 @@ export class ActionHandler {
     // 记录投票
     game.liangShanVotes.push(player.id);
 
-    // 广播投票消息（第一个是发起，后续是响应）
     const isFirst = game.liangShanVotes.length === 1;
-    broadcastQuickMessage(game.gameId, isFirst
-      ? `🔥 [${player.name}]发起了梁山聚义！`
-      : `🔥 [${player.name}]响应了梁山聚义！`, 'special');
 
     // 活跃玩家总数（只统计真人）
     const activePlayers = game.players.filter(p => p.status === PlayerStatus.PLAYING);
@@ -972,21 +968,36 @@ export class ActionHandler {
     const threshold = game.liangShanThreshold ?? 4000;
     let effectiveVoteCount = game.liangShanVotes.length;
 
-    // 广播投票进度
-    broadcastGameState(game.gameId);
-
+    // 先处理自动同意的玩家（超过QJ线）
+    const autoAgreedNames: string[] = [];
     for (const ap of activeHumans) {
       if (game.liangShanVotes.includes(ap.id)) continue;
       const cumulativeScore = getPlayerCumulativeScore(game.gameId, ap.id);
       if (cumulativeScore > threshold) {
         effectiveVoteCount++;
-        if (!game.liangShanVotes.includes(ap.id)) {
-          game.liangShanVotes.push(ap.id);
-          broadcastQuickMessage(game.gameId, `🔥 [${ap.name}]响应了[${player.name}]的梁山聚义！`, 'special');
-        }
+        game.liangShanVotes.push(ap.id);
+        autoAgreedNames.push(ap.name);
         console.log(`[LiangShan] ${ap.name} 累积赢分${cumulativeScore}超过QJ线${threshold},自动同意`);
       }
     }
+
+    // 广播投票消息（合并为一条，保证顺序：先发起/响应，再自动同意）
+    if (isFirst) {
+      let msg = `🔥 [${player.name}]发起了梁山聚义！`;
+      if (autoAgreedNames.length > 0) {
+        msg += ` (${autoAgreedNames.map(n => `[${n}]`).join('、')}自动同意)`;
+      }
+      broadcastQuickMessage(game.gameId, msg, 'special');
+    } else {
+      let msg = `🔥 [${player.name}]响应了梁山聚义！`;
+      if (autoAgreedNames.length > 0) {
+        msg += ` (${autoAgreedNames.map(n => `[${n}]`).join('、')}自动同意)`;
+      }
+      broadcastQuickMessage(game.gameId, msg, 'special');
+    }
+
+    // 广播投票进度
+    broadcastGameState(game.gameId);
 
     console.log(`[LiangShan] ${player.name} voted (${effectiveVoteCount}/${activeHumans.length}, threshold: ${threshold})`);
 
