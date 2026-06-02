@@ -1845,11 +1845,14 @@ const getDiceRoundMultiplier = (dice1: number, dice2: number, dice3?: number, di
   return singleMultiplier
 }
 const effectiveMaxRolls = computed(() => {
-  // 优先使用服务端根据继承倍数计算好的 effectiveDiceRollCount
-  const effective = Number((gameState.value as any)?.effectiveDiceRollCount)
-  if (Number.isFinite(effective) && effective > 0) return Math.floor(effective)
-  const raw = Number(gameState.value?.diceRollCount ?? route.query.dice ?? 2)
-  return Number.isFinite(raw) && raw > 0 ? Math.max(1, Math.floor(raw)) : 2
+  const base = Number(gameState.value?.diceRollCount ?? route.query.dice ?? 2)
+  const rollCount = Number.isFinite(base) && base > 0 ? Math.max(1, Math.floor(base)) : 2
+  // 继承倍数>=2时只掷1次（前端自行计算，不依赖服务端传递）
+  const inherit = Number((gameState.value as any)?.inheritMultiplier ?? (gameState.value as any)?.inheritedGlobalMultiplier ?? 1)
+  if (inherit >= 2) return 1
+  // 首局翻倍也只掷1次
+  if ((gameState.value as any)?.firstRoundDouble) return 1
+  return rollCount
 })
 const roundMultiplier = computed(() => {
   const actualRound = Number(gameState.value?.roundMultiplier ?? 0)
@@ -2366,6 +2369,10 @@ const enterStartingPhaseWithDiceOverlay = async () => {
     const response = await beginGame({ hesitationWindow: hesitationWindow.value })
     const res = response as any
     if (res?.success) {
+      // 立即更新继承倍数，确保 effectiveMaxRolls 在 polling 前就算对
+      if (typeof res.inheritMultiplier === 'number' && gameState.value) {
+        (gameState.value as any).inheritMultiplier = res.inheritMultiplier
+      }
       if (res.humanRollPending) {
         // 人类庄家：显示 idle 状态，等玩家自己点击掷骰子
         diceValues.value = [0, 0]  // 清除默认值，防止 DiceAnimation 误判为已掷
@@ -4662,8 +4669,7 @@ watch(
           // AI 庄家：自动发牌
           setTimeout(() => {
             if (gameState.value?.phase !== GamePhase.STARTING) return
-            const effectiveRollCount = Number((gameState.value as any)?.effectiveDiceRollCount ?? gameState.value?.diceRollCount ?? 2)
-            const needsSecondRoll = (gameState.value?.roundMultiplier ?? 1) === 1 && effectiveRollCount >= 2
+            const needsSecondRoll = (gameState.value?.roundMultiplier ?? 1) === 1 && effectiveMaxRolls.value >= 2
             const doDeal = () => {
               if (gameState.value?.phase === GamePhase.STARTING) {
                 void onDealTiles()

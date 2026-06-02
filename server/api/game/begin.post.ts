@@ -43,6 +43,7 @@ export default defineEventHandler(async (event) => {
       diceRolls: game.diceRolls,
       roundMultiplier: game.roundMultiplier,
       diceRollCount: game.diceRollCount ?? 2,
+      inheritMultiplier: game.inheritMultiplier ?? 1,
       humanRollPending: !!(game as any)._humanRollPending,
     };
   } catch (error: any) {
