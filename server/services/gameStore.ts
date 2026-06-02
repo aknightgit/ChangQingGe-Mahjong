@@ -90,10 +90,10 @@ export class GameStore {
   }
 
   /** 关键节点立即刷盘（回合结束/退房/断连） */
-  async flushGameNow(gameId: string): Promise<void> {
+  async flushGameNow(gameId: string, gameOverride?: GameState): Promise<void> {
     const timer = this.flushTimers.get(gameId)
     if (timer) { clearTimeout(timer); this.flushTimers.delete(gameId) }
-    const game = this.dirtyGames.get(gameId)
+    const game = gameOverride || this.dirtyGames.get(gameId)
     if (!game) return
     try {
       await saveGameState(game)

@@ -3973,7 +3973,7 @@ class GameManager {
           player.status = PlayerStatus.LOST;
         }
       }
-      this.store.flushGameNow(game.gameId).catch(() => {});
+      this.store.flushGameNow(game.gameId, game).catch(() => {});
       this.broadcastGameState(game.gameId);
       const gameId = game.gameId;
       this.timerManager.detachTimer(setTimeout(async () => {
@@ -3995,7 +3995,7 @@ class GameManager {
     // 已处于REVEAL阶段，执行结算
     game.phase = GamePhase.ENDED;
     // 回合结束立即刷盘
-    this.store.flushGameNow(game.gameId).catch(() => {});
+    this.store.flushGameNow(game.gameId, game).catch(() => {});
     this.broadcastGameState(game.gameId);
 
     // Calculate final scores
@@ -4314,7 +4314,7 @@ class GameManager {
 
     console.log("[ENDED] broadcastGameState for game", game.gameId, "reason=", finalReason);
     // ENDED 阶段数据完整，立即刷盘确保 MongoDB 不丢数据
-    this.store.flushGameNow(game.gameId).catch(() => {});
+    this.store.flushGameNow(game.gameId, game).catch(() => {});
     MatchHistoryService.recordMatch(game, finalScores, finalReason).catch((error) => {
       console.error('Failed to persist match history:', error);
     });
