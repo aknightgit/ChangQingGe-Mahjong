@@ -119,6 +119,18 @@ export function buildFeatureSummary(input: {
   // ★ V2: 生张计数
   const rawTileCount = countRawTiles(hand, game.discardPile || [])
 
+  // ★ V2: 两口关系检测 — 两个对手做同一门清混一色，互相卡死
+  const opponentSuitConcentration: Record<string, number> = {}
+  for (const c of opponents) {
+    const ns = new Set<TileSuit>()
+    for (const m of c.hand.exposedMelds || []) {
+      for (const t of m.tiles || []) { if (NUMBER_SUITS.includes(t.suit)) ns.add(t.suit) }
+    }
+    if (ns.size === 1) { const s = [...ns][0]; opponentSuitConcentration[s] = (opponentSuitConcentration[s] || 0) + 1 }
+  }
+  const blockedSuit = Object.entries(opponentSuitConcentration).find(([, cnt]) => cnt >= 2)?.[0] || null
+  const twoPlayerBlocking = Object.values(opponentSuitConcentration).some(cnt => cnt >= 2)
+
   return {
     longestSuit, longestSuitCount,
     shortestSuit: shortestSuitEntry?.suit || null, shortestSuitCount: shortestSuitEntry?.count || 0,
@@ -128,6 +140,7 @@ export function buildFeatureSummary(input: {
     upstreamRejectedSuit: upstreamRejectedSuit && upstreamRejectedSuit.count >= 2 ? upstreamRejectedSuit.suit : null,
     allOpponentsAvoidSuit, liveHonorCount, opponentOpenMelds, fastOpenOpponentCount, bigOpenOpponentCount, downstreamPressure, oneSuitOpponentCount,
     pureFlushUpgradeReady, weakHonorPairCount, rawTileCount,
+    blockedSuit, twoPlayerBlocking,
   }
 }
 
@@ -365,8 +378,13 @@ export function evaluateRouteStateV2(input: {
 
   const evidenceAgainstPrevious = previousRouteState && previousRouteState.current !== topCandidate.route ? (previousRouteState.evidenceCounter || 0) + 1 : 0
   const softLockedPrevious = !!previousRouteState && (previousRouteState.lockLevel > 0 || (previousRouteState.stableTurns || 0) >= 2)
-  const requiredEvidenceToFlip = previousRouteState?.lockLevel === 2 ? 3 : previousRouteState?.lockLevel === 1 ? 2 : (previousRouteState?.stableTurns || 0) >= 2 ? 2 : 1
-  const canHoldPreviousRoute = isPostRound10Forced && previousRouteState && !HIGH_VALUE_ROUTES.includes(previousRouteState.current as RouteKind) ? false : !!previousRouteState && !!previousCandidate && softLockedPrevious && (previousCandidate.score >= topCandidate.score - (previousRouteState.lockLevel === 2 ? 3.6 : previousRouteState.lockLevel === 1 ? 2.2 : 1.4) || evidenceAgainstPrevious < requiredEvidenceToFlip)
+  // ★ V2: 提高切换门槛 — 确定方向后不轻易摇摆
+  // lockLevel=2(坚决执行): 需要3次以上反面证据 + 反面路线高出6分才切换
+  // lockLevel=1(锁定): 需要2次以上反面证据 + 反面路线高出4分才切换
+  // 未锁定但稳定2回合: 需要1次反面证据 + 反面路线高出3分才切换
+  const requiredEvidenceToFlip = previousRouteState?.lockLevel === 2 ? 4 : previousRouteState?.lockLevel === 1 ? 3 : (previousRouteState?.stableTurns || 0) >= 2 ? 2 : 1
+  const flipThreshold = previousRouteState?.lockLevel === 2 ? 6.0 : previousRouteState?.lockLevel === 1 ? 4.0 : (previousRouteState?.stableTurns || 0) >= 2 ? 3.0 : 1.4
+  const canHoldPreviousRoute = isPostRound10Forced && previousRouteState && !HIGH_VALUE_ROUTES.includes(previousRouteState.current as RouteKind) ? false : !!previousRouteState && !!previousCandidate && softLockedPrevious && (previousCandidate.score >= topCandidate.score - flipThreshold || evidenceAgainstPrevious < requiredEvidenceToFlip)
 
   const current = isPostRound10Forced ? postRound10Top : (canHoldPreviousRoute ? previousCandidate : topCandidate)
   const secondary = routeScores.find(c => c.route !== current.route) || null

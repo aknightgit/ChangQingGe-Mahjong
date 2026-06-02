@@ -33,6 +33,9 @@ export interface RouteFeatureSummary {
   bigOpenOpponentCount: number
   pureFlushUpgradeReady: boolean
   weakHonorPairCount: number
+  rawTileCount?: number
+  blockedSuit?: TileSuit | null
+  twoPlayerBlocking?: boolean
 }
 
 export interface RouteEvaluationInput {

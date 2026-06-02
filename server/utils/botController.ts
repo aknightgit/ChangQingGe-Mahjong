@@ -215,8 +215,8 @@ export class BotController {
         const action = await shouldClaimPendingAction(player, filteredHigherActions, game);
         console.log(`[BotService] ${player.name} priority action: ${action} (from ${filteredHigherActions})`);
 
-        // AI 吃碰随机延迟
-        if (action !== ActionType.PASS && action !== ActionType.HU) {
+        // AI 吃碰胡随机延迟（模拟真人思考）
+        if (action !== ActionType.PASS) {
           await this.randomClaimDelay(game);
         }
 

@@ -1678,7 +1678,7 @@ onMounted(async () => {
     else if (actionKind === 'pong') { playVoiceAction('pong') }
     else if (actionKind === 'kong') { playVoiceAction('kong') }
     else if (actionKind === 'hu') { playVoiceAction('hu') }
-    else if (actionKind === 'selfHu') { playVoiceAction('selfHu') }
+    else if (actionKind === 'selfHu') { /* 由 game state watcher 统一播放 */ }
     else if (actionKind === 'flowerReplace') { playVoiceAction('flowerReplace') }
   }) as EventListener)
 
@@ -2979,7 +2979,7 @@ const onConfirmHu = async (index: number) => {
   playSound('tile-hu')
   const selectedOption: any = displayWinOptions.value[index]
   if (selectedOption?.type === 'self_draw') {
-    playVoiceAction('selfHu')
+    // 由 game state watcher 统一播放 selfHu 语音
   } else {
     playVoiceAction('hu')
   }
@@ -4351,7 +4351,7 @@ const checkOtherPlayerSounds = (newState: any) => {
       const isBotCtrl = !!(player as any).isBotControlled || isBotPlayer(player)
       const shouldPlayVoice = !isSelf || isBotCtrl  // AI托管时自己的动作也要播放语音
       if (replacedFlowerCount > prev.replacedFlowerCount) {
-        if (shouldPlayVoice && !_flowerVoicePlayed.has(player.id)) {
+        if (!_flowerVoicePlayed.has(player.id)) {
           _flowerVoicePlayed.add(player.id)
           playSound('tile-draw')
           playVoiceAction('flowerReplace')
