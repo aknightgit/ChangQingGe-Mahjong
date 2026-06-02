@@ -127,7 +127,7 @@ export class ActionHandler {
       game.freezePlayerId = player.id;
       game.freezeComplete = false;
       game.pendingActions = [];
-      broadcastQuickMessage(game.gameId, `🃏 【${player.name}】打出了百搭，本轮不能吃碰捉冲！`, 'warn');
+      broadcastQuickMessage(game.gameId, `🃏 [${player.name}]打出了百搭，本轮不能吃碰捉冲！`, 'warn');
       await persistGame(game);
       broadcastGameState(game.gameId);
       await beginCurrentPlayerTurn(game);
@@ -312,7 +312,7 @@ export class ActionHandler {
     // 吃牌广播（牌局快讯+语音）
     const chowTileName = getTileDisplayName(lastDiscard);
     const chowSourceName = lastDiscardPlayerId ? (game.players.find(p => p.id === lastDiscardPlayerId)?.name || '') : '';
-    broadcastQuickMessage(game.gameId, `🍽️ 【${player.name}】吃了${chowSourceName}的${chowTileName}`, 'info', 'chow');
+    broadcastQuickMessage(game.gameId, `🍽️ [${player.name}]吃了${chowSourceName}的${chowTileName}`, 'info', 'chow');
     if (lastDiscardPlayerId) {
       this.deps.recordBailoutAction(game.gameId, player.id, lastDiscardPlayerId, MeldType.SEQUENCE);
       this.deps.checkAndBroadcastBailout(game, player.id, lastDiscardPlayerId);
@@ -343,6 +343,7 @@ export class ActionHandler {
     this.deps.broadcastGameState(game.gameId);
     // 【修复】吃牌后初始化该玩家回合：beginCurrentPlayerTurn 设置 freeze timer + 补花
     await this.deps.beginCurrentPlayerTurn(game);
+    game.drawnThisTurn = true; // 吃牌后已有14张牌，不能再摸
     if (this.deps.isPlayerBotControlled(player)) {
       this.deps.scheduleBotDiscard(game.gameId, player.id);
     }
@@ -405,7 +406,7 @@ export class ActionHandler {
     // 碰牌广播（牌局快讯+语音）
     const pengTileName = getTileDisplayName(lastDiscard);
     const pengSourceName = game.players.find(p => p.id === getLastDiscardPlayerId(game))?.name || '';
-    broadcastQuickMessage(game.gameId, `【${player.name}】碰了${pengSourceName}的${pengTileName}`, 'info', 'pong');
+    broadcastQuickMessage(game.gameId, `[${player.name}]碰了${pengSourceName}的${pengTileName}`, 'info', 'pong');
 
     // 记录互包
     const lastDiscardPlayerId = getLastDiscardPlayerId(game);
@@ -518,7 +519,7 @@ export class ActionHandler {
     // 杠牌广播（牌局快讯+语音，含牌名）
     const kongTileName = getTileDisplayName(lastDiscard);
     const kongSourceName = game.players.find(p => p.id === sourcePlayerId)?.name || '';
-    broadcastQuickMessage(game.gameId, `杠！ 【${player.name}】杠了${kongSourceName}的${kongTileName}`, 'info', 'kong');
+    broadcastQuickMessage(game.gameId, `杠！ [${player.name}]杠了${kongSourceName}的${kongTileName}`, 'info', 'kong');
     broadcastKongSupplement(game, player, 'ming');
 
     // 设置当前玩家
@@ -713,11 +714,9 @@ export class ActionHandler {
     game.winnersCount++;
 
     // 【修复】计算番数和最终点数（老代码 _handleHu_original 有，新代码漏了）
-    const huPlayerIdx = game.players.findIndex(p => p.id === player.id);
-    const isSelfDrawn = game.currentPlayerIndex === huPlayerIdx;
-    const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
+    const isSelfDrawn = huIsSelfDraw;
     const isKongFlower = isSelfDrawn && !!(player as any).isSelfDrawn;
-    const isRobbingKong = !!pendingAction?.tile && !!(game as any).pendingKongClaim;
+    const isRobbingKong = !!huPendingAction?.tile && !!(game as any).pendingKongClaim;
     const flowerTiles = player.hand.exposedMelds
       .flatMap((m: any) => m.tiles)
       .filter((t: any) => isFlower(t));
@@ -873,7 +872,7 @@ export class ActionHandler {
     const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode } = this.deps;
 
     // 造反：所有玩家重新发牌
-    broadcastQuickMessage(game.gameId, `⚔️ 【${player.name}】 发起了造反！`, 'special');
+    broadcastQuickMessage(game.gameId, `⚔️ [${player.name}] 发起了造反！`, 'special');
 
     // 广播造反亮手牌事件（给所有客户端）
     const wsManager = (this.deps as any).store?.getWsManager?.();
@@ -961,8 +960,8 @@ export class ActionHandler {
     // 广播投票消息（第一个是发起，后续是响应）
     const isFirst = game.liangShanVotes.length === 1;
     broadcastQuickMessage(game.gameId, isFirst
-      ? `🔥 【${player.name}】发起了梁山聚义！`
-      : `🔥 【${player.name}】响应了梁山聚义！`, 'special');
+      ? `🔥 [${player.name}]发起了梁山聚义！`
+      : `🔥 [${player.name}]响应了梁山聚义！`, 'special');
 
     // 活跃玩家总数（只统计真人）
     const activePlayers = game.players.filter(p => p.status === PlayerStatus.PLAYING);
@@ -982,7 +981,7 @@ export class ActionHandler {
         effectiveVoteCount++;
         if (!game.liangShanVotes.includes(ap.id)) {
           game.liangShanVotes.push(ap.id);
-          broadcastQuickMessage(game.gameId, `🔥 【${ap.name}】响应了【${player.name}】的梁山聚义！`, 'special');
+          broadcastQuickMessage(game.gameId, `🔥 [${ap.name}]响应了[${player.name}]的梁山聚义！`, 'special');
         }
         console.log(`[LiangShan] ${ap.name} 累积赢分${cumulativeScore}超过QJ线${threshold},自动同意`);
       }
@@ -1068,7 +1067,7 @@ export class ActionHandler {
       broadcastGameState(game.gameId);
     }, 8000));
 
-    broadcastQuickMessage(game.gameId, `⏳ 【${player.name}】 想一想！(剩余${remaining}次)`, 'special');
+    broadcastQuickMessage(game.gameId, `⏳ [${player.name}] 想一想！(剩余${remaining}次)`, 'special');
     broadcastGameState(game.gameId);
   }
 

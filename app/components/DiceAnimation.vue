@@ -233,7 +233,7 @@ watch(() => [props.dice1, props.dice2], ([d1, d2]) => {
 // 监听服务器广播的骰子事件 - 自动播放动画（非庄家玩家）
 watch(() => props.rollTriggerKey, (key) => {
   if (!key || key === 0) return
-  currentRoll.value++
+  if (!props.isDealer) currentRoll.value++  // 只有非庄家才通过 watch 递增（庄家由 onRoll 递增）
   rollingSeed.value = Date.now() % 100000
   phase.value = 'rolling'
   showResultBurst.value = false
