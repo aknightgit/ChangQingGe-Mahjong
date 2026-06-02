@@ -27,7 +27,8 @@ export default defineEventHandler(async (event) => {
   try {
     const result = await gameManager.rollFirstDice(gameId);
     await apiLog(event, { endpoint: 'roll-first-dice', gameId, playerId, statusCode: 200, durationMs: Date.now() - startTime });
-    return { success: true, ...result };
+    // needSecondRoll 告知客户端是否需要第二次掷骰子
+    return { success: true, ...result, needSecondRoll: (result as any).needSecondRoll ?? false };
   } catch (error: any) {
     await apiLog(event, { endpoint: 'roll-first-dice', gameId, playerId, statusCode: 400, durationMs: Date.now() - startTime, error: error.message || 'Failed to roll dice' });
     throw createError({ statusCode: 400, message: error.message || 'Failed to roll dice' });

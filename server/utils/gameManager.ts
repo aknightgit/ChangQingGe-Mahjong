@@ -1376,7 +1376,8 @@ class GameManager {
       game.roundMultiplier = singleMult;
 
       const rollCount = game.diceRollCount ?? 2;
-      const needSecondRoll = rollCount >= 2 && singleMult === 1;
+      // 继承倍数>=2或首局翻倍时，只掷一次骰子强制发牌
+      const needSecondRoll = rollCount >= 2 && singleMult === 1 && prevGlobal < 2;
       (game as any)._needSecondRoll = needSecondRoll;
 
       if (this.wsManager) {
@@ -1437,7 +1438,9 @@ class GameManager {
     game.roundMultiplier = singleMult;
 
     const rollCount = game.diceRollCount ?? 2;
-    const needSecondRoll = rollCount >= 2 && singleMult === 1;
+    // 继承倍数>=2或首局翻倍时，只掷一次骰子强制发牌
+    const prevGlobal = game.inheritMultiplier ?? game.inheritedGlobalMultiplier ?? 1;
+    const needSecondRoll = rollCount >= 2 && singleMult === 1 && prevGlobal < 2;
     (game as any)._needSecondRoll = needSecondRoll;
     delete (game as any)._humanRollPending;
 
@@ -1450,9 +1453,9 @@ class GameManager {
 
     await this.persistGame(game);
     this.broadcastGameState(gameId);
-    console.log(`[rollFirstDice] dice=${d1}+${d2} mult=${singleMult} needSecond=${needSecondRoll}`);
+    console.log(`[rollFirstDice] dice=${d1}+${d2} mult=${singleMult} needSecond=${needSecondRoll} prevGlobal=${prevGlobal}`);
 
-    return { dice1: d1, dice2: d2, roundMultiplier: singleMult };
+    return { dice1: d1, dice2: d2, roundMultiplier: singleMult, needSecondRoll };
   }
 
   /**

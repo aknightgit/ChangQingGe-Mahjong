@@ -2430,6 +2430,10 @@ const onRollDice = async () => {
       if (res?.success && res.dice1 && res.dice2) {
         diceValues.value = [res.dice1, res.dice2]
       }
+      // 继承倍数>=2或首局翻倍时，第一次掷完直接发牌，跳过第二次
+      if (res?.needSecondRoll === false) {
+        setTimeout(() => { void onDealTiles() }, 1200)
+      }
     } else {
       // ★ 保存第一次骰子值，用于两次比较
       prevDiceValues.value = [diceValues.value[0], diceValues.value[1]]
@@ -4249,6 +4253,7 @@ const _processBroadcastQueue = () => {
   const dedupeKey = item.dedupeKey || sanitizedText
   const lastAt = recentBroadcastTexts.get(dedupeKey) ?? 0
   if (now - lastAt < 30000) {
+    console.log('[BC-QUEUE] DEDUP blocked:', sanitizedText.slice(0, 30), 'key:', dedupeKey)
     _broadcastProcessing = false
     _processBroadcastQueue()
     return
@@ -4658,16 +4663,19 @@ watch(
           // AI 庄家：自动发牌
           setTimeout(() => {
             if (gameState.value?.phase !== GamePhase.STARTING) return
+            const inheritMul = (gameState.value as any)?.inheritMultiplier ?? (gameState.value as any)?.inheritedGlobalMultiplier ?? 1
             const needsSecondRoll = (gameState.value?.roundMultiplier ?? 1) === 1 &&
-              (gameState.value?.diceRollCount ?? 2) >= 2
+              (gameState.value?.diceRollCount ?? 2) >= 2 &&
+              inheritMul < 2
             const doDeal = () => {
               if (gameState.value?.phase === GamePhase.STARTING) {
                 void onDealTiles()
               }
             }
             if (needsSecondRoll) {
-              void onRollSecondDice()
-              setTimeout(doDeal, 1500)
+              void rollSecondDice().then(() => {
+                setTimeout(doDeal, 1500)
+              })
             } else {
               doDeal()
             }
