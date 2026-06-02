@@ -6560,7 +6560,8 @@ const forceDiscard = async (p: Player) => {
 .liang-shan-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(3, 10, 8, 0.85);
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -6569,13 +6570,9 @@ const forceDiscard = async (p: Player) => {
 }
 
 .liang-shan-card {
-  background: linear-gradient(135deg, rgba(180, 40, 10, 0.95), rgba(120, 20, 5, 0.95));
-  border: 2px solid rgba(255, 180, 50, 0.6);
-  border-radius: 14px;
+  background: transparent;
   padding: 40px 48px;
   text-align: center;
-  box-shadow: 0 0 60px rgba(255, 100, 20, 0.4), 0 12px 32px rgba(0, 0, 0, 0.6);
-  animation: liangShanPop 0.12s ease-out;
 }
 
 .liang-shan-icon {
