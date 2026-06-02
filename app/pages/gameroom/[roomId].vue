@@ -2214,13 +2214,14 @@ const tingPreviewItems = computed(() => {
     })
   }
 
-  // ★ 追加百搭牌名到听牌提示末尾
+  // ★ 追加百搭牌名到听牌提示末尾（花牌百搭显示“百搭花”，其他只显示牌名）
   if (wildTile.value) {
     const wt = wildTile.value
-    const wildLabel = tileLabel(wt)
+    const isFlowerWild = wt.suit === 'hua' || wt.suit === 'flower'
+    const wildLabel = isFlowerWild ? '百搭花' : tileLabel(wt)
     deduped.set('wild', {
       key: 'wild',
-      label: `百搭·${wildLabel}`,
+      label: wildLabel,
       tile: wt as Tile,
       isExhausted: false
     })
