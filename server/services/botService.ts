@@ -1033,11 +1033,23 @@ function scoreTileForDiscard(
         }
       }
     } else if (rs === 'ALL_PUNGS') {
-      // 碰碰胡：保留所有对子，打单张
-      if (sameTypeCount >= 2) {
-        score -= 3.0 * routeBiasFactor  // 对子：坚决保留
-      } else if (sameTypeCount === 1) {
-        score += 2.0 * routeBiasFactor  // 单张：优先打掉
+      // 碰碰胡：路线已锁定，弃牌为路线服务！
+      // 对子/刻子：坚决保留（大负分），顺子搭子：果断拆掉（大正分）
+      if (sameTypeCount >= 3) {
+        score -= 12.0 * routeBiasFactor  // 刻子：绝不拆
+      } else if (sameTypeCount >= 2) {
+        score -= 8.0 * routeBiasFactor   // 对子：坚决保留
+      } else {
+        score += 5.0 * routeBiasFactor   // 单张：优先打掉
+      }
+      // 顺子搭子：碰碰胡不需要，果断拆
+      if (!isHonor(tile) && sameTypeCount < 2) {
+        const adjacentCount = hand.filter(t => t.id !== tile.id && t.suit === tile.suit && Math.abs(t.value - tile.value) <= 2).length
+        if (adjacentCount >= 2) {
+          score += 6.0 * routeBiasFactor  // 有多个相邻牌（顺子核心），拆掉
+        } else if (adjacentCount === 1) {
+          score += 3.0 * routeBiasFactor  // 有1个相邻牌，也拆
+        }
       }
     } else if (rs === 'HONOR_HEAVY') {
       // 风一色：保留风箭，打数牌
