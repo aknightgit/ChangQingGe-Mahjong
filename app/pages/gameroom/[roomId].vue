@@ -3998,10 +3998,10 @@ const handleCircularAction = (type: string) => {
 // For self-drawn Kong (Concealed or Extended)
 const showConcealedKong = computed(() => availableActions.value.includes(ActionType.CONCEALED_KONG))
 const showExtendedKong = computed(() => availableActions.value.includes(ActionType.EXTENDED_KONG))
-// 自动摸牌：轮到自己且只能摸牌时自动执行
+// 自动摸牌：轮到自己且只能摸牌时自动执行（不检查聚义/造反）
 const canAutoDraw = computed(() => {
   if (!isMyTurn.value || !autoDraw.value || !showDraw.value) return false
-  if (showChow.value || showPeng.value || showKong.value || showHu.value || showRebel.value || showConcealedKong.value || showExtendedKong.value) return false
+  if (showChow.value || showPeng.value || showKong.value || showHu.value || showConcealedKong.value || showExtendedKong.value) return false
   return true
 })
 watch(canAutoDraw, (can) => {
