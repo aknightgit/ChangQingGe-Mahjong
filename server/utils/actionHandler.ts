@@ -162,7 +162,7 @@ export class ActionHandler {
    * 处理摸牌
    */
   handleDraw(game: GameState, player: Player, options?: { allowFullHand?: boolean }): void {
-    const { endRound, broadcastQuickMessage, replaceFlowers, isPlayerBotControlled, timerManager, isWildTile, sortHandWithWildFront, getLastDiscardPlayerId, schedulePendingActionTimeout, store } = this.deps;
+    const { endRound, broadcastQuickMessage, replaceFlowers, isPlayerBotControlled, timerManager, isWildTile, sortHandWithWildFront, getLastDiscardPlayerId, schedulePendingActionTimeout, store, broadcastFlowerReplacement } = this.deps;
 
     console.log(`[handleDraw] ${player.name} drawnThisTurn=${game.drawnThisTurn} wall=${game.wall.length} concealed=${player.hand.concealedTiles.length} allowFull=${options?.allowFullHand}`);
 
@@ -197,13 +197,14 @@ export class ActionHandler {
       flowerCount++
       console.log(`[FLOWER] ${player.name} 摸到花牌: ${tile.id}, 门口花牌数: ${player.hand.exposedMelds.filter(m => m.tiles.length === 1 && isFlower(m.tiles[0]) && !isWildTile(game, m.tiles[0])).length}`);
       if (game.wall.length === 0) {
-        // 补花广播由 replaceFlowers 统一处理
+        if (flowerCount > 0) this.deps.broadcastFlowerReplacement(game, player, flowerCount);
         endRound(game, GameEndReason.WALL_EXHAUSTED);
         return;
       }
       tile = game.wall.pop()!;
     }
-    // 补花广播由 replaceFlowers 统一处理
+    // 摸牌时补花广播
+    if (flowerCount > 0) this.deps.broadcastFlowerReplacement(game, player, flowerCount);
 
     // 花牌百搭 → 进手牌
     if (isFlower(tile) && isWildTile(game, tile)) {

@@ -4558,15 +4558,8 @@ watch(() => gameState.value, (newState, oldState) => {
         showLiangShanOverlay.value = false
         void startNextRound()
       }, 3000)
-    } else {
-      const newResponderIds = currentVoteIds.filter(id => !prevLiangShanVoteIds.value.includes(id))
-      const responderNames = newResponderIds
-        .filter(id => id !== initiatorId)
-        .map(id => newState.players?.find((p: any) => p.id === id)?.name)
-        .filter(Boolean)
-      // 响应消息由后端 broadcastQuickMessage 推送，前端不再重复广播
-      addBroadcast(`🔥 有${currentVotes}名玩家响应了梁山聚义！`, 'special')
     }
+    // 所有聚义消息（发起/响应/汇总）由后端 broadcastQuickMessage 推送，前端不重复广播
   }
   prevLiangShanVoteCount.value = currentVotes
   prevLiangShanVoteIds.value = [...currentVoteIds]

@@ -1,7 +1,7 @@
 // ai_v2/pathSelector.ts — V2 路径选择引擎（激进权重 + STRIVE_DRAW）
 // 基于 server/ai/route/routeEvaluator.ts，修改关键权重
 
-import { TileSuit, type Tile } from '../types/game'
+import { TileSuit, MeldType, type Tile } from '../types/game'
 import { groupTiles, isDragon, isHonor, isWind } from '../utils/tiles'
 import { detectDecisionPhase } from '../ai/route/phaseDetector'
 import type { RouteFeatureSummary, RouteScore, RouteState, RouteKind, DecisionPhase } from './types'
@@ -74,6 +74,14 @@ export function buildFeatureSummary(input: {
     if (isHonor(sample) && tiles.length >= 2) honorPairCount++
     if (isHonor(sample) && tiles.length === 2) weakHonorPairCount++
     if (tiles.length === 1 && countAdjacentPartners(sample, hand) === 0) isolatedCount++
+  }
+
+  // 已碰/已杠的暴露刻子也算入 tripletCount（碰碰胡路线识别）
+  for (const meld of player.hand.exposedMelds) {
+    if (meld.type === MeldType.TRIPLET && meld.tiles.length >= 3) {
+      tripletCount++
+      if (isHonor(meld.tiles[0])) honorPairCount++
+    }
   }
 
   let sequenceLikeCount = 0

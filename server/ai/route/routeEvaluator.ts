@@ -1,4 +1,4 @@
-import { TileSuit, type Tile } from '../../types/game'
+import { TileSuit, MeldType, type Tile } from '../../types/game'
 import { groupTiles, isDragon, isHonor, isWind } from '../../utils/tiles'
 import { detectDecisionPhase } from './phaseDetector'
 import type {
@@ -90,6 +90,14 @@ function buildFeatureSummary(input: RouteEvaluationInput): RouteFeatureSummary {
     if (isHonor(sample) && tiles.length >= 2) honorPairCount++
     if (isHonor(sample) && tiles.length === 2) weakHonorPairCount++
     if (tiles.length === 1 && countAdjacentPartners(sample, hand) === 0) isolatedCount++
+  }
+
+  // 已碰/已杠的暴露刻子也算入 tripletCount（碰碰胡路线识别）
+  for (const meld of player.hand.exposedMelds) {
+    if (meld.type === MeldType.TRIPLET && meld.tiles.length >= 3) {
+      tripletCount++
+      if (isHonor(meld.tiles[0])) honorPairCount++
+    }
   }
 
   let sequenceLikeCount = 0
