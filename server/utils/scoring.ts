@@ -149,8 +149,9 @@ export function calculateScore(params: {
         hasNoAnKong(exposedMelds);
 
       if (hasNoFlowers && hasNoBlocks) {
-        const isPengOrHun = handTypes.includes(HandType.ALL_TRIPLETS) ||
-                            handTypes.includes(HandType.HALF_FLUSH);
+        // 只对当前主牌型检查，不用 handTypes.includes（避免混碰分解误触发）
+        const isPengOrHun = topType === HandType.ALL_TRIPLETS ||
+                            topType === HandType.HALF_FLUSH;
         if (isPengOrHun) {
           baseFan = Math.max(baseFan, 10);
           details.push('无花自摸 = 10番');
