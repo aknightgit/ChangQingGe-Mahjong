@@ -398,13 +398,29 @@ export function evaluateRouteStateV2(input: {
 
   const evidenceAgainstPrevious = previousRouteState && previousRouteState.current !== topCandidate.route ? (previousRouteState.evidenceCounter || 0) + 1 : 0
   const softLockedPrevious = !!previousRouteState && (previousRouteState.lockLevel > 0 || (previousRouteState.stableTurns || 0) >= 2)
-  // ★ V2: 提高切换门槛 — 确定方向后不轻易摇摆
-  // lockLevel=2(坚决执行): 需要3次以上反面证据 + 反面路线高出6分才切换
-  // lockLevel=1(锁定): 需要2次以上反面证据 + 反面路线高出4分才切换
-  // 未锁定但稳定2回合: 需要1次反面证据 + 反面路线高出3分才切换
-  const requiredEvidenceToFlip = previousRouteState?.lockLevel === 2 ? 4 : previousRouteState?.lockLevel === 1 ? 3 : (previousRouteState?.stableTurns || 0) >= 2 ? 2 : 1
-  const flipThreshold = previousRouteState?.lockLevel === 2 ? 6.0 : previousRouteState?.lockLevel === 1 ? 4.0 : (previousRouteState?.stableTurns || 0) >= 2 ? 3.0 : 1.4
-  const canHoldPreviousRoute = isPostRound10Forced && previousRouteState && !HIGH_VALUE_ROUTES.includes(previousRouteState.current as RouteKind) ? false : !!previousRouteState && !!previousCandidate && softLockedPrevious && (previousCandidate.score >= topCandidate.score - flipThreshold || evidenceAgainstPrevious < requiredEvidenceToFlip)
+
+  // ★ V2.1: 方向意识强化 — 10巡内验证，10巡后坚决执行
+  // 极端情况检测：两口关系、对手大牌（风一色/清碰/风碰）
+  const extremeThreat =
+    features.twoPlayerBlocking ||
+    features.bigOpenOpponentCount >= 2 ||
+    (features.downstreamPressure >= 1.2 && features.fastOpenOpponentCount >= 2) ||
+    features.oneSuitOpponentCount >= 2
+  // 允许的保守转向：碰碰胡/争取流局（不胡不放冲）
+  const conservativeRoutes: RouteKind[] = ['ALL_PUNGS', 'STRIVE_DRAW']
+  const isConservativeSwitch = previousRouteState && conservativeRoutes.includes(topCandidate.route as RouteKind) && !conservativeRoutes.includes(previousRouteState.current as RouteKind)
+
+  // 切换门槛：lockLevel越高越难切换
+  // lockLevel=2(坚决执行): 90%不摇摆，仅极端情况+保守转向才允许
+  // lockLevel=1(锁定): 需要3次反面证据+高出5分才切换
+  // 未锁定但稳定2回合: 需要2次反面证据+高出3分才切换
+  const requiredEvidenceToFlip = previousRouteState?.lockLevel === 2 ? 5 : previousRouteState?.lockLevel === 1 ? 3 : (previousRouteState?.stableTurns || 0) >= 2 ? 2 : 1
+  const flipThreshold = previousRouteState?.lockLevel === 2 ? 7.0 : previousRouteState?.lockLevel === 1 ? 5.0 : (previousRouteState?.stableTurns || 0) >= 2 ? 3.0 : 1.4
+  // lockLevel=2时：仅极端情况+保守转向才允许切换
+  const locked2CanSwitch = previousRouteState?.lockLevel === 2
+    ? (extremeThreat && isConservativeSwitch) || (extremeThreat && topCandidate.score >= previousCandidate!.score + 8)
+    : true
+  const canHoldPreviousRoute = isPostRound10Forced && previousRouteState && !HIGH_VALUE_ROUTES.includes(previousRouteState.current as RouteKind) ? false : !!previousRouteState && !!previousCandidate && softLockedPrevious && locked2CanSwitch && (previousCandidate.score >= topCandidate.score - flipThreshold || evidenceAgainstPrevious < requiredEvidenceToFlip)
 
   const current = isPostRound10Forced ? postRound10Top : (canHoldPreviousRoute ? previousCandidate : topCandidate)
   const secondary = routeScores.find(c => c.route !== current.route) || null
@@ -415,11 +431,18 @@ export function evaluateRouteStateV2(input: {
   const evidenceCounter = canHoldPreviousRoute && previousRouteState && previousRouteState.current !== topCandidate.route ? evidenceAgainstPrevious : 0
   // ★ V2: 4+对子碰碰胡路线直接锁定
   const _apLockByPairs = current?.route === 'ALL_PUNGS' && features.pairCount >= 4
+  // ★ V2.1: 10巡后方向确定，压缩摇摆
+  // 10巡+稳定2回合 → lockLevel=2（坚决执行）
+  // 10巡+有方向 → lockLevel=1（锁定）
+  // 5-9巡+稳定3回合+gap大 → lockLevel=1
+  // 碰碰胡4+对子 → lockLevel=1
   const lockLevel: 0 | 1 | 2 =
-    isPostRound10Forced && HIGH_VALUE_ROUTES.includes((postRound10Top?.route || current?.route) as RouteKind) ? 2 :
+    isPostRound10Forced && stableTurns >= 2 && HIGH_VALUE_ROUTES.includes((current?.route) as RouteKind) ? 2 :
+    isPostRound10Forced && HIGH_VALUE_ROUTES.includes((current?.route) as RouteKind) ? 1 :
     stableTurns >= 3 && stableOnPrevious && previousRouteState && previousRouteState.lockLevel === 2 && gap >= 1.4 ? 2 :
     phase === 'RUSH' && gap >= 4 ? 2 :
     _apLockByPairs ? 1 :
+    estimatedRound >= 7 && stableTurns >= 2 && gap >= 2.0 ? 1 :
     stableTurns >= 2 && stableOnPrevious && previousRouteState && previousRouteState.lockLevel >= 1 && gap >= 1.1 ? 1 :
     (phase === 'COMMIT' || phase === 'RUSH') && gap >= 2.5 ? 1 : 0
 
