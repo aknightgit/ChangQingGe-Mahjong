@@ -201,7 +201,7 @@ export function calculateScore(params: {
       details.push('无百搭 ×2');
     } else {
       // 手上有百搭，但百搭当原牌仍能胡 → 也算无百搭
-      const noWildCheck = canWin(handTiles, exposedMelds.length, () => false);
+      const noWildCheck = canWin(handTiles, exposedMelds, () => false);
       if (noWildCheck.canWin) {
         extraMultipliers *= 2;
         details.push('无百搭(百搭归位) ×2');
@@ -415,7 +415,7 @@ export function generateWinOptions(params: {
   if (params.wildTileSuit !== undefined && params.wildTileValue !== undefined && params.wildTileSuit !== TileSuit.FLOWER) {
     const wildCount = countWildTiles(params.handTiles, params.wildTileSuit, params.wildTileValue, params.wildTileGroup);
     if (wildCount > 0) {
-      const noWildCheck = canWin(params.handTiles, params.exposedMelds.length, () => false);
+      const noWildCheck = canWin(params.handTiles, params.exposedMelds, () => false);
       if (noWildCheck.canWin) {
         const noWildTypes = noWildCheck.types;
         // 自摸版
