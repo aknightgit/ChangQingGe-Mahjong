@@ -399,7 +399,7 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       score += getPolicyValue(policy, 'flushVsPungsBalance') * ((qingPengReady ? 2.4 : 0) - (features.secondSuitCount > 0 ? 0.8 : 0))
       if (earlyPairHeavy) {
         reasons.push('early_four_pairs_push')
-        score += 8.5
+        score += 8.0  // 4对子无长门 → 强推碰碰胡
       }
       if (veryPairHeavy) {
         reasons.push('very_pair_heavy_push')
