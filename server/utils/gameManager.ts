@@ -4334,7 +4334,7 @@ class GameManager {
       finalReason === GameEndReason.LAST_PLAYER ||
       finalReason === GameEndReason.WALL_EXHAUSTED
     ) {
-      this.autoStartNextRound(game.gameId, 5000);
+      this.autoStartNextRound(game.gameId, 12000);
     }
   }
 

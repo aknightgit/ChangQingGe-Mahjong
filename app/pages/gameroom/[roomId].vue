@@ -4341,18 +4341,16 @@ watch(
       return
     }
 
-    // 流局或胡牌:5秒后显示结算(REVEAL阶段由服务端控制,手牌自动翻开)
-    window.setTimeout(() => {
-      showSettlement.value = true
-      startWallExhaustedCountdown()
-      // 流局/造反自动进下一局(8秒后)
-      const hasRebel = !!(gameState.value as any)?.rebelEvent
-      if (isWallExhausted || hasRebel) {
-        window.setTimeout(() => {
-          if (showSettlement.value) void startNextRound()
-        }, 8000)
-      }
-    }, isWallExhausted ? 1000 : 5000)
+    // 流局或胡牌:ENDED后立即显示结算面板(REVEAL阶段已由服务端5秒展示完成)
+    showSettlement.value = true
+    startWallExhaustedCountdown()
+    // 流局/造反自动进下一局(12秒后,给玩家充足时间看结算)
+    const hasRebel = !!(gameState.value as any)?.rebelEvent
+    if (isWallExhausted || hasRebel) {
+      window.setTimeout(() => {
+        if (showSettlement.value) void startNextRound()
+      }, 12000)
+    }
   }
 )
 
