@@ -3679,6 +3679,21 @@ class GameManager {
     // 设置 freezeUntil 同时控制人类和 Bot，让 autoDrawForCurrentPlayer 都能检查
     (game as any)._freezeUntil = Date.now() + freezeMs;
 
+    // 人类玩家也需要定时器清除冻结（否则 _freezeUntil 永远不会被清除）
+    if (!this.isPlayerBotControlled(nextPlayer)) {
+      const humanFreezeIndex = game.currentPlayerIndex;
+      this.timerManager.detachTimer(setTimeout(async () => {
+        try {
+          const freshGame = await this.getGame(game.gameId);
+          if (!freshGame || freshGame.phase !== GamePhase.PLAYING) return;
+          if (freshGame.currentPlayerIndex !== humanFreezeIndex) return;
+          delete (freshGame as any)._freezeUntil;
+          await this.persistGame(freshGame);
+          this.broadcastGameState(game.gameId);
+        } catch (e) { /* ignore */ }
+      }, freezeMs));
+    }
+
     if (this.isPlayerBotControlled(nextPlayer)) {
       const freezeBotIndex = game.currentPlayerIndex;
       const botFreezeTimer = this.timerManager.detachTimer(setTimeout(async () => {
