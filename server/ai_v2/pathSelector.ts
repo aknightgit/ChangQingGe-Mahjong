@@ -263,8 +263,9 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       if (features.honorCount >= 6) score += getPolicyValue(policy, 'allHonorsPursuit') * 2.2
       score += getPolicyValue(policy, 'flushVsPungsBalance') * ((qingPengReady ? 2.4 : 0) - (features.secondSuitCount > 0 ? 0.8 : 0))
       if (earlyPairHeavy) { reasons.push('early_four_pairs_push'); score += 8.5 }
-      // ★ V2: 4+对子推高碰碰胡路线（不限回合数，但不过度推高避免压制吃牌）
-      if (features.pairCount >= 4) { reasons.push('four_pairs_commit'); score += 3.5 }
+      // ★ V2: 4+对子/刻子坚决做碰碰胡（90%概率直接锁定）
+      if (features.pairCount >= 4) { reasons.push('four_pairs_commit'); score += 16 }
+      if (features.pairCount + features.tripletCount >= 5) { reasons.push('five_pairs_triplets_lock'); score += 10 }
       if (_ap_isAgg && features.pairCount + features.tripletCount >= 3) { reasons.push('aggressive_pungs_commit'); score += 12 }
       if (_ap_isAgg && features.wildCount > 0 && features.pairCount + features.tripletCount >= 2) { reasons.push('wild_pungs_push'); score += 7 }
       if (noWildOpenPush) score += 1.4
@@ -374,10 +375,13 @@ export function evaluateRouteStateV2(input: {
   const stableTurns = stableOnPrevious ? (previousRouteState?.stableTurns || 1) + 1 : 1
   const switchCount = previousRouteState && previousRouteState.current !== current.route ? (previousRouteState.switchCount || 0) + 1 : (previousRouteState?.switchCount || 0)
   const evidenceCounter = canHoldPreviousRoute && previousRouteState && previousRouteState.current !== topCandidate.route ? evidenceAgainstPrevious : 0
+  // ★ V2: 4+对子碰碰胡路线直接锁定
+  const _apLockByPairs = current?.route === 'ALL_PUNGS' && features.pairCount >= 4
   const lockLevel: 0 | 1 | 2 =
     isPostRound10Forced && HIGH_VALUE_ROUTES.includes((postRound10Top?.route || current?.route) as RouteKind) ? 2 :
     stableTurns >= 3 && stableOnPrevious && previousRouteState && previousRouteState.lockLevel === 2 && gap >= 1.4 ? 2 :
     phase === 'RUSH' && gap >= 4 ? 2 :
+    _apLockByPairs ? 1 :
     stableTurns >= 2 && stableOnPrevious && previousRouteState && previousRouteState.lockLevel >= 1 && gap >= 1.1 ? 1 :
     (phase === 'COMMIT' || phase === 'RUSH') && gap >= 2.5 ? 1 : 0
 

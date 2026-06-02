@@ -91,6 +91,9 @@ const props = defineProps<{
   dealerName: string
   maxRolls?: number
   isDealer?: boolean
+  /** 第一次掷骰子的值（用于两次掷骰比较） */
+  prevDice1?: number
+  prevDice2?: number
   /** 服务器广播的骰子结果 - 非庄家玩家通过此prop接收并自动播放动画 */
   rollTriggerKey?: number
   /** 父组件递增此值可强制重置到 idle（如 API 失败） */
@@ -111,12 +114,27 @@ const RESULT_HOLD_MS = 300
 const maxRollsLimit = computed(() => props.maxRolls || 1)
 const canReroll = computed(() => currentRoll.value < maxRollsLimit.value && phase.value === 'result')
 const isQuadCombo = computed(() => {
-  return (props.dice1 === 1 && props.dice2 === 1) || (props.dice1 === 4 && props.dice2 === 4)
+  // 单次：1+1 或 4+4 → 4倍
+  const singleQuad = (props.dice1 === 1 && props.dice2 === 1) || (props.dice1 === 4 && props.dice2 === 4)
+  // 两次掷骰：完全相同组合（顺序无关）→ 4倍
+  const hasPrev = props.prevDice1 !== undefined && props.prevDice2 !== undefined && (props.prevDice1! > 0 || props.prevDice2! > 0)
+  const sameCombo = hasPrev &&
+    Math.min(props.dice1, props.dice2) === Math.min(props.prevDice1!, props.prevDice2!) &&
+    Math.max(props.dice1, props.dice2) === Math.max(props.prevDice1!, props.prevDice2!)
+  return singleQuad || sameCombo
 })
 const isOneFourCombo = computed(() => {
   return (props.dice1 === 1 && props.dice2 === 4) || (props.dice1 === 4 && props.dice2 === 1)
 })
-const isDoubleCombo = computed(() => props.dice1 === props.dice2)
+const isDoubleCombo = computed(() => {
+  if (props.dice1 === props.dice2) return true
+  // 两次掷骰：点数之和相同 → 2倍
+  const hasPrev = props.prevDice1 !== undefined && props.prevDice2 !== undefined && (props.prevDice1! > 0 || props.prevDice2! > 0)
+  if (hasPrev && !isQuadCombo.value) {
+    return (props.dice1 + props.dice2) === (props.prevDice1! + props.prevDice2!)
+  }
+  return false
+})
 const resultBurstLabel = computed(() => {
   if (isQuadCombo.value) return '四倍！'
   if (isOneFourCombo.value) return '两倍！'

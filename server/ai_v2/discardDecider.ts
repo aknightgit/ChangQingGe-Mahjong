@@ -256,27 +256,32 @@ function scoreByRoute(input: RouteDiscardInput): number {
       }
       return 5.8 + (tile.suit === shortestSuit ? 1.1 : 0)
 
-    case 'ALL_PUNGS':
-      // 碰碰胡：优先保留对子，拆顺子，打短门熟张单张
-      const _discardScore = count >= 2 ? -4.4 : 2.8
+    case 'ALL_PUNGS': {
+      // ★ 碰碰胡坚决执行：4+对子时单张一律高正分打掉
+      const _pairTripletTotal = routeState.features.pairCount + routeState.features.tripletCount
+      const _firmCommit = _pairTripletTotal >= 4
+      const _discardScore = count >= 2 ? -4.4 : (_firmCommit ? 4.5 : 2.8)
       // 单张在短门且有熟张 → 最高优先打
       const _shortSuit_seen_single =
-        count === 1 && isShortestSuitTile && visibleCopies >= 1 ? 4.0 : 0
+        count === 1 && isShortestSuitTile && visibleCopies >= 1 ? (_firmCommit ? 6.0 : 4.0) : 0
       // 单张在短门 → 优先打
       const _shortSuit_single =
-        count === 1 && isShortestSuitTile ? 2.4 : 0
+        count === 1 && isShortestSuitTile ? (_firmCommit ? 4.0 : 2.4) : 0
       // 单张有邻牌（潜在的顺子）→ 拆了不影响对子
       const _adjacent_single =
-        count === 1 && nearby > 0 ? 1.8 : 0
+        count === 1 && nearby > 0 ? (_firmCommit ? 3.0 : 1.8) : 0
       // 对子在短门 → 额外保留
       const _shortSuit_pair =
         count >= 2 && isShortestSuitTile ? -2.2 : 0
       // 对子所属花色短门缺口大 → 更应保留
       const _gap_pair =
         count >= 2 && isShortestSuitTile && suitGap >= 3 ? -1.6 : 0
-      // ★ 风箭单张保留：确保短门单张先于风箭打出
+      // 风箭单张：坚定执行时也要打（不再保留）
       const _honor_single_keep =
-        count === 1 && isHonor(tile) ? -1.2 : 0
+        count === 1 && isHonor(tile) ? (_firmCommit ? 1.5 : -1.2) : 0
+      // 熟张额外加分（坚决执行时优先打熟张）
+      const _seen_bonus =
+        count === 1 && visibleCopies >= 2 && _firmCommit ? 2.5 : 0
       return (
         _discardScore +
         _shortSuit_seen_single +
@@ -285,8 +290,10 @@ function scoreByRoute(input: RouteDiscardInput): number {
         _shortSuit_pair +
         _gap_pair +
         _honor_single_keep +
+        _seen_bonus +
         (isHonor(tile) && count >= 2 ? -1 : 0)
       )
+    }
 
     case 'HONOR_HEAVY':
       if (isHonor(tile)) {

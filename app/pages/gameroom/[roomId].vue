@@ -912,6 +912,8 @@
           v-if="showDiceOverlay"
           :dice1="diceValues[0]"
           :dice2="diceValues[1]"
+          :prev-dice1="prevDiceValues[0]"
+          :prev-dice2="prevDiceValues[1]"
           :dealer-name="dealerName"
           :max-rolls="effectiveMaxRolls"
           :is-dealer="isDealer"
@@ -1260,6 +1262,7 @@ watch(showDiceOverlay, (val, oldVal) => {
   console.log('[DICE-DEBUG] showDiceOverlay:', oldVal, '->', val, 'stack:', new Error().stack?.split('\n').slice(1, 4).map(s => s.trim()).join(' | '))
 })
 const diceValues = ref<[number, number]>([1, 1])
+const prevDiceValues = ref<[number, number]>([0, 0])  // 第一次掷骰子值，用于两次比较
 const diceExtra = ref<[number, number] | undefined>(undefined)
 const hasDicePreview = ref(false)
 const diceFromWebSocket = ref(false)
@@ -1648,6 +1651,10 @@ onMounted(async () => {
     if (!detail) return
     diceValues.value = [detail.dice1, detail.dice2]
     diceExtra.value = detail.dice3 !== undefined ? [detail.dice3, detail.dice4] : undefined
+    // ★ 保存第一次骰子值，用于两次比较显示倍数提示
+    if (detail.dice3 !== undefined && detail.dice4 !== undefined) {
+      prevDiceValues.value = [detail.dice3, detail.dice4]
+    }
     // overlay已显示时不重新触发滚动画，防server端diceRoll二次渲染
     if (!showDiceOverlay.value) {
       // WebSocket 事件先于 HTTP 响应到达 - 立即显示 overlay
@@ -2370,6 +2377,7 @@ const enterStartingPhaseWithDiceOverlay = async () => {
           } else {
             // AI庄家未翻倍且允许重掷：自动第二次掷骰，然后发牌
             console.log('[autoDeal] AI dealer needs re-roll, calling rollSecondDice...')
+            prevDiceValues.value = [diceValues.value[0], diceValues.value[1]]  // 保存第一次骰子
             void rollSecondDice().then(() => {
               setTimeout(() => {
                 if (gameState.value?.phase === GamePhase.STARTING) {
@@ -2409,6 +2417,8 @@ const onRollDice = async () => {
         diceValues.value = [res.dice1, res.dice2]
       }
     } else {
+      // ★ 保存第一次骰子值，用于两次比较
+      prevDiceValues.value = [diceValues.value[0], diceValues.value[1]]
       const res = await rollSecondDice() as any
       // ★ 修复：从响应中提取第二次骰子值，更新 diceValues 触发动画
       if (res?.success && res.diceRolls && res.diceRolls.length >= 2) {
