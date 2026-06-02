@@ -431,6 +431,18 @@
                         <button class="glass-theme-chip" :class="{ 'glass-theme-chip--active': discardMode === 'drag' }" @click="setDiscardMode('drag')">拖拽出牌</button>
                       </div>
                     </div>
+                    <div class="glass-settings-row glass-settings-row--panel" @click="autoDraw = !autoDraw">
+                      <div class="glass-settings-row-main">
+                        <span class="glass-settings-icon">{{ autoDraw ? '🤖' : '👆' }}</span>
+                        <div class="glass-settings-copy">
+                          <span class="glass-settings-label">自动摸牌</span>
+                          <span class="glass-settings-help">开启后轮到自己时自动摸牌，无需点击</span>
+                        </div>
+                      </div>
+                      <div class="glass-toggle" :class="{ 'glass-toggle--on': autoDraw }">
+                        <div class="glass-toggle-knob"></div>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div class="glass-settings-section">
@@ -1298,6 +1310,15 @@ const tileBackScheme = ref(0)
 type DiscardMode = 'double_tap' | 'tap_confirm' | 'drag'
 const discardMode = ref<DiscardMode>('double_tap')
 const autoDraw = ref(false)
+// 自动摸牌：轮到自己且只能摸牌时自动执行
+watch([isMyTurn, autoDraw, showDraw, showChow, showPeng, showKong, showHu, showRebel, showConcealedKong, showExtendedKong], ([myTurn, enabled, canDraw, canChow, canPeng, canKong, canHu, canRebel, canConcealedKong, canExtendedKong]) => {
+  if (!myTurn || !enabled || !canDraw) return
+  // 有其他优先操作时不自动摸
+  if (canChow || canPeng || canKong || canHu || canRebel || canConcealedKong || canExtendedKong) return
+  setTimeout(() => {
+    if (showDraw.value && autoDraw.value) void executeAction(ActionType.DRAW)
+  }, 500)
+})
 const dragDiscardThresholdPx = 56
 
 const playWhoosh = () => {
@@ -3549,12 +3570,20 @@ const getSettlementPayerCount = (round: any, winner: any) => {
 const getRoundSettlementRows = (round: any) => {
   const winners = Array.isArray(round?.winnerDetails) ? round.winnerDetails : []
   const winnerByPlayer = new Map(winners.map((winner: any) => [winner.playerId, winner]))
+  // 两口/三口关系：名字加括号
+  const bailoutRelations = round?.bailoutRelations || []
+  const bailoutNameSet = new Set<string>()
+  for (const rel of bailoutRelations) {
+    if (rel.player1Name) bailoutNameSet.add(rel.player1Name)
+    if (rel.player2Name) bailoutNameSet.add(rel.player2Name)
+  }
+  const formatName = (name: string) => bailoutNameSet.has(name) ? `(${name})` : name
   const rows = (settlementData.value?.playerStats || []).map((player: any) => {
     const winner: any = winnerByPlayer.get(player.id)
     const score = Number(round?.scores?.[player.id] ?? 0)
     return {
       playerId: player.id,
-      playerName: player.name,
+      playerName: formatName(player.name),
       isWinner: !!winner,
       winSequence: winner ? getSettlementWinnerSequence(round, player.id) : '',
       handType: winner?.handTypeName || '-',

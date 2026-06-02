@@ -433,8 +433,15 @@ export class BotController {
         } else {
           console.warn(`[bot-discard] ${refreshedPlayer.name} has no tile to discard! hand: ${refreshedPlayer.hand.concealedTiles.length}`);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('[bot-discard] Error:', err);
+        // 犹豫期冻结导致摸牌失败 → 等待冻结结束后重试
+        if (err?.message?.includes('hesitation freeze')) {
+          const retryDelay = 800;
+          console.log(`[bot-discard] Retrying draw in ${retryDelay}ms after hesitation freeze...`);
+          setTimeout(() => scheduleBotAction(gameId), retryDelay);
+          return;
+        }
       }
     }, (() => {
       const g = games.get(gameId);

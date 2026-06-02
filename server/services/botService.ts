@@ -1509,6 +1509,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         : 0
       score += routeScore
       composite += routeScore * 2
+      const visibleCopies = countVisibleCopies(tile, game)
       // ★ 碰碰胡坚决执行：4+对子/刻子时，单张强制打出，对子坚决保留
       if (routeState.current === 'ALL_PUNGS' && (routeState.features.pairCount + routeState.features.tripletCount) >= 4) {
         if (tilePairCount === 1) {
@@ -1549,7 +1550,6 @@ export function selectDiscardTile(player: Player, game: GameState): string {
           else composite += 50
         }
       }
-      const visibleCopies = countVisibleCopies(tile, game)
       const shouldPurgeMinorSuitResidue =
         routeState.current === 'HALF_FLUSH' &&
         routeState.targetSuit &&
