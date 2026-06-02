@@ -15,7 +15,7 @@
         <template v-if="phase === 'idle'">
           <div class="dice-idle-phase">
             <p class="dice-hint dice-hint--lead">
-              {{ isDealer ? '点击骰子掷骰' : `${dealerName} 掷骰子` }}
+              {{ dealerName ? `${dealerName} 掷骰子` : '等待掷骰子...' }}
             </p>
             <div
               class="dice-row"
@@ -25,8 +25,20 @@
               <Dice3D :value="dice1" :state="'idle'" />
               <Dice3D :value="dice2" :state="'idle'" />
             </div>
-            <button v-if="isDealer" class="deal-button" @click="onDeal">
-              <span class="deal-icon">🀫</span> 发牌
+            <p v-if="maxRollsLimit > 1" class="dice-hint dice-hint--sub">{{ currentRoll }}/{{ maxRollsLimit }}</p>
+            <button
+              v-if="isDealer && maxRollsLimit <= 1"
+              class="deal-button"
+              @click="onRollAndDeal"
+            >
+              <span class="deal-icon">🎲🀫</span> 掷骰子+发牌
+            </button>
+            <button
+              v-if="isDealer && maxRollsLimit > 1"
+              class="deal-button"
+              @click="onRoll"
+            >
+              <span class="deal-icon">🎲</span> 掷骰子 ({{ currentRoll }}/{{ maxRollsLimit }})
             </button>
             <p v-if="!isDealer" class="dice-hint dice-hint--sub">等待庄家掷骰子...</p>
           </div>
@@ -55,7 +67,10 @@
               <span class="dice-total-sep">&amp;</span>
               <span class="dice-total-num">{{ dice2 }}</span>
             </p>
-            <p v-if="canReroll && isDealer" class="dice-hint dice-hint--sub">还可以再掷一次</p>
+            <p class="dice-hint">{{ dealerName ? `庄家: ${dealerName}` : '' }}</p>
+            <p v-if="canReroll && isDealer" class="dice-hint dice-hint--sub">
+              点击骰子可重掷（{{ currentRoll }}/{{ maxRollsLimit }}）
+            </p>
             <button v-if="isDealer" class="deal-button deal-button--result" @click="onDeal">
               <span class="deal-icon">🀫</span> 发牌
             </button>

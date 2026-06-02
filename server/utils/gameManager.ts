@@ -1455,7 +1455,7 @@ class GameManager {
 
     await this.persistGame(game);
     this.broadcastGameState(gameId);
-    console.log(`[rollFirstDice] dice=${d1}+${d2} mult=${singleMult} needSecond=${needSecondRoll} prevGlobal=${prevGlobal}`);
+    console.log(`[rollFirstDice] dice=${d1}+${d2} mult=${singleMult} needSecond=${needSecondRoll}`);
 
     return { dice1: d1, dice2: d2, roundMultiplier: singleMult, needSecondRoll };
   }

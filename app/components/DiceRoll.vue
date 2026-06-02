@@ -47,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch } from 'vue'
 import Dice3D from './Dice3D.vue'
 
 const props = defineProps<{
