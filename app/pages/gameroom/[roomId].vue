@@ -2460,8 +2460,12 @@ const startNextRound = async () => {
   showLiangShanOverlay.value = false
   settlementData.value = null
   isHuReviewMode.value = false
-  // 主动刷新一次状态，确保拿到服务端 STARTING 阶段
-  try { await refreshState('startNextRound') } catch {}
+  // 轮询等待服务端进入 STARTING 阶段（最多 8 秒）
+  for (let i = 0; i < 16; i++) {
+    try { await refreshState('startNextRound') } catch {}
+    if (gameState.value?.phase === GamePhase.STARTING || gameState.value?.phase === GamePhase.PLAYING) break
+    await new Promise(r => setTimeout(r, 500))
+  }
 }
 const isInteractionLocked = computed(() => isOverlayVisible.value)
 
@@ -4526,7 +4530,10 @@ watch(() => gameState.value, (newState, oldState) => {
     }
     if ((newState as any).liangShanSuccess) {
       console.log('[LiangShan] Popup triggered:', { currentVotes, activeCount: activePlayerCount(newState), liangShanSuccess: (newState as any).liangShanSuccess })
-      addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
+      // 延迟确保“发起”消息先显示
+      setTimeout(() => {
+        addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
+      }, 300)
       // 显示梁山聚义成功弹窗，3s 后主动推进到下一局
       showLiangShanOverlay.value = true
       setTimeout(() => {
