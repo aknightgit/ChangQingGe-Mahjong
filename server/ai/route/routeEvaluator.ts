@@ -258,6 +258,7 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
   const routeBucketBoost = getRouteBucketBoost(policy, handQuality, isHighMult, route)
   const pureFlushBucketBoost = getPureFlushBucketBoost(policy, handQuality, isHighMult)
   const earlyPairHeavy = estimatedRound <= 5 && features.pairCount >= 4
+  const veryPairHeavy = features.pairCount >= 5 && features.sequenceLikeCount <= 3  // 5+对子且无明显长门
   const noWildOpenPush = features.wildCount === 0
   const multiWildMenqingPush = features.wildCount >= 2
   const oneWildLongSuitPivot = features.wildCount === 1 && features.longestSuitCount >= 6
@@ -295,6 +296,7 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       if (oneWildLongSuitPivot) score -= 0.9
       if (upstreamRejectedLongSuit) score -= 2.4
       if (earlyPairHeavy) score -= 3.8
+      if (veryPairHeavy) score -= 6.0  // 5+对子无长门，门清路线不划算
       if (multiWildMenqingPush) score += 2.8
       if (input.player.hand.exposedMelds.length === 0) score += 3
       if (input.shanten <= 2 && features.isolatedCount <= 2) score += 2.5
@@ -398,6 +400,10 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       if (earlyPairHeavy) {
         reasons.push('early_four_pairs_push')
         score += 8.5
+      }
+      if (veryPairHeavy) {
+        reasons.push('very_pair_heavy_push')
+        score += 14.0  // 5+对子无长门 → 强制碰碰胡
       }
       // 高意愿+足够对子→提前决定性commit
       if (_ap_isAgg && features.pairCount + features.tripletCount >= 3) {

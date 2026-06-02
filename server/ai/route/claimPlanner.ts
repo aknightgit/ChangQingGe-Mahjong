@@ -121,6 +121,7 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
   const estimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
   const wildCount = routeState.features.wildCount
   const pairHeavyPungsPush = estimatedRound <= 5 && routeState.features.pairCount >= 4
+  const veryPairHeavy = routeState.features.pairCount >= 5 && routeState.features.sequenceLikeCount <= 3
   const upstreamRejectedSuit = routeState.features.upstreamRejectedSuit
   const upstreamSuitCount = upstreamRejectedSuit ? getNumberSuitCount(player.hand.concealedTiles, upstreamRejectedSuit) : 0
   const upstreamRejectedOpenPush =
@@ -232,7 +233,8 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
         (effectiveGlobalMultiplier >= 4 && candidateShanten <= passShanten && candidateEffective + 1 >= passEffective) ||
         (noWildOpenPush && candidateShanten <= passShanten && candidateEffective + (action === ActionType.CHOW ? 1 : 0) >= passEffective) ||
         (upstreamRejectedOpenPush && candidateShanten <= passShanten && candidateEffective + 1 >= passEffective) ||
-        (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG))
+        (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG)) ||
+        (veryPairHeavy && action === ActionType.PENG)  // 5+对子无长门，坚决碰
 
       const openingBreakNeeds =
         candidateShanten < passShanten ||
@@ -242,7 +244,8 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
         effectiveGlobalMultiplier >= 4 ||
         (noWildOpenPush && (action === ActionType.PENG || candidateEffective >= passEffective + 1)) ||
         upstreamRejectedOpenPush ||
-        (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG))
+        (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG)) ||
+        (veryPairHeavy && action === ActionType.PENG)  // 5+对子无长门，坚决碰
 
       const canBreakOpeningMenqing = openingMenqing
         ? (multiWildMenqingPush ? openingBreakNeeds && effectiveGlobalMultiplier >= 4 : openingBreakNeeds)
