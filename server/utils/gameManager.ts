@@ -3924,7 +3924,9 @@ class GameManager {
   public endRound(game: GameState, reason: GameEndReason): void {
     this.timerManager.clearPendingActionTimer(game.gameId);
     // 【2026-05-29 验牌阶段】如果还不是REVEAL阶段，先进入REVEAL并延迟5秒
-    if (game.phase !== GamePhase.REVEAL) {
+    // 梁山聚义成功：跳过验牌，直接结算
+    const skipReveal = !!(game as any).liangShanSuccess;
+    if (game.phase !== GamePhase.REVEAL && !skipReveal) {
       game.phase = GamePhase.REVEAL;
       game.endReason = reason;
       const winners = game.players.filter(p => p.status === PlayerStatus.WON);
