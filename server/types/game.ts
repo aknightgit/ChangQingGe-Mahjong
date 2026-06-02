@@ -315,7 +315,7 @@ export interface GameState {
   huSelectionLocks?: Record<string, number>;
   trainingRoundStartSnapshot?: any;
   // 吃碰排斥规则状态（每局重置）
-  chowPongExclusion?: Record<string, { firstActionSuit: string | null; firstActionType: 'chow' | 'pong' | null }>;
+  chowPongExclusion?: Record<string, { firstActionSuit: string | null; firstActionType: 'chow' | 'pong' | null; pongedSuits?: string[] }>;
   /** 本回合是否已摸牌（防同回合连续摸牌） */
   drawnThisTurn?: boolean;
 }

@@ -28,6 +28,7 @@ type PersistedMahjongGame = MahjongGame & {
   hesitationWindow?: number
   diceRollCount?: number
   drawnThisTurn?: boolean
+  chowPongExclusion?: Record<string, { firstActionSuit: string | null; firstActionType: 'chow' | 'pong' | null; pongedSuits?: string[] }>
   trainingRoundStartSnapshot?: any
 }
 
@@ -150,6 +151,7 @@ const gameStateToDocument = (game: GameState): PersistedMahjongGame => ({
   hesitationWindow: game.hesitationWindow,
   diceRollCount: game.diceRollCount,
   drawnThisTurn: game.drawnThisTurn,
+  chowPongExclusion: game.chowPongExclusion || {},
   trainingRoundStartSnapshot: (game as any).trainingRoundStartSnapshot
 })
 
@@ -180,6 +182,8 @@ const documentToGameState = (doc: PersistedMahjongGame): GameState => ({
   rebelEvent: doc.rebelEvent,
   hesitationWindow: doc.hesitationWindow,
   diceRollCount: doc.diceRollCount,
+  chowPongExclusion: (doc as any).chowPongExclusion || {},
+
   drawnThisTurn: doc.drawnThisTurn,
   trainingRoundStartSnapshot: doc.trainingRoundStartSnapshot
 })
