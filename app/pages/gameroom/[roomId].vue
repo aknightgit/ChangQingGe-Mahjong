@@ -2409,7 +2409,14 @@ const onRollDice = async () => {
         diceValues.value = [res.dice1, res.dice2]
       }
     } else {
-      await rollSecondDice()
+      const res = await rollSecondDice() as any
+      // ★ 修复：从响应中提取第二次骰子值，更新 diceValues 触发动画
+      if (res?.success && res.diceRolls && res.diceRolls.length >= 2) {
+        const secondRoll = res.diceRolls[1]  // [d3, d4]
+        if (secondRoll && secondRoll.length >= 2) {
+          diceValues.value = [secondRoll[0], secondRoll[1]]
+        }
+      }
     }
   } catch (e: any) {
     console.error('[onRollDice] Failed:', e)
