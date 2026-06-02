@@ -120,7 +120,7 @@ export class GameStore {
     if (!this.wsManager) return;
     const game = this.games.get(gameId);
     if (!game) return;
-    this.wsManager.broadcast(gameId, 'gameStateUpdate', {
+    const payload: any = {
       gameId,
       phase: game.phase,
       currentPlayerIndex: game.currentPlayerIndex,
@@ -130,7 +130,14 @@ export class GameStore {
       _freezeUntil: (game as any)._freezeUntil || 0,
       liangShanSuccess: game.liangShanSuccess,
       liangShanVotes: game.liangShanVotes
-    });
+    };
+    // REVEAL/ENDED 阶段：发送完整 players 数据（含手牌），前端需要展示亮牌
+    if (game.phase === GamePhase.REVEAL || game.phase === GamePhase.ENDED) {
+      payload.players = game.players;
+      payload.endReason = game.endReason;
+      payload.roundStats = game.roundStats;
+    }
+    this.wsManager.broadcast(gameId, 'gameStateUpdate', payload);
   }
 
   // ─── Query ──────────────────────────────────

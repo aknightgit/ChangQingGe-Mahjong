@@ -137,7 +137,8 @@ export default defineEventHandler(async (event) => {
       isAdmin ||
       p.id === normalizedPlayerId ||
       canRevealSpectatorTarget(game, normalizedPlayerId, p) ||
-      hasDebugSpectatorLock;
+      hasDebugSpectatorLock ||
+      game.phase === 'reveal' || game.phase === 'ended';  // REVEAL/ENDED 阶段：所有人可见手牌
 
     return {
       isBotControlled: gameManager.isPlayerInBotMode(p.id),
