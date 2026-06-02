@@ -641,13 +641,25 @@ function calculateFormulaFan(
   // 百搭虚拟分配：找最优组合（利益最大化）
   // 优先级：箭牌刻子(+2) > 风牌刻子(+1) > 其他
   // 支持：3张百搭→刻子, 2百搭+1牌→刻子, 1百搭+2牌→刻子
+  // 重要：如果百搭已在自然位置形成顺子（如一二三万中的二万），不做虚拟分配
   let virtualHand = [...handTiles];
   if (wildTileSuit !== undefined && wildTileValue !== undefined) {
     const wildTiles = handTiles.filter(t => t.suit === wildTileSuit && t.value === wildTileValue);
+    // 检查百搭是否已在自然位置形成顺子（与同门相邻牌组成连续序列）
+    const wildsInNaturalSequence = wildTiles.filter(wt => {
+      const sameSuit = handTiles.filter(t => t.suit === wt.suit && t.id !== wt.id);
+      const hasLower = sameSuit.some(t => t.value === wt.value - 1);
+      const hasUpper = sameSuit.some(t => t.value === wt.value + 1);
+      const hasLower2 = sameSuit.some(t => t.value === wt.value - 2);
+      const hasUpper2 = sameSuit.some(t => t.value === wt.value + 2);
+      // 百搭与同门相邻牌形成顺子搭子（如二万旁边有一万或三万）
+      return (hasLower && hasUpper) || (hasLower && hasLower2) || (hasUpper && hasUpper2);
+    });
     if (wildTiles.length > 0) {
       const nonWildTiles = handTiles.filter(t => !(t.suit === wildTileSuit && t.value === wildTileValue));
-      let remainingWilds = wildTiles.length;
-      const virtualParts: Tile[] = [...nonWildTiles];
+      // 只对不在自然顺子中的百搭做虚拟分配
+      let remainingWilds = wildTiles.length - wildsInNaturalSequence.length;
+      const virtualParts: Tile[] = [...nonWildTiles, ...wildsInNaturalSequence];
 
       // 1. 优先配箭牌刻子（中发白 triplet = +2）
       // 去重：每种箭牌只处理一次

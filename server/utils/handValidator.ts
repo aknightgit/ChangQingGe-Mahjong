@@ -1419,21 +1419,9 @@ export function canWin(
     return { canWin: true, types: [HandType.EIGHT_FLOWERS] };
   }
 
-  if (typeof wildTileIdOrChecker === 'function' && !wildTileId) {
-    const meldsNeeded = Math.floor((concealedNonFlower.length - 2) / 3);
-    const genericCanWin =
-      meldsNeeded >= 0 &&
-      isValidHandSize(concealedNonFlower.length) &&
-      canFormMelds(concealedNonFlower, meldsNeeded, isWildTileFn);
-    const genericResult = {
-      canWin: genericCanWin,
-      types: genericCanWin ? [HandType.STANDARD] : []
-    };
-    if (canWinResultCache.size < CAN_WIN_CACHE_MAX) {
-      canWinResultCache.set(cacheKey, genericResult);
-    }
-    return genericResult;
-  }
+  // [已移除] 之前的快速路径在无百搭时直接返回STANDARD，跳过detectTypes
+  // 导致无百搭选项永远看不到混一色/碰碰胡等牌型
+  // 现在统一走下面的 detectTypes 路径
   // 第二层：标准 3n+2 / 特殊牌型检测
   // _skipWildAssignment 时跳过 findBestAssignment DFS，直接用 detectTypes（用于 baseline 提速）
   const types = (wildTileId && !_skipWildAssignment)
