@@ -2346,12 +2346,21 @@ const enterStartingPhaseWithDiceOverlay = async () => {
         setTimeout(() => {
           console.log('[autoDeal] Timer fired, phase:', gameState.value?.phase)
           if (gameState.value?.phase !== GamePhase.STARTING) return
-          // 翻倍了 → 直接发牌；未翻倍 → 等玩家点击二次掷骰按钮
+          // 翻倍了 → 直接发牌；未翻倍且次数上限<2 → 直接发牌
           const isDoubled = (gameState.value?.roundMultiplier ?? 1) > 1
           if (isDoubled || (gameState.value?.diceRollCount ?? 2) < 2) {
             void onDealTiles()
+          } else {
+            // AI庄家未翻倍且允许重掷：自动第二次掷骰，然后发牌
+            console.log('[autoDeal] AI dealer needs re-roll, calling rollSecondDice...')
+            void rollSecondDice().then(() => {
+              setTimeout(() => {
+                if (gameState.value?.phase === GamePhase.STARTING) {
+                  void onDealTiles()
+                }
+              }, 2500)
+            })
           }
-          // 未翻倍且需要二次掷骰：不自动发牌，等玩家点击“再掷一次”
         }, 2500)
       }
     } else {
