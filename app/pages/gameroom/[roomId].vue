@@ -269,7 +269,7 @@
 
         <!-- [2026-05-29] 验牌亮牌阶段 -->
         <div v-if="showWinnerReveal" class="reveal-phase-overlay">
-          <div class="reveal-phase-text">客官请验牌！</div>
+          <div class="reveal-phase-text">亮牌验牌</div>
           <div class="reveal-phase-countdown">{{ revealCountdown }}s</div>
         </div>
 
@@ -853,7 +853,7 @@
                         v-for="item in tingPreviewItems"
                         :key="item.key"
                         class="ting-preview-tile"
-                        :class="{ 'ting-preview-tile--exhausted': item.isExhausted }"
+                        :class="{ 'ting-preview-tile--exhausted': item.isExhausted, 'ting-preview-tile--wild': item.key === 'wild' }"
                       >{{ item.label }}</span>
                     </template>
                     <span v-else class="ting-preview-label__hint">未听牌</span>
@@ -2207,7 +2207,24 @@ const tingPreviewItems = computed(() => {
     })
   }
 
-  return Array.from(deduped.values()).sort((a, b) => compareTilesForDisplay(a.tile, b.tile))
+  // ★ 追加百搭牌名到听牌提示末尾
+  if (wildTile.value) {
+    const wt = wildTile.value
+    const wildLabel = tileLabel(wt)
+    deduped.set('wild', {
+      key: 'wild',
+      label: `百搭·${wildLabel}`,
+      tile: wt as Tile,
+      isExhausted: false
+    })
+  }
+
+  return Array.from(deduped.values()).sort((a, b) => {
+    // 百搭始终排最后
+    if (a.key === 'wild') return 1
+    if (b.key === 'wild') return -1
+    return compareTilesForDisplay(a.tile, b.tile)
+  })
 })
 const getHuOptionBasePoints = (opt: any) => Number(opt?.summary?.finalPoints ?? opt?.score ?? 0)
 // finalPoints = 自摸时单个输家应付的点数，或捉冲时放冲者独自应付的点数
@@ -4305,6 +4322,7 @@ const checkOtherPlayerSounds = (newState: any) => {
     _flowerVoicePlayedTurnKey = turnKey
   }
   const pendingMeldVoices: Array<'kong' | 'pong' | 'chow'> = []
+  const pendingDiscards: Array<{ suit: string; value: number; sound: boolean }> = []
   for (const player of newState.players) {
     const prev = prevOtherPlayerState.get(player.id)
     const meldCount = getOtherMeldCount(player)
@@ -4315,19 +4333,19 @@ const checkOtherPlayerSounds = (newState: any) => {
       const isSelf = player.id === playerId.value
       const isBotCtrl = !!(player as any).isBotControlled || isBotPlayer(player)
       const shouldPlayVoice = !isSelf || isBotCtrl  // AI托管时自己的动作也要播放语音
-if (replacedFlowerCount > prev.replacedFlowerCount) {
+      if (replacedFlowerCount > prev.replacedFlowerCount) {
         if (shouldPlayVoice && !_flowerVoicePlayed.has(player.id)) {
           _flowerVoicePlayed.add(player.id)
           playSound('tile-draw')
           playVoiceAction('flowerReplace')
         }
       }
+      // 先收集出牌，稍后播放语音（确保吃碰杠语音先于出牌语音）
       if (shouldPlayVoice && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
         const newDiscards = (player.hand?.discardedTiles || []).slice(prev.discardCount)
         const lastNew = newDiscards[newDiscards.length - 1]
         if (!recentlyPlayedDiscardAudio(lastNew)) {
-          playSound('tile-discard')
-          if (lastNew?.suit) playVoiceTile(lastNew.suit, lastNew.value)
+          pendingDiscards.push({ suit: lastNew?.suit, value: lastNew?.value, sound: true })
           markDiscardAudioPlayed(lastNew)
         }
       }
@@ -4353,6 +4371,7 @@ if (replacedFlowerCount > prev.replacedFlowerCount) {
   for (const id of prevOtherPlayerState.keys()) {
     if (!currentIds.has(id)) prevOtherPlayerState.delete(id)
   }
+  // ★ 先播吃碰杠语音，再播出牌语音（修复顺序bug）
   for (const action of pendingMeldVoices) {
     if (action === 'kong') {
       playSound('tile-kong')
@@ -4364,6 +4383,11 @@ if (replacedFlowerCount > prev.replacedFlowerCount) {
       playSound('tile-chow')
       playVoiceAction('chow')
     }
+  }
+  // 出牌语音放在吃碰杠之后
+  for (const d of pendingDiscards) {
+    playSound('tile-discard')
+    if (d.suit) playVoiceTile(d.suit, d.value)
   }
 }
 const activePlayerCount = (state: any) => (state?.players || []).filter((p: any) => p.status === 'playing' && !p.isBotControlled).length
@@ -4386,9 +4410,15 @@ watch(() => gameState.value, (newState, oldState) => {
     prevQjAlertIds.value = new Set<string>(existingAlerts.map((a: any) => a.playerId))
   }
 
-  // 有人胡牌（广播消息由服务端 actionHandler.ts 中 broadcastQuickMessage 统一处理，此处不再重复）
+  // 有人胡牌 → 播放胡牌音效 + 语音
   if (newState.winnersCount > prevWinnersCount.value && prevPhase.value === 'playing') {
     playSound('round-end')
+    // 检测最新胡牌玩家是自摸还是捉冲，播放对应语音
+    const newWinners = (newState.players || []).filter((p: any) => p.status === 'won' && !(oldState?.players || []).find((op: any) => op.id === p.id && op.status === 'won'))
+    for (const w of newWinners) {
+      if (w.isSelfDrawn) { playVoiceAction('selfHu') }
+      else { playVoiceAction('hu') }
+    }
   }
 
   // 流局
@@ -5766,6 +5796,11 @@ const forceDiscard = async (p: Player) => {
 
 .ting-preview-tile--exhausted {
   color: rgba(255, 255, 255, 0.38);
+}
+
+.ting-preview-tile--wild {
+  color: #ffd700;
+  font-weight: bold;
 }
 
 /* 内联动作按钮组 — 放在手牌右侧 */

@@ -85,10 +85,20 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
   const seenHonorWaste =
     isHonor(input.tile) &&
     isSingleton &&
-    visibleCopies >= 3 &&
+    visibleCopies >= 2 &&
     input.routeState.current !== 'HONOR_HEAVY' &&
     input.routeState.current !== 'HALF_FLUSH'
       ? 11 + visibleCopies
+      : 0
+  // ★ 风箭单张低可见度 → 保留（负分=不打）
+  const honorSingletonKeep =
+    isHonor(input.tile) &&
+    isSingleton &&
+    visibleCopies <= 1 &&
+    input.routeState.current !== 'HONOR_HEAVY' &&
+    input.routeState.current !== 'HALF_FLUSH' &&
+    input.routeState.current !== 'ALL_PUNGS'
+      ? -2.5
       : 0
   const exhaustedHonorPair =
     isHonor(input.tile) &&
@@ -241,7 +251,8 @@ function scoreByRoute(input: RouteDiscardInput): number {
         if (routeState.features.pureFlushUpgradeReady) {
           return count >= 2 ? 5.6 : 3.4
         }
-        return count === 1 ? -0.1 : -1.8
+        // ★ 风箭单张保留力度加强（从-0.1改为-1.5），确保短门单张先打
+        return count === 1 ? -1.5 : -2.2
       }
       return 5.8 + (tile.suit === shortestSuit ? 1.1 : 0)
 
@@ -263,6 +274,9 @@ function scoreByRoute(input: RouteDiscardInput): number {
       // 对子所属花色短门缺口大 → 更应保留
       const _gap_pair =
         count >= 2 && isShortestSuitTile && suitGap >= 3 ? -1.6 : 0
+      // ★ 风箭单张保留：确保短门单张先于风箭打出
+      const _honor_single_keep =
+        count === 1 && isHonor(tile) ? -1.2 : 0
       return (
         _discardScore +
         _shortSuit_seen_single +
@@ -270,6 +284,7 @@ function scoreByRoute(input: RouteDiscardInput): number {
         _adjacent_single +
         _shortSuit_pair +
         _gap_pair +
+        _honor_single_keep +
         (isHonor(tile) && count >= 2 ? -1 : 0)
       )
 
@@ -296,10 +311,13 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
     input.routeState.targetSuit && input.afterRouteState.targetSuit === input.routeState.targetSuit ? 0.6 : 0
   const routeStrengthDelta =
     input.afterRouteState.routeScores[0].score - input.routeState.routeScores[0].score
+  const _obsHonorSingletonKeep =
+    isHonor(input.tile) && sameTypeCount(input) === 1 && countVisibleCopies(input) <= 1 ? -2.5 : 0
   const observeOrdering =
     input.routeState.phase === 'OBSERVE'
       ? (
         getObserveBucketScore(input) +
+        _obsHonorSingletonKeep +
         (input.routeState.features.shortestSuit && input.tile.suit === input.routeState.features.shortestSuit && sameTypeCount(input) === 1 ? 2.3 : 0) +
         (input.routeState.features.shortestSuit && input.tile.suit === input.routeState.features.shortestSuit && adjacentCount(input) > 0 ? -3.0 : 0) +  // 短门邻接张：打掉，不留
         (input.routeState.features.shortestSuitCount > 0 &&

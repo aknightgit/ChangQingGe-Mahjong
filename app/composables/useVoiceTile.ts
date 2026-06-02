@@ -243,7 +243,7 @@ export const loadVoiceScheme = async (scheme: VoiceScheme): Promise<void> => {
       else if (tile.opus) map.set(tile.key, tile.opus)
     }
     // 加载动作语音（吃/碰/杠/胡/补花）
-    const ACTION_VOICE_KEYS = ['gang', 'wochi', 'peng', 'hule', 'buhua']
+    const ACTION_VOICE_KEYS = ['gang', 'wochi', 'peng', 'hule', 'buhua', 'zimo', 'zaofan', 'juyi']
     for (const entry of schemeEntries) {
       if (entry.scheme !== scheme) continue
       if (ACTION_VOICE_KEYS.includes(entry.key) && !map.has(entry.key)) {
