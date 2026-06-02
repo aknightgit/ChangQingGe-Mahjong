@@ -4017,6 +4017,10 @@ watch([isMyTurn, hasPriorityActions], ([myTurn, hasActions]) => {
   }
 }, { immediate: true })
 
+// 聚义投票状态（必须在 phase watcher 之前定义）
+const prevLiangShanVoteCount = ref(0)
+const prevLiangShanVoteIds = ref<string[]>([])
+
 // 监听游戏进入PLAYING阶段，强制触发倒计时
 watch(() => gameState.value?.phase, (phase, oldPhase) => {
   if (phase === GamePhase.PLAYING && isMyTurn.value && !isAIControlled.value) {
@@ -4038,7 +4042,6 @@ watch(() => gameState.value?.phase, (phase, oldPhase) => {
     showLiangShanOverlay.value = false
     showWinnerReveal.value = false
     showDiceOverlay.value = true
-    // 重置聚义投票状态
     prevLiangShanVoteCount.value = 0
     prevLiangShanVoteIds.value = []
   }
@@ -4304,8 +4307,6 @@ const prevPhase = ref<string>('')
 const prevBailoutRelations = ref<string>('')
 const prevBotPlayers = ref<Set<string>>(new Set())
 const prevRebelEvent = ref<any>(null)
-const prevLiangShanVoteCount = ref(0)
-const prevLiangShanVoteIds = ref<string[]>([])
 const prevQjAlertIds = ref<Set<string>>(new Set())
 const prevSwapRequestIds = ref<Set<string>>(new Set())
 const prevIsMyTurn = ref(false)
