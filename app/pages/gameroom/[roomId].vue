@@ -1845,6 +1845,9 @@ const getDiceRoundMultiplier = (dice1: number, dice2: number, dice3?: number, di
   return singleMultiplier
 }
 const effectiveMaxRolls = computed(() => {
+  // 优先使用服务端根据继承倍数计算好的 effectiveDiceRollCount
+  const effective = Number((gameState.value as any)?.effectiveDiceRollCount)
+  if (Number.isFinite(effective) && effective > 0) return Math.floor(effective)
   const raw = Number(gameState.value?.diceRollCount ?? route.query.dice ?? 2)
   return Number.isFinite(raw) && raw > 0 ? Math.max(1, Math.floor(raw)) : 2
 })
@@ -2429,10 +2432,6 @@ const onRollDice = async () => {
       const res = await rollFirstDice() as any
       if (res?.success && res.dice1 && res.dice2) {
         diceValues.value = [res.dice1, res.dice2]
-      }
-      // 继承倍数>=2或首局翻倍时，第一次掷完直接发牌，跳过第二次
-      if (res?.needSecondRoll === false) {
-        setTimeout(() => { void onDealTiles() }, 1200)
       }
     } else {
       // ★ 保存第一次骰子值，用于两次比较
@@ -4663,10 +4662,8 @@ watch(
           // AI 庄家：自动发牌
           setTimeout(() => {
             if (gameState.value?.phase !== GamePhase.STARTING) return
-            const inheritMul = (gameState.value as any)?.inheritMultiplier ?? (gameState.value as any)?.inheritedGlobalMultiplier ?? 1
-            const needsSecondRoll = (gameState.value?.roundMultiplier ?? 1) === 1 &&
-              (gameState.value?.diceRollCount ?? 2) >= 2 &&
-              inheritMul < 2
+            const effectiveRollCount = Number((gameState.value as any)?.effectiveDiceRollCount ?? gameState.value?.diceRollCount ?? 2)
+            const needsSecondRoll = (gameState.value?.roundMultiplier ?? 1) === 1 && effectiveRollCount >= 2
             const doDeal = () => {
               if (gameState.value?.phase === GamePhase.STARTING) {
                 void onDealTiles()

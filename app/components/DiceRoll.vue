@@ -34,8 +34,10 @@
           <div class="dice-total">
             {{ diceValues[0] }} &amp; {{ diceValues[1] }}（共{{ diceValues[0] + diceValues[1] }}）
           </div>
-          <div class="dice-hint">{{ isDealer ? '点击发牌开始游戏' : `等待 ${dealerName} 发牌...` }}</div>
+          <div v-if="isDealer && canReroll" class="dice-hint">还可以再掷一次</div>
+          <div v-else class="dice-hint">{{ isDealer ? '点击发牌开始游戏' : `等待 ${dealerName} 发牌...` }}</div>
           <div v-if="isDealer" class="dice-btn-row">
+            <button v-if="canReroll" class="dice-action-btn" @click="doRoll">🎲 再掷</button>
             <button class="dice-action-btn dice-action-btn--deal" @click="doDeal">🀫 发牌</button>
           </div>
         </template>
@@ -54,6 +56,7 @@ const props = defineProps<{
   dealerName: string
   isDealer: boolean
   roundNum: number
+  maxRolls?: number  // 最大掷骰次数，默认2
   resetTrigger?: number  // 父组件递增此值可强制重置到 idle
 }>()
 
@@ -64,13 +67,18 @@ const emit = defineEmits<{
 
 const phase = ref<'idle' | 'rolling' | 'result'>('idle')
 const rolling = ref(false)
+const rollCount = ref(0)  // 已掷骰次数
+const canReroll = computed(() => {
+  const max = props.maxRolls ?? 2
+  return rollCount.value < max
+})
 
 function doRoll() {
   if (rolling.value) return  // 防重复点击
   rolling.value = true
+  rollCount.value++
   phase.value = 'rolling'
   emit('roll')
-  // 不再自动跳到 result — 等父组件通过 diceValues 变化触发
 }
 
 function doDeal() {
@@ -88,10 +96,10 @@ watch(() => props.diceValues, (vals) => {
   }
 }, { deep: true })
 
-watch(() => props.visible, (v) => { if (v) { phase.value = 'idle'; rolling.value = false } })
+watch(() => props.visible, (v) => { if (v) { phase.value = 'idle'; rolling.value = false; rollCount.value = 0 } })
 
 // 父组件可通过递增 resetTrigger 强制回到 idle（如 API 失败）
-watch(() => props.resetTrigger, () => { phase.value = 'idle'; rolling.value = false })
+watch(() => props.resetTrigger, () => { phase.value = 'idle'; rolling.value = false; rollCount.value = 0 })
 </script>
 
 <style scoped>

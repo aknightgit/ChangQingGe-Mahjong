@@ -1355,6 +1355,11 @@ class GameManager {
     }
     game.inheritedGlobalMultiplier = undefined;
 
+    // ── 根据继承倍数确定掷骰次数：>=2倍时只掷1次 ──
+    const baseRollCount = game.diceRollCount ?? 2;
+    const effectiveRollCount = prevGlobal >= 2 ? 1 : baseRollCount;
+    (game as any).effectiveDiceRollCount = effectiveRollCount;
+
     // ── 掷骰子：人类庄家不预先掷，等玩家自己点击 ──
     const dealer = game.players[game.dealerIndex];
     const humanDealer = dealer && !isBotPlayer(dealer);
@@ -1375,9 +1380,8 @@ class GameManager {
       })();
       game.roundMultiplier = singleMult;
 
-      const rollCount = game.diceRollCount ?? 2;
-      // 继承倍数>=2或首局翻倍时，只掷一次骰子强制发牌
-      const needSecondRoll = rollCount >= 2 && singleMult === 1 && prevGlobal < 2;
+      // 继承倍数>=2时只掷1次，第一次掷完直接标记不需要第二次
+      const needSecondRoll = effectiveRollCount >= 2 && singleMult === 1;
       (game as any)._needSecondRoll = needSecondRoll;
 
       if (this.wsManager) {
@@ -1437,10 +1441,8 @@ class GameManager {
     })();
     game.roundMultiplier = singleMult;
 
-    const rollCount = game.diceRollCount ?? 2;
-    // 继承倍数>=2或首局翻倍时，只掷一次骰子强制发牌
-    const prevGlobal = game.inheritMultiplier ?? game.inheritedGlobalMultiplier ?? 1;
-    const needSecondRoll = rollCount >= 2 && singleMult === 1 && prevGlobal < 2;
+    const effectiveRollCount = (game as any).effectiveDiceRollCount ?? game.diceRollCount ?? 2;
+    const needSecondRoll = effectiveRollCount >= 2 && singleMult === 1;
     (game as any)._needSecondRoll = needSecondRoll;
     delete (game as any)._humanRollPending;
 
