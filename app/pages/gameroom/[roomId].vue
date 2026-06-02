@@ -3989,14 +3989,16 @@ const handleCircularAction = (type: string) => {
 const showConcealedKong = computed(() => availableActions.value.includes(ActionType.CONCEALED_KONG))
 const showExtendedKong = computed(() => availableActions.value.includes(ActionType.EXTENDED_KONG))
 // 自动摸牌：轮到自己且只能摸牌时自动执行
-watch([isMyTurn, autoDraw, showDraw, showChow, showPeng, showKong, showHu, showRebel, showConcealedKong, showExtendedKong], ([myTurn, enabled, canDraw, canChow, canPeng, canKong, canHu, canRebel, canConcealedKong, canExtendedKong]) => {
-  try {
-    if (!myTurn || !enabled || !canDraw) return
-    if (canChow || canPeng || canKong || canHu || canRebel || canConcealedKong || canExtendedKong) return
-    setTimeout(() => {
-      if (showDraw.value && autoDraw.value) void executeAction(ActionType.DRAW)
-    }, 500)
-  } catch (e) { console.warn('[autoDraw] Error:', e) }
+const canAutoDraw = computed(() => {
+  if (!isMyTurn.value || !autoDraw.value || !showDraw.value) return false
+  if (showChow.value || showPeng.value || showKong.value || showHu.value || showRebel.value || showConcealedKong.value || showExtendedKong.value) return false
+  return true
+})
+watch(canAutoDraw, (can) => {
+  if (!can) return
+  setTimeout(() => {
+    if (canAutoDraw.value) void executeAction(ActionType.DRAW)
+  }, 500)
 })
 const hasPriorityActions = computed(
   () =>
@@ -4271,9 +4273,12 @@ watch(
 
     const isWallExhausted = endReason === GameEndReason.WALL_EXHAUSTED
 
+    // 注入实时互包关系到 roundDetails（state API 顶层有 bailoutRelations，roundStats 里没有）
+    const liveBailout = (gameState.value as any)?.bailoutRelations || []
     settlementData.value = {
       roundDetails: [{
         ...lastRound,
+        bailoutRelations: lastRound.bailoutRelations || liveBailout,
         winnerDetails: lastRound.winnerDetails || []
       }],
       playerStats: (gameState.value?.players || []).map(p => ({

@@ -2,8 +2,12 @@
  * botController.ts — Bot AI 决策与调度（从 gameManager 拆分）
  * 负责：bot pending 动作处理、吃牌决策、出牌调度、超时自动接管
  */
-import { GameState, Player, GamePhase, PlayerStatus, ActionType, PendingAction, MeldType, Tile } from '../types/game';
+import { GameState, Player, GamePhase, PlayerStatus, ActionType, PendingAction, MeldType, Tile, TileSuit } from '../types/game';
 import { shouldClaimPendingAction, selectBotChowTileIds, selectDiscardTile } from '../services/botService';
+
+function isHonorTile(tile: Tile): boolean {
+  return tile.suit === TileSuit.WINDS || tile.suit === TileSuit.DRAGONS;
+}
 
 /**
  * AI 自杠决策：加杠/暗杠是否值得执行
@@ -38,12 +42,14 @@ function evaluateSelfKong(
           return { shouldKong: false, type: 'extended', reason: 'tile-pair-useful' };
         }
 
-        // 检查是否靠近顺子（左右相邻牌）
-        const nearChow = player.hand.concealedTiles.some(t =>
-          t.suit === fourth.suit && t.id !== fourth.id && Math.abs(t.value - fourth.value) <= 2
-        );
-        if (nearChow) {
-          return { shouldKong: false, type: 'extended', reason: 'tile-near-chow' };
+        // 检查是否靠近顺子（左右相邻牌）—— 风牌/箭牌不检查（不能组顺子）
+        if (!isHonorTile(fourth)) {
+          const nearChow = player.hand.concealedTiles.some(t =>
+            t.suit === fourth.suit && t.id !== fourth.id && Math.abs(t.value - fourth.value) <= 2
+          );
+          if (nearChow) {
+            return { shouldKong: false, type: 'extended', reason: 'tile-near-chow' };
+          }
         }
 
         // 加杠决策：基于 kongChance + kakanAggression
@@ -436,7 +442,7 @@ export class BotController {
       } catch (err: any) {
         console.error('[bot-discard] Error:', err);
         // 犹豫期冻结导致摸牌失败 → 等待冻结结束后重试
-        if (err?.message?.includes('hesitation freeze')) {
+        if (err?.message?.includes('Draw is locked') || err?.message?.includes('hesitation freeze')) {
           const retryDelay = 800;
           console.log(`[bot-discard] Retrying draw in ${retryDelay}ms after hesitation freeze...`);
           setTimeout(() => scheduleBotAction(gameId), retryDelay);
