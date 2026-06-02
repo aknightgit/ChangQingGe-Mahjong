@@ -422,18 +422,6 @@
                         <div class="glass-toggle-knob"></div>
                       </div>
                     </div>
-                    <div class="glass-settings-row glass-settings-row--panel" @click="autoDraw = !autoDraw">
-                      <div class="glass-settings-row-main">
-                        <span class="glass-settings-icon">{{ autoDraw ? '🤖' : '👆' }}</span>
-                        <div class="glass-settings-copy">
-                          <span class="glass-settings-label">自动摸牌</span>
-                          <span class="glass-settings-help">无其他可选操作时，自动摸牌（减少点击）</span>
-                        </div>
-                      </div>
-                      <div class="glass-toggle" :class="{ 'glass-toggle--on': autoDraw }">
-                        <div class="glass-toggle-knob"></div>
-                      </div>
-                    </div>
                     <div class="glass-settings-card">
                       <div class="glass-settings-card-title">出牌方式</div>
                       <div class="glass-settings-card-subtitle">移动端支持双击、点选确认、拖拽出牌</div>
@@ -2460,12 +2448,8 @@ const startNextRound = async () => {
   showLiangShanOverlay.value = false
   settlementData.value = null
   isHuReviewMode.value = false
-  // 轮询等待服务端进入 STARTING 阶段（最多 8 秒）
-  for (let i = 0; i < 16; i++) {
-    try { await refreshState('startNextRound') } catch {}
-    if (gameState.value?.phase === GamePhase.STARTING || gameState.value?.phase === GamePhase.PLAYING) break
-    await new Promise(r => setTimeout(r, 500))
-  }
+  // 主动刷新一次状态，确保拿到服务端 STARTING 阶段
+  try { await refreshState('startNextRound') } catch {}
 }
 const isInteractionLocked = computed(() => isOverlayVisible.value)
 
@@ -2756,22 +2740,6 @@ const showDraw = computed(() =>
   shouldExposeSharedDraw.value ||
   shouldPreviewDeferredDraw.value
 )
-// ★ 自动摸牌：无其他可选操作时自动摸牌
-watch(showDraw, (val) => {
-  if (!val || !autoDraw.value) return
-  // 有其他优先操作时不自动摸
-  const hasPriorityAction = showChow.value || showPeng.value || showKong.value || showHu.value
-    || showRebel.value || showConcealedKong.value || showExtendedKong.value
-  if (hasPriorityAction) return
-  // 延迟 500ms 后自动摸牌（给动画和反应时间）
-  setTimeout(() => {
-    if (!showDraw.value || !autoDraw.value) return
-    const hasPriorityNow = showChow.value || showPeng.value || showKong.value || showHu.value
-      || showRebel.value || showConcealedKong.value || showExtendedKong.value
-    if (hasPriorityNow) return
-    void onDraw()
-  }, 500)
-})
 const filteredCircularAvailableActions = computed(() => {
   if ((shouldExposeSharedDraw.value || shouldPreviewDeferredDraw.value) && !availableActions.value.includes(ActionType.DRAW)) {
     return [...availableActions.value, ActionType.DRAW]
@@ -4017,10 +3985,6 @@ watch([isMyTurn, hasPriorityActions], ([myTurn, hasActions]) => {
   }
 }, { immediate: true })
 
-// 聚义投票状态（必须在 phase watcher 之前定义）
-const prevLiangShanVoteCount = ref(0)
-const prevLiangShanVoteIds = ref<string[]>([])
-
 // 监听游戏进入PLAYING阶段，强制触发倒计时
 watch(() => gameState.value?.phase, (phase, oldPhase) => {
   if (phase === GamePhase.PLAYING && isMyTurn.value && !isAIControlled.value) {
@@ -4042,8 +4006,6 @@ watch(() => gameState.value?.phase, (phase, oldPhase) => {
     showLiangShanOverlay.value = false
     showWinnerReveal.value = false
     showDiceOverlay.value = true
-    prevLiangShanVoteCount.value = 0
-    prevLiangShanVoteIds.value = []
   }
   // 发牌完成：隐藏骰子界面
   if (phase === GamePhase.PLAYING && oldPhase === GamePhase.STARTING) {
@@ -4307,6 +4269,8 @@ const prevPhase = ref<string>('')
 const prevBailoutRelations = ref<string>('')
 const prevBotPlayers = ref<Set<string>>(new Set())
 const prevRebelEvent = ref<any>(null)
+const prevLiangShanVoteCount = ref(0)
+const prevLiangShanVoteIds = ref<string[]>([])
 const prevQjAlertIds = ref<Set<string>>(new Set())
 const prevSwapRequestIds = ref<Set<string>>(new Set())
 const prevIsMyTurn = ref(false)
@@ -4533,7 +4497,7 @@ watch(() => gameState.value, (newState, oldState) => {
       addBroadcast(`🔥 [${initiator?.name || '某玩家'}] 发起了梁山聚义！`, 'special')
     }
     if ((newState as any).liangShanSuccess) {
-      console.log('[LiangShan] Popup triggered:', { currentVotes, prevCount: prevLiangShanVoteCount.value, liangShanSuccess: (newState as any).liangShanSuccess, broadcastCount: broadcastMessages.value.length })
+      console.log('[LiangShan] Popup triggered:', { currentVotes, activeCount: activePlayerCount(newState), liangShanSuccess: (newState as any).liangShanSuccess })
       addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
       // 显示梁山聚义成功弹窗，3s 后主动推进到下一局
       showLiangShanOverlay.value = true
