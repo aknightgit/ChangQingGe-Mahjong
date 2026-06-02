@@ -1310,15 +1310,6 @@ const tileBackScheme = ref(0)
 type DiscardMode = 'double_tap' | 'tap_confirm' | 'drag'
 const discardMode = ref<DiscardMode>('double_tap')
 const autoDraw = ref(false)
-// 自动摸牌：轮到自己且只能摸牌时自动执行
-watch([isMyTurn, autoDraw, showDraw, showChow, showPeng, showKong, showHu, showRebel, showConcealedKong, showExtendedKong], ([myTurn, enabled, canDraw, canChow, canPeng, canKong, canHu, canRebel, canConcealedKong, canExtendedKong]) => {
-  if (!myTurn || !enabled || !canDraw) return
-  // 有其他优先操作时不自动摸
-  if (canChow || canPeng || canKong || canHu || canRebel || canConcealedKong || canExtendedKong) return
-  setTimeout(() => {
-    if (showDraw.value && autoDraw.value) void executeAction(ActionType.DRAW)
-  }, 500)
-})
 const dragDiscardThresholdPx = 56
 
 const playWhoosh = () => {
@@ -3997,6 +3988,16 @@ const handleCircularAction = (type: string) => {
 // For self-drawn Kong (Concealed or Extended)
 const showConcealedKong = computed(() => availableActions.value.includes(ActionType.CONCEALED_KONG))
 const showExtendedKong = computed(() => availableActions.value.includes(ActionType.EXTENDED_KONG))
+// 自动摸牌：轮到自己且只能摸牌时自动执行
+watch([isMyTurn, autoDraw, showDraw, showChow, showPeng, showKong, showHu, showRebel, showConcealedKong, showExtendedKong], ([myTurn, enabled, canDraw, canChow, canPeng, canKong, canHu, canRebel, canConcealedKong, canExtendedKong]) => {
+  try {
+    if (!myTurn || !enabled || !canDraw) return
+    if (canChow || canPeng || canKong || canHu || canRebel || canConcealedKong || canExtendedKong) return
+    setTimeout(() => {
+      if (showDraw.value && autoDraw.value) void executeAction(ActionType.DRAW)
+    }, 500)
+  } catch (e) { console.warn('[autoDraw] Error:', e) }
+})
 const hasPriorityActions = computed(
   () =>
     hasSharedDrawWindow.value ||
