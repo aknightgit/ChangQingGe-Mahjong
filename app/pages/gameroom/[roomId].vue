@@ -1297,6 +1297,7 @@ const tableTheme = ref<'classic-green' | 'jade-green' | 'royal-red'>('classic-gr
 const tileBackScheme = ref(0)
 type DiscardMode = 'double_tap' | 'tap_confirm' | 'drag'
 const discardMode = ref<DiscardMode>('double_tap')
+const autoDraw = ref(false)
 const dragDiscardThresholdPx = 56
 
 const playWhoosh = () => {
@@ -4363,11 +4364,11 @@ const checkOtherPlayerSounds = (newState: any) => {
       const isSelf = player.id === playerId.value
       const isBotCtrl = !!(player as any).isBotControlled || isBotPlayer(player)
       const shouldPlayVoice = !isSelf || isBotCtrl  // AI托管时自己的动作也要播放语音
+      // 补花语音也排队，确保出牌语音先于补花语音
       if (replacedFlowerCount > prev.replacedFlowerCount) {
         if (!_flowerVoicePlayed.has(player.id)) {
           _flowerVoicePlayed.add(player.id)
-          playSound('tile-draw')
-          playVoiceAction('flowerReplace')
+          pendingDiscards.push({ suit: 'flower', value: 0, sound: false })  // 占位，稍后播放补花语音
         }
       }
       // 先收集出牌，稍后播放语音（确保吃碰杠语音先于出牌语音）
@@ -4414,10 +4415,16 @@ const checkOtherPlayerSounds = (newState: any) => {
       playVoiceAction('chow')
     }
   }
-  // 出牌语音放在吃碰杠之后
+  // 出牌语音放在吃碰杠之后，补花在最后
   for (const d of pendingDiscards) {
-    playSound('tile-discard')
-    if (d.suit) playVoiceTile(d.suit, d.value)
+    if (d.suit === 'flower') {
+      // 补花语音：在出牌之后播放
+      playSound('tile-draw')
+      playVoiceAction('flowerReplace')
+    } else {
+      playSound('tile-discard')
+      if (d.suit) playVoiceTile(d.suit, d.value)
+    }
   }
 }
 const activePlayerCount = (state: any) => (state?.players || []).filter((p: any) => p.status === 'playing' && !p.isBotControlled).length
