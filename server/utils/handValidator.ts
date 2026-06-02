@@ -453,8 +453,11 @@ function canWinByProjectRuleNoWild(concealed: Tile[], exposed: Meld[]): boolean 
   const concealedNonFlower = concealed.filter(t => !isFlower(t));
   if (!isValidHandSize(concealedNonFlower.length) && concealedNonFlower.length !== 1) return false;
 
-  const allWind = concealedNonFlower.length > 0 &&
-    concealedNonFlower.every(t => isWind(t) || isDragon(t));
+  // 风一色：手牌+门口必须全部是风牌/箭牌
+  const exposedNonFlower = exposed.flatMap(m => m.tiles).filter(t => !isFlower(t));
+  const allTilesNonFlower = [...concealedNonFlower, ...exposedNonFlower];
+  const allWind = allTilesNonFlower.length > 0 &&
+    allTilesNonFlower.every(t => isWind(t) || isDragon(t));
   if (allWind) return true;
 
   let remainingMelds: number;
