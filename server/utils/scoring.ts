@@ -414,7 +414,14 @@ export function generateWinOptions(params: {
   // 禁用百搭后用花牌原值检测胡牌会产生误判（花牌可能正好凑成面子）
   if (params.wildTileSuit !== undefined && params.wildTileValue !== undefined && params.wildTileSuit !== TileSuit.FLOWER) {
     const wildCount = countWildTiles(params.handTiles, params.wildTileSuit, params.wildTileValue, params.wildTileGroup);
-    if (wildCount > 0) {
+    // 检查百搭是否已在自然顺子中（如二万在一二三万中）
+    // 如果是，标准路径已包含无百搭效果，不需要额外生成无百搭选项
+    const wildInNaturalMeld = params.handTiles.some(t =>
+      t.suit === params.wildTileSuit && t.value === params.wildTileValue &&
+      params.handTiles.some(t2 => t2.id !== t.id && t2.suit === t.suit && t2.value === t.value - 1) &&
+      params.handTiles.some(t2 => t2.id !== t.id && t2.suit === t.suit && t2.value === t.value + 1)
+    );
+    if (wildCount > 0 && !wildInNaturalMeld) {
       const noWildCheck = canWin(params.handTiles, params.exposedMelds, () => false);
       if (noWildCheck.canWin) {
         const noWildTypes = noWildCheck.types;
