@@ -244,6 +244,26 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       else if (features.longestSuitCount < 6) score -= 6
       if (features.upstreamVoidSuit && features.upstreamVoidSuit === targetSuit) { reasons.push('upstream_void_target'); score += 3 }
       if (features.upstreamRejectedSuit && features.upstreamRejectedSuit === targetSuit && features.longestSuitCount >= 6) { reasons.push('upstream_rejected_target'); score += 2.4 }
+      // ★ V2: 两门长度接近时，上家不做+下家做的门优先
+      if (features.secondSuitCount > 0 && Math.abs(features.longestSuitCount - features.secondSuitCount) <= 2) {
+        const secondSuit = NUMBER_SUITS.find(s => s !== features.longestSuit && (features as any)[s + 'Count'] === features.secondSuitCount) || null
+        if (secondSuit) {
+          // 上家不做第二门 → 第二门加分
+          if (features.upstreamVoidSuit === secondSuit) { reasons.push('upstream_void_second'); score += 4.5 }
+          if (features.upstreamRejectedSuit === secondSuit) { reasons.push('upstream_rejected_second'); score += 3.0 }
+          // 下家做第二门 → 第二门加分（下家要的我也做，卡住他）
+          const allPlayers = input.game.players || []
+          const downstream = allPlayers.find((p: any) => p.position === ((input.player.position || 0) + 1) % 4)
+          if (downstream) {
+            const downstreamExposed = downstream.hand.exposedMelds || []
+            const downstreamSuitCount: Record<string, number> = {}
+            for (const m of downstreamExposed) {
+              for (const t of m.tiles || []) { if (NUMBER_SUITS.includes(t.suit)) downstreamSuitCount[t.suit] = (downstreamSuitCount[t.suit] || 0) + 1 }
+            }
+            if ((downstreamSuitCount[secondSuit] || 0) >= 3) { reasons.push('downstream_wants_second'); score += 3.5 }
+          }
+        }
+      }
       // ★ V2: allOpponentsAvoidSuit 权重 2→5
       if (features.allOpponentsAvoidSuit && features.allOpponentsAvoidSuit === targetSuit) { reasons.push('global_void_target'); score += 5 /* was: 2 */ }
       if (features.wildCount === 0) score += 1.1

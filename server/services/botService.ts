@@ -2360,6 +2360,27 @@ export async function shouldClaimPendingAction(
           pengTune += 0.72 + (pairHeavyOpenPush ? 0.2 : 0)
         }
 
+        // === 断张检测：碰牌会破坏邻牌的顺子潜力 ===
+        // 例：手牌1-2万+3万对子，碰3万后1-2万变死顺子
+        if (isNumberTile(claimTile) && remainingClaimCopies <= 1) {
+          const v = claimTile.value
+          const s = claimTile.suit
+          // 检查手牌中与此牌相邻的牌
+          const hasLower = hand.some(t => t.suit === s && t.value === v - 1)
+          const hasUpper = hand.some(t => t.suit === s && t.value === v + 1)
+          const hasLower2 = hand.some(t => t.suit === s && t.value === v - 2)
+          const hasUpper2 = hand.some(t => t.suit === s && t.value === v + 2)
+          // 碰后相邻牌变断张：有下邻(v-1)或上邻(v+1)，且没有其他可组顺的牌
+          const breaksLower = hasLower && !hasLower2  // 碰v后，v-1失去下顺潜力
+          const breaksUpper = hasUpper && !hasUpper2  // 碰v后，v+1失去上顺潜力
+          if (breaksLower || breaksUpper) {
+            // 清混一色方向：断张惩罚更大（破坏同门连续性）
+            const isFlushRoute = routeState?.current === 'HALF_FLUSH' || routeState?.current === 'PURE_FLUSH'
+            const breakPenalty = isFlushRoute ? 0.85 : 0.45
+            pengTune -= breakPenalty
+          }
+        }
+
         if (overdueMenqingHold) {
           pengTune += 0.16 + routeMetricPolicy.forcedOpenRate * 0.35
         }
