@@ -4009,6 +4009,8 @@ watch(() => gameState.value?.phase, (phase, oldPhase) => {
     showSettlement.value = false
     showLiangShanOverlay.value = false
     showWinnerReveal.value = false
+    diceRollTriggerKey.value = 0  // 重置骰子，防止自动滚动
+    diceValues.value = [0, 0]
     showDiceOverlay.value = true
   }
   // 发牌完成：隐藏骰子界面
@@ -4263,6 +4265,13 @@ watch(
     window.setTimeout(() => {
       showSettlement.value = true
       startWallExhaustedCountdown()
+      // 流局/造反自动进下一局（8秒后）
+      const hasRebel = !!(gameState.value as any)?.rebelEvent
+      if (isWallExhausted || hasRebel) {
+        window.setTimeout(() => {
+          if (showSettlement.value) void startNextRound()
+        }, 8000)
+      }
     }, isWallExhausted ? 1000 : 5000)
   }
 )
@@ -4275,9 +4284,9 @@ const prevBotPlayers = ref<Set<string>>(new Set())
 const prevRebelEvent = ref<any>(null)
 const prevLiangShanVoteCount = ref(0)
 const prevLiangShanVoteIds = ref<string[]>([])
-// 新局重置聚义投票状态
+// 新局重置聚义投票状态（仅在弹窗关闭后重置，避免重复触发）
 watch(() => gameState.value?.phase, (phase) => {
-  if (phase === GamePhase.STARTING) {
+  if (phase === GamePhase.STARTING && !showLiangShanOverlay.value) {
     prevLiangShanVoteCount.value = 0
     prevLiangShanVoteIds.value = []
   }
