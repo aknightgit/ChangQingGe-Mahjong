@@ -1422,6 +1422,17 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         : 0
       score += routeScore
       composite += routeScore * 2
+      // ★ 碰碰胡坚决执行：4+对子/刻子时，单张强制打出，对子坚决保留
+      if (routeState.current === 'ALL_PUNGS' && (routeState.features.pairCount + routeState.features.tripletCount) >= 4) {
+        if (tilePairCount === 1) {
+          // 单张：强制打掉（大正分）
+          const _isShort = routeState.features.shortestSuit && tile.suit === routeState.features.shortestSuit
+          composite += 55 + visibleCopies * 8 + (_isShort ? 12 : 0) + (isHonor(tile) ? 6 : 0)
+        } else if (tilePairCount >= 2) {
+          // 对子/刻子：坚决保留（大负分）
+          composite -= 45 + tilePairCount * 10
+        }
+      }
       if (isPostTurn10 && round10Commitment) {
         if (routeState.current === "HALF_FLUSH" && routeState.targetSuit) {
           if (isNumberTile(tile) && tile.suit !== routeState.targetSuit) {
