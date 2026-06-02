@@ -4548,9 +4548,7 @@ watch(() => gameState.value, (newState, oldState) => {
     const initiatorId = currentVoteIds[0]
     const initiator = newState.players?.find((p: any) => p.id === initiatorId)
     // 之前没有发起消息 → 先播报发起
-    if (prevLiangShanVoteCount.value === 0) {
-      addBroadcast(`🔥 [${initiator?.name || '某玩家'}] 发起了梁山聚义！`, 'special')
-    }
+    // 发起/响应消息由后端 broadcastQuickMessage 推送，前端不再重复广播
     if ((newState as any).liangShanSuccess) {
       console.log('[LiangShan] Popup triggered:', { currentVotes, activeCount: activePlayerCount(newState), liangShanSuccess: (newState as any).liangShanSuccess })
       addBroadcast(`🔥🔥🔥 全员响应梁山聚义！本局结束，下把翻倍！`, 'special')
@@ -4566,9 +4564,7 @@ watch(() => gameState.value, (newState, oldState) => {
         .filter(id => id !== initiatorId)
         .map(id => newState.players?.find((p: any) => p.id === id)?.name)
         .filter(Boolean)
-      for (const responderName of responderNames) {
-        addBroadcast(`🔥 [${responderName}] 响应了${initiator?.name || '发起者'}的梁山聚义！`, 'special')
-      }
+      // 响应消息由后端 broadcastQuickMessage 推送，前端不再重复广播
       addBroadcast(`🔥 有${currentVotes}名玩家响应了梁山聚义！`, 'special')
     }
   }

@@ -1030,7 +1030,7 @@ export class ActionHandler {
    * 处理想一想
    */
   handleThink(game: GameState, player: Player): void {
-    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode } = this.deps;
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, scheduleBotDiscard, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode } = this.deps;
 
     if (game.phase !== GamePhase.PLAYING) return;
 
@@ -1065,6 +1065,13 @@ export class ActionHandler {
       game.thinkFreezePlayerId = undefined;
       timerManager.freezeTimers.delete(game.gameId);
       broadcastGameState(game.gameId);
+      // 冻结结束后恢复游戏流程：如果有 pending actions 则调度超时，如果当前是 bot 则调度出牌
+      const curPlayer = game.players[game.currentPlayerIndex];
+      if (game.pendingActions.length > 0) {
+        schedulePendingActionTimeout(game.gameId);
+      } else if (curPlayer && isPlayerBotControlled(curPlayer)) {
+        scheduleBotDiscard(game.gameId, curPlayer.id);
+      }
     }, 8000));
 
     broadcastQuickMessage(game.gameId, `⏳ [${player.name}] 想一想！(剩余${remaining}次)`, 'special');
