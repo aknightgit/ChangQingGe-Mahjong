@@ -4233,29 +4233,48 @@ const displayBroadcastMessages = computed(() => {
 })
 let broadcastId = 0
 const recentBroadcastTexts = new Map<string, number>()
-const addBroadcast = (
-  text: string,
-  type: BroadcastMsg['type'] = 'info',
-  options?: { dedupeKey?: string }
-) => {
+// 广播消息队列：保证按接收顺序处理，防止 WebSocket 快速连续消息乱序
+const _broadcastQueue: Array<{ text: string; type: BroadcastMsg['type']; dedupeKey?: string }> = []
+let _broadcastProcessing = false
+
+const _processBroadcastQueue = () => {
+  if (_broadcastProcessing || _broadcastQueue.length === 0) return
+  _broadcastProcessing = true
+  const item = _broadcastQueue.shift()!
   const now = Date.now()
   const timeLabel = formatBeijingTime(now)
-  const sanitizedText = type === 'win'
-    ? text.replace(/(胡牌)\s*[·•･][^·•･()（）\s]+/u, '$1')
-    : text
-  const dedupeKey = options?.dedupeKey || sanitizedText
+  const sanitizedText = item.type === 'win'
+    ? item.text.replace(/(胡牌)\s*[·•･][^·•･()（）\s]+/u, '$1')
+    : item.text
+  const dedupeKey = item.dedupeKey || sanitizedText
   const lastAt = recentBroadcastTexts.get(dedupeKey) ?? 0
   if (now - lastAt < 30000) {
+    _broadcastProcessing = false
+    _processBroadcastQueue()
     return
   }
   recentBroadcastTexts.set(dedupeKey, now)
   for (const [key, ts] of recentBroadcastTexts) {
     if (now - ts > 300000) recentBroadcastTexts.delete(key)
   }
-  broadcastMessages.value.push({ id: ++broadcastId, text: sanitizedText, type, timestamp: now, timeLabel })
+  broadcastMessages.value.push({ id: ++broadcastId, text: sanitizedText, type: item.type, timestamp: now, timeLabel })
   if (broadcastMessages.value.length > 20) {
     broadcastMessages.value = broadcastMessages.value.slice(-20)
   }
+  _broadcastProcessing = false
+  // 继续处理队列中的下一条
+  if (_broadcastQueue.length > 0) {
+    requestAnimationFrame(_processBroadcastQueue)
+  }
+}
+
+const addBroadcast = (
+  text: string,
+  type: BroadcastMsg['type'] = 'info',
+  options?: { dedupeKey?: string }
+) => {
+  _broadcastQueue.push({ text, type, dedupeKey: options?.dedupeKey })
+  _processBroadcastQueue()
 }
 
 watch(
