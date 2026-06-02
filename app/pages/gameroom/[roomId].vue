@@ -4450,7 +4450,8 @@ const checkOtherPlayerSounds = (newState: any) => {
     if (prev) {
       const isSelf = player.id === playerId.value
       const isBotCtrl = !!(player as any).isBotControlled || isBotPlayer(player)
-      const shouldPlayVoice = !isSelf || isBotCtrl  // AI托管时自己的动作也要播放语音
+      // 超时AI帮忙摸牌打牌时也播放语音（isSelf但不是自己触发的）
+      const shouldPlayVoice = !isSelf || isBotCtrl || autoDraw.value  // 自动摸牌开启时也播放语音
       // 补花语音也排队，确保出牌语音先于补花语音
       if (replacedFlowerCount > prev.replacedFlowerCount) {
         if (!_flowerVoicePlayed.has(player.id)) {
@@ -4545,8 +4546,8 @@ watch(() => gameState.value, (newState, oldState) => {
     }
   }
 
-  // 流局
-  if (newState.phase === 'ended' && oldState?.phase === 'playing') {
+  // 流局（兼容 PLAYING→REVEAL→ENDED 和 PLAYING→ENDED 两种路径）
+  if (newState.phase === 'ended' && (oldState?.phase === 'playing' || oldState?.phase === 'reveal')) {
     const reason = (newState as any).endReason
     if (reason === 'wall_exhausted') {
       addBroadcast('💨 牌墙摸完，流局！倍数翻倍！', 'warn')
@@ -4659,10 +4660,14 @@ watch(
 
       // 🔄 自动下一局：来自结算/流局后
       if (prevPhase === GamePhase.ENDED) {
-        if (isSettleRequested.value) {
+        if (isSettleRequested.value && !isAIControlled.value) {
           showDiceOverlay.value = false
           showSettlement.value = true
           return
+        }
+        // AI托管时：强制显示骰子界面，自动进入下一局
+        if (isAIControlled.value) {
+          showSettlement.value = false
         }
         const aiDealer = dealerPlayer.value
         if (aiDealer && isBotPlayer(aiDealer)) {

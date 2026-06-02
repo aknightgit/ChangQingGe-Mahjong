@@ -82,7 +82,7 @@ export class WinEvaluator {
     const key = this.getContextKey(game, player);
     const cached = pc.fast.get(key);
     if (cached) return cached;
-    const result = canWin(player.hand.concealedTiles, player.hand.exposedMelds, this.getWinWildArg(game));
+    const result = canWin(player.hand.concealedTiles, player.hand.exposedMelds, this.getWinWildArg(game), undefined, game.wildTileGroup);
     pc.fast.set(key, result);
     return result;
   }
@@ -110,7 +110,7 @@ export class WinEvaluator {
       ? [...player.hand.concealedTiles, flags.extraTile]
       : player.hand.concealedTiles;
     const winCheck = flags?.extraTile
-      ? canWin(handTiles, player.hand.exposedMelds, this.getWinWildArg(game))
+      ? canWin(handTiles, player.hand.exposedMelds, this.getWinWildArg(game), undefined, game.wildTileGroup)
       : this.getCachedWinCheck(game, player);
     const wildParts = game.customScoringMode?.split('-');
     const wildSuit = wildParts?.[0] ? wildParts[0] as TileSuit : undefined;
@@ -145,7 +145,7 @@ export class WinEvaluator {
   prewarm(game: GameState, player: Player, context: 'self_draw' | 'discard', extraTile?: Tile): void {
     if (player.status !== PlayerStatus.PLAYING) return;
     const winCheck = extraTile
-      ? canWin([...player.hand.concealedTiles, extraTile], player.hand.exposedMelds, this.getWinWildArg(game))
+      ? canWin([...player.hand.concealedTiles, extraTile], player.hand.exposedMelds, this.getWinWildArg(game), undefined, game.wildTileGroup)
       : this.getCachedWinCheck(game, player);
     if (!winCheck.canWin) return;
     this.getCachedWinOptions(game, player, context, {
