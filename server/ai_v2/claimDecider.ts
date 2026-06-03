@@ -328,6 +328,12 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       if (upstreamRejectedOpenPush) tuneDelta += 0.32
       if (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG)) tuneDelta += 0.5
       if (multiWildMenqingPush && openingMenqing) tuneDelta -= 0.18
+      // ★ V2.3: 非门清/清一色路线下，大幅增加碰风箭对子意愿
+      const isHonorPung = action === ActionType.PENG && isHonorTile
+      const isNonFlushRoute = routeState.current !== 'HALF_FLUSH' && routeState.current !== 'PURE_FLUSH'
+      if (isHonorPung && isNonFlushRoute) {
+        tuneDelta += 0.6
+      }
       tuneDelta += wildBaoStartPush + mutualBaoBuildPush + mutualBaoFinalPush + deadTilePungBonus
       return { allowed: true, tuneDelta, reason: 'menqing_speed' }
     }
