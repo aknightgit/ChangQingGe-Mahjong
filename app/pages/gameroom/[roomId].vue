@@ -55,6 +55,15 @@
           </div>
         </div>
 
+        <!-- 流局全屏弹窗（复用聚义样式） -->
+        <div v-if="showWallExhaustedOverlay" class="liang-shan-overlay">
+          <div class="liang-shan-card">
+            <div class="liang-shan-icon">💨💨💨</div>
+            <p class="liang-shan-title">流局!牌墙摸完!</p>
+            <p class="liang-shan-sub">本局结束 · 下把翻倍</p>
+          </div>
+        </div>
+
         <!-- 造反亮手牌弹窗 -->
         <div v-if="rebelEvent" class="rebel-overlay">
           <div class="rebel-card">
@@ -1285,6 +1294,7 @@ const diceResetTrigger = ref(0)  // API失败时递增,重置骰子组件到idle
 const showDoubleReminder = ref(false)
 const flowerReplacementNotice = ref<Tile | null>(null)
 const showLiangShanOverlay = ref(false)
+const showWallExhaustedOverlay = ref(false)  // 流局全屏弹窗（类似聚义）
 let doubleReminderTimer: ReturnType<typeof setTimeout> | null = null
 const getActionWindowMs = (state: any) => {
   const hw = state?.hesitationWindow
@@ -2485,6 +2495,7 @@ const startNextRound = async () => {
   }
   showSettlement.value = false
   showLiangShanOverlay.value = false
+  showWallExhaustedOverlay.value = false
   settlementData.value = null
   isHuReviewMode.value = false
   // 轮询等待服务端进入 STARTING 阶段(最多 8 秒)
@@ -4365,6 +4376,16 @@ watch(
     }
 
     // 流局或胡牌:ENDED后立即显示结算面板(REVEAL阶段已由服务端5秒展示完成)
+    // 流局: 先显示全屏流局弹窗(类似聚义) 1.8s, 再切结算面板
+    if (isWallExhausted) {
+      showWallExhaustedOverlay.value = true
+      setTimeout(() => {
+        showWallExhaustedOverlay.value = false
+        showSettlement.value = true
+        startWallExhaustedCountdown()
+      }, 1800)
+      return
+    }
     showSettlement.value = true
     startWallExhaustedCountdown()
     // 流局/造反自动进下一局:客户端 10s 倒计时已调 startNextRound
