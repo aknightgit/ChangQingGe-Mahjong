@@ -205,6 +205,11 @@ export class BotController {
           const winOptions = getCachedWinOptions(game, player, 'discard', {
             isRobbingKong: !!game.pendingKongClaim
           });
+          // ★ 诊断: HU 被过滤时打印原因
+          if (winOptions.length === 0) {
+            const winCheck = this.deps.getCachedWinCheck(game, player);
+            console.log(`[BotHU-filtered] ${player.name} HU filtered out! canWin=${winCheck.canWin} types=${winCheck.types} concealed=${player.hand.concealedTiles.length} exposed=${player.hand.exposedMelds.length} tile=${pa.tile?.suit}-${pa.tile?.value}`);
+          }
           return winOptions.length > 0;
         });
         if (filteredHigherActions.length === 0) {

@@ -537,7 +537,7 @@ function loadCharacterPolicy(botName: string): any {
         id: 'fallback',
         useV2Engine: true,
         selfWinChance: 0.95,
-        discardHuChance: 0.7,
+        discardHuChance: 0.95,
         discardHuWildPenalty: 0.3,
         discardHuMenQingPenalty: 0.1,
         pengChance: 0.6,
@@ -2174,6 +2174,7 @@ export async function shouldClaimPendingAction(
   //   - bao3AvoidThreshold   → 三宝避免阈值
   if (availableActions.includes(ActionType.HU)) {
     const isSelfDraw = !claimTile
+    console.log(`[shouldClaim-HU] ${player.name} HU available! isSelfDraw=${isSelfDraw} concealed=${player.hand.concealedTiles.length} exposed=${player.hand.exposedMelds.length} tile=${claimTile?.suit}-${claimTile?.value}`);
 
     // 自摸：有 selfWinChance 控制意愿
     if (isSelfDraw) {
@@ -2195,71 +2196,30 @@ export async function shouldClaimPendingAction(
       const isWildDiscard = discardTile ? isWildTile(discardTile, game) : false
       const isMenQing = exposedCount === 0
       const wildCount = hand.filter(t => isWildTile(t, game)).length
-      if (shouldDeclineLowValueHu(game, player)) {
-        traceClaim(player, game, 'hu-discard-blocked', `reason=low-value-hu discardTile=${traceTile(discardTile)} isMenQing=${isMenQing} wildCount=${wildCount}`)
-        return ActionType.PASS
-      }
 
-      // 百搭惩罚：放冲胡百搭降低概率
-      if (isWildDiscard && (policy.discardHuWildPenalty ?? 0) > 0) {
-        const wildProb = Math.max(0, 1.0 - (policy.discardHuWildPenalty ?? 0))
-        const wildRoll = Math.random()
-        if (wildRoll >= wildProb) {
-          traceClaim(player, game, 'hu-discard-blocked', `reason=wild-penalty discardTile=${traceTile(discardTile)} roll=${wildRoll.toFixed(6)} prob=${wildProb.toFixed(6)}`)
-          return ActionType.PASS
-        }
-      }
-
-      // 门清惩罚：门清时放冲胡也降低概率
-      if (isMenQing && (policy.discardHuMenQingPenalty ?? 0) > 0) {
-        const menqingProb = Math.max(0, 1.0 - (policy.discardHuMenQingPenalty ?? 0))
-        const menqingRoll = Math.random()
-        if (menqingRoll >= menqingProb) {
-          traceClaim(player, game, 'hu-discard-blocked', `reason=menqing-penalty discardTile=${traceTile(discardTile)} roll=${menqingRoll.toFixed(6)} prob=${menqingProb.toFixed(6)}`)
-          return ActionType.PASS
-        }
-      }
-
-      // 宝牌惩罚：二宝捉冲降低意愿
-      if (wildCount >= 2 && (policy.bao2ClaimPenalty ?? 0) > 0) {
-        const penalty = Math.max(0, 1.0 - (policy.bao2ClaimPenalty ?? 0))
-        const bao2Roll = Math.random()
-        if (bao2Roll >= penalty) {
-          traceClaim(player, game, 'hu-discard-blocked', `reason=bao2-penalty wildCount=${wildCount} roll=${bao2Roll.toFixed(6)} prob=${penalty.toFixed(6)}`)
-          return ActionType.PASS
-        }
-      }
-
-      // 三宝避免：wildCount >= 3 时按概率减少冲
-      if (wildCount >= 3 && (policy.bao3AvoidThreshold ?? 0) > 0) {
-        const avoidProb = Math.min(0.9, (policy.bao3AvoidThreshold ?? 0) * 0.9)
-        const bao3Roll = Math.random()
-        if (bao3Roll < avoidProb) {
-          traceClaim(player, game, 'hu-discard-blocked', `reason=bao3-avoid wildCount=${wildCount} roll=${bao3Roll.toFixed(6)} prob=${avoidProb.toFixed(6)}`)
-          return ActionType.PASS
-        }
-      }
-
-      // ★ V2.12 K哥铁律: 牌墙越少越提高捉冲意愿
-      // wallRemaining <= 10: 显著提高(x1.5~)
-      // wallRemaining <= 5:  极大提高(x2 封顶1)
-      // 前提: 能胡才能捉; 没机会胡才走 STRIVE_DRAW 防守
+      // ★ V2.16 K哥铁律: 捉冲意愿统一计算，惩罚和加成合并
+      // 基础概率
+      const baseProb = policy.discardHuChance ?? 0.95
+      // 加成：牌墙少 + 听牌少
       const wallRemaining = game.wall?.length || 0
-      let wallBoost = 0
-      if (wallRemaining <= 5) wallBoost = 1.0  // 极大提高，封顶1
-      else if (wallRemaining <= 10) wallBoost = 0.5  // 显著提高
-      else if (wallRemaining <= 15) wallBoost = 0.18  // 轻度提高
-      // ★ V2.15 K哥铁律: 听牌剩余总张数不多(<=4)时，大幅提高捉冲意愿
-      // 听牌张数少 = 对手也难胡 = 抓住每次机会
+      let boost = 0
+      if (wallRemaining <= 5) boost += 1.0
+      else if (wallRemaining <= 10) boost += 0.5
+      else if (wallRemaining <= 15) boost += 0.18
       const tingTilesCount = countWinningTilesForHand(hand, player.hand.exposedMelds.length, game)
-      let tingBoost = 0
-      if (tingTilesCount <= 2) tingBoost = 1.0   // 极少，几乎必胡
-      else if (tingTilesCount <= 4) tingBoost = 0.6  // 大幅提高
-      const baseDiscardHuProb = Math.max(0, Math.min(1, policy.discardHuChance ?? 1))
-      const discardHuProb = Math.min(1, baseDiscardHuProb + wallBoost + tingBoost)
+      if (tingTilesCount <= 2) boost += 1.0
+      else if (tingTilesCount <= 4) boost += 0.6
+      // 惩罚：百搭/门清/二宝/三宝
+      let penalty = 0
+      if (isWildDiscard) penalty += (policy.discardHuWildPenalty ?? 0.3)
+      if (isMenQing) penalty += (policy.discardHuMenQingPenalty ?? 0.1)
+      if (wildCount >= 2) penalty += (policy.bao2ClaimPenalty ?? 0.25)
+      if (wildCount >= 3) penalty += Math.min(0.9, (policy.bao3AvoidThreshold ?? 0.35) * 0.9)
+      // 最终概率 = base + boost - penalty，封顶 [0, 1]
+      const finalProb = Math.max(0, Math.min(1, baseProb + boost - penalty))
       const finalRoll = Math.random()
-      const decision = finalRoll < discardHuProb ? ActionType.HU : ActionType.PASS
-      traceClaim(player, game, 'hu-discard-final', `discardTile=${traceTile(discardTile)} isMenQing=${isMenQing} wildCount=${wildCount} tingTiles=${tingTilesCount} discardHuChance=${discardHuProb.toFixed(6)} roll=${finalRoll.toFixed(6)} decision=${decision}`)
+      const decision = finalRoll < finalProb ? ActionType.HU : ActionType.PASS
+      traceClaim(player, game, 'hu-discard-final', `discardTile=${traceTile(discardTile)} tingTiles=${tingTilesCount} wall=${wallRemaining} wild=${wildCount} base=${baseProb.toFixed(2)} boost=${boost.toFixed(2)} penalty=${penalty.toFixed(2)} final=${finalProb.toFixed(2)} roll=${finalRoll.toFixed(3)} decision=${decision}`)
       return decision
     }
 
