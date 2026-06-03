@@ -102,11 +102,34 @@ function isEdgeChow(hand: Tile[], claimTile: Tile): boolean {
   if (!isNumberSuit(claimTile.suit)) return false
   const vals = hand.filter(t => t.suit === claimTile.suit).map(t => t.value)
   const cv = claimTile.value
+  // ★ 边张吃牌(K哥铁律): 吃完后形成单边顺, 进张唯一
+  // 1+2 吃 3 → 1 2 3, 听 4 (单边)
+  // 8+9 吃 7 → 7 8 9, 听 7 (单边)
   if (cv === 3 && vals.includes(1) && vals.includes(2)) return true
   if (cv === 7 && vals.includes(8) && vals.includes(9)) return true
-  if (cv === 1 && vals.includes(2) && vals.includes(3)) return true
-  if (cv === 9 && vals.includes(7) && vals.includes(8)) return true
+  if (cv === 1 && vals.includes(2) && vals.includes(3)) return true  // 2+3 吃 1 → 1 2 3 听 4
+  if (cv === 9 && vals.includes(7) && vals.includes(8)) return true  // 7+8 吃 9 → 7 8 9 听 7
   return false
+}
+
+/** 坎张吃牌: 1+3 吃 2, 2+4 吃 3, 6+8 吃 7, 7+9 吃 8 */
+function isKantChow(hand: Tile[], claimTile: Tile): boolean {
+  if (!isNumberSuit(claimTile.suit)) return false
+  const vals = hand.filter(t => t.suit === claimTile.suit).map(t => t.value)
+  const cv = claimTile.value
+  if (cv === 2 && vals.includes(1) && vals.includes(3)) return true
+  if (cv === 3 && vals.includes(2) && vals.includes(4)) return true
+  if (cv === 7 && vals.includes(6) && vals.includes(8)) return true
+  if (cv === 8 && vals.includes(7) && vals.includes(9)) return true
+  return false
+}
+
+/** 强吃牌检测: 边张必吃 > 坎张高概率吃 > 普通坎张 */
+function isStrongChow(hand: Tile[], claimTile: Tile): 'edge' | 'kant' | 'gap' | null {
+  if (isEdgeChow(hand, claimTile)) return 'edge'
+  if (isKantChow(hand, claimTile)) return 'kant'
+  if (isGapChow(hand, claimTile)) return 'gap'
+  return null
 }
 
 function breaksCoreStructure(beforeHand: Tile[], afterHand: Tile[]): boolean {
@@ -335,6 +358,15 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
         tuneDelta += 0.6
       }
       tuneDelta += wildBaoStartPush + mutualBaoBuildPush + mutualBaoFinalPush + deadTilePungBonus
+      // ★ V2.4: 单边张/强吃牌加权(已破门清仍生效,一二筒吃三筒几乎必吃)
+      if (action === ActionType.CHOW) {
+        const strongChow = isStrongChow(player.hand.concealedTiles, claimTile)
+        if (strongChow === 'edge') tuneDelta += 1.5  // 边张(1-2吃3,8-9吃7等),必吃
+        else if (strongChow === 'kant') tuneDelta += 1.2  // 两面(2-3吃1,5-6吃4等),必吃
+        else if (strongChow === 'gap') tuneDelta += 0.8  // 坎张(2-4吃3),高概率吃
+        // 已破门清额外加分:越开越多吃越省事
+        if (exposedMeldCount >= 1) tuneDelta += 0.4
+      }
       return { allowed: true, tuneDelta, reason: 'menqing_speed' }
     }
 
@@ -347,7 +379,13 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
           (action === ActionType.CHOW ? 0.2 : 0.12) +
           (committedOpenSuit && claimTile.suit === committedOpenSuit ? 0.35 : 0) +
           wildBaoStartPush + mutualBaoBuildPush + mutualBaoFinalPush +
-          chowGapEdgeBoost,
+          chowGapEdgeBoost +
+          (action === ActionType.CHOW ? (
+            isStrongChow(player.hand.concealedTiles, claimTile) === 'edge' ? 1.5 :
+            isStrongChow(player.hand.concealedTiles, claimTile) === 'kant' ? 1.2 :
+            isStrongChow(player.hand.concealedTiles, claimTile) === 'gap' ? 0.8 : 0
+          ) : 0) +
+          (action === ActionType.CHOW && exposedMeldCount >= 1 ? 0.4 : 0),
         reason: 'open_speed_push',
       }
 
@@ -385,6 +423,12 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       // ★ V2: 碰碰胡路线下允许有价值的吃牌（有顺子能更快碰碰胡时）
       // 硬拒绝所有CHOW太严格 → 改为评估CHOW是否真正提升碰碰胡路线
       if (action === ActionType.CHOW) {
+        // ★ V2.4: 单边张/两面吃牌豁免碰碰胡拒绝(一二筒吃三筒几乎必吃)
+        const strongChowAllPungs = isStrongChow(player.hand.concealedTiles, claimTile)
+        if (strongChowAllPungs) {
+          const boost = strongChowAllPungs === 'edge' ? 1.5 : strongChowAllPungs === 'kant' ? 1.2 : 0.8
+          return { allowed: true, tuneDelta: 0.3 + boost, reason: 'all_pungs_strong_chow_override' }
+        }
         // 吃后能减少向听 → 允许
         if (candidateShanten < passShanten) {
           return { allowed: true, tuneDelta: 0.3, reason: 'all_pungs_chow_shanten_gain' }
