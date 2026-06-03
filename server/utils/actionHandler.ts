@@ -869,28 +869,10 @@ export class ActionHandler {
     }
 
     // 牌墙未空，找下一个未胡牌玩家继续
-    let nextIdx = game.currentPlayerIndex;
-    let searched = 0;
-    while (searched < game.players.length) {
-      nextIdx = (nextIdx + 1) % game.players.length;
-      searched++;
-      if (game.players[nextIdx].status === PlayerStatus.PLAYING) break;
-    }
-    game.currentPlayerIndex = nextIdx;
-    game.drawnThisTurn = false;
-    const nextPlayer = game.players[nextIdx];
-    this.deps.replaceInitialFlowers(game, nextPlayer);
-    const totalTiles = this.deps.getPlayableTileCount(nextPlayer);
-    if (totalTiles < 14) {
-      handleDraw(game, nextPlayer);  // handleDraw 内部已设置 drawnThisTurn = true
-    } else {
-      game.drawnThisTurn = true;
-    }
-    await persistGame(game);
-    broadcastGameState(game.gameId);
-    if (this.deps.isPlayerBotControlled(nextPlayer)) {
-      this.deps.scheduleBotDiscard(game.gameId, nextPlayer.id);
-    }
+    // ★ 修复：用 moveToNextPlayer 统一处理，避免手动搜索遗漏
+    // moveToNextPlayer 会自动跳过 WON/LOST 玩家，设置 freeze timer，调度 bot 出牌
+    console.log(`[handleHu] ${player.name} won, advancing to next player`)
+    await this.deps.moveToNextPlayer(game)
   }
 
   /**
