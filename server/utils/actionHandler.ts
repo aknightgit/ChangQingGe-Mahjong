@@ -872,6 +872,7 @@ export class ActionHandler {
       if (game.players[nextIdx].status === PlayerStatus.PLAYING) break;
     }
     game.currentPlayerIndex = nextIdx;
+    console.log(`[handleHu-advance] game=${game.gameId.substring(0,8)} player=${player.name} won, advancing ${game.currentPlayerIndex} -> ${nextIdx} (${game.players[nextIdx].name}) wall=${game.wall.length} nextStatus=${game.players[nextIdx].status}`)
     game.drawnThisTurn = false;
     const nextPlayer = game.players[nextIdx];
     this.deps.replaceInitialFlowers(game, nextPlayer);
