@@ -437,21 +437,16 @@ export class ActionHandler {
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
     this.deps.replaceInitialFlowers(game, player);
     game.drawnThisTurn = true;
-    if (this.deps.isPlayerBotControlled(player)) {
+    player.hand.concealedTiles = this.deps.sortHandWithWildFront(player.hand.concealedTiles, game);
+    // ★ 修复：碰后用 beginCurrentPlayerTurn 统一初始化
+    // 替代手动 _freezeUntil，确保 freeze timer / 状态机完整
+    await beginCurrentPlayerTurn(game);
+    game.drawnThisTurn = true; // 碰后已有14张牌，不能再摸
+    if (isPlayerBotControlled(player)) {
       this.deps.scheduleBotDiscard(game.gameId, player.id);
     }
-    player.hand.concealedTiles = this.deps.sortHandWithWildFront(player.hand.concealedTiles, game);
     await persistGame(game);
-    this.deps.broadcastGameState(game.gameId);
-    // 【修复】碰牌后开启该玩家回合：调度 freeze timer + 更新 pendingExpiresAt
-    // 老代码 executePengDirectly 之后不调用 beginCurrentPlayerTurn（静默开启），
-    // 但新代码需要广播 gameState 后显式调用，让下家能看到新的 pending timer
-    (game as any)._freezeUntil = Date.now() + timerManager.getHesitationWindow(game); // 碰吃后同一玩家直接进出牌
-
-    // 如果有 pending actions（不太可能，但保险），调度超时
-    if (game.pendingActions.length > 0) {
-      schedulePendingActionTimeout(game.gameId);
-    }
+    broadcastGameState(game.gameId);
   
   }
 
