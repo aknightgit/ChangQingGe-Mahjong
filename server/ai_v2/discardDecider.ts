@@ -243,14 +243,34 @@ function scoreByRoute(input: RouteDiscardInput): number {
       ? 1.2 + nearby * 0.5 + Math.max(0, suitGap - 1) * 0.35
       : 0
 
+  // ★ V2.12 K哥铁律: 非长门(包括短门/次短门) 任何牌都是优先打掉
+  // - 短门+次短门的单张: 不管顺子还是坬张, 都是高正分
+  // - 短门+次短门的邻接牌(顺子搭子): +高分打(原来是负分, 错)
+  // - 熟张(visibleCopies >= 1): 额外加分
+  // 保留只在长门(保留顺子/坬张/对子)
+  const isSecondSuit = input.routeState.features.secondSuit && tile.suit === input.routeState.features.secondSuit
+  const isShortSuitFamily = isShortestSuitTile || isSecondSuit
+  const shortSuitSequenceBreakBias =
+    isShortSuitFamily && !isLongestSuitTile && count === 1
+      ? 6.0 + (nearby > 0 ? 2.0 : 0) + (visibleCopies >= 1 ? Math.min(3, visibleCopies) * 1.2 : 0)
+      : 0
+  const shortSuitFamilyPairBreak =
+    isShortSuitFamily && !isLongestSuitTile && count >= 2
+      ? 1.5
+      : 0
+
   switch (routeState.current) {
     case 'MENQING_SPEED':
       return (
         (isShortestSuitTile ? 5.1 + suitGap * 0.6 : 0) +
         shortestSuitSequenceBreakBias +
+        shortSuitSequenceBreakBias +
+        shortSuitFamilyPairBreak +
         (isShortestSuitTile && count >= 2 ? -shortestSuitPairReserveBias : 0) +
         (count === 1 ? 1.2 : -2.6) +
-        (nearby === 0 ? 1.8 : -0.65 * nearby) +
+        // ★ V2.12: 长门坬张 保留, 非长门坬张 打掉
+        (isLongestSuitTile && count === 1 ? -1.8 : 0) +
+        (isLongestSuitTile && count === 1 && nearby > 0 ? -1.2 : 0) +
         (isLongestSuitTile ? -longestSuitSingletonKeepBias : 0) +
         (isHonor(tile) && count === 1 ? (isOfficialOpening ? -2.4 : 1.2) : 0) +
         (count >= 2 ? -globalPairProtection : 0) +
@@ -260,9 +280,10 @@ function scoreByRoute(input: RouteDiscardInput): number {
     case 'OPEN_SPEED':
       return (
         (count === 1 ? 2.2 : -1.6) +
-        (nearby === 0 ? 1.6 : -0.15 * nearby) +
         (longestSuit && tile.suit !== longestSuit && !isHonor(tile) ? 2.2 : 0) +
         (isShortestSuitTile ? 2.4 + shortestSuitSequenceBreakBias : 0) +
+        shortSuitSequenceBreakBias +
+        shortSuitFamilyPairBreak +
         (isShortestSuitTile && count >= 2 ? -Math.max(1.4, shortestSuitPairReserveBias * 0.6) : 0) +
         (isLongestSuitTile ? -Math.max(0.8, longestSuitSingletonKeepBias * 0.85) : 0) +
         (routeState.targetSuit && tile.suit !== routeState.targetSuit && !isHonor(tile) ? 4.8 : 0) +
