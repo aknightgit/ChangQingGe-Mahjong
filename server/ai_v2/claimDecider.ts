@@ -291,37 +291,17 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     }
   }
 
-  // ★ V2.7 K哥铁律: 第一口碰严格限制(原话恢复)
-  // 数字门: 该门 >= 4 张 OR 手牌 >= 3 对子
-  // 风/箭牌: 无限制
-  if (action === ActionType.PENG && player.hand.exposedMelds.length === 0) {
-    const isHonorClaim = isHonor(claimTile)
-    if (!isHonorClaim) {
-      // 数字门第一口碰, 需要该门 >= 4 或 >= 3 对子
-      const claimSuitCount = getNumberSuitCount(player.hand.concealedTiles, claimTile.suit)
-      const handPairs = countPairs(player.hand.concealedTiles)
-      const eligibleByCount = claimSuitCount >= 4
-      const eligibleByPairs = handPairs >= 3
-      if (!eligibleByCount && !eligibleByPairs) {
-        return { allowed: false, tuneDelta: -1.4, reason: 'first_peng_requires_four_tiles_or_three_pairs' }
-      }
-    }
-    // 风/箭牌第一口碰: 无限制
-  }
-
   // ★ V2.5: 强力碰碰胡潜质检测 — 4+副露+多对子时碰牌几乎必碰
   // K哥铁律: 4 副露+4 对子明显做碰碰胡, 别人出对子必碰
   const allExposedMeldCount = player.hand.exposedMelds.length
   const handPairCount2 = countPairs(player.hand.concealedTiles)
   if (action === ActionType.PENG && allExposedMeldCount + handPairCount2 >= 4) {
-    // 已有 4+ 副露/对子, 凑齐 5+ 副露, 接近听牌/和牌
     return { allowed: true, tuneDelta: 2.0, reason: 'strong_pung_potential' }
   }
 
-  // ★ V2.8 K哥铁律: 成型混碰强碰buff
+  // ★ V2.8 K哥铁律: 成型混碰强碰buff (优先于 V2.7 第一口碰限制)
   // 牌型: 已有 1+ 副露(已破门清) + 数字门对子 >= 2 + 至少 1 个风/箭刻/对
   // 典型场景: 已碰 jian-2 刻 + tiao 2对 + 别人打 4万 → 碰 4万 凑混碰
-  // 门清时由 V2.7 限制处理(原话: 该门>=4 或 >=3对, 严格)
   if (action === ActionType.PENG && !isHonor(claimTile) && player.hand.exposedMelds.length >= 1) {
     const claimSuitCount = getNumberSuitCount(player.hand.concealedTiles, claimTile.suit)
     const handPairs = countPairs(player.hand.concealedTiles)
@@ -338,6 +318,22 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     const hunPengReady = claimSuitCount >= 2 && handPairs >= 2 && hasHonorTripletOrPair
     if (hunPengReady) {
       return { allowed: true, tuneDelta: 1.5, reason: 'hun_peng_potential_boost' }
+    }
+  }
+
+  // ★ V2.7 K哥铁律: 第一口碰严格限制(原话恢复)
+  // 数字门: 该门 >= 4 张 OR 手牌 >= 3 对子
+  // 风/箭牌: 无限制
+  if (action === ActionType.PENG && player.hand.exposedMelds.length === 0) {
+    const isHonorClaim = isHonor(claimTile)
+    if (!isHonorClaim) {
+      const claimSuitCount = getNumberSuitCount(player.hand.concealedTiles, claimTile.suit)
+      const handPairs = countPairs(player.hand.concealedTiles)
+      const eligibleByCount = claimSuitCount >= 4
+      const eligibleByPairs = handPairs >= 3
+      if (!eligibleByCount && !eligibleByPairs) {
+        return { allowed: false, tuneDelta: -1.4, reason: 'first_peng_requires_four_tiles_or_three_pairs' }
+      }
     }
   }
 
@@ -409,12 +405,39 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       if ((action === ActionType.PENG || action === ActionType.KONG) && player.hand.exposedMelds.length === 0 && !canBreakOpeningMenqing && !pengForPungsTransition) {
         return { allowed: false, tuneDelta: -1.2, reason: 'menqing_hold_pung' }
       }
+      // ★ V2.11 K哥铁律: 已破门清后, 基础 tuneDelta 大幅提升
+      // 破门清 = 已经没有退路, 应该更积极吃碰, 不再保守
       let tuneDelta = canBreakOpeningMenqing ? 0.35 + routeGain * 0.04 : -0.15
+      // ★ V2.11: 已破门清(exposedMelds >= 1)时, 基础分从 -0.15 提升到 +0.3
+      if (exposedMeldCount >= 1 && !canBreakOpeningMenqing) {
+        tuneDelta = 0.3  // 破门清后不再保守, 积极吃碰
+      }
       if (effectiveGlobalMultiplier >= 4) tuneDelta += 0.4 + (effectiveGlobalMultiplier - 4) * 0.08
       if (noWildOpenPush) tuneDelta += 0.28
       if (upstreamRejectedOpenPush) tuneDelta += 0.32
       if (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG)) tuneDelta += 0.5
       if (multiWildMenqingPush && openingMenqing) tuneDelta -= 0.18
+      // ★ V2.11 K哥铁律: 清混一色方向, 已吃碰该门, 第二口吃碰大幅积极
+      // committedOpenSuit = 已副露的数字门(清混一色方向)
+      if (committedOpenSuit && claimTile.suit === committedOpenSuit && exposedMeldCount >= 1) {
+        // 已吃碰该门 + 第二口同门 → 大幅加分
+        if (action === ActionType.CHOW) {
+          tuneDelta += 1.2  // 吃同门: 大幅积极
+        } else if (action === ActionType.PENG) {
+          // ★ K哥铁律: 已吃该门, 第二口碰 → 小幅提升(考虑碰断顺子)
+          // 检查: 是否有该门顺子副露(碰可能断顺子)
+          const hasExposedSequence = player.hand.exposedMelds.some(
+            (m: any) => m.type === 'sequence' && m.tiles?.some((t: any) => t.suit === claimTile.suit)
+          )
+          if (hasExposedSequence) {
+            // 已有该门顺子副露, 碰可能断顺子 → 小幅提升
+            tuneDelta += 0.6
+          } else {
+            // 已有该门刻子副露, 碰不会断顺子 → 大幅提升
+            tuneDelta += 1.0
+          }
+        }
+      }
       // ★ V2.3: 非门清/清一色路线下，大幅增加碰风箭对子意愿
       const isHonorPung = action === ActionType.PENG && isHonorTile
       const isNonFlushRoute = routeState.current !== 'HALF_FLUSH' && routeState.current !== 'PURE_FLUSH'
@@ -428,8 +451,6 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
         if (strongChow === 'edge') tuneDelta += 1.5  // 边张(1-2吃3,8-9吃7等),必吃
         else if (strongChow === 'kant') tuneDelta += 1.2  // 两面(2-3吃1,5-6吃4等),必吃
         else if (strongChow === 'gap') tuneDelta += 0.8  // 坎张(2-4吃3),高概率吃
-        // 已破门清额外加分:越开越多吃越省事
-        if (exposedMeldCount >= 1) tuneDelta += 0.4
       }
       return { allowed: true, tuneDelta, reason: 'menqing_speed' }
     }
