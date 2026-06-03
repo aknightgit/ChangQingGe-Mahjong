@@ -524,3 +524,65 @@ export function evaluateRouteStateV2(input: {
     routeScores, features,
   }
 }
+
+// ═══════════════════════════════════════════════
+// ★ V2.15 性能优化: evaluateRouteStateV2 LRU 缓存
+// 训练脚本中每张弃牌都调一次 evaluateRouteStateV2, 缓存避免重复 buildFeatureSummary
+// 缓存 key = hand签名 + wildGroup + shanten + tableThreat + wallRemaining
+// previousRouteState 不入 key(引用类型 + 是输入侧状态)
+// 生产环境也可受益(同一玩家同状态多次评估)
+// ═══════════════════════════════════════════════
+const _routeStateV2Cache = new Map<string, { value: any; ts: number }>()
+const _ROUTE_STATE_V2_CACHE_MAX = 5000
+const _ROUTE_STATE_V2_CACHE_TTL = 60000
+let _routeStateV2CacheHits = 0
+let _routeStateV2CacheMisses = 0
+
+export function getRouteStateV2CacheStats() {
+  const total = _routeStateV2CacheHits + _routeStateV2CacheMisses
+  return {
+    hits: _routeStateV2CacheHits,
+    misses: _routeStateV2CacheMisses,
+    hitRate: total > 0 ? (_routeStateV2CacheHits / total * 100).toFixed(1) + '%' : '0%',
+    size: _routeStateV2Cache.size
+  }
+}
+
+export function clearRouteStateV2Cache() {
+  _routeStateV2Cache.clear()
+  _routeStateV2CacheHits = 0
+  _routeStateV2CacheMisses = 0
+}
+
+// 包装函数: 优先查 cache, miss 才走完整逻辑
+export function evaluateRouteStateV2Cached(input: {
+  game: any; player: any; hand: any[]; shanten: number; effectiveTiles: number; tableThreat: number; wallRemaining: number;
+  previousRouteState?: any; policy?: any
+}): RouteState {
+  const handLen = input.hand.length
+  const handParts: string[] = new Array(handLen)
+  for (let i = 0; i < handLen; i++) {
+    const t = input.hand[i]
+    handParts[i] = (t.isFlower || t.suit === 'hua' ? 'f' : t.suit[0]) + t.value
+  }
+  handParts.sort()
+  const wildGroupKey = (input.game?.wildTileGroup || []).join(',')
+  const cacheKey = handParts.join(',') + '|' + wildGroupKey + '|' + input.shanten + '|' + input.tableThreat.toFixed(2) + '|' + input.wallRemaining
+  const cached = _routeStateV2Cache.get(cacheKey)
+  if (cached && Date.now() - cached.ts < _ROUTE_STATE_V2_CACHE_TTL) {
+    _routeStateV2CacheHits++
+    return cached.value
+  }
+  _routeStateV2CacheMisses++
+  const result = evaluateRouteStateV2(input)
+  if (_routeStateV2Cache.size >= _ROUTE_STATE_V2_CACHE_MAX) {
+    const toDelete = Math.floor(_ROUTE_STATE_V2_CACHE_MAX / 4)
+    const iter = _routeStateV2Cache.keys()
+    for (let i = 0; i < toDelete; i++) {
+      const k = iter.next().value
+      if (k) _routeStateV2Cache.delete(k)
+    }
+  }
+  _routeStateV2Cache.set(cacheKey, { value: result, ts: Date.now() })
+  return result
+}
