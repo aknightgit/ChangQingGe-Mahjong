@@ -287,6 +287,9 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       break
 
     case 'ALL_PUNGS':
+      // ★ V2.5: 纯碰碰胡要求全部是刻子, 已破门清(有顺子副露)扣大分
+      const _hasExposedSequence = input.player.hand.exposedMelds.some((m: any) => m.type === 'sequence')
+      if (_hasExposedSequence) score -= 30  // 已吃顺子,纯碰碰胡路线不成立
       const _ap_pursuitVal = getPolicyValue(policy, 'allPungsPursuit')
       const _ap_isAgg = _ap_pursuitVal >= 1.2
       score += features.pairCount * (5.2 + (_ap_isAgg ? 4.0 : 0))

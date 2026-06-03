@@ -420,6 +420,14 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       }
 
     case 'ALL_PUNGS':
+      // ★ V2.5: 纯碰碰胡要求全部是刻子,已破门清(有顺子副露)不适用此路线
+      // K哥铁律: 既然已吃过一口,路线就不可能是碰碰胡,ALL_PUNGS 拒绝逻辑不适用
+      const hasExposedSequence = player.hand.exposedMelds.some((m: any) => m.type === 'sequence')
+      if (action === ActionType.CHOW && hasExposedSequence) {
+        // 已有顺子副露 → 不应走 ALL_PUNGS 拒绝路径
+        // 跳出该 case, 走到下面的 default 吃牌处理
+        break
+      }
       // ★ V2: 碰碰胡路线下允许有价值的吃牌（有顺子能更快碰碰胡时）
       // 硬拒绝所有CHOW太严格 → 改为评估CHOW是否真正提升碰碰胡路线
       if (action === ActionType.CHOW) {
