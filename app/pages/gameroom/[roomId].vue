@@ -3619,7 +3619,7 @@ const getRoundSettlementRows = (round: any) => {
     if (rel.player1Name) bailoutNameSet.add(rel.player1Name)
     if (rel.player2Name) bailoutNameSet.add(rel.player2Name)
   }
-  const formatName = (name: string) => bailoutNameSet.has(name) ? `(${name})` : name
+  const formatName = (name: string) => name  // K哥要求: 不加括号
   const rows = (settlementData.value?.playerStats || []).map((player: any) => {
     const winner: any = winnerByPlayer.get(player.id)
     const score = Number(round?.scores?.[player.id] ?? 0)

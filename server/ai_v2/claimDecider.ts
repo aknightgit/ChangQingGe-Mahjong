@@ -491,15 +491,19 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       // → 碰成风/箭刻 = 混碰牌型(高分) → 强力碰
       // 前提: 不能是 pureFlushUpgradeReady 压制(转清一色冲突)
       const hasHonorPairForClaim = isHonorTile && routeState.features.honorPairCount >= 1
-      // ★ V2.14 K哥铁律: 碰了直接听牌 → 极大提升碰牌概率(必须碰)
-      const isDirectTingAfterClaim = candidateShanten === 0 && passShanten >= 1
-      if (isDirectTingAfterClaim && !routeState.features.pureFlushUpgradeReady) {
+      // ★ V2.14 K哥铁律: 碰了 shanten 降低 → 大幅提升碰牌概率
+      // 原条件太严(candidateShanten===0), 改为 shanten 任何降低都触发
+      const isShantenImproved = candidateShanten < passShanten
+      if (isShantenImproved && !routeState.features.pureFlushUpgradeReady) {
+        const tingDelta = (passShanten - candidateShanten) * 0.8 // shanten 每降 1 级 +0.8
         return {
           allowed: true,
-          tuneDelta: 2.5 + // 必碰(听牌机会不能错失)
+          tuneDelta:
+            1.8 + // 基础: 强力碰
+            tingDelta + // shanten 降幅越大越碰
             routeGain * 0.15 +
             deadTilePungBonus,
-          reason: isHonorTile ? 'half_flush_hun_peng_direct_ting' : 'direct_ting_must_claim',
+          reason: candidateShanten === 0 ? 'half_flush_direct_ting_must_claim' : 'half_flush_shanten_improved',
         }
       }
       if (hasHonorPairForClaim && !routeState.features.pureFlushUpgradeReady) {

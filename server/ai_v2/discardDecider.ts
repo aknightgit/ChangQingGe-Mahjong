@@ -117,6 +117,17 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
     input.routeState.current !== 'HALF_FLUSH'
       ? 11 + visibleCopies
       : 0
+  // ★ V2.15 K哥铁律: 多张风牌待打时，优先打熟张(出现过的)
+  // visibleCopies >= 1 的风牌比未出现的优先打
+  const honorSeenPreference =
+    isHonor(input.tile) &&
+    isSingleton &&
+    visibleCopies >= 1 &&
+    input.routeState.current !== 'HONOR_HEAVY' &&
+    input.routeState.current !== 'HALF_FLUSH' &&
+    input.routeState.current !== 'ALL_PUNGS'
+      ? 1.5 + visibleCopies * 0.8
+      : 0
   // ★ 风箭单张低可见度 → 保留（负分=不打）
   const honorSingletonKeep =
     isHonor(input.tile) &&
@@ -162,6 +173,7 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
     shortestSingleton || 0,
     shortestSeenConnector || 0,
     seenHonorWaste || 0,
+    honorSeenPreference || 0,
     exhaustedHonorPair || 0,
     secondSuitWaste || 0,
     secondSuitSeenWaste || 0
