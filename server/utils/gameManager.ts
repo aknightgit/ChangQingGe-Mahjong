@@ -3705,23 +3705,9 @@ class GameManager {
   }
 
   private async beginCurrentPlayerTurn(game: GameState): Promise<void> {
-    // ★ 安全网：如果 currentPlayerIndex 指向非 PLAYING 玩家，自动跳到下一个
-    let nextPlayer = game.players[game.currentPlayerIndex];
-    if (!nextPlayer || nextPlayer.status !== PlayerStatus.PLAYING) {
-      console.warn(`[beginCurrentPlayerTurn] currentPlayer ${nextPlayer?.name} status=${nextPlayer?.status}, auto-advancing`)
-      const idx = game.currentPlayerIndex
-      for (let i = 1; i <= game.players.length; i++) {
-        const nextIdx = (idx + i) % game.players.length
-        if (game.players[nextIdx].status === PlayerStatus.PLAYING) {
-          game.currentPlayerIndex = nextIdx
-          break
-        }
-      }
-      nextPlayer = game.players[game.currentPlayerIndex]
-    }
-    if (!nextPlayer || nextPlayer.status !== PlayerStatus.PLAYING) {
-      console.error(`[beginCurrentPlayerTurn] No active player found, game may be stuck`)
-      return
+    const nextPlayer = game.players[game.currentPlayerIndex];
+    if (!nextPlayer) {
+      throw new Error('No current player available');
     }
 
     const freezeMs = this.timerManager.getHesitationWindow(game);  // 决策犹豫期同时控制人类和AI
