@@ -111,6 +111,9 @@ export function buildFeatureSummary(input: {
   const longestSuitCount = orderedSuits[0]?.count || 0
   const secondSuitCount = orderedSuits[1]?.count || 0
   const shortestSuitEntry = [...orderedSuits].reverse().find(e => e.count > 0) || null
+  // ★ V2.13: 碰碰胡潜质检测 (供 discardDecider 多路线感知使用)
+  const hunPengReady = longestSuitCount >= 6 && honorCount >= 2 && secondSuitCount <= 1
+  const qingPengReady = longestSuitCount >= 8 && secondSuitCount === 0 && honorCount <= 2
 
   // upstream analysis
   const upstream = game.players[(player.position + 3) % game.players.length]
