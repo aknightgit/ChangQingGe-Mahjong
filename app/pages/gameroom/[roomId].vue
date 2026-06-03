@@ -3600,13 +3600,27 @@ const getSettlementWinnerSequence = (round: any, playerId: string) => {
 }
 
 const getSettlementPayerCount = (round: any, winner: any) => {
+  // 1. 从 transfers 计算 (1vN 的赔偿)
   const transfers = Array.isArray(round?.transfers) ? round.transfers : []
-  const payers = new Set(
+  const payersFromTransfers = new Set(
     transfers
       .filter((transfer: any) => transfer?.toPlayerId === winner?.playerId && transfer?.fromPlayerId)
       .map((transfer: any) => transfer.fromPlayerId)
   )
-  return Math.max(1, payers.size)
+  if (payersFromTransfers.size > 0) return payersFromTransfers.size
+  // 2. Fallback: 从 loser 列表 (round.losers) 取胡牌以外的人数
+  const losers = Array.isArray(round?.losers) ? round.losers : []
+  if (losers.length > 0) {
+    return losers.filter((l: any) => l.playerId !== winner?.playerId).length
+  }
+  // 3. Fallback: 从 winnerDetails 看互包表
+  const winnerDetails = Array.isArray(round?.winnerDetails) ? round.winnerDetails : []
+  const w = winnerDetails.find((d: any) => d.playerId === winner?.playerId)
+  if (w && Array.isArray(w.payerIds)) return w.payerIds.length
+  // 4. 最后 fallback: 总玩家数 - 胡牌数 (默认 4 人麻将)
+  const totalPlayers = Array.isArray(round?.scores) ? Object.keys(round.scores).length : 4
+  const totalWinners = Array.isArray(round?.winners) ? round.winners.length : 1
+  return Math.max(1, totalPlayers - totalWinners)
 }
 
 const getRoundSettlementRows = (round: any) => {
@@ -4094,6 +4108,12 @@ watch(() => gameState.value?.phase, (phase, oldPhase) => {
   if (phase === GamePhase.ENDED && oldPhase === GamePhase.REVEAL) {
     if (_revealCountdownTimer) { clearInterval(_revealCountdownTimer); _revealCountdownTimer = null }
     showWinnerReveal.value = false
+  }
+  // ★ 验牌结束进入结算: 主动拉取结算数据并显示本局输赢界面
+  if (phase === GamePhase.ENDED) {
+    void fetchSettlement()
+    showSettlement.value = true
+    startWallExhaustedCountdown()
   }
   // 新局开始:重置所有弹窗,显示骰子界面
   if (phase === GamePhase.STARTING) {
