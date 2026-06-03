@@ -507,7 +507,19 @@ function canWinByProjectRuleWithWildExact(concealed: Tile[], exposed: Meld[], wi
   const wildSuit = normalizeTileSuit(wildSuitRaw);
   if (!wildSuit) return canWinByProjectRuleNoWild(concealed, exposed);
 
-  const isWild = (t: Tile) => t.suit === wildSuit && String(t.value) === wildVal;
+  // ★ 修复：花牌百搭时，同组其他花牌也都是百搭
+  let wildGroup: string[] | null = null;
+  if (wildSuit === TileSuit.FLOWER) {
+    const fv = parseInt(wildVal, 10);
+    if (!Number.isNaN(fv)) {
+      wildGroup = fv <= 4 ? ['1', '2', '3', '4'] : ['5', '6', '7', '8'];
+    }
+  }
+  const isWild = (t: Tile) => {
+    if (t.suit !== wildSuit) return false;
+    if (wildGroup) return wildGroup.includes(String(t.value));
+    return String(t.value) === wildVal;
+  };
   const wildCount = concealed.filter(t => isWild(t)).length;
   if (wildCount === 0) return canWinByProjectRuleNoWild(concealed, exposed);
   if (wildCount > 3) return false;
@@ -1070,7 +1082,19 @@ function findBestAssignmentByPriority(
   const [wildSuitRaw, wildVal] = parts;
   const wildSuit = normalizeTileSuit(wildSuitRaw);
   if (!wildSuit) return detectTypes(concealed, exposed);
-  const isWild = (t: Tile) => t.suit === wildSuit && String(t.value) === wildVal;
+  // ★ 修复：花牌百搭时，同组其他花牌也都是百搭
+  let wildGroup: string[] | null = null;
+  if (wildSuit === TileSuit.FLOWER) {
+    const fv = parseInt(wildVal, 10);
+    if (!Number.isNaN(fv)) {
+      wildGroup = fv <= 4 ? ['1', '2', '3', '4'] : ['5', '6', '7', '8'];
+    }
+  }
+  const isWild = (t: Tile) => {
+    if (t.suit !== wildSuit) return false;
+    if (wildGroup) return wildGroup.includes(String(t.value));
+    return String(t.value) === wildVal;
+  };
 
   const wildCount = concealed.filter(t => isWild(t)).length;
   if (wildCount === 0) return detectTypes(concealed, exposed);
