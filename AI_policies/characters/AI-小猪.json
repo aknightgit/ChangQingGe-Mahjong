@@ -30,7 +30,7 @@
     "chowWildPenalty": 0.18783660677464314,
     "menqingKeepBonus": 0.95,
     "meldPenalty": 0.02042102440544998,
-    "allPungsPursuit": 0.7220163618617642,
+    "allPungsPursuit": 2.0,
     "pureFlushPursuit": 0.9113396760214975,
     "halfFlushWeight": 0.85,
     "allHonorsPursuit": 0.14083222760517888,
