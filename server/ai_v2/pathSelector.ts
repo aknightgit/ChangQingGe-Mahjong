@@ -195,7 +195,7 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       score -= features.opponentOpenMelds * 1.35
       score -= features.downstreamPressure * 2.2
       score -= Math.max(0, effectiveGlobalMultiplier - 1) * 1.9
-      if (noWildOpenPush) score -= 2.6
+      if (noWildOpenPush) score -= 3.8  // ★ V2.2: 无百搭时门清更难成型，降低概率
       if (oneWildLongSuitPivot) score -= 0.9
       if (upstreamRejectedLongSuit) score -= 2.4
       if (earlyPairHeavy) score -= 3.8
@@ -244,7 +244,9 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       score += routeBucketBoost * (2.6 + handRouteBias)
       score += pureFlushBucketBoost * (features.secondSuitCount === 0 ? 2.2 : 1.1)
       score -= features.secondSuitCount * 2.5
-      if (hunPengReady) score += getPolicyValue(policy, 'hunPengPursuit') * (3.8 + suitedPairCount * 0.35)
+      // ★ V2.2: 单门数字+3对以上风箭对子 → 大幅提升混碰概率
+      const singleSuitWithHonorPairs = features.longestSuitCount >= 5 && features.secondSuitCount === 0 && features.honorPairCount >= 3
+      if (hunPengReady || singleSuitWithHonorPairs) score += getPolicyValue(policy, 'hunPengPursuit') * (3.8 + suitedPairCount * 0.35) * (singleSuitWithHonorPairs ? 1.6 : 1)
       if (qingPengReady) score += getPolicyValue(policy, 'qingPengPursuit') * (2.4 + pureFlushBucketBoost * 0.6)
       score += getPolicyValue(policy, 'pureFlushPursuit') * Math.max(0, features.longestSuitCount - 6) * 0.8
       if (features.longestSuitCount >= 9) { reasons.push('half_flush_nine_tiles'); score += 16 }

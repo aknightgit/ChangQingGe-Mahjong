@@ -60,6 +60,27 @@ function countPairs(hand: Tile[]): number {
   return pairs
 }
 
+/** 统计某张牌在弃牌区+暴露副露中的可见数量（不含手牌） */
+function countVisibleCopies(game: any, tile: Tile): number {
+  let visible = 0
+  for (const t of game.discardPile || []) {
+    if (t.suit === tile.suit && t.value === tile.value) visible++
+  }
+  for (const player of game.players || []) {
+    for (const meld of player.hand?.exposedMelds || []) {
+      for (const t of meld.tiles || []) {
+        if (t.suit === tile.suit && t.value === tile.value) visible++
+      }
+    }
+  }
+  return visible
+}
+
+/** 判断是否为绝张（4张中已有3张可见） */
+function isDeadTile(game: any, tile: Tile): boolean {
+  return countVisibleCopies(game, tile) >= 3
+}
+
 function getBestNumberSuit(hand: Tile[], routeState: RouteState): TileSuit | null {
   if (routeState.targetSuit && isNumberSuit(routeState.targetSuit)) return routeState.targetSuit
 
@@ -157,6 +178,9 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
   const effectiveGlobalMultiplier = getEffectiveGlobalMultiplier(game)
   const estimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
   const pairHeavyPungsPush = estimatedRound <= 8 && routeState.features.pairCount >= 3
+  // ★ V2.2: 绝张碰牌 — 最后一张，不碰就没了
+  const isDeadTilePung = action === ActionType.PENG && isDeadTile(game, claimTile)
+  const deadTilePungBonus = isDeadTilePung ? 0.8 : 0
   const upstreamRejectedSuit = routeState.features.upstreamRejectedSuit
   const upstreamSuitCount = upstreamRejectedSuit ? getNumberSuitCount(player.hand.concealedTiles, upstreamRejectedSuit) : 0
   const upstreamRejectedOpenPush =
@@ -304,7 +328,7 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       if (upstreamRejectedOpenPush) tuneDelta += 0.32
       if (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG)) tuneDelta += 0.5
       if (multiWildMenqingPush && openingMenqing) tuneDelta -= 0.18
-      tuneDelta += wildBaoStartPush + mutualBaoBuildPush + mutualBaoFinalPush
+      tuneDelta += wildBaoStartPush + mutualBaoBuildPush + mutualBaoFinalPush + deadTilePungBonus
       return { allowed: true, tuneDelta, reason: 'menqing_speed' }
     }
 
@@ -324,6 +348,10 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     case 'HALF_FLUSH':
       if (!isHonorTile && routeState.targetSuit && claimTile.suit !== routeState.targetSuit) {
         return { allowed: false, tuneDelta: -1.6, reason: 'off_route_half_flush' }
+      }
+      // ★ V2.2: 绝张碰牌在混一色路线下也有价值
+      if (isDeadTilePung && isHonorTile) {
+        return { allowed: true, tuneDelta: 0.9 + routeGain * 0.06 + deadTilePungBonus, reason: 'half_flush_dead_tile_honor_peng' }
       }
       if (
         isHonorTile &&
@@ -372,7 +400,8 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
           ((policy?.qingPengPursuit || 0) * (routeState.features.secondSuitCount === 0 ? 0.18 : 0)) +
           ((policy?.hunPengPursuit || 0) * (routeState.features.honorPairCount >= 1 ? 0.20 : 0)) +
           (_apAgg && isHonorTile && routeState.features.honorPairCount >= 1 ? 0.4 : 0) +
-          (_apAgg && routeState.features.wildCount > 0 ? 0.35 : 0),
+          (_apAgg && routeState.features.wildCount > 0 ? 0.35 : 0) +
+          deadTilePungBonus,
         reason: 'all_pungs_claim',
       }
 
@@ -389,7 +418,8 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
           0.7 +
           routeGain * 0.05 +
           (policy?.allHonorsPursuit || 0) * 0.18 +
-          (policy?.allHonorsPungsPursuit || 0) * 0.12,
+          (policy?.allHonorsPungsPursuit || 0) * 0.12 +
+          deadTilePungBonus,
         reason: 'honor_claim_push',
       }
 
