@@ -999,15 +999,20 @@ export class ActionHandler {
         .filter(p => game.liangShanVotes.includes(p.id))
         .map(p => p.name)
         .join('、')
-      broadcastQuickMessage(game.gameId,
-        `🔥 全员响应聚义,本局结束!下局翻倍! (${voterNames})`, 'special');
-
-      // 逐个玩家响应广播(让K哥能看到)
-      for (const p of activeHumans) {
-        if (game.liangShanVotes.includes(p.id)) {
-          broadcastQuickMessage(game.gameId,
-            `🔥 [${p.name}]响应了梁山聚义!`, 'special');
+      // ★ K哥铁律: 只有1个真人时不发逐个响应消息, 只发汇总
+      if (activeHumans.length === 1) {
+        broadcastQuickMessage(game.gameId,
+          `🔥 全员响应聚义,本局结束!下局翻倍! (${voterNames})`, 'special');
+      } else {
+        // 多真人: 逐个响应 + 汇总
+        for (const p of activeHumans) {
+          if (game.liangShanVotes.includes(p.id)) {
+            broadcastQuickMessage(game.gameId,
+              `🔥 [${p.name}]响应了梁山聚义!`, 'special');
+          }
         }
+        broadcastQuickMessage(game.gameId,
+          `🔥 全员响应聚义,本局结束!下局翻倍! (${voterNames})`, 'special');
       }
 
 
