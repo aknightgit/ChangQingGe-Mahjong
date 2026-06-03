@@ -41,6 +41,18 @@ function getEffectiveGlobalMultiplier(game: any): number {
   return Math.min(inherit * round, 8)
 }
 
+/** 统计玩家门口(已暴露)风/箭牌数 */
+function playerExposedHonorCount(player: any): number {
+  if (!player?.hand?.exposedMelds) return 0
+  let count = 0
+  for (const meld of player.hand.exposedMelds) {
+    for (const tile of meld.tiles || []) {
+      if (tile.suit === 'feng' || tile.suit === 'jian') count++
+    }
+  }
+  return count
+}
+
 function countAdjacentPartners(tile: Tile, hand: Tile[]): number {
   if (!NUMBER_SUITS.includes(tile.suit)) return 0
   return hand.filter(c => c.id !== tile.id && c.suit === tile.suit && Math.abs(c.value - tile.value) > 0 && Math.abs(c.value - tile.value) <= 2).length
@@ -309,11 +321,12 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       if (qingPengReady) score += getPolicyValue(policy, 'qingPengPursuit') * (6.2 + pureFlushBucketBoost * 0.9)
       if (hunPengReady) score += getPolicyValue(policy, 'hunPengPursuit') * (5.4 + features.honorPairCount * 0.8)
       if (features.honorCount >= 6) score += getPolicyValue(policy, 'allHonorsPursuit') * 2.2
-      // ★ V2.9 K哥铁律: ALL_PUNGS 路线也有风/箭碰碰 buff
-      const _apHonorEarlyRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
-      const _apTotalHonor = features.honorCount + (features.tripletCount || 0)
-      if (_apHonorEarlyRound <= 1.5 && features.honorCount >= 8) { reasons.push('kge_ap_early_honor'); score += 15 }
-      if (_apHonorEarlyRound <= 10 && _apTotalHonor >= 10) { reasons.push('kge_ap_mid_honor'); score += 10 }
+      // ★ V2.10 K哥铁律: ALL_PUNGS 路线(风碰) buff(与HONOR_HEAVY同一逻辑)
+      const _apRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
+      const _apExposedHonor = (playerExposedHonorCount(input.player) || 0)
+      if (_apRound <= 5 && features.honorCount >= 8) { reasons.push('kge_ap_round5'); score += 8 }
+      if (_apRound <= 7 && (features.honorCount + features.wildCount) >= 9) { reasons.push('kge_ap_round7'); score += 12 }
+      if (_apRound <= 10 && (features.honorCount + _apExposedHonor + features.wildCount) >= 10) { reasons.push('kge_ap_round10'); score += 15 }
       score += getPolicyValue(policy, 'flushVsPungsBalance') * ((qingPengReady ? 2.4 : 0) - (features.secondSuitCount > 0 ? 0.8 : 0))
       if (earlyPairHeavy) { reasons.push('early_four_pairs_push'); score += 8.5 }
       // ★ V2: 4+对子/刻子坚决做碰碰胡（90%概率直接锁定）
@@ -342,16 +355,24 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       score += getWildRouteBoost(policy, features.wildCount, 'honors') * 4.6
       score += getPolicyValue(policy, 'honorVsSuitedBalance') * 6.0
       score -= (features.longestSuitCount + features.secondSuitCount) * 0.7
-      // ★ V2.9 K哥铁律: 1.5巡内手上>=8张风/箭, 或10巡内手上+副露>=10张风/箭 → 提升风一色/风碰倾向
-      const _honorEarlyRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
-      const _totalHonorTiles = features.honorCount + (features.tripletCount || 0) // 手牌+副露刻子(包含风/箭刻)
-      if (_honorEarlyRound <= 1.5 && features.honorCount >= 8) {
-        reasons.push('kge_early_honor_stack')
-        score += 18
+      // ★ V2.10 K哥铁律: 调整 wind一色/风碰倾向 buff
+      // 5巡(含)内 honorCount >= 8 → +10
+      // 7巡(含)内 honorCount+百搭 >= 9 → +15
+      // 10巡(含)内 honor(含门口 + 百搭) >= 10 → +18
+      const _honorRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
+      const _exposedHonorCount = (playerExposedHonorCount(input.player) || 0) // 门口风/箭牌数
+      const _totalHonorWithWild = features.honorCount + features.wildCount
+      if (_honorRound <= 5 && features.honorCount >= 8) {
+        reasons.push('kge_round5_honor_8')
+        score += 10
       }
-      if (_honorEarlyRound <= 10 && _totalHonorTiles >= 10) {
-        reasons.push('kge_mid_honor_heavy')
-        score += 12
+      if (_honorRound <= 7 && _totalHonorWithWild >= 9) {
+        reasons.push('kge_round7_honor_with_wild_9')
+        score += 15
+      }
+      if (_honorRound <= 10 && (features.honorCount + _exposedHonorCount + features.wildCount) >= 10) {
+        reasons.push('kge_round10_total_honor_10')
+        score += 18
       }
       if (features.honorCount >= 9) {
         reasons.push('honor_stack_nine_plus')
