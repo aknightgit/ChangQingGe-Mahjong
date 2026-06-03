@@ -813,19 +813,21 @@ export class ActionHandler {
     if (remainingActive <= 1 || game.winnersCount >= 3) {
       // 【修复】进入5秒亮牌阶段，再进入结算
       // 如果已处于REVEAL(前人胡已设), 推迟 1s 直接 endRound, 避免多个 5s setTimeout 抢跑
+      // ★ V2.12: 去重 —— 只设一个 1s 定时器, 后续胡不再重复设
       if (game.phase === GamePhase.REVEAL) {
-        console.log(`[handleHu] Already in REVEAL, scheduling direct endRound in 1s`)
-        const gameId = game.gameId
-        const { timerManager: tm } = this.deps
-        tm.detachTimer(setTimeout(() => {
-          try {
-            const fresh = this.deps.games.get(gameId)
-            if (!fresh) return
-            // 强制 endRound, 刷新 phase
-            game.phase = GamePhase.ENDED
-            endRound(fresh, GameEndReason.LAST_PLAYER)
-          } catch (e) { console.warn('[handleHu] reveal end error', e) }
-        }, 1000))
+        if (!(game as any)._revealEndScheduled) {
+          (game as any)._revealEndScheduled = true
+          console.log(`[handleHu] Already in REVEAL, scheduling direct endRound in 1s`)
+          const gameId = game.gameId
+          const { timerManager: tm } = this.deps
+          tm.detachTimer(setTimeout(() => {
+            try {
+              const fresh = this.deps.games.get(gameId)
+              if (!fresh) return
+              endRound(fresh, GameEndReason.LAST_PLAYER)
+            } catch (e) { console.warn('[handleHu] reveal end error', e) }
+          }, 1000))
+        }
         return
       }
       game.phase = GamePhase.REVEAL;
