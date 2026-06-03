@@ -1647,8 +1647,11 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         bestTingValue = timingValue
         bestTile = tile
       }
-      if (hand.length <= 6) {
-        console.log(`[AI-DISCARD] ${player.name} tile=${tile.suit}-${tile.value} composite=${composite.toFixed(1)} shanten=${shanten} effective=${effective} score=${score.toFixed(1)} honor=${isHonor(tile)} committed=${tile.suit === committedOpenSuit}`)
+      if (hand.length <= 14) {
+        const longestSuit = routeState?.features?.longestSuit
+        const targetSuit = routeState?.targetSuit
+        const isLongest = longestSuit && tile.suit === longestSuit
+        console.log(`[AI-DISCARD] ${player.name} tile=${tile.suit}-${tile.value} composite=${composite.toFixed(1)} shanten=${shanten} score=${score.toFixed(1)} route=${routeState?.current} target=${targetSuit} longest=${longestSuit}(${routeState?.features?.longestSuitCount}) isLongest=${isLongest}`)
       }
     } else if (!legacyDiscardPathDisabled && (
       shanten < bestShanten ||
