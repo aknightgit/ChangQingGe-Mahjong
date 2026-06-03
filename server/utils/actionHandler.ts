@@ -710,6 +710,12 @@ export class ActionHandler {
     player.winTimestamp = Date.now();
     game.winnersCount++;
 
+    // 【修复】计算番数和最终点数（老代码 _handleHu_original 有，新代码漏了）
+    // ★ 先声明变量, 再用 recordWinImmediately (TDZ fix)
+    const isSelfDrawn = huIsSelfDraw;
+    const isKongFlower = isSelfDrawn && !!(player as any).isSelfDrawn;
+    const isRobbingKong = !!huPendingAction?.tile && !!(game as any).pendingKongClaim;
+
     // ★ K哥铁律: 胡牌成功的瞬间立即记录 winner 数据, 不依赖 endRound
     // 即使后续游戏崩溃/玩家退场, 胡牌案例已存档
     if (this.deps.recordWinImmediately) {
@@ -717,11 +723,6 @@ export class ActionHandler {
         console.warn('[handleHu] recordWinImmediately failed:', e?.message);
       });
     }
-
-    // 【修复】计算番数和最终点数（老代码 _handleHu_original 有，新代码漏了）
-    const isSelfDrawn = huIsSelfDraw;
-    const isKongFlower = isSelfDrawn && !!(player as any).isSelfDrawn;
-    const isRobbingKong = !!huPendingAction?.tile && !!(game as any).pendingKongClaim;
     const flowerTiles = player.hand.exposedMelds
       .flatMap((m: any) => m.tiles)
       .filter((t: any) => isFlower(t));
