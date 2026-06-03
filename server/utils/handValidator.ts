@@ -393,8 +393,25 @@ function tryFormOnlyTriplets(n: number, wildLeft: number, map: Map<string, numbe
 // 尝试用剩余牌组成 n 个面子（不回溯配对）
 function tryFormMelds(n: number, wildLeft: number, map: Map<string, number>): boolean {
   if (n === 0) {
-    for (const c of map.values()) if (c > 0) return false;
-    return wildLeft === 0;
+    // ★ V2.14 BUG修复(K哥2446): n=0 时应该允许"剩 1 对"作为将
+    // 原代码: for c>0 return false → 任何 leftover 都失败
+    // 实际麻将规则: 3n+2 → n=0 表示 0 副, 剩余必须是 0 张 或 1 个对子(2张)
+    // - 0 张: true
+    // - 1 个自然对(2张同): true
+    // - 1张自然+1张百搭: true
+    // - 2张百搭: true
+    // 其他(>2张/单张): false
+    let leftover = 0
+    for (const c of map.values()) leftover += c
+    if (leftover === 0 && wildLeft === 0) return true
+    if (leftover === 0 && wildLeft === 2) return true  // 2张百搭成对
+    if (leftover === 1 && wildLeft === 1) return true  // 1自然+1百搭
+    if (leftover === 2) {
+      // 检查是否 1 个自然对
+      const positiveKeys = [...map.entries()].filter(([k, c]) => c > 0)
+      if (positiveKeys.length === 1 && positiveKeys[0][1] === 2) return true
+    }
+    return false
   }
 
   // 找第一个还有牌的色值
@@ -679,12 +696,12 @@ function detectTypes(
     return true;
   }
 
-  // 基础胡牌：满足 3n+2 格式且没有更高优先级特殊牌型，且不是垃圾胡
+  // 基础胡牌：满足 3n+2 格式且没有更高优先级特殊牌型
+  // ★ V2.14 BUG修复(K哥2446): K哥铁律 "没有'普通胡/基础胡'这个牌型, 所有赢牌必须是目标牌型之一"
+  // 原代码 isGarbageMultiSuitsWithSequence 错误地把"多门+顺子"当成垃圾胡 reject
+  // 实际: 普通多门胡牌型在 K哥麻将里完全合法, 只过 STANDARD 走基础计算
   if (types.length === 0 && satisfiesFormat) {
-    if (!isGarbageMultiSuitsWithSequence(concealedNonFlower)) {
-      types.push(HandType.STANDARD);
-    }
-    // 垃圾胡：types.length 仍然为 0，不会胡
+    types.push(HandType.STANDARD);
   }
 
   return types.sort((a, b) => (HAND_TYPE_PRIORITY[b] ?? 0) - (HAND_TYPE_PRIORITY[a] ?? 0));
