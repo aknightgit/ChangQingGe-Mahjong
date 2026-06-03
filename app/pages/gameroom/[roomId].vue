@@ -905,16 +905,15 @@
                   <span v-if="turnTimerActive && !isWinner && !isAIControlled" class="turn-timer-inline" :class="{ 'turn-timer--urgent': turnTimer <= 10 }">
                     ⏱ {{ turnTimer }}s
                   </span>
+                  <div v-if="isAIControlled" class="comeback-inline">
+                    <span class="comeback-label">🤖 AI托管中</span>
+                    <button
+                      class="inline-action-btn inline-action-btn--comeback"
+                      @click="onPlayerBack"
+                    >我回来了</button>
+                  </div>
                 </div>
               </div>
-              <div v-if="isAIControlled" class="comeback-floating-bar">
-                <span class="comeback-label">🤖 AI托管中</span>
-                <button
-                  class="inline-action-btn inline-action-btn--comeback"
-                  @click="onPlayerBack"
-                >我回来了</button>
-              </div>
-          </div>
         </aside>
       </main>
 
@@ -6162,24 +6161,27 @@ const forceDiscard = async (p: Player) => {
 }
 
 .comeback-floating-bar {
-  position: absolute;
-  left: 50%;
-  top: calc(100% + 8px);
-  transform: translateX(-50%);
-  display: flex;
+  /* 已弃用, 改为 .comeback-inline 放在聚义/听牌同位置 */
+  display: none;
+}
+.comeback-inline {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 8px 16px;
-  border-radius: 12px;
+  gap: 8px;
+  padding: 4px 10px;
+  margin-left: auto;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(16px) saturate(1.4);
   border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
   animation: comeback-glow 1.5s infinite;
-  pointer-events: auto;
-  z-index: 10;
   white-space: nowrap;
+  font-size: 0.75rem;
+}
+.comeback-inline .comeback-label {
+  color: #ffd36a;
+  font-size: 0.72rem;
 }
 
 .comeback-label {
