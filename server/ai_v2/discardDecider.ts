@@ -255,19 +255,44 @@ function scoreByRoute(input: RouteDiscardInput): number {
       ? 6.0 + (nearby > 0 ? 2.0 : 0) + (visibleCopies >= 1 ? Math.min(3, visibleCopies) * 1.2 : 0)
       : 0
 
+  // ★ V2.13 保守方案: 多路线感知 - top2 路线差距影响对子打破强度
+  // 路线近距离(gap小): 保守,保留对子观察
+  // 路线远距离(gap大): 明确路线, 果断打破/保留
+  const _routeScores = input.routeState.routeScores || []
+  const _topRoute = _routeScores[0]
+  const _secondRoute = _routeScores[1]
+  const _topScore = _topRoute?.score || 0
+  const _secondScore = _secondRoute?.score || 0
+  const _routeGap = _topScore - _secondScore
+  const _secondRouteName = _secondRoute?.route || null
+  // 次路线是碰碰胡/清混一色 都需考虑
+  const _secondIsPungs = _secondRouteName === 'ALL_PUNGS'
+  const _secondIsFlush = _secondRouteName === 'HALF_FLUSH'
+
   const _hunPengReady = input.routeState.features.hunPengReady
   const _qingPengReady = input.routeState.features.qingPengReady
   const _pairCount = input.routeState.features.pairCount
   const _hasPungPotential = _hunPengReady || _qingPengReady || _pairCount >= 3
   const _flushLocked = input.routeState.current === 'HALF_FLUSH' && input.routeState.features.secondSuitCount === 0
   // 短门/次短门 对子 处理:
-  // 1. 有碰碰胡潜质且未锁定清混 → 保留对子(0, 不打破)
-  // 2. 锁定清混 → 强打破 (+4.5)
+  // 1. 主路线锁定清混 + 场次路线明显较低 → 强打破 (+4.5)
+  // 2. 有碰碰胡潜质 且 (次路线是碰碰胡 或 路线未定) → 保留对子 (0)
   // 3. 其他情况 → 轻微打破 (+1.5)
-  const shortSuitFamilyPairBreak =
-    isShortSuitFamily && !isLongestSuitTile && count >= 2
-      ? (_hasPungPotential && !_flushLocked ? 0 : (_flushLocked ? 4.5 : 1.5))
-      : 0
+  // 多路线加权: 路线越明确, 打破越强
+  let shortSuitFamilyPairBreak = 0
+  if (isShortSuitFamily && !isLongestSuitTile && count >= 2) {
+    if (_flushLocked && _routeGap >= 3) {
+      // 明确清混一色 + 路线锁定 → 强打破
+      shortSuitFamilyPairBreak = 4.5
+    } else if (_hasPungPotential && !_flushLocked) {
+      // 有碰碰胡潜质 → 保留对子(场次路线是碰碰胡或未定)
+      shortSuitFamilyPairBreak = 0
+    } else {
+      // 其他情况: 路线越近越保守
+      const _commitFactor = Math.min(1, _routeGap / 6)
+      shortSuitFamilyPairBreak = 1.5 * (0.4 + _commitFactor * 0.6)
+    }
+  }
 
   switch (routeState.current) {
     case 'MENQING_SPEED':
@@ -448,5 +473,30 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
     pureFlushUpgradeBonus = Math.max(pureFlushUpgradeBonus, 0)
   }
 
-  return routeBias + residuePressure + preservePrimary + targetSuitBonus + observeOrdering + routeStrengthDelta * 0.18 + dangerAdjustment + tingBonus + pureFlushUpgradeBonus
+  // ★ V2.13 保守方案: 多路线感知 - top2 路线差距调整对子/坬张
+  // - 路线未定(gap小): 保留对子(观察)
+  // - 主路线是 ALL_PUNGS(碰碰胡) 且 gap 大: 保留对子, 拆坬张
+  // - 主路线是 HALF_FLUSH 且 gap 大: 打破对子
+  // - 次路线是 ALL_PUNGS/碰碰胡候选: 额外保留对子(防万一)
+  let multiRouteTuneDelta = 0
+  const _topRoute = (input.routeState.routeScores || [])[0]
+  const _secondRoute = (input.routeState.routeScores || [])[1]
+  const _topName = _topRoute?.route || null
+  const _secondName = _secondRoute?.route || null
+  const _topScore2 = _topRoute?.score || 0
+  const _secondScore2 = _secondRoute?.score || 0
+  const _gap2 = _topScore2 - _secondScore2
+  const _tileCount = sameTypeCount(input)
+  if (_tileCount >= 2) {
+    // 路线未定(差距 < 4)→ 保留对子
+    if (_gap2 < 4) multiRouteTuneDelta -= 0.8
+    // 主路线碰碰胡 → 保留对子
+    if (_topName === 'ALL_PUNGS' && _gap2 >= 2) multiRouteTuneDelta -= 1.2
+    // 次路线碰碰胡 → 保留对子(防万一转)
+    if (_secondName === 'ALL_PUNGS' && _gap2 < 5) multiRouteTuneDelta -= 0.6
+    // 主路线清混一色 + 路线锁定 → 打破对子
+    if (_topName === 'HALF_FLUSH' && _gap2 >= 4) multiRouteTuneDelta += 1.0
+  }
+
+  return routeBias + residuePressure + preservePrimary + targetSuitBonus + observeOrdering + routeStrengthDelta * 0.18 + dangerAdjustment + tingBonus + pureFlushUpgradeBonus + multiRouteTuneDelta
 }
