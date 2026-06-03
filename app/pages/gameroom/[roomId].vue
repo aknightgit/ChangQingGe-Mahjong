@@ -8618,14 +8618,13 @@ const forceDiscard = async (p: Player) => {
   font-size: 1.2rem;
   font-weight: 700;
   color: #fff;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
 }
 /* ★ K哥铁律: mobile landscape 模式验牌条适配 */
 .layout--mobile-landscape .reveal-phase-banner {
   top: 40%;
   padding: 10px 24px;
   font-size: 0.9rem;
-}
-  text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
 }
 
 </style>
