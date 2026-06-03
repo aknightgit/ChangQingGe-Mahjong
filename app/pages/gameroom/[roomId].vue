@@ -696,14 +696,7 @@
                     @click="openHuReviewPanel"
                   >回看胡牌选项</button>
                 </div>
-                <div v-if="isAIControlled" class="comeback-floating-bar">
-                  <span class="comeback-label">🤖 AI托管中</span>
-                  <button
-                    class="inline-action-btn inline-action-btn--comeback"
-                    @click="onPlayerBack"
-                  >我回来了</button>
-                </div>
-                <div class="inline-action-buttons" v-else-if="isConnected && !isInteractionLocked" style="display:none">
+                <div class="inline-action-buttons" v-if="isConnected && !isInteractionLocked" style="display:none">
                   <div v-if="actionWindowText" class="inline-action-timer">{{ actionWindowText }}</div>
                   <button
                     v-if="showChow"
@@ -913,6 +906,13 @@
                     ⏱ {{ turnTimer }}s
                   </span>
                 </div>
+              </div>
+              <div v-if="isAIControlled" class="comeback-floating-bar">
+                <span class="comeback-label">🤖 AI托管中</span>
+                <button
+                  class="inline-action-btn inline-action-btn--comeback"
+                  @click="onPlayerBack"
+                >我回来了</button>
               </div>
           </div>
         </aside>
@@ -6152,22 +6152,20 @@ const forceDiscard = async (p: Player) => {
 }
 
 .comeback-floating-bar {
-  position: fixed;
-  bottom: 180px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 99999;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
-  padding: 12px 24px;
-  border-radius: 16px;
+  padding: 8px 16px;
+  margin-top: 4px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(16px) saturate(1.4);
   border: 1px solid rgba(255, 255, 255, 0.15);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   animation: comeback-glow 1.5s infinite;
   pointer-events: auto;
+  align-self: stretch;
 }
 
 .comeback-label {
