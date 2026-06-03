@@ -3843,17 +3843,20 @@ const onBotMode = async () => {
 
 // 我回来了(取消AI托管)
 const onPlayerBack = async () => {
-  if (!currentPlayer.value) return
+  const myId = (route.query.playerId as string) || sessionStorage.getItem('mahjong.playerId')
+  if (!myId) return
+  const me = gameState.value?.players.find(p => p.id === myId || p.userId === myId)
+  if (!me) return
   try {
     await $fetch('/mahjong/api/game/comeback', {
       method: 'POST',
       body: {
         gameId: roomId.value,
-        playerId: currentPlayer.value.id
+        playerId: me.id
       }
     })
     isAIControlled.value = false
-    addBroadcast(`👋 [${currentPlayer.value.name}] 已回到牌桌!`, 'success')
+    addBroadcast(`👋 [${me.name}] 已回到牌桌!`, 'success')
     await refreshState()
   } catch (e) {
     console.error('[Comeback] Failed:', e)
@@ -4751,9 +4754,12 @@ if (typeof window !== 'undefined') {
 
 // AI 接管检测(通过轮询检查 botModePlayers)
 const checkAITakeover = () => {
-  if (!gameState.value?.players || !currentPlayer.value) return
-  // 检查当前玩家是否被AI托管(从 gameState 的 isBotControlled 字段检测)
-  const me = gameState.value.players.find(p => p.id === currentPlayer.value!.id)
+  if (!gameState.value?.players) return
+  // ★ 修复：用自己(myPlayerId)查,不是 currentPlayer
+  // 否则其他玩家回合时,自己托管状态会被重置
+  const myId = (route.query.playerId as string) || sessionStorage.getItem('mahjong.playerId')
+  if (!myId) return
+  const me = gameState.value.players.find(p => p.id === myId || p.userId === myId)
   isAIControlled.value = !!(me as any)?.isBotControlled
 }
 
