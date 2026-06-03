@@ -32,6 +32,7 @@ export interface ActionHandlerDeps {
   isWinAfterKong(game: GameState, playerId: string): boolean;
   getCachedWinOptions(game: GameState, player: Player, context: 'self_draw' | 'discard', flags?: any): WinOption[];
   getCachedWinCheck(game: GameState, player: Player): { canWin: boolean; types: HandType[] };
+  recordWinImmediately?(game: GameState, player: Player, flags?: { isSelfDrawn?: boolean; isKongFlower?: boolean; isRobbingKong?: boolean }): Promise<void>;
   invalidateWinEvaluationCache(gameId: string, playerIds?: string[]): void;
   schedulePendingActionTimeout(gameId: string): void;
   scheduleBotDiscard(gameId: string, playerId: string): void;
@@ -713,6 +714,14 @@ export class ActionHandler {
     player.winRound = game.roundNumber;
     player.winTimestamp = Date.now();
     game.winnersCount++;
+
+    // ★ K哥铁律: 胡牌成功的瞬间立即记录 winner 数据, 不依赖 endRound
+    // 即使后续游戏崩溃/玩家退场, 胡牌案例已存档
+    if (this.deps.recordWinImmediately) {
+      this.deps.recordWinImmediately(game, player, { isSelfDrawn, isKongFlower, isRobbingKong }).catch((e: any) => {
+        console.warn('[handleHu] recordWinImmediately failed:', e?.message);
+      });
+    }
 
     // 【修复】计算番数和最终点数（老代码 _handleHu_original 有，新代码漏了）
     const isSelfDrawn = huIsSelfDraw;

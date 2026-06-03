@@ -107,6 +107,7 @@ class GameManager {
       broadcastGameState: (id) => this.broadcastGameState(id),
       broadcastQuickMessage: (id, text, type, actionKind) => this.broadcastQuickMessage(id, text, type as any, actionKind),
       persistGame: (g) => this.persistGame(g),
+      recordWinImmediately: (g, w, f) => this.recordWinImmediately(g, w, f),
       handleDraw: (g, p, opts) => this.handleDraw(g, p, opts),
       replaceFlowers: (g, p) => this.replaceFlowers(g, p),
       isPlayerBotControlled: (p) => this.isPlayerBotControlled(p),
@@ -899,6 +900,47 @@ class GameManager {
 
   public async persistGame(game: GameState): Promise<void> {
     return this.store.persistGame(game);
+  }
+
+  /**
+   * ★ K哥铁律: 胡牌成功的瞬间立即记录 winner 数据到 mahjongTrainingRounds
+   * 不依赖 endRound, 即使后续游戏崩溃/玩家退场, 胡牌案例已存档
+   * 使用已存在的 latestRoundStat(从 game.roundStats 末位)或构造临时 stat
+   */
+  public async recordWinImmediately(
+    game: GameState,
+    winner: Player,
+    flags?: { isSelfDrawn?: boolean; isKongFlower?: boolean; isRobbingKong?: boolean }
+  ): Promise<void> {
+    try {
+      // 构造临时 roundStat(供 TrainingRecordService 使用)
+      const tempRoundStat: any = {
+        roundNumber: game.roundNumber,
+        winners: [winner.id],
+        selfDraws: flags?.isSelfDrawn ? [winner.id] : [],
+        winnerDetails: [{
+          playerId: winner.id,
+          playerName: winner.name,
+          handTypeName: winner.winHandType || winner.handTypeName || '未知',
+          isSelfDrawn: flags?.isSelfDrawn ?? false,
+          isKongFlower: flags?.isKongFlower ?? false,
+          isRobbingKong: flags?.isRobbingKong ?? false,
+          handTiles: winner.hand?.concealedTiles || [],
+          exposedTiles: winner.hand?.exposedMelds?.flatMap((m: any) => m.tiles) || [],
+          tileFaces: [],
+          baseFan: winner.wonFan || 0,
+          finalPoints: winner.wonFan || 0,
+          isMenQing: !winner.hand?.exposedMelds?.length,
+        }],
+        finalScores: game.players.reduce((acc, p) => { acc[p.id] = 0; return acc }, {} as Record<string, number>),
+      }
+      await TrainingRecordService.recordRound(game, 'win_immediately', tempRoundStat.finalScores, tempRoundStat).catch((e: any) => {
+        console.warn('[recordWinImmediately] TrainingRecordService failed:', e?.message);
+      })
+      console.log(`[recordWinImmediately] ${winner.name} 麻将案例已存档 (gameId=${game.gameId.substring(0,8)})`)
+    } catch (e: any) {
+      console.warn('[recordWinImmediately] error:', e?.message)
+    }
   }
 
   /** 立即持久化（不走延迟队列） */
