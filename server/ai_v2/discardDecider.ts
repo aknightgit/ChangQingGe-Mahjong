@@ -40,18 +40,13 @@ function getSecondSuit(input: RouteDiscardInput): TileSuit | null {
 }
 
 function isPungsPotential(input: RouteDiscardInput): boolean {
-  // ★ V2.5 (K哥铁律): 手上有 4 个异门对子/刻子 = 碰碰胡潜质明显
-  // 注意: 不是 4 副露, 是手牌+副露里(对子+刻子)累计有 4 个不同门
-  // 门口花多 = 额外加分(可以多凑刻子)
+  // ★ V2.5 (K哥铁律): 4+ 对子/刻子(手牌+副露) = 强碰碰胡潜质, 坚定执行
   const exposedTripletCount = input.player.hand.exposedMelds.filter((m: any) => m.type === 'triplet' || m.type === 'kong').length
   const handPairTripletCount = (() => {
     let c = 0
     for (const tiles of groupTiles(input.hand).values()) if (tiles.length >= 2) c++
     return c
   })()
-  const flowerCount = (input.hand || []).filter((t: any) => t.isFlower || t.suit === 'hua').length
-  // 核心: 手牌+副露里对子+刻子总>=4 → 碰碰胡潜质
-  // 门口花>=2 → 额外加成(更倾向)
   return exposedTripletCount + handPairTripletCount >= 4
 }
 
@@ -278,15 +273,22 @@ function scoreByRoute(input: RouteDiscardInput): number {
       )
 
     case 'HALF_FLUSH':
+      // ★ V2.6 K哥铁律: 做混一色时优先出主门(targetSuit)散牌, 保留风/箭单张
+      // 因为风/箭单张是凑混一色的潜在副露资源, targetSuit 的散牌(无邻/单张)反而是废牌
       if (tile.suit === routeState.targetSuit) {
-        return (count >= 2 ? -4.4 : -3.2) + (nearby > 0 ? -1.6 : -0.3) + (count >= 2 ? -globalPairProtection : 0)
+        // 主门targetSuit: 散牌优先打, 保留对子和有邻牌的
+        // 单张无邻 +5.5 鼓励打, 单张有邻 -1.6 保留(潜在顺子), 对子 -4.4 强保留
+        const _wasteSingle = count === 1 && nearby === 0 ? 5.5 : 0
+        const _wasteEdgeGap = count === 1 && nearby > 0 ? -1.6 : 0
+        return (count >= 2 ? -4.4 : -3.2) + _wasteSingle + _wasteEdgeGap + (count >= 2 ? -globalPairProtection : 0)
       }
       if (isHonor(tile)) {
+        // ★ V2.6: 风/箭单张保留 (K哥铁律: 凑混一色副露资源)
         if (routeState.features.pureFlushUpgradeReady) {
           return count >= 2 ? 5.6 : 3.4
         }
-        // ★ 风箭单张保留力度加强（从-0.1改为-1.5），确保短门单张先打
-        return count === 1 ? -1.5 : -2.2
+        // 单张 -3.5 保留(可凑刻子), 对子 -2.2 强保留
+        return count === 1 ? -3.5 : -2.2
       }
       return 5.8 + (tile.suit === shortestSuit ? 1.1 : 0)
 
