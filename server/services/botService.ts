@@ -2240,7 +2240,17 @@ export async function shouldClaimPendingAction(
         }
       }
 
-      const discardHuProb = Math.max(0, Math.min(1, policy.discardHuChance ?? 1))
+      // ★ V2.12 K哥铁律: 牌墙越少越提高捉冲意愿
+      // wallRemaining <= 10: 显著提高(x1.5~)
+      // wallRemaining <= 5:  极大提高(x2 封顶1)
+      // 前提: 能胡才能捉; 没机会胡才走 STRIVE_DRAW 防守
+      const wallRemaining = game.wall?.length || 0
+      let wallBoost = 0
+      if (wallRemaining <= 5) wallBoost = 1.0  // 极大提高，封顶1
+      else if (wallRemaining <= 10) wallBoost = 0.5  // 显著提高
+      else if (wallRemaining <= 15) wallBoost = 0.18  // 轻度提高
+      const baseDiscardHuProb = Math.max(0, Math.min(1, policy.discardHuChance ?? 1))
+      const discardHuProb = Math.min(1, baseDiscardHuProb + wallBoost)
       const finalRoll = Math.random()
       const decision = finalRoll < discardHuProb ? ActionType.HU : ActionType.PASS
       traceClaim(player, game, 'hu-discard-final', `discardTile=${traceTile(discardTile)} isMenQing=${isMenQing} wildCount=${wildCount} discardHuChance=${discardHuProb.toFixed(6)} roll=${finalRoll.toFixed(6)} decision=${decision}`)
