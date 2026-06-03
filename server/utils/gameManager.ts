@@ -3962,7 +3962,8 @@ class GameManager {
     this.timerManager.clearPendingActionTimer(game.gameId);
     // 【2026-05-29 验牌阶段】如果还不是REVEAL阶段，先进入REVEAL并延迟5秒
     // 梁山聚义成功：跳过验牌，直接结算
-    const skipReveal = !!(game as any).liangShanSuccess;
+    // 流局（wall_exhausted）：跳过验牌阶段，直接结算（K哥要求）
+    const skipReveal = !!(game as any).liangShanSuccess || reason === GameEndReason.WALL_EXHAUSTED;
     if (game.phase !== GamePhase.REVEAL && !skipReveal) {
       game.phase = GamePhase.REVEAL;
       game.endReason = reason;

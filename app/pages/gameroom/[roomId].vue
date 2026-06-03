@@ -8571,34 +8571,34 @@ const forceDiscard = async (p: Player) => {
 
 
 
-/* ===== [2026-05-29] 验牌阶段(顶部小提示条) ===== */
+/* ===== [2026-05-29] 验牌阶段(牌桌中央毛玻璃条) ===== */
 .reveal-phase-banner {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 215, 0, 0.4);
+  gap: 16px;
+  padding: 14px 32px;
   border-radius: 16px;
-  padding: 16px 32px;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   z-index: 9999;
   animation: fadeIn 0.3s ease;
   pointer-events: none;
 }
 .reveal-phase-label {
-  font-size: 1.2rem;
+  font-size: 1rem;
   font-weight: 700;
-  color: #ffd700;
-  letter-spacing: 4px;
-  text-shadow: 0 0 12px rgba(255, 215, 0, 0.5);
+  color: #ffd36a;
+  letter-spacing: 2px;
+  white-space: nowrap;
 }
 .reveal-phase-timer {
-  font-size: 2rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: #fff;
   text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
