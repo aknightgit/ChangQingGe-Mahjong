@@ -713,7 +713,9 @@ class GameManager {
         this.handlePass(game, player);
       }
     } else if (action === ActionType.HU) {
+      console.log(`[resolvePendingAction] ${player.name} HU before: currentPlayerIndex=${game.currentPlayerIndex} phase=${game.phase} wall=${game.wall?.length}`);
       await this.handleHu(game, player);
+      console.log(`[resolvePendingAction] ${player.name} HU after: currentPlayerIndex=${game.currentPlayerIndex} phase=${game.phase} wall=${game.wall?.length} drawnThisTurn=${game.drawnThisTurn} pendingActions=${game.pendingActions?.length}`);
     } else {
       this.handlePass(game, player);
     }
@@ -2449,7 +2451,9 @@ class GameManager {
         break;
 
       case ActionType.HU:
+        console.log(`[executeAction-HU] ${player.name} HU before: currentPlayerIndex=${game.currentPlayerIndex} phase=${game.phase} wall=${game.wall?.length}`);
         await this.handleHu(game, player, winOptionLabel);
+        console.log(`[executeAction-HU] ${player.name} HU after: currentPlayerIndex=${game.currentPlayerIndex} phase=${game.phase} wall=${game.wall?.length} drawnThisTurn=${game.drawnThisTurn} pendingActions=${game.pendingActions?.length}`);
         break;
 
       case ActionType.CHEAT_HU:
