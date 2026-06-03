@@ -296,6 +296,16 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     return { allowed: true, tuneDelta: 2.0, reason: 'strong_pung_potential' }
   }
 
+  // ★ V2.6: 强吃牌(边张/坎张/两面)硬保证 — K哥铁律: 重复副露允许, 必吃
+  // 1+2吃3, 2+3吃1, 7+8吃9, 8+9吃7, 1+3吃2, 2+4吃3 等
+  if (action === ActionType.CHOW) {
+    const strongChowHard = isStrongChow(player.hand.concealedTiles, claimTile)
+    if (strongChowHard) {
+      const boost = strongChowHard === 'edge' ? 3.0 : strongChowHard === 'kant' ? 2.4 : 1.5
+      return { allowed: true, tuneDelta: boost, reason: 'strong_chow_hard_override' }
+    }
+  }
+
   const bestSuit = getBestNumberSuit(player.hand.concealedTiles, routeState)
   const bestSuitCount = bestSuit ? getNumberSuitCount(player.hand.concealedTiles, bestSuit) : 0
   if (
