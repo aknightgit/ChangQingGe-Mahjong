@@ -573,6 +573,7 @@
               :is-winner="isWinner"
               :round-multiplier="roundMultiplier"
               :global-multiplier="globalMultiplier"
+              :overflow-multiplier="overflowMultiplier"
               :wild-tile="wildTile"
             />
 
@@ -1877,6 +1878,22 @@ const globalMultiplier = computed(() => {
   }
 
   return game.globalMultiplier ?? inherit
+})
+// ★ K哥铁律: 超帽倍数 — 有效倍数超过8的部分继承给下局
+const overflowMultiplier = computed(() => {
+  const game = gameState.value
+  if (!game) return 1
+  const inherit = (game as any).inheritMultiplier ?? (game as any).inheritedGlobalMultiplier ?? 1
+  const actualRound = game.roundMultiplier
+  let effective = 1
+  if (typeof actualRound === 'number' && actualRound > 0) {
+    effective = inherit * actualRound
+  } else if (showDiceOverlay.value && hasDicePreview.value) {
+    effective = inherit * getDiceRoundMultiplier(diceValues.value[0], diceValues.value[1], diceExtra.value?.[0], diceExtra.value?.[1])
+  } else {
+    effective = inherit
+  }
+  return effective > 8 ? Math.floor(effective / 8) : 1
 })
 const dealerName = computed(() => {
   if (!gameState.value?.players?.length) return ''

@@ -5,7 +5,7 @@
       <div class="info-item multiplier-badge">
         <span class="badge-icon">🎲</span>
         <span class="badge-label">总倍</span>
-        <span class="badge-value">×{{ globalMultiplier || 1 }}</span>
+        <span class="badge-value">×{{ globalMultiplier || 1 }}<span v-if="overflowMultiplier > 1" class="overflow-tag">({{ overflowMultiplier }})</span></span>
       </div>
       <div class="info-item remaining-badge">
         <span class="badge-icon">🀄</span>
@@ -33,6 +33,7 @@ const props = defineProps<{
   isWinner?: boolean
   roundMultiplier?: number
   globalMultiplier?: number
+  overflowMultiplier?: number
   wildTile?: Tile | null
 }>()
 
@@ -140,6 +141,13 @@ const wildTileName = computed(() => {
 .multiplier-badge .badge-value {
   font-size: 0.62rem;
   font-weight: 900;
+}
+
+.overflow-tag {
+  color: #ffd36a;
+  font-size: 0.55rem;
+  font-weight: 700;
+  margin-left: 1px;
 }
 
 /* 剩余牌数徽章 */
