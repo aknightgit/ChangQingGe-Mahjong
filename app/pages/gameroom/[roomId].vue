@@ -4376,13 +4376,12 @@ watch(
     }
 
     // 流局或胡牌:ENDED后立即显示结算面板(REVEAL阶段已由服务端5秒展示完成)
-    // 流局: 先显示全屏流局弹窗(类似聚义) 1.8s, 再切结算面板
+    // 流局: K哥铁律 - 只显示全屏流局弹窗 1.8s, 直接进下一局, 不看结算面板
     if (isWallExhausted) {
       showWallExhaustedOverlay.value = true
       setTimeout(() => {
         showWallExhaustedOverlay.value = false
-        showSettlement.value = true
-        startWallExhaustedCountdown()
+        void startNextRound()
       }, 1800)
       return
     }
