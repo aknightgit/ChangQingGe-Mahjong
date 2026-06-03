@@ -134,7 +134,9 @@ export function buildFeatureSummary(input: {
 
   const effectiveGlobalMultiplier = getEffectiveGlobalMultiplier(game)
   const estimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
-  const pureFlushUpgradeReady = longestSuitCount >= 10 && secondSuitCount === 0 && honorPairCount >= 1 && honorCount <= 2 && weakHonorPairCount >= 1 && estimatedRound <= 15 && input.tableThreat <= 0.58 && opponentOpenMelds <= 3 && downstreamPressure <= 0.75 && oneSuitOpponentCount === 0 && effectiveGlobalMultiplier <= 3
+  // ★ V2.12: weakHonorPairCount <= 1 — 开掉两对风向(4张牌)难度大增,清一色最多才10番
+  // 门口花+有效番数越多,风险回报率越低,不允许为清一色开两对
+  const pureFlushUpgradeReady = longestSuitCount >= 10 && secondSuitCount === 0 && honorPairCount >= 1 && honorCount <= 2 && weakHonorPairCount >= 1 && weakHonorPairCount <= 1 && estimatedRound <= 15 && input.tableThreat <= 0.58 && opponentOpenMelds <= 3 && downstreamPressure <= 0.75 && oneSuitOpponentCount === 0 && effectiveGlobalMultiplier <= 3
 
   // ★ V2: 生张计数
   const rawTileCount = countRawTiles(hand, game.discardPile || [])

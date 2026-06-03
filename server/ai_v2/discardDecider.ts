@@ -396,13 +396,26 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
       : input.candidateShanten === 1
         ? input.candidateEffective * 0.04
         : 0
-  const pureFlushUpgradeBonus =
+  // ★ V2.12: 混一色转清一色意愿调整
+  // 开掉两对风向(4张牌)难度大增,清一色最多才10番,风险回报率太低
+  // 门口花+有效番数越多,越降低意愿(已有价值不值得冒险)
+  let pureFlushUpgradeBonus = 0
+  if (
     input.routeState.current === 'HALF_FLUSH' &&
     input.routeState.features.pureFlushUpgradeReady &&
     isHonor(input.tile) &&
     sameTypeCount(input) >= 2
-      ? 7.5
-      : 0
+  ) {
+    pureFlushUpgradeBonus = 7.5
+    // 门口花越多,已有番数越高,转清一色越不值
+    const doorFlowers = (input.player.hand.exposedMelds || []).reduce(
+      (cnt: number, m: any) => cnt + (m.tiles || []).filter((t: any) => t.suit === 'hua' || t.isFlower).length, 0)
+    const exposedMeldCount = (input.player.hand.exposedMelds || []).length
+    // 每朵门口花减1.5, 每个门口牌组减0.3 (已有价值越高,升级越不值)
+    pureFlushUpgradeBonus -= doorFlowers * 1.5
+    pureFlushUpgradeBonus -= exposedMeldCount * 0.3
+    pureFlushUpgradeBonus = Math.max(pureFlushUpgradeBonus, 0)
+  }
 
   return routeBias + residuePressure + preservePrimary + targetSuitBonus + observeOrdering + routeStrengthDelta * 0.18 + dangerAdjustment + tingBonus + pureFlushUpgradeBonus
 }
