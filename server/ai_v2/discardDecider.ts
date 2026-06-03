@@ -293,11 +293,13 @@ function scoreByRoute(input: RouteDiscardInput): number {
   // 多路线加权: 路线越明确, 打破越强
   let shortSuitFamilyPairBreak = 0
   if (isShortSuitFamily && !isLongestSuitTile && count >= 2) {
+    // ★ V2.16: ALL_PUNGS 路线 + lockLevel>=1 → 短门对子也保留(碰碰胡坚定执行)
+    const _allPungsLocked = input.routeState.current === 'ALL_PUNGS' && (input.routeState.lockLevel ?? 0) >= 1
     if (_flushLocked && _routeGap >= 3) {
       // 明确清混一色 + 路线锁定 → 强打破
       shortSuitFamilyPairBreak = 4.5
-    } else if (_hasPungPotential && !_flushLocked) {
-      // 有碰碰胡潜质 → 保留对子(场次路线是碰碰胡或未定)
+    } else if (_hasPungPotential || _allPungsLocked) {
+      // 有碰碰胡潜质 或 碰碰胡已锁定 → 保留对子
       shortSuitFamilyPairBreak = 0
     } else {
       // 其他情况: 路线越近越保守
