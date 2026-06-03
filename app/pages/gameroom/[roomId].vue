@@ -4367,13 +4367,8 @@ watch(
     // 流局或胡牌:ENDED后立即显示结算面板(REVEAL阶段已由服务端5秒展示完成)
     showSettlement.value = true
     startWallExhaustedCountdown()
-    // 流局/造反自动进下一局(12秒后,给玩家充足时间看结算)
-    const hasRebel = !!(gameState.value as any)?.rebelEvent
-    if (isWallExhausted || hasRebel) {
-      window.setTimeout(() => {
-        if (showSettlement.value) void startNextRound()
-      }, 12000)
-    }
+    // 流局/造反自动进下一局:客户端 10s 倒计时已调 startNextRound
+    // 这里不再叠加 setTimeout(避免重复调用, 已去掉)
   }
 )
 

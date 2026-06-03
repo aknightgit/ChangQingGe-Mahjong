@@ -4382,10 +4382,17 @@ class GameManager {
       finalReason === GameEndReason.LAST_PLAYER ||
       finalReason === GameEndReason.WALL_EXHAUSTED
     ) {
-      // ★ V2.13 K哥优化: 聚义成功场景下没有结算面板, 只需弹窗动画(1.5s+)
-      // 之前 12s 全部套用, 聚义场景下大量空等
+      // ★ V2.13 K哥优化: 加速进下一局
+      // 聚义成功: 只需弹窗(1.8s) -> 4s
+      // 流局/造反: 已有 10s 倒计时弹窗 -> 后端 5s(避免和前端倒计时竞争)
+      // 胡牌正常结算: 玩家看结算面板 -> 12s
       const isLiangShan = !!(game as any).liangShanSuccess
-      const nextRoundDelay = isLiangShan ? 4000 : 12000
+      const isWallExhausted = finalReason === GameEndReason.WALL_EXHAUSTED
+      const hasRebel = !!(game as any).rebelEvent
+      let nextRoundDelay: number
+      if (isLiangShan) nextRoundDelay = 4000
+      else if (isWallExhausted || hasRebel) nextRoundDelay = 5000  // 流局/造反, 客户端有 10s 倒计时但后端不能等太久
+      else nextRoundDelay = 12000  // 胡牌正常结算
       this.autoStartNextRound(game.gameId, nextRoundDelay);
     }
   }
