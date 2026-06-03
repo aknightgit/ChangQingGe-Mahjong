@@ -4618,7 +4618,7 @@ watch(() => gameState.value, (newState, oldState) => {
     if (now - lastTs < 3000) {
       if (lastAction.type === 'rebel') {
         const player = newState.players?.find((p: any) => p.id === lastAction.playerId)
-        if (player) addBroadcast(`⚔️ [${player.name}] 提议梁山聚义!造反!`, 'special')
+        if (player) addBroadcast(`⚔️ [${player.name}] 造反!`, 'special')
       }
     }
   }
