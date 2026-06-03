@@ -235,7 +235,7 @@ export class ActionHandler {
           playerId: player.id,
           availableActions: [ActionType.HU, ActionType.PASS],
           tile: tile,
-          expiresAt: Date.now() + timerManager.getHesitationWindow(game)
+          expiresAt: 0 // K哥铁律: 吃碰胡pending不设expire, 60s autoTakeover接管
         });
         this.deps.schedulePendingActionTimeout(game.gameId);
       }
@@ -1178,7 +1178,7 @@ export class ActionHandler {
             playerId: player.id,
             availableActions: [ActionType.HU, ActionType.PASS],
             tile: discardedTile,
-            expiresAt: Date.now() + timerManager.getHesitationWindow(game)
+            expiresAt: 0 // K哥铁律: 吃碰胡pending不设expire, 60s autoTakeover接管
           });
         }
       }
@@ -1242,7 +1242,7 @@ export class ActionHandler {
               ? selectBotChowTileIds(player, game, discardedTile, chowOptions)
               : undefined
           } : {}),
-          expiresAt: Date.now() + timerManager.getHesitationWindow(game)
+          expiresAt: 0 // K哥铁律: 吃碰胡pending不设expire, 60s autoTakeover接管
         });
       }
     }

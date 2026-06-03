@@ -2777,6 +2777,9 @@ const selectedChowOption = ref<number | null>(null)
 const shouldShowActionButton = (type: ActionType) => {
   if (!availableActions.value.includes(type)) return false
   if (type === ActionType.CHOW && showChowPicker.value) return true
+  // ★ K哥铁律: 下家对上家出牌有 claim 状态时(pending action 包含 HU/PENG/CHOW/KONG)
+  // 一律不设 expire, 按钮一直可见, 只有 60s 自动接管才清
+  if (myPendingExpiresAt.value > 0) return true
   return nowTs.value <= actionButtonsVisibleUntil.value
 }
 
