@@ -6155,7 +6155,7 @@ const forceDiscard = async (p: Player) => {
 .comeback-floating-bar {
   position: absolute;
   left: 50%;
-  bottom: calc(100% + 8px);
+  top: calc(100% + 8px);
   transform: translateX(-50%);
   display: flex;
   align-items: center;

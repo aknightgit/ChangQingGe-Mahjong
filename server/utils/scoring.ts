@@ -114,8 +114,8 @@ export function calculateScore(params: {
   }
 
   // 1. 确定最高优先级牌型
-  if (handTypes.length > 0) {
-    const topType = handTypes[0];
+  const topType: HandType | null = handTypes.length > 0 ? handTypes[0] : null;
+  if (topType) {
     handTypeName = getHandTypeDisplayName(topType);
 
     // 检查是否为固定番数牌型
