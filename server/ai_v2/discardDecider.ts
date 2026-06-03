@@ -477,6 +477,7 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
   // - 路线未定(gap小): 保留对子(观察)
   // - 主路线是 ALL_PUNGS(碰碰胡) 且 gap 大: 保留对子, 拆坬张
   // - 主路线是 HALF_FLUSH 且 gap 大: 打破对子
+  // - 主路线是 HONOR_HEAVY(风一色) 且 gap 大: 数牌坬张必打
   // - 次路线是 ALL_PUNGS/碰碰胡候选: 额外保留对子(防万一)
   let multiRouteTuneDelta = 0
   const _topRoute = (input.routeState.routeScores || [])[0]
@@ -487,6 +488,7 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
   const _secondScore2 = _secondRoute?.score || 0
   const _gap2 = _topScore2 - _secondScore2
   const _tileCount = sameTypeCount(input)
+  // ── 对子专用 (count >= 2) ─────────────────────────────────
   if (_tileCount >= 2) {
     // 路线未定(差距 < 4)→ 保留对子
     if (_gap2 < 4) multiRouteTuneDelta -= 0.8
@@ -494,8 +496,21 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
     if (_topName === 'ALL_PUNGS' && _gap2 >= 2) multiRouteTuneDelta -= 1.2
     // 次路线碰碰胡 → 保留对子(防万一转)
     if (_secondName === 'ALL_PUNGS' && _gap2 < 5) multiRouteTuneDelta -= 0.6
-    // 主路线清混一色 + 路线锁定 → 打破对子
-    if (_topName === 'HALF_FLUSH' && _gap2 >= 4) multiRouteTuneDelta += 1.0
+    // 主路线清混一色 + 路线锁定 → 轻微打破对子 (+0.5, 避免与 shortSuitFamilyPairBreak 重复)
+    if (_topName === 'HALF_FLUSH' && _gap2 >= 4) multiRouteTuneDelta += 0.5
+    // 次路线风一色 → 保留风箭对子(防万一转)
+    if (_secondName === 'HONOR_HEAVY' && _gap2 < 5 && isHonor(input.tile)) multiRouteTuneDelta -= 0.4
+  }
+  // ── 坬张专用 (count === 1) ─────────────────────────────────
+  if (_tileCount === 1) {
+    // 次路线风一色 + 主路线不是风一色: 数牌坬张必打 (转向风一色机会)
+    if (_secondName === 'HONOR_HEAVY' && _topName !== 'HONOR_HEAVY' && _gap2 < 6 && !isHonor(input.tile)) {
+      multiRouteTuneDelta += 2.0
+    }
+    // 主路线风一色 + 路线锁定: 数牌坬张必打
+    if (_topName === 'HONOR_HEAVY' && _gap2 >= 3 && !isHonor(input.tile)) {
+      multiRouteTuneDelta += 1.5
+    }
   }
 
   return routeBias + residuePressure + preservePrimary + targetSuitBonus + observeOrdering + routeStrengthDelta * 0.18 + dangerAdjustment + tingBonus + pureFlushUpgradeBonus + multiRouteTuneDelta
