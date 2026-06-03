@@ -487,6 +487,21 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       if (isDeadTilePung && isHonorTile) {
         return { allowed: true, tuneDelta: 0.9 + routeGain * 0.06 + deadTilePungBonus, reason: 'half_flush_dead_tile_honor_peng' }
       }
+      // ★ V2.14 K哥铁律(K哥2446): 混一色路线 + 别家出风/箭牌 + 手牌有该风/箭对子
+      // → 碰成风/箭刻 = 混碰牌型(高分) → 强力碰
+      // 前提: 不能是 pureFlushUpgradeReady 压制(转清一色冲突)
+      const hasHonorPairForClaim = isHonorTile && routeState.features.honorPairCount >= 1
+      if (hasHonorPairForClaim && !routeState.features.pureFlushUpgradeReady) {
+        return {
+          allowed: true,
+          tuneDelta:
+            1.5 + // 基础: 强力碰(K哥铁律: 混碰是高分, 必碰)
+            routeGain * 0.1 +
+            (routeState.features.honorPairCount >= 2 ? 0.6 : 0) + // 多个风对额外加分
+            deadTilePungBonus,
+          reason: 'half_flush_hun_peng_must_claim',
+        }
+      }
       if (
         isHonorTile &&
         routeState.features.pureFlushUpgradeReady &&
