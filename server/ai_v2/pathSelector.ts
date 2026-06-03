@@ -309,6 +309,11 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       if (qingPengReady) score += getPolicyValue(policy, 'qingPengPursuit') * (6.2 + pureFlushBucketBoost * 0.9)
       if (hunPengReady) score += getPolicyValue(policy, 'hunPengPursuit') * (5.4 + features.honorPairCount * 0.8)
       if (features.honorCount >= 6) score += getPolicyValue(policy, 'allHonorsPursuit') * 2.2
+      // ★ V2.9 K哥铁律: ALL_PUNGS 路线也有风/箭碰碰 buff
+      const _apHonorEarlyRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
+      const _apTotalHonor = features.honorCount + (features.tripletCount || 0)
+      if (_apHonorEarlyRound <= 1.5 && features.honorCount >= 8) { reasons.push('kge_ap_early_honor'); score += 15 }
+      if (_apHonorEarlyRound <= 10 && _apTotalHonor >= 10) { reasons.push('kge_ap_mid_honor'); score += 10 }
       score += getPolicyValue(policy, 'flushVsPungsBalance') * ((qingPengReady ? 2.4 : 0) - (features.secondSuitCount > 0 ? 0.8 : 0))
       if (earlyPairHeavy) { reasons.push('early_four_pairs_push'); score += 8.5 }
       // ★ V2: 4+对子/刻子坚决做碰碰胡（90%概率直接锁定）
@@ -337,6 +342,17 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       score += getWildRouteBoost(policy, features.wildCount, 'honors') * 4.6
       score += getPolicyValue(policy, 'honorVsSuitedBalance') * 6.0
       score -= (features.longestSuitCount + features.secondSuitCount) * 0.7
+      // ★ V2.9 K哥铁律: 1.5巡内手上>=8张风/箭, 或10巡内手上+副露>=10张风/箭 → 提升风一色/风碰倾向
+      const _honorEarlyRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
+      const _totalHonorTiles = features.honorCount + (features.tripletCount || 0) // 手牌+副露刻子(包含风/箭刻)
+      if (_honorEarlyRound <= 1.5 && features.honorCount >= 8) {
+        reasons.push('kge_early_honor_stack')
+        score += 18
+      }
+      if (_honorEarlyRound <= 10 && _totalHonorTiles >= 10) {
+        reasons.push('kge_mid_honor_heavy')
+        score += 12
+      }
       if (features.honorCount >= 9) {
         reasons.push('honor_stack_nine_plus')
         score += 10
