@@ -244,9 +244,9 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       score += routeBucketBoost * (2.6 + handRouteBias)
       score += pureFlushBucketBoost * (features.secondSuitCount === 0 ? 2.2 : 1.1)
       score -= features.secondSuitCount * 2.5
-      // ★ V2.2: 单门数字+3对以上风箭对子 → 大幅提升混碰概率
-      const singleSuitWithHonorPairs = features.longestSuitCount >= 5 && features.secondSuitCount === 0 && features.honorPairCount >= 3
-      if (hunPengReady || singleSuitWithHonorPairs) score += getPolicyValue(policy, 'hunPengPursuit') * (3.8 + suitedPairCount * 0.35) * (singleSuitWithHonorPairs ? 1.6 : 1)
+      // ★ V2.2: （数字门+风箭）对子总共>=4 → 大幅提升混碰概率
+      const totalPairsHunPeng = features.pairCount >= 4 && features.longestSuitCount >= 4 && features.secondSuitCount <= 1
+      if (hunPengReady || totalPairsHunPeng) score += getPolicyValue(policy, 'hunPengPursuit') * (3.8 + suitedPairCount * 0.35) * (totalPairsHunPeng ? 1.6 : 1)
       if (qingPengReady) score += getPolicyValue(policy, 'qingPengPursuit') * (2.4 + pureFlushBucketBoost * 0.6)
       score += getPolicyValue(policy, 'pureFlushPursuit') * Math.max(0, features.longestSuitCount - 6) * 0.8
       if (features.longestSuitCount >= 9) { reasons.push('half_flush_nine_tiles'); score += 16 }
