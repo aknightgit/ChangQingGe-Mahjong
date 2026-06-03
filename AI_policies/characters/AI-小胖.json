@@ -19,7 +19,7 @@
     "selfWinChance": 0.9978679375065825,
     "discardHuChance": 1.0,
     "selfWinWildBoost": 0.13626006977216448,
-    "discardHuWildPenalty": 0.15,
+    "discardHuWildPenalty": 0.0,
     "discardHuMenQingPenalty": 0.0,
     "pengChance": 0.7395186207492794,
     "kongChance": 0.5255161246497381,
@@ -28,7 +28,7 @@
     "pengWildBoost": 0.07868602024057338,
     "kongWildBoost": 0.2300849018774388,
     "chowWildPenalty": 0.18783660677464314,
-    "menqingKeepBonus": 0.15,
+    "menqingKeepBonus": 0.05,
     "meldPenalty": 0.02042102440544998,
     "allPungsPursuit": 0.7220163618617642,
     "pureFlushPursuit": 0.9113396760214975,
@@ -118,7 +118,7 @@
     "speedVsValueBalance": 0.62,
     "defenseRiskAversion": 0.34,
     "wallTilesImpact": 0.22321248721821,
-    "baoRiskAversion": 0.6174292204162568,
+    "baoRiskAversion": 0.1,
     "baoThreshold": 4,
     "anKongAggression": 0.99,
     "minkanAggression": 0.4173432343195308,
@@ -145,6 +145,9 @@
     "windDragonPairKeepBonus": 11.836265385481415,
     "tripletComboBonus": 1.3808875380252752,
     "flushChaseBonus": 1.9372010313649672,
-    "useV2Engine": true
+    "useV2Engine": true,
+    "menqingHoldTurns": 1,
+    "forcedOpenRate": 0.8,
+    "deadHandRate": 0.6
   }
 }
