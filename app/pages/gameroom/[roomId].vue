@@ -8589,7 +8589,8 @@ const forceDiscard = async (p: Player) => {
 
 /* ===== [2026-05-29] 验牌阶段(牌桌中央毛玻璃条) ===== */
 .reveal-phase-banner {
-  position: absolute;
+  /* ★ K哥铁律: 固定在 viewport 中心(牌桌中心圆圈附近) */
+  position: fixed;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
@@ -8602,7 +8603,7 @@ const forceDiscard = async (p: Player) => {
   backdrop-filter: blur(16px) saturate(1.4);
   border: 1px solid rgba(255, 255, 255, 0.15);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  z-index: 9999;
+  z-index: 99999;
   animation: fadeIn 0.3s ease;
   pointer-events: none;
 }
