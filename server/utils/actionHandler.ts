@@ -994,6 +994,22 @@ export class ActionHandler {
     if (effectiveVoteCount >= activeHumans.length) {
       console.log(`[LiangShan] All players agreed! Ending round with ×2 multiplier.`);
 
+      // ★ 广播全员响应聚义消息
+      const voterNames = activeHumans
+        .filter(p => game.liangShanVotes.includes(p.id))
+        .map(p => p.name)
+        .join('、')
+      broadcastQuickMessage(game.gameId,
+        `🔥 全员响应聚义,本局结束!下局翻倍! (${voterNames})`, 'special');
+
+      // 逐个玩家响应广播(让K哥能看到)
+      for (const p of activeHumans) {
+        if (game.liangShanVotes.includes(p.id)) {
+          broadcastQuickMessage(game.gameId,
+            `🔥 [${p.name}]响应了梁山聚义!`, 'special');
+        }
+      }
+
 
       // 所有未胡牌玩家标记为输
       for (const p of game.players) {
