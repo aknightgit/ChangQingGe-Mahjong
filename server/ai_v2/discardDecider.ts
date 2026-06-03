@@ -243,20 +243,30 @@ function scoreByRoute(input: RouteDiscardInput): number {
       ? 1.2 + nearby * 0.5 + Math.max(0, suitGap - 1) * 0.35
       : 0
 
-  // ★ V2.12 K哥铁律: 非长门(包括短门/次短门) 任何牌都是优先打掉
-  // - 短门+次短门的单张: 不管顺子还是坬张, 都是高正分
-  // - 短门+次短门的邻接牌(顺子搭子): +高分打(原来是负分, 错)
-  // - 熟张(visibleCopies >= 1): 额外加分
-  // 保留只在长门(保留顺子/坬张/对子)
+  // ★ V2.12 K哥铁律: 非长门(包括短门/次短门) 坬张/顺子搭子优先打
+  // 对子根据路线动态调整:
+  // - 碰碰胡方向(hunPengReady/qingPengReady/pairCount>=3): 保留对子观察
+  // - 明确清/混一色(HALF_FLUSH + secondSuitCount===0): 压制对子
+  // - 其他情况: 轻微打破
   const isSecondSuit = input.routeState.features.secondSuit && tile.suit === input.routeState.features.secondSuit
   const isShortSuitFamily = isShortestSuitTile || isSecondSuit
   const shortSuitSequenceBreakBias =
     isShortSuitFamily && !isLongestSuitTile && count === 1
       ? 6.0 + (nearby > 0 ? 2.0 : 0) + (visibleCopies >= 1 ? Math.min(3, visibleCopies) * 1.2 : 0)
       : 0
+
+  const _hunPengReady = input.routeState.features.hunPengReady
+  const _qingPengReady = input.routeState.features.qingPengReady
+  const _pairCount = input.routeState.features.pairCount
+  const _hasPungPotential = _hunPengReady || _qingPengReady || _pairCount >= 3
+  const _flushLocked = input.routeState.current === 'HALF_FLUSH' && input.routeState.features.secondSuitCount === 0
+  // 短门/次短门 对子 处理:
+  // 1. 有碰碰胡潜质且未锁定清混 → 保留对子(0, 不打破)
+  // 2. 锁定清混 → 强打破 (+4.5)
+  // 3. 其他情况 → 轻微打破 (+1.5)
   const shortSuitFamilyPairBreak =
     isShortSuitFamily && !isLongestSuitTile && count >= 2
-      ? 1.5
+      ? (_hasPungPotential && !_flushLocked ? 0 : (_flushLocked ? 4.5 : 1.5))
       : 0
 
   switch (routeState.current) {

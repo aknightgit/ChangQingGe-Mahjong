@@ -170,6 +170,7 @@ export function buildFeatureSummary(input: {
     allOpponentsAvoidSuit, liveHonorCount, opponentOpenMelds, fastOpenOpponentCount, bigOpenOpponentCount, downstreamPressure, oneSuitOpponentCount,
     pureFlushUpgradeReady, weakHonorPairCount, rawTileCount,
     blockedSuit, twoPlayerBlocking,
+    hunPengReady, qingPengReady,
   }
 }
 
