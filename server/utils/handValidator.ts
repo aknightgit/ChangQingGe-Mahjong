@@ -664,10 +664,14 @@ function detectTypes(
   // ---- 垃圾胡过滤（K哥规则）----
   // 规则：多门(>=2门) + 含顺子（不能全刻子）= 禁止的普通3n+2，直接判不能胡
   // 注意：清一色/混一色/碰碰胡/风一色 等特殊牌型已在上方单独处理，不受影响
+  // ★ V2.16 K哥铁律: 有风/箭牌时不算垃圾胡（混碰/混一色都允许风箭）
   // 判断逻辑：hand spans >= 2 suits AND canFormOnlyTriplets = false（即必须用顺子）
   function isGarbageMultiSuitsWithSequence(concealedTiles: Tile[]): boolean {
     const suits = getSuits(concealedTiles);
     if (suits.size < 2) return false;  // 单门（清一色/风一色）不是垃圾胡
+    // 有风/箭牌 → 混碰/混一色可能，不算垃圾胡
+    const hasHonor = concealedTiles.some(t => isWind(t) || isDragon(t));
+    if (hasHonor) return false;
     // 检查是否能全用刻子组成（顺子牌型需要wild配合才成立）
     // 用 canFormOnlyTripletsFrom 检验：不用顺子能否满足 3n+2
     const nonFlower = concealedTiles.filter(t => !isFlower(t));
