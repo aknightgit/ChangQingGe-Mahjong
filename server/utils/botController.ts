@@ -445,7 +445,7 @@ export class BotController {
         if (err?.message?.includes('Draw is locked') || err?.message?.includes('hesitation freeze')) {
           const retryDelay = 800;
           console.log(`[bot-discard] Retrying draw in ${retryDelay}ms after hesitation freeze...`);
-          setTimeout(() => scheduleBotAction(gameId), retryDelay);
+          setTimeout(() => this.scheduleBotDiscard(gameId, playerId), retryDelay);
           return;
         }
       }
