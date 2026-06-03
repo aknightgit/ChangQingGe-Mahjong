@@ -2278,6 +2278,11 @@ class GameManager {
 
     const player = game.players.find(p => p.id === playerId);
     if (!player) throw new Error('Player not found');
+    // ★ 修复：已胡牌/已出局的玩家不能执行任何动作
+    if (player.status !== PlayerStatus.PLAYING && action !== ActionType.PASS) {
+      console.warn(`[executeAction] Blocked: ${player.name} status=${player.status}, cannot execute ${action}`);
+      return;
+    }
 
     // 玩家已响应,取消当前自动超时推进
     this.timerManager.clearPendingActionTimer(gameId);

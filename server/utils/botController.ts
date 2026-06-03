@@ -360,6 +360,11 @@ export class BotController {
           return;
         }
         const currentP = game.players[game.currentPlayerIndex];
+        // ★ 修复：跳过已胡牌的玩家，防止对 WON 状态的 bot 调度出牌
+        if (currentP.status !== PlayerStatus.PLAYING) {
+          console.log(`[bot-discard] ${currentP.name} status=${currentP.status}, skipping`);
+          return;
+        }
         if (currentP.id !== playerId) {
           if (isPlayerBotControlled(currentP) && !timerManager.botTimers.has(gameId)) {
             console.log(`[bot-discard] Current player changed to bot ${currentP.name}, rescheduling`);
