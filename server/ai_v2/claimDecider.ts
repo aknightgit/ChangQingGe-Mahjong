@@ -491,6 +491,17 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       // → 碰成风/箭刻 = 混碰牌型(高分) → 强力碰
       // 前提: 不能是 pureFlushUpgradeReady 压制(转清一色冲突)
       const hasHonorPairForClaim = isHonorTile && routeState.features.honorPairCount >= 1
+      // ★ V2.14 K哥铁律: 碰了直接听牌 → 极大提升碰牌概率(必须碰)
+      const isDirectTingAfterClaim = candidateShanten === 0 && passShanten >= 1
+      if (isDirectTingAfterClaim && !routeState.features.pureFlushUpgradeReady) {
+        return {
+          allowed: true,
+          tuneDelta: 2.5 + // 必碰(听牌机会不能错失)
+            routeGain * 0.15 +
+            deadTilePungBonus,
+          reason: isHonorTile ? 'half_flush_hun_peng_direct_ting' : 'direct_ting_must_claim',
+        }
+      }
       if (hasHonorPairForClaim && !routeState.features.pureFlushUpgradeReady) {
         return {
           allowed: true,
