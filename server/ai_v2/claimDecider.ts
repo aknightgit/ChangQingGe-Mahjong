@@ -287,6 +287,15 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     }
   }
 
+  // ★ V2.5: 强力碰碰胡潜质检测 — 4+副露+多对子时碰牌几乎必碰
+  // K哥铁律: 4 副露+4 对子明显做碰碰胡, 别人出对子必碰
+  const allExposedMeldCount = player.hand.exposedMelds.length
+  const handPairCount2 = countPairs(player.hand.concealedTiles)
+  if (action === ActionType.PENG && allExposedMeldCount + handPairCount2 >= 4) {
+    // 已有 4+ 副露/对子, 凑齐 5+ 副露, 接近听牌/和牌
+    return { allowed: true, tuneDelta: 2.0, reason: 'strong_pung_potential' }
+  }
+
   const bestSuit = getBestNumberSuit(player.hand.concealedTiles, routeState)
   const bestSuitCount = bestSuit ? getNumberSuitCount(player.hand.concealedTiles, bestSuit) : 0
   if (

@@ -39,6 +39,38 @@ function getSecondSuit(input: RouteDiscardInput): TileSuit | null {
   return ordered[1]?.suit || null
 }
 
+function isPungsPotential(input: RouteDiscardInput): boolean {
+  // ★ V2.5 (K哥铁律): 手上有 4 个异门对子/刻子 = 碰碰胡潜质明显
+  // 注意: 不是 4 副露, 是手牌+副露里(对子+刻子)累计有 4 个不同门
+  // 门口花多 = 额外加分(可以多凑刻子)
+  const exposedTripletCount = input.player.hand.exposedMelds.filter((m: any) => m.type === 'triplet' || m.type === 'kong').length
+  const handPairTripletCount = (() => {
+    let c = 0
+    for (const tiles of groupTiles(input.hand).values()) if (tiles.length >= 2) c++
+    return c
+  })()
+  const flowerCount = (input.hand || []).filter((t: any) => t.isFlower || t.suit === 'hua').length
+  // 核心: 手牌+副露里对子+刻子总>=4 → 碰碰胡潜质
+  // 门口花>=2 → 额外加成(更倾向)
+  return exposedTripletCount + handPairTripletCount >= 4
+}
+
+function pungsPriorityScore(input: RouteDiscardInput): number {
+  // ★ V2.5: 碰碰胡潜质优先级
+  // 门口花越多越加分(可以凑刻/做八花等)
+  const flowerCount = (input.hand || []).filter((t: any) => t.isFlower || t.suit === 'hua').length
+  const isHonor = input.tile.suit === 'feng' || input.tile.suit === 'jian'
+  if (!isPungsPotential(input)) return 0
+  // 碰碰胡潜质时: 风向单张优先出, 越多花越狠
+  if (isHonor && input.tile.suit === 'feng' && sameTypeCount(input) === 1) {
+    return 2.5 + Math.min(flowerCount, 4) * 0.5  // 风单张 0花: +2.5, 4花: +4.5
+  }
+  if (isHonor && sameTypeCount(input) === 1) {
+    return 1.8 + Math.min(flowerCount, 4) * 0.4  // 箭单张
+  }
+  return 0
+}
+
 function getObserveBucketScore(input: RouteDiscardInput): number {
   const estimatedRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
   const isSingleton = sameTypeCount(input) === 1
@@ -226,7 +258,8 @@ function scoreByRoute(input: RouteDiscardInput): number {
         (nearby === 0 ? 1.8 : -0.65 * nearby) +
         (isLongestSuitTile ? -longestSuitSingletonKeepBias : 0) +
         (isHonor(tile) && count === 1 ? (isOfficialOpening ? -2.4 : 1.2) : 0) +
-        (count >= 2 ? -globalPairProtection : 0)
+        (count >= 2 ? -globalPairProtection : 0) +
+        pungsPriorityScore(input)
       )
 
     case 'OPEN_SPEED':
@@ -240,7 +273,8 @@ function scoreByRoute(input: RouteDiscardInput): number {
         (routeState.targetSuit && tile.suit !== routeState.targetSuit && !isHonor(tile) ? 4.8 : 0) +
         (routeState.targetSuit && tile.suit === routeState.targetSuit && !isHonor(tile) ? -2.6 : 0) +
         (isHonor(tile) && count === 1 ? 0.4 : 0) +
-        (count >= 2 ? -globalPairProtection : 0)
+        (count >= 2 ? -globalPairProtection : 0) +
+        pungsPriorityScore(input)
       )
 
     case 'HALF_FLUSH':
