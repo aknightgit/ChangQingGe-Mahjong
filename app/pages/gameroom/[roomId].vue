@@ -914,7 +914,6 @@
                   @click="onPlayerBack"
                 >我回来了</button>
               </div>
-            </div>
           </div>
         </aside>
       </main>
