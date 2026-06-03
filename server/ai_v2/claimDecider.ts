@@ -291,19 +291,19 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     }
   }
 
-  // ★ V2.7 K哥铁律: 第一口碰严格限制
-  // 数字门: 该门 >= 4 张 OR 手牌 >= 3 对子
+  // ★ V2.7 K哥铁律: 第一口碰限制(防过损碰)
+  // 数字门: 该门 >= 3 张 OR 手牌 >= 2 对子(混碰强潜质)
   // 风/箭牌: 无限制
   if (action === ActionType.PENG && player.hand.exposedMelds.length === 0) {
     const isHonorClaim = isHonor(claimTile)
     if (!isHonorClaim) {
-      // 数字门第一口碰, 需要该门 >= 4 或 >= 3 对子
+      // 数字门第一口碰, 需要该门 >= 3 或 >= 2 对子
       const claimSuitCount = getNumberSuitCount(player.hand.concealedTiles, claimTile.suit)
       const handPairs = countPairs(player.hand.concealedTiles)
-      const eligibleByCount = claimSuitCount >= 4
-      const eligibleByPairs = handPairs >= 3
+      const eligibleByCount = claimSuitCount >= 3
+      const eligibleByPairs = handPairs >= 2
       if (!eligibleByCount && !eligibleByPairs) {
-        return { allowed: false, tuneDelta: -1.4, reason: 'first_peng_requires_four_tiles_or_three_pairs' }
+        return { allowed: false, tuneDelta: -1.4, reason: 'first_peng_requires_three_tiles_or_two_pairs' }
       }
     }
     // 风/箭牌第一口碰: 无限制
@@ -316,6 +316,31 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
   if (action === ActionType.PENG && allExposedMeldCount + handPairCount2 >= 4) {
     // 已有 4+ 副露/对子, 凑齐 5+ 副露, 接近听牌/和牌
     return { allowed: true, tuneDelta: 2.0, reason: 'strong_pung_potential' }
+  }
+
+  // ★ V2.8 K哥铁律: 成型混碰强碰buff
+  // 牌型: 手牌有 数字门对子 >= 2 + 至少 1 个风/箭刻/对(已有或新碰)
+  // 典型场景: tiao 2对 + jian-2 刻 + 别人打 4万 → 碰 4万 凑混碰
+  if (action === ActionType.PENG && !isHonor(claimTile)) {
+    const claimSuitCount = getNumberSuitCount(player.hand.concealedTiles, claimTile.suit)
+    const handPairs = countPairs(player.hand.concealedTiles)
+    // 手牌已有风/箭刻(可凑混一色) + 数字门对子 >= 2 = 成型混碰
+    const hasHonorTripletOrPair = (() => {
+      const groups = groupTiles(player.hand.concealedTiles)
+      for (const [key, tiles] of groups.entries()) {
+        if ((key.startsWith('feng-') || key.startsWith('jian-')) && tiles.length >= 2) return true
+      }
+      // 已暴露副露中是否有风/箭
+      for (const m of player.hand.exposedMelds) {
+        if (m.tiles?.some((t: any) => t.suit === 'feng' || t.suit === 'jian')) return true
+      }
+      return false
+    })()
+    // 碰后该门总刻子 = 现有 + 1, 已成型混碰
+    const hunPengReady = claimSuitCount >= 2 && handPairs >= 2 && hasHonorTripletOrPair
+    if (hunPengReady) {
+      return { allowed: true, tuneDelta: 1.5, reason: 'hun_peng_potential_boost' }
+    }
   }
 
   // ★ V2.6: 强吃牌(边张/坎张/两面)硬保证 — K哥铁律: 重复副露允许, 必吃
