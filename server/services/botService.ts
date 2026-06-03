@@ -2249,11 +2249,17 @@ export async function shouldClaimPendingAction(
       if (wallRemaining <= 5) wallBoost = 1.0  // 极大提高，封顶1
       else if (wallRemaining <= 10) wallBoost = 0.5  // 显著提高
       else if (wallRemaining <= 15) wallBoost = 0.18  // 轻度提高
+      // ★ V2.15 K哥铁律: 听牌剩余总张数不多(<=4)时，大幅提高捉冲意愿
+      // 听牌张数少 = 对手也难胡 = 抓住每次机会
+      const tingTilesCount = countWinningTilesForHand(hand, player.hand.exposedMelds.length, game)
+      let tingBoost = 0
+      if (tingTilesCount <= 2) tingBoost = 1.0   // 极少，几乎必胡
+      else if (tingTilesCount <= 4) tingBoost = 0.6  // 大幅提高
       const baseDiscardHuProb = Math.max(0, Math.min(1, policy.discardHuChance ?? 1))
-      const discardHuProb = Math.min(1, baseDiscardHuProb + wallBoost)
+      const discardHuProb = Math.min(1, baseDiscardHuProb + wallBoost + tingBoost)
       const finalRoll = Math.random()
       const decision = finalRoll < discardHuProb ? ActionType.HU : ActionType.PASS
-      traceClaim(player, game, 'hu-discard-final', `discardTile=${traceTile(discardTile)} isMenQing=${isMenQing} wildCount=${wildCount} discardHuChance=${discardHuProb.toFixed(6)} roll=${finalRoll.toFixed(6)} decision=${decision}`)
+      traceClaim(player, game, 'hu-discard-final', `discardTile=${traceTile(discardTile)} isMenQing=${isMenQing} wildCount=${wildCount} tingTiles=${tingTilesCount} discardHuChance=${discardHuProb.toFixed(6)} roll=${finalRoll.toFixed(6)} decision=${decision}`)
       return decision
     }
 
