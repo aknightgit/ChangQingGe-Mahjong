@@ -301,7 +301,7 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
   if (action === ActionType.CHOW) {
     const strongChowHard = isStrongChow(player.hand.concealedTiles, claimTile)
     if (strongChowHard) {
-      const boost = strongChowHard === 'edge' ? 3.0 : strongChowHard === 'kant' ? 2.4 : 1.5
+      const boost = strongChowHard === 'edge' ? 3.0 : strongChowHard === 'kant' ? 2.8 : 1.5
       return { allowed: true, tuneDelta: boost, reason: 'strong_chow_hard_override' }
     }
   }
