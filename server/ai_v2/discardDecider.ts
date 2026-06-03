@@ -273,22 +273,32 @@ function scoreByRoute(input: RouteDiscardInput): number {
       )
 
     case 'HALF_FLUSH':
-      // ★ V2.6 K哥铁律: 做混一色时优先出主门(targetSuit)散牌, 保留风/箭单张
-      // 因为风/箭单张是凑混一色的潜在副露资源, targetSuit 的散牌(无邻/单张)反而是废牌
+      // ★ V2.6 K哥铁律(真正版): 做清/混一色时
+      // - 优先保留 targetSuit 数字牌(核心资源, 凑清一色)
+      // - 优先打掉 风/箭单张(凑清一色必须去除)
+      // - 有百搭时, 甚至可以打掉 风/箭对子 保留 targetSuit 单张无邻(因为百搭能补位, 对子反成资源浪费)
       if (tile.suit === routeState.targetSuit) {
-        // 主门targetSuit: 散牌优先打, 保留对子和有邻牌的
-        // 单张无邻 +5.5 鼓励打, 单张有邻 -1.6 保留(潜在顺子), 对子 -4.4 强保留
-        const _wasteSingle = count === 1 && nearby === 0 ? 5.5 : 0
-        const _wasteEdgeGap = count === 1 && nearby > 0 ? -1.6 : 0
-        return (count >= 2 ? -4.4 : -3.2) + _wasteSingle + _wasteEdgeGap + (count >= 2 ? -globalPairProtection : 0)
+        // targetSuit 数字牌: 强保留, 包括单张(凑清一色)
+        // 单张: -2.5 保留(可做清一色, 百搭可补), 对子: -4.4 强保留
+        return (count >= 2 ? -4.4 : -2.5) + (nearby > 0 ? -1.2 : 0) + (count >= 2 ? -globalPairProtection : 0)
       }
       if (isHonor(tile)) {
-        // ★ V2.6: 风/箭单张保留 (K哥铁律: 凑混一色副露资源)
+        // 风/箭: 优先打(K哥铁律: 凑清一色必须去除)
         if (routeState.features.pureFlushUpgradeReady) {
-          return count >= 2 ? 5.6 : 3.4
+          // 已接近清一色(可升级), 坚决打掉风/箭
+          return count >= 2 ? 5.6 : 4.2
         }
-        // 单张 -3.5 保留(可凑刻子), 对子 -2.2 强保留
-        return count === 1 ? -3.5 : -2.2
+        // ★ K哥: 有百搭时可以打掉风/箭对子保留 targetSuit 单张(做清一色)
+        // 用 features.wildCount 检测
+        const _hasWild = (input.hand || []).some((t: any) => t.isFlower === true || t.suit === 'hua' && t.value && t.value > 0)
+        // 从 handTotalWildCount 拿(已在 pathSelector features 里)
+        const _wildCount = (input.routeState?.features?.wildCount ?? 0)
+        if (count >= 2 && _wildCount >= 1) {
+          // 有百搭 + 风/箭对子 = 鼓励打(对子可凑刻但单张target可凑清)
+          return 3.5
+        }
+        // 单张风/箭: 鼓励打 (凑清一色必须去除)
+        return count === 1 ? 3.2 : 1.8
       }
       return 5.8 + (tile.suit === shortestSuit ? 1.1 : 0)
 
