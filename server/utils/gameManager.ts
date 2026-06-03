@@ -2145,7 +2145,9 @@ class GameManager {
       // 摸牌:手牌+门口(不含花牌)< 14张时可以摸;每回合只能摸一次
       const totalTileCount = this.getPlayableTileCount(player);
       const winCheck = this.winEvaluator.getCachedWinCheck(game, player);
-      if (this.isDaDiaoReadyState(game, player) && winCheck.canWin && winCheck.types.length > 0) {
+      // ★ 修复：自摸胡 = 摸牌后(drawnThisTurn) + canWin，不再限于大吊状态
+      // 原条件 isDaDiaoReadyState 要求只剩1张可打牌，导致正常自摸(手牌>1张)永远无法胡
+      if (game.drawnThisTurn && winCheck.canWin && winCheck.types.length > 0) {
         actions.push(ActionType.HU);
       } else if (totalTileCount < 14 && game.wall.length > 0 && !game.drawnThisTurn) {
         actions.push(ActionType.DRAW);
