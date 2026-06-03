@@ -287,9 +287,11 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       break
 
     case 'ALL_PUNGS':
-      // ★ V2.5: 纯碰碰胡要求全部是刻子, 已破门清(有顺子副露)扣大分
+      // ★ V2.5: 已破门清不适用纯碰碰胡(需要全刻子),但可走混碰/边张
+      // K哥: 1-2 听 3、8-9 听 7 这种边张吃牌仍合法(中间顺子不是冲碰碰胡的)
+      // 不再硬性 -30, 仅轻微抑制让 v2 选择 OPEN_SPEED
       const _hasExposedSequence = input.player.hand.exposedMelds.some((m: any) => m.type === 'sequence')
-      if (_hasExposedSequence) score -= 30  // 已吃顺子,纯碰碰胡路线不成立
+      if (_hasExposedSequence) score -= 8  // 轻抑制,不再是 -30
       const _ap_pursuitVal = getPolicyValue(policy, 'allPungsPursuit')
       const _ap_isAgg = _ap_pursuitVal >= 1.2
       score += features.pairCount * (5.2 + (_ap_isAgg ? 4.0 : 0))

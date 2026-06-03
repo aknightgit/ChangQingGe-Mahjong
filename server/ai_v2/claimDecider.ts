@@ -371,12 +371,17 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     }
 
     case 'OPEN_SPEED':
+      // ★ V2.5: 多对子+多副露时碰牌强力 buff (K哥铁律: 适合碰碰胡的牌必碰)
+      const exposedTripletCount = player.hand.exposedMelds.filter((m: any) => m.type === 'triplet' || m.type === 'kong').length
+      const handPairCount = countPairs(player.hand.concealedTiles)
+      const pungsPotential = (exposedTripletCount + handPairCount) >= 4
       return {
         allowed: true,
         tuneDelta:
           0.48 +
           Math.max(0, speedGain) * 0.1 +
           (action === ActionType.CHOW ? 0.2 : 0.12) +
+          (action === ActionType.PENG && pungsPotential ? 1.5 : 0) +  // 多副露+多对子必碰
           (committedOpenSuit && claimTile.suit === committedOpenSuit ? 0.35 : 0) +
           wildBaoStartPush + mutualBaoBuildPush + mutualBaoFinalPush +
           chowGapEdgeBoost +
