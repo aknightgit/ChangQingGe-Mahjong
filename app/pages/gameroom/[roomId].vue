@@ -914,6 +914,7 @@
                   @click="onPlayerBack"
                 >我回来了</button>
               </div>
+            </div>
           </div>
         </aside>
       </main>
@@ -5276,6 +5277,7 @@ const forceDiscard = async (p: Player) => {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  position: relative;
 }
 
 /* 更多特殊操作横条 */
@@ -6152,12 +6154,15 @@ const forceDiscard = async (p: Player) => {
 }
 
 .comeback-floating-bar {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
   padding: 8px 16px;
-  margin-top: 4px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(16px) saturate(1.4);
@@ -6165,7 +6170,8 @@ const forceDiscard = async (p: Player) => {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   animation: comeback-glow 1.5s infinite;
   pointer-events: auto;
-  align-self: stretch;
+  z-index: 10;
+  white-space: nowrap;
 }
 
 .comeback-label {
