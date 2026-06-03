@@ -3,6 +3,7 @@
 
 import { TileSuit, MeldType, type Tile } from '../types/game'
 import { groupTiles, isDragon, isHonor, isWind } from '../utils/tiles'
+import { buildWildTileChecker } from '../utils/handValidator'
 import { detectDecisionPhase } from '../ai/route/phaseDetector'
 import type { RouteFeatureSummary, RouteScore, RouteState, RouteKind, DecisionPhase } from './types'
 
@@ -72,9 +73,12 @@ export function buildFeatureSummary(input: {
   const suitCounts: Record<string, number> = {}
   const groups = groupTiles(hand)
   let pairCount = 0, tripletCount = 0, isolatedCount = 0, honorCount = 0, honorPairCount = 0, weakHonorPairCount = 0, wildCount = 0
+  // ★ V2.14 BUG修复: Tile.isWild 从未被设置(只在 handValidator 内部用 isWild=true 的临时结构)
+  // 改用 buildWildTileChecker 动态判断(支持花牌百搭 + wildTileGroup)
+  const isWildTileFn = buildWildTileChecker(game?.customScoringMode || null, game?.wildTileGroup)
 
   for (const tile of hand) {
-    if (tile.isWild) wildCount++
+    if (isWildTileFn(tile)) wildCount++
     if (NUMBER_SUITS.includes(tile.suit)) suitCounts[tile.suit] = (suitCounts[tile.suit] || 0) + 1
     if (isHonor(tile)) honorCount++
   }
