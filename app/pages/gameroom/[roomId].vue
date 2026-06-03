@@ -4618,10 +4618,11 @@ watch(() => gameState.value, (newState, oldState) => {
     // 所有聚义消息(发起/响应/汇总)由后端 broadcastQuickMessage 推送,前端不重复广播
     if ((newState as any).liangShanSuccess) {
       showLiangShanOverlay.value = true
+      // ★ V2.13 K哥优化: 弹窗 3000ms → 1800ms(够动画但不快)
       setTimeout(() => {
         showLiangShanOverlay.value = false
         void startNextRound()
-      }, 3000)
+      }, 1800)
     }
   }
   prevLiangShanVoteCount.value = currentVotes

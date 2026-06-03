@@ -4382,7 +4382,11 @@ class GameManager {
       finalReason === GameEndReason.LAST_PLAYER ||
       finalReason === GameEndReason.WALL_EXHAUSTED
     ) {
-      this.autoStartNextRound(game.gameId, 12000);
+      // ★ V2.13 K哥优化: 聚义成功场景下没有结算面板, 只需弹窗动画(1.5s+)
+      // 之前 12s 全部套用, 聚义场景下大量空等
+      const isLiangShan = !!(game as any).liangShanSuccess
+      const nextRoundDelay = isLiangShan ? 4000 : 12000
+      this.autoStartNextRound(game.gameId, nextRoundDelay);
     }
   }
 
