@@ -288,14 +288,12 @@ function scoreByRoute(input: RouteDiscardInput): number {
           // 已接近清一色(可升级), 坚决打掉风/箭
           return count >= 2 ? 5.6 : 4.2
         }
-        // ★ K哥: 有百搭时可以打掉风/箭对子保留 targetSuit 单张(做清一色)
-        // 用 features.wildCount 检测
-        const _hasWild = (input.hand || []).some((t: any) => t.isFlower === true || t.suit === 'hua' && t.value && t.value > 0)
-        // 从 handTotalWildCount 拿(已在 pathSelector features 里)
+        // ★ K哥铁律 v2:
+        // - 风/箭对子: +0.8 (比单张弱, 仍鼓励打)
+        // - 风/箭对子 + 有百搭: +1.5 (百搭能补位, 对子成刻反浪费清一色潜力, 更鼓励打)
         const _wildCount = (input.routeState?.features?.wildCount ?? 0)
-        if (count >= 2 && _wildCount >= 1) {
-          // 有百搭 + 风/箭对子 = 鼓励打(对子可凑刻但单张target可凑清)
-          return 3.5
+        if (count >= 2) {
+          return _wildCount >= 1 ? 1.5 : 0.8
         }
         // 单张风/箭: 鼓励打 (凑清一色必须去除)
         return count === 1 ? 3.2 : 1.8
