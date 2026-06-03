@@ -273,6 +273,10 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     if (!bestSuit || bestSuitCount < requiredBestSuitTiles) {
       return { allowed: false, tuneDelta: -1.3, reason: 'first_chow_requires_five_tiles' }
     }
+    // ★ V2.7 K哥铁律: 第一口吃, claim 该门也必须 >= 5 张(防止跟进门牌过杂)
+    if (claimSuitCount < 5) {
+      return { allowed: false, tuneDelta: -1.5, reason: 'first_chow_claim_suit_too_few' }
+    }
     if (claimTile.suit !== bestSuit) {
       return { allowed: false, tuneDelta: -1.7, reason: 'first_chow_must_follow_best_suit' }
     }
@@ -285,6 +289,24 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     if (!canRelaxFirstChowGate && breaksCoreStructure(player.hand.concealedTiles, candidateHand)) {
       return { allowed: false, tuneDelta: -1.9, reason: 'first_chow_breaks_core_structure' }
     }
+  }
+
+  // ★ V2.7 K哥铁律: 第一口碰严格限制
+  // 数字门: 该门 >= 4 张 OR 手牌 >= 3 对子
+  // 风/箭牌: 无限制
+  if (action === ActionType.PENG && player.hand.exposedMelds.length === 0) {
+    const isHonorClaim = isHonor(claimTile)
+    if (!isHonorClaim) {
+      // 数字门第一口碰, 需要该门 >= 4 或 >= 3 对子
+      const claimSuitCount = getNumberSuitCount(player.hand.concealedTiles, claimTile.suit)
+      const handPairs = countPairs(player.hand.concealedTiles)
+      const eligibleByCount = claimSuitCount >= 4
+      const eligibleByPairs = handPairs >= 3
+      if (!eligibleByCount && !eligibleByPairs) {
+        return { allowed: false, tuneDelta: -1.4, reason: 'first_peng_requires_four_tiles_or_three_pairs' }
+      }
+    }
+    // 风/箭牌第一口碰: 无限制
   }
 
   // ★ V2.5: 强力碰碰胡潜质检测 — 4+副露+多对子时碰牌几乎必碰

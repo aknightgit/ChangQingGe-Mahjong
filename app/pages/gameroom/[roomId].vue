@@ -906,13 +906,13 @@
                     ⏱ {{ turnTimer }}s
                   </span>
                 </div>
-              </div>
-              <div v-if="isAIControlled" class="comeback-floating-bar">
-                <span class="comeback-label">🤖 AI托管中</span>
-                <button
-                  class="inline-action-btn inline-action-btn--comeback"
-                  @click="onPlayerBack"
-                >我回来了</button>
+                <div v-if="isAIControlled" class="comeback-floating-bar">
+                  <span class="comeback-label">🤖 AI托管中</span>
+                  <button
+                    class="inline-action-btn inline-action-btn--comeback"
+                    @click="onPlayerBack"
+                  >我回来了</button>
+                </div>
               </div>
           </div>
         </aside>
@@ -5295,6 +5295,7 @@ const forceDiscard = async (p: Player) => {
   gap: 5px;
   padding: 4px 7px;
   background: rgba(10, 20, 15, 0.85);
+  position: relative; /* ★ K哥铁律: 托管条 reference 改为 .extra-actions-bar, 浮在其正上方 */
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   flex-wrap: nowrap;
