@@ -78,6 +78,13 @@ export function buildFeatureSummary(input: {
     if (NUMBER_SUITS.includes(tile.suit)) suitCounts[tile.suit] = (suitCounts[tile.suit] || 0) + 1
     if (isHonor(tile)) honorCount++
   }
+  // ★ V2.12: 门口副露牌也计入 suitCounts，避免暗牌少时误判长门
+  // 例：门口有 tiao-4,5,6 + tiao-6,7,8(6张条子)，暗牌条子少时会误判万子为长门
+  for (const meld of player.hand.exposedMelds || []) {
+    for (const tile of meld.tiles || []) {
+      if (NUMBER_SUITS.includes(tile.suit)) suitCounts[tile.suit] = (suitCounts[tile.suit] || 0) + 1
+    }
+  }
 
   for (const [, tiles] of groups.entries()) {
     if (tiles.length >= 2) pairCount++
