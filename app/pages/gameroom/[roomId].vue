@@ -3186,12 +3186,12 @@ watch(
     const pending = (gameState.value as any)?.pendingActions || []
     const mine = myId ? pending.find((pa: any) => pa.playerId === myId) : null
     const selfAvailableActions = availableActions.value || []
+    // ★ 修复: 新可胡的 HU 出现时(自己回合摸牌后能自摸),必须重新设置按钮可见时间
+    // K哥铁律: 上家出牌可胡 → 选不胡 → 摸牌后可自摸胡 → 按钮要重新可见
     if (mine || selfAvailableActions.includes(ActionType.HU) || hasSharedDrawWindow.value) {
       const newUntil = mine?.expiresAt || Date.now() + getActionWindowMs(gameState.value)
-      // 只设置更大的值(不重启已有的倒计时)
-      if (newUntil > actionButtonsVisibleUntil.value) {
-        actionButtonsVisibleUntil.value = newUntil
-      }
+      // 总是重设(不只设更大的), 保证新 HU 出现时按钮重新可见
+      actionButtonsVisibleUntil.value = newUntil
     } else {
       actionButtonsVisibleUntil.value = 0
     }
