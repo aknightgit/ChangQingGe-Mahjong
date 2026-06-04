@@ -439,6 +439,24 @@ function tryFormMelds(n: number, wildLeft: number, map: Map<string, number>): bo
   return false;
 }
 
+// ★ 统一垃圾胡检查（K哥铁律）
+// 规则：有多个数字门 + 不能通过碰碰胡检查 = 垃圾胡，不可胡
+// 使用 canFormOnlyTripletsFrom 检查是否能全刻子+对子
+// 用于：canWin、materializeTypes、detectTypes、听牌评估
+function isGarbageHand(tiles: Tile[]): boolean {
+  const nonFlower = tiles.filter(t => !isFlower(t));
+  if (nonFlower.length < 2) return false;
+  // 检查数字门数
+  const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+  const numSuitSet = new Set(nonFlower.filter(t => numSuits.includes(t.suit)).map(t => t.suit));
+  if (numSuitSet.size < 2) return false;  // 单门或无数字门，不是垃圾胡
+  // 检查是否能全刻子+对子
+  const m = (nonFlower.length - 2) / 3;
+  if (!Number.isInteger(m) || m < 0) return true;  // 张数不对，视为垃圾
+  if (canFormOnlyTripletsFrom(nonFlower, m, () => false)) return false;  // 能全刻子，不是垃圾
+  return true;  // 多门+不能全刻子 = 垃圾胡
+}
+
 function isGarbageMultiSuitsWithSequenceProjectRule(concealedTiles: Tile[]): boolean {
   const suits = getSuits(concealedTiles);
   if (suits.size < 2) return false;
@@ -975,41 +993,9 @@ function findBestAssignmentHeuristic(
       virtualHand.push({ suit: tile.suit as TileSuit, value: tile.value, id: `vh-${i}`, isFlower: false });
     }
     const result = detectTypes(virtualHand, exposed);
-    // ★ 百搭不能创造顺子：虚拟手牌（含百搭分配）中有顺子，就不是碰碰胡
-    if (result.includes(HandType.ALL_TRIPLETS) && naturals.length >= 3) {
-      const virtualNonFlower = virtualHand.filter(t => !isFlower(t));
-      const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-      let hasSequence = false;
-      for (const suit of numSuits) {
-        const suitTiles = virtualNonFlower.filter(t => t.suit === suit).sort((a, b) => a.value - b.value);
-        if (suitTiles.length < 3) continue;
-        for (let i = 0; i <= suitTiles.length - 3; i++) {
-          const a = suitTiles[i], b = suitTiles[i + 1], c = suitTiles[i + 2];
-          if (a.value + 1 === b.value && b.value + 1 === c.value) {
-            hasSequence = true;
-            break;
-          }
-        }
-        if (hasSequence) break;
-      }
-      if (hasSequence) {
-        return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
-      }
-      // ★ 额外检查：确认所有非对子组都是3张同值（全刻子）
-      const nonFlowerGroups = new Map<string, number>();
-      for (const t of virtualNonFlower) {
-        const key = `${t.suit}-${t.value}`;
-        nonFlowerGroups.set(key, (nonFlowerGroups.get(key) || 0) + 1);
-      }
-      let pairCount = 0;
-      let allOthersAreTriplets = true;
-      for (const count of nonFlowerGroups.values()) {
-        if (count === 2) pairCount++;
-        else if (count !== 3 && count !== 4) { allOthersAreTriplets = false; break; }
-      }
-      if (!allOthersAreTriplets || pairCount > 1) {
-        return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
-      }
+    // ★ 统一垃圾胡检查：多数字门 + 不能全刻子 = 垃圾胡，不是碰碰胡
+    if (result.includes(HandType.ALL_TRIPLETS) && isGarbageHand(virtualHand)) {
+      return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
     }
     return result;
   };
@@ -1208,46 +1194,9 @@ function findBestAssignmentByPriority(
       virtualHand.push({ suit: tile.suit as TileSuit, value: tile.value, id: `vhp-${i}`, isFlower: false });
     }
     const result = detectTypes(virtualHand, exposed);
-    // ★ 百搭不能拆自然顺子：如果自然张中有顺子，百搭分配不能创造碰碰胡
-    // 碰碰胡 = 全刻子+对子，有顺子就不是碰碰胡
-    if (result.includes(HandType.ALL_TRIPLETS) && naturals.length >= 3) {
-      // ★ 检查虚拟手牌（含百搭分配）中是否有顺子
-      // 碰碰胡 = 全刻子+对子，有任何顺子就不是碰碰胡
-      const virtualNonFlower = virtualHand.filter(t => !isFlower(t));
-      const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-      let hasSequence = false;
-      for (const suit of numSuits) {
-        const suitTiles = virtualNonFlower.filter(t => t.suit === suit).sort((a, b) => a.value - b.value);
-        if (suitTiles.length < 3) continue;
-        // 检查是否有3张连续同花色（顺子）
-        for (let i = 0; i <= suitTiles.length - 3; i++) {
-          const a = suitTiles[i], b = suitTiles[i + 1], c = suitTiles[i + 2];
-          if (a.value + 1 === b.value && b.value + 1 === c.value) {
-            hasSequence = true;
-            break;
-          }
-        }
-        if (hasSequence) break;
-      }
-      if (hasSequence) {
-        return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
-      }
-      // ★ 额外检查：确认所有非对子组都是3张同值（全刻子）
-      // 防止 顺子+刻子+对子 被误判为碰碰胡
-      const nonFlowerGroups = new Map<string, number>();
-      for (const t of virtualNonFlower) {
-        const key = `${t.suit}-${t.value}`;
-        nonFlowerGroups.set(key, (nonFlowerGroups.get(key) || 0) + 1);
-      }
-      let pairCount = 0;
-      let allOthersAreTriplets = true;
-      for (const count of nonFlowerGroups.values()) {
-        if (count === 2) pairCount++;
-        else if (count !== 3 && count !== 4) { allOthersAreTriplets = false; break; }
-      }
-      if (!allOthersAreTriplets || pairCount > 1) {
-        return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
-      }
+    // ★ 统一垃圾胡检查：多数字门 + 不能全刻子 = 垃圾胡，不是碰碰胡
+    if (result.includes(HandType.ALL_TRIPLETS) && isGarbageHand(virtualHand)) {
+      return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
     }
     return result;
   };
@@ -1575,20 +1524,9 @@ export function canWin(
           return t.suit === wParts[0] && String(t.value) === wParts[1];
         };
     const naturalTiles = concealedNonFlower.filter(t => !wildCheckerFn(t));
-    if (naturalTiles.length >= 2) {
-      const numSuitsList = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-      const isNum = (t: Tile) => numSuitsList.includes(t.suit);
-      const naturalSuits = new Set(naturalTiles.filter(isNum).map(t => t.suit));
-      if (naturalSuits.size >= 2) {
-        const hasSequenceLike = naturalTiles.some(t => {
-          if (!isNum(t)) return false;
-          return naturalTiles.some(t2 => t2 !== t && t2.suit === t.suit && Math.abs(t2.value - t.value) <= 2);
-        });
-        const hasNaturalHonorTriplet = naturalTiles.some(t => isWind(t) || isDragon(t));
-        if (hasSequenceLike && !hasNaturalHonorTriplet) {
-          naturalTilesBlockedByGarbage = true;
-        }
-      }
+    // ★ 统一垃圾胡检查：多数字门 + 不能全刻子 = 垃圾胡
+    if (naturalTiles.length >= 2 && isGarbageHand(naturalTiles)) {
+      naturalTilesBlockedByGarbage = true;
     }
   }
 
