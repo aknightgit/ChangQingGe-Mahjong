@@ -710,6 +710,26 @@ export class ActionHandler {
     player.winTimestamp = Date.now();
     game.winnersCount++;
 
+    // ★ 捉冲：弃牌从弃牌区移到赢家手牌（显示用）
+    if (!huIsSelfDraw && huPendingTile) {
+      // 从 discardPile 移除
+      const pileIdx = game.discardPile.findIndex(t => t.id === huPendingTile.id);
+      if (pileIdx >= 0) game.discardPile.splice(pileIdx, 1);
+      // 从放冲者的 discardedTiles 移除（通过 actionHistory 查找谁打出了这张牌）
+      for (let i = game.actionHistory.length - 1; i >= 0; i--) {
+        const act = game.actionHistory[i];
+        if (act.type === ActionType.DISCARD && act.tileId === huPendingTile.id) {
+          const discarder = game.players.find(p => p.id === act.playerId);
+          if (discarder) {
+            discarder.hand.discardedTiles = discarder.hand.discardedTiles.filter(t => t.id !== huPendingTile.id);
+          }
+          break;
+        }
+      }
+      // 加入赢家手牌（胡牌展示用）
+      player.hand.concealedTiles.push(huPendingTile);
+    }
+
     // 【修复】计算番数和最终点数（老代码 _handleHu_original 有，新代码漏了）
     // ★ 先声明变量, 再用 recordWinImmediately (TDZ fix)
     const isSelfDrawn = huIsSelfDraw;
