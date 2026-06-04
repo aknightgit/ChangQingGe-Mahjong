@@ -13,6 +13,12 @@ export default defineNitroPlugin(() => {
       for (const game of playing) {
         try {
           await gameManager.ensureGameLoaded(game.gameId)
+          // ★ 修复卡死: winnersCount>=3 但还在 playing 阶段 → REVEAL 定时器丢失，强制 endRound
+          if (game.winnersCount >= 3 && game.phase === 'playing') {
+            console.log(`[StartupRecovery] Game ${game.roomNumber || game.gameId} has ${game.winnersCount} winners but still playing, forcing REVEAL→END`)
+            game.phase = 'reveal'
+            await gameManager.endRound(game, 'last_player' as any)
+          }
           console.log("[StartupRecovery] Recovered game " + (game.roomNumber || game.gameId))
         } catch (err: any) {
           console.warn("[StartupRecovery] Failed to recover " + (game.roomNumber || game.gameId) + ":", err.message)
@@ -35,6 +41,18 @@ export default defineNitroPlugin(() => {
       const result = await cleanupStaleGames()
       if (result.cleanedMongo > 0 || result.cleanedMemory > 0) {
         console.log("[PeriodicCleanup] Removed " + result.cleanedMongo + " stale games from DB, " + result.cleanedMemory + " from memory")
+      }
+      // ★ 修复卡死: 检查 playing 阶段但 winnersCount>=3 的游戏
+      const { loadActiveGameStates } = await import("../utils/gamePersistence")
+      const games = await loadActiveGameStates()
+      for (const game of games.filter(g => g.phase === 'playing' && g.winnersCount >= 3)) {
+        console.log(`[PeriodicCleanup] Stuck game ${game.roomNumber}: ${game.winnersCount} winners, forcing endRound`)
+        try {
+          game.phase = 'reveal'
+          await gameManager.endRound(game, 'last_player' as any)
+        } catch (e: any) {
+          console.warn(`[PeriodicCleanup] Failed to fix stuck game ${game.roomNumber}:`, e.message)
+        }
       }
     } catch (err: any) {
       console.warn("[PeriodicCleanup] Error:", err.message)
