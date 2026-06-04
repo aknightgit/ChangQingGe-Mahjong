@@ -2311,18 +2311,56 @@ export async function shouldClaimPendingAction(
         return ActionType.HU
       }
 
-      // 2. 杠开潜力评估: 有暗杠/加杠机会 → 等杠开(10点固定番)
-      // 检查暗杠: 手牌有4张相同的非百搭牌
+      // 2. 百搭重组潜力: 当前自摸<10点时，检查能否用百搭重组达到无花自摸
+      // 场景: 百搭+五筒+东风对+摸到东风 → 自摸=4-6点
+      //       但打出东风 → 百搭+五筒+东风对 → 摸3筒-7筒 → 无花自摸=10点
+      let hasWildReorganizePotential = false
+      if (selfWildCount >= 1 && selfIsCleanExposure && selfIsMenQing) {
+        // 门口干净+有百搭 → 检查打出一张牌后，能否用百搭+剩余牌组成无花自摸听牌
+        const nonWild = selfConcealed.filter(t => !isWildTile(t, game) && !isFlower(t))
+        if (nonWild.length >= 1) {
+          // 尝试每张非百搭牌作为"保留牌"，检查百搭能否与它组成顺子听牌
+          for (const keepTile of nonWild) {
+            if (keepTile.suit === TileSuit.WIND || keepTile.suit === TileSuit.DRAGON) continue
+            // 检查保留牌周围3-7筒范围内的听牌数
+            let reorganizeTingCount = 0
+            for (let dv = -2; dv <= 2; dv++) {
+              const testValue = keepTile.value + dv
+              if (testValue < 1 || testValue > 9) continue
+              // 检查这个组合是否能形成顺子+将牌
+              const testTile: Tile = { suit: keepTile.suit, value: testValue, id: 'test-reorg' }
+              const testHand = [keepTile, testTile]
+              // 百搭可以当任意牌，所以只要 keepTile + testTile 能组成顺子的一部分
+              const diff = Math.abs(keepTile.value - testValue)
+              if (diff <= 2 && diff >= 1) {
+                // 可以组成顺子(百搭补第三张) + 剩余牌做将牌
+                const remaining = nonWild.filter(t => t.id !== keepTile.id)
+                const hasPair = remaining.some((t, i) => remaining.some((t2, j) => i !== j && t.suit === t2.suit && t.value === t2.value))
+                if (hasPair || remaining.length === 0) {
+                  // 计算这个听牌的剩余张数
+                  const inHand = selfConcealed.filter(t => t.suit === testTile.suit && t.value === testTile.value).length
+                  const visible = countVisibleCopies(testTile, game)
+                  reorganizeTingCount += Math.max(0, 4 - inHand - visible)
+                }
+              }
+            }
+            if (reorganizeTingCount >= 3) {
+              hasWildReorganizePotential = true
+              break
+            }
+          }
+        }
+      }
+
+      // 3. 杠开潜力评估: 有暗杠/加杠机会 → 等杠开(10点固定番)
       const hasAnKongPotential = selfConcealed.filter(t => {
         if (isWildTile(t, game) || isFlower(t)) return false
         return selfConcealed.filter(t2 => t2.suit === t.suit && t2.value === t.value).length >= 4
       }).length > 0
-      // 检查加杠: 门口有刻子，手牌有第4张
       const hasJiaKongPotential = selfExposedMelds.some(m => {
         if (m.type !== 'triplet') return false
         return selfConcealed.some(t => t.suit === m.tiles[0].suit && t.value === m.tiles[0].value)
       })
-      // 检查花牌补摸: 手牌有花牌，可以补摸
       const hasFlowerDraw = selfFlowerCount > 0
       const hasKongPotential = hasAnKongPotential || hasJiaKongPotential || hasFlowerDraw
 
@@ -2356,7 +2394,13 @@ export async function shouldClaimPendingAction(
       const selfTableThreat = estimateTableThreat(game, player.id)
       const riskMultiplier = selfTableThreat >= 0.8 ? 1.5 : selfTableThreat >= 0.5 ? 1.2 : 1.0
 
-      // 5. 决策: 期望收益 > 当前收益 且 风险可控 → 等
+      // 5. 百搭重组潜力: 当前自摸<10点 + 门口干净 + 有百搭 → 等无花自摸
+      if (hasWildReorganizePotential && currentSelfDrawValue < 10 && selfWallRemaining > 8) {
+        traceClaim(player, game, 'hu-self-wild-reorganize', `currentFan=${currentSelfDrawValue.toFixed(1)} wild=${selfWildCount} → wait for 无花自摸(10点)`)
+        return ActionType.PASS
+      }
+
+      // 6. 决策: 期望收益 > 当前收益 且 风险可控 → 等
       const adjustedFutureValue = futureSelfDrawValue / riskMultiplier
       const shouldWaitForBetter = adjustedFutureValue > currentSelfDrawValue * 0.5 && selfWallRemaining > 8
 
