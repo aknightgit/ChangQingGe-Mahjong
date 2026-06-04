@@ -2362,6 +2362,9 @@ class GameManager {
           if (freezeUntil > Date.now()) {
             console.warn(`[DRAW] Blocked: ${player.name} is still in hesitation freeze until ${freezeUntil}`);
             throw new Error('Draw is locked until the hesitation window ends');
+          } else if (freezeUntil > 0) {
+            // ★ 安全检查：freezeUntil 已过期但未清除 → 主动清除
+            delete (game as any)._freezeUntil;
           }
           if (game.thinkFreezeUntil && game.thinkFreezeUntil > Date.now() && game.thinkFreezePlayerId !== player.id) {
             console.warn(`[DRAW] Blocked: ${player.name} is waiting for ${game.thinkFreezePlayerId} think freeze to end`);
@@ -3831,6 +3834,8 @@ class GameManager {
               this.broadcastGameState(game.gameId);
             }
           }
+          // ★ 清除 _freezeUntil（定时器到期，冻结结束）
+          delete (freshGame as any)._freezeUntil;
           console.log(`[bot-freeze] Freeze expired for ${livePlayer.name}, drawing...`);
           // 牌墙已空 → 流局
           if (freshGame.wall.length === 0) {
