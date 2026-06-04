@@ -18,6 +18,18 @@ export default defineNitroPlugin(() => {
             console.log(`[StartupRecovery] Game ${game.roomNumber || game.gameId} has ${game.winnersCount} winners but still playing, forcing REVEAL→END`)
             game.phase = 'reveal'
             await gameManager.endRound(game, 'last_player' as any)
+            // ★ 强制刷盘: endRound 的 flushGameNow 可能不更新 MongoDB phase 字段
+            try {
+              const { getDb } = await import("../utils/mongo")
+              const db = await getDb()
+              await db.collection("mahjongGames").updateOne(
+                { gameId: game.gameId },
+                { $set: { phase: game.phase, endReason: game.endReason, finalScores: game.finalScores, endedAt: game.endedAt } }
+              )
+              console.log(`[StartupRecovery] Persisted ${game.roomNumber} phase=${game.phase} to MongoDB`)
+            } catch (e: any) {
+              console.warn(`[StartupRecovery] MongoDB persist failed for ${game.roomNumber}:`, e.message)
+            }
           }
           console.log("[StartupRecovery] Recovered game " + (game.roomNumber || game.gameId))
         } catch (err: any) {
