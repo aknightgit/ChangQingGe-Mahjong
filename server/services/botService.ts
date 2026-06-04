@@ -251,6 +251,24 @@ function shouldDeclineLowValueHu(game: GameState, player: Player): boolean {
   const isCleanExposure = !hasWindMeld && !hasArrowMeld && !hasFlower && !hasMingKong && !hasAnKong
   if (isPengOrHalfFlush && isCleanExposure) return true
 
+  // ★★ K哥铁律（强化版）：不依赖路线识别，直接看手牌结构
+  // 手牌里如果手牌型能凑出碰碰胡/混一色/清一色 + 门清 + 门口干净 → 必等自摸
+  // 防止路线识别错误导致无花自摸价值的牌被低番捉冲
+  const wildTileIdForCheck = game.customScoringMode || null
+  const testHandForHu = [...player.hand.concealedTiles, discardTile]
+  const allHandTypes = findBestHandTypes(testHandForHu, exposedMelds, wildTileIdForCheck)
+  const hasPengOrFlushType =
+    allHandTypes.includes(HandType.ALL_TRIPLETS) ||
+    allHandTypes.includes(HandType.HALF_FLUSH) ||
+    allHandTypes.includes(HandType.FULL_FLUSH) ||
+    allHandTypes.includes(HandType.HUN_PENG) ||
+    allHandTypes.includes(HandType.QING_PENG)
+  // 任何“内住有型” + 门清 + 门口干净 → 必等自摸（无花自摸=10番 + 门清×2）
+  if (hasPengOrFlushType && exposedMelds.length === 0 && isCleanExposure) {
+    console.log(`[NoFlowerSelfDraw-guard] ${player.name} 拦捉冲: 门清+碰/混/清一色+无花箭刻=无花自摸10番·门清×2=${isMenQing ? '20番' : '10番'}，不捉冲低番`)
+    return true
+  }
+
   const likelyLowValueHu =
     !isMenQing &&
     !isWildDiscard &&
@@ -267,6 +285,16 @@ function shouldDeclineLowValueHu(game: GameState, player: Player): boolean {
     const currentFan = estimateCurrentFanQuick(handTypes, exposedMelds, player.hand.concealedTiles, game)
     
     if (currentFan < FAN_LEAP_CONFIG.minFanThreshold) {
+      // ★ 前5巡 + 番数<5 → fanLeap 必触发
+      // 牌局初期：牌墙足 + 容错率低 + 自摸概率高 → 优先等自摸
+      const estimatedRounds = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
+      if (estimatedRounds <= 5) {
+        const leap = evaluateFanLeap(player, game, currentFan)
+        if (leap.expectedFan > currentFan) {
+          console.log(`[FanLeap-EarlyRounds] ${player.name} 牌局初期(${estimatedRounds}巡)放弃低番(${currentFan})捉冲→ 期望${leap.expectedFan.toFixed(1)}番 (跃迁${(leap.leapProbability * 100).toFixed(1)}%)`)
+          return true
+        }
+      }
       const leap = evaluateFanLeap(player, game, currentFan)
       if (leap.shouldDecline) {
         console.log(`[FanLeap] ${player.name} decline ${currentFan}番 → 期望${leap.expectedFan.toFixed(1)}番 (跃迁${(leap.leapProbability * 100).toFixed(1)}%) ${leap.details.join(' | ')}`)
