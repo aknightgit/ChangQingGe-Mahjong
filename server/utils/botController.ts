@@ -343,7 +343,13 @@ export class BotController {
     if (pa.selectedChowTileIds && pa.selectedChowTileIds.length > 0) {
       // ★ 修复：直接调用 handleChow，不通过 resolvePendingAction（避免 shouldClaimPendingAction 的随机概率推翻已做出的吃牌决策）
       if (player.hand.concealedTiles.length >= 2) {
-        await handleChow(game, player, pa.selectedChowTileIds);
+        try {
+          await handleChow(game, player, pa.selectedChowTileIds);
+        } catch (e) {
+          // ★ 吃牌失败（牌已被抢走/状态不一致），不卡住游戏
+          console.warn(`[BotChow] ${player.name} chow failed, fallback to pass:`, (e as Error).message);
+          handlePass(game, player);
+        }
         game.pendingActions = game.pendingActions.filter(p => p.playerId !== player.id);
       } else {
         handlePass(game, player);
