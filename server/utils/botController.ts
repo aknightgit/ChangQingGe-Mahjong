@@ -204,12 +204,12 @@ export class BotController {
         const filteredHigherActions = higherActions.filter((candidate) => {
           if (candidate !== ActionType.HU) return true;
           const winOptions = getCachedWinOptions(game, player, 'discard', {
-            isRobbingKong: !!game.pendingKongClaim
+            isRobbingKong: !!game.pendingKongClaim,
+            extraTile: pa.tile || undefined  // ★ 修复：传入弃牌 tile，否则 canWin 检查的是缺一张的手牌
           });
           // ★ 诊断: HU 被过滤时打印原因
           if (winOptions.length === 0) {
-            const winCheck = this.deps.getCachedWinCheck(game, player);
-            console.log(`[BotHU-filtered] ${player.name} HU filtered out! canWin=${winCheck.canWin} types=${winCheck.types} concealed=${player.hand.concealedTiles.length} exposed=${player.hand.exposedMelds.length} tile=${pa.tile?.suit}-${pa.tile?.value}`);
+            console.log(`[BotHU-filtered] ${player.name} HU filtered out! concealed=${player.hand.concealedTiles.length} exposed=${player.hand.exposedMelds.length} tile=${pa.tile?.suit}-${pa.tile?.value}`);
           }
           return winOptions.length > 0;
         });
