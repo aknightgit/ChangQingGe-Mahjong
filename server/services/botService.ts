@@ -4,7 +4,8 @@
  */
 import { GameState, Player, Tile, TileSuit, MeldType, PlayerStatus, ActionType } from '../types/game'
 import { groupTiles, tilesEqual, isFlower, isHonor, isWind, isDragon } from '../utils/tiles'
-import { canWin, findBestDiscardForTing, checkChowPongExclusion, updateChowPongExclusion, ChowPongExclusionState } from '../utils/handValidator'
+import { canWin, findBestHandTypes, findBestDiscardForTing, checkChowPongExclusion, updateChowPongExclusion, ChowPongExclusionState, HandType } from '../utils/handValidator'
+import { evaluateFanLeap, FAN_LEAP_CONFIG } from '../ai/fanLeapEngine'
 import {
   DISABLE_LEGACY_BOT_PATH,
   PIPELINE_SHADOW_MODE,
@@ -256,7 +257,71 @@ function shouldDeclineLowValueHu(game: GameState, player: Player): boolean {
     effectiveGlobalMultiplier <= 2 &&
     wildCount <= 1
 
+  // ★ 番数跃迁引擎：当前番数 < 5 时，搜索3手内能否达到10番
+  // 只在收口阶段（能自摸但番数低）触发
+  if (likelyLowValueHu) {
+    // 估算当前胡牌番数
+    const wildTileId = game.customScoringMode || null
+    const testHand = [...player.hand.concealedTiles, discardTile]
+    const handTypes = findBestHandTypes(testHand, exposedMelds, wildTileId)
+    const currentFan = estimateCurrentFanQuick(handTypes, exposedMelds, player.hand.concealedTiles, game)
+    
+    if (currentFan < FAN_LEAP_CONFIG.minFanThreshold) {
+      const leap = evaluateFanLeap(player, game, currentFan)
+      if (leap.shouldDecline) {
+        console.log(`[FanLeap] ${player.name} decline ${currentFan}番 → 期望${leap.expectedFan.toFixed(1)}番 (跃迁${(leap.leapProbability * 100).toFixed(1)}%) ${leap.details.join(' | ')}`)
+        return true
+      }
+    }
+  }
+
   return huTableThreat >= 0.9 && scoreLead >= 800 && likelyLowValueHu
+}
+
+/**
+ * 快速番数估算（用于 shouldDeclineLowValueHu 的 fanLeap 触发判断）
+ * 仅判断当前胡牌番数，不走完整 calculateScore
+ */
+function estimateCurrentFanQuick(
+  handTypes: HandType[],
+  exposedMelds: any[],
+  concealedTiles: Tile[],
+  game: GameState
+): number {
+  if (handTypes.length === 0) return 0
+  const hasType = (t: HandType) => handTypes.includes(t)
+  const wildId = game.customScoringMode || null
+  const wildCount = wildId ? concealedTiles.filter(t => isWildTile(t, game)).length : 0
+  const flowerCount = concealedTiles.filter(t => isFlower(t)).length +
+    exposedMelds.filter((m: any) => m.tiles?.length === 1 && isFlower(m.tiles[0])).length
+
+  // 固定番
+  if (hasType(HandType.ALL_WIND) && hasType(HandType.ALL_TRIPLETS)) return 40
+  if (hasType(HandType.ALL_WIND)) return 20
+  if (hasType(HandType.FULL_FLUSH) && hasType(HandType.ALL_TRIPLETS)) return 20
+  if (hasType(HandType.HALF_FLUSH) && hasType(HandType.ALL_TRIPLETS)) return 10
+  if (hasType(HandType.FULL_FLUSH)) return 10
+  if (hasType(HandType.HALF_FLUSH)) return 10
+  if (hasType(HandType.EIGHT_FLOWERS)) return 20
+  if (wildCount >= 4) return 10
+  if (hasType(HandType.DA_DIAO)) return 10
+  if (hasType(HandType.FOUR_WILD)) return 10
+  // 大吊
+  const concealedCount = concealedTiles.filter(t => !isFlower(t)).length
+  if (concealedCount <= 2) return 10
+  // 公式
+  if (hasType(HandType.ALL_TRIPLETS) || hasType(HandType.HALF_FLUSH)) {
+    let comboPoints = 0
+    for (const m of exposedMelds) {
+      if (m.type === MeldType.TRIPLET || m.type === MeldType.KONG || m.type === MeldType.CONCEALED_KONG) {
+        const t = m.tiles[0]
+        if (isWind(t)) comboPoints += 4
+        else if (isDragon(t)) comboPoints += 6
+      }
+    }
+    return Math.min(2 + flowerCount + comboPoints, 10)
+  }
+  return 2
 }
 
 function estimateRouteExpectedFan(routeState: any, player: Player, game: GameState, winningTiles: number): number {
@@ -2082,6 +2147,15 @@ function evaluateChowValue(
 
   if ((policy.allPungsPursuit || 0) > 0) {
     score -= (policy.allPungsPursuit || 0) * 0.8
+  }
+
+  // ★ 多对子硬惩罚：4+对子时坚决不吃，5+对子直接禁止吃
+  // 不依赖 allPungsPursuit 参数，直接看手牌结构
+  const currentPairCount = countPairs(hand)
+  if (currentPairCount >= 5) {
+    score -= 2.0  // 5+对子：几乎禁止吃
+  } else if (currentPairCount >= 4) {
+    score -= 1.2  // 4对子：强烈不鼓励吃
   }
 
   // === F. nearWeight — 相邻搭子保留加分 ===

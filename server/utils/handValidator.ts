@@ -495,7 +495,20 @@ function canWinByProjectRuleNoWild(concealed: Tile[], exposed: Meld[]): boolean 
 
   if (numSuitCount === 1 && windCount === 0) return true;
   if (numSuitCount === 1 && windCount >= 1) return true;
-  if (concealedNonFlower.length === 1) return true;
+  // 大吊：需要检查 complete hand 是否垃圾胡
+  // exposed 中有多门+顺子+无风箭 → 垃圾胡，不允许
+  if (concealedNonFlower.length === 1) {
+    const exposedSequences = exposed.filter(m => m.type === MeldType.SEQUENCE);
+    const exposedTripletHonors = exposed.filter(m =>
+      (m.type === MeldType.TRIPLET || m.type === MeldType.KONG || m.type === MeldType.CONCEALED_KONG) &&
+      (isWind(m.tiles[0]) || isDragon(m.tiles[0]))
+    );
+    if (exposedSequences.length > 0 && exposedTripletHonors.length === 0) {
+      const seqSuits = new Set(exposedSequences.map(m => m.tiles[0].suit));
+      if (seqSuits.size >= 2) return false; // 多门+顺子+无风箭 → 垃圾胡
+    }
+    return true;
+  }
 
   return !isGarbageMultiSuitsWithSequenceProjectRule(concealedNonFlower);
 }
@@ -654,8 +667,27 @@ function detectTypes(
     types.push(HandType.FENG_PENG);
   }
 
-  // 大吊：手牌仅剩1张（非花牌）时，直接标记 DA_DIAO
+  // ★ 大吊垃圾胡检查：complete hand（concealed+exposed）多门+顺子 = 垃圾胡，不允许大吊
+  // 检查 complete hand 的 exposed melds 是否含垃圾（多门+顺子）
+  // 因为 concealed 只有1张，isGarbageMultiSuitsWithSequence 永远返回 false
   if (concealedNonFlower.length === 1) {
+    // 完整牌 = exposed melds + concealed 1张
+    // 如果 exposed 中有 >= 2 门数牌的顺子，且没有风箭刻 → 垃圾胡，不放大吊
+    const exposedSequences = exposed.filter(m => m.type === MeldType.SEQUENCE);
+    const exposedTripletHonors = exposed.filter(m =>
+      (m.type === MeldType.TRIPLET || m.type === MeldType.KONG || m.type === MeldType.CONCEALED_KONG) &&
+      (isWind(m.tiles[0]) || isDragon(m.tiles[0]))
+    );
+    if (exposedSequences.length > 0 && exposedTripletHonors.length === 0) {
+      // 有顺子 + 无风箭刻 → 检查是否多门
+      const seqSuits = new Set(exposedSequences.map(m => m.tiles[0].suit));
+      const concealedSuit = concealedNonFlower[0]?.suit;
+      if (concealedSuit) seqSuits.add(concealedSuit);
+      if (seqSuits.size >= 2) {
+        // 多门+顺子+无风箭 → 垃圾胡，不放大吊，直接返回
+        return [];
+      }
+    }
     if (!types.includes(HandType.DA_DIAO)) {
       types.push(HandType.DA_DIAO);
     }
@@ -1439,10 +1471,23 @@ export function canWin(
     ? canWinByProjectRuleWithWildExact(concealed, exposed, wildTileId)
     : canWinByProjectRuleNoWild(concealed, exposed);
   // 大吊（1张手牌）：即使 detectTypes 返回空，只要 exactCanWin 就应该允许胡
+  // ★ 但必须通过垃圾胡检查：exposed 中有多门+顺子+无风箭 → 垃圾胡，不允许
   const isDaDiaoState = concealedNonFlower.length === 1;
-  const finalCanWin = types.length > 0 || exactCanWin || isDaDiaoState;
+  let daDiaoBlockedByGarbage = false;
+  if (isDaDiaoState && types.length === 0) {
+    const exposedSequences = exposed.filter(m => m.type === MeldType.SEQUENCE);
+    const exposedTripletHonors = exposed.filter(m =>
+      (m.type === MeldType.TRIPLET || m.type === MeldType.KONG || m.type === MeldType.CONCEALED_KONG) &&
+      (isWind(m.tiles[0]) || isDragon(m.tiles[0]))
+    );
+    if (exposedSequences.length > 0 && exposedTripletHonors.length === 0) {
+      const seqSuits = new Set(exposedSequences.map(m => m.tiles[0].suit));
+      if (seqSuits.size >= 2) daDiaoBlockedByGarbage = true;
+    }
+  }
+  const finalCanWin = types.length > 0 || (exactCanWin && !daDiaoBlockedByGarbage) || (isDaDiaoState && !daDiaoBlockedByGarbage);
   const validTypes = finalCanWin
-    ? (types.length > 0 ? types : isDaDiaoState ? [HandType.DA_DIAO] : [HandType.STANDARD])
+    ? (types.length > 0 ? types : (isDaDiaoState && !daDiaoBlockedByGarbage) ? [HandType.DA_DIAO] : [HandType.STANDARD])
     : [];
 
   const result = { canWin: finalCanWin, types: validTypes }

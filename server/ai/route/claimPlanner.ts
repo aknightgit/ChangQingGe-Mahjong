@@ -192,7 +192,8 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     if (claimTile.suit !== bestSuit) {
       return { allowed: false, tuneDelta: -1.7, reason: 'first_chow_must_follow_best_suit' }
     }
-    if (!pairHeavyPungsPush && pairCount >= 4 && candidateShanten >= passShanten && candidateEffective <= passEffective + 2) {
+    // ★ 4+对子坚决不吃（无论是否 pairHeavyPungsPush，pairHeavyPungsPush 只影响碰/杠，不应放行吃）
+    if (pairCount >= 4 && candidateShanten >= passShanten && candidateEffective <= passEffective + 2) {
       return { allowed: false, tuneDelta: -2, reason: 'first_chow_breaks_pair_heavy_shape' }
     }
     if (!upstreamRejectedOpenPush && bestSuitCount >= claimSuitCount + 4 && candidateShanten >= passShanten && candidateEffective <= passEffective + 1) {
