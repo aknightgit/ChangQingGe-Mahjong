@@ -1701,7 +1701,26 @@ onMounted(async () => {
     if (actionKind === 'chow') { playVoiceAction('chow') }
     else if (actionKind === 'pong') { playVoiceAction('pong') }
     else if (actionKind === 'kong') { playVoiceAction('kong') }
-    else if (actionKind === 'hu') { playVoiceAction('hu') }
+    else if (actionKind === 'hu') {
+      // 捉冲:先念出放冲的牌名,再播胡语音
+      const huText = detail?.text || ''
+      const tileMatch = huText.match(/捉冲\[.*?\]-(.*?)(?:·|$)/)
+      if (tileMatch) {
+        const tileName = tileMatch[1]
+        // 尝试从牌名解析花色和点数播放语音
+        const suitMap: Record<string, string> = { '筒': 'dots', '条': 'tiao', '万': 'wan', '风': 'feng' }
+        const valueMap: Record<string, number> = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 }
+        for (const [cn, suit] of Object.entries(suitMap)) {
+          for (const [cv, val] of Object.entries(valueMap)) {
+            if (tileName.includes(cv) && tileName.includes(cn)) {
+              playVoiceTile(suit, val)
+              break
+            }
+          }
+        }
+      }
+      playVoiceAction('hu')
+    }
     else if (actionKind === 'selfHu') { /* 由 game state watcher 统一播放 */ }
     else if (actionKind === 'flowerReplace') { playVoiceAction('flowerReplace') }
   }) as EventListener)
@@ -4126,9 +4145,15 @@ watch(() => gameState.value?.phase, (phase, oldPhase) => {
   }
   // ★ 验牌结束进入结算: 主动拉取结算数据并显示本局输赢界面
   if (phase === GamePhase.ENDED) {
-    void fetchSettlement()
-    showSettlement.value = true
-    startWallExhaustedCountdown()
+    // ★ 三家胡牌/验牌结束都进 ENDED，强制重置所有状态
+    if (_revealCountdownTimer) { clearInterval(_revealCountdownTimer); _revealCountdownTimer = null }
+    showWinnerReveal.value = false
+    // ★ 聚义不弹结算（但 liangShanSuccess 路径已被上面处理，这里是常规胡牌）
+    if (!(gameState.value as any)?.liangShanSuccess) {
+      void fetchSettlement()
+      showSettlement.value = true
+      startWallExhaustedCountdown()
+    }
   }
   // 新局开始:重置所有弹窗,显示骰子界面
   if (phase === GamePhase.STARTING) {
@@ -4552,6 +4577,12 @@ const checkOtherPlayerSounds = (newState: any) => {
           markDiscardAudioPlayed(lastNew)
         }
       }
+      // ★ 修复放冲丢语音: discardCount 减少 = 放冲者的弃牌被吃走/搽走
+      // 这种情况说明放冲发生，弃牌语音已被捉冲出牌广播处理，无需补播
+      if (discardCount < prev.discardCount) {
+        // 同步 prev，让下一轮检查重新开始
+        // （不需要补播语音，因为捉冲广播会播放 "hu"）
+      }
       if (meldCount > prev.meldCount) {
         const newMelds = (player.hand?.exposedMelds || []).slice(prev.meldCount)
         for (const m of newMelds) {
@@ -4574,7 +4605,17 @@ const checkOtherPlayerSounds = (newState: any) => {
   for (const id of prevOtherPlayerState.keys()) {
     if (!currentIds.has(id)) prevOtherPlayerState.delete(id)
   }
-  // ★ 先播吃碰杠语音,再播出牌语音(修复顺序bug)
+  // ★ 修复顺序bug：先播出牌语音（包括补花），再播吃碰杠语音
+  // 这样听到的顺序是：八万 → 吃
+  for (const d of pendingDiscards) {
+    if (d.suit === 'flower') {
+      playSound('tile-draw')
+      playVoiceAction('flowerReplace')
+    } else {
+      playSound('tile-discard')
+      if (d.suit) playVoiceTile(d.suit, d.value)
+    }
+  }
   for (const action of pendingMeldVoices) {
     if (action === 'kong') {
       playSound('tile-kong')
@@ -4585,17 +4626,6 @@ const checkOtherPlayerSounds = (newState: any) => {
     } else {
       playSound('tile-chow')
       playVoiceAction('chow')
-    }
-  }
-  // 出牌语音放在吃碰杠之后,补花在最后
-  for (const d of pendingDiscards) {
-    if (d.suit === 'flower') {
-      // 补花语音:在出牌之后播放
-      playSound('tile-draw')
-      playVoiceAction('flowerReplace')
-    } else {
-      playSound('tile-discard')
-      if (d.suit) playVoiceTile(d.suit, d.value)
     }
   }
 }
@@ -4668,6 +4698,8 @@ watch(() => gameState.value, (newState, oldState) => {
     // 所有聚义消息(发起/响应/汇总)由后端 broadcastQuickMessage 推送,前端不重复广播
     if ((newState as any).liangShanSuccess) {
       showLiangShanOverlay.value = true
+      // ★ 聚义不需要本局输赢流程，只弹聚义成功文本
+      showSettlement.value = false
       // ★ V2.13 K哥优化: 弹窗 3000ms → 1800ms(够动画但不快)
       setTimeout(() => {
         showLiangShanOverlay.value = false

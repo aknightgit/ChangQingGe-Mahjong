@@ -189,6 +189,15 @@ const playAudio = (url: string, fallbackText?: string) => {
     .then(() => playAudioQueued(url, fallbackText))
 }
 
+// ★ 立刻播放（不走队列）：用于出牌语音，保证“念牌”先于后续动作语音播出
+const playAudioImmediate = (url: string, fallbackText?: string) => {
+  if (!url) {
+    speakTextFallback(fallbackText)
+    return
+  }
+  playAudioQueued(url, fallbackText).catch(() => {})
+}
+
 const playVoiceKey = (key: string, fallbackText: string) => {
   const url = _audioMap.value.get(key)
   if (!url) {
@@ -294,7 +303,9 @@ export const playVoiceAction = (action: keyof typeof VOICE_ACTION_MAP): void => 
 export const playVoiceTile = (suit: string, value: number): void => {
   if (!process.client) return
   const key = resolveTileKey(suit, value)
-  playVoiceKey(key, VOICE_TEXT_MAP[key] || key)
+  const url = _audioMap.value.get(key)
+  // ★ 走 immediate 路径，不占 _voiceQueue，避免前一个音频出错时丢牌语音
+  playAudioImmediate(url, VOICE_TEXT_MAP[key] || key)
 }
 
 export const preloadAllTiles = async (): Promise<void> => {
