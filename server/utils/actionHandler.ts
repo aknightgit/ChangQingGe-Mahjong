@@ -784,20 +784,30 @@ export class ActionHandler {
 
     // 胡牌广播
     player.isSelfDrawn = isSelfDrawn;
-    // 捉冲：用 getLastDiscardPlayerId 获取正确的放冲者（不依赖 currentPlayerIndex，可能已被改过）
-    const lastDiscardPlayerId = isSelfDrawn ? null : this.deps.getLastDiscardPlayerId(game);
-    const lastDiscardPlayer = lastDiscardPlayerId ? game.players.find(p => p.id === lastDiscardPlayerId) : null;
+    // 捉冲：从 pendingTile 的 tileId 反查 actionHistory 找到真正的放冲者
+    // 不依赖 currentPlayerIndex（可能已被改过）也不依赖 getLastDiscardPlayerId（可能返回后续出牌者）
+    const pendingTile = game.pendingActions.find(pa => pa.playerId === player.id)?.tile;
+    let discarderPlayer: typeof game.players[0] | undefined;
+    if (!isSelfDrawn && pendingTile) {
+      for (let i = game.actionHistory.length - 1; i >= 0; i--) {
+        const act = game.actionHistory[i];
+        if (act.type === ActionType.DISCARD && act.tileId === pendingTile.id) {
+          discarderPlayer = game.players.find(p => p.id === act.playerId);
+          break;
+        }
+      }
+      if (!discarderPlayer) discarderPlayer = game.players[game.currentPlayerIndex];
+    }
     if (!isSelfDrawn) {
-      player.discarderId = lastDiscardPlayer?.id || game.players[game.currentPlayerIndex]?.id;
-      player.discarderName = lastDiscardPlayer?.name || game.players[game.currentPlayerIndex]?.name;
+      player.discarderId = discarderPlayer?.id || game.players[game.currentPlayerIndex]?.id;
+      player.discarderName = discarderPlayer?.name || game.players[game.currentPlayerIndex]?.name;
     }
     // 捉冲：从pendingAction.tile获取放冲牌名；自摸：从lastDrawnTile获取摸到的牌名
-    const pendingTile = game.pendingActions.find(pa => pa.playerId === player.id)?.tile;
     const lastDrawn = (player as any).lastDrawnTile;
     const winningTileName = isSelfDrawn
       ? (lastDrawn ? getTileDisplayName(lastDrawn) : '')
       : (pendingTile ? getTileDisplayName(pendingTile) : (lastDrawn ? getTileDisplayName(lastDrawn) : ''));
-    const discarderName = isSelfDrawn ? '' : (lastDiscardPlayer?.name || game.players[game.currentPlayerIndex]?.name || '');
+    const discarderName = isSelfDrawn ? '' : (discarderPlayer?.name || game.players[game.currentPlayerIndex]?.name || '');
     const huMsg = isSelfDrawn
       ? `🎉 [${player.name}] 自摸${winningTileName ? '-' + winningTileName : ''}`
       : `🎉 [${player.name}] 捉冲[${discarderName}]${winningTileName ? '-' + winningTileName : ''}`;
