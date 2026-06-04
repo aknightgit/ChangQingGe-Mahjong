@@ -103,6 +103,7 @@ export interface BotControllerDeps {
   games: Map<string, GameState>;
   isPlayerBotControlled(player: Player): boolean;
   getCachedWinOptions(game: GameState, player: Player, context: 'self_draw' | 'discard', flags?: any): any[];
+  getCachedWinCheck(game: GameState, player: Player): any;
   handlePass(game: GameState, player: Player): void;
   handlePeng(game: GameState, player: Player): void;
   handleKong(game: GameState, player: Player, tileId: string): void;
