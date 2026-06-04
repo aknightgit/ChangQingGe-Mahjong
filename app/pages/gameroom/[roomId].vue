@@ -3539,7 +3539,7 @@ const finishSettleToFinal = async () => {
 }
 
 const startWallExhaustedCountdown = () => {
-  wallExhaustedCountdown.value = 10
+  wallExhaustedCountdown.value = 15
   settleFinalMode.value = false
   wallExhaustedTimer.value = window.setInterval(() => {
     wallExhaustedCountdown.value--

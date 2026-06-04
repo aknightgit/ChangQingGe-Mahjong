@@ -1670,6 +1670,7 @@ class GameManager {
     game.endedAt = undefined;
     game.finalScores = undefined;
     game.customScoringMode = null;
+    game.winnersCount = 0;  // ★ 新局重置赢家计数（防止跨局累积导致 PeriodicCleanup 误判）
     game.liangShanSuccess = undefined;  // 清除聚义成功标记
     game.liangShanVotes = [];  // 重置聚义投票，新局允许再次发起
     // 清空上一局残留状态
