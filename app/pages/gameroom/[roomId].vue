@@ -1700,7 +1700,7 @@ onMounted(async () => {
     // 吃碰杠胡:所有玩家都播放语音(包括操作者)
     if (actionKind === 'chow') { playVoiceAction('chow') }
     else if (actionKind === 'pong') { playVoiceAction('pong') }
-    else if (actionKind === 'kong') { playVoiceAction('kong') }
+    else if (actionKind === 'kong' || actionKind === 'kongSupplement') { playVoiceAction('kong') }
     else if (actionKind === 'hu') {
       // 捉冲:先念出放冲的牌名,再播胡语音
       const huText = detail?.text || ''
