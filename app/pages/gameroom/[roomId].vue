@@ -3057,8 +3057,9 @@ const onConfirmHu = async (index: number) => {
   resetAutoCount()
   playSound('tile-hu')
   const selectedOption: any = displayWinOptions.value[index]
+  // ★ K哥: 自摸用自摸语音，捉冲用胡了语音
   if (selectedOption?.type === 'self_draw') {
-    // 由 game state watcher 统一播放 selfHu 语音
+    playVoiceAction('selfHu')
   } else {
     playVoiceAction('hu')
   }
