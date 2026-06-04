@@ -236,9 +236,19 @@ function shouldDeclineLowValueHu(game: GameState, player: Player): boolean {
   const isMenQing = player.hand.exposedMelds.length === 0
   const flowerCount = player.hand.concealedTiles.filter(t => isFlower(t)).length +
     player.hand.exposedMelds.filter(m => m.tiles?.length === 1 && isFlower(m.tiles[0])).length
-  // ★ K哥铁律: 门清+无花+无百搭 → 无花自摸=10点固定番, 始终不捉冲
-  const menqingNoFlowerNoWild = isMenQing && flowerCount === 0 && wildCount === 0
-  if (menqingNoFlowerNoWild) return true
+  // ★ K哥铁律: 路线=碰碰胡/混一色 + 门口无花/无风箭刻 → 无花自摸=10点固定番, 不捉冲
+  // 注意：不要求门清！吃3口也能做无花自摸，只要门口干净
+  const routeMem = getPlayerRouteMemory(player)
+  const currentRoute = routeMem?.current as string | undefined
+  const isPengOrHalfFlush = currentRoute === 'ALL_PUNGS' || currentRoute === 'HALF_FLUSH'
+  const exposedMelds = player.hand.exposedMelds
+  const hasWindMeld = exposedMelds.some(m => m.tiles?.some(t => isWind(t)))
+  const hasArrowMeld = exposedMelds.some(m => m.tiles?.some(t => isDragon(t)))
+  const hasFlower = flowerCount > 0
+  const hasMingKong = exposedMelds.some(m => m.type === 'kong' || m.type === 'exposed_kong')
+  const hasAnKong = exposedMelds.some(m => m.type === 'concealed_kong')
+  const isCleanExposure = !hasWindMeld && !hasArrowMeld && !hasFlower && !hasMingKong && !hasAnKong
+  if (isPengOrHalfFlush && isCleanExposure) return true
 
   const likelyLowValueHu =
     !isMenQing &&
@@ -2186,12 +2196,20 @@ export async function shouldClaimPendingAction(
 
     // 自摸：有 selfWinChance 控制意愿
     if (isSelfDraw) {
-      // ★ K哥铁律: 门清+无花+无百搭 → 无花自摸=10点固定番, 必须100%胡
+      // ★ K哥铁律: 路线=碰碰胡/混一色 + 门口无花/无风箭刻 → 无花自摸=10点, 100%胡
       const selfFlowerCount = player.hand.concealedTiles.filter(t => isFlower(t)).length +
         player.hand.exposedMelds.filter(m => m.tiles?.length === 1 && isFlower(m.tiles[0])).length
-      const selfWildCount = player.hand.concealedTiles.filter(t => isWildTile(t, game)).length
-      const isMenQingSelf = player.hand.exposedMelds.length === 0
-      const isNoFlowerSelfDraw = isMenQingSelf && selfFlowerCount === 0 && selfWildCount === 0
+      const selfExposedMelds = player.hand.exposedMelds
+      const selfHasWindMeld = selfExposedMelds.some(m => m.tiles?.some(t => isWind(t)))
+      const selfHasArrowMeld = selfExposedMelds.some(m => m.tiles?.some(t => isDragon(t)))
+      const selfHasFlower = selfFlowerCount > 0
+      const selfHasMingKong = selfExposedMelds.some(m => m.type === 'kong' || m.type === 'exposed_kong')
+      const selfHasAnKong = selfExposedMelds.some(m => m.type === 'concealed_kong')
+      const selfIsCleanExposure = !selfHasWindMeld && !selfHasArrowMeld && !selfHasFlower && !selfHasMingKong && !selfHasAnKong
+      const selfRouteMem = getPlayerRouteMemory(player)
+      const selfCurrentRoute = selfRouteMem?.current as string | undefined
+      const selfIsPengOrHalfFlush = selfCurrentRoute === 'ALL_PUNGS' || selfCurrentRoute === 'HALF_FLUSH'
+      const isNoFlowerSelfDraw = selfIsPengOrHalfFlush && selfIsCleanExposure
       const selfWinProb = isNoFlowerSelfDraw ? 1.0 : (policy.selfWinChance ?? 0.95)
       const selfRoll = Math.random()
       const decision = selfRoll < selfWinProb ? ActionType.HU : ActionType.PASS
@@ -2210,6 +2228,24 @@ export async function shouldClaimPendingAction(
       const isWildDiscard = discardTile ? isWildTile(discardTile, game) : false
       const isMenQing = exposedCount === 0
       const wildCount = hand.filter(t => isWildTile(t, game)).length
+
+      // ★ K哥铁律: 路线=碰碰胡/混一色 + 门口无花/无风箭刻 → 禁止捉冲(等无花自摸)
+      const exposedMelds = player.hand.exposedMelds
+      const flowerCount = hand.filter(t => isFlower(t)).length +
+        exposedMelds.filter(m => m.tiles?.length === 1 && isFlower(m.tiles[0])).length
+      const hasWindMeld = exposedMelds.some(m => m.tiles?.some(t => isWind(t)))
+      const hasArrowMeld = exposedMelds.some(m => m.tiles?.some(t => isDragon(t)))
+      const hasFlower = flowerCount > 0
+      const hasMingKong = exposedMelds.some(m => m.type === 'kong' || m.type === 'exposed_kong')
+      const hasAnKong = exposedMelds.some(m => m.type === 'concealed_kong')
+      const isCleanExposure = !hasWindMeld && !hasArrowMeld && !hasFlower && !hasMingKong && !hasAnKong
+      const routeMem = getPlayerRouteMemory(player)
+      const currentRoute = routeMem?.current as string | undefined
+      const isPengOrHalfFlush = currentRoute === 'ALL_PUNGS' || currentRoute === 'HALF_FLUSH'
+      if (isPengOrHalfFlush && isCleanExposure) {
+        traceClaim(player, game, 'hu-no-flower-block', `route=${currentRoute} cleanExposure=true → decline, wait for 无花自摸`)
+        return ActionType.PASS
+      }
 
       // ★ V2.17 K哥铁律: 捉冲意愿统一计算
       // 基础概率：降低，让 AI 有时放弃捉冲等自摸
@@ -2235,13 +2271,6 @@ export async function shouldClaimPendingAction(
       let penalty = 0
       if (isWildDiscard) penalty += (policy.discardHuWildPenalty ?? 0.3)
       if (isMenQing) penalty += (policy.discardHuMenQingPenalty ?? 0.15)
-      // ★ K哥铁律: 门清+无花+无百搭 → 无花自摸=10点固定番, 远高于普通捉冲
-      // 必须大幅惩罚捉冲, 让AI争取自摸
-      const flowerCount = hand.filter(t => isFlower(t)).length +
-        player.hand.exposedMelds.filter(m => m.tiles?.length === 1 && isFlower(m.tiles[0])).length
-      if (isMenQing && flowerCount === 0 && wildCount === 0) {
-        penalty += 0.6  // 几乎必定放弃捉冲, 等无花自摸
-      }
       if (wildCount >= 2) penalty += (policy.bao2ClaimPenalty ?? 0.3)
       if (wildCount >= 3) penalty += Math.min(0.9, (policy.bao3AvoidThreshold ?? 0.4) * 0.9)
       // 最终概率 = base + boost - penalty，封顶 [0, 1]
