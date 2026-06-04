@@ -179,15 +179,16 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     const claimSuitCount = isNumberSuit(claimTile.suit) ? getNumberSuitCount(player.hand.concealedTiles, claimTile.suit) : 0
     const pairCount = countPairs(player.hand.concealedTiles)
     const canRelaxFirstChowGate =
-      noWildOpenPush ||
       effectiveGlobalMultiplier >= 4 ||
       upstreamRejectedOpenPush ||
       (wildCount === 1 && bestSuit !== null && claimTile.suit === bestSuit && bestSuitCount >= 6)
-    const requiredBestSuitTiles = multiWildMenqingPush ? 6 : (canRelaxFirstChowGate ? 4 : 5)
+    // ★ K哥铁律: 第一口吃必须5张(无百搭也不能放松)
+    const requiredBestSuitTiles = multiWildMenqingPush ? 6 : 5
 
     if (!bestSuit || bestSuitCount < requiredBestSuitTiles) {
       return { allowed: false, tuneDelta: -1.3, reason: 'first_chow_requires_five_tiles' }
     }
+    // ★ 吃的这门也要检查: 吃的门必须是长门
     if (claimTile.suit !== bestSuit) {
       return { allowed: false, tuneDelta: -1.7, reason: 'first_chow_must_follow_best_suit' }
     }
