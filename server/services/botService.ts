@@ -2145,22 +2145,6 @@ export async function shouldClaimPendingAction(
         const ctx = engine.buildActionContext(game, player.id, availableActions, game.turnIndex)
         const ranked = engine.rankActions(ctx)
         if (ranked[0]?.action === ActionType.HU) {
-          // ★ 路线一致性检查：弃牌花色必须符合当前路线（pipeline 路径）
-          const claimTileForRoute = pendingAction?.tile
-          if (claimTileForRoute && [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS].includes(claimTileForRoute.suit)) {
-            const routeMem = getPlayerRouteMemory(player)
-            const currentRoute = routeMem?.current as string | undefined
-            const longestSuit = routeMem?.features?.longestSuit as TileSuit | undefined
-            const concealedNonFlower = hand.filter(t => !isFlower(t) && !isWildTile(t, game))
-            const isDaDiao = concealedNonFlower.length === 1
-            if (!isDaDiao && longestSuit && (currentRoute === 'HALF_FLUSH' || currentRoute === 'FULL_FLUSH')) {
-              if (claimTileForRoute.suit !== longestSuit && !isHonor(claimTileForRoute)) {
-                traceClaim(player, game, 'pipeline-route-mismatch', `route=${currentRoute} longestSuit=${longestSuit} discardSuit=${claimTileForRoute.suit} → decline HU`)
-                const bestNonHu = ranked.find(r => r.action !== ActionType.HU)
-                return bestNonHu ? bestNonHu.action : ActionType.PASS
-              }
-            }
-          }
           const decision = shouldDeclineLowValueHu(game, player) ? ActionType.PASS : ActionType.HU
           traceClaim(player, game, 'pipeline', `rankedTop=HU decision=${decision}`)
           return decision
@@ -2212,23 +2196,6 @@ export async function shouldClaimPendingAction(
       const isWildDiscard = discardTile ? isWildTile(discardTile, game) : false
       const isMenQing = exposedCount === 0
       const wildCount = hand.filter(t => isWildTile(t, game)).length
-
-      // ★ 路线一致性检查：弃牌花色必须符合当前路线
-      // 防止筒子混一色捉冲万子等情况
-      if (discardTile && [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS].includes(discardTile.suit)) {
-        const routeMem = getPlayerRouteMemory(player)
-        const currentRoute = routeMem?.current as string | undefined
-        const longestSuit = routeMem?.features?.longestSuit as TileSuit | undefined
-        const concealedNonFlower = hand.filter(t => !isFlower(t) && !isWildTile(t, game))
-        const isDaDiao = concealedNonFlower.length === 1  // 大吊：手牌只剩1张，必须捉冲
-        // 清一色/混一色路线：弃牌不是目标花色 → 不捉冲（除非大吊）
-        if (!isDaDiao && longestSuit && (currentRoute === 'HALF_FLUSH' || currentRoute === 'FULL_FLUSH')) {
-          if (discardTile.suit !== longestSuit && !isHonor(discardTile)) {
-            traceClaim(player, game, 'hu-route-mismatch', `route=${currentRoute} longestSuit=${longestSuit} discardSuit=${discardTile.suit} → decline`)
-            return ActionType.PASS
-          }
-        }
-      }
 
       // ★ V2.16 K哥铁律: 捉冲意愿统一计算，惩罚和加成合并
       // 基础概率
