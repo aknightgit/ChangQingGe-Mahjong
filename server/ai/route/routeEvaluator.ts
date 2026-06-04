@@ -364,6 +364,12 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       if (features.longestSuitCount <= 5 && features.pairCount >= 3) {
         score -= 5
       }
+      // ★ 多对子惩罚：5+对子时混一色路线严重降权，让路给碰碰胡
+      if (features.pairCount >= 5) {
+        score -= 18  // 5+对子：混一色几乎不可行
+      } else if (features.pairCount >= 4) {
+        score -= 8   // 4对子：混一色明显劣势
+      }
       if (features.upstreamVoidSuit && features.upstreamVoidSuit === targetSuit) {
         reasons.push('upstream_void_target')
         score += 3
@@ -387,7 +393,12 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
     case 'ALL_PUNGS':
       const _ap_pursuitVal = getPolicyValue(policy, 'allPungsPursuit')
       const _ap_isAgg = _ap_pursuitVal >= 1.2  // 高意愿→更激进
-      score += features.pairCount * (5.2 + (_ap_isAgg ? 4.0 : 0))
+      // ★ 多对子指数加成：对子越多，碰碰胡概率越高，指数级增长
+      const _ap_pairBonus = features.pairCount >= 6 ? features.pairCount * 12.0
+        : features.pairCount >= 5 ? features.pairCount * 9.5
+        : features.pairCount >= 4 ? features.pairCount * 7.0
+        : features.pairCount * (5.2 + (_ap_isAgg ? 4.0 : 0))
+      score += _ap_pairBonus
       score += features.tripletCount * (5.8 + (_ap_isAgg ? 3.5 : 0))
       score += features.honorPairCount * (2.5 + (_ap_isAgg ? 3.0 : 0))
       score += features.wildCount * (2.8 + (_ap_isAgg ? 3.5 : 0))
@@ -407,7 +418,7 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       }
       if (veryPairHeavy) {
         reasons.push('very_pair_heavy_push')
-        score += 14.0  // 5+对子无长门 → 强制碰碰胡
+        score += 22.0  // ★ 5+对子无长门 → 强制碰碰胡（从14提升到22，确保盖过混一色）
       }
       // 高意愿+足够对子→提前决定性commit
       if (_ap_isAgg && features.pairCount + features.tripletCount >= 3) {

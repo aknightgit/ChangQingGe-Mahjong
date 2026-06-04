@@ -1485,7 +1485,36 @@ export function canWin(
       if (seqSuits.size >= 2) daDiaoBlockedByGarbage = true;
     }
   }
-  const finalCanWin = types.length > 0 || (exactCanWin && !daDiaoBlockedByGarbage) || (isDaDiaoState && !daDiaoBlockedByGarbage);
+  // ★ 自然张垃圾胡检查：百搭分配返回空（所有分配都是垃圾）→ 检查自然张是否垃圾
+  // 如果自然张是垃圾（多门+顺子+无风箭），百搭不能救 → 不允许胡
+  let naturalTilesBlockedByGarbage = false;
+  if (types.length === 0 && wildTileId && concealedNonFlower.length >= 2) {
+    const wildCheckerFn = typeof wildTileIdOrChecker === 'function'
+      ? wildTileIdOrChecker
+      : (t: Tile) => {
+          const wParts = (wildTileId || '').split('-');
+          if (wParts.length < 2) return false;
+          return t.suit === wParts[0] && String(t.value) === wParts[1];
+        };
+    const naturalTiles = concealedNonFlower.filter(t => !wildCheckerFn(t));
+    if (naturalTiles.length >= 2) {
+      const numSuitsList = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+      const isNum = (t: Tile) => numSuitsList.includes(t.suit);
+      const naturalSuits = new Set(naturalTiles.filter(isNum).map(t => t.suit));
+      if (naturalSuits.size >= 2) {
+        const hasSequenceLike = naturalTiles.some(t => {
+          if (!isNum(t)) return false;
+          return naturalTiles.some(t2 => t2 !== t && t2.suit === t.suit && Math.abs(t2.value - t.value) <= 2);
+        });
+        const hasNaturalHonorTriplet = naturalTiles.some(t => isWind(t) || isDragon(t));
+        if (hasSequenceLike && !hasNaturalHonorTriplet) {
+          naturalTilesBlockedByGarbage = true;
+        }
+      }
+    }
+  }
+
+  const finalCanWin = types.length > 0 || (exactCanWin && !daDiaoBlockedByGarbage && !naturalTilesBlockedByGarbage) || (isDaDiaoState && !daDiaoBlockedByGarbage);
   const validTypes = finalCanWin
     ? (types.length > 0 ? types : (isDaDiaoState && !daDiaoBlockedByGarbage) ? [HandType.DA_DIAO] : [HandType.STANDARD])
     : [];
