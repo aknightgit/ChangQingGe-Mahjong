@@ -1352,7 +1352,7 @@ export function canWin(
     }
   }
 
-（同时缓存 boolean 和 types，避免重复计算）
+  // canWin 结果缓存（同时缓存 boolean 和 types，避免重复计算）
   const handSig = handSignature(handTiles)
   const exposedSig = meldSignature(exposed)
   const wildCacheKey = typeof wildTileIdOrChecker === 'function' ? '__wild_fn__' : ((wildTileId || '') + (wildTileGroup ? '|g=' + wildTileGroup.sort().join(',') : ''))
