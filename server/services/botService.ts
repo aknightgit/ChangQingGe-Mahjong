@@ -2624,6 +2624,32 @@ export async function shouldClaimPendingAction(
       return decision
     }
 
+    // ★ 即使 pendingDiscard 为 null（游戏状态异常），也要检查硬性禁止
+    const fallbackExposedMelds = player.hand.exposedMelds
+    const fallbackFlowerCount = hand.filter(t => isFlower(t)).length +
+      fallbackExposedMelds.filter(m => m.tiles?.length === 1 && isFlower(m.tiles[0])).length
+    const fallbackHasWindMeld = fallbackExposedMelds.some(m => m.tiles?.some(t => isWind(t)))
+    const fallbackHasArrowMeld = fallbackExposedMelds.some(m => m.tiles?.some(t => isDragon(t)))
+    const fallbackHasFlower = fallbackFlowerCount > 0
+    const fallbackHasMingKong = fallbackExposedMelds.some(m => m.type === 'kong' || m.type === 'exposed_kong')
+    const fallbackHasAnKong = fallbackExposedMelds.some(m => m.type === 'concealed_kong')
+    const fallbackIsClean = !fallbackHasWindMeld && !fallbackHasArrowMeld && !fallbackHasFlower && !fallbackHasMingKong && !fallbackHasAnKong
+    const fallbackWildId = game.customScoringMode || null
+    const fallbackTestHand = claimTile ? [...hand, claimTile] : hand
+    const fallbackHandTypes = findBestHandTypes(fallbackTestHand, fallbackExposedMelds, fallbackWildId)
+    const fallbackHasPengOrFlush =
+      fallbackHandTypes.includes(HandType.ALL_TRIPLETS) ||
+      fallbackHandTypes.includes(HandType.HALF_FLUSH) ||
+      fallbackHandTypes.includes(HandType.FULL_FLUSH) ||
+      fallbackHandTypes.includes(HandType.HUN_PENG) ||
+      fallbackHandTypes.includes(HandType.QING_PENG) ||
+      fallbackHandTypes.includes(HandType.FENG_PENG) ||
+      fallbackHandTypes.includes(HandType.ALL_WIND)
+    const fallbackIsDaDiao = hand.filter(t => !isFlower(t)).length === 1
+    if (fallbackHasPengOrFlush && fallbackIsClean && !fallbackIsDaDiao) {
+      traceClaim(player, game, 'hu-no-flower-block-fallback', `types=[${fallbackHandTypes}] clean=true → decline, wait for 无花自摸`)
+      return ActionType.PASS
+    }
     traceClaim(player, game, 'hu-no-pending-discard', `decision=HU claimTile=${traceTile(claimTile)}`)
     return ActionType.HU
   }
