@@ -537,7 +537,7 @@ function loadCharacterPolicy(botName: string): any {
         id: 'fallback',
         useV2Engine: true,
         selfWinChance: 0.95,
-        discardHuChance: 0.95,
+        discardHuChance: 0.35,
         discardHuWildPenalty: 0.3,
         discardHuMenQingPenalty: 0.1,
         pengChance: 0.6,
@@ -2197,24 +2197,32 @@ export async function shouldClaimPendingAction(
       const isMenQing = exposedCount === 0
       const wildCount = hand.filter(t => isWildTile(t, game)).length
 
-      // ★ V2.16 K哥铁律: 捉冲意愿统一计算，惩罚和加成合并
-      // 基础概率
-      const baseProb = policy.discardHuChance ?? 0.95
-      // 加成：牌墙少 + 听牌少
+      // ★ V2.17 K哥铁律: 捉冲意愿统一计算
+      // 基础概率：降低，让 AI 有时放弃捉冲等自摸
+      const baseProb = policy.discardHuChance ?? 0.35
+      // 加成：牌局往后 + 听牌少 + 对手危险 + 无百搭 → 鼓励捉冲
       const wallRemaining = game.wall?.length || 0
       let boost = 0
-      if (wallRemaining <= 5) boost += 1.0
+      // 牌墙越少越该捉冲（牌局往后）
+      if (wallRemaining <= 5) boost += 0.8
       else if (wallRemaining <= 10) boost += 0.5
-      else if (wallRemaining <= 15) boost += 0.18
+      else if (wallRemaining <= 20) boost += 0.2
+      // 听牌明显变少 → 捉冲
       const tingTilesCount = countWinningTilesForHand(hand, player.hand.exposedMelds.length, game)
-      if (tingTilesCount <= 2) boost += 1.0
-      else if (tingTilesCount <= 4) boost += 0.6
-      // 惩罚：百搭/门清/二宝/三宝
+      if (tingTilesCount <= 1) boost += 0.8
+      else if (tingTilesCount <= 3) boost += 0.4
+      // 其他玩家越危险越该捉冲（有人副露多/听牌了）
+      const tableThreat = estimateTableThreat(game, player.id)
+      if (tableThreat >= 0.8) boost += 0.4
+      else if (tableThreat >= 0.5) boost += 0.2
+      // 无百搭 → 捉冲更积极（自摸难度高）
+      if (wildCount === 0) boost += 0.25
+      // 惩罚：百搭/门清/二宝/三宝 → 降低捉冲意愿
       let penalty = 0
       if (isWildDiscard) penalty += (policy.discardHuWildPenalty ?? 0.3)
-      if (isMenQing) penalty += (policy.discardHuMenQingPenalty ?? 0.1)
-      if (wildCount >= 2) penalty += (policy.bao2ClaimPenalty ?? 0.25)
-      if (wildCount >= 3) penalty += Math.min(0.9, (policy.bao3AvoidThreshold ?? 0.35) * 0.9)
+      if (isMenQing) penalty += (policy.discardHuMenQingPenalty ?? 0.15)
+      if (wildCount >= 2) penalty += (policy.bao2ClaimPenalty ?? 0.3)
+      if (wildCount >= 3) penalty += Math.min(0.9, (policy.bao3AvoidThreshold ?? 0.4) * 0.9)
       // 最终概率 = base + boost - penalty，封顶 [0, 1]
       const finalProb = Math.max(0, Math.min(1, baseProb + boost - penalty))
       const finalRoll = Math.random()
