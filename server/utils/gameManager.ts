@@ -4416,7 +4416,7 @@ class GameManager {
       let nextRoundDelay: number
       if (isLiangShan) nextRoundDelay = 4000
       else if (isWallExhausted || hasRebel) nextRoundDelay = 5000  // 流局/造反, 客户端有 10s 倒计时但后端不能等太久
-      else nextRoundDelay = 12000  // 胡牌正常结算
+      else nextRoundDelay = 10000  // 胡牌正常结算（10秒，与客户端倒计时一致）
       this.autoStartNextRound(game.gameId, nextRoundDelay);
     }
   }
