@@ -995,6 +995,21 @@ function findBestAssignmentHeuristic(
       if (hasSequence) {
         return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
       }
+      // ★ 额外检查：确认所有非对子组都是3张同值（全刻子）
+      const nonFlowerGroups = new Map<string, number>();
+      for (const t of virtualNonFlower) {
+        const key = `${t.suit}-${t.value}`;
+        nonFlowerGroups.set(key, (nonFlowerGroups.get(key) || 0) + 1);
+      }
+      let pairCount = 0;
+      let allOthersAreTriplets = true;
+      for (const count of nonFlowerGroups.values()) {
+        if (count === 2) pairCount++;
+        else if (count !== 3 && count !== 4) { allOthersAreTriplets = false; break; }
+      }
+      if (!allOthersAreTriplets || pairCount > 1) {
+        return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
+      }
     }
     return result;
   };
@@ -1215,6 +1230,22 @@ function findBestAssignmentByPriority(
         if (hasSequence) break;
       }
       if (hasSequence) {
+        return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
+      }
+      // ★ 额外检查：确认所有非对子组都是3张同值（全刻子）
+      // 防止 顺子+刻子+对子 被误判为碰碰胡
+      const nonFlowerGroups = new Map<string, number>();
+      for (const t of virtualNonFlower) {
+        const key = `${t.suit}-${t.value}`;
+        nonFlowerGroups.set(key, (nonFlowerGroups.get(key) || 0) + 1);
+      }
+      let pairCount = 0;
+      let allOthersAreTriplets = true;
+      for (const count of nonFlowerGroups.values()) {
+        if (count === 2) pairCount++;
+        else if (count !== 3 && count !== 4) { allOthersAreTriplets = false; break; }
+      }
+      if (!allOthersAreTriplets || pairCount > 1) {
         return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
       }
     }
