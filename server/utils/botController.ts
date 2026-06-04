@@ -210,6 +210,11 @@ export class BotController {
           // ★ 诊断: HU 被过滤时打印原因
           if (winOptions.length === 0) {
             console.log(`[BotHU-filtered] ${player.name} HU filtered out! concealed=${player.hand.concealedTiles.length} exposed=${player.hand.exposedMelds.length} tile=${pa.tile?.suit}-${pa.tile?.value}`);
+          } else {
+            // ★ 诊断: HU 通过时打印手牌详情（调试捉冲问题）
+            const concealedStr = player.hand.concealedTiles.map(t => `${t.suit}-${t.value}`).join(',');
+            const exposedStr = player.hand.exposedMelds.map(m => `[${m.type}:${m.tiles.map(t => `${t.suit}-${t.value}`).join(',')}]`).join(',');
+            console.log(`[BotHU-accepted] ${player.name} concealed=[${concealedStr}] exposed=[${exposedStr}] tile=${pa.tile?.suit}-${pa.tile?.value} wildId=${game.customScoringMode}`);
           }
           return winOptions.length > 0;
         });
