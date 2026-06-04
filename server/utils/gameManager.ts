@@ -76,6 +76,7 @@ class GameManager {
       games: this.games,
       isPlayerBotControlled: (p) => this.isPlayerBotControlled(p),
       getCachedWinOptions: (g, p, c, f) => this.winEvaluator.getCachedWinOptions(g, p, c, f),
+      getCachedWinCheck: (g, p) => this.winEvaluator.getCachedWinCheck(g, p),
       handlePass: (g, p) => this.handlePass(g, p),
       handlePeng: (g, p) => this.handlePeng(g, p),
       handleKong: (g, p, t) => this.handleKong(g, p, t),
