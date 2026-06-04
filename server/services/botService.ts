@@ -251,9 +251,9 @@ function shouldDeclineLowValueHu(game: GameState, player: Player): boolean {
   const isCleanExposure = !hasWindMeld && !hasArrowMeld && !hasFlower && !hasMingKong && !hasAnKong
   if (isPengOrHalfFlush && isCleanExposure) return true
 
-  // ★★ K哥铁律（强化版）：不依赖路线识别，直接看手牌结构
-  // 手牌里如果手牌型能凑出碰碰胡/混一色/清一色 + 门清 + 门口干净 → 必等自摸
-  // 防止路线识别错误导致无花自摸价值的牌被低番捉冲
+  // ★★ K哥铁律（RULES.md 七、七）：
+  // 只能自摸（无花自摸=10番 · 门清×2=20番）。只有大吊例外。
+  // 不依赖 currentRoute 路线判断（路线识别可能错），直接看手牌结构
   const wildTileIdForCheck = game.customScoringMode || null
   const testHandForHu = [...player.hand.concealedTiles, discardTile]
   const allHandTypes = findBestHandTypes(testHandForHu, exposedMelds, wildTileIdForCheck)
@@ -262,10 +262,15 @@ function shouldDeclineLowValueHu(game: GameState, player: Player): boolean {
     allHandTypes.includes(HandType.HALF_FLUSH) ||
     allHandTypes.includes(HandType.FULL_FLUSH) ||
     allHandTypes.includes(HandType.HUN_PENG) ||
-    allHandTypes.includes(HandType.QING_PENG)
-  // 任何“内住有型” + 门清 + 门口干净 → 必等自摸（无花自摸=10番 + 门清×2）
-  if (hasPengOrFlushType && exposedMelds.length === 0 && isCleanExposure) {
-    console.log(`[NoFlowerSelfDraw-guard] ${player.name} 拦捉冲: 门清+碰/混/清一色+无花箭刻=无花自摸10番·门清×2=${isMenQing ? '20番' : '10番'}，不捉冲低番`)
+    allHandTypes.includes(HandType.QING_PENG) ||
+    allHandTypes.includes(HandType.FENG_PENG) ||
+    allHandTypes.includes(HandType.ALL_WIND)
+  // 大吊例外：手牌仅剩1张（非花牌）→ 可捉冲
+  const isDaDiao = player.hand.concealedTiles.filter(t => !isFlower(t)).length === 1
+  // 任何“内住有型” + 门口干净 + 非大吊 → 必等自摸
+  if (hasPengOrFlushType && isCleanExposure && !isDaDiao) {
+    const extraNote = isMenQing ? '·门清×2=20番' : ''
+    console.log(`[NoFlowerSelfDraw-guard] ${player.name} 拦捉冲(RULES.md): 碰/混/清一色+门口干净${extraNote}，无花自摸=10番×门清，只能自摸`)
     return true
   }
 
@@ -2408,8 +2413,20 @@ export async function shouldClaimPendingAction(
       const selfRouteMem = getPlayerRouteMemory(player)
       const selfCurrentRoute = selfRouteMem?.current as string | undefined
       const selfIsPengOrHalfFlush = selfCurrentRoute === 'ALL_PUNGS' || selfCurrentRoute === 'HALF_FLUSH'
-      if (selfIsPengOrHalfFlush && selfIsCleanExposure) {
-        traceClaim(player, game, 'hu-self-no-flower', `route=${selfCurrentRoute} cleanExposure=true → 无花自摸=10点`)
+      // ★ K哥铁律：门口干净+碰碰胡/混一色 → 自摸=无花自摸=10点，必胡
+      // 不依赖 currentRoute（路线可能识别错），直接检查手牌结构
+      const selfWildTileId = game.customScoringMode || null
+      const selfHandTypes = findBestHandTypes(selfConcealed, selfExposedMelds, selfWildTileId)
+      const selfHasPengOrFlush =
+        selfHandTypes.includes(HandType.ALL_TRIPLETS) ||
+        selfHandTypes.includes(HandType.HALF_FLUSH) ||
+        selfHandTypes.includes(HandType.FULL_FLUSH) ||
+        selfHandTypes.includes(HandType.HUN_PENG) ||
+        selfHandTypes.includes(HandType.QING_PENG) ||
+        selfHandTypes.includes(HandType.FENG_PENG) ||
+        selfHandTypes.includes(HandType.ALL_WIND)
+      if ((selfIsPengOrHalfFlush || selfHasPengOrFlush) && selfIsCleanExposure) {
+        traceClaim(player, game, 'hu-self-no-flower', `route=${selfCurrentRoute} types=[${selfHandTypes}] cleanExposure=true → 无花自摸=10点`)
         return ActionType.HU
       }
 
@@ -2556,8 +2573,22 @@ export async function shouldClaimPendingAction(
       const isCleanExposure = !hasWindMeld && !hasArrowMeld && !hasFlower && !hasMingKong && !hasAnKongMeld
       const currentRoute = routeMem?.current as string | undefined
       const isPengOrHalfFlush = currentRoute === 'ALL_PUNGS' || currentRoute === 'HALF_FLUSH'
-      if (isPengOrHalfFlush && isCleanExposure) {
-        traceClaim(player, game, 'hu-no-flower-block', `route=${currentRoute} cleanExposure=true → decline, wait for 无花自摸`)
+      // ★ K哥铁律：门口干净+碰碰胡/混一色 → 不捉冲，只能自摸
+      // 不依赖 currentRoute（路线可能识别错），直接检查手牌结构
+      const wildTileIdClaim = game.customScoringMode || null
+      const claimTestHand = discardTile ? [...hand, discardTile] : hand
+      const claimHandTypes = findBestHandTypes(claimTestHand, exposedMelds, wildTileIdClaim)
+      const claimHasPengOrFlush =
+        claimHandTypes.includes(HandType.ALL_TRIPLETS) ||
+        claimHandTypes.includes(HandType.HALF_FLUSH) ||
+        claimHandTypes.includes(HandType.FULL_FLUSH) ||
+        claimHandTypes.includes(HandType.HUN_PENG) ||
+        claimHandTypes.includes(HandType.QING_PENG) ||
+        claimHandTypes.includes(HandType.FENG_PENG) ||
+        claimHandTypes.includes(HandType.ALL_WIND)
+      const claimIsDaDiao = hand.filter(t => !isFlower(t)).length === 1
+      if ((isPengOrHalfFlush || claimHasPengOrFlush) && isCleanExposure && !claimIsDaDiao) {
+        traceClaim(player, game, 'hu-no-flower-block', `route=${currentRoute} types=[${claimHandTypes}] cleanExposure=true → decline, wait for 无花自摸`)
         return ActionType.PASS
       }
 
