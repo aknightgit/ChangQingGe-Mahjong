@@ -2026,13 +2026,15 @@ const statsPlayers = computed(() => {
       const score = Number(round?.scores?.[p.id] ?? 0)
       return best === null ? score : Math.max(best, score)
     }, null)
+    // ★ 累计分数：从 roundStats 累加各局实际得分
+    const cumulativeScore = roundStats.reduce((sum: number, round: any) => sum + Number(round?.scores?.[p.id] ?? 0), 0)
     return {
       id: p.id,
       name: p.name,
-      score: p.score || 0,
+      score: cumulativeScore,  // 累计分数（不只当前局）
       isBotControlled: !!(p as any).isBotControlled,
-      wins: p.status === 'won' ? 1 : 0,
-      losses: p.status === 'lost' ? 1 : 0,
+      wins: winCount,         // 累计胡牌局数
+      losses: roundStats.length - winCount,  // 累计输牌局数
       color: positionColors[p.position] || 'south',
       isMe: p.id === currentPlayer.value?.id,
       isBot: isBotPlayer(p),
