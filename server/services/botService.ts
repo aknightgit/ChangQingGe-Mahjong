@@ -234,6 +234,12 @@ function shouldDeclineLowValueHu(game: GameState, player: Player): boolean {
   const wildCount = player.hand.concealedTiles.filter(t => isWildTile(t, game)).length
   const isWildDiscard = isWildTile(discardTile, game)
   const isMenQing = player.hand.exposedMelds.length === 0
+  const flowerCount = player.hand.concealedTiles.filter(t => isFlower(t)).length +
+    player.hand.exposedMelds.filter(m => m.tiles?.length === 1 && isFlower(m.tiles[0])).length
+  // ★ K哥铁律: 门清+无花+无百搭 → 无花自摸=10点固定番, 始终不捉冲
+  const menqingNoFlowerNoWild = isMenQing && flowerCount === 0 && wildCount === 0
+  if (menqingNoFlowerNoWild) return true
+
   const likelyLowValueHu =
     !isMenQing &&
     !isWildDiscard &&
@@ -2180,10 +2186,16 @@ export async function shouldClaimPendingAction(
 
     // 自摸：有 selfWinChance 控制意愿
     if (isSelfDraw) {
-      const selfWinProb = policy.selfWinChance ?? 0.95
+      // ★ K哥铁律: 门清+无花+无百搭 → 无花自摸=10点固定番, 必须100%胡
+      const selfFlowerCount = player.hand.concealedTiles.filter(t => isFlower(t)).length +
+        player.hand.exposedMelds.filter(m => m.tiles?.length === 1 && isFlower(m.tiles[0])).length
+      const selfWildCount = player.hand.concealedTiles.filter(t => isWildTile(t, game)).length
+      const isMenQingSelf = player.hand.exposedMelds.length === 0
+      const isNoFlowerSelfDraw = isMenQingSelf && selfFlowerCount === 0 && selfWildCount === 0
+      const selfWinProb = isNoFlowerSelfDraw ? 1.0 : (policy.selfWinChance ?? 0.95)
       const selfRoll = Math.random()
       const decision = selfRoll < selfWinProb ? ActionType.HU : ActionType.PASS
-      traceClaim(player, game, 'hu-self-draw', `roll=${selfRoll.toFixed(6)} prob=${selfWinProb.toFixed(6)} decision=${decision}`)
+      traceClaim(player, game, 'hu-self-draw', `roll=${selfRoll.toFixed(6)} prob=${selfWinProb.toFixed(6)} noFlower=${isNoFlowerSelfDraw} decision=${decision}`)
       if (decision === ActionType.HU) {
         return ActionType.HU
       }
@@ -2223,6 +2235,13 @@ export async function shouldClaimPendingAction(
       let penalty = 0
       if (isWildDiscard) penalty += (policy.discardHuWildPenalty ?? 0.3)
       if (isMenQing) penalty += (policy.discardHuMenQingPenalty ?? 0.15)
+      // ★ K哥铁律: 门清+无花+无百搭 → 无花自摸=10点固定番, 远高于普通捉冲
+      // 必须大幅惩罚捉冲, 让AI争取自摸
+      const flowerCount = hand.filter(t => isFlower(t)).length +
+        player.hand.exposedMelds.filter(m => m.tiles?.length === 1 && isFlower(m.tiles[0])).length
+      if (isMenQing && flowerCount === 0 && wildCount === 0) {
+        penalty += 0.6  // 几乎必定放弃捉冲, 等无花自摸
+      }
       if (wildCount >= 2) penalty += (policy.bao2ClaimPenalty ?? 0.3)
       if (wildCount >= 3) penalty += Math.min(0.9, (policy.bao3AvoidThreshold ?? 0.4) * 0.9)
       // 最终概率 = base + boost - penalty，封顶 [0, 1]

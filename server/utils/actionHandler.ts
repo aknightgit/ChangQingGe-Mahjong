@@ -1058,7 +1058,7 @@ export class ActionHandler {
       // ★ K哥铁律: 只有1个真人时不发逐个响应消息, 只发汇总
       if (activeHumans.length === 1) {
         broadcastQuickMessage(game.gameId,
-          `🔥 全员响应聚义,本局结束!下局翻倍! (${voterNames})`, 'special');
+          `🔥 全员响应聚义,本局结束!下局翻倍!`, 'special');
       } else {
         // 多真人: 逐个响应 + 汇总
         for (const p of activeHumans) {
@@ -1068,7 +1068,7 @@ export class ActionHandler {
           }
         }
         broadcastQuickMessage(game.gameId,
-          `🔥 全员响应聚义,本局结束!下局翻倍! (${voterNames})`, 'special');
+          `🔥 全员响应聚义,本局结束!下局翻倍!`, 'special');
       }
 
 
