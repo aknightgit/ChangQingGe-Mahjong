@@ -784,9 +784,12 @@ export class ActionHandler {
 
     // 胡牌广播
     player.isSelfDrawn = isSelfDrawn;
+    // 捉冲：用 getLastDiscardPlayerId 获取正确的放冲者（不依赖 currentPlayerIndex，可能已被改过）
+    const lastDiscardPlayerId = isSelfDrawn ? null : this.deps.getLastDiscardPlayerId(game);
+    const lastDiscardPlayer = lastDiscardPlayerId ? game.players.find(p => p.id === lastDiscardPlayerId) : null;
     if (!isSelfDrawn) {
-      player.discarderId = game.players[game.currentPlayerIndex]?.id;
-      player.discarderName = game.players[game.currentPlayerIndex]?.name;
+      player.discarderId = lastDiscardPlayer?.id || game.players[game.currentPlayerIndex]?.id;
+      player.discarderName = lastDiscardPlayer?.name || game.players[game.currentPlayerIndex]?.name;
     }
     // 捉冲：从pendingAction.tile获取放冲牌名；自摸：从lastDrawnTile获取摸到的牌名
     const pendingTile = game.pendingActions.find(pa => pa.playerId === player.id)?.tile;
@@ -794,11 +797,10 @@ export class ActionHandler {
     const winningTileName = isSelfDrawn
       ? (lastDrawn ? getTileDisplayName(lastDrawn) : '')
       : (pendingTile ? getTileDisplayName(pendingTile) : (lastDrawn ? getTileDisplayName(lastDrawn) : ''));
-    const handTypeLabel = (player as any).winHandType || '';
-    const discarderName = isSelfDrawn ? '' : (game.players[game.currentPlayerIndex]?.name || '');
+    const discarderName = isSelfDrawn ? '' : (lastDiscardPlayer?.name || game.players[game.currentPlayerIndex]?.name || '');
     const huMsg = isSelfDrawn
       ? `🎉 [${player.name}] 自摸${winningTileName ? '-' + winningTileName : ''}`
-      : `🎉 [${player.name}] 捉冲[${discarderName}]${winningTileName ? '-' + winningTileName : ''}${handTypeLabel ? '·' + handTypeLabel : ''}`;
+      : `🎉 [${player.name}] 捉冲[${discarderName}]${winningTileName ? '-' + winningTileName : ''}`;
     broadcastQuickMessage(game.gameId, huMsg, 'special', isSelfDrawn ? 'selfHu' : 'hu');
 
     // 清除pending actions
