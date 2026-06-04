@@ -974,7 +974,29 @@ function findBestAssignmentHeuristic(
       const tile = alloc[i];
       virtualHand.push({ suit: tile.suit as TileSuit, value: tile.value, id: `vh-${i}`, isFlower: false });
     }
-    return detectTypes(virtualHand, exposed);
+    const result = detectTypes(virtualHand, exposed);
+    // ★ 百搭不能拆自然顺子：如果自然张中有顺子，百搭分配不能创造碰碰胡
+    if (result.includes(HandType.ALL_TRIPLETS) && naturals.length >= 3) {
+      const naturalNonFlower = naturals.filter(t => !isFlower(t));
+      const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+      let hasNaturalSequence = false;
+      for (const suit of numSuits) {
+        const suitTiles = naturalNonFlower.filter(t => t.suit === suit).sort((a, b) => a.value - b.value);
+        if (suitTiles.length < 3) continue;
+        for (let i = 0; i <= suitTiles.length - 3; i++) {
+          const a = suitTiles[i], b = suitTiles[i + 1], c = suitTiles[i + 2];
+          if (a.value + 1 === b.value && b.value + 1 === c.value) {
+            hasNaturalSequence = true;
+            break;
+          }
+        }
+        if (hasNaturalSequence) break;
+      }
+      if (hasNaturalSequence) {
+        return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
+      }
+    }
+    return result;
   };
 
   // 3 张百搭时全量穷举仍在可控范围内，避免被启发式漏掉真实可胡解
@@ -1171,6 +1193,38 @@ function findBestAssignmentByPriority(
       virtualHand.push({ suit: tile.suit as TileSuit, value: tile.value, id: `vhp-${i}`, isFlower: false });
     }
     const result = detectTypes(virtualHand, exposed);
+    // ★ 百搭不能拆自然顺子：如果自然张中有顺子，百搭分配不能创造碰碰胡
+    // 碰碰胡 = 全刻子+对子，有顺子就不是碰碰胡
+    if (result.includes(HandType.ALL_TRIPLETS) && naturals.length >= 3) {
+      const naturalNonFlower = naturals.filter(t => !isFlower(t));
+      const naturalGroups = new Map<string, Tile[]>();
+      for (const t of naturalNonFlower) {
+        const key = `${t.suit}-${t.value}`;
+        if (!naturalGroups.has(key)) naturalGroups.set(key, []);
+        naturalGroups.get(key)!.push(t);
+      }
+      // 检查自然张中是否有顺子（3张不同数值的同花色数牌，且不是刻子）
+      const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+      let hasNaturalSequence = false;
+      for (const suit of numSuits) {
+        const suitTiles = naturalNonFlower.filter(t => t.suit === suit).sort((a, b) => a.value - b.value);
+        if (suitTiles.length < 3) continue;
+        // 检查是否有连续3张（且不是3张同数值=刻子）
+        for (let i = 0; i <= suitTiles.length - 3; i++) {
+          const a = suitTiles[i], b = suitTiles[i + 1], c = suitTiles[i + 2];
+          if (a.value + 1 === b.value && b.value + 1 === c.value) {
+            // 3张连续同花色 = 顺子
+            hasNaturalSequence = true;
+            break;
+          }
+        }
+        if (hasNaturalSequence) break;
+      }
+      if (hasNaturalSequence) {
+        // 自然张有顺子 → 百搭分配拆了顺子 → 碰碰胡无效
+        return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
+      }
+    }
     return result;
   };
 
