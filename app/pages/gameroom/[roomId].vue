@@ -3442,6 +3442,11 @@ const _startRevealCountdown = () => {
     if (revealCountdown.value <= 0) {
       if (_revealCountdownTimer) { clearInterval(_revealCountdownTimer); _revealCountdownTimer = null }
       showWinnerReveal.value = false
+      // ★ 安全机制：验牌结束后如果游戏还在 REVEAL，强制刷新状态
+      // 防止 socket 断连导致客户端卡在验牌阶段
+      if (gameState.value?.phase === GamePhase.REVEAL) {
+        void refreshState('reveal-timeout')
+      }
     }
   }, 500)
 }

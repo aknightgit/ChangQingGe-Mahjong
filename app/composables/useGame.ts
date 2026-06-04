@@ -67,7 +67,7 @@ export const useGame = () => {
     pollingTimer = setInterval(() => {
       pollingTickCount += 1
       const gs = gameState.value
-      if (gameId.value && playerId.value && gs && (gs.phase === 'playing' || gs.phase === 'waiting' || gs.phase === 'starting')) {
+      if (gameId.value && playerId.value && gs && (gs.phase === 'playing' || gs.phase === 'waiting' || gs.phase === 'starting' || gs.phase === 'reveal' || gs.phase === 'ended')) {
         if (pollingTickCount === 1 || pollingTickCount % 5 === 0) {
           pushDiag('polling:tick', {
             tick: pollingTickCount,
@@ -246,6 +246,9 @@ export const useGame = () => {
           userName: userName,
           debugAccessToken
         })
+
+        // ★ Socket 重连后刷新状态（防止 REVEAL→ENDED 转换被错过）
+        void refreshState('socket-reconnect')
       })
 
       socket.value.on('connect_error', (err) => {
