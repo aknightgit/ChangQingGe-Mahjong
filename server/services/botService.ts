@@ -156,17 +156,19 @@ function softScoreWins(
   baseChance: number,
   temperature = 1
 ): boolean {
-  const currentShanten = 0 // PASS基准线
-  const currentEffective = 0 // PASS没有进张增益
-
   // 分数差（对所有候选统一标准化）
   // 重要：shanten通常吃碰前后相同（都是0），tune是实际区分因素
-  // tune权重从0.1提升到1.0，让evaluateChowValue的策略评估真正生效
+  // ★ P1 修复：effective 是实际进张数，碰牌会减少 3-5 张（手牌少 2+进张可能变顺子）
+  // 用相对差 (s.effective - best.effective) 会让碰牌永远输给 PASS (effective 0)
+  // 改为：effective 差为负时额外扣分，但 baseChance 先验足以抵消
   s = { ...s, shanten: (s.shanten - best.shanten) * 1.2 };
+  const effectivePenalty = s.effective < best.effective
+    ? (s.effective - best.effective) * 0.15  // effective 减少只会轻微扣分
+    : (s.effective - best.effective) * 0.5   // effective 增多重奖
   const scoreDiff =
-    (-s.shanten - 0) * 1 +           // shanten越低越好
-    (s.effective - best.effective) * 1 + // effective进张（与tune同等权重）
-    (s.tune - best.tune) * 1         // tune策略分（提升权重，真正影响决策）
+    (-s.shanten - 0) * 1 +           // shanten 越低越好
+    effectivePenalty +                // effective 差（减少轻微，增多重奖）
+    (s.tune - best.tune) * 1         // tune 策略分（提升权重，真正影响决策）
 
   // 先验差（PASS的logit=0）
   const priorDiff = chanceToLogit(baseChance)
