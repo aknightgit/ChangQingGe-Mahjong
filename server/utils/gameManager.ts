@@ -3794,9 +3794,12 @@ class GameManager {
           if (!livePlayer || livePlayer.id !== nextPlayer.id || livePlayer.status !== PlayerStatus.PLAYING) return;
           if (freshGame.pendingActions.length > 0) {
             const botLogMsg = (freshGame as any).hasTriggeredAction
-              ? '[bot-freeze] hasTriggeredAction=true, retaining all claims'
+              ? '[bot-freeze] hasTriggeredAction=true, clearing expired claims after freeze'
               : '[bot-freeze] No action triggered, clearing CD claims (B preserved)';
             console.log(`[bot-freeze] Freeze expired for ${livePlayer.name}, ${botLogMsg}`);
+            // ★ 犹豫期到期后，不管 hasTriggeredAction，都要清除过期 claims
+            // 否则其他玩家的过期 pending action 永远不清除，游戏卡住
+            delete (freshGame as any).hasTriggeredAction;
             this.clearExpiredClaimsForDecisionWindow(freshGame);
             if (freshGame.pendingActions.length > 0 && !this.canExecuteCurrentTurnPlayerDrawDuringPending(freshGame, livePlayer.id)) {
               await this.persistGame(freshGame);

@@ -975,24 +975,24 @@ function findBestAssignmentHeuristic(
       virtualHand.push({ suit: tile.suit as TileSuit, value: tile.value, id: `vh-${i}`, isFlower: false });
     }
     const result = detectTypes(virtualHand, exposed);
-    // ★ 百搭不能拆自然顺子：如果自然张中有顺子，百搭分配不能创造碰碰胡
+    // ★ 百搭不能创造顺子：虚拟手牌（含百搭分配）中有顺子，就不是碰碰胡
     if (result.includes(HandType.ALL_TRIPLETS) && naturals.length >= 3) {
-      const naturalNonFlower = naturals.filter(t => !isFlower(t));
+      const virtualNonFlower = virtualHand.filter(t => !isFlower(t));
       const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-      let hasNaturalSequence = false;
+      let hasSequence = false;
       for (const suit of numSuits) {
-        const suitTiles = naturalNonFlower.filter(t => t.suit === suit).sort((a, b) => a.value - b.value);
+        const suitTiles = virtualNonFlower.filter(t => t.suit === suit).sort((a, b) => a.value - b.value);
         if (suitTiles.length < 3) continue;
         for (let i = 0; i <= suitTiles.length - 3; i++) {
           const a = suitTiles[i], b = suitTiles[i + 1], c = suitTiles[i + 2];
           if (a.value + 1 === b.value && b.value + 1 === c.value) {
-            hasNaturalSequence = true;
+            hasSequence = true;
             break;
           }
         }
-        if (hasNaturalSequence) break;
+        if (hasSequence) break;
       }
-      if (hasNaturalSequence) {
+      if (hasSequence) {
         return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
       }
     }
@@ -1196,32 +1196,25 @@ function findBestAssignmentByPriority(
     // ★ 百搭不能拆自然顺子：如果自然张中有顺子，百搭分配不能创造碰碰胡
     // 碰碰胡 = 全刻子+对子，有顺子就不是碰碰胡
     if (result.includes(HandType.ALL_TRIPLETS) && naturals.length >= 3) {
-      const naturalNonFlower = naturals.filter(t => !isFlower(t));
-      const naturalGroups = new Map<string, Tile[]>();
-      for (const t of naturalNonFlower) {
-        const key = `${t.suit}-${t.value}`;
-        if (!naturalGroups.has(key)) naturalGroups.set(key, []);
-        naturalGroups.get(key)!.push(t);
-      }
-      // 检查自然张中是否有顺子（3张不同数值的同花色数牌，且不是刻子）
+      // ★ 检查虚拟手牌（含百搭分配）中是否有顺子
+      // 碰碰胡 = 全刻子+对子，有任何顺子就不是碰碰胡
+      const virtualNonFlower = virtualHand.filter(t => !isFlower(t));
       const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-      let hasNaturalSequence = false;
+      let hasSequence = false;
       for (const suit of numSuits) {
-        const suitTiles = naturalNonFlower.filter(t => t.suit === suit).sort((a, b) => a.value - b.value);
+        const suitTiles = virtualNonFlower.filter(t => t.suit === suit).sort((a, b) => a.value - b.value);
         if (suitTiles.length < 3) continue;
-        // 检查是否有连续3张（且不是3张同数值=刻子）
+        // 检查是否有3张连续同花色（顺子）
         for (let i = 0; i <= suitTiles.length - 3; i++) {
           const a = suitTiles[i], b = suitTiles[i + 1], c = suitTiles[i + 2];
           if (a.value + 1 === b.value && b.value + 1 === c.value) {
-            // 3张连续同花色 = 顺子
-            hasNaturalSequence = true;
+            hasSequence = true;
             break;
           }
         }
-        if (hasNaturalSequence) break;
+        if (hasSequence) break;
       }
-      if (hasNaturalSequence) {
-        // 自然张有顺子 → 百搭分配拆了顺子 → 碰碰胡无效
+      if (hasSequence) {
         return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
       }
     }
