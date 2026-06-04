@@ -360,6 +360,10 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       } else if (features.longestSuitCount < 6) {
         score -= 6
       }
+      // 长门≤5+有对子优势 → 混一色不划算，碰碰胡更合适
+      if (features.longestSuitCount <= 5 && features.pairCount >= 3) {
+        score -= 5
+      }
       if (features.upstreamVoidSuit && features.upstreamVoidSuit === targetSuit) {
         reasons.push('upstream_void_target')
         score += 3
@@ -425,6 +429,11 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
         score += 10
       } else if (features.pairCount + features.tripletCount < 3) {
         score -= 5
+      }
+      // 3对+百搭+无明显长门 → 碰碰胡可行性高，不应被混一色压制
+      if (features.pairCount >= 3 && features.wildCount >= 1 && features.longestSuitCount <= 5) {
+        reasons.push('pair_wild_no_flush_push')
+        score += 12
       }
       break
 
