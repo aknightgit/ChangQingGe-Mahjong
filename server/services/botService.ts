@@ -2285,12 +2285,18 @@ export async function shouldClaimPendingAction(
     const isSelfDraw = !claimTile
     console.log(`[shouldClaim-HU] ${player.name} HU available! isSelfDraw=${isSelfDraw} concealed=${player.hand.concealedTiles.length} exposed=${player.hand.exposedMelds.length} tile=${claimTile?.suit}-${claimTile?.value}`);
 
-    // 自摸：有 selfWinChance 控制意愿
+    // 自摸：利益最大化评估 - 评估能否几手后做更大的牌
     if (isSelfDraw) {
-      // ★ K哥铁律: 路线=碰碰胡/混一色 + 门口无花/无风箭刻 → 无花自摸=10点, 100%胡
-      const selfFlowerCount = player.hand.concealedTiles.filter(t => isFlower(t)).length +
-        player.hand.exposedMelds.filter(m => m.tiles?.length === 1 && isFlower(m.tiles[0])).length
       const selfExposedMelds = player.hand.exposedMelds
+      const selfExposedCount = selfExposedMelds.length
+      const selfIsMenQing = selfExposedCount === 0
+      const selfConcealed = player.hand.concealedTiles
+      const selfWildCount = selfConcealed.filter(t => isWildTile(t, game)).length
+      const selfFlowerCount = selfConcealed.filter(t => isFlower(t)).length +
+        selfExposedMelds.filter(m => m.tiles?.length === 1 && isFlower(m.tiles[0])).length
+      const selfWallRemaining = game.wall?.length || 0
+
+      // 1. 无花自摸: 门口干净+碰碰胡/混一色 → 100%胡
       const selfHasWindMeld = selfExposedMelds.some(m => m.tiles?.some(t => isWind(t)))
       const selfHasArrowMeld = selfExposedMelds.some(m => m.tiles?.some(t => isDragon(t)))
       const selfHasFlower = selfFlowerCount > 0
@@ -2300,11 +2306,75 @@ export async function shouldClaimPendingAction(
       const selfRouteMem = getPlayerRouteMemory(player)
       const selfCurrentRoute = selfRouteMem?.current as string | undefined
       const selfIsPengOrHalfFlush = selfCurrentRoute === 'ALL_PUNGS' || selfCurrentRoute === 'HALF_FLUSH'
-      const isNoFlowerSelfDraw = selfIsPengOrHalfFlush && selfIsCleanExposure
-      const selfWinProb = isNoFlowerSelfDraw ? 1.0 : (policy.selfWinChance ?? 0.95)
+      if (selfIsPengOrHalfFlush && selfIsCleanExposure) {
+        traceClaim(player, game, 'hu-self-no-flower', `route=${selfCurrentRoute} cleanExposure=true → 无花自摸=10点`)
+        return ActionType.HU
+      }
+
+      // 2. 杠开潜力评估: 有暗杠/加杠机会 → 等杠开(10点固定番)
+      // 检查暗杠: 手牌有4张相同的非百搭牌
+      const hasAnKongPotential = selfConcealed.filter(t => {
+        if (isWildTile(t, game) || isFlower(t)) return false
+        return selfConcealed.filter(t2 => t2.suit === t.suit && t2.value === t.value).length >= 4
+      }).length > 0
+      // 检查加杠: 门口有刻子，手牌有第4张
+      const hasJiaKongPotential = selfExposedMelds.some(m => {
+        if (m.type !== 'triplet') return false
+        return selfConcealed.some(t => t.suit === m.tiles[0].suit && t.value === m.tiles[0].value)
+      })
+      // 检查花牌补摸: 手牌有花牌，可以补摸
+      const hasFlowerDraw = selfFlowerCount > 0
+      const hasKongPotential = hasAnKongPotential || hasJiaKongPotential || hasFlowerDraw
+
+      // 3. 计算当前自摸收益 vs 继续打的期望收益
+      const selfTingTiles = countWinningTilesForHand(selfConcealed, selfExposedCount, game)
+      const selfExpectedFan = estimateRouteExpectedFan(selfRouteMem, player, game, selfTingTiles)
+      const currentSelfDrawValue = selfExpectedFan  // 当前自摸的价值
+
+      // 继续打的期望收益: 杠开概率×10 + 无花自摸概率×10 + 其他
+      let futureSelfDrawValue = 0
+      if (hasKongPotential) {
+        // 杠开: 概率约15-20%，收益10点固定番
+        const kongDrawProb = hasAnKongPotential ? 0.20 : (hasJiaKongPotential ? 0.15 : 0.10)
+        futureSelfDrawValue += 10 * kongDrawProb
+      }
+      // 无花自摸潜力: 门口目前不干净，但可能变干净
+      if (!selfIsCleanExposure && selfIsPengOrHalfFlush) {
+        // 路线对但门口不干净，可能等几手后变干净
+        futureSelfDrawValue += 3.0
+      }
+      // 清一色潜力: 长门7+张
+      const selfLongestSuitCount = selfRouteMem?.features?.longestSuitCount || 0
+      if (selfLongestSuitCount >= 7 && selfCurrentRoute !== 'FULL_FLUSH') {
+        futureSelfDrawValue += 4.0
+      }
+      // 百搭加成: 百搭越多，未来做牌空间越大
+      if (selfWildCount >= 2) futureSelfDrawValue += 3.0
+      else if (selfWildCount >= 1) futureSelfDrawValue += 1.5
+
+      // 4. 风险评估: 对手越危险，越应该赶紧胡
+      const selfTableThreat = estimateTableThreat(game, player.id)
+      const riskMultiplier = selfTableThreat >= 0.8 ? 1.5 : selfTableThreat >= 0.5 ? 1.2 : 1.0
+
+      // 5. 决策: 期望收益 > 当前收益 且 风险可控 → 等
+      const adjustedFutureValue = futureSelfDrawValue / riskMultiplier
+      const shouldWaitForBetter = adjustedFutureValue > currentSelfDrawValue * 0.5 && selfWallRemaining > 8
+
+      if (shouldWaitForBetter && hasKongPotential) {
+        let reason = ''
+        if (hasAnKongPotential) reason += '暗杠潜力+'
+        if (hasJiaKongPotential) reason += '加杠潜力+'
+        if (hasFlowerDraw) reason += '花牌补摸+'
+        if (selfWildCount >= 2) reason += `${selfWildCount}百搭+`
+        traceClaim(player, game, 'hu-self-wait', `currentFan=${currentSelfDrawValue.toFixed(1)} futureValue=${futureSelfDrawValue.toFixed(1)} risk=${selfTableThreat.toFixed(2)} reason=${reason} → wait for 杠开/更大牌型`)
+        return ActionType.PASS
+      }
+
+      // 6. 默认: 概率决策
+      const selfWinProb = policy.selfWinChance ?? 0.95
       const selfRoll = Math.random()
       const decision = selfRoll < selfWinProb ? ActionType.HU : ActionType.PASS
-      traceClaim(player, game, 'hu-self-draw', `roll=${selfRoll.toFixed(6)} prob=${selfWinProb.toFixed(6)} noFlower=${isNoFlowerSelfDraw} decision=${decision}`)
+      traceClaim(player, game, 'hu-self-draw', `roll=${selfRoll.toFixed(6)} prob=${selfWinProb.toFixed(6)} fan=${currentSelfDrawValue.toFixed(1)} future=${futureSelfDrawValue.toFixed(1)} decision=${decision}`)
       if (decision === ActionType.HU) {
         return ActionType.HU
       }
