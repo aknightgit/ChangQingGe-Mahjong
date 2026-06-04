@@ -3464,6 +3464,21 @@ const revealAllPlayers = computed(() => {
 })
 
 const settlementData = ref<any>(null)
+
+// ★ 自动拉取结算数据: 从 gameState.roundStats 构建 settlementData
+const fetchSettlement = () => {
+  const gs = gameState.value
+  if (!gs || !gs.roundStats || !Array.isArray(gs.roundStats) || gs.roundStats.length === 0) return
+  const latestRound = gs.roundStats[gs.roundStats.length - 1]
+  settlementData.value = {
+    playerStats: (gs.players || []).map((p: any) => ({
+      playerId: p.id,
+      playerName: p.name,
+      totalScore: p.totalScore ?? p.score ?? 0
+    })),
+    roundDetails: [latestRound]
+  }
+}
 const lastAutoSettlementKey = ref('')
 const wallExhaustedCountdown = ref(10)
 const wallExhaustedTimer = ref(null)
