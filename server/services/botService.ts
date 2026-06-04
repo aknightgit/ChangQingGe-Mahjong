@@ -318,6 +318,97 @@ function estimateRouteExpectedFan(routeState: any, player: Player, game: GameSta
   return Math.max(1, fan)
 }
 
+/**
+ * ★ K哥铁律: 利益最大化评估
+ * 评估"继续打 vs 立即捉冲"的期望收益差
+ * 核心因素: 百搭数、杠开潜力、无花自摸潜力、清一色潜力、听牌质量
+ */
+function estimateFutureReward(input: {
+  player: Player
+  game: GameState
+  routeState: any
+  tingTilesCount: number
+  wallRemaining: number
+}): { expectedFan: number; selfDrawProb: number; shouldWait: boolean; reason: string } {
+  const { player, game, routeState, tingTilesCount, wallRemaining } = input
+  const policy = routeState?.policy ?? getPolicyForPlayer(player)
+  const wildCount = player.hand.concealedTiles.filter(t => isWildTile(t, game)).length
+  const exposedMelds = player.hand.exposedMelds
+  const exposedCount = exposedMelds.length
+  const isMenQing = exposedCount === 0
+  const concealed = player.hand.concealedTiles
+
+  // 1. 估算当前路线的期望番数
+  const expectedFan = estimateRouteExpectedFan(routeState, player, game, tingTilesCount)
+
+  // 2. 计算自摸概率（基于听牌数、百搭数、牌墙剩余）
+  // 听牌数越多、百搭越多 → 自摸概率越高
+  let selfDrawProb = 0
+  if (tingTilesCount > 0) {
+    // 基础: 每张听牌的自摸概率 = 剩余张数 / 牌墙
+    const baseProb = Math.min(1, tingTilesCount / Math.max(1, wallRemaining))
+    // 百搭加成: 百搭可以"变成"更多牌 → 听牌范围更广
+    const wildBoost = wildCount >= 2 ? 0.35 : wildCount === 1 ? 0.15 : 0
+    // 门清加成: 门清时自摸番数更高
+    const menqingBoost = isMenQing ? 0.1 : 0
+    selfDrawProb = Math.min(0.95, baseProb + wildBoost + menqingBoost)
+  }
+
+  // 3. 检查杠开潜力
+  const hasAnKong = concealed.filter(t => {
+    const same = concealed.filter(t2 => t2.suit === t.suit && t2.value === t.value)
+    return same.length >= 4 && !isWildTile(t, game)
+  }).length > 0
+  const hasJiaKong = exposedMelds.some(m => {
+    if (m.type !== 'triplet') return false
+    const match = concealed.find(t => t.suit === m.tiles[0].suit && t.value === m.tiles[0].value)
+    return !!match && !isWildTile(match, game)
+  })
+  const hasKongPotential = hasAnKong || hasJiaKong
+
+  // 4. 检查清一色/大吊潜力
+  const routeMem = routeState
+  const currentRoute = routeMem?.current as string | undefined
+  const longestSuitCount = routeMem?.features?.longestSuitCount || 0
+  const pureFlushUpgradeReady = routeMem?.features?.pureFlushUpgradeReady || false
+  const hasPureFlushPotential = pureFlushUpgradeReady || (longestSuitCount >= 7 && wildCount >= 1)
+
+  // 5. 计算"继续打"的期望收益
+  // 基础: 期望番数 × 自摸概率 × (1 + 各种加成)
+  let futureValue = expectedFan * selfDrawProb
+
+  // 杠开加成: 杠开=10点固定番，概率虽低但收益极高
+  if (hasKongPotential) {
+    const kongDrawProb = 0.15  // 杠后补摸自摸的概率约15%
+    futureValue += 10 * kongDrawProb  // 10点固定番
+  }
+
+  // 清一色加成: 如果有清一色潜力，期望番数更高
+  if (hasPureFlushPotential && currentRoute !== 'ALL_PUNGS') {
+    futureValue += 4.0  // 清一色额外4番
+  }
+
+  // 大吊潜力: 手牌少+百搭多 → 听牌范围极广
+  const concealedCount = concealed.filter(t => !isFlower(t)).length
+  if (concealedCount <= 4 && wildCount >= 2) {
+    futureValue += 3.0  // 大吊额外3番
+  }
+
+  // 6. 决策: 期望收益 > 捉冲收益 → 等
+  const immediateFan = expectedFan  // 捉冲的即时收益约等于期望番数
+  const shouldWait = futureValue > immediateFan * 0.8  // 期望收益超过捉冲80%就等
+
+  let reason = ''
+  if (hasKongPotential) reason += '杠开潜力+'
+  if (hasPureFlushPotential) reason += '清一色潜力+'
+  if (concealedCount <= 4 && wildCount >= 2) reason += '大吊潜力+'
+  if (wildCount >= 2) reason += `${wildCount}百搭+`
+  if (tingTilesCount >= 8) reason += `听${tingTilesCount}张+`
+  if (!reason) reason = '无特殊潜力'
+
+  return { expectedFan, selfDrawProb, shouldWait, reason }
+}
+
 function estimateTingDecisionValue(input: {
   routeState: any
   player: Player
@@ -2229,17 +2320,24 @@ export async function shouldClaimPendingAction(
       const isMenQing = exposedCount === 0
       const wildCount = hand.filter(t => isWildTile(t, game)).length
 
-      // ★ K哥铁律: 路线=碰碰胡/混一色 + 门口无花/无风箭刻 → 禁止捉冲(等无花自摸)
+      // ★ K哥铁律: 利益最大化评估 - 期望收益 > 捉冲收益 → 等
       const exposedMelds = player.hand.exposedMelds
+      const wallRemaining = game.wall?.length || 0
+      const tingTilesCount = countWinningTilesForHand(hand, exposedMelds.length, game)
+      const routeMem = getPlayerRouteMemory(player)
+      const futureReward = estimateFutureReward({
+        player, game, routeState: routeMem, tingTilesCount, wallRemaining
+      })
+
+      // 硬性禁止: 门口干净+碰碰胡/混一色 → 不捉冲
       const flowerCount = hand.filter(t => isFlower(t)).length +
         exposedMelds.filter(m => m.tiles?.length === 1 && isFlower(m.tiles[0])).length
       const hasWindMeld = exposedMelds.some(m => m.tiles?.some(t => isWind(t)))
       const hasArrowMeld = exposedMelds.some(m => m.tiles?.some(t => isDragon(t)))
       const hasFlower = flowerCount > 0
       const hasMingKong = exposedMelds.some(m => m.type === 'kong' || m.type === 'exposed_kong')
-      const hasAnKong = exposedMelds.some(m => m.type === 'concealed_kong')
-      const isCleanExposure = !hasWindMeld && !hasArrowMeld && !hasFlower && !hasMingKong && !hasAnKong
-      const routeMem = getPlayerRouteMemory(player)
+      const hasAnKongMeld = exposedMelds.some(m => m.type === 'concealed_kong')
+      const isCleanExposure = !hasWindMeld && !hasArrowMeld && !hasFlower && !hasMingKong && !hasAnKongMeld
       const currentRoute = routeMem?.current as string | undefined
       const isPengOrHalfFlush = currentRoute === 'ALL_PUNGS' || currentRoute === 'HALF_FLUSH'
       if (isPengOrHalfFlush && isCleanExposure) {
@@ -2247,37 +2345,35 @@ export async function shouldClaimPendingAction(
         return ActionType.PASS
       }
 
-      // ★ V2.17 K哥铁律: 捉冲意愿统一计算
-      // 基础概率：降低，让 AI 有时放弃捉冲等自摸
+      // 利益最大化: 期望收益高于捉冲 → 放弃捉冲
+      if (futureReward.shouldWait && wallRemaining > 8) {
+        traceClaim(player, game, 'hu-future-reward', `futureValue=${futureReward.expectedFan.toFixed(1)} selfDrawProb=${futureReward.selfDrawProb.toFixed(2)} reason=${futureReward.reason} → wait`)
+        return ActionType.PASS
+      }
+
+      // 概率决策: 考虑百搭数、听牌数、牌墙剩余
       const baseProb = policy.discardHuChance ?? 0.35
-      // 加成：牌局往后 + 听牌少 + 对手危险 + 无百搭 → 鼓励捉冲
-      const wallRemaining = game.wall?.length || 0
       let boost = 0
-      // 牌墙越少越该捉冲（牌局往后）
       if (wallRemaining <= 5) boost += 0.8
       else if (wallRemaining <= 10) boost += 0.5
       else if (wallRemaining <= 20) boost += 0.2
-      // 听牌明显变少 → 捉冲
-      const tingTilesCount = countWinningTilesForHand(hand, player.hand.exposedMelds.length, game)
       if (tingTilesCount <= 1) boost += 0.8
       else if (tingTilesCount <= 3) boost += 0.4
-      // 其他玩家越危险越该捉冲（有人副露多/听牌了）
       const tableThreat = estimateTableThreat(game, player.id)
       if (tableThreat >= 0.8) boost += 0.4
       else if (tableThreat >= 0.5) boost += 0.2
-      // 无百搭 → 捉冲更积极（自摸难度高）
-      if (wildCount === 0) boost += 0.25
-      // 惩罚：百搭/门清/二宝/三宝 → 降低捉冲意愿
+      // 百搭越多 → 越应该等自摸（不捉冲）
+      if (wildCount >= 2) boost -= 0.3
+      else if (wildCount === 0) boost += 0.25
       let penalty = 0
       if (isWildDiscard) penalty += (policy.discardHuWildPenalty ?? 0.3)
       if (isMenQing) penalty += (policy.discardHuMenQingPenalty ?? 0.15)
       if (wildCount >= 2) penalty += (policy.bao2ClaimPenalty ?? 0.3)
       if (wildCount >= 3) penalty += Math.min(0.9, (policy.bao3AvoidThreshold ?? 0.4) * 0.9)
-      // 最终概率 = base + boost - penalty，封顶 [0, 1]
       const finalProb = Math.max(0, Math.min(1, baseProb + boost - penalty))
       const finalRoll = Math.random()
       const decision = finalRoll < finalProb ? ActionType.HU : ActionType.PASS
-      traceClaim(player, game, 'hu-discard-final', `discardTile=${traceTile(discardTile)} tingTiles=${tingTilesCount} wall=${wallRemaining} wild=${wildCount} base=${baseProb.toFixed(2)} boost=${boost.toFixed(2)} penalty=${penalty.toFixed(2)} final=${finalProb.toFixed(2)} roll=${finalRoll.toFixed(3)} decision=${decision}`)
+      traceClaim(player, game, 'hu-discard-final', `discardTile=${traceTile(discardTile)} tingTiles=${tingTilesCount} wall=${wallRemaining} wild=${wildCount} futureReason=${futureReward.reason} base=${baseProb.toFixed(2)} boost=${boost.toFixed(2)} penalty=${penalty.toFixed(2)} final=${finalProb.toFixed(2)} roll=${finalRoll.toFixed(3)} decision=${decision}`)
       return decision
     }
 
