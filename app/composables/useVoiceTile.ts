@@ -189,13 +189,19 @@ const playAudio = (url: string, fallbackText?: string) => {
     .then(() => playAudioQueued(url, fallbackText))
 }
 
-// ★ 立刻播放（不走队列）：用于出牌语音，保证“念牌”先于后续动作语音播出
+// ★ 立即播放（走队列，强制排在所有已排队任务之前）：用于出牌语音，
+// 保证“念牌”一定先于后续动作语音播出，同时不会与队列里其他任务并发。
 const playAudioImmediate = (url: string, fallbackText?: string) => {
   if (!url) {
     speakTextFallback(fallbackText)
     return
   }
-  playAudioQueued(url, fallbackText).catch(() => {})
+  // 截取当前队列的尾巴：先播这一条，再续播原队列剩余部分
+  const tail = _voiceQueue
+  _voiceQueue = tail
+    .catch(() => {})
+    .then(() => playAudioQueued(url, fallbackText))
+    .then(() => tail)
 }
 
 const playVoiceKey = (key: string, fallbackText: string) => {
