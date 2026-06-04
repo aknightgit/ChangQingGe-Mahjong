@@ -3937,6 +3937,10 @@ const onPlayerBack = async () => {
     isAIControlled.value = false
     addBroadcast(`👋 [${me.name}] 已回到牌桌!`, 'success')
     await refreshState()
+    // ★ 回来后如果有结算数据，显示上一局结算
+    if (settlementData.value && gameState.value?.phase === 'playing') {
+      showSettlement.value = true
+    }
   } catch (e) {
     console.error('[Comeback] Failed:', e)
   }
@@ -4156,8 +4160,11 @@ watch(() => gameState.value?.phase, (phase, oldPhase) => {
     }
   }
   // 新局开始:重置所有弹窗,显示骰子界面
+  // ★ AI托管玩家不隐藏结算，等玩家回来再看
   if (phase === GamePhase.STARTING) {
-    showSettlement.value = false
+    if (!isAIControlled.value) {
+      showSettlement.value = false
+    }
     showLiangShanOverlay.value = false
     showWinnerReveal.value = false
     diceRollTriggerKey.value = 0  // 重置骰子,防止自动滚动

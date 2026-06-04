@@ -2479,6 +2479,10 @@ export async function shouldClaimPendingAction(
         }
 
         if (!pengBlockedByRoute) {
+          // ★ 碰牌 shanten 改善时给 tune 加成（弥补 effective 损失）
+          if (shanten < passEval.shanten) {
+            pengTune += (passEval.shanten - shanten) * 0.6
+          }
           pengTune = Math.max(0.05, pengTune)
           actionScores.set(ActionType.PENG, { shanten, effective, tune: pengTune })
         }
@@ -2715,7 +2719,7 @@ export async function shouldClaimPendingAction(
   // 当分数差=0时，baseChance 直接决定动作概率
   const baseChances: Record<ActionType, number> = {
     [ActionType.PASS]: 0.5,  // PASS无先验（50/50）
-    [ActionType.PENG]: policy.pengChance ?? 0.4,  // P1: 降低碰牌概率
+    [ActionType.PENG]: policy.pengChance ?? 0.65,  // 提高碰牌先验
     [ActionType.KONG]: policy.kongChance ?? 0.7,
     [ActionType.CHOW]: policy.chowChance ?? 0.6,  // P1: 提高吃牌概率
     [ActionType.HU]: 1.0,    // 胡牌100%（已在HU分支处理）
