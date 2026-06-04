@@ -1352,27 +1352,7 @@ export function canWin(
     }
   }
 
-  // [TEMP DISABLED] 防御性检查临时禁用——阻止了正确的胡牌判定
-  // const totalExposedTiles = exposed.reduce(
-  //   (sum, m) => sum + (m.type === MeldType.KONG ? 3 : m.tiles.length), 0
-  // );
-  // const expectedConcealed = 14 - totalExposedTiles;
-  // const minExpected = expectedConcealed - 1;
-  // const maxExpected = expectedConcealed + 3;
-  // if (handTiles.length < minExpected || handTiles.length > maxExpected) {
-  //   return { canWin: false, types: [] };
-  // }
-
-  // [TEMP DISABLED] 重复 tile ID 检查临时禁用
-  // const seenIds = new Set<string>();
-  // for (const t of handTiles) {
-  //   if (seenIds.has(t.id)) {
-  //     return { canWin: false, types: [] };
-  //   }
-  //   seenIds.add(t.id);
-  // }
-
-  // canWin 结果缓存（同时缓存 boolean 和 types，避免重复计算）
+（同时缓存 boolean 和 types，避免重复计算）
   const handSig = handSignature(handTiles)
   const exposedSig = meldSignature(exposed)
   const wildCacheKey = typeof wildTileIdOrChecker === 'function' ? '__wild_fn__' : ((wildTileId || '') + (wildTileGroup ? '|g=' + wildTileGroup.sort().join(',') : ''))
