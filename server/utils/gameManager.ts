@@ -714,9 +714,19 @@ class GameManager {
         this.handlePass(game, player);
       }
     } else if (action === ActionType.HU) {
-      console.log(`[resolvePendingAction] ${player.name} HU before: currentPlayerIndex=${game.currentPlayerIndex} phase=${game.phase} wall=${game.wall?.length}`);
-      await this.handleHu(game, player);
-      console.log(`[resolvePendingAction] ${player.name} HU after: currentPlayerIndex=${game.currentPlayerIndex} phase=${game.phase} wall=${game.wall?.length} drawnThisTurn=${game.drawnThisTurn} pendingActions=${game.pendingActions?.length}`);
+      // ★ 捉冲校验: 用 getCachedWinOptions + extraTile 严格检查能否胡
+      const huPendingTile = pa.tile;
+      const winOptions = this.winEvaluator.getCachedWinOptions(game, player, 'discard', {
+        extraTile: huPendingTile || undefined
+      });
+      if (winOptions.length === 0) {
+        console.log(`[resolvePendingAction] ${player.name} HU rejected: winOptions=0 (canWin=false with extraTile)`);
+        this.handlePass(game, player);
+      } else {
+        console.log(`[resolvePendingAction] ${player.name} HU before: currentPlayerIndex=${game.currentPlayerIndex} phase=${game.phase} wall=${game.wall?.length}`);
+        await this.handleHu(game, player);
+        console.log(`[resolvePendingAction] ${player.name} HU after: currentPlayerIndex=${game.currentPlayerIndex} phase=${game.phase} wall=${game.wall?.length} drawnThisTurn=${game.drawnThisTurn} pendingActions=${game.pendingActions?.length}`);
+      }
     } else {
       this.handlePass(game, player);
     }

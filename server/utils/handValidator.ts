@@ -1446,6 +1446,12 @@ export function canWin(
     : [];
 
   const result = { canWin: finalCanWin, types: validTypes }
+  // ★ 诊断: canWin 结果日志（仅在有百搭且胡牌时打印）
+  if (finalCanWin && wildTileId && concealed.length <= 14) {
+    const concealedStr = concealed.map(t => `${t.suit}-${t.value}`).join(',');
+    const exposedStr = exposed.map(m => `[${m.type}:${m.tiles.map(t => `${t.suit}-${t.value}`).join(',')}]`).join(',');
+    console.log(`[canWin-DIAG] canWin=${finalCanWin} types=${validTypes} concealed=[${concealedStr}] exposed=[${exposedStr}] wildId=${wildTileId} concealedNonFlower=${concealedNonFlower.length} exactCanWin=${exactCanWin} isDaDiao=${isDaDiaoState}`);
+  }
   // 缓存结果（同时缓存 boolean 和 types）
   if (canWinResultCache.size < CAN_WIN_CACHE_MAX) {
     canWinResultCache.set(cacheKey, { canWin: result.canWin, types: result.types })
