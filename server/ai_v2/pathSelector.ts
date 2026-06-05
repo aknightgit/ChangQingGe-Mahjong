@@ -360,7 +360,7 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       // ★ V2: 4+对子/刻子坚决做碰碰胡（90%概率直接锁定）
       // 碰了一对到门口后 pairCount 降但 tripletCount 升，总数仍算
       if (features.pairCount >= 4 || features.pairCount + features.tripletCount >= 4) { reasons.push('four_pairs_commit'); score += 25 }
-      if (features.pairCount + features.tripletCount >= 5) { reasons.push('five_pairs_triplets_lock'); score += 10 }
+      if (features.pairCount + features.tripletCount >= 5) { reasons.push('five_pairs_triplets_lock'); score += 40 }
       if (_ap_isAgg && features.pairCount + features.tripletCount >= 3) { reasons.push('aggressive_pungs_commit'); score += 12 }
       if (_ap_isAgg && features.wildCount > 0 && features.pairCount + features.tripletCount >= 2) { reasons.push('wild_pungs_push'); score += 7 }
       if (noWildOpenPush) score += 1.4
