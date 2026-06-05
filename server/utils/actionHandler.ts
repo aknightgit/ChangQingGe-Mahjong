@@ -881,7 +881,7 @@ export class ActionHandler {
             return;
           }
           endRound(fresh, GameEndReason.LAST_PLAYER);
-        } catch (e) { console.warn('[handleHu] reveal end error', e); }
+        } catch (e: any) { console.error('[handleHu] reveal end error:', e?.stack || e); }
       }, 5000)
       tm.revealTimers.set(gameId, revealTimer)
       tm.detachTimer(revealTimer)

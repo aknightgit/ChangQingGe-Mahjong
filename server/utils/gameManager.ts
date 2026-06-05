@@ -4302,6 +4302,15 @@ class GameManager {
       game.leadingBrotherEvent = null;
     }
 
+    // AI接管玩家赢分减半（K哥确认要实现）
+    const botTakeovers = game.botTakeoverPlayers || [];
+    for (const player of game.players) {
+      if (botTakeovers.includes(player.id) && player.score > 0) {
+        player.score = Math.round(player.score / 20) * 10;
+        console.log(`[BotPenalty] ${player.name}(AI托管) 赢分减半: ${player.score}`);
+      }
+    }
+
     for (const player of game.players) {
       finalScores[player.id] = player.score;
     }
@@ -4396,11 +4405,13 @@ class GameManager {
         const exposedTiles = winner.hand.exposedMelds.flatMap(meld => meld.tiles).map(tile => ({ ...tile }));
         const allWinnerTiles = [...concealedTiles, ...exposedTiles];
         const isWildTile = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup);
+        const isBotPenalty = botTakeovers.includes(winner.id);
         return {
           playerId: winner.id,
           playerName: winner.name,
           handTypeName: winner.winHandType,
           isSelfDrawn: winner.isSelfDrawn ?? false,
+          isBotPenalty,
           discarderId: winner.discarderId,
           discarderName: discarder?.name,
           baseFan: winner.winningScoreBreakdown?.baseFan ?? 0,
