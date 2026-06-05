@@ -381,6 +381,11 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       score += features.wildCount * 0.8
       if (features.wildCount === 0) score += 5
       else if (features.wildCount === 1) score += 2
+      // ★ K哥铁律(2026-06-05): 百搭 0 且有风箭对子 → 加速碰对子 buff（防止补词已0但还能碰）
+      if (features.wildCount === 0 && features.honorPairCount >= 1) {
+        reasons.push('kge_honor_pair_no_wild_speedup')
+        score += features.honorPairCount * 2.5
+      }
       // ★ V2: liveHonorCount 权重 0.4→1.2
       score += features.liveHonorCount * 1.2 /* was: 0.4 */
       score += getPolicyValue(policy, 'allHonorsPursuit') * 8.2

@@ -33,6 +33,17 @@ function evaluateSelfKong(
         );
         if (!fourth) continue;
 
+        // ★ K哥铁律(2026-06-05): 做风一色/风碰时严禁杠风箭牌
+        // 杠会少一张风箭 + 补的牌不一定是风箭
+        if (isHonorTile(fourth) && (game as any).winnersCount === 0) {
+          // 检查是否在做风一色/风碰路线（手牌风箭多）
+          const honorCount = player.hand.concealedTiles.filter(t => isHonorTile(t)).length +
+            (player.hand.exposedMelds?.flatMap(m => m.tiles).filter(t => isHonorTile(t)).length || 0)
+          if (honorCount >= 7) {
+            return { shouldKong: false, type: 'extended', reason: 'kge_honor_kong_forbidden' };
+          }
+        }
+
         // 检查这张牌在手中是否还有用（组成对子或顺子）
         const sameTiles = player.hand.concealedTiles.filter(
           t => t.suit === fourth.suit && t.value === fourth.value
@@ -74,6 +85,14 @@ function evaluateSelfKong(
     }
     for (const [key, tiles] of counts) {
       if (tiles.length === 4) {
+        // ★ K哥铁律(2026-06-05): 做风一色/风碰时严禁暗杠风箭牌
+        if (isHonorTile(tiles[0]) && (game as any).winnersCount === 0) {
+          const honorCount = player.hand.concealedTiles.filter(t => isHonorTile(t)).length +
+            (player.hand.exposedMelds?.flatMap(m => m.tiles).filter(t => isHonorTile(t)).length || 0)
+          if (honorCount >= 7) {
+            return { shouldKong: false, type: 'concealed', reason: 'kge_honor_kong_forbidden' };
+          }
+        }
         // 检查这4张牌是否都孤立（无相邻牌）
         const suit = tiles[0].suit;
         const value = tiles[0].value;
