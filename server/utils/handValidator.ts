@@ -739,8 +739,10 @@ function detectTypes(
   }
 
   // 基础胡牌：满足 3n+2 格式且没有更高优先级特殊牌型，且不是垃圾胡
+  // ★ 用完整牌（手牌+门口）判断垃圾胡，防止门口有多门顺子时漏判
   if (types.length === 0 && satisfiesFormat) {
-    if (!isGarbageMultiSuitsWithSequence(concealedNonFlower)) {
+    const completeHand = [...concealedNonFlower, ...exposedNonFlower];
+    if (!isGarbageMultiSuitsWithSequence(completeHand)) {
       types.push(HandType.STANDARD);
     }
     // 垃圾胡：types.length 仍然为 0，不会胡
