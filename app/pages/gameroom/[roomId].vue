@@ -3193,8 +3193,6 @@ watch(rebelEvent, (event) => {
   tick()
   rebelTimer_ = setInterval(tick, 100)
 })
-})
-onUnmounted(() => { if (rebelTimer_) { clearInterval(rebelTimer_); rebelTimer_ = null } })
 
 const approvalCountdownRatio = computed(() => {
   const expiresAt = actionApprovalEvent.value?.expiresAt
