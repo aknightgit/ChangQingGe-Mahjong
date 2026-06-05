@@ -945,6 +945,8 @@ export class ActionHandler {
 
     // 造反成功标记（客户端据此显示弹窗而非结算）
     game.rebelSuccess = true;
+    game.rebelPlayerName = player.name;
+    game.rebelHand = [...player.hand.concealedTiles];
 
     // 结束本局（broadcastGameState 在 endRound 内部，会把 rebelSuccess 推送给客户端）
     endRound(game, GameEndReason.LAST_PLAYER);

@@ -268,6 +268,8 @@ export interface GameState {
   liangShanVotes?: string[];  // 梁山聚义投票者ID列表
   liangShanSuccess?: boolean;  // 聚义成功标记（客户端据此显示弹窗而非结算）
   rebelSuccess?: boolean;  // 造反成功标记（客户端据此显示弹窗而非结算）
+  rebelPlayerName?: string;  // 造反玩家姓名
+  rebelHand?: Tile[];  // 造反玩家手牌（全员可见）
   pendingRemovals?: string[];  // 下局要移除的AI玩家ID
   pendingReplacements?: { spectatorId: string; aiPlayerId: string; spectatorName?: string }[];  // 下局替换AI的请求
   settleRequested?: boolean;  // 是否已请求退房结算
