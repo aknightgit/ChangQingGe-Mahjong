@@ -768,15 +768,15 @@ function loadCharacterPolicy(botName: string): any {
       _policies['default'] = {
         id: 'fallback',
         useV2Engine: true,
-        selfWinChance: 0.95,
-        discardHuChance: 0.35,
+        selfWinChance: 0.98,
+        discardHuChance: 0.25,
         discardHuWildPenalty: 0.3,
         discardHuMenQingPenalty: 0.1,
         pengChance: 0.6,
         kongChance: 0.5,
         chowChance: 0.65,
         chowWildPenalty: 0.05,
-        menqingKeepBonus: 0.3,  // 门清执念：降低意愿，AI更愿意吃牌做牌
+        menqingKeepBonus: 0.45,  // 门清执念：提高门清意愿
         allPungsPursuit: 0,     // 碰碰胡追求：越高越不愿吃顺
         pureFlushPursuit: 0,
         halfFlushWeight: 0,
