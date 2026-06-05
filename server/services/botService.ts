@@ -1802,7 +1802,11 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         if (tilePairCount === 1) {
           // 单张：强制打掉（大正分）
           const _isShort = routeState.features.shortestSuit && tile.suit === routeState.features.shortestSuit
-          composite += 55 + visibleCopies * 8 + (_isShort ? 12 : 0) + (isHonor(tile) ? 6 : 0)
+          composite += 55 + (_isShort ? 12 : 0) + (isHonor(tile) ? 6 : 0)
+          // ★ 熟张优先：外面已出现的牌优先打（安全+清理手牌）
+          // 死张(3张可见)=+40, 熟张(1-2张可见)=+15~25
+          if (visibleCopies >= 3) composite += 40
+          else if (visibleCopies >= 1) composite += 15 + visibleCopies * 5
           // ★ 有相邻牌的单张（顺子搭子）：额外加分，优先拆顺子
           const hasAdjacent = hand.some(t => t.id !== tile.id && t.suit === tile.suit && Math.abs(t.value - tile.value) <= 2)
           if (hasAdjacent) composite += 30
