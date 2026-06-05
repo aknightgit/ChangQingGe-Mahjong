@@ -99,7 +99,7 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
     nearby === 0
       ? 12 + Math.max(0, shortSuitGap - 1)
       : 0
-  // ★ K哥铁律(2026-06-05): 短门顺子是垃圾！一律加大打掉力度，不保留任何短门顺子。
+  // ★ K哥铁律(2026-06-05): 短门顺子是垃圾!一律加大打掉力度,不保留任何短门顺子。
   // 短门邻接张(含顺子潜力)统统给负分
   // 熟张 ≥ 1 + gap >= 3 → -5.0 强打
   // 邻接张 ≥ 1 (任意 gap) → -2.0 保持打掉
@@ -109,11 +109,11 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
     nearby > 0 &&
     visibleCopies >= 1 &&
     shortSuitGap >= 3
-      ? -5.0  // 短门邻接熟张+gap大：强打
+      ? -5.0  // 短门邻接熟张+gap大:强打
       : shortestSuit &&
         input.tile.suit === shortestSuit &&
         nearby > 0
-        ? -2.0  // 短门邻接张（任意gap）：打掉
+        ? -2.0  // 短门邻接张(任意gap):打掉
         : 0
   const seenHonorWaste =
     isHonor(input.tile) &&
@@ -123,7 +123,7 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
     input.routeState.current !== 'HALF_FLUSH'
       ? 11 + visibleCopies
       : 0
-  // ★ V2.15 K哥铁律: 多张风牌待打时，优先打熟张(出现过的)
+  // ★ V2.15 K哥铁律: 多张风牌待打时,优先打熟张(出现过的)
   // visibleCopies >= 1 的风牌比未出现的优先打
   const honorSeenPreference =
     isHonor(input.tile) &&
@@ -134,7 +134,7 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
     input.routeState.current !== 'ALL_PUNGS'
       ? 1.5 + visibleCopies * 0.8
       : 0
-  // ★ 风箭单张低可见度 → 保留（负分=不打）
+  // ★ 风箭单张低可见度 → 保留(负分=不打)
   const honorSingletonKeep =
     isHonor(input.tile) &&
     isSingleton &&
@@ -238,20 +238,20 @@ function scoreByRoute(input: RouteDiscardInput): number {
   const isLongestSuitTile = !!longestSuit && tile.suit === longestSuit
   const suitGap = Math.max(0, longestSuitCount - shortestSuitCount)
   const shortSuitGapTrap = isShortestSuitTile && suitGap >= 4
-  // ★ K哥规则：短门的单张和顺子极不值钱，优先打掉！
-  // 正分=打掉，负分=保留。短门单张/顺子给高正分，强制丢弃
+  // ★ K哥规则:短门的单张和顺子极不值钱,优先打掉!
+  // 正分=打掉,负分=保留。短门单张/顺子给高正分,强制丢弃
   const shortestSuitSequenceBreakBias =
     isShortestSuitTile && count === 1 && nearby > 0
-      ? (10.0 + Math.max(0, suitGap - 1) * 1.6)  // 短门顺子单张：极高正分，必打
+      ? (10.0 + Math.max(0, suitGap - 1) * 1.6)  // 短门顺子单张:极高正分,必打
       : isShortestSuitTile && count === 1 && nearby === 0
-        ? (8.0 + Math.max(0, suitGap - 1) * 1.2)  // 短门孤张：高正分，优先打
+        ? (8.0 + Math.max(0, suitGap - 1) * 1.2)  // 短门孤张:高正分,优先打
         : 0
-  // 短门对子保护：短门有对子时不要轻易拆（负分=保留）
+  // 短门对子保护:短门有对子时不要轻易拆(负分=保留)
   const shortestSuitPairReserveBias =
     isShortestSuitTile && count >= 2 && suitGap >= 3
       ? (4.0 + Math.max(0, suitGap - 1) * 0.8)
       : 0
-  // 全局对子保护：4+对子时，对子不可拆（不管走哪条路线）
+  // 全局对子保护:4+对子时,对子不可拆(不管走哪条路线)
   const globalPairProtection =
     count >= 2 && (routeState.features.pairCount + (routeState.features.tripletCount || 0)) >= 4
       ? 5.0
@@ -379,7 +379,7 @@ function scoreByRoute(input: RouteDiscardInput): number {
       return 5.8 + (tile.suit === shortestSuit ? 1.1 : 0)
 
     case 'ALL_PUNGS': {
-      // ★ 碰碰胡坚决执行：4+对子时单张一律高正分打掉
+      // ★ 碰碰胡坚决执行:4+对子时单张一律高正分打掉
       const _pairTripletTotal = routeState.features.pairCount + routeState.features.tripletCount
       const _firmCommit = _pairTripletTotal >= 4
       const _discardScore = count >= 2 ? -4.4 : (_firmCommit ? 4.5 : 2.8)
@@ -389,7 +389,7 @@ function scoreByRoute(input: RouteDiscardInput): number {
       // 单张在短门 → 优先打
       const _shortSuit_single =
         count === 1 && isShortestSuitTile ? (_firmCommit ? 4.0 : 2.4) : 0
-      // 单张有邻牌（潜在的顺子）→ 拆了不影响对子
+      // 单张有邻牌(潜在的顺子)→ 拆了不影响对子
       const _adjacent_single =
         count === 1 && nearby > 0 ? (_firmCommit ? 3.0 : 1.8) : 0
       // 对子在短门 → 额外保留
@@ -398,10 +398,10 @@ function scoreByRoute(input: RouteDiscardInput): number {
       // 对子所属花色短门缺口大 → 更应保留
       const _gap_pair =
         count >= 2 && isShortestSuitTile && suitGap >= 3 ? -1.6 : 0
-      // 风箭单张：坚定执行时也要打（不再保留）
+      // 风箭单张:坚定执行时也要打(不再保留)
       const _honor_single_keep =
         count === 1 && isHonor(tile) ? (_firmCommit ? 1.5 : -1.2) : 0
-      // 熟张额外加分（坚决执行时优先打熟张）
+      // 熟张额外加分(坚决执行时优先打熟张)
       const _seen_bonus =
         count === 1 && visibleCopies >= 2 && _firmCommit ? 2.5 : 0
       return (
@@ -424,11 +424,11 @@ function scoreByRoute(input: RouteDiscardInput): number {
       return 3.8 + (longestSuit && tile.suit !== longestSuit ? 0.6 : 0) + (count >= 2 ? -globalPairProtection : 0)
 
     case 'STRIVE_DRAW':
-      // ★ V2: 争取流局 → 打熟张优先，留安全牌
+      // ★ V2: 争取流局 → 打熟张优先,留安全牌
       if (visibleCopies >= 2) return 8.5 + visibleCopies  // 熟张优先打
       if (count >= 2) return -3.5  // 留对子防点炮
       if (isHonor(tile)) return -1.2  // 留风箭当安全牌
-      return 3.2 + (visibleCopies >= 1 ? 2.5 : -1.5)  // 有熟张打熟张，生张慎打
+      return 3.2 + (visibleCopies >= 1 ? 2.5 : -1.5)  // 有熟张打熟张,生张慎打
   }
 }
 
@@ -447,18 +447,24 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
       ? (
         getObserveBucketScore(input) +
         _obsHonorSingletonKeep +
-        (input.routeState.features.shortestSuit && input.tile.suit === input.routeState.features.shortestSuit && sameTypeCount(input) === 1 ? 2.3 : 0) +
-        (input.routeState.features.shortestSuit && input.tile.suit === input.routeState.features.shortestSuit && adjacentCount(input) > 0 ? -3.0 : 0) +  // 短门邻接张：打掉，不留
+        // ★ K哥铁律(2026-06-05): 短门单张 → 无论如何优先打
+        // 熟张(家门口/弃牌区可见) → 最低分，绝对优先打
+        (input.routeState.features.shortestSuit && input.tile.suit === input.routeState.features.shortestSuit && sameTypeCount(input) === 1
+          ? (countVisibleCopies(input) >= 1 ? 6.0 : 3.5) : 0) +
+        (input.routeState.features.shortestSuit && input.tile.suit === input.routeState.features.shortestSuit && adjacentCount(input) > 0 ? -3.0 : 0) +  // 短门邻接张:打掉,不留
         (input.routeState.features.shortestSuitCount > 0 &&
           input.routeState.features.longestSuitCount - input.routeState.features.shortestSuitCount >= 4 &&
           input.routeState.features.shortestSuit &&
           input.tile.suit === input.routeState.features.shortestSuit &&
           sameTypeCount(input) >= 2 ? -2.6 : 0) +
         (input.routeState.features.upstreamVoidSuit && input.tile.suit === input.routeState.features.upstreamVoidSuit && sameTypeCount(input) === 1 ? 1.5 : 0) +
-        // ★ K哥铁律(2026-06-05): 上家吃过该门数牌、且自己这门<3张、且不是长门 → 才加大打掉
-        // 只有“长门不够强且上家做过同门”才进避。3+张同门（含长门）默认保留（卡住上游）。
+        // ★ K哥铁律(2026-06-05): 上家吃过该门数牌 → 才加大打掉
+        // 但长门>=次短门+3 → 绝不拆长门避上游（长门太强，卡上游更重要）
         (input.routeState.features.upstreamEatenSuits?.includes(input.tile.suit) &&
           sameTypeCount(input) === 1 &&
+          !(input.tile.suit === input.routeState.features.longestSuit &&
+            (input.routeState.features.longestSuitCount || 0) >= 3 &&
+            (input.routeState.features.longestSuitCount || 0) - (input.routeState.features.secondSuitCount || 0) >= 3) &&
           (input.routeState.features.longestSuit !== input.tile.suit || (input.routeState.features.longestSuitCount || 0) < 3)
             ? 3.0 : 0) +
         (input.routeState.features.longestSuit && input.tile.suit === input.routeState.features.longestSuit && sameTypeCount(input) >= 2 ? -1.2 : 0) +

@@ -154,6 +154,7 @@ const gameStateToDocument = (game: GameState): PersistedMahjongGame => ({
   diceRollCount: game.diceRollCount,
   drawnThisTurn: game.drawnThisTurn,
   chowPongExclusion: game.chowPongExclusion || {},
+  nextDealerId: (game as any).nextDealerId || null,
   trainingRoundStartSnapshot: (game as any).trainingRoundStartSnapshot
 })
 
@@ -185,6 +186,7 @@ const documentToGameState = (doc: PersistedMahjongGame): GameState => ({
   hesitationWindow: doc.hesitationWindow,
   diceRollCount: doc.diceRollCount,
   chowPongExclusion: (doc as any).chowPongExclusion || {},
+  nextDealerId: (doc as any).nextDealerId || null,
 
   drawnThisTurn: doc.drawnThisTurn,
   trainingRoundStartSnapshot: doc.trainingRoundStartSnapshot
