@@ -651,7 +651,10 @@ function calculateFormulaFan(
   // 重要：如果百搭已在自然位置形成顺子（如一二三万中的二万），不做虚拟分配
   let virtualHand = [...handTiles];
   if (wildTileSuit !== undefined && wildTileValue !== undefined) {
-    const wildTiles = handTiles.filter(t => t.suit === wildTileSuit && t.value === wildTileValue);
+    // ★ 花牌百搭组：匹配所有属于 wildTileGroup 的花牌，而非仅匹配单个值
+    const wildTiles = wildTileSuit === TileSuit.FLOWER && wildTileGroup && wildTileGroup.length > 0
+      ? handTiles.filter(t => t.suit === TileSuit.FLOWER && wildTileGroup.includes(String(t.value)))
+      : handTiles.filter(t => t.suit === wildTileSuit && t.value === wildTileValue);
     // 检查百搭是否已在自然位置形成顺子（与同门相邻牌组成连续序列）
     const wildsInNaturalSequence = wildTiles.filter(wt => {
       const sameSuit = handTiles.filter(t => t.suit === wt.suit && t.id !== wt.id);
@@ -663,7 +666,11 @@ function calculateFormulaFan(
       return (hasLower && hasUpper) || (hasLower && hasLower2) || (hasUpper && hasUpper2);
     });
     if (wildTiles.length > 0) {
-      const nonWildTiles = handTiles.filter(t => !(t.suit === wildTileSuit && t.value === wildTileValue));
+      // ★ 花牌百搭组：排除所有属于 wildTileGroup 的花牌
+      const isWild = wildTileSuit === TileSuit.FLOWER && wildTileGroup && wildTileGroup.length > 0
+        ? (t: Tile) => t.suit === TileSuit.FLOWER && wildTileGroup.includes(String(t.value))
+        : (t: Tile) => t.suit === wildTileSuit && t.value === wildTileValue;
+      const nonWildTiles = handTiles.filter(t => !isWild(t));
       // 只对不在自然顺子中的百搭做虚拟分配
       let remainingWilds = wildTiles.length - wildsInNaturalSequence.length;
       const virtualParts: Tile[] = [...nonWildTiles, ...wildsInNaturalSequence];
