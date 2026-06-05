@@ -198,25 +198,18 @@ function setPlayerRouteMemory(player: Player, routeState: any): void {
   ;(player as any).__routeStateMemory = routeState
 }
 
-/** 碰/吃执行后，用新路线覆盖路线缓存（解决AI失忆问题） */
+/**
+ * 碰/吃执行后，保留路线方向，不重新评估。
+ * K哥铁律：路线是顶层决策，吃碰不能反向改变路线。
+ * 只在摸牌时（selectBotDiscardTile 入口）评估一次路线。
+ */
 export function refreshRouteMemoryAfterClaim(player: Player, game: GameState): void {
-  const policy = getPolicyForPlayer(player)
-  if (!useV2Engine(policy)) return
-  const hand = player.hand.concealedTiles
-  const exposedCount = player.hand.exposedMelds.length
-  const isWildTileFn = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup)
-  const passShanten = calculateShanten(hand, exposedCount, isWildTileFn)
-  const passEffective = countEffectiveTiles(hand, exposedCount, isWildTileFn)
-  const routeState = getEvaluator(player).evaluate({
-    game, player, hand,
-    shanten: passShanten,
-    effectiveTiles: passEffective,
-    tableThreat: 0, wallRemaining: game.wall?.length || 0,
-    previousRouteState: getPlayerRouteMemory(player),
-    policy,
-  })
-  setPlayerRouteMemory(player, routeState)
-  console.log(`[RouteMemory] ${player.name} refreshed after claim → route=${routeState?.current} target=${routeState?.targetSuit} shanten=${passShanten}`)
+  // 不重新评估路线，保留摸牌时的路线决策
+  // 碰/吃只是执行路线中的一步，不应改变路线方向
+  const routeState = getPlayerRouteMemory(player)
+  if (routeState) {
+    console.log(`[RouteMemory] ${player.name} after claim → keeping route=${routeState?.current} (not re-evaluating)`)
+  }
 }
 
 function getLiveRouteMetricPolicy(policy: any): {
