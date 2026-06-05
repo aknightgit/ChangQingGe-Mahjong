@@ -229,6 +229,7 @@ function buildFeatureSummary(input: RouteEvaluationInput): RouteFeatureSummary {
     wildCount,
     upstreamVoidSuit: upstreamVoidSuit && (upstreamVoidSuit.consecutive || upstreamVoidSuit.count >= 2) ? upstreamVoidSuit.suit : null,
     upstreamRejectedSuit: upstreamRejectedSuit && upstreamRejectedSuit.runCount >= 1 ? upstreamRejectedSuit.suit : null,
+    upstreamEatenSuits: (() => { const set = new Set<string>(); if (upstream) for (const m of upstream.hand.exposedMelds || []) { if (m.type === 'sequence' && NUMBER_SUITS.includes(m.tiles[0]?.suit)) set.add(m.tiles[0].suit) } return Array.from(set) })(),
     allOpponentsAvoidSuit,
     liveHonorCount,
     opponentOpenMelds,

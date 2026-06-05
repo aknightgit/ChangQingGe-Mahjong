@@ -447,6 +447,11 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
           input.tile.suit === input.routeState.features.shortestSuit &&
           sameTypeCount(input) >= 2 ? -2.6 : 0) +
         (input.routeState.features.upstreamVoidSuit && input.tile.suit === input.routeState.features.upstreamVoidSuit && sameTypeCount(input) === 1 ? 1.5 : 0) +
+        // ★ K哥铁律：上家吃过该门数牌、且自己这门<=5张、且不是长门 → 大幅提高打该门单张优先级
+        (input.routeState.features.upstreamEatenSuits?.includes(input.tile.suit) &&
+          sameTypeCount(input) === 1 &&
+          (input.routeState.features.longestSuit !== input.tile.suit || (input.routeState.features.longestSuitCount || 0) <= 5)
+            ? 4.0 : 0) +
         (input.routeState.features.longestSuit && input.tile.suit === input.routeState.features.longestSuit && sameTypeCount(input) >= 2 ? -1.2 : 0) +
         (input.routeState.features.longestSuit && input.tile.suit === input.routeState.features.longestSuit && sameTypeCount(input) === 1 ? -1.8 : 0) +
         (input.routeState.features.longestSuit && input.routeState.features.longestSuitCount >= 6 && input.tile.suit === input.routeState.features.longestSuit ? -3.2 : 0) +

@@ -126,6 +126,15 @@ export function buildFeatureSummary(input: {
   for (const d of upstreamDiscards) upstreamSuitCounts[d.suit] = (upstreamSuitCounts[d.suit] || 0) + 1
   const upstreamVoidSuit = NUMBER_SUITS.map(s => ({ suit: s, count: upstreamSuitCounts[s] || 0 })).sort((a, b) => b.count - a.count)[0]
   const upstreamRejectedSuit = NUMBER_SUITS.map(s => ({ suit: s, count: upstreamSuitCounts[s] || 0 })).sort((a, b) => b.count - a.count)[0]
+  // ★ 上家吃过的门：检查上家吃过的顺子里包含的数牌门（3+张该门就是明确吃过）
+  const upstreamEatenSuits = new Set<string>()
+  if (upstream) {
+    for (const meld of upstream.hand.exposedMelds || []) {
+      if (meld.type === 'sequence' && NUMBER_SUITS.includes(meld.tiles[0]?.suit)) {
+        upstreamEatenSuits.add(meld.tiles[0].suit)
+      }
+    }
+  }
 
   const allOpponentsAvoidSuit = NUMBER_SUITS.find(s => game.players.filter((c: any) => c.id !== player.id).every((c: any) => (c.hand.discardedTiles || []).some((d: Tile) => d.suit === s))) || null
   const opponents = game.players.filter((c: any) => c.id !== player.id)
@@ -174,6 +183,7 @@ export function buildFeatureSummary(input: {
     honorCount, honorPairCount, wildCount,
     upstreamVoidSuit: upstreamVoidSuit && (upstreamVoidSuit.count >= 2) ? upstreamVoidSuit.suit : null,
     upstreamRejectedSuit: upstreamRejectedSuit && upstreamRejectedSuit.count >= 2 ? upstreamRejectedSuit.suit : null,
+    upstreamEatenSuits: Array.from(upstreamEatenSuits),
     allOpponentsAvoidSuit, liveHonorCount, opponentOpenMelds, fastOpenOpponentCount, bigOpenOpponentCount, downstreamPressure, oneSuitOpponentCount,
     pureFlushUpgradeReady, weakHonorPairCount, rawTileCount,
     blockedSuit, twoPlayerBlocking,

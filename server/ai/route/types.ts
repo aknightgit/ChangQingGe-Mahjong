@@ -24,6 +24,7 @@ export interface RouteFeatureSummary {
   wildCount: number
   upstreamVoidSuit: TileSuit | null
   upstreamRejectedSuit: TileSuit | null
+  upstreamEatenSuits: TileSuit[]
   allOpponentsAvoidSuit: TileSuit | null
   liveHonorCount: number
   opponentOpenMelds: number
