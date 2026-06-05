@@ -1697,6 +1697,7 @@ class GameManager {
     game.customScoringMode = null;
     game.winnersCount = 0;  // ★ 新局重置赢家计数（防止跨局累积导致 PeriodicCleanup 误判）
     // ★ 强制重置所有玩家 status 为 PLAYING（防止 endRound 异常中断后 status 残留）
+    // 注意：p.score 是累计分，不能清零！endRound 里 player.score = finalScores[pid] 是单局得分
     for (const p of game.players) {
       p.status = PlayerStatus.PLAYING;
       p.winOrder = null;
@@ -1707,7 +1708,7 @@ class GameManager {
       p.winningScoreBreakdown = undefined;
       p.wonFan = 0;
       p.winHandType = undefined;
-      p.score = 0;
+      // p.score 不重置！战绩榜需要累计
     }
     game.liangShanSuccess = undefined;  // 清除聚义成功标记
     game.liangShanVotes = [];  // 重置聚义投票，新局允许再次发起
@@ -4088,7 +4089,8 @@ class GameManager {
   private static formatPaymentFormula(
     transfers: Array<{ amount: number; bailoutType?: string; reason: string }>,
     isSelfDrawn: boolean,
-    totalPlayers: number
+    totalPlayers: number,
+    isBotPenalty: boolean = false
   ): string {
     if (!transfers || transfers.length === 0) return '';
     // 补齐全部玩家：未参与的玩家计为0
@@ -4101,14 +4103,19 @@ class GameManager {
     }
     const parts = filled.map(t => {
       if (t.amount === 0) return '0';
+      let term: string;
       if (t.bailoutType && (t.reason.includes('互包') || t.bailoutType === '三口' || t.bailoutType === '四口')) {
         const bailoutMultiplier = t.bailoutType === '四口' ? 5 : 3;
-        return `${t.amount / bailoutMultiplier}*${bailoutMultiplier}`;
+        term = `${t.amount / bailoutMultiplier}*${bailoutMultiplier}`;
+      } else {
+        term = String(t.amount);
       }
-      return String(t.amount);
+      if (isBotPenalty) term = `(${term})/2`;
+      return term;
     });
     const total = transfers.reduce((s, t) => s + t.amount, 0);
-    return `${parts.join('+')}=${total}`;
+    const finalTotal = isBotPenalty ? Math.ceil(total / 2) : total;
+    return `${parts.join('+')}=${finalTotal}`;
   }
 
   public endRound(game: GameState, reason: GameEndReason): void {
@@ -4278,7 +4285,8 @@ class GameManager {
             reason: t.reason
           })),
           winner.isSelfDrawn ?? false,
-          game.players.length
+          game.players.length,
+          botTakeovers.includes(winner.id)
         );
 
         for (const [idx, delta] of breakdown.deltas) {
@@ -4288,18 +4296,21 @@ class GameManager {
       }
     }
 
-    game.finalScores = finalScores;
+    // ★ BotPenalty：AI接管玩家赢分减半（基于单局 finalScores，不是累计分）
+    const botTakeovers = game.botTakeoverPlayers || [];
     for (const player of game.players) {
-      player.score = finalScores[player.id] ?? 0;
+      if (botTakeovers.includes(player.id) && (finalScores[player.id] ?? 0) > 0) {
+        finalScores[player.id] = Math.ceil(finalScores[player.id] / 2);
+        console.log(`[BotPenalty] ${player.name}(AI托管) 单局赢分减半: ${finalScores[player.id]}`);
+      }
     }
 
-    // 谢谢带头大哥:第一个出该牌的玩家赔付其余三家每家10分(在平衡之前)
+    // ★ 带头大哥：基于 finalScores 处理
     if (game.leadingBrotherEvent) {
       const { firstPlayerId } = game.leadingBrotherEvent;
       const firstPlayer = game.players.find(p => p.id === firstPlayerId);
       if (firstPlayer) {
-        const penalty = 30; // 赔付3家 × 10分
-        firstPlayer.score -= penalty;
+        const penalty = 30;
         finalScores[firstPlayerId] = (finalScores[firstPlayerId] || 0) - penalty;
         specialEvents.push({
           type: 'leading_brother',
@@ -4310,7 +4321,6 @@ class GameManager {
         });
         for (const p of game.players) {
           if (p.id !== firstPlayerId) {
-            p.score += 10;
             finalScores[p.id] = (finalScores[p.id] || 0) + 10;
             roundTransfers.push({
               fromPlayerId: firstPlayer.id,
@@ -4322,25 +4332,16 @@ class GameManager {
             });
           }
         }
-        game.finalScores = finalScores; // 同步更新
         console.log(`[LeadingBrother] ${firstPlayer.name} 赔付30分(每家10分)`);
       }
       game.leadingBrotherEvent = null;
     }
 
-    // AI接管玩家赢分减半（K哥确认要实现）
-    const botTakeovers = game.botTakeoverPlayers || [];
-    for (const player of game.players) {
-      if (botTakeovers.includes(player.id) && player.score > 0) {
-        player.score = Math.ceil(player.score / 2);
-        console.log(`[BotPenalty] ${player.name}(AI托管) 赢分减半: ${player.score}`);
-      }
-    }
-
-    for (const player of game.players) {
-      finalScores[player.id] = player.score;
-    }
     game.finalScores = finalScores;
+    // ★ player.score 是累计分，每局累加（不覆盖）
+    for (const player of game.players) {
+      player.score = (player.score || 0) + (finalScores[player.id] ?? 0);
+    }
 
     // 清除本局AI接管记录
     game.botTakeoverPlayers = [];

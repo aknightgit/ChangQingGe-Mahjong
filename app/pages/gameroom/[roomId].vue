@@ -330,7 +330,8 @@
                   <td style="font-size:0.7rem;white-space:nowrap">{{ row.formula }}</td>
                   <td>{{ row.winMode }}</td>
                   <td :class="{ 'settle-round-positive': row.score > 0, 'settle-round-negative': row.score < 0 }">
-                    {{ row.scoreLabel }}
+                    <span v-if="row.isWinner && row.paymentFormula" style="font-size:0.7rem;opacity:0.8;display:block">{{ row.paymentFormula }}</span>
+                    <span :style="{ fontWeight: 800 }">{{ row.scoreLabel }}</span>
                   </td>
                 </tr>
               </tbody>
@@ -3612,9 +3613,7 @@ const getSettlementFormula = (winner: any): string => {
   const global = winner.effectiveMultiplier ?? 1
   const settlement = winner.settlementMultiplier ?? 1
   const final = winner.finalPoints ?? 0
-  let formula = `${base}×${extra}×${global}×${settlement}=${final}`
-  if (winner.isBotPenalty) formula += ' 🤖÷2'
-  return formula
+  return `${base}×${extra}×${global}×${settlement}=${final}`
 }
 
 const formatMeldTiles = (tiles: any[]): string => {
@@ -3707,6 +3706,7 @@ const getRoundSettlementRows = (round: any) => {
       wild: winner ? (typeof winner.hasWild === 'boolean' ? (winner.hasWild ? '有' : '无') : '-') : '-',
       baseFan: getSettlementBaseFanDisplay(winner),
       formula: winner ? getSettlementFormula(winner) : '-',
+      paymentFormula: winner?.paymentFormula || '',
       finalPoints: winner?.finalPoints ?? '-',
       isBotPenalty: !!winner?.isBotPenalty,
       winMode: winner
