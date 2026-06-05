@@ -4302,54 +4302,6 @@ class GameManager {
       game.leadingBrotherEvent = null;
     }
 
-    // AI接管玩家:赢分减半,输分照常
-    // 注意:player.score 已包含带头大哥赔付,基于当前值计算
-    const botAffected = game.botTakeoverPlayers || [];
-
-    for (const player of game.players) {
-      if (botAffected.includes(player.id)) {
-        if (player.score > 0) {
-          // ★ K哥铁律(2026-06-05): 膨张系数10下所有输赢必须是10的倍数，
-          // 减半后按10取整
-          const half = Math.floor(player.score / 2);
-          const rounded = Math.floor(half / 10) * 10;
-          console.log(`[BotPenalty] ${player.name}(AI接管) 赢分减半: ${player.score} → ${half} → ${rounded}`);
-          player.score = rounded;
-        }
-        // 输分照常,不减
-      }
-    }
-
-    // 平衡总分:如果AI赢分减半导致总赢≠总输,按比例缩小输家支付
-    // ★ K哥铁律(2026-06-05): 膨张系数10下所有输赢必须是10的倍数，
-    // 平衡调整时按10取整，兑底调整也按10取整
-    const totalScore = game.players.reduce((s, p) => s + p.score, 0);
-    if (totalScore !== 0) {
-      const losers = game.players.filter(p => p.score < 0);
-      const totalLoss = losers.reduce((s, p) => s + Math.abs(p.score), 0);
-      const deficit = Math.abs(totalScore);
-
-      if (totalLoss > 0) {
-        for (const loser of losers) {
-          const ratio = Math.abs(loser.score) / totalLoss;
-          // 按10取整，保证平衡后仍是10的倍数
-          const reduction = Math.floor(deficit * ratio / 10) * 10;
-          loser.score += reduction;
-        }
-      }
-
-      // 兑底:取整差额加到最大输家，也按10取整
-      const finalTotal = game.players.reduce((s, p) => s + p.score, 0);
-      if (finalTotal !== 0) {
-        const minP = game.players.reduce((a, b) => a.score < b.score ? a : b);
-        minP.score -= finalTotal;
-        // 如果不是10的倍数，缩到最近的10的倍数
-        if (minP.score % 10 !== 0) {
-          minP.score = Math.floor(minP.score / 10) * 10;
-        }
-      }
-    }
-
     for (const player of game.players) {
       finalScores[player.id] = player.score;
     }
