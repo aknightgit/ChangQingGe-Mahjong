@@ -1314,6 +1314,29 @@ function scoreTileForDiscard(
     }
   }
 
+  // === 4.5 ★ 谢谢大哥引导：差一张触发时，非重要牌鼓励跟打 ===
+  if (game.consecutiveDiscards) {
+    const cd = game.consecutiveDiscards;
+    const trackedKey = `${cd.suit}-${cd.value}`;
+    const tileKey = `${tile.suit}-${tile.value}`;
+    // 差一张触发：已有3个不同玩家连续打出同一张牌，且自己手里有这张牌
+    if (trackedKey === tileKey && cd.playerIds.length === 3 && !cd.playerIds.includes(player.id)) {
+      // 判断是否“重要牌”：
+      // 1. 长门(target suit)的牌 → 重要，不跟
+      const isTargetSuitTile = routeState?.targetSuit && tile.suit === routeState.targetSuit;
+      // 2. 风一色路线的风向牌 → 重要，不跟
+      const isHonorHeavyHonor = routeState?.current === 'HONOR_HEAVY' && isHonor(tile);
+      // 3. 有相邻牌的数牌（顺子搭子）→ 较重要
+      const hasNeighbor = !isHonor(tile) && hand.some(t =>
+        t.id !== tile.id && t.suit === tile.suit && Math.abs(t.value - tile.value) <= 2
+      );
+      const isImportant = isTargetSuitTile || isHonorHeavyHonor || (hasNeighbor && sameTypeCount >= 2);
+      if (!isImportant) {
+        score += 8.0; // 非重要牌：强烈建议跟打，赚10分
+      }
+    }
+  }
+
   // Late game tie-break: bias toward ready hand speed and safer discards.
   if (isLatePhase) {
     const dangerPenalty = isHonor(tile) ? 0.15 : 0.45
