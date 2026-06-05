@@ -384,7 +384,7 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
         candidateShanten < passShanten ||
         candidateEffective >= passEffective + (action === ActionType.CHOW ? 3 : 6) ||
         speedGain >= (action === ActionType.CHOW ? 0.8 : 1.5) ||
-        routeGain >= (isHonorTile ? 1.0 : 0.65) ||
+        routeGain >= (isHonorTile ? 2.5 : 2.0) ||  // ★ 大幅提高门槛：门清是核心资产，routeGain必须非常显著才破
         effectiveGlobalMultiplier >= 4 ||
         (noWildOpenPush && (action === ActionType.PENG || candidateEffective >= passEffective + 1)) ||
         upstreamRejectedOpenPush ||
@@ -394,17 +394,16 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
         ? (multiWildMenqingPush ? openingBreakNeeds && effectiveGlobalMultiplier >= 4 : openingBreakNeeds)
         : canBreakForSpeed
 
-      if (action === ActionType.CHOW && player.hand.exposedMelds.length === 0 && !canBreakOpeningMenqing) {
-        return { allowed: false, tuneDelta: -1.5, reason: 'menqing_hold_chow' }
+      if (openingMenqing && !canBreakOpeningMenqing) {
+        const reason = action === ActionType.CHOW ? 'menqing_hold_chow' : 'menqing_hold_pung'
+        console.log(`[ClaimDecider] ${player.name} ${action} blocked: reason=${reason} routeGain=${routeGain.toFixed(2)} shanten=${candidateShanten}/${passShanten} effective=${candidateEffective}/${passEffective} speedGain=${speedGain.toFixed(2)}`)
+        return { allowed: false, tuneDelta: action === ActionType.CHOW ? -1.5 : -1.2, reason }
       }
-      // ★ 对手威胁高（2+副露）且AI有3+对子 → 允许碰牌转碰碰胡
+      // ★ 对手威胁高（2+副露）且AI有3+对子 → 允许碰牌转碰碰胡（仅在门清已被打破时生效）
       const opponentExposedMelds = game.players.filter((p: any) => p.id !== player.id)
         .reduce((sum: number, p: any) => sum + (p.hand?.exposedMelds?.length || 0), 0)
-      const highOpponentThreat = opponentExposedMelds >= 4  // 至少一家有2+副露
-      const pengForPungsTransition = highOpponentThreat && routeState.features.pairCount >= 3 && action === ActionType.PENG
-      if ((action === ActionType.PENG || action === ActionType.KONG) && player.hand.exposedMelds.length === 0 && !canBreakOpeningMenqing && !pengForPungsTransition) {
-        return { allowed: false, tuneDelta: -1.2, reason: 'menqing_hold_pung' }
-      }
+      const highOpponentThreat = opponentExposedMelds >= 4
+      const pengForPungsTransition = highOpponentThreat && routeState.features.pairCount >= 3 && action === ActionType.PENG && exposedMeldCount >= 1
       // ★ V2.11 K哥铁律: 已破门清后, 基础 tuneDelta 大幅提升
       // 破门清 = 已经没有退路, 应该更积极吃碰, 不再保守
       let tuneDelta = canBreakOpeningMenqing ? 0.35 + routeGain * 0.04 : -0.15

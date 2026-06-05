@@ -838,10 +838,8 @@ export class ActionHandler {
 
     // 检查是否需要结束牌局
     const remainingActive = game.players.filter(p => p.status === PlayerStatus.PLAYING).length;
-    // ★ K哥铁律(2026-06-05): 胡 > 碰 > 出牌, 任何玩家胡牌后必须立即进入 REVEAL 验牌,
-    // 5秒后进入 ENDED 结算, 不允许"胡了之后其他玩家继续打牌"
-    // 之前逻辑 remainingActive <= 1 || winnersCount >= 3 会让 4 人局 1 胡后继续打 → 卡死
-    if (game.winnersCount >= 1) {
+    // ★ 只有3人胡或牌墙摸光才进REVEAL→ENDED，1人胡后牌局继续
+    if (remainingActive <= 1 || game.winnersCount >= 3) {
       // 【修复】进入5秒亮牌阶段，再进入结算
       // 如果已处于REVEAL(前人胡已设), 推迟 1s 直接 endRound, 避免多个 5s setTimeout 抢跑
       // ★ V2.12: 去重 —— 只设一个 1s 定时器, 后续胡不再重复设
@@ -901,10 +899,8 @@ export class ActionHandler {
 
     // 牌墙未空，找下一个未胡牌玩家继续
     let nextIdx = game.currentPlayerIndex;
-    let searched = 0;
-    while (searched < game.players.length) {
+    for (let i = 0; i < game.players.length; i++) {
       nextIdx = (nextIdx + 1) % game.players.length;
-      searched++;
       if (game.players[nextIdx].status === PlayerStatus.PLAYING) break;
     }
     game.currentPlayerIndex = nextIdx;
