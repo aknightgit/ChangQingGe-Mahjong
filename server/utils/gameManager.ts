@@ -1713,6 +1713,12 @@ class GameManager {
       this.timerManager.freezeTimers.delete(gameId);
       console.log(`[WallDebug] Cleared stale freeze timer for game ${gameId}`);
     }
+    // ★ K哥铁律(2026-06-05): 清除上一局残留的 REVEAL 定时器
+    // handleHu 设的 5s REVEAL 定时器如果没触发，新局开始时必须清除，否则新局被强制结束
+    if ((game as any)._revealEndScheduled) {
+      delete (game as any)._revealEndScheduled;
+      console.log(`[beginGame] Cleared stale _revealEndScheduled for game ${gameId}`);
+    }
     // 每局重置百搭冷冻状态
     game.freezePlayerId = null;
     game.freezeComplete = false;
@@ -4048,6 +4054,12 @@ class GameManager {
   }
 
   public endRound(game: GameState, reason: GameEndReason): void {
+    // ★ K哥铁律(2026-06-05): 防止上一局残留的 REVEAL 定时器在新局里触发
+    // 如果游戏已经不在 REVEAL/PLAYING 阶段（比如已经 ENDED 或 STARTING），跳过
+    if (game.phase !== GamePhase.REVEAL && game.phase !== GamePhase.PLAYING) {
+      console.log(`[endRound] Skipped: game phase=${game.phase}, stale timer?`)
+      return
+    }
     this.timerManager.clearPendingActionTimer(game.gameId);
     // 【2026-05-29 验牌阶段】如果还不是REVEAL阶段，先进入REVEAL并延迟5秒
     // 梁山聚义成功：跳过验牌，直接结算
