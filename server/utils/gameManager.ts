@@ -939,6 +939,9 @@ class GameManager {
         winnerDetails: [{
           playerId: winner.id,
           playerName: winner.name,
+          winOrder: winner.winOrder ?? null,
+          winRound: winner.winRound ?? null,
+          winTimestamp: winner.winTimestamp ?? null,
           handTypeName: winner.winHandType || winner.handTypeName || '未知',
           isSelfDrawn: flags?.isSelfDrawn ?? false,
           isKongFlower: flags?.isKongFlower ?? false,
