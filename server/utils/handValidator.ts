@@ -1551,7 +1551,15 @@ export function canWin(
     }
   }
 
-  const finalCanWin = types.length > 0 || (exactCanWin && !daDiaoBlockedByGarbage && !naturalTilesBlockedByGarbage) || (isDaDiaoState && !daDiaoBlockedByGarbage);
+  // ★ exactCanWin 兜底时也要检查垃圾胡（防止 detectTypes 过滤后被 exactCanWin 绕过）
+  let exactWinBlockedByGarbage = false;
+  if (exactCanWin && types.length === 0 && concealedNonFlower.length >= 2) {
+    const completeHandForGarbage = [...concealedNonFlower, ...exposed.flatMap(m => m.tiles).filter(t => !isFlower(t))];
+    if (isGarbageMultiSuitsWithSequence(completeHandForGarbage)) {
+      exactWinBlockedByGarbage = true;
+    }
+  }
+  const finalCanWin = types.length > 0 || (exactCanWin && !daDiaoBlockedByGarbage && !naturalTilesBlockedByGarbage && !exactWinBlockedByGarbage) || (isDaDiaoState && !daDiaoBlockedByGarbage);
   const validTypes = finalCanWin
     ? (types.length > 0 ? types : (isDaDiaoState && !daDiaoBlockedByGarbage) ? [HandType.DA_DIAO] : [HandType.STANDARD])
     : [];
