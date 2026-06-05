@@ -4627,15 +4627,7 @@ const checkOtherPlayerSounds = (newState: any) => {
   }
   // ★ 修复顺序bug：先播出牌语音（包括补花），再播吃碰杠语音
   // 这样听到的顺序是：八万 → 吃
-  for (const d of pendingDiscards) {
-    if (d.suit === 'flower') {
-      playSound('tile-draw')
-      playVoiceAction('flowerReplace')
-    } else {
-      playSound('tile-discard')
-      if (d.suit) playVoiceTile(d.suit, d.value)
-    }
-  }
+  // ★ 先播放碰/吃/杠语音，再播放出牌语音（按动作发生时间顺序）
   for (const action of pendingMeldVoices) {
     if (action === 'kong') {
       playSound('tile-kong')
@@ -4646,6 +4638,15 @@ const checkOtherPlayerSounds = (newState: any) => {
     } else {
       playSound('tile-chow')
       playVoiceAction('chow')
+    }
+  }
+  for (const d of pendingDiscards) {
+    if (d.suit === 'flower') {
+      playSound('tile-draw')
+      playVoiceAction('flowerReplace')
+    } else {
+      playSound('tile-discard')
+      if (d.suit) playVoiceTile(d.suit, d.value)
     }
   }
 }
