@@ -25,7 +25,7 @@ import { randomUUID } from 'crypto';
 import { saveGameState, loadGameState, loadAllGameStates, loadActiveGameStates, deleteGameState } from './gamePersistence';
 import { MatchHistoryService } from '../services/matchHistoryService';
 import { TrainingRecordService } from '../services/trainingRecordService';
-import { isBotPlayer, selectBotChowTileIds, selectDiscardTile, shouldClaimPendingAction } from '../services/botService';
+import { isBotPlayer, selectBotChowTileIds, selectDiscardTile, shouldClaimPendingAction, refreshRouteMemoryAfterClaim } from '../services/botService';
 import { formatBeijingTime } from './beijingTime';
 import { isConcealedDiscardState, tileLabel } from './gameHelpers';
 import { RoomGameBridge } from '../services/roomGameBridge';
@@ -703,12 +703,16 @@ class GameManager {
     if (action === ActionType.PASS) {
       this.handlePass(game, player);
     } else if (action === ActionType.PENG) {
-      if (player.hand.concealedTiles.length >= 2) { this.handlePeng(game, player); }
+      if (player.hand.concealedTiles.length >= 2) {
+        this.handlePeng(game, player);
+        refreshRouteMemoryAfterClaim(player, game);
+      }
       else { this.handlePass(game, player); }
     } else if (action === ActionType.CHOW) {
       if (player.hand.concealedTiles.length >= 2) {
         console.log(`[PendingResolve] ${player.name} executing CHOW (concealed=${player.hand.concealedTiles.length})`);
         this.handleChow(game, player, pa.selectedChowTileIds);
+        refreshRouteMemoryAfterClaim(player, game);
       } else {
         console.warn(`[PendingResolve] ${player.name} CHOW blocked: not enough tiles`);
         this.handlePass(game, player);
