@@ -1088,7 +1088,9 @@ export function calculateSettlementBreakdownByRules(
   };
 
   if (isSelfDrawn) {
-    const bailoutLoser = allPlayerIndices.find(idx => {
+    // ★ bailoutLoser 不受 eligiblePlayerIndices 限制，互包义务独立于胡牌顺序
+    const allBailoutIndices = mutualBailout ? [...mutualBailout.keys()] : [];
+    const bailoutLoser = allBailoutIndices.find(idx => {
       if (idx === winnerIndex) return false;
       const bailout = mutualBailout?.get(idx);
       return bailout?.partnerIndex === winnerIndex;
@@ -1136,7 +1138,9 @@ export function calculateSettlementBreakdownByRules(
 
     // 再检查其他玩家是否有互包关系（第三方互包补赔）
     // 规则：第三方放冲 → 放冲者赔1倍 + 互包输家补赔1倍
-    const bailoutLoser = allPlayerIndices.find(idx => {
+    // ★ bailoutLoser 不受 eligiblePlayerIndices 限制，互包义务独立于胡牌顺序
+    const allIndices = mutualBailout ? [...mutualBailout.keys()] : [];
+    const bailoutLoser = allIndices.find(idx => {
       if (idx === winnerIndex || idx === discarderId) return false;
       const bailout = mutualBailout?.get(idx);
       return bailout?.partnerIndex === winnerIndex;
