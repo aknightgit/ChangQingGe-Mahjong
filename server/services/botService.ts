@@ -2167,8 +2167,8 @@ function evaluateChowValue(
 
   // ★ K哥铁律：第一口开门吃时，长门 >= 5 才能确定做混一色/清一色，才能开吃
   // 第二口第三口不限制（已开门）
-  const chowSuitCount = hand.filter(t => t.suit === chowTile.suit && !isWildTile(t, game)).length
-  if (meldCount === 0 && chowSuitCount < 5) {
+  const chowSuitTiles = hand.filter(t => t.suit === chowTile.suit && !isWildTile(t, game)).length
+  if (meldCount === 0 && chowSuitTiles < 5) {
     return 0  // 第一口开门，此门不足5张，禁止吃
   }
 
