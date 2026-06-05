@@ -311,8 +311,7 @@
                   <th>牌型</th>
                   <th>花</th>
                   <th>番数</th>
-                  <th>门清</th>
-                  <th>百搭</th>
+                  <th>算式</th>
                   <th>自摸/捉冲</th>
                   <th>总输赢</th>
                 </tr>
@@ -328,8 +327,7 @@
                   <td>{{ row.handType }}</td>
                   <td>{{ row.flowerCount }}</td>
                   <td>{{ row.baseFan }}</td>
-                  <td>{{ row.menQing }}</td>
-                  <td>{{ row.wild }}</td>
+                  <td style="font-size:0.7rem;white-space:nowrap">{{ row.formula }}</td>
                   <td>{{ row.winMode }}</td>
                   <td :class="{ 'settle-round-positive': row.score > 0, 'settle-round-negative': row.score < 0 }">
                     {{ row.scoreLabel }}
@@ -3607,6 +3605,18 @@ const getSettlementBaseFanDisplay = (winner: any): string | number => {
   return winner.baseFan ?? '-'
 }
 
+const getSettlementFormula = (winner: any): string => {
+  if (!winner) return '-'
+  const base = winner.baseFan ?? 0
+  const extra = winner.extraMultipliers ?? 1
+  const global = winner.effectiveMultiplier ?? 1
+  const settlement = winner.settlementMultiplier ?? 1
+  const final = winner.finalPoints ?? 0
+  let formula = `${base}×${extra}×${global}×${settlement}=${final}`
+  if (winner.isBotPenalty) formula += ' 🤖÷2'
+  return formula
+}
+
 const formatMeldTiles = (tiles: any[]): string => {
   const sorted = [...tiles].sort((a, b) => {
     const suitOrder: Record<string, number> = { wan: 0, tiao: 1, dots: 2, feng: 3, jian: 4 }
@@ -3696,7 +3706,9 @@ const getRoundSettlementRows = (round: any) => {
       menQing: winner ? (typeof winner.isMenQing === 'boolean' ? (winner.isMenQing ? '门清' : '非门清') : '-') : '-',
       wild: winner ? (typeof winner.hasWild === 'boolean' ? (winner.hasWild ? '有' : '无') : '-') : '-',
       baseFan: getSettlementBaseFanDisplay(winner),
+      formula: winner ? getSettlementFormula(winner) : '-',
       finalPoints: winner?.finalPoints ?? '-',
+      isBotPenalty: !!winner?.isBotPenalty,
       winMode: winner
         ? (winner.discarderId
           ? `捉冲 ${winner.discarderName || '未知'}`
