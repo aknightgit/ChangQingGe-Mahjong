@@ -2165,6 +2165,12 @@ function evaluateChowValue(
 
   if (player.isTing) return 0
 
+  // ★ K哥铁律：最短门 >= 5 才能吃这一门（硬限制）
+  const chowSuitCount = hand.filter(t => t.suit === chowTile.suit && !isWildTile(t, game)).length
+  if (shortestSuitEntry?.suit === chowTile.suit && chowSuitCount < 5) {
+    return 0  // 最短门不足5张，禁止吃
+  }
+
   // === 基础分 ===
   let score = policy.chowChance
 
