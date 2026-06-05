@@ -186,8 +186,6 @@ const playAudio = (url: string, fallbackText?: string) => {
     .then(() => playAudioQueued(url, fallbackText))
 }
 
-// ★ playAudioImmediate 已合并到 playAudio：两者行为一致（走队列串行播放）。
-// 不需要插队：playVoiceTile 总在 playVoiceAction 之前调用，队列天然保持顺序。
 
 const playVoiceKey = (key: string, fallbackText: string) => {
   const url = _audioMap.value.get(key)
