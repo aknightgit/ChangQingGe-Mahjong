@@ -1929,18 +1929,8 @@ export function selectBotChowTileIds(
 
   const passShanten = calculateShanten(hand, exposedCount, wildChecker)
   const passEffective = countEffectiveTiles(hand, exposedCount, wildChecker)
-  const routeState = useRoutePlanner
-    ? getEvaluator(player).evaluate({
-        game,
-        player,
-        hand,
-        shanten: passShanten,
-        effectiveTiles: passEffective,
-        tableThreat,
-        wallRemaining,
-        previousRouteState: getPlayerRouteMemory(player),
-      })
-    : null
+  // ★ K哥铁律：用摸牌时存好的路线，不重新评估
+  const routeState = useRoutePlanner ? getPlayerRouteMemory(player) : null
 
   let best: { tileIds: string[]; shanten: number; effective: number; tune: number } | null = null
 
@@ -2712,19 +2702,8 @@ export async function shouldClaimPendingAction(
   }
 
   const passEval = actionScores.get(ActionType.PASS)!
-  const routeState = useRoutePlanner
-    ? getEvaluator(player).evaluate({
-        game,
-        player,
-        hand,
-        shanten: passEval.shanten,
-        effectiveTiles: passEval.effective,
-        tableThreat,
-        wallRemaining,
-        previousRouteState: getPlayerRouteMemory(player),
-        policy,
-      })
-    : null
+  // ★ K哥铁律：用摸牌时存好的路线，不重新评估，保证吃碰决策跟出牌决策一致
+  const routeState = useRoutePlanner ? getPlayerRouteMemory(player) : null
 
   // PENG
   if (
