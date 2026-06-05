@@ -719,9 +719,14 @@ function detectTypes(
   function isGarbageMultiSuitsWithSequence(concealedTiles: Tile[]): boolean {
     const suits = getSuits(concealedTiles);
     if (suits.size < 2) return false;  // 单门（清一色/风一色）不是垃圾胡
-    // 有风/箭牌 → 混碰/混一色可能，不算垃圾胡
+    // 有风/箭牌时，只有数牌仅1门才可能是混一色/混碰；多门数牌仍是垃圾胡
     const hasHonor = concealedTiles.some(t => isWind(t) || isDragon(t));
-    if (hasHonor) return false;
+    if (hasHonor) {
+      const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+      const numSuitSet = new Set(concealedTiles.filter(t => numSuits.includes(t.suit)).map(t => t.suit));
+      if (numSuitSet.size <= 1) return false;  // 单门数牌+风箭 → 混一色/混碰可能，不算垃圾
+      // 多门数牌+风箭 → 不能成混一色（需要单门），继续垃圾检查
+    }
     // 检查是否能全用刻子组成（顺子牌型需要wild配合才成立）
     // 用 canFormOnlyTripletsFrom 检验：不用顺子能否满足 3n+2
     const nonFlower = concealedTiles.filter(t => !isFlower(t));

@@ -100,11 +100,8 @@ let _lastSpokenAt = 0
 let _playSeq = 0
 
 const getAudioEl = (): HTMLAudioElement => {
-  // 暂停所有正在播放的旧音频，确保同一时刻只有一段语音
-  for (const old of _audioEls) {
-    try { old.pause(); old.onended = null; old.onerror = null; old.src = ''; } catch {}
-  }
-  _audioEls = []
+  // 不 pause 旧音频：覆盖 src 时浏览器自动 stop 旧的 → 触发 onended → 队列正常推进
+  // 旧的 finish() 会清理 _audioEls 引用
   const el = new Audio()
   el.preload = 'auto'
   el.volume = _volume.value
@@ -189,20 +186,8 @@ const playAudio = (url: string, fallbackText?: string) => {
     .then(() => playAudioQueued(url, fallbackText))
 }
 
-// ★ 立即播放（走队列，强制排在所有已排队任务之前）：用于出牌语音，
-// 保证“念牌”一定先于后续动作语音播出，同时不会与队列里其他任务并发。
-const playAudioImmediate = (url: string, fallbackText?: string) => {
-  if (!url) {
-    speakTextFallback(fallbackText)
-    return
-  }
-  // 截取当前队列的尾巴：先播这一条，再续播原队列剩余部分
-  const tail = _voiceQueue
-  _voiceQueue = tail
-    .catch(() => {})
-    .then(() => playAudioQueued(url, fallbackText))
-    .then(() => tail)
-}
+// ★ playAudioImmediate 已合并到 playAudio：两者行为一致（走队列串行播放）。
+// 不需要插队：playVoiceTile 总在 playVoiceAction 之前调用，队列天然保持顺序。
 
 const playVoiceKey = (key: string, fallbackText: string) => {
   const url = _audioMap.value.get(key)
@@ -310,8 +295,7 @@ export const playVoiceTile = (suit: string, value: number): void => {
   if (!process.client) return
   const key = resolveTileKey(suit, value)
   const url = _audioMap.value.get(key)
-  // ★ 走 immediate 路径，不占 _voiceQueue，避免前一个音频出错时丢牌语音
-  playAudioImmediate(url, VOICE_TEXT_MAP[key] || key)
+  playAudio(url, VOICE_TEXT_MAP[key] || key)
 }
 
 export const preloadAllTiles = async (): Promise<void> => {
