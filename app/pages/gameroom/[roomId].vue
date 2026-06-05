@@ -64,6 +64,15 @@
           </div>
         </div>
 
+        <!-- 连接中/重连中提示 banner -->
+        <div v-if="isReconnecting" class="reconnect-banner">
+          <span class="reconnect-spinner">⏳</span>
+          连接中…… 第 {{ reconnectAttempt }} 次重连
+        </div>
+        <div v-else-if="!isConnected && gameState" class="reconnect-banner reconnect-banner-warn">
+          <span class="reconnect-spinner">🔌</span>
+          丢失连接,轮询中…
+        </div>
         <!-- 造反成功弹窗（显示手牌） -->
         <div v-if="rebelEvent" class="rebel-overlay">
           <div class="rebel-card">
@@ -1164,7 +1173,9 @@ const {
     lastStateChangeAt,
     leadingBrotherEvent,
     actionApprovalEvent,
-    rebelEvent
+    rebelEvent,
+    isReconnecting,
+    reconnectAttempt
   } = useGame()
 
 const backToLobby = () => {
@@ -6716,6 +6727,27 @@ const forceDiscard = async (p: Player) => {
 }
 
 /* ===== 梁山聚义成功弹窗 ===== */
+.reconnect-banner {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  pointer-events: none;
+}
+.reconnect-banner-warn { background: rgba(220, 53, 69, 0.9); }
+.reconnect-spinner { display: inline-block; animation: spin 1.5s linear infinite; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
 .liang-shan-overlay {
   position: absolute;
   inset: 0;

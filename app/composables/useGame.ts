@@ -37,6 +37,8 @@ export const useGame = () => {
   const availableActions = ref<ActionType[]>([])
   const socket = ref<Socket | null>(null)
   const isConnected = ref(false)
+  const isReconnecting = ref(false)  // ★ 正在重连中（用于 UI 提示）
+  const reconnectAttempt = ref(0)   // ★ 重连尝试次数
   const error = ref<string | null>(null)
   const rebelEvent = ref<{ playerId: string; playerName: string; hand: any[]; rebelEndTime: number } | null>(null)
   const leadingBrotherEvent = ref<{ firstPlayerName: string; tileKey: string } | null>(null)
@@ -213,9 +215,12 @@ export const useGame = () => {
         transports,
         timeout: 10000,
         reconnection: true,
-        reconnectionAttempts: 10,
+        reconnectionAttempts: Infinity,  // ★ 无线重连
         reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000
+        reconnectionDelayMax: 5000,
+        // ★ ping/pong 心跳: 30s ping, 25s pong timeout
+        pingInterval: 30000,
+        pingTimeout: 25000
       })
 
       socket.value.on('connect', () => {
@@ -266,18 +271,61 @@ export const useGame = () => {
         }
       })
 
-      socket.value.on('disconnect', () => {
+      socket.value.on('disconnect', (reason) => {
         pushDiag('socket:disconnect', {
+          reason,
           transport: socket.value?.io.engine.transport.name,
           hasGameState: !!gameState.value
         })
-        console.log('Socket disconnected', 'transport=', socket.value?.io.engine.transport.name)
+        console.log('Socket disconnected, reason=', reason)
         if (!gameState.value) {
           isConnected.value = false
         }
         // Socket.IO 断开，恢复轮询兜底
         startPolling()
       })
+
+      // ★ Socket.IO 内部重连事件处理
+      socket.value.on('reconnect_attempt', (attempt) => {
+        isReconnecting.value = true
+        reconnectAttempt.value = attempt
+        pushDiag('socket:reconnect_attempt', { attempt })
+        console.log(`[Socket] reconnect attempt #${attempt}`)
+      })
+      socket.value.on('reconnect', (attempt) => {
+        isReconnecting.value = false
+        reconnectAttempt.value = 0
+        pushDiag('socket:reconnect', { attempt })
+        console.log(`[Socket] reconnected after #${attempt} attempts`)
+        void refreshState('socket-reconnect-success')
+      })
+      socket.value.on('reconnect_failed', () => {
+        pushDiag('socket:reconnect_failed', {})
+        console.warn('[Socket] reconnect failed (all attempts exhausted), keep polling')
+        // 重连全部失败，轮询顶住
+        startPolling()
+      })
+
+      // ★ 应用层心跳检测：socket.on('disconnect') 在移动端可能不触发
+      // 每 15s 检查一次 lastHeartbeat，超过 45s 没更新就主动 reconnect
+      let lastHeartbeat = Date.now()
+      const heartbeatTimer = setInterval(() => {
+        if (!socket.value?.connected) {
+          lastHeartbeat = Date.now()
+          return
+        }
+        const now = Date.now()
+        const silentMs = now - lastHeartbeat
+        if (silentMs > 45000) {
+          pushDiag('socket:silent_timeout', { silentMs })
+          console.warn(`[Socket] 静默断连 ${silentMs}ms, 主动 reconnect`)
+          socket.value.disconnect()
+          socket.value.connect()
+          lastHeartbeat = now
+        }
+      }, 15000)
+      // 在 connect 时刷新心跳
+      socket.value.on('connect', () => { lastHeartbeat = Date.now() })
 
       // Room Events
       socket.value.on('room:user-joined', async (data) => {
@@ -754,6 +802,8 @@ export const useGame = () => {
     tingPreview,
     availableActions,
     isConnected,
+    isReconnecting,
+    reconnectAttempt,
     error,
     connect,
     disconnect,
