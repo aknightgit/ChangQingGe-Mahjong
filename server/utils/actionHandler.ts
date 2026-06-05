@@ -516,7 +516,7 @@ export class ActionHandler {
     // 杠牌广播（牌局快讯+语音，含牌名）
     const kongTileName = getTileDisplayName(lastDiscard);
     const kongSourceName = game.players.find(p => p.id === sourcePlayerId)?.name || '';
-    broadcastQuickMessage(game.gameId, `杠！ [${player.name}]杠了[${kongSourceName}]的${kongTileName}`, 'info', 'kong');
+    broadcastQuickMessage(game.gameId, `🀄 [${player.name}]杠了[${kongSourceName}]的${kongTileName}`, 'info', 'kong');
     broadcastKongSupplement(game, player, 'ming');
 
     // 设置当前玩家
