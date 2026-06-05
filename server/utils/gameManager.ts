@@ -4149,6 +4149,9 @@ class GameManager {
     // 回合结束立即刷盘
     this.store.flushGameNow(game.gameId, game).catch(() => {});
     this.broadcastGameState(game.gameId);
+    console.log(`[endRound] phase=ENDED, starting settlement game=${game.gameId.substring(0,8)}`);
+
+    try {
 
     // Calculate final scores
     const winners = game.players.filter(p => p.status === PlayerStatus.WON);
@@ -4490,6 +4493,9 @@ class GameManager {
       else if (isWallExhausted || hasRebel) nextRoundDelay = 5000  // 流局/造反, 客户端有 10s 倒计时但后端不能等太久
       else nextRoundDelay = 10000  // 胡牌正常结算（10秒，与客户端倒计时一致）
       this.autoStartNextRound(game.gameId, nextRoundDelay);
+    }
+    } catch (e: any) {
+      console.error('[endRound] Settlement error:', e?.stack || e);
     }
   }
 
