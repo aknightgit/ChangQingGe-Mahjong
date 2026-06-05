@@ -295,11 +295,13 @@ function scoreByRoute(input: RouteDiscardInput): number {
   if (isShortSuitFamily && !isLongestSuitTile && count >= 2) {
     // ★ V2.16: ALL_PUNGS 路线 + lockLevel>=1 → 短门对子也保留(碰碰胡坚定执行)
     const _allPungsLocked = input.routeState.current === 'ALL_PUNGS' && (input.routeState.lockLevel ?? 0) >= 1
+    // ★ K哥铁律(2026-06-05): HONOR_HEAVY 路线 + lockLevel>=1 → 风箭对子也保留(风一色坚定执行)
+    const _honorLocked = input.routeState.current === 'HONOR_HEAVY' && (input.routeState.lockLevel ?? 0) >= 1
     if (_flushLocked && _routeGap >= 3) {
       // 明确清混一色 + 路线锁定 → 强打破
       shortSuitFamilyPairBreak = 4.5
-    } else if (_hasPungPotential || _allPungsLocked) {
-      // 有碰碰胡潜质 或 碰碰胡已锁定 → 保留对子
+    } else if (_hasPungPotential || _allPungsLocked || _honorLocked) {
+      // 有碰碰胡潜质 或 碰碰胡已锁定 或 风一色已锁定 → 保留对子
       shortSuitFamilyPairBreak = 0
     } else {
       // 其他情况: 路线越近越保守

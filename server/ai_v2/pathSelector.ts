@@ -519,12 +519,21 @@ export function evaluateRouteStateV2(input: {
   // 10巡+稳定2回合 → lockLevel=2（坚决执行）
   // 10巡+有方向 → lockLevel=1（锁定）
   // 5-9巡+稳定3回合+gap大 → lockLevel=1
+  // ★ 风一色/风碰 锁定: 5巡内 honorCount>=8 (含百搭) → lockLevel=1 坚定做风一色
+  // 5巡内 honorCount+wildCount>=9 → lockLevel=2 坚决执行
+  const _honorRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
+  const _honorWithWild = features.honorCount + features.wildCount
+  const _honorLock2 = _honorRound <= 5 && _honorWithWild >= 9
+  const _honorLock1 = _honorRound <= 5 && features.honorCount >= 8
+
   // 碰碰胡4+对子 → lockLevel=1
   const lockLevel: 0 | 1 | 2 =
     isPostRound10Forced && stableTurns >= 2 && HIGH_VALUE_ROUTES.includes((current?.route) as RouteKind) ? 2 :
     isPostRound10Forced && HIGH_VALUE_ROUTES.includes((current?.route) as RouteKind) ? 1 :
     stableTurns >= 3 && stableOnPrevious && previousRouteState && previousRouteState.lockLevel === 2 && gap >= 1.4 ? 2 :
     phase === 'RUSH' && gap >= 4 ? 2 :
+    _honorLock2 ? 2 :
+    _honorLock1 ? 1 :
     _apLockByPairs ? 1 :
     estimatedRound >= 7 && stableTurns >= 2 && gap >= 2.0 ? 1 :
     stableTurns >= 2 && stableOnPrevious && previousRouteState && previousRouteState.lockLevel >= 1 && gap >= 1.1 ? 1 :
