@@ -4055,6 +4055,39 @@ class GameManager {
     game.roundNumber = calculatedRound;
   }
 
+  /**
+   * 生成赔付算式明细
+   * 例：自摸 + 三口：160+160+160*3=800
+   * 捉冲 + 互包：160(放冲)+160(互包补赔)=320
+   * 捉冲 + 互包 + 其他玩家不付：0+160+160=320
+   * 普通自摸：160+160+160=480
+   */
+  private static formatPaymentFormula(
+    transfers: Array<{ amount: number; bailoutType?: string; reason: string }>,
+    isSelfDrawn: boolean,
+    totalPlayers: number
+  ): string {
+    if (!transfers || transfers.length === 0) return '';
+    // 补齐全部玩家：未参与的玩家计为0
+    const filled: Array<{ amount: number; bailoutType?: string; reason: string }> = [...transfers];
+    if (filled.length < totalPlayers - 1) {
+      // 补 0 的位置（未参与赔付的玩家）
+      while (filled.length < totalPlayers - 1) {
+        filled.push({ amount: 0, reason: '不参与' });
+      }
+    }
+    const parts = filled.map(t => {
+      if (t.amount === 0) return '0';
+      if (t.bailoutType && (t.reason.includes('互包') || t.bailoutType === '三口' || t.bailoutType === '四口')) {
+        const bailoutMultiplier = t.bailoutType === '四口' ? 5 : 3;
+        return `${t.amount / bailoutMultiplier}*${bailoutMultiplier}`;
+      }
+      return String(t.amount);
+    });
+    const total = transfers.reduce((s, t) => s + t.amount, 0);
+    return `${parts.join('+')}=${total}`;
+  }
+
   public endRound(game: GameState, reason: GameEndReason): void {
     // ★ K哥铁律(2026-06-05): 防止上一局残留的 REVEAL 定时器在新局里触发
     // 如果游戏已经不在 REVEAL/PLAYING 阶段（比如已经 ENDED 或 STARTING），跳过
@@ -4211,6 +4244,17 @@ class GameManager {
           });
         }
 
+        // ★ 生成赔付算式明细 (例：自摸 三口时输出 160+160+160*3=800)
+        (winner as any)._paymentFormula = formatPaymentFormula(
+          breakdown.transfers.map(t => ({
+            amount: t.amount,
+            bailoutType: t.bailoutType,
+            reason: t.reason
+          })),
+          winner.isSelfDrawn ?? false,
+          game.players.length
+        );
+
         for (const [idx, delta] of breakdown.deltas) {
           const pid = game.players[idx].id;
           finalScores[pid] = (finalScores[pid] ?? 0) + delta;
@@ -4265,36 +4309,44 @@ class GameManager {
     for (const player of game.players) {
       if (botAffected.includes(player.id)) {
         if (player.score > 0) {
+          // ★ K哥铁律(2026-06-05): 膨张系数10下所有输赢必须是10的倍数，
+          // 减半后按10取整
           const half = Math.floor(player.score / 2);
-          console.log(`[BotPenalty] ${player.name}(AI接管) 赢分减半: ${player.score} → ${half}`);
-          player.score = half;
+          const rounded = Math.floor(half / 10) * 10;
+          console.log(`[BotPenalty] ${player.name}(AI接管) 赢分减半: ${player.score} → ${half} → ${rounded}`);
+          player.score = rounded;
         }
         // 输分照常,不减
       }
     }
 
     // 平衡总分:如果AI赢分减半导致总赢≠总输,按比例缩小输家支付
+    // ★ K哥铁律(2026-06-05): 膨张系数10下所有输赢必须是10的倍数，
+    // 平衡调整时按10取整，兑底调整也按10取整
     const totalScore = game.players.reduce((s, p) => s + p.score, 0);
     if (totalScore !== 0) {
-      // 有AI赢了且赢分减半 → 总赢 < 总输(totalScore < 0)
-      // 需要减少输家的支付来平衡
       const losers = game.players.filter(p => p.score < 0);
       const totalLoss = losers.reduce((s, p) => s + Math.abs(p.score), 0);
-      const deficit = Math.abs(totalScore); // 需要减少的总输分
+      const deficit = Math.abs(totalScore);
 
       if (totalLoss > 0) {
         for (const loser of losers) {
           const ratio = Math.abs(loser.score) / totalLoss;
-          const reduction = Math.floor(deficit * ratio);
-          loser.score += reduction; // 少输一点
+          // 按10取整，保证平衡后仍是10的倍数
+          const reduction = Math.floor(deficit * ratio / 10) * 10;
+          loser.score += reduction;
         }
       }
 
-      // 兜底:取整差额加到最大输家
+      // 兑底:取整差额加到最大输家，也按10取整
       const finalTotal = game.players.reduce((s, p) => s + p.score, 0);
       if (finalTotal !== 0) {
         const minP = game.players.reduce((a, b) => a.score < b.score ? a : b);
         minP.score -= finalTotal;
+        // 如果不是10的倍数，缩到最近的10的倍数
+        if (minP.score % 10 !== 0) {
+          minP.score = Math.floor(minP.score / 10) * 10;
+        }
       }
     }
 
@@ -4407,6 +4459,7 @@ class GameManager {
           settlementMultiplier: winner.winningScoreBreakdown?.settlementMultiplier ?? (game.settlementMultiplier ?? 1),
           finalPoints: winner.winningScoreBreakdown?.finalPoints ?? winner.wonFan,
           details: winner.winningScoreBreakdown?.details ?? [],
+          paymentFormula: (winner as any)._paymentFormula || '',
           flowerCount: tileHelper.getPlayerFlowerTiles(winner).length,
           handTiles: concealedTiles,
           exposedTiles,
