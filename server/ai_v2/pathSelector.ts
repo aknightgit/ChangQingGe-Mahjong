@@ -347,7 +347,8 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       score += getPolicyValue(policy, 'flushVsPungsBalance') * ((qingPengReady ? 2.4 : 0) - (features.secondSuitCount > 0 ? 0.8 : 0))
       if (earlyPairHeavy) { reasons.push('early_four_pairs_push'); score += 8.5 }
       // ★ V2: 4+对子/刻子坚决做碰碰胡（90%概率直接锁定）
-      if (features.pairCount >= 4) { reasons.push('four_pairs_commit'); score += 16 }
+      // 碰了一对到门口后 pairCount 降但 tripletCount 升，总数仍算
+      if (features.pairCount >= 4 || features.pairCount + features.tripletCount >= 4) { reasons.push('four_pairs_commit'); score += 16 }
       if (features.pairCount + features.tripletCount >= 5) { reasons.push('five_pairs_triplets_lock'); score += 10 }
       if (_ap_isAgg && features.pairCount + features.tripletCount >= 3) { reasons.push('aggressive_pungs_commit'); score += 12 }
       if (_ap_isAgg && features.wildCount > 0 && features.pairCount + features.tripletCount >= 2) { reasons.push('wild_pungs_push'); score += 7 }
@@ -484,7 +485,11 @@ export function evaluateRouteStateV2(input: {
   // lockLevel=1(锁定): 需要3次反面证据+高出5分才切换
   // 未锁定但稳定2回合: 需要2次反面证据+高出3分才切换
   const requiredEvidenceToFlip = previousRouteState?.lockLevel === 2 ? 5 : previousRouteState?.lockLevel === 1 ? 3 : (previousRouteState?.stableTurns || 0) >= 2 ? 2 : 1
-  const flipThreshold = previousRouteState?.lockLevel === 2 ? 7.0 : previousRouteState?.lockLevel === 1 ? 5.0 : (previousRouteState?.stableTurns || 0) >= 2 ? 3.0 : 1.4
+  // ★ 路线清晰度加成：方向越明确，切换门槛越高
+  // 清晰度 = top score - second score，越大说明方向越明确
+  const routeClarity = previousCandidate && topCandidate ? Math.abs(topCandidate.score - (routeScores[1]?.score ?? 0)) : 0
+  const clarityBoost = routeClarity > 5 ? 1.5 : routeClarity > 3 ? 0.8 : 0
+  const flipThreshold = (previousRouteState?.lockLevel === 2 ? 7.0 : previousRouteState?.lockLevel === 1 ? 5.0 : (previousRouteState?.stableTurns || 0) >= 2 ? 3.0 : 1.4) + clarityBoost
   // lockLevel=2时：仅极端情况+保守转向才允许切换
   const locked2CanSwitch = previousRouteState?.lockLevel === 2
     ? (extremeThreat && isConservativeSwitch) || (extremeThreat && topCandidate.score >= previousCandidate!.score + 8)
