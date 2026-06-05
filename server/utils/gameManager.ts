@@ -653,6 +653,7 @@ class GameManager {
               // ★ 修复：直接调用 handleChow，避免 resolvePendingAction 中 shouldClaimPendingAction 的随机概率推翻已做出的吃牌决策
               if (chowPa.selectedChowTileIds && chowPa.selectedChowTileIds.length > 0 && currentPlayer.hand.concealedTiles.length >= 2) {
                 await this.handleChow(game, currentPlayer, chowPa.selectedChowTileIds);
+                refreshRouteMemoryAfterClaim(currentPlayer, game);
               } else {
                 this.handlePass(game, currentPlayer);
               }
@@ -2438,6 +2439,7 @@ class GameManager {
           }
         }
         this.handlePeng(game, player);
+        refreshRouteMemoryAfterClaim(player, game);
         break;
 
       case ActionType.CHOW:
@@ -2449,6 +2451,7 @@ class GameManager {
           }
         }
         this.handleChow(game, player, tileIds);
+        refreshRouteMemoryAfterClaim(player, game);
         break;
 
       case ActionType.KONG:
@@ -2480,7 +2483,8 @@ class GameManager {
         break;
 
       case ActionType.REBEL:
-        this.handleRebel(game, player);
+        console.log(`[executeAction] ${player.name} REBEL → handleRebel`);
+        await this.handleRebel(game, player);
         break;
 
       case ActionType.LIANG_SHAN:

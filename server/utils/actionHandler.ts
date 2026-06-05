@@ -925,68 +925,37 @@ export class ActionHandler {
    * 处理造反
    */
   async handleRebel(game: GameState, player: Player): Promise<void> {
-    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode } = this.deps;
+    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame } = this.deps;
 
-    // 造反：所有玩家重新发牌
+    // 造反：广播消息
     broadcastQuickMessage(game.gameId, `⚔️ [${player.name}] 发起了造反！`, 'special');
 
-    // 广播造反亮手牌事件（给所有客户端）
-    const wsManager = (this.deps as any).store?.getWsManager?.();
-    if (wsManager) {
-      wsManager.broadcast(game.gameId, 'rebel', {
-        playerId: player.id,
-        playerName: player.name,
-        hand: player.hand.concealedTiles,
-        rebelEndTime: Date.now() + 5000
-      });
-    }
-
-    // 翻倍
-    game.inheritedGlobalMultiplier = Math.min((game.inheritedGlobalMultiplier || 1) * 2, 8);
-
-    // 重新发牌
-    const deck = createDeck();
-    game.wall = deck;
-
-    // 重新发牌给所有玩家
+    // 所有未胡牌玩家标记为输
     for (const p of game.players) {
-      p.hand.concealedTiles = [];
-      p.hand.exposedMelds = [];
-      p.status = PlayerStatus.PLAYING;
-    }
-
-    // 发牌
-    for (let i = 0; i < 13; i++) {
-      for (const p of game.players) {
-        if (game.wall.length > 0) {
-          const tile = game.wall.pop()!;
-          p.hand.concealedTiles.push(tile);
-        }
+      if (p.status !== PlayerStatus.WON) {
+        p.status = PlayerStatus.LOST;
       }
     }
 
-    // 庄家多摸一张
-    const dealer = game.players[game.dealerIndex];
-    if (game.wall.length > 0) {
-      const tile = game.wall.pop()!;
-      dealer.hand.concealedTiles.push(tile);
-    }
+    // 翻倍（×2）
+    const doubled = Math.min((game.inheritMultiplier ?? 1) * 2, 8);
+    const roundMul = game.roundMultiplier ?? 1;
+    const effective = doubled * roundMul;
+    game.inheritedGlobalMultiplier = Math.min(effective > 8 ? Math.floor(effective / 8) : doubled, 8);
 
-    await persistGame(game);
-    broadcastGameState(game.gameId);
+    // 造反成功标记（客户端据此显示弹窗而非结算）
+    game.rebelSuccess = true;
 
-    // 5秒后自动结束本局，触发自动开始下一局
-    const gameId = game.gameId;
-    const gamesMap = this.deps.games;
-    setTimeout(async () => {
-      try {
-        const g = gamesMap.get(gameId);
-        if (!g || g.phase !== GamePhase.PLAYING) return;
-        this.deps.endRound(g, GameEndReason.LAST_PLAYER);
-      } catch (err: any) {
-        console.warn('[Rebel] Auto-end round failed:', err?.message || err);
+    // 结束本局（broadcastGameState 在 endRound 内部，会把 rebelSuccess 推送给客户端）
+    endRound(game, GameEndReason.LAST_PLAYER);
+
+    // 造反成功：庄家不变
+    if (!game.nextDealerId) {
+      const currentDealer = game.players[game.dealerIndex];
+      if (currentDealer) {
+        game.nextDealerId = currentDealer.id;
       }
-    }, 5000);
+    }
   }
 
   /**

@@ -64,22 +64,12 @@
           </div>
         </div>
 
-        <!-- 造反亮手牌弹窗 -->
-        <div v-if="rebelEvent" class="rebel-overlay">
-          <div class="rebel-card">
-            <div class="rebel-icon">⚔️🀄</div>
-            <p class="rebel-title">{{ rebelEvent.playerName }} 造反了!!</p>
-            <p class="rebel-hand-label">手牌:</p>
-            <div class="rebel-hand-tiles">
-              <span v-for="t in rebelEvent.hand" :key="t.id" class="rebel-tile" :class="'tile-' + t.suit + '-' + t.value">
-                {{ t.suit === 'wan' ? '万' : t.suit === 'dots' ? '筒' : t.suit === 'tiao' ? '条' : t.suit === 'feng' ? ['东','南','西','北'][t.value-1] : ['中','发','白'][t.value-1] }}{{ t.suit === 'wan' || t.suit === 'dots' || t.suit === 'tiao' ? t.value : '' }}
-              </span>
-            </div>
-            <div class="rebel-multiplier">即将下一局,翻倍!</div>
-            <div class="rebel-countdown-wrap">
-              <div class="rebel-countdown-bar" :style="{ width: rebelCountdownPercent + '%' }"></div>
-              <span class="rebel-countdown-text">{{ rebelCountdownSec }}s</span>
-            </div>
+        <!-- 造反成功弹窗（复用聚义样式） -->
+        <div v-if="rebelEvent" class="liang-shan-overlay">
+          <div class="liang-shan-card">
+            <div class="liang-shan-icon">⚔️⚔️⚔️</div>
+            <p class="liang-shan-title">造反成功!翻倍!</p>
+            <p class="liang-shan-sub">本局结束 · 下把翻倍</p>
           </div>
         </div>
 
@@ -4724,6 +4714,21 @@ watch(() => gameState.value, (newState, oldState) => {
   }
   prevLiangShanVoteCount.value = currentVotes
   prevLiangShanVoteIds.value = [...currentVoteIds]
+
+  // 造反成功检测（跟聚义一样的流程）
+  if ((newState as any).rebelSuccess && !showLiangShanOverlay.value) {
+    rebelEvent.value = {
+      playerId: '',
+      playerName: (newState.players || []).find((p: any) => p.status === 'lost')?.name || '',
+      hand: [],
+      rebelEndTime: Date.now() + 1800
+    }
+    showSettlement.value = false
+    setTimeout(() => {
+      rebelEvent.value = null
+      void startNextRound()
+    }, 1800)
+  }
 
   // 被聚义QJ线突破提醒(红色高亮)
   const currentAlerts = (newState as any).qjAlerts || []
