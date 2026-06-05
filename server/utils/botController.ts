@@ -93,17 +93,7 @@ function evaluateSelfKong(
             return { shouldKong: false, type: 'concealed', reason: 'kge_honor_kong_forbidden' };
           }
         }
-        // 检查这4张牌是否都孤立（无相邻牌）
-        const suit = tiles[0].suit;
-        const value = tiles[0].value;
-        const nearTiles = player.hand.concealedTiles.filter(t =>
-          t.suit === suit && t.id !== tiles[0].id && t.id !== tiles[1].id && t.id !== tiles[2].id && t.id !== tiles[3].id && Math.abs(t.value - value) <= 2
-        );
-        if (nearTiles.length > 0) {
-          return { shouldKong: false, type: 'concealed', reason: 'tile-near-chow' };
-        }
-
-        // 暗杠决策：基于 kongChance + anKongAggression
+        // 暗杠决策：基于 kongChance + anKongAggression（K哥：暗杠不需要检查相邻牌）
         const score = kongChance + anKongAggression * 0.5;
         if (Math.random() < score) {
           return { shouldKong: true, type: 'concealed', reason: `score=${score.toFixed(2)}` };
