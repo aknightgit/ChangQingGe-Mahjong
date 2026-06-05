@@ -4316,7 +4316,7 @@ class GameManager {
     const botTakeovers = game.botTakeoverPlayers || [];
     for (const player of game.players) {
       if (botTakeovers.includes(player.id) && player.score > 0) {
-        player.score = Math.round(player.score / 20) * 10;
+        player.score = Math.ceil(player.score / 2);
         console.log(`[BotPenalty] ${player.name}(AI托管) 赢分减半: ${player.score}`);
       }
     }
