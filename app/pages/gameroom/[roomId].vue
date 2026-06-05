@@ -2745,10 +2745,7 @@ const commitDiscard = (tile: Tile) => {
   })
   selectedTileId.value = null
   resetAutoCount()
-  playSound('tile-discard')
-  // 出牌念牌
-  if (tile.suit) playVoiceTile(tile.suit, tile.value)
-  markDiscardAudioPlayed(tile)
+  // 出牌音效由socket state更新统一播放，确保碰/吃声先于出牌声
   void executeAction(ActionType.DISCARD, tile.id).then((success) => {
     if (success) return
     pendingDiscardTileId.value = null
@@ -3402,8 +3399,7 @@ const hideActionButtonsNow = () => {
 const submitChow = (tileIds?: string[]) => {
   hideActionButtonsNow()
   resetAutoCount()
-  playSound('tile-chow')
-  // 语音由广播处理器统一播放,避免重复
+  // 语音由广播处理器(socket state更新)统一播放，确保顺序正确
   showChowPicker.value = false
   selectedChowOption.value = null
   executeAction(ActionType.CHOW, undefined, tileIds)
@@ -3424,7 +3420,7 @@ const onCancelChowPicker = () => {
   showChowPicker.value = false
   selectedChowOption.value = null
 }
-const onPeng = () => { hideActionButtonsNow(); resetAutoCount(); playSound('tile-pong'); /* 语音由广播处理器统一播放 */ executeAction(ActionType.PENG) }
+const onPeng = () => { hideActionButtonsNow(); resetAutoCount(); /* 语音由广播处理器(socket state更新)统一播放，确保顺序正确 */ executeAction(ActionType.PENG) }
 const onKong = () => {
   hideActionButtonsNow()
   resetAutoCount()
@@ -4535,8 +4531,7 @@ const handleRealtimeState = (e: Event) => {
       return
     }
     lastFastDiscardAt.value = Date.now()
-    playSound('tile-discard')
-    // 语音由 state watcher 统一播放(避免重复)
+    // 出牌声由 socket state 更新统一播放，确保碰/吃声先于出牌声
     markDiscardAudioPlayed(lastTile)
   }
   prevRealtimeDiscardCount.value = discardCount
@@ -4584,8 +4579,8 @@ const checkOtherPlayerSounds = (newState: any) => {
     if (prev) {
       const isSelf = player.id === playerId.value
       const isBotCtrl = !!(player as any).isBotControlled || isBotPlayer(player)
-      // 非自己的玩家 或 AI托管的自己 → 播放语音(自己的操作由广播处理器处理)
-      const shouldPlayVoice = !isSelf || isBotCtrl
+      // 所有玩家(包括自己)的碰/吃/出牌语音都由socket state更新统一播放，确保顺序正确
+      const shouldPlayVoice = true
       // 补花语音也排队,确保出牌语音先于补花语音
       if (replacedFlowerCount > prev.replacedFlowerCount) {
         if (!_flowerVoicePlayed.has(player.id)) {
