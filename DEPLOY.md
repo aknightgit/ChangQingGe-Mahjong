@@ -20,7 +20,7 @@
 ### 当前生产端口拓扑（2026-05-05已核实）
 
 #### 应用实际监听
-- **Mahjong 服务本体**：`127.0.0.1:8899`
+- **Mahjong 服务本体**：`127.0.0.1:8888`
   - 进程：`node /home/ak/myworkspace/ChangQingGe-Mahjong/.output/server/index.mjs`（ak 账号运行）
 - **MyIsland 服务本体**：`127.0.0.1:3100`
 
@@ -35,7 +35,7 @@ upstream myisland {
 }
 
 upstream mahjong {
-    server 127.0.0.1:8899;
+    server 127.0.0.1:8888;
 }
 
 location / {
@@ -50,7 +50,7 @@ location /mahjong/ {
 #### 外网访问现状
 - **当前实际外网入口**：`443 -> 8080`
 - **8888 仍在 Ubuntu 内部 nginx 监听，但花生壳 8888 映射已取消，不作为当前外网入口**
-- **8899 不需要直接映射到 NAS host**，因为它是 nginx 的后端服务端口，仅供同机反代访问
+- **8888 不需要直接映射到 NAS host**，因为它是 nginx 的后端服务端口，仅供同机反代访问
 - **当前可访问地址**：`https://cv388xr9771.vicp.fun/mahjong/`
 
 #### 2026-05-05 子路径部署问题总结
@@ -73,7 +73,7 @@ location /mahjong/ {
   - `app/error.vue`
   - `server/api/auth/google/callback.get.ts`
 - 生产 PM2：
-  - `PORT=8899`
+  - `PORT=8888`
   - `NUXT_APP_BASE_URL=/mahjong/`
 - nginx：
   - `proxy_pass http://mahjong/;` → `proxy_pass http://mahjong;`
@@ -178,7 +178,7 @@ node .output/server/index.mjs
 > - 正确的 PM2 daemon 路径：`/home/ak/.pm2/`（不是 `/root/.pm2/`）
 > - 正确的服务目录：`/home/ak/myworkspace/ChangQingGe-Mahjong/`（不是 `/home/` 或 `/root/`）
 > 
-> **2026-05-29 教训**：root PM2 占了 8899 端口，ak PM2 绑不上，导致新版代码始终不生效
+> **2026-05-29 教训**：root PM2 占了 8888 端口，ak PM2 绑不上，导致新版代码始终不生效
 
 ## 部署到服务器
 
@@ -190,7 +190,7 @@ node .output/server/index.mjs
 运行路径：/home/.output/server/index.mjs
 工作目录：/home
 环境变量：
-  - PORT=8899
+  - PORT=8888
   - NUXT_APP_BASE_URL=/mahjong/
   - MONGODB_URI=mongodb://admin:%24%249myHome@192.168.3.241:27017/changqingge?authSource=admin
   - MONGODB_DB=changqingge
@@ -242,7 +242,7 @@ cp -r /home/ak/.output /home/.output
 pm2 restart mahjong
 
 # 验证
-curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8899/mahjong/
+curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8888/mahjong/
 # 期望输出：302
 
 # 清理垃圾
