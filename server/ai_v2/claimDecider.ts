@@ -263,12 +263,12 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     const bestSuitCount = bestSuit ? getNumberSuitCount(player.hand.concealedTiles, bestSuit) : 0
     const claimSuitCount = isNumberSuit(claimTile.suit) ? getNumberSuitCount(player.hand.concealedTiles, claimTile.suit) : 0
     const pairCount = countPairs(player.hand.concealedTiles)
+    // ★ K哥铁律: 第一口吃必须自己的长门>=5张、claim 门也>=5张。
+    // 即使无百搭、即使多倍、多对子，不放宽该硬约束。
+    // canRelax 仅用于多百搭场景下的极限情况
     const canRelaxFirstChowGate =
-      noWildOpenPush ||
-      effectiveGlobalMultiplier >= 4 ||
-      upstreamRejectedOpenPush ||
-      (wildCount === 1 && bestSuit !== null && claimTile.suit === bestSuit && bestSuitCount >= 6)
-    const requiredBestSuitTiles = multiWildMenqingPush ? 6 : (canRelaxFirstChowGate ? 4 : 5)
+      (wildCount >= 2 && bestSuit !== null && claimTile.suit === bestSuit && bestSuitCount >= 5)
+    const requiredBestSuitTiles = 5  // ★ 硬约束：5张以上才能开吃第一口
 
     if (!bestSuit || bestSuitCount < requiredBestSuitTiles) {
       return { allowed: false, tuneDelta: -1.3, reason: 'first_chow_requires_five_tiles' }

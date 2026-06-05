@@ -1249,6 +1249,13 @@ class GameManager {
       console.log('[beginGame] Already STARTING or PLAYING, skipping');
       return;
     }
+    // ★ K哥铁律(2026-06-05): 上一局可能遗留 winnersCount 等胜者计数跨局。
+    // 重新计算本局真实的 winnersCount(根据玩家 status 重新统计)。
+    const realWinnersCount = game.players.filter(p => p.status === PlayerStatus.WON).length;
+    if (realWinnersCount !== game.winnersCount) {
+      console.warn(`[beginGame] Sync winnersCount: ${game.winnersCount} → ${realWinnersCount} (based on player status)`);
+      game.winnersCount = realWinnersCount;
+    }
     if (game.players.length < 4) {
       throw new Error('Need 4 players to start');
     }
