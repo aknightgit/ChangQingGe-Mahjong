@@ -4084,6 +4084,8 @@ class GameManager {
     }
     // 已处于REVEAL阶段，执行结算
     game.phase = GamePhase.ENDED;
+    // ★ K哥铁律(2026-06-05): 本局结算完成,重置 winnersCount 防下一局跨局累积
+    game.winnersCount = 0;
     // 回合结束立即刷盘
     this.store.flushGameNow(game.gameId, game).catch(() => {});
     this.broadcastGameState(game.gameId);
