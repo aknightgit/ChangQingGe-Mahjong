@@ -503,6 +503,16 @@ class GameManager {
    */
   disableBotMode(playerId: string): void {
     this.botModePlayers.delete(playerId);
+    // ★ "我回来了" → 从botTakeoverPlayers移除，当局不减半
+    for (const game of this.games.values()) {
+      if (game.botTakeoverPlayers) {
+        const idx = game.botTakeoverPlayers.indexOf(playerId);
+        if (idx >= 0) {
+          game.botTakeoverPlayers.splice(idx, 1);
+          console.log(`[BotPenalty] ${playerId} 已回来，取消减半`);
+        }
+      }
+    }
     // ★ 回来时重置连续超时计数，避免下次超时从累积值继续
     for (const [key, _] of this.timerManager.consecutiveTimeouts) {
       if (key.endsWith(`-${playerId}`)) {
