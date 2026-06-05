@@ -380,11 +380,20 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
         (upstreamRejectedOpenPush && candidateShanten <= passShanten && candidateEffective + 1 >= passEffective) ||
         (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG))
 
+      // ★ 路线清晰度：top 分 - 次分，越大说明方向越明确
+      const routeClarity = routeState.routeScores.length >= 2
+        ? routeState.routeScores[0].score - routeState.routeScores[1].score
+        : routeState.routeScores[0]?.score ?? 0
+      // 路线越清晰，门清门槛越高（保护明确方向不被轻易打破）
+      // 路线模糊时门槛低一些（但仍然比之前严格）
+      const clarityBonus = routeClarity > 5 ? 1.0 : routeClarity > 3 ? 0.5 : 0
+      const routeGainThreshold = (isHonorTile ? 2.5 : 2.0) + clarityBonus
+
       const openingBreakNeeds =
         candidateShanten < passShanten ||
         candidateEffective >= passEffective + (action === ActionType.CHOW ? 3 : 6) ||
         speedGain >= (action === ActionType.CHOW ? 0.8 : 1.5) ||
-        routeGain >= (isHonorTile ? 2.5 : 2.0) ||  // ★ 大幅提高门槛：门清是核心资产，routeGain必须非常显著才破
+        routeGain >= routeGainThreshold ||
         effectiveGlobalMultiplier >= 4 ||
         (noWildOpenPush && (action === ActionType.PENG || candidateEffective >= passEffective + 1)) ||
         upstreamRejectedOpenPush ||
@@ -396,7 +405,7 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
 
       if (openingMenqing && !canBreakOpeningMenqing) {
         const reason = action === ActionType.CHOW ? 'menqing_hold_chow' : 'menqing_hold_pung'
-        console.log(`[ClaimDecider] ${player.name} ${action} blocked: reason=${reason} routeGain=${routeGain.toFixed(2)} shanten=${candidateShanten}/${passShanten} effective=${candidateEffective}/${passEffective} speedGain=${speedGain.toFixed(2)}`)
+        console.log(`[ClaimDecider] ${player.name} ${action} blocked: reason=${reason} routeGain=${routeGain.toFixed(2)} clarity=${routeClarity.toFixed(1)} threshold=${routeGainThreshold.toFixed(1)} shanten=${candidateShanten}/${passShanten} speedGain=${speedGain.toFixed(2)}`)
         return { allowed: false, tuneDelta: action === ActionType.CHOW ? -1.5 : -1.2, reason }
       }
       // ★ 对手威胁高（2+副露）且AI有3+对子 → 允许碰牌转碰碰胡（仅在门清已被打破时生效）
