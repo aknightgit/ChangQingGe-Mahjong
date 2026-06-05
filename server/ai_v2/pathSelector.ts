@@ -431,8 +431,8 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       } else if (features.honorCount >= 7) { score += 10 /* was: 4 */ }
       else if (features.honorCount < 6) { score -= 11 }
       // ★ K哥铁律: 长门<5时才-8（不肯定不是做风一色）；长门>=5 与风一色不冲突
-      if (features.longestSuitCount >= 5) { score -= 3 }
-      else if (features.longestSuitCount >= 4) { score -= 5 }
+      if (features.longestSuitCount >= 5) { score -= 5 }
+      else if (features.longestSuitCount >= 4) { score -= 3 }
       if (features.longestSuitCount + features.honorCount >= 8) score -= 6
       if (features.honorCount >= 6) reasons.push('dense_honors')
       if (shouldStriveDraw) score -= 5
