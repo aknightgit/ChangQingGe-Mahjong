@@ -376,7 +376,11 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
     case 'HONOR_HEAVY':
       score += features.honorCount * 4
       score += features.honorPairCount * 3.5
-      score += features.wildCount * 2.6
+      // ★ K哥铁律(2026-06-05): 百搭越少概率越高
+      // 百搭0 走不了溜 × 额外加分；百搭1 微加分；百搭≥2 略微加分
+      score += features.wildCount * 0.8
+      if (features.wildCount === 0) score += 5
+      else if (features.wildCount === 1) score += 2
       // ★ V2: liveHonorCount 权重 0.4→1.2
       score += features.liveHonorCount * 1.2 /* was: 0.4 */
       score += getPolicyValue(policy, 'allHonorsPursuit') * 8.2
@@ -408,10 +412,22 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
         score += 10
         const _estRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
         if (features.honorCount + features.wildCount >= 9 && _estRound <= 5) { reasons.push('early_honor_9_plus_commit'); score += 30 }
+        // ★ K哥铁律(2026-06-05): 5巡内≥8风/箭，百搭≤1（99%做风一色/风碰）
+        if (_estRound <= 5 && features.honorCount >= 8 && features.wildCount <= 1) {
+          reasons.push('kge_early_honor_8_no_wild_80pct')
+          score += 20
+        }
+        // 10巡内≥9风/箭，百搭≤2（同样加当）
+        if (_estRound <= 10 && features.honorCount >= 9 && features.wildCount <= 2) {
+          reasons.push('kge_round10_honor_9_low_wild')
+          score += 15
+        }
       // ★ V2: 6-7张中间态 4→10
       } else if (features.honorCount >= 7) { score += 10 /* was: 4 */ }
       else if (features.honorCount < 6) { score -= 11 }
-      if (features.longestSuitCount >= 4) { score -= 8 }
+      // ★ K哥铁律: 长门<5时才-8（不肯定不是做风一色）；长门>=5 与风一色不冲突
+      if (features.longestSuitCount >= 5) { score -= 3 }
+      else if (features.longestSuitCount >= 4) { score -= 5 }
       if (features.longestSuitCount + features.honorCount >= 8) score -= 6
       if (features.honorCount >= 6) reasons.push('dense_honors')
       if (shouldStriveDraw) score -= 5
