@@ -1199,16 +1199,27 @@ function scoreTileForDiscard(
   }
 
   // Near sequence (前后两张): keep for sequence building
+  // ★ 短门/次短门的顺子不保留，优先拆掉
+  const _shortestSuit = numberSuits
+    .filter(s => (suitCounts[s] || 0) > 0)
+    .sort((a, b) => (suitCounts[a] || 0) - (suitCounts[b] || 0))[0] || null
+  const _secondShortSuit = numberSuits
+    .filter(s => (suitCounts[s] || 0) > 0 && s !== _shortestSuit)
+    .sort((a, b) => (suitCounts[a] || 0) - (suitCounts[b] || 0))[0] || null
   if (tile.suit !== TileSuit.FLOWER && tile.suit !== TileSuit.WIND && tile.suit !== TileSuit.DRAGON) {
     const value = tile.value
     const suit = tile.suit
+    const isShortOrSecond = suit === _shortestSuit || suit === _secondShortSuit
 
-    // Check if there are adjacent tiles
     for (const v of [value - 1, value - 2, value + 1, value + 2]) {
       if (v >= 1 && v <= 9) {
         const key = `${suit}-${v}`
         if (groups.has(key)) {
-          score -= policy.nearWeight * nearWeightFactor
+          if (isShortOrSecond) {
+            score += policy.nearWeight * nearWeightFactor  // 短门/次短门：鼓励拆顺子
+          } else {
+            score -= policy.nearWeight * nearWeightFactor  // 长门：保留顺子
+          }
         }
       }
     }
@@ -1247,7 +1258,12 @@ function scoreTileForDiscard(
     const rs = routeState.current
     const targetSuit = routeState.targetSuit
     const shortestSuit = routeState.features?.shortestSuit
+    const secondShortSuit = numberSuits
+      .filter(s => (suitCounts[s] || 0) > 0 && s !== shortestSuit)
+      .sort((a, b) => (suitCounts[a] || 0) - (suitCounts[b] || 0))[0] || null
     const isShortSuit = shortestSuit && tile.suit === shortestSuit
+    const isSecondShortSuit = secondShortSuit && tile.suit === secondShortSuit
+    const isShortOrSecond = isShortSuit || isSecondShortSuit
     const isTarget = targetSuit && tile.suit === targetSuit
 
     if (rs === 'HALF_FLUSH' || rs === 'OPEN_SPEED') {
@@ -1258,19 +1274,23 @@ function scoreTileForDiscard(
         score -= 2.0 * routeBiasFactor  // 长门单张：保留
       } else if (!isHonor(tile) && !isTarget) {
         // 短门/次短门：无论对子还是单张，都优先打掉
+        const _suitBonus = isShortSuit ? 1.5 : 0  // 最短门额外加成
         if (sameTypeCount >= 2) {
-          score += 3.5 * routeBiasFactor  // 短门对子：打掉！为路线服务
+          score += 0  // 短门/次短门对子：中性（不保留也不特别打）
         } else {
-          score += 2.5 * routeBiasFactor  // 短门单张：打掉
+          score += (2.5 + _suitBonus) * routeBiasFactor  // 短门单张：打掉
         }
       }
     } else if (rs === 'ALL_PUNGS') {
       // 碰碰胡：路线已锁定，弃牌为路线服务！
-      // 对子/刻子：坚决保留（大负分），顺子搭子：果断拆掉（大正分）
       if (sameTypeCount >= 3) {
         score -= 12.0 * routeBiasFactor  // 刻子：绝不拆
       } else if (sameTypeCount >= 2) {
-        score -= 8.0 * routeBiasFactor   // 对子：坚决保留
+        if (isShortOrSecond) {
+          score += 0  // 短门/次短门对子：中性
+        } else {
+          score -= 8.0 * routeBiasFactor   // 长门对子：坚决保留
+        }
       } else {
         score += 5.0 * routeBiasFactor   // 单张：优先打掉
       }

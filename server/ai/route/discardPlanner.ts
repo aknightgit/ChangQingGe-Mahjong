@@ -116,6 +116,17 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
     visibleCopies >= 1
       ? 9 + Math.min(3, visibleCopies)
       : 0
+  // ★ 次短门顺子（有相邻牌）：也要打掉
+  const secondSuitSequenceWaste =
+    secondSuit &&
+    input.tile.suit === secondSuit &&
+    input.tile.suit !== longestSuit &&
+    !isHonor(input.tile) &&
+    nearby >= 1
+      ? 7 + Math.min(3, nearby)
+      : 0
+  // ★ 短门对子：中性（OBSERVE阶段）
+  const shortestSuitPairWaste = 0
 
   return Math.max(
     weakUpstreamSuit || 0,
@@ -125,7 +136,9 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
     seenHonorWaste || 0,
     exhaustedHonorPair || 0,
     secondSuitWaste || 0,
-    secondSuitSeenWaste || 0
+    secondSuitSeenWaste || 0,
+    secondSuitSequenceWaste || 0,
+    shortestSuitPairWaste || 0
   )
 }
 
@@ -199,7 +212,7 @@ function scoreByRoute(input: RouteDiscardInput): number {
       return (
         (isShortestSuitTile ? 5.1 + suitGap * 0.6 : 0) +
         shortestSuitSequenceBreakBias +
-        (isShortestSuitTile && count >= 2 ? -shortestSuitPairReserveBias : 0) +
+        (isShortestSuitTile && count >= 2 ? 0 : 0) +
         (count === 1 ? 1.2 : -2.6) +
         (nearby === 0 ? 1.8 : -0.65 * nearby) +
         (isLongestSuitTile ? -longestSuitSingletonKeepBias : 0) +
@@ -212,7 +225,7 @@ function scoreByRoute(input: RouteDiscardInput): number {
         (nearby === 0 ? 1.6 : -0.15 * nearby) +
         (longestSuit && tile.suit !== longestSuit && !isHonor(tile) ? 2.2 : 0) +
         (isShortestSuitTile ? 2.4 + shortestSuitSequenceBreakBias : 0) +
-        (isShortestSuitTile && count >= 2 ? -Math.max(1.4, shortestSuitPairReserveBias * 0.6) : 0) +
+        (isShortestSuitTile && count >= 2 ? 0 : 0) +
         (isLongestSuitTile ? -Math.max(0.8, longestSuitSingletonKeepBias * 0.85) : 0) +
         (routeState.targetSuit && tile.suit !== routeState.targetSuit && !isHonor(tile) ? 4.8 : 0) +
         (routeState.targetSuit && tile.suit === routeState.targetSuit && !isHonor(tile) ? -2.6 : 0) +
@@ -243,12 +256,10 @@ function scoreByRoute(input: RouteDiscardInput): number {
       // 单张有邻牌（潜在的顺子）→ 拆了不影响对子
       const _adjacent_single =
         count === 1 && nearby > 0 ? 1.8 : 0
-      // 对子在短门 → 额外保留
-      const _shortSuit_pair =
-        count >= 2 && isShortestSuitTile ? -2.2 : 0
-      // 对子所属花色短门缺口大 → 更应保留
-      const _gap_pair =
-        count >= 2 && isShortestSuitTile && suitGap >= 3 ? -1.6 : 0
+      // 对子在短门 → 中性
+      const _shortSuit_pair = 0
+      // 对子所属花色短门缺口大 → 中性
+      const _gap_pair = 0
       return (
         _discardScore +
         _shortSuit_seen_single +
@@ -275,6 +286,11 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
     input.routeState.targetSuit && input.afterRouteState.targetSuit === input.routeState.targetSuit ? 0.6 : 0
   const routeStrengthDelta =
     input.afterRouteState.routeScores[0].score - input.routeState.routeScores[0].score
+  const _secondShortSuit = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
+    .filter(s => s !== input.routeState.features.shortestSuit)
+    .map(s => ({ suit: s, count: input.hand.filter(t => t.suit === s).length }))
+    .filter(e => e.count > 0)
+    .sort((a, b) => a.count - b.count)[0]?.suit || null
   const observeOrdering =
     input.routeState.phase === 'OBSERVE'
       ? (
@@ -285,14 +301,16 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
           input.routeState.features.longestSuitCount - input.routeState.features.shortestSuitCount >= 4 &&
           input.routeState.features.shortestSuit &&
           input.tile.suit === input.routeState.features.shortestSuit &&
-          sameTypeCount(input) >= 2 ? -2.6 : 0) +
+          sameTypeCount(input) >= 2 ? 0 : 0) +
         (input.routeState.features.upstreamVoidSuit && input.tile.suit === input.routeState.features.upstreamVoidSuit && sameTypeCount(input) === 1 ? 1.5 : 0) +
         (input.routeState.features.longestSuit && input.tile.suit === input.routeState.features.longestSuit && sameTypeCount(input) >= 2 ? -1.2 : 0) +
         (input.routeState.features.longestSuit && input.tile.suit === input.routeState.features.longestSuit && sameTypeCount(input) === 1 ? -1.8 : 0) +
         (input.routeState.features.longestSuit && input.routeState.features.longestSuitCount >= 6 && input.tile.suit === input.routeState.features.longestSuit ? -3.2 : 0) +
         (input.routeState.features.longestSuitCount - input.routeState.features.secondSuitCount >= 3 &&
           input.routeState.features.longestSuit &&
-          input.tile.suit === input.routeState.features.longestSuit ? -2.4 : 0)
+          input.tile.suit === input.routeState.features.longestSuit ? -2.4 : 0) +
+        // ★ 次短门顺子（OBSERVE阶段）：鼓励打掉
+        (_secondShortSuit && input.tile.suit === _secondShortSuit && adjacentCount(input) >= 1 ? 4.0 + Math.min(2, adjacentCount(input)) : 0)
       )
       : 0
   const dangerAdjustment = (0.65 - input.discardDanger) * (

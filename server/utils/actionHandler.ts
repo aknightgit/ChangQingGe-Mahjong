@@ -850,13 +850,17 @@ export class ActionHandler {
           console.log(`[handleHu] Already in REVEAL, scheduling direct endRound in 1s`)
           const gameId = game.gameId
           const { timerManager: tm } = this.deps
-          tm.detachTimer(setTimeout(() => {
+          tm.clearRevealTimer(gameId)
+          const revealTimer = setTimeout(() => {
+            tm.revealTimers.delete(gameId)
             try {
               const fresh = this.deps.games.get(gameId)
               if (!fresh) return
               endRound(fresh, GameEndReason.LAST_PLAYER)
             } catch (e) { console.warn('[handleHu] reveal end error', e) }
-          }, 1000))
+          }, 1000)
+          tm.revealTimers.set(gameId, revealTimer)
+          tm.detachTimer(revealTimer)
         }
         return
       }
@@ -865,7 +869,9 @@ export class ActionHandler {
       broadcastGameState(game.gameId);
       const gameId = game.gameId;
       const { timerManager: tm } = this.deps;
-      tm.detachTimer(setTimeout(async () => {
+      tm.clearRevealTimer(gameId)
+      const revealTimer = setTimeout(async () => {
+        tm.revealTimers.delete(gameId)
         try {
           console.log(`[handleHu-reveal] 5s timer FIRED gameId=${gameId.substring(0,8)}`);
           const fresh = await this.deps.getGame(gameId);
@@ -876,7 +882,9 @@ export class ActionHandler {
           }
           endRound(fresh, GameEndReason.LAST_PLAYER);
         } catch (e) { console.warn('[handleHu] reveal end error', e); }
-      }, 5000));
+      }, 5000)
+      tm.revealTimers.set(gameId, revealTimer)
+      tm.detachTimer(revealTimer)
       return;
     }
 
@@ -885,16 +893,20 @@ export class ActionHandler {
       game.phase = GamePhase.REVEAL;
       await persistGame(game);
       broadcastGameState(game.gameId);
-      const gameId = game.gameId;
-      const { timerManager: tm } = this.deps;
-      tm.detachTimer(setTimeout(async () => {
+      const wallGameId = game.gameId;
+      const { timerManager: tm2 } = this.deps;
+      tm2.clearRevealTimer(wallGameId)
+      const wallRevealTimer = setTimeout(async () => {
+        tm2.revealTimers.delete(wallGameId)
         try {
-          console.log(`[handleHu-wall] 5s timer FIRED gameId=${gameId.substring(0,8)}`);
-          const fresh = await this.deps.getGame(gameId);
+          console.log(`[handleHu-wall] 5s timer FIRED gameId=${wallGameId.substring(0,8)}`);
+          const fresh = await this.deps.getGame(wallGameId);
           if (!fresh || fresh.phase !== GamePhase.REVEAL) return;
           endRound(fresh, GameEndReason.LAST_PLAYER);
         } catch (e) { console.warn('[handleHu] reveal end error', e); }
-      }, 5000));
+      }, 5000)
+      tm2.revealTimers.set(wallGameId, wallRevealTimer)
+      tm2.detachTimer(wallRevealTimer)
       return;
     }
 

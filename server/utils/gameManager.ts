@@ -1714,11 +1714,13 @@ class GameManager {
       console.log(`[WallDebug] Cleared stale freeze timer for game ${gameId}`);
     }
     // ★ K哥铁律(2026-06-05): 清除上一局残留的 REVEAL 定时器
-    // handleHu 设的 5s REVEAL 定时器如果没触发，新局开始时必须清除，否则新局被强制结束
+    // handleHu/endRound 设的 5s REVEAL 定时器如果没触发，新局开始时必须清除，否则新局被强制结束
     if ((game as any)._revealEndScheduled) {
       delete (game as any)._revealEndScheduled;
       console.log(`[beginGame] Cleared stale _revealEndScheduled for game ${gameId}`);
     }
+    this.timerManager.clearRevealTimer(gameId);
+    console.log(`[beginGame] Cleared REVEAL timers for game ${gameId.substring(0,8)}`);
     // 每局重置百搭冷冻状态
     game.freezePlayerId = null;
     game.freezeComplete = false;
@@ -4078,7 +4080,8 @@ class GameManager {
       this.store.flushGameNow(game.gameId, game).catch(() => {});
       this.broadcastGameState(game.gameId);
       const gameId = game.gameId;
-      this.timerManager.detachTimer(setTimeout(async () => {
+      const revealTimer = setTimeout(async () => {
+        this.timerManager.revealTimers.delete(gameId);
         try {
           console.log(`[enterReveal] 5s timer FIRED gameId=${gameId.substring(0,8)}`);
           const fresh = await this.getGame(gameId);
@@ -4091,7 +4094,9 @@ class GameManager {
         } catch (e) {
           console.warn("[enterReveal] end error:", e);
         }
-      }, 5000));
+      }, 5000);
+      this.timerManager.revealTimers.set(gameId, revealTimer);
+      this.timerManager.detachTimer(revealTimer);
       return;
     }
     // 已处于REVEAL阶段，执行结算

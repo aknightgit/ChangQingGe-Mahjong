@@ -13,6 +13,8 @@ export class TimerManager {
   freezeTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   // Bot 定时器
   botTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  // ★ REVEAL 阶段定时器（5s 验牌 / 1s 去重）
+  revealTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   // 自动托管定时器
   autoTakeoverTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   autoTakeoverWarnings: Map<string, ReturnType<typeof setTimeout>> = new Map();
@@ -66,11 +68,21 @@ export class TimerManager {
     }
   }
 
+  /** 清除 REVEAL 定时器 */
+  clearRevealTimer(gameId: string): void {
+    const timer = this.revealTimers.get(gameId);
+    if (timer) {
+      clearTimeout(timer);
+      this.revealTimers.delete(gameId);
+    }
+  }
+
   /** 清除游戏所有定时器 */
   clearAllGameTimers(gameId: string): void {
     this.clearPendingActionTimer(gameId);
     this.clearFreezeTimers(gameId);
     this.clearBotTimer(gameId);
+    this.clearRevealTimer(gameId);
     // 清除该游戏所有自动托管定时器
     for (const key of this.autoTakeoverTimers.keys()) {
       if (key.startsWith(gameId + ':')) {
