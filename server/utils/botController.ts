@@ -44,32 +44,8 @@ function evaluateSelfKong(
           }
         }
 
-        // 检查这张牌在手中是否还有用（组成对子或顺子）
-        const sameTiles = player.hand.concealedTiles.filter(
-          t => t.suit === fourth.suit && t.value === fourth.value
-        );
-        // 如果手里还有同牌（除了要杠的这张），说明有对子，可能有用
-        if (sameTiles.length > 1) {
-          return { shouldKong: false, type: 'extended', reason: 'tile-pair-useful' };
-        }
-
-        // 检查是否靠近顺子（左右相邻牌）—— 风牌/箭牌不检查（不能组顺子）
-        if (!isHonorTile(fourth)) {
-          const nearChow = player.hand.concealedTiles.some(t =>
-            t.suit === fourth.suit && t.id !== fourth.id && Math.abs(t.value - fourth.value) <= 2
-          );
-          if (nearChow) {
-            return { shouldKong: false, type: 'extended', reason: 'tile-near-chow' };
-          }
-        }
-
-        // 加杠决策：基于 kongChance + kakanAggression
-        const score = kongChance + kakanAggression * 0.5;
-        if (Math.random() < score) {
-          return { shouldKong: true, type: 'extended', reason: `score=${score.toFixed(2)}` };
-        } else {
-          return { shouldKong: false, type: 'extended', reason: `score-low=${score.toFixed(2)}` };
-        }
+        // ★ K哥铁律：碰了就杠（碰碰胡路线从不拆刻子，加杠是必选项）
+        return { shouldKong: true, type: 'extended', reason: 'peng-peng-hu-must-kong' };
       }
     }
   }
@@ -93,31 +69,8 @@ function evaluateSelfKong(
             return { shouldKong: false, type: 'concealed', reason: 'kge_honor_kong_forbidden' };
           }
         }
-        // 暗杠抑制1：如果该牌还能组顺子，大幅降低暗杠概率
-        const suit = tiles[0].suit;
-        const value = tiles[0].value;
-        if (!isHonorTile(tiles[0])) {
-          const hasChowPartner = player.hand.concealedTiles.some(t =>
-            t.suit === suit && t.id !== tiles[0].id && t.id !== tiles[1].id && t.id !== tiles[2].id && t.id !== tiles[3].id &&
-            Math.abs(t.value - value) <= 2
-          );
-          if (hasChowPartner) {
-            return { shouldKong: false, type: 'concealed', reason: 'tile-has-chow-partner' };
-          }
-        }
-        // 暗杠抑制2：杠掉后手牌从4张变1张，听张大幅减少，降低概率
-        const concealedCount = player.hand.concealedTiles.length;
-        if (concealedCount <= 5) {
-          // 手牌少时暗杠风险高，大幅降低
-          return { shouldKong: false, type: 'concealed', reason: `hand-too-few=${concealedCount}` };
-        }
-        // 暗杠决策：基于 kongChance + anKongAggression
-        const score = kongChance + anKongAggression * 0.5;
-        if (Math.random() < score) {
-          return { shouldKong: true, type: 'concealed', reason: `score=${score.toFixed(2)}` };
-        } else {
-          return { shouldKong: false, type: 'concealed', reason: `score-low=${score.toFixed(2)}` };
-        }
+        // ★ K哥铁律：有4张一样的牌必须暗杠（碰碰胡路线刻子/杠是核心）
+        return { shouldKong: true, type: 'concealed', reason: 'must-concealed-kong' };
       }
     }
   }
