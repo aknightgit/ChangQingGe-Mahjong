@@ -4306,25 +4306,23 @@ class GameManager {
     // 注意:player.score 已包含带头大哥赔付,基于当前值计算
     const botAffected = game.botTakeoverPlayers || [];
 
-    // ★ 膨胀系数是最后乘、每个玩家都乘的系数
-    // BotPenalty减半逻辑：先÷膨胀系数得基数，减半，再×膨胀系数
-    const sm = game.settlementMultiplier ?? 1;
     for (const player of game.players) {
       if (botAffected.includes(player.id)) {
         if (player.score > 0) {
-          const baseScore = Math.floor(player.score / sm); // 去掉膨胀系数
-          const halfBase = Math.floor(baseScore / 2);     // 减半（基数层面）
-          const finalScore = halfBase * sm;                 // 乘回膨胀系数
-          console.log(`[BotPenalty] ${player.name}(AI接管) 赢分减半: ${player.score} → ÷${sm}=${baseScore} → ÷2=${halfBase} → ×${sm}=${finalScore}`);
-          player.score = finalScore;
+          // ★ K哥铁律(2026-06-05): 膨张系数10下所有输赢必须是10的倍数，
+          // 减半后按10取整
+          const half = Math.floor(player.score / 2);
+          const rounded = Math.floor(half / 10) * 10;
+          console.log(`[BotPenalty] ${player.name}(AI接管) 赢分减半: ${player.score} → ${half} → ${rounded}`);
+          player.score = rounded;
         }
         // 输分照常,不减
       }
     }
 
     // 平衡总分:如果AI赢分减半导致总赢≠总输,按比例缩小输家支付
-    // ★ 膨胀系数是最后乘、每个玩家都乘的系数
-    // 平衡调整在基数层面（÷sm）进行，最后乘回sm
+    // ★ K哥铁律(2026-06-05): 膨张系数10下所有输赢必须是10的倍数，
+    // 平衡调整时按10取整，兑底调整也按10取整
     const totalScore = game.players.reduce((s, p) => s + p.score, 0);
     if (totalScore !== 0) {
       const losers = game.players.filter(p => p.score < 0);
@@ -4334,18 +4332,20 @@ class GameManager {
       if (totalLoss > 0) {
         for (const loser of losers) {
           const ratio = Math.abs(loser.score) / totalLoss;
-          loser.score += Math.floor(deficit * ratio / sm) * sm;
+          // 按10取整，保证平衡后仍是10的倍数
+          const reduction = Math.floor(deficit * ratio / 10) * 10;
+          loser.score += reduction;
         }
       }
 
-      // 兑底:取整差额加到最大输家（在基数层面取整）
+      // 兑底:取整差额加到最大输家，也按10取整
       const finalTotal = game.players.reduce((s, p) => s + p.score, 0);
       if (finalTotal !== 0) {
         const minP = game.players.reduce((a, b) => a.score < b.score ? a : b);
         minP.score -= finalTotal;
-        // 强制按sm取整（兜底）
-        if (minP.score % sm !== 0) {
-          minP.score = Math.floor(minP.score / sm) * sm;
+        // 如果不是10的倍数，缩到最近的10的倍数
+        if (minP.score % 10 !== 0) {
+          minP.score = Math.floor(minP.score / 10) * 10;
         }
       }
     }
