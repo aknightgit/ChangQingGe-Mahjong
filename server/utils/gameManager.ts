@@ -4258,7 +4258,7 @@ class GameManager {
         }
 
         // ★ 生成赔付算式明细 (例：自摸 三口时输出 160+160+160*3=800)
-        (winner as any)._paymentFormula = formatPaymentFormula(
+        (winner as any)._paymentFormula = GameManager.formatPaymentFormula(
           breakdown.transfers.map(t => ({
             amount: t.amount,
             bailoutType: t.bailoutType,
