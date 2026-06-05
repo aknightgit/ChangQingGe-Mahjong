@@ -99,16 +99,22 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
     nearby === 0
       ? 12 + Math.max(0, shortSuitGap - 1)
       : 0
-  // ★ K哥规则：短门的邻接张（含顺子潜力）一律优先打，不留
-  // 原来 +10~+16 是错的 → 短门留顺子等于留垃圾，改成不给分或给负分
+  // ★ K哥铁律(2026-06-05): 短门顺子是垃圾！一律加大打掉力度，不保留任何短门顺子。
+  // 短门邻接张(含顺子潜力)统统给负分
+  // 熟张 ≥ 1 + gap >= 3 → -5.0 强打
+  // 邻接张 ≥ 1 (任意 gap) → -2.0 保持打掉
   const shortestSeenConnector =
     shortestSuit &&
     input.tile.suit === shortestSuit &&
     nearby > 0 &&
     visibleCopies >= 1 &&
-    shortSuitGap >= 4
-      ? -3.0  // 短门邻接熟张：打掉，不留
-      : 0
+    shortSuitGap >= 3
+      ? -5.0  // 短门邻接熟张+gap大：强打
+      : shortestSuit &&
+        input.tile.suit === shortestSuit &&
+        nearby > 0
+        ? -2.0  // 短门邻接张（任意gap）：打掉
+        : 0
   const seenHonorWaste =
     isHonor(input.tile) &&
     isSingleton &&
@@ -449,11 +455,12 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
           input.tile.suit === input.routeState.features.shortestSuit &&
           sameTypeCount(input) >= 2 ? -2.6 : 0) +
         (input.routeState.features.upstreamVoidSuit && input.tile.suit === input.routeState.features.upstreamVoidSuit && sameTypeCount(input) === 1 ? 1.5 : 0) +
-        // ★ K哥铁律：上家吃过该门数牌、且自己这门<=5张、且不是长门 → 大幅提高打该门单张优先级
+        // ★ K哥铁律(2026-06-05): 上家吃过该门数牌、且自己这门<3张、且不是长门 → 才加大打掉
+        // 只有“长门不够强且上家做过同门”才进避。3+张同门（含长门）默认保留（卡住上游）。
         (input.routeState.features.upstreamEatenSuits?.includes(input.tile.suit) &&
           sameTypeCount(input) === 1 &&
-          (input.routeState.features.longestSuit !== input.tile.suit || (input.routeState.features.longestSuitCount || 0) <= 5)
-            ? 4.0 : 0) +
+          (input.routeState.features.longestSuit !== input.tile.suit || (input.routeState.features.longestSuitCount || 0) < 3)
+            ? 3.0 : 0) +
         (input.routeState.features.longestSuit && input.tile.suit === input.routeState.features.longestSuit && sameTypeCount(input) >= 2 ? -1.2 : 0) +
         (input.routeState.features.longestSuit && input.tile.suit === input.routeState.features.longestSuit && sameTypeCount(input) === 1 ? -1.8 : 0) +
         (input.routeState.features.longestSuit && input.routeState.features.longestSuitCount >= 6 && input.tile.suit === input.routeState.features.longestSuit ? -3.2 : 0) +

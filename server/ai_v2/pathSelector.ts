@@ -292,7 +292,8 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       else if (features.longestSuitCount >= 7) { reasons.push('half_flush_seven_tiles'); score += 10 }
       else if (features.longestSuitCount < 6) score -= 6
       if (features.upstreamVoidSuit && features.upstreamVoidSuit === targetSuit) { reasons.push('upstream_void_target'); score += 3 }
-      if (features.upstreamRejectedSuit && features.upstreamRejectedSuit === targetSuit && features.longestSuitCount >= 6) { reasons.push('upstream_rejected_target'); score += 2.4 }
+      // ★ K哥铁律(2026-06-05): 上家不要长门(打了2+张) + 自己长门够强(>=4张) → 允许同门
+      if (features.upstreamRejectedSuit && features.upstreamRejectedSuit === targetSuit && features.longestSuitCount >= 4) { reasons.push('upstream_rejected_target'); score += 3.0 }
       // ★ V2: 两门长度接近时，上家不做+下家做的门优先
       if (features.secondSuitCount > 0 && Math.abs(features.longestSuitCount - features.secondSuitCount) <= 2) {
         const secondSuit = NUMBER_SUITS.find(s => s !== features.longestSuit && (features as any)[s + 'Count'] === features.secondSuitCount) || null
