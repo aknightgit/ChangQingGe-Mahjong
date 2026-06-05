@@ -705,7 +705,9 @@ export class ActionHandler {
 
     // 设置胡牌状态
     player.status = PlayerStatus.WON;
-    player.winOrder = game.winnersCount + 1;
+    // ★ 安全同步：用实际 WON 玩家数，防止跨局残留值干扰
+    game.winnersCount = game.players.filter(p => p.status === PlayerStatus.WON).length;
+    player.winOrder = game.winnersCount;
     player.winRound = game.roundNumber;
     player.winTimestamp = Date.now();
     game.winnersCount++;
@@ -837,6 +839,8 @@ export class ActionHandler {
     game.pendingActions = [];
 
     // 检查是否需要结束牌局
+    // ★ 安全同步：用实际 WON 玩家数，防止跨局残留值导致误判
+    game.winnersCount = game.players.filter(p => p.status === PlayerStatus.WON).length;
     const remainingActive = game.players.filter(p => p.status === PlayerStatus.PLAYING).length;
     // ★ K哥铁律(2026-06-05): 仅3人胡+或牌墙摸光才进REVEAL→ENDED
     // 1家胡后牌局继续，决不允许1家胡就endgame

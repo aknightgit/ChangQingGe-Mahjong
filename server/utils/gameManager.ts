@@ -1696,6 +1696,19 @@ class GameManager {
     game.finalScores = undefined;
     game.customScoringMode = null;
     game.winnersCount = 0;  // ★ 新局重置赢家计数（防止跨局累积导致 PeriodicCleanup 误判）
+    // ★ 强制重置所有玩家 status 为 PLAYING（防止 endRound 异常中断后 status 残留）
+    for (const p of game.players) {
+      p.status = PlayerStatus.PLAYING;
+      p.winOrder = null;
+      p.winRound = null;
+      p.winTimestamp = null;
+      p.isSelfDrawn = undefined;
+      p.discarderId = undefined;
+      p.winningScoreBreakdown = undefined;
+      p.wonFan = 0;
+      p.winHandType = undefined;
+      p.score = 0;
+    }
     game.liangShanSuccess = undefined;  // 清除聚义成功标记
     game.liangShanVotes = [];  // 重置聚义投票，新局允许再次发起
     // 清空上一局残留状态
