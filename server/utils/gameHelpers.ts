@@ -11,6 +11,8 @@ export function isConcealedDiscardState(player: Player): boolean {
   // 补花后: 可能15/16张(花牌补入后手牌数异常), 只要>=14张也可出牌
   // 吃/碰后: 12张暗牌+1个副露 → 12%3=0, 但有副露所以是合法出牌状态
   if (concealedCount >= 2 && exposedMeldCount > 0 && concealedCount % 3 === 0) return true
+  // 加杠后补牌可能让手牌变成 %3===1（如3张→加杠→补牌→4张），也应允许出牌
+  if (concealedCount >= 2 && exposedMeldCount > 0 && concealedCount % 3 === 1) return true
   return concealedCount >= 2 && (concealedCount % 3 === 2 || concealedCount >= 14)
 }
 
