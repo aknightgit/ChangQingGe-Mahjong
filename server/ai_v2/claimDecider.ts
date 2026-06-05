@@ -548,31 +548,10 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       }
 
     case 'ALL_PUNGS':
-      // ★ V2.5: 纯碰碰胡要求全部是刻子,已破门清(有顺子副露)不适用此路线
-      // K哥铁律: 既然已吃过一口,路线就不可能是碰碰胡,ALL_PUNGS 拒绝逻辑不适用
-      const hasExposedSequence = player.hand.exposedMelds.some((m: any) => m.type === 'sequence')
-      if (action === ActionType.CHOW && hasExposedSequence) {
-        // 已有顺子副露 → 不应走 ALL_PUNGS 拒绝路径
-        // 跳出该 case, 走到下面的 default 吃牌处理
-        break
-      }
-      // ★ V2: 碰碰胡路线下允许有价值的吃牌（有顺子能更快碰碰胡时）
-      // 硬拒绝所有CHOW太严格 → 改为评估CHOW是否真正提升碰碰胡路线
+      // ★ K哥铁律：碰碰胡路线下禁止吃牌（吃顺子破坏碰碰胡结构）
       if (action === ActionType.CHOW) {
-        // ★ V2.4: 单边张/两面吃牌豁免碰碰胡拒绝(一二筒吃三筒几乎必吃)
-        const strongChowAllPungs = isStrongChow(player.hand.concealedTiles, claimTile)
-        if (strongChowAllPungs) {
-          const boost = strongChowAllPungs === 'edge' ? 1.5 : strongChowAllPungs === 'kant' ? 1.2 : 0.8
-          return { allowed: true, tuneDelta: 0.3 + boost, reason: 'all_pungs_strong_chow_override' }
-        }
-        // 吃后能减少向听 → 允许
-        if (candidateShanten < passShanten) {
-          return { allowed: true, tuneDelta: 0.3, reason: 'all_pungs_chow_shanten_gain' }
-        }
-        // 吃后进张不减少太多 → 允许但减分
-        if (candidateEffective >= passEffective - 2) {
-          return { allowed: true, tuneDelta: -0.8, reason: 'all_pungs_chow_marginal' }
-        }
+        return { allowed: false, tuneDelta: -2.0, reason: 'all_pungs_chow_forbidden' }
+      }
         return { allowed: false, tuneDelta: -2, reason: 'all_pungs_blocks_chow' }
       }
       const _apPursuit = (policy?.allPungsPursuit || 0)
