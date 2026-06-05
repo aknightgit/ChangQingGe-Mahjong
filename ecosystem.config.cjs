@@ -8,7 +8,7 @@ module.exports = {
     script: '.output/server/index.mjs',
     cwd: __dirname,
     env: {
-      PORT: process.env.PORT || '8899',
+      PORT: process.env.PORT || '8888',
       MONGODB_URI: process.env.MONGODB_URI || 'mongodb://localhost:27017',
       MONGODB_DB: process.env.MONGODB_DB || 'changqingge',
       REDIS_URL: process.env.REDIS_URL || '',
