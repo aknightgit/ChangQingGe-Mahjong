@@ -4311,6 +4311,28 @@ class GameManager {
       ? GameEndReason.LAST_PLAYER
       : reason;
 
+    // ★ K哥铁律(2026-06-05): 下一局庄家 = 本局首胡者(一炮多响则放冲者坐庄)
+    // 流局时庄家不变(已处理)。跳走这个逻辑让上局赢家中 winner=1 当庄。
+    if (!game.nextDealerId && roundWinners.length > 0 && finalReason !== GameEndReason.WALL_EXHAUSTED) {
+      const firstWinner = roundWinners[0];
+      // 检查是否一炮多响（多个 winner 同一时间胡）
+      const isMultipleWinners = roundWinners.length > 1
+      if (isMultipleWinners) {
+        // 一炮多响: 放冲者坐庄（winner.discarderId）
+        const discarder = game.players.find(p => p.id === firstWinner.discarderId)
+        if (discarder) {
+          game.nextDealerId = discarder.id
+          console.log(`[endRound] 一炮多响，放冲者坐庄: ${discarder.name}`)
+        } else {
+          game.nextDealerId = firstWinner.id
+          console.log(`[endRound] 首胡者坐庄 (放冲者未找到): ${firstWinner.name}`)
+        }
+      } else {
+        game.nextDealerId = firstWinner.id
+        console.log(`[endRound] 首胡者坐庄: ${firstWinner.name}`)
+      }
+    }
+
     // 倍数继承链:溢出倍数继承(超过8倍封顶的部分传递给下一把)
     // 规则:effective = inheritMultiplier × roundMultiplier,封顶8,超出部分 = effective/8 继承给下把
     // 注意:聚义/造反已经自行设置 inheritedGlobalMultiplier,不要覆盖
