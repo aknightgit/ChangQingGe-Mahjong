@@ -4296,8 +4296,8 @@ class GameManager {
       }
     }
 
-    // ★ BotPenalty：AI接管玩家赢分减半（基于单局 finalScores，不是累计分）
     const botTakeovers = game.botTakeoverPlayers || [];
+    // ★ BotPenalty：AI接管玩家赢分减半（基于单局 finalScores，不是累计分）
     for (const player of game.players) {
       if (botTakeovers.includes(player.id) && (finalScores[player.id] ?? 0) > 0) {
         finalScores[player.id] = Math.ceil(finalScores[player.id] / 2);
