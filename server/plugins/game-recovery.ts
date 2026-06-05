@@ -14,7 +14,11 @@ export default defineNitroPlugin(() => {
         try {
           await gameManager.ensureGameLoaded(game.gameId)
           // ★ 修复卡死: winnersCount>=3 但还在 playing 阶段 → REVEAL 定时器丢失，强制 endRound
-          if (game.winnersCount >= 3 && game.phase === 'playing') {
+          // ★ K哥铁律(2026-06-05): 只在游戏超过5分钟未动时强制结束，不能仅凭 wc>=3 强制结束正常进行的牌局
+          const now = Date.now()
+          const lastActive = (game as any).lastActionTime || (game as any).createdAt
+          const idleMs = lastActive ? now - new Date(lastActive).getTime() : 0
+          if (game.winnersCount >= 3 && game.phase === 'playing' && idleMs > 3 * 60 * 1000) {
             console.log(`[StartupRecovery] Game ${game.roomNumber || game.gameId} has ${game.winnersCount} winners but still playing, forcing REVEAL→END`)
             game.phase = 'reveal'
             await gameManager.endRound(game, 'last_player' as any)
@@ -54,10 +58,15 @@ export default defineNitroPlugin(() => {
       if (result.cleanedMongo > 0 || result.cleanedMemory > 0) {
         console.log("[PeriodicCleanup] Removed " + result.cleanedMongo + " stale games from DB, " + result.cleanedMemory + " from memory")
       }
-      // ★ 修复卡死: 检查 playing 阶段但 winnersCount>=3 的游戏
+      // ★ 修复卡死: 检查 playing 阶段但 winnersCount>=3 且游戏空闹超过 3 分钟的游戏
+      // K哥铁律(2026-06-05): 不能仅凭 wc>=3 强制结束正常进行的牌局（1家胡后牌局继续）
       const { loadActiveGameStates } = await import("../utils/gamePersistence")
       const games = await loadActiveGameStates()
+      const cleanupNow = Date.now()
       for (const game of games.filter(g => g.phase === 'playing' && g.winnersCount >= 3)) {
+        const lastActive = (game as any).lastActionTime || (game as any).createdAt
+        const idleMs = lastActive ? cleanupNow - new Date(lastActive).getTime() : 0
+        if (idleMs < 3 * 60 * 1000) continue  // 游戏中不强制结束
         console.log(`[PeriodicCleanup] Stuck game ${game.roomNumber}: ${game.winnersCount} winners, forcing endRound`)
         try {
           game.phase = 'reveal'

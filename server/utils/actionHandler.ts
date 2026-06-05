@@ -838,8 +838,9 @@ export class ActionHandler {
 
     // 检查是否需要结束牌局
     const remainingActive = game.players.filter(p => p.status === PlayerStatus.PLAYING).length;
-    // ★ 只有3人胡或牌墙摸光才进REVEAL→ENDED，1人胡后牌局继续
-    if (remainingActive <= 1 || game.winnersCount >= 3) {
+    // ★ K哥铁律(2026-06-05): 仅3人胡+或牌墙摸光才进REVEAL→ENDED
+    // 1家胡后牌局继续，决不允许1家胡就endgame
+    if (game.winnersCount >= 3 || remainingActive <= 0) {
       // 【修复】进入5秒亮牌阶段，再进入结算
       // 如果已处于REVEAL(前人胡已设), 推迟 1s 直接 endRound, 避免多个 5s setTimeout 抢跑
       // ★ V2.12: 去重 —— 只设一个 1s 定时器, 后续胡不再重复设
