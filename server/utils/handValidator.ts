@@ -1000,9 +1000,16 @@ function findBestAssignmentHeuristic(
       virtualHand.push({ suit: tile.suit as TileSuit, value: tile.value, id: `vh-${i}`, isFlower: false });
     }
     const result = detectTypes(virtualHand, exposed);
-    // ★ 统一垃圾胡检查：多数字门 + 不能全刻子 = 垃圾胡，不是碰碰胡
+    // ★ 统一垃圾胡检查：多数字门 + 不能全刻子 = 垃圾胡
     if (result.includes(HandType.ALL_TRIPLETS) && isGarbageHand(virtualHand)) {
       return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
+    }
+    // ★ STANDARD 也要检查垃圾胡（百搭分配后可能得到含顺子的多门 STANDARD）
+    if (result.includes(HandType.STANDARD)) {
+      const completeHand = [...virtualHand, ...exposed.flatMap(m => m.tiles).filter(t => !isFlower(t))];
+      if (isGarbageMultiSuitsWithSequence(completeHand)) {
+        return result.filter(t => t !== HandType.STANDARD);
+      }
     }
     return result;
   };
@@ -1201,9 +1208,16 @@ function findBestAssignmentByPriority(
       virtualHand.push({ suit: tile.suit as TileSuit, value: tile.value, id: `vhp-${i}`, isFlower: false });
     }
     const result = detectTypes(virtualHand, exposed);
-    // ★ 统一垃圾胡检查：多数字门 + 不能全刻子 = 垃圾胡，不是碰碰胡
+    // ★ 统一垃圾胡检查：多数字门 + 不能全刻子 = 垃圾胡
     if (result.includes(HandType.ALL_TRIPLETS) && isGarbageHand(virtualHand)) {
       return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
+    }
+    // ★ STANDARD 也要检查垃圾胡（百搭分配后可能得到含顺子的多门 STANDARD）
+    if (result.includes(HandType.STANDARD)) {
+      const completeHand = [...virtualHand, ...exposed.flatMap(m => m.tiles).filter(t => !isFlower(t))];
+      if (isGarbageMultiSuitsWithSequence(completeHand)) {
+        return result.filter(t => t !== HandType.STANDARD);
+      }
     }
     return result;
   };
