@@ -2203,7 +2203,8 @@ function detectQuanTing(player: Player, game: GameState): { isQuanTing: boolean;
 /**
  * 检查 tiles 能否恰好组成 count 个面子（刻子或顺子）
  */
-function canFormMelds(tiles: Tile[], count: number, wildTileId: string | null, game: GameState): boolean {
+function canFormMelds(tiles: Tile[], count: number, wildTileId: string | null, game: GameState, _depth: number = 0): boolean {
+  if (_depth > 20) return false  // 防止无限递归
   if (count === 0) return tiles.length === 0
   if (tiles.length < 3) return false
 
@@ -2222,7 +2223,7 @@ function canFormMelds(tiles: Tile[], count: number, wildTileId: string | null, g
       const idx = remaining.findIndex(t => t.suit === first.suit && t.value === first.value)
       if (idx >= 0) remaining.splice(idx, 1)
     }
-    if (canFormMelds(remaining, count - 1, wildTileId, game)) return true
+    if (canFormMelds(remaining, count - 1, wildTileId, game, _depth + 1)) return true
   }
 
   // 尝试作为顺子
@@ -2235,7 +2236,7 @@ function canFormMelds(tiles: Tile[], count: number, wildTileId: string | null, g
         const idx = remaining.findIndex(t => t.id === target.id)
         if (idx >= 0) remaining.splice(idx, 1)
       }
-      if (canFormMelds(remaining, count - 1, wildTileId, game)) return true
+      if (canFormMelds(remaining, count - 1, wildTileId, game, _depth + 1)) return true
     }
   }
 

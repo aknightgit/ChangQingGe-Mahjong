@@ -569,7 +569,6 @@ export function evaluateRouteStateV2(input: {
       const allPungsCandidate = routeScores.find(c => c.route === 'ALL_PUNGS')
       if (allPungsCandidate) {
         current = allPungsCandidate
-        reasons.push('kge_ap_lock_no_half_flush')
       }
     }
   }
