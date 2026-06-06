@@ -258,6 +258,11 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       score += features.downstreamPressure * 4.2
       score += features.opponentOpenMelds * 1.4
       score += input.player.hand.exposedMelds.length * 1.6
+      // ★ K哥铁律(2026-06-06): 4+对子/刻子时OPEN_SPEED也要让步
+      if (features.pairCount + features.tripletCount >= 4) {
+        reasons.push('kge_pungs_priority_open_speed_punish')
+        score -= 35
+      }
       score += getWildRouteBoost(policy, features.wildCount, 'meld') * 3.5
       score += getPolicyValue(policy, 'wallEarlySpeedPush') * 1.1
       score += getPolicyValue(policy, 'wallMidBalance') * 0.8
@@ -274,6 +279,15 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
 
     case 'HALF_FLUSH':
       targetSuit = features.longestSuit
+      // ★ K哥铁律(2026-06-06): 4+对子/刻子时碰碰胡绝对优先,混一色拆对子损失巨大
+      // room4472 场景: 5个对子/刻子(1刻子+4对子) AI却去混一色,反向PUNISH
+      if (features.pairCount + features.tripletCount >= 4) {
+        reasons.push('kge_pungs_priority_halfflush_punish')
+        score -= 60  // 强PUNISH,让ALL_PUNGS 100%胜出
+      } else if (features.pairCount + features.tripletCount >= 3) {
+        // 3对子也明显倾向碰碰胡
+        score -= 12
+      }
       score += features.longestSuitCount * 4.1
       score += features.honorCount * 1.6
       score += features.honorPairCount * 1.5
@@ -360,7 +374,11 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       // ★ V2: 4+对子/刻子坚决做碰碰胡（90%概率直接锁定）
       // 碰了一对到门口后 pairCount 降但 tripletCount 升，总数仍算
       if (features.pairCount >= 4 || features.pairCount + features.tripletCount >= 4) { reasons.push('four_pairs_commit'); score += 25 }
-      if (features.pairCount + features.tripletCount >= 5) { reasons.push('five_pairs_triplets_lock'); score += 40 }
+      // ★ K哥铁律(2026-06-06): 5+对子/刻子(含门口刻子)绝对锁定碰碰胡 40→60
+      // room4472 场景: 1刻子+4对子=5个对子/刻子 却跑混一色
+      if (features.pairCount + features.tripletCount >= 5) { reasons.push('five_pairs_triplets_lock'); score += 60 }
+      // ★ K哥铁律(2026-06-06): 开局3对子走碰碰胡路线(中等强度,避免硬锁)
+      if (features.pairCount + features.tripletCount === 3 && !_hasExposedSequence) { reasons.push('opening_three_pairs_pungs'); score += 9 }
       if (_ap_isAgg && features.pairCount + features.tripletCount >= 3) { reasons.push('aggressive_pungs_commit'); score += 12 }
       if (_ap_isAgg && features.wildCount > 0 && features.pairCount + features.tripletCount >= 2) { reasons.push('wild_pungs_push'); score += 7 }
       if (noWildOpenPush) score += 1.4
@@ -481,6 +499,20 @@ export function evaluateRouteStateV2(input: {
 
   const routeScores = ROUTES.map(r => evaluateSingleRoute(r, input, features)).sort((a, b) => b.score - a.score)
   const previousRouteState = input.previousRouteState || null
+
+  // ★ V2.16 风险感知：对手威胁高时，加速路线加分
+  // 对手快胡了（多副露/听牌） → 碰碰胡/门清速度加分，慢路线扣分
+  if (input.tableThreat > 0.6) {
+    const threatBoost = input.tableThreat * 6 // 最高 6 分加成
+    for (const rs of routeScores) {
+      if (rs.route === 'ALL_PUNGS') rs.score += threatBoost * 0.8        // 碰碰胡：快成型
+      if (rs.route === 'MENQING_SPEED') rs.score += threatBoost * 0.6    // 门清：不碰不吃最快
+      if (rs.route === 'STRIVE_DRAW') rs.score += threatBoost * 0.4      // 搏命：倍数高时搏一把
+      if (rs.route === 'HALF_FLUSH') rs.score -= threatBoost * 0.3       // 混一色：慢
+      if (rs.route === 'HONOR_HEAVY') rs.score -= threatBoost * 0.2      // 风箭重：中等
+    }
+    routeScores.sort((a, b) => b.score - a.score)
+  }
 
   const HIGH_VALUE_ROUTES: RouteKind[] = ['ALL_PUNGS', 'HALF_FLUSH', 'HONOR_HEAVY']
   const isPostRound10Forced = estimatedRound >= 10

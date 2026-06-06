@@ -115,13 +115,17 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
         nearby > 0
         ? -2.0  // 短门邻接张(任意gap):打掉
         : 0
+  // ★ K哥铁律(2026-06-06): 熟张风箭(visibleCopies>=1)提高打掉意愿
+  // 外面>=2时大幅拉开(13 + visibleCopies*4), 外面==1时适度(11 + 1)
   const seenHonorWaste =
     isHonor(input.tile) &&
     isSingleton &&
-    visibleCopies >= 2 &&
+    visibleCopies >= 1 &&
     input.routeState.current !== 'HONOR_HEAVY' &&
     input.routeState.current !== 'HALF_FLUSH'
-      ? 11 + visibleCopies
+      ? (visibleCopies >= 2
+          ? 13 + visibleCopies * 4   // >=2: 13/17/21 (大幅提高)
+          : 12)                       // ==1: 12 (略提, 11→12)
       : 0
   // ★ V2.15 K哥铁律: 多张风牌待打时,优先打熟张(出现过的)
   // visibleCopies >= 1 的风牌比未出现的优先打
@@ -138,7 +142,7 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
   const honorSingletonKeep =
     isHonor(input.tile) &&
     isSingleton &&
-    visibleCopies <= 1 &&
+    visibleCopies <= 0 &&
     input.routeState.current !== 'HONOR_HEAVY' &&
     input.routeState.current !== 'HALF_FLUSH' &&
     input.routeState.current !== 'ALL_PUNGS'
@@ -547,5 +551,34 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
     }
   }
 
-  return routeBias + residuePressure + preservePrimary + targetSuitBonus + observeOrdering + routeStrengthDelta * 0.18 + dangerAdjustment + tingBonus + pureFlushUpgradeBonus + multiRouteTuneDelta
+  // ★ 风险感知：根据对手路线和自身牌力动态调整
+  let riskPenalty = 0
+  const risk = input.riskAssessment
+  if (risk) {
+    const tileDanger = risk.dangerousSuits.get(input.tile.suit) || 0
+    if (tileDanger > 0) {
+      // 基础危险度惩罚：该门越危险，打这张的惩罚越大
+      riskPenalty = -tileDanger * 8 // 最高 -8 分
+      // 自身牌力压制：牌越强，惩罚越小（可以冒险）
+      riskPenalty *= (1 - risk.selfStrength * 0.8) // strength=1 → 惩罚×0.2
+      // 风险容忍度调节
+      riskPenalty *= (1 - risk.riskTolerance * 0.5) // tolerance=1 → 惩罚×0.5
+    }
+
+    // ★ 下家额外危险惩罚：下家能吃牌，动态识别
+    const nextPlayerDanger = risk.nextPlayerDanger.get(input.tile.suit) || 0
+    if (nextPlayerDanger > 0) {
+      let nextPenalty = -nextPlayerDanger * 6 // 最高 -9 分（×1.5权重后）
+      nextPenalty *= (1 - risk.selfStrength * 0.8)
+      nextPenalty *= (1 - risk.riskTolerance * 0.5)
+      riskPenalty += nextPenalty
+    }
+
+    // 听牌状态下危险牌额外惩罚（对手快胡了，自己还没胡）
+    if (risk.maxThreat > 0.7 && input.candidateShanten > 0) {
+      riskPenalty -= 2.0
+    }
+  }
+
+  return routeBias + residuePressure + preservePrimary + targetSuitBonus + observeOrdering + routeStrengthDelta * 0.18 + dangerAdjustment + tingBonus + pureFlushUpgradeBonus + multiRouteTuneDelta + riskPenalty
 }

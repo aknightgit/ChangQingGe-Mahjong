@@ -21,6 +21,7 @@ import { evaluateRouteClaim } from '../ai/route/claimPlanner'
 import { evaluateRouteClaim as evaluateRouteClaimV2 } from '../ai_v2/claimDecider'
 import { scoreRouteDiscardCandidate } from '../ai/route/discardPlanner'
 import { scoreRouteDiscardCandidate as scoreDiscardV2 } from '../ai_v2/discardDecider'
+import { assessRisk } from '../ai_v2/riskAssessor'
 import fs from 'fs'
 import path from 'path'
 
@@ -625,7 +626,7 @@ function tuneLiveClaimPolicy(policy: any): any {
   lower('bao3AvoidThreshold', 0.35)
   lower('baoRiskAversion', 0.3)
   lower('baoSelfClaimCaution', 0.18)
-  lower('allPungsPursuit', 0.35)
+  lower('allPungsPursuit', 0.45)  // ★ K哥铁律(2026-06-06): 略微提高所有AI做碰碰胡意愿 0.35→0.45
   lower('pureFlushPursuit', 0.45)
   lower('halfFlushWeight', 0.45)
 
@@ -1660,6 +1661,11 @@ export function selectDiscardTile(player: Player, game: GameState): string {
       })
     : null
 
+  // ★ 风险感知：评估对手威胁和自身牌力
+  const riskAssessment = useRoutePlanner && routeState
+    ? assessRisk(player, game, currentShanten, currentEffective, routeState)
+    : undefined
+
   const isPostTurn10 = estimatedRound >= 10
   const round10Commitment = isPostTurn10 && useRoutePlanner && routeState && ["ALL_PUNGS", "HALF_FLUSH", "HONOR_HEAVY"].includes(routeState.current)
 
@@ -1781,6 +1787,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         winningTiles,
         baselineScore: score,
         afterRouteState,
+        riskAssessment,
       })
       const expectedFan = shanten === 0 ? estimateRouteExpectedFan(afterRouteState, player, game, winningTiles) : 0
       const tingDecisionValue = shanten === 0
@@ -1813,6 +1820,20 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         } else if (tilePairCount >= 2) {
           // 对子/刻子：坚决保留（大负分）
           composite -= 45 + tilePairCount * 10
+        }
+      }
+      // ★ K哥铁律(2026-06-06): 开局3对子ALL_PUNGS路线软引导(不硬锁,只是鼓励走碰碰胡)
+      if (routeState.current === 'ALL_PUNGS' && (routeState.features.pairCount + routeState.features.tripletCount) === 3) {
+        if (tilePairCount === 1) {
+          // 单张：适度加分(不强制),尤其风箭/熟张/顺子搭子优先打
+          composite += 18 + (isHonor(tile) ? 6 : 0)
+          if (visibleCopies >= 2) composite += 12
+          else if (visibleCopies >= 1) composite += 6
+          const hasAdjacent = hand.some(t => t.id !== tile.id && t.suit === tile.suit && Math.abs(t.value - tile.value) <= 2)
+          if (hasAdjacent) composite += 10
+        } else if (tilePairCount >= 2) {
+          // 对子：保留倾向(弱于4+对子的硬保留)
+          composite -= 18 + tilePairCount * 4
         }
       }
       // ★ 清混一色坚决执行：拆短门对子，保留长门
