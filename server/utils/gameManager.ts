@@ -4314,10 +4314,14 @@ class GameManager {
     }
 
     // ★ BotPenalty：AI接管玩家赢分减半（基于单局 finalScores，不是累计分）
-    for (const player of game.players) {
-      if (botTakeovers.includes(player.id) && (finalScores[player.id] ?? 0) > 0) {
-        finalScores[player.id] = Math.ceil(finalScores[player.id] / 2);
-        console.log(`[BotPenalty] ${player.name}(AI托管) 单局赢分减半: ${finalScores[player.id]}`);
+    // ★ K哥铁律(2026-06-06): 暂时关闭，观察AI真实战斗力
+    const BOT_PENALTY_ENABLED = false;
+    if (BOT_PENALTY_ENABLED) {
+      for (const player of game.players) {
+        if (botTakeovers.includes(player.id) && (finalScores[player.id] ?? 0) > 0) {
+          finalScores[player.id] = Math.ceil(finalScores[player.id] / 2);
+          console.log(`[BotPenalty] ${player.name}(AI托管) 单局赢分减半: ${finalScores[player.id]}`);
+        }
       }
     }
 
