@@ -552,8 +552,6 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       if (action === ActionType.CHOW) {
         return { allowed: false, tuneDelta: -2.0, reason: 'all_pungs_chow_forbidden' }
       }
-        return { allowed: false, tuneDelta: -2, reason: 'all_pungs_blocks_chow' }
-      }
       const _apPursuit = (policy?.allPungsPursuit || 0)
       const _apAgg = _apPursuit >= 1.2
       return {
