@@ -560,7 +560,19 @@ export function evaluateRouteStateV2(input: {
     : true
   const canHoldPreviousRoute = isPostRound10Forced && previousRouteState && !HIGH_VALUE_ROUTES.includes(previousRouteState.current as RouteKind) ? false : !!previousRouteState && !!previousCandidate && softLockedPrevious && locked2CanSwitch && (previousCandidate.score >= topCandidate.score - flipThreshold || evidenceAgainstPrevious < requiredEvidenceToFlip)
 
-  const current = isPostRound10Forced ? postRound10Top : (canHoldPreviousRoute ? previousCandidate : topCandidate)
+  let current = isPostRound10Forced ? postRound10Top : (canHoldPreviousRoute ? previousCandidate : topCandidate)
+  // ★ K哥铁律(2026-06-07): 碰碰胡路线一旦决定，不可转混一色，只能升级为混碰
+  // 如果之前是ALL_PUNGS且lockLevel>=1，绝不允许切到HALF_FLUSH/FULL_FLUSH
+  if (previousRouteState?.current === 'ALL_PUNGS' && (previousRouteState.lockLevel >= 1 || (previousRouteState.stableTurns || 0) >= 2)) {
+    if (current?.route === 'HALF_FLUSH' || current?.route === 'OPEN_SPEED') {
+      // 强制保持ALL_PUNGS，不可转混一色
+      const allPungsCandidate = routeScores.find(c => c.route === 'ALL_PUNGS')
+      if (allPungsCandidate) {
+        current = allPungsCandidate
+        reasons.push('kge_ap_lock_no_half_flush')
+      }
+    }
+  }
   const secondary = routeScores.find(c => c.route !== current.route) || null
   const gap = current && secondary ? current.score - secondary.score : (current?.score || 0)
   const stableOnPrevious = previousRouteState?.current === current?.route

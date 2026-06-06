@@ -212,16 +212,34 @@ export function refreshRouteMemoryAfterClaim(player: Player, game: GameState): v
   const isWildTileFn = buildWildTileChecker(game.customScoringMode || null, game.wildTileGroup)
   const passShanten = calculateShanten(hand, exposedCount, isWildTileFn)
   const passEffective = countEffectiveTiles(hand, exposedCount, isWildTileFn)
+  const previousRouteState = getPlayerRouteMemory(player)
   const routeState = getEvaluator(player).evaluate({
     game, player, hand,
     shanten: passShanten,
     effectiveTiles: passEffective,
     tableThreat: 0, wallRemaining: game.wall?.length || 0,
-    previousRouteState: getPlayerRouteMemory(player),
+    previousRouteState,
     policy,
   })
+  // ★ K哥铁律(2026-06-07): 碰后如果之前是碰碰胡且4+对子/刻子，保持lockLevel不低于1
+  // 防止碰了一门之后路线被HALF_FLUSH抢走
+  const pairTripletCount = hand.filter(t => !isFlower(t) && !isWildTileFn(t)).reduce((groups, t) => {
+    const same = hand.filter(o => o.suit === t.suit && o.value === t.value).length
+    if (same >= 2 && !groups.has(`${t.suit}-${t.value}`)) groups.set(`${t.suit}-${t.value}`, same)
+    return groups
+  }, new Map<string, number>())
+  const totalPairs = [...pairTripletCount.values()].filter(c => c >= 2).length
+  const totalTriplets = [...pairTripletCount.values()].filter(c => c >= 3).length
+  const exposedMeldTriplets = exposedCount  // 门口碰/杠都算刻子
+  const allPairTriplet = totalPairs + totalTriplets + exposedMeldTriplets
+  if (allPairTriplet >= 4 && routeState) {
+    // 4+对子/刻子 → 确保路线是ALL_PUNGS且lockLevel >= 1
+    routeState.current = 'ALL_PUNGS'
+    routeState.lockLevel = Math.max(routeState.lockLevel || 0, 1) as 0 | 1 | 2
+    routeState.stableTurns = Math.max(routeState.stableTurns || 0, 3)
+  }
   setPlayerRouteMemory(player, routeState)
-  console.log(`[RouteMemory] ${player.name} refreshed after claim → route=${routeState?.current} lock=${routeState?.lockLevel} stable=${routeState?.stableTurns}`)
+  console.log(`[RouteMemory] ${player.name} refreshed after claim → route=${routeState?.current} lock=${routeState?.lockLevel} stable=${routeState?.stableTurns} pairTriplet=${allPairTriplet}`)
 }
 
 function getLiveRouteMetricPolicy(policy: any): {
