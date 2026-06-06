@@ -28,7 +28,7 @@
     "pengWildBoost": 0.07868602024057338,
     "kongWildBoost": 0.2300849018774388,
     "chowWildPenalty": 0.1975975398445984,
-    "menqingKeepBonus": 0.949073945903548,
+    "menqingKeepBonus": 0.25,
     "meldPenalty": 0.02042102440544998,
     "allPungsPursuit": 0.6475842619527894,
     "pureFlushPursuit": 0.9113396760214975,
@@ -145,6 +145,9 @@
     "windDragonPairKeepBonus": 11.836265385481415,
     "tripletComboBonus": 1.3808875380252752,
     "flushChaseBonus": 2.2372010313649673,
-    "useV2Engine": true
+    "useV2Engine": true,
+    "menqingHoldTurns": 2,
+    "forcedOpenRate": 0.7,
+    "deadHandRate": 0.5
   }
 }
