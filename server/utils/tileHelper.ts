@@ -68,11 +68,8 @@ export function getTileMaxCopies(suit: TileSuit): number {
 /** 可打牌数（不含花牌的门口牌+手牌） */
 export function getPlayableTileCount(player: Player): number {
   const concealed = player.hand.concealedTiles.filter(t => !isFlower(t));
-  const exposed = player.hand.exposedMelds.reduce((sum, meld) => {
-    if (meld.tiles.some(t => isFlower(t))) return sum;
-    // 杠(kong)4张只算3张（和碰/吃一样是一个meld组），避免总数超14导致跳过摸牌
-    return sum + Math.min(meld.tiles.length, 3);
-  }, 0);
+  // 每个非花牌 meld 固定算3张（碰/吃/杠都是一个meld组=3张牌），避免杠4张导致总数超14
+  const exposed = player.hand.exposedMelds.filter(m => !m.tiles.some(t => isFlower(t))).length * 3;
   return concealed.length + exposed;
 }
 
