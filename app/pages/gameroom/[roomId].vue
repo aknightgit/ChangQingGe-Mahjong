@@ -306,17 +306,17 @@
             <table class="settle-round-table settle-round-table--compact">
               <thead>
                 <tr>
-                  <th>玩家</th>
-                  <th style="width:36px">胡序</th>
-                  <th>牌型</th>
-                  <th style="width:28px">花</th>
-                  <th style="width:40px">番数</th>
-                  <th style="width:48px">门清</th>
-                  <th style="width:48px">百搭</th>
-                  <th style="width:120px">三四口关系</th>
-                  <th>算式</th>
-                  <th>自摸/捉冲</th>
-                  <th>总输赢</th>
+                  <th style="min-width:50px">玩家</th>
+                  <th style="width:28px">序</th>
+                  <th style="min-width:60px">牌型</th>
+                  <th style="width:24px">花</th>
+                  <th style="width:32px">番</th>
+                  <th style="width:36px">门清</th>
+                  <th style="width:36px">百搭</th>
+                  <th style="min-width:80px">三四口</th>
+                  <th style="min-width:80px">算式</th>
+                  <th style="min-width:60px">方式</th>
+                  <th style="min-width:55px">总输赢</th>
                 </tr>
               </thead>
               <tbody>
@@ -353,19 +353,17 @@
     <div class="settle-actions">
       <!-- 第一阶段:本局输赢(独面板) -->
       <div v-if="!settleFinalMode">
-        <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:8px">
-          <div class="auto-next-countdown" style="display:flex;align-items:center;gap:8px;font-size:0.85rem;opacity:0.8">
+        <div style="display:flex;align-items:center;justify-content:flex-end;width:100%;margin-bottom:8px;gap:8px">
+          <div class="auto-next-countdown" style="display:flex;align-items:center;gap:8px;font-size:0.8rem;opacity:0.7;margin-right:auto">
             <span class="auto-next-spinner"></span>
-            <span>倒计时 {{ wallExhaustedCountdown }}s 后{{ isSettleRequested ? '显示最终结算' : '自动下一局' }}</span>
+            <span>{{ wallExhaustedCountdown }}s后自动{{ isSettleRequested ? '结算' : '下一局' }}</span>
           </div>
-          <div style="display:flex;gap:8px">
-            <button v-if="canReviewHuSelection" class="settle-save-btn settle-save-btn--secondary" @click="openHuReviewPanel">
-              回看胡牌选择
-            </button>
-            <button class="settle-save-btn" @click="isSettleRequested ? finishSettleToFinal() : startNextRound()">
-              {{ isSettleRequested ? '查看最终结算' : '下一局' }}{{ wallExhaustedCountdown > 0 ? ' (' + wallExhaustedCountdown + 's)' : '' }}
-            </button>
-          </div>
+          <button v-if="canReviewHuSelection" class="settle-save-btn settle-save-btn--secondary" @click="openHuReviewPanel">
+            回看
+          </button>
+          <button class="settle-save-btn" @click="isSettleRequested ? finishSettleToFinal() : startNextRound()">
+            {{ isSettleRequested ? '最终结算' : '下一局' }}{{ wallExhaustedCountdown > 0 ? ' (' + wallExhaustedCountdown + 's)' : '' }}
+          </button>
         </div>
       </div>
       <!-- 第二阶段:最终结算(独面板,表格化列对齐) -->
