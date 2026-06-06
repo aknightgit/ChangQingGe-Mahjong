@@ -330,8 +330,7 @@
                   <td style="font-size:0.7rem;white-space:nowrap">{{ row.formula }}</td>
                   <td>{{ row.winMode }}</td>
                   <td :class="{ 'settle-round-positive': row.score > 0, 'settle-round-negative': row.score < 0 }">
-                    <span v-if="row.isWinner && row.paymentFormula" style="font-size:0.7rem;opacity:0.8;display:block">{{ row.paymentFormula }}<template v-if="row.isBotPenalty"> 🤖÷2</template></span>
-                    <span v-if="row.isBotPenalty && !row.paymentFormula" style="font-size:0.7rem;opacity:0.8;display:block">🤖AI托管÷2</span>
+                    <span v-if="row.isWinner && row.paymentFormula" style="font-size:0.7rem;opacity:0.8;display:block">{{ row.paymentFormula }}</span>
                     <span :style="{ fontWeight: 800 }">{{ row.scoreLabel }}</span>
                   </td>
                 </tr>
@@ -1708,13 +1707,16 @@ onMounted(async () => {
     const text = detail.text || ''
     const actionKind = detail.actionKind || ''
     // 吃碰杠胡:所有玩家都播放语音(包括操作者)
-    // ★ K哥铁律(2026-06-06): 碰/吃/杠/补花语音由state watcher统一播放(确保按动作顺序排队)
-    // 广播处理器只播放捉冲牌名语音(需要解析广播文本)
-    if (actionKind === 'hu') {
+    if (actionKind === 'chow') { playVoiceAction('chow') }
+    else if (actionKind === 'pong') { playVoiceAction('pong') }
+    else if (actionKind === 'kong' || actionKind === 'kongSupplement') { playVoiceAction('kong') }
+    else if (actionKind === 'hu') {
+      // 捉冲:先念出放冲的牌名,再播胡语音
       const huText = detail?.text || ''
       const tileMatch = huText.match(/捉冲\[.*?\]-(.*?)(?:·|$)/)
       if (tileMatch) {
         const tileName = tileMatch[1]
+        // 尝试从牌名解析花色和点数播放语音
         const suitMap: Record<string, string> = { '筒': 'dots', '条': 'tiao', '万': 'wan', '风': 'feng' }
         const valueMap: Record<string, number> = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 }
         for (const [cn, suit] of Object.entries(suitMap)) {
@@ -1726,7 +1728,10 @@ onMounted(async () => {
           }
         }
       }
+      playVoiceAction('hu')
     }
+    else if (actionKind === 'selfHu') { /* 由 game state watcher 统一播放 */ }
+    else if (actionKind === 'flowerReplace') { playVoiceAction('flowerReplace') }
   }) as EventListener)
 
   if (process.client) {
@@ -3419,7 +3424,8 @@ const onKong = () => {
   hideActionButtonsNow()
   resetAutoCount()
   selfPendingSupplementHighlight.value = true
-  // ★ K哥铁律(2026-06-06): 语音由广播处理器统一播放，确保顺序正确（避免重复播放）
+  playSound('tile-kong')
+  playVoiceAction('kong')
   executeAction(ActionType.KONG)
 }
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); playVoiceAction('rebel'); executeAction(ActionType.REBEL) }
@@ -3583,14 +3589,12 @@ const FIXED_SETTLEMENT_FAN: Record<string, number> = {
 
 const parseFixedFanFromDetails = (details: any): number | null => {
   if (!Array.isArray(details)) return null
-  // ★ 取最后一个匹配（无花自摸/杠开/八花自摸等会覆盖前面的公式计算值）
-  let lastMatch: number | null = null
   for (const entry of details) {
     if (typeof entry !== 'string') continue
     const match = entry.match(/=\s*(\d+)番$/)
-    if (match) lastMatch = Number(match[1])
+    if (match) return Number(match[1])
   }
-  return lastMatch
+  return null
 }
 
 const getSettlementBaseFanDisplay = (winner: any): string | number => {
@@ -4633,8 +4637,9 @@ const checkOtherPlayerSounds = (newState: any) => {
   for (const id of prevOtherPlayerState.keys()) {
     if (!currentIds.has(id)) prevOtherPlayerState.delete(id)
   }
-  // ★ K哥铁律(2026-06-06): 所有语音由state watcher统一播放(确保按动作顺序排队)
-  // 先播碰/吃/杠语音+音效，再播出牌语音
+  // ★ 修复顺序bug：先播出牌语音（包括补花），再播吃碰杠语音
+  // 这样听到的顺序是：八万 → 吃
+  // ★ 先播放碰/吃/杠语音，再播放出牌语音（按动作发生时间顺序）
   for (const action of pendingMeldVoices) {
     if (action === 'kong') {
       playSound('tile-kong')
