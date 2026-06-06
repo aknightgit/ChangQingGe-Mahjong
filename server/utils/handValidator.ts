@@ -715,40 +715,34 @@ function detectTypes(
   // 规则：多门(>=2门) + 含顺子（不能全刻子）= 禁止的普通3n+2，直接判不能胡
   // 注意：清一色/混一色/碰碰胡/风一色 等特殊牌型已在上方单独处理，不受影响
   // ★ V2.16 K哥铁律: 有风/箭牌时不算垃圾胡（混碰/混一色都允许风箭）
-  // 判断逻辑：hand spans >= 2 suits AND canFormOnlyTriplets = false（即必须用顺子）
-  function isGarbageMultiSuitsWithSequence(concealedTiles: Tile[]): boolean {
-    const suits = getSuits(concealedTiles);
-    if (suits.size < 2) return false;  // 单门（清一色/风一色）不是垃圾胡
-    // 有风/箭牌时，只有数牌仅1门才可能是混一色/混碰；多门数牌仍是垃圾胡
-    const hasHonor = concealedTiles.some(t => isWind(t) || isDragon(t));
-    if (hasHonor) {
-      const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-      const numSuitSet = new Set(concealedTiles.filter(t => numSuits.includes(t.suit)).map(t => t.suit));
-      if (numSuitSet.size <= 1) return false;  // 单门数牌+风箭 → 混一色/混碰可能，不算垃圾
-      // 多门数牌+风箭 → 不能成混一色（需要单门），继续垃圾检查
-    }
-    // 检查是否能全用刻子组成（顺子牌型需要wild配合才成立）
-    // 用 canFormOnlyTripletsFrom 检验：不用顺子能否满足 3n+2
-    const nonFlower = concealedTiles.filter(t => !isFlower(t));
-    const m = (nonFlower.length - 2) / 3;
-    if (!Number.isInteger(m) || m < 0) return false;
-    // 如果只用刻子就能满足3n+2，说明手牌不需要顺子（全是刻子+对子）→ 不是垃圾胡
-    if (canFormOnlyTripletsFrom(nonFlower, m, () => false)) return false;
-    // 不能全刻子 → 必须用顺子 → 多门+顺子 → 垃圾胡
-    return true;
-  }
-
-  // 基础胡牌：满足 3n+2 格式且没有更高优先级特殊牌型，且不是垃圾胡
+    // 基础胡牌：满足 3n+2 格式且没有更高优先级特殊牌型，且不是垃圾胡
   // ★ 用完整牌（手牌+门口）判断垃圾胡，防止门口有多门顺子时漏判
   if (types.length === 0 && satisfiesFormat) {
     const completeHand = [...concealedNonFlower, ...exposedNonFlower];
-    if (!isGarbageMultiSuitsWithSequence(completeHand)) {
+    if (!_isGarbageMultiSuitsWithSequenceModuleLevel(completeHand)) {
       types.push(HandType.STANDARD);
     }
     // 垃圾胡：types.length 仍然为 0，不会胡
   }
 
   return types.sort((a, b) => (HAND_TYPE_PRIORITY[b] ?? 0) - (HAND_TYPE_PRIORITY[a] ?? 0));
+}
+
+// ★ 模块级函数（原为detectTypes局部函数，提升到模块级供canWin/findBestAssignment使用）
+function _isGarbageMultiSuitsWithSequenceModuleLevel(concealedTiles: Tile[]): boolean {
+    const suits = getSuits(concealedTiles);
+    if (suits.size < 2) return false;
+    const hasHonor = concealedTiles.some(t => isWind(t) || isDragon(t));
+    if (hasHonor) {
+      const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+      const numSuitSet = new Set(concealedTiles.filter(t => numSuits.includes(t.suit)).map(t => t.suit));
+      if (numSuitSet.size <= 1) return false;
+    }
+    const nonFlower = concealedTiles.filter(t => !isFlower(t));
+    const m = (nonFlower.length - 2) / 3;
+    if (!Number.isInteger(m) || m < 0) return false;
+    if (canFormOnlyTripletsFrom(nonFlower, m, () => false)) return false;
+    return true;
 }
 
 // ============================================================
@@ -1007,7 +1001,7 @@ function findBestAssignmentHeuristic(
     // ★ STANDARD 也要检查垃圾胡（百搭分配后可能得到含顺子的多门 STANDARD）
     if (result.includes(HandType.STANDARD)) {
       const completeHand = [...virtualHand, ...exposed.flatMap(m => m.tiles).filter(t => !isFlower(t))];
-      if (isGarbageMultiSuitsWithSequence(completeHand)) {
+      if (_isGarbageMultiSuitsWithSequenceModuleLevel(completeHand)) {
         return result.filter(t => t !== HandType.STANDARD);
       }
     }
@@ -1215,7 +1209,7 @@ function findBestAssignmentByPriority(
     // ★ STANDARD 也要检查垃圾胡（百搭分配后可能得到含顺子的多门 STANDARD）
     if (result.includes(HandType.STANDARD)) {
       const completeHand = [...virtualHand, ...exposed.flatMap(m => m.tiles).filter(t => !isFlower(t))];
-      if (isGarbageMultiSuitsWithSequence(completeHand)) {
+      if (_isGarbageMultiSuitsWithSequenceModuleLevel(completeHand)) {
         return result.filter(t => t !== HandType.STANDARD);
       }
     }
@@ -1555,7 +1549,7 @@ export function canWin(
   let exactWinBlockedByGarbage = false;
   if (exactCanWin && types.length === 0 && concealedNonFlower.length >= 2) {
     const completeHandForGarbage = [...concealedNonFlower, ...exposed.flatMap(m => m.tiles).filter(t => !isFlower(t))];
-    if (isGarbageMultiSuitsWithSequence(completeHandForGarbage)) {
+    if (isGarbageMultiSuitsWithSequenceProjectRule(completeHandForGarbage)) {
       exactWinBlockedByGarbage = true;
     }
   }

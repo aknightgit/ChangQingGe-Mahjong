@@ -1335,10 +1335,10 @@ class GameManager {
 
     // ── 选庄家: 首局建房者坐庄，后续上局首胡者坐庄 ──
     if (game.nextDealerId) {
-      const nextDealer = game.players.find(p => p.id === game.nextDealerId);
-      if (nextDealer) {
-        game.dealerIndex = nextDealer.position;
-        console.log(`[beginGame] 上局指定庄家: ${nextDealer.name}`);
+      const nextDealerIdx = game.players.findIndex(p => p.id === game.nextDealerId);
+      if (nextDealerIdx >= 0) {
+        game.dealerIndex = nextDealerIdx;
+        console.log(`[beginGame] 上局指定庄家: ${game.players[nextDealerIdx].name} (index=${nextDealerIdx})`);
       } else {
         game.dealerIndex = Math.floor(Math.random() * game.players.length);
       }
@@ -1784,10 +1784,10 @@ class GameManager {
 
     // 🎰 选庄家:上局首胡者掷骰(一炮多响则放冲者掷骰)
     if (game.nextDealerId) {
-      const nextDealer = game.players.find(p => p.id === game.nextDealerId);
-      if (nextDealer) {
-        game.dealerIndex = nextDealer.position;
-        console.log(`[StartGame] 上局指定庄家: ${nextDealer.name}`);
+      const nextDealerIdx = game.players.findIndex(p => p.id === game.nextDealerId);
+      if (nextDealerIdx >= 0) {
+        game.dealerIndex = nextDealerIdx;
+        console.log(`[StartGame] 上局指定庄家: ${game.players[nextDealerIdx].name} (index=${nextDealerIdx})`);
       } else {
         game.dealerIndex = Math.floor(Math.random() * game.players.length);
       }
