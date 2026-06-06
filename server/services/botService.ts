@@ -2133,6 +2133,99 @@ function countWinningTiles(player: Player, game: GameState): number {
 }
 
 /**
+ * 全听检测: 4面子成型 + 手牌只剩1张百搭 → 摸任何牌都能自摸
+ * 全听 = 手牌只有1张百搭(无其他牌)，门口+手牌内共4个面子
+ * 接近全听 = 百搭>=1 且手牌内散牌很少
+ * 返回 { isQuanTing: boolean, distance: number }
+ *   distance = 0 → 已全听
+ *   distance = 1 → 差1步（多1张散牌，碰/吃一次即可）
+ *   distance = 2 → 差2步
+ */
+function detectQuanTing(player: Player, game: GameState): { isQuanTing: boolean; distance: number } {
+  const hand = player.hand.concealedTiles
+  const exposedMelds = player.hand.exposedMelds
+  const wildTileId = game.customScoringMode || null
+
+  const wilds = hand.filter(t => isWildTile(t, game))
+  const nonWilds = hand.filter(t => !isWildTile(t, game) && !isFlower(t))
+  const wildCount = wilds.length
+  const nonWildCount = nonWilds.length
+
+  // 无百搭 → 不可能全听
+  if (wildCount === 0) return { isQuanTing: false, distance: 99 }
+
+  // 门口已成型的面子数（碰/杠，不含花牌）
+  const exposedMeldCount = exposedMelds.filter(m => m.type !== 'flower' && (m.type === 'triplet' || m.type === 'kong' || m.type === 'concealed_kong' || m.type === 'sequence') && m.tiles?.length >= 3).length
+
+  // 手牌内需要成型的面子数 = 4 - 门口面子数
+  const neededMelds = 4 - exposedMeldCount
+  if (neededMelds < 0) return { isQuanTing: false, distance: 99 }
+
+  // 全听条件: 手牌只剩1张百搭 + 非百搭牌恰好组成 neededMelds 个面子
+  // 即 nonWildCount == neededMelds * 3 且能组成面子
+  if (wildCount >= 1 && nonWildCount === neededMelds * 3) {
+    if (neededMelds === 0 || canFormMelds(nonWilds, neededMelds, wildTileId, game)) {
+      return { isQuanTing: true, distance: 0 }
+    }
+  }
+
+  // 差1步: 散牌比完美多1张（需要碰/吃一次消灭1张散牌）
+  if (wildCount >= 1 && nonWildCount === neededMelds * 3 + 1) {
+    return { isQuanTing: false, distance: 1 }
+  }
+
+  // 差2步
+  if (wildCount >= 1 && nonWildCount === neededMelds * 3 + 2) {
+    return { isQuanTing: false, distance: 2 }
+  }
+
+  return { isQuanTing: false, distance: 3 }
+}
+
+/**
+ * 检查 tiles 能否恰好组成 count 个面子（刻子或顺子）
+ */
+function canFormMelds(tiles: Tile[], count: number, wildTileId: string | null, game: GameState): boolean {
+  if (count === 0) return tiles.length === 0
+  if (tiles.length < 3) return false
+
+  // 按花色和值排序
+  const sorted = [...tiles].sort((a, b) => {
+    if (a.suit !== b.suit) return a.suit.localeCompare(b.suit)
+    return a.value - b.value
+  })
+
+  // 尝试第一个牌作为刻子
+  const first = sorted[0]
+  const sameType = sorted.filter(t => t.suit === first.suit && t.value === first.value)
+  if (sameType.length >= 3) {
+    const remaining = [...sorted]
+    for (let i = 0; i < 3; i++) {
+      const idx = remaining.findIndex(t => t.suit === first.suit && t.value === first.value)
+      if (idx >= 0) remaining.splice(idx, 1)
+    }
+    if (canFormMelds(remaining, count - 1, wildTileId, game)) return true
+  }
+
+  // 尝试作为顺子
+  if (isNumberTile(first)) {
+    const v2 = sorted.find(t => t.suit === first.suit && t.value === first.value + 1)
+    const v3 = sorted.find(t => t.suit === first.suit && t.value === first.value + 2)
+    if (v2 && v3) {
+      const remaining = [...sorted]
+      for (const target of [first, v2, v3]) {
+        const idx = remaining.findIndex(t => t.id === target.id)
+        if (idx >= 0) remaining.splice(idx, 1)
+      }
+      if (canFormMelds(remaining, count - 1, wildTileId, game)) return true
+    }
+  }
+
+  return false
+}
+}
+
+/**
  * Check if chowing this tile would actually improve the hand (not create dead hand).
  * Returns true if the chow creates at least one complete sequence from the tiles used.
  * 严格检查：必须能组成完整顺子（三种合法形之一）
@@ -2689,6 +2782,28 @@ export async function shouldClaimPendingAction(
       if (futureReward.shouldWait && wallRemaining > 8) {
         traceClaim(player, game, 'hu-future-reward', `futureValue=${futureReward.expectedFan.toFixed(1)} selfDrawProb=${futureReward.selfDrawProb.toFixed(2)} reason=${futureReward.reason} → wait`)
         return ActionType.PASS
+      }
+
+      // ★ K哥铁律(2026-06-06): 全听引导 — 接近全听时不捉冲，等自摸
+      // 全听 = 4面子成型 + 手牌只剩1张百搭 → 摸任何牌都能自摸
+      // 差1步 = 3面子+百搭+1散牌 → 碰/吃一次即可全听
+      const quanTing = detectQuanTing(player, game)
+      if (quanTing.isQuanTing) {
+        // 已全听：100%不捉冲，等自摸
+        traceClaim(player, game, 'hu-quenting-block', `已全听(4面子+百搭) → 等自摸，不捉冲`)
+        return ActionType.PASS
+      }
+      if (quanTing.distance <= 1 && wildCount >= 1 && wallRemaining > 5) {
+        // 差1步接近全听：大幅降低捉冲概率
+        const quanTingPenalty = 0.6  // 减60%捉冲概率
+        traceClaim(player, game, 'hu-quenting-near', `差${quanTing.distance}步全听，百搭=${wildCount} → 捉冲概率减${quanTingPenalty}`)
+        // 直接注入到后续概率计算的 penalty 中
+        penalty += quanTingPenalty
+      } else if (quanTing.distance <= 2 && wildCount >= 1 && wallRemaining > 10) {
+        // 差2步：适度降低
+        const quanTingPenalty = 0.25
+        traceClaim(player, game, 'hu-quenting-approach', `差${quanTing.distance}步全听，百搭=${wildCount} → 捉冲概率减${quanTingPenalty}`)
+        penalty += quanTingPenalty
       }
 
       // 概率决策: 考虑百搭数、听牌数、牌墙剩余
