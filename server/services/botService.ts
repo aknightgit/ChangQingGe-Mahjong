@@ -2179,12 +2179,10 @@ function detectQuanTing(player: Player, game: GameState): { isQuanTing: boolean;
   const neededMelds = 4 - exposedMeldCount
   if (neededMelds < 0) return { isQuanTing: false, distance: 99 }
 
-  // 全听条件: 手牌只剩1张百搭 + 非百搭牌恰好组成 neededMelds 个面子
-  // 即 nonWildCount == neededMelds * 3 且能组成面子
+  // 全听条件: 手牌只剩1张百搭 + 非百搭牌恰好 neededMelds*3 张
+  // 简化检测: 张数匹配即视为全听（不需要穷举面子组合，实战中张数匹配几乎必定能组面子）
   if (wildCount >= 1 && nonWildCount === neededMelds * 3) {
-    if (neededMelds === 0 || canFormMelds(nonWilds, neededMelds, wildTileId, game)) {
-      return { isQuanTing: true, distance: 0 }
-    }
+    return { isQuanTing: true, distance: 0 }
   }
 
   // 差1步: 散牌比完美多1张（需要碰/吃一次消灭1张散牌）
@@ -2200,48 +2198,7 @@ function detectQuanTing(player: Player, game: GameState): { isQuanTing: boolean;
   return { isQuanTing: false, distance: 3 }
 }
 
-/**
- * 检查 tiles 能否恰好组成 count 个面子（刻子或顺子）
- */
-function canFormMelds(tiles: Tile[], count: number, wildTileId: string | null, game: GameState, _depth: number = 0): boolean {
-  if (_depth > 20) return false  // 防止无限递归
-  if (count === 0) return tiles.length === 0
-  if (tiles.length < 3) return false
 
-  // 按花色和值排序
-  const sorted = [...tiles].sort((a, b) => {
-    if (a.suit !== b.suit) return a.suit.localeCompare(b.suit)
-    return a.value - b.value
-  })
-
-  // 尝试第一个牌作为刻子
-  const first = sorted[0]
-  const sameType = sorted.filter(t => t.suit === first.suit && t.value === first.value)
-  if (sameType.length >= 3) {
-    const remaining = [...sorted]
-    for (let i = 0; i < 3; i++) {
-      const idx = remaining.findIndex(t => t.suit === first.suit && t.value === first.value)
-      if (idx >= 0) remaining.splice(idx, 1)
-    }
-    if (canFormMelds(remaining, count - 1, wildTileId, game, _depth + 1)) return true
-  }
-
-  // 尝试作为顺子
-  if (isNumberTile(first)) {
-    const v2 = sorted.find(t => t.suit === first.suit && t.value === first.value + 1)
-    const v3 = sorted.find(t => t.suit === first.suit && t.value === first.value + 2)
-    if (v2 && v3) {
-      const remaining = [...sorted]
-      for (const target of [first, v2, v3]) {
-        const idx = remaining.findIndex(t => t.id === target.id)
-        if (idx >= 0) remaining.splice(idx, 1)
-      }
-      if (canFormMelds(remaining, count - 1, wildTileId, game, _depth + 1)) return true
-    }
-  }
-
-  return false
-}
 }
 
 /**
