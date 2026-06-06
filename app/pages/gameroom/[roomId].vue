@@ -1706,11 +1706,10 @@ onMounted(async () => {
     // 根据广播内容播放音效和语音
     const text = detail.text || ''
     const actionKind = detail.actionKind || ''
-    // ★ K哥铁律(2026-06-06): 碰/吃/杠语音统一由state watcher播放(确保按动作顺序排队)
-    // 广播处理器只设置标记，state watcher检测到标记后播放，避免重复
-    if (actionKind === 'chow') { _pendingBroadcastVoice = 'chow' }
-    else if (actionKind === 'pong') { _pendingBroadcastVoice = 'pong' }
-    else if (actionKind === 'kong' || actionKind === 'kongSupplement') { _pendingBroadcastVoice = 'kong' }
+    // 广播处理器直接播放碰/吃/杠语音（确保不丢失）
+    if (actionKind === 'chow') { playVoiceAction('chow') }
+    else if (actionKind === 'pong') { playVoiceAction('pong') }
+    else if (actionKind === 'kong' || actionKind === 'kongSupplement') { playVoiceAction('kong') }
     else if (actionKind === 'hu') {
       // 捉冲:先念出放冲的牌名,再播胡语音
       const huText = detail?.text || ''
@@ -4559,7 +4558,7 @@ watch(isMyTurn, (isMe) => {
 const prevOtherPlayerState = new Map<string, { meldCount: number; discardCount: number; replacedFlowerCount: number }>()
 const _flowerVoicePlayed = new Set<string>()
 let _flowerVoicePlayedTurnKey = ''  // roundNumber-turnCounter
-let _pendingBroadcastVoice: 'chow' | 'pong' | 'kong' | null = null  // 广播处理器设置标记，state watcher统一播放
+
 let _flowerVoiceTurnCounter = 0
 let _flowerVoicePrevPlayerIndex = -1
 const prevBailoutMap = new Map<string, Map<number, number>>()
@@ -4639,18 +4638,14 @@ const checkOtherPlayerSounds = (newState: any) => {
   for (const id of prevOtherPlayerState.keys()) {
     if (!currentIds.has(id)) prevOtherPlayerState.delete(id)
   }
-  // ★ K哥铁律(2026-06-06): 碰/吃/杠语音+音效由state watcher统一播放(确保按动作顺序排队)
+  // ★ 碰/吃/杠音效由state watcher播放（语音由广播处理器播放）
   for (const action of pendingMeldVoices) {
-    _pendingBroadcastVoice = null
     if (action === 'kong') {
       playSound('tile-kong')
-      playVoiceAction('kong')
     } else if (action === 'pong') {
       playSound('tile-pong')
-      playVoiceAction('pong')
     } else {
       playSound('tile-chow')
-      playVoiceAction('chow')
     }
   }
   for (const d of pendingDiscards) {

@@ -5,3 +5,7 @@
 *.tar.gz
 node_modules/
 .env
+
+# Training / arena runtime outputs
+training-output/
+arena-output/

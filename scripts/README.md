@@ -18,6 +18,7 @@
 | `train-ai-ak.ts` | AI-AK 迭代训练，4人，1人被优化 |
 | `train-baseline.ts` | 4人同策略基线训练 |
 | `run-training.ts` | 简单训练运行器 |
+| `ai-arena.ts` | 6个候选AI随机抽4+随机座位的大规模竞技对战，输出统计报告 |
 
 **运行方式**（从项目根目录运行）：
 ```bash
@@ -31,14 +32,22 @@ npx tsx scripts/train-baseline.ts 1 1000 --baseline
 
 # 简单运行
 npx tsx scripts/run-training.ts 1 100
+
+# AI 竞技对战（6选4 + 随机座位）
+npx tsx scripts/ai-arena.ts --games 500
+npx tsx scripts/ai-arena.ts --games 1000 --no-detail    # 关闭逐局MD
+npx tsx scripts/ai-arena.ts --games 50 --seed 12345     # 固定种子复现
 ```
 
 ## 输出路径
 
-所有训练输出 → `training-output/`
-
-- 每次训练启动前，会自动清空 `training-output/` 下旧日志
-- `training-output/save/` 永久保留，供手动存档
+- **训练输出** → `training-output/`（自动清理旧日志，保留 `save/`）
+- **AI 竞技对战输出** → `arena-output/<时间戳>/`
+  - `summary.md` 总览榜 + 排名 + 番种分布 + 速度统计
+  - `games.csv` 每局一行（座位/赢家/番数/事件数/耗时）
+  - `games.jsonl` 全量 JSON 备份
+  - `detailed/<id>.md` 逐局明细（默认前 30 局）
+  - `meta.json` 运行参数
 
 包含：训练报告(.md)、最佳策略(.json)、轮次详情(.md)、索引(index.md)
 
