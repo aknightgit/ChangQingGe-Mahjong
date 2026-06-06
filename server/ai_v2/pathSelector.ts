@@ -567,8 +567,8 @@ export function evaluateRouteStateV2(input: {
   const stableTurns = stableOnPrevious ? (previousRouteState?.stableTurns || 1) + 1 : 1
   const switchCount = previousRouteState && previousRouteState.current !== current.route ? (previousRouteState.switchCount || 0) + 1 : (previousRouteState?.switchCount || 0)
   const evidenceCounter = canHoldPreviousRoute && previousRouteState && previousRouteState.current !== topCandidate.route ? evidenceAgainstPrevious : 0
-  // ★ V2: 4+对子碰碰胡路线直接锁定
-  const _apLockByPairs = current?.route === 'ALL_PUNGS' && features.pairCount >= 4
+  // ★ V2: 4+对子/刻子碰碰胡路线直接锁定（含门口碰/杠的刻子）
+  const _apLockByPairs = current?.route === 'ALL_PUNGS' && (features.pairCount + features.tripletCount) >= 4
   // ★ V2.1: 10巡后方向确定，压缩摇摆
   // 10巡+稳定2回合 → lockLevel=2（坚决执行）
   // 10巡+有方向 → lockLevel=1（锁定）
