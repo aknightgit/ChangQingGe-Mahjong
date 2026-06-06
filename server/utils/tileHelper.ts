@@ -70,7 +70,8 @@ export function getPlayableTileCount(player: Player): number {
   const concealed = player.hand.concealedTiles.filter(t => !isFlower(t));
   const exposed = player.hand.exposedMelds.reduce((sum, meld) => {
     if (meld.tiles.some(t => isFlower(t))) return sum;
-    return sum + meld.tiles.length;
+    // 杠(kong)4张只算3张（和碰/吃一样是一个meld组），避免总数超14导致跳过摸牌
+    return sum + Math.min(meld.tiles.length, 3);
   }, 0);
   return concealed.length + exposed;
 }
