@@ -1706,10 +1706,11 @@ onMounted(async () => {
     // 根据广播内容播放音效和语音
     const text = detail.text || ''
     const actionKind = detail.actionKind || ''
-    // 吃碰杠胡:所有玩家都播放语音(包括操作者)
-    if (actionKind === 'chow') { playVoiceAction('chow') }
-    else if (actionKind === 'pong') { playVoiceAction('pong') }
-    else if (actionKind === 'kong' || actionKind === 'kongSupplement') { playVoiceAction('kong') }
+    // ★ K哥铁律(2026-06-06): 碰/吃/杠语音统一由state watcher播放(确保按动作顺序排队)
+    // 广播处理器只设置标记，state watcher检测到标记后播放，避免重复
+    if (actionKind === 'chow') { _pendingBroadcastVoice = 'chow' }
+    else if (actionKind === 'pong') { _pendingBroadcastVoice = 'pong' }
+    else if (actionKind === 'kong' || actionKind === 'kongSupplement') { _pendingBroadcastVoice = 'kong' }
     else if (actionKind === 'hu') {
       // 捉冲:先念出放冲的牌名,再播胡语音
       const huText = detail?.text || ''
@@ -4558,6 +4559,7 @@ watch(isMyTurn, (isMe) => {
 const prevOtherPlayerState = new Map<string, { meldCount: number; discardCount: number; replacedFlowerCount: number }>()
 const _flowerVoicePlayed = new Set<string>()
 let _flowerVoicePlayedTurnKey = ''  // roundNumber-turnCounter
+let _pendingBroadcastVoice: 'chow' | 'pong' | 'kong' | null = null  // 广播处理器设置标记，state watcher统一播放
 let _flowerVoiceTurnCounter = 0
 let _flowerVoicePrevPlayerIndex = -1
 const prevBailoutMap = new Map<string, Map<number, number>>()
@@ -4637,10 +4639,9 @@ const checkOtherPlayerSounds = (newState: any) => {
   for (const id of prevOtherPlayerState.keys()) {
     if (!currentIds.has(id)) prevOtherPlayerState.delete(id)
   }
-  // ★ 修复顺序bug：先播出牌语音（包括补花），再播吃碰杠语音
-  // 这样听到的顺序是：八万 → 吃
-  // ★ 先播放碰/吃/杠语音，再播放出牌语音（按动作发生时间顺序）
+  // ★ K哥铁律(2026-06-06): 碰/吃/杠语音+音效由state watcher统一播放(确保按动作顺序排队)
   for (const action of pendingMeldVoices) {
+    _pendingBroadcastVoice = null
     if (action === 'kong') {
       playSound('tile-kong')
       playVoiceAction('kong')
