@@ -4258,11 +4258,13 @@ class GameManager {
         const winnerIdx = game.players.findIndex(p => p.id === winner.id);
         if (winnerIdx < 0) continue;
         const currentWinOrder = winner.winOrder ?? Number.MAX_SAFE_INTEGER;
+        // ★ K哥铁律(2026-06-07): 胡牌玩家只跟当时还在活跃(PLAYING)的其他玩家结算
+        // 已胡牌(winOrder已设)的玩家不参与结算，避免总分不为0
         const eligiblePlayerIndices = game.players
           .map((player, index) => ({ player, index }))
           .filter(({ player, index }) => {
             if (index === winnerIdx) return true;
-            return player.winOrder == null || player.winOrder > currentWinOrder;
+            return player.status === PlayerStatus.PLAYING;
           })
           .map(({ index }) => index);
 
