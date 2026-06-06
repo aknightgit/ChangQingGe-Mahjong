@@ -136,6 +136,9 @@ export class GameStore {
       payload.players = game.players;
       payload.endReason = game.endReason;
       payload.roundStats = game.roundStats;
+    } else {
+      // ★ K哥铁律(2026-06-07): 任何阶段都推送roundStats，前端战绩榜需累加各局分数
+      payload.roundStats = game.roundStats;
     }
     this.wsManager.broadcast(gameId, 'gameStateUpdate', payload);
   }
