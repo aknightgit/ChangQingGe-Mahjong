@@ -147,7 +147,8 @@
     "windDragonPairKeepBonus": 11.836265385481415,
     "tripletComboBonus": 1.3808875380252752,
     "flushChaseBonus": 1.9372010313649672,
-    "pungsPreference": 0.5
+    "pungsPreference": 0.5,
+    "useV2Engine": true
   },
   "name": "AI-老蒋",
   "style": "均衡型",
