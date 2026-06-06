@@ -881,7 +881,14 @@ class GameManager {
             }
           } else if (currentPlayer && this.isPlayerBotControlled(currentPlayer)) {
             // ⭐ 修复核心: bot 轮到但没有 freeze timer → 模拟 beginCurrentPlayerTurn 的 freeze
+            // 先清除可能残留的过期 _freezeUntil（服务器重启后定时器丢失）
+            const staleFreeze = Number((stored as any)._freezeUntil ?? 0);
+            if (staleFreeze > 0 && staleFreeze <= Date.now()) {
+              console.log('[Recovery] Clearing stale _freezeUntil for game', gameId);
+              delete (stored as any)._freezeUntil;
+            }
             const freezeMs = this.timerManager.getHesitationWindow(stored);
+            (stored as any)._freezeUntil = Date.now() + freezeMs;
             console.log('[Recovery] Restoring bot freeze timer for', currentPlayer.name, 'delay:', freezeMs);
             const botFreezeTimer = this.timerManager.detachTimer(setTimeout(async () => {
               try {
@@ -892,6 +899,7 @@ class GameManager {
                 const livePlayer = freshGame.players[freshGame.currentPlayerIndex];
                 if (!livePlayer || livePlayer.status !== 'playing') return;
                 console.log('[Recovery] Bot freeze expired for', livePlayer.name, 'drawing...');
+                delete (freshGame as any)._freezeUntil;
                 if (freshGame.wall.length === 0) {
                   this.endRound(freshGame, 'wall_exhausted');
                   return;
@@ -3265,6 +3273,11 @@ class GameManager {
     const matchingTiles = player.hand.concealedTiles.filter(t => tilesEqual(t, lastDiscard));
     if (matchingTiles.length < 3) return;
 
+    // ---- 吃碰排斥检查（明杠=杠他人弃牌，等同于碰，需更新排斥状态） ----
+    if (!game.chowPongExclusion) game.chowPongExclusion = {};
+    const prevState = game.chowPongExclusion[player.id] || { firstActionSuit: null, firstActionType: null };
+    game.chowPongExclusion[player.id] = updateChowPongExclusion(prevState, 'pong', lastDiscard.suit);
+
     const sourcePlayerId = this.getLastDiscardPlayerId(game);
     this.bailoutTracker.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.KONG);
     if (sourcePlayerId) {
@@ -3301,7 +3314,8 @@ class GameManager {
     this.handleDraw(game, player, { allowFullHand: true });
     game.drawnThisTurn = true;
     if (this.isPlayerBotControlled(player)) {
-      this.scheduleBotDiscard(game.gameId, currentPlayer.id);
+      // ★ K哥铁律(2026-06-06): 修复currentPlayer未定义TDZ ReferenceError,导致杠后bot不摸牌直接出牌手牌少一张
+      this.scheduleBotDiscard(game.gameId, player.id);
     }
     this.broadcastService.broadcastKongSupplement(game, player, 'ming');
   }
@@ -3442,7 +3456,8 @@ class GameManager {
     this.handleDraw(game, player, { allowFullHand: true });
     game.drawnThisTurn = true;
     if (this.isPlayerBotControlled(player)) {
-      this.scheduleBotDiscard(game.gameId, currentPlayer.id);
+      // ★ K哥铁律(2026-06-06): 修复currentPlayer未定义TDZ ReferenceError
+      this.scheduleBotDiscard(game.gameId, player.id);
     }
     this.broadcastService.broadcastKongSupplement(game, player, 'jia');
   }
@@ -4199,6 +4214,8 @@ class GameManager {
       amountPerPlayer: number;
     }> = [];
 
+    const botTakeovers = game.botTakeoverPlayers || [];
+
     if (game.customScoringMode === 'cheat') {
       finalScores = {};
       for (const player of game.players) {
@@ -4296,7 +4313,6 @@ class GameManager {
       }
     }
 
-    const botTakeovers = game.botTakeoverPlayers || [];
     // ★ BotPenalty：AI接管玩家赢分减半（基于单局 finalScores，不是累计分）
     for (const player of game.players) {
       if (botTakeovers.includes(player.id) && (finalScores[player.id] ?? 0) > 0) {
