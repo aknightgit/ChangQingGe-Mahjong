@@ -313,6 +313,7 @@
                   <th style="width:40px">番数</th>
                   <th style="width:48px">门清</th>
                   <th style="width:48px">百搭</th>
+                  <th style="width:120px">三四口关系</th>
                   <th>算式</th>
                   <th>自摸/捉冲</th>
                   <th>总输赢</th>
@@ -331,6 +332,7 @@
                   <td>{{ row.baseFan }}</td>
                   <td>{{ row.menQing }}</td>
                   <td>{{ row.wild }}</td>
+                  <td style="font-size:0.7rem;white-space:nowrap">{{ row.bailoutRelation }}</td>
                   <td style="font-size:0.7rem;white-space:nowrap">{{ row.formula }}</td>
                   <td>{{ row.winMode }}</td>
                   <td :class="{ 'settle-round-positive': row.score > 0, 'settle-round-negative': row.score < 0 }">
@@ -3715,6 +3717,15 @@ const getRoundSettlementRows = (round: any) => {
       flowerCount: winner?.flowerCount ?? 0,
       menQing: winner ? (typeof winner.isMenQing === 'boolean' ? (winner.isMenQing ? '门清' : '非门清') : '-') : '-',
       wild: winner ? (typeof winner.hasWild === 'boolean' ? (winner.hasWild ? '有' : '无') : '-') : '-',
+      bailoutRelation: (() => {
+        const relations = round?.bailoutRelations || []
+        const playerRelations = relations.filter((rel: any) => rel.player1Name === player.name || rel.player2Name === player.name)
+        if (playerRelations.length === 0) return '无'
+        return playerRelations.map((rel: any) => {
+          const partner = rel.player1Name === player.name ? rel.player2Name : rel.player1Name
+          return `${partner}-${rel.type}`
+        }).join('，')
+      })(),
       baseFan: getSettlementBaseFanDisplay(winner),
       formula: winner ? getSettlementFormula(winner) : '-',
       paymentFormula: winner?.paymentFormula || '',
