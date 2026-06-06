@@ -2198,9 +2198,6 @@ function detectQuanTing(player: Player, game: GameState): { isQuanTing: boolean;
   return { isQuanTing: false, distance: 3 }
 }
 
-
-}
-
 /**
  * Check if chowing this tile would actually improve the hand (not create dead hand).
  * Returns true if the chow creates at least one complete sequence from the tiles used.

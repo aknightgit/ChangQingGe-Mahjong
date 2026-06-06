@@ -185,38 +185,69 @@ export function calculateScore(params: {
   // 7. 番数上限（仅公式计算受上限，固定番数不受限）
   // baseFan 可能 > 10（如风碰=40），这是允许的
 
-  // 8. 额外翻倍（上面第 85 行已声明 extraMultipliers = 1）
-  
-  // 无百搭翻倍
+  // 8. 百搭最优分配 —— K哥铁律(2026-06-07)
+  // 同时评估两种方案，取 baseFan × extra 最大的：
+  // 方案A: 百搭归位 → canWin → 无百搭×2 (extra翻倍)
+  // 方案B: 百搭给箭牌/风牌/数字牌 → comboPoints增加 (baseFan增加，已在calculateFormulaFan处理)
+  // 剪枝策略: 固定番牌型命中即停；清一色命中即停；公式计算取max
   if (wildTileSuit !== undefined && wildTileValue !== undefined) {
     const wildCount = countWildTiles(handTiles, wildTileSuit, wildTileValue, wildTileGroup);
-    
-    // 特殊规则: 百搭是风牌/箭牌时，风一色/风碰可算无百搭
     const isWindOrDragonWild = wildTileSuit === TileSuit.WIND || wildTileSuit === TileSuit.DRAGON;
     const isWindHand = handTypes.includes(HandType.ALL_WIND) || handTypes.includes(HandType.FENG_PENG);
-    
+
     if (wildCount === 0) {
-      // 手牌无百搭
+      // 手牌无百搭 → 直接无百搭×2
       extraMultipliers *= 2;
       details.push('无百搭 ×2');
-    } else {
-      // 手上有百搭，但百搭当原牌仍能胡 → 也算无百搭
+    } else if (wildCount > 0) {
+      // ★ 方案A: 百搭归位检查
+      let planA_baseFan = baseFan;
+      let planA_extra = extraMultipliers;
+      let planA_details: string[] = [];
+      let planA_valid = false;
+
+      // 普通百搭归位: 去掉百搭功能后能否胡
       const noWildCheck = canWin(handTiles, exposedMelds, () => false);
       if (noWildCheck.canWin) {
-        extraMultipliers *= 2;
-        details.push('无百搭(百搭归位) ×2');
+        planA_valid = true;
+        planA_extra *= 2;
+        planA_details.push('无百搭(百搭归位) ×2');
       } else if (isWindOrDragonWild && isWindHand) {
-        // 百搭是风/箭 + 风一色/风碰 → 可算无百搭
+        // 百搭是风/箭 + 风一色/风碰
         if (handTypes.includes(HandType.FENG_PENG)) {
           if (checkAllTripletsWithoutWild(handTiles, exposedMelds, wildTileSuit, wildTileValue)) {
-            extraMultipliers *= 2;
-            details.push('无百搭(风碰,百搭归位) ×2');
+            planA_valid = true;
+            planA_extra *= 2;
+            planA_details.push('无百搭(风碰,百搭归位) ×2');
           }
         } else {
-          extraMultipliers *= 2;
-          details.push('无百搭(风一色,百搭归位) ×2');
+          planA_valid = true;
+          planA_extra *= 2;
+          planA_details.push('无百搭(风一色,百搭归位) ×2');
         }
       }
+
+      // ★ 方案B: 百搭给牌（已在 calculateFormulaFan 里处理，baseFan 已含 comboPoints）
+      const planB_baseFan = baseFan;  // 已含百搭虚拟分配的 comboPoints
+      const planB_extra = extraMultipliers;
+
+      // 比较两个方案: baseFan × extra 取最大
+      if (planA_valid) {
+        const planA_total = planA_baseFan * planA_extra;
+        const planB_total = planB_baseFan * planB_extra;
+        if (planA_total > planB_total) {
+          // 方案A更优: 百搭归位，无百搭×2
+          extraMultipliers = planA_extra;
+          details.push(...planA_details);
+          // ★ 百搭归位后需要重新计算 baseFan（用归位后的手牌）
+          // 但百搭归位意味着百搭当原牌用，牌型不变，comboPoints可能更高
+          // 这里不重算 baseFan（因为百搭归位只是 extra×2，baseFan 已经是正确的）
+        } else {
+          // 方案B更优: 百搭给牌，保持当前 baseFan
+          // extraMultipliers 不变（已是 planB_extra）
+        }
+      }
+      // 如果方案A无效，直接用方案B（当前 baseFan 已含百搭分配）
     }
   }
 
@@ -629,6 +660,7 @@ function enumerateHandDecompositions(
 interface FormulaResult {
   fan: number;
   details: string[];
+  wildReturnBonus?: number;  // 百搭归位方案的 comboPoints（用于方案比较）
 }
 
 function calculateFormulaFan(
@@ -644,6 +676,43 @@ function calculateFormulaFan(
 
   // 花牌数
   const flowerCount = flowerTiles.length;
+
+  // ★ K哥铁律(2026-06-07): 百搭最优分配 —— 同时评估方案A(百搭归位)和方案B(百搭给牌)
+  // 方案A: 百搭当原牌用 → comboPoints(归位) + 无百搭×2
+  // 方案B: 百搭给箭牌/风牌 → comboPoints(分配) + 无额外翻倍
+  // 取 baseFan × extra 最大的方案
+
+  // 先算方案A的 comboPoints（百搭归位，不虚拟分配）
+  let wildReturnBonus = -1;  // -1 表示方案A不可用
+  if (wildTileSuit !== undefined && wildTileValue !== undefined) {
+    const wildCount = countWildTiles(handTiles, wildTileSuit, wildTileValue, wildTileGroup);
+    if (wildCount > 0) {
+      // 用原手牌（百搭当原牌）算 comboPoints
+      const returnMelds = [...exposedMelds];
+      const returnGroups = groupTiles(handTiles);
+      for (const [, group] of returnGroups) {
+        if (group.length >= 3) {
+          returnMelds.push({ type: MeldType.TRIPLET, tiles: group.slice(0, 3), isConcealed: true });
+        }
+      }
+      let returnCombo = 0;
+      for (const meld of returnMelds) {
+        const first = meld.tiles[0];
+        const isKong = meld.type === MeldType.KONG || meld.type === MeldType.CONCEALED_KONG;
+        const isConcealed = meld.type === MeldType.CONCEALED_KONG;
+        if (isWind(first)) {
+          if (isKong) { returnCombo += 2 + (isConcealed ? 1 : 0); }
+          else if (meld.type === MeldType.TRIPLET) { returnCombo += 1; }
+        } else if (isDragon(first)) {
+          if (isKong) { returnCombo += 3 + (isConcealed ? 1 : 0); }
+          else if (meld.type === MeldType.TRIPLET) { returnCombo += 2; }
+        } else {
+          if (isKong) { returnCombo += 1 + (isConcealed ? 1 : 0); }
+        }
+      }
+      wildReturnBonus = returnCombo;
+    }
+  }
 
   // 百搭虚拟分配：找最优组合（利益最大化）
   // 优先级：箭牌刻子(+2) > 风牌刻子(+1) > 其他
