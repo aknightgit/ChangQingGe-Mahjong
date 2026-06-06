@@ -307,10 +307,12 @@
               <thead>
                 <tr>
                   <th>玩家</th>
-                  <th>胡序</th>
+                  <th style="width:36px">胡序</th>
                   <th>牌型</th>
-                  <th>花</th>
-                  <th>番数</th>
+                  <th style="width:28px">花</th>
+                  <th style="width:40px">番数</th>
+                  <th style="width:48px">门清</th>
+                  <th style="width:48px">百搭</th>
                   <th>算式</th>
                   <th>自摸/捉冲</th>
                   <th>总输赢</th>
@@ -327,6 +329,8 @@
                   <td>{{ row.handType }}</td>
                   <td>{{ row.flowerCount }}</td>
                   <td>{{ row.baseFan }}</td>
+                  <td>{{ row.menQing }}</td>
+                  <td>{{ row.wild }}</td>
                   <td style="font-size:0.7rem;white-space:nowrap">{{ row.formula }}</td>
                   <td>{{ row.winMode }}</td>
                   <td :class="{ 'settle-round-positive': row.score > 0, 'settle-round-negative': row.score < 0 }">
@@ -3613,7 +3617,14 @@ const getSettlementFormula = (winner: any): string => {
   const global = winner.effectiveMultiplier ?? 1
   const settlement = winner.settlementMultiplier ?? 1
   const final = winner.finalPoints ?? 0
-  return `${base}×${extra}×${global}×${settlement}=${final}`
+  // extra里已包含门清×2和无百搭×2，这里拆开展示
+  const isMenQing = !!winner.isMenQing
+  const hasWild = winner.hasWild !== false
+  const extraParts: string[] = []
+  if (isMenQing) extraParts.push('门清×2')
+  if (!hasWild) extraParts.push('无百搭×2')
+  const extraDetail = extraParts.length > 0 ? `(${extraParts.join('')})` : `${extra}`
+  return `${base}×${extraDetail}×${global}×${settlement}=${final}`
 }
 
 const formatMeldTiles = (tiles: any[]): string => {
