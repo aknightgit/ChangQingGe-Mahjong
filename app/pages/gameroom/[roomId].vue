@@ -3618,14 +3618,7 @@ const getSettlementFormula = (winner: any): string => {
   const global = winner.effectiveMultiplier ?? 1
   const settlement = winner.settlementMultiplier ?? 1
   const final = winner.finalPoints ?? 0
-  // extra里已包含门清×2和无百搭×2，这里拆开展示
-  const isMenQing = !!winner.isMenQing
-  const hasWild = winner.hasWild !== false
-  const extraParts: string[] = []
-  if (isMenQing) extraParts.push('门清×2')
-  if (!hasWild) extraParts.push('无百搭×2')
-  const extraDetail = extraParts.length > 0 ? `(${extraParts.join('')})` : `${extra}`
-  return `${base}×${extraDetail}×${global}×${settlement}=${final}`
+  return `${base}×${extra}×${global}×${settlement}=${final}`
 }
 
 const formatMeldTiles = (tiles: any[]): string => {
@@ -3714,8 +3707,8 @@ const getRoundSettlementRows = (round: any) => {
       handType: winner?.handTypeName || '-',
       tiles: winner ? formatWinnerTiles(winner) : '-',
       flowerCount: winner?.flowerCount ?? 0,
-      menQing: winner ? (typeof winner.isMenQing === 'boolean' ? (winner.isMenQing ? '门清' : '非门清') : '-') : '-',
-      wild: winner ? (typeof winner.hasWild === 'boolean' ? (winner.hasWild ? '有' : '无') : '-') : '-',
+      menQing: winner?.isMenQing === true ? '门清' : winner?.isMenQing === false ? '非门清' : '-',
+      wild: winner?.hasWild === true ? '有' : winner?.hasWild === false ? '无' : '-',
       bailoutRelation: (() => {
         const relations = round?.bailoutRelations || []
         const playerRelations = relations.filter((rel: any) => rel.player1Name === player.name || rel.player2Name === player.name)
