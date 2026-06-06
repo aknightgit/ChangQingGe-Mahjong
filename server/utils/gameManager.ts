@@ -4141,6 +4141,8 @@ class GameManager {
       return
     }
     this.timerManager.clearPendingActionTimer(game.gameId);
+    // ★ K哥铁律(2026-06-06): 暂时关闭BotPenalty，观察AI真实战斗力
+    const BOT_PENALTY_ENABLED = false;
     // 【2026-05-29 验牌阶段】如果还不是REVEAL阶段，先进入REVEAL并延迟5秒
     // 梁山聚义成功：跳过验牌，直接结算
     // 流局（wall_exhausted）：跳过验牌阶段，直接结算（K哥要求）
@@ -4303,7 +4305,7 @@ class GameManager {
           })),
           winner.isSelfDrawn ?? false,
           game.players.length,
-          botTakeovers.includes(winner.id)
+          BOT_PENALTY_ENABLED && botTakeovers.includes(winner.id)
         );
 
         for (const [idx, delta] of breakdown.deltas) {
@@ -4314,8 +4316,6 @@ class GameManager {
     }
 
     // ★ BotPenalty：AI接管玩家赢分减半（基于单局 finalScores，不是累计分）
-    // ★ K哥铁律(2026-06-06): 暂时关闭，观察AI真实战斗力
-    const BOT_PENALTY_ENABLED = false;
     if (BOT_PENALTY_ENABLED) {
       for (const player of game.players) {
         if (botTakeovers.includes(player.id) && (finalScores[player.id] ?? 0) > 0) {
@@ -4358,6 +4358,11 @@ class GameManager {
     }
 
     game.finalScores = finalScores;
+    // ★ 零和校验: finalScores 总和应为 0
+    const scoreSum = Object.values(finalScores).reduce((s, v) => s + v, 0);
+    if (scoreSum !== 0) {
+      console.warn(`[endRound] ⚠️ finalScores 总和不为0: ${scoreSum}，scores=${JSON.stringify(finalScores)}`);
+    }
     // ★ player.score 是累计分，每局累加（不覆盖）
     for (const player of game.players) {
       player.score = (player.score || 0) + (finalScores[player.id] ?? 0);
