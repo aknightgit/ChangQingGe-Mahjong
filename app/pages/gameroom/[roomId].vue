@@ -336,6 +336,7 @@
                   <td style="font-size:0.7rem;white-space:nowrap">{{ row.formula }}</td>
                   <td>{{ row.winMode }}</td>
                   <td :class="{ 'settle-round-positive': row.score > 0, 'settle-round-negative': row.score < 0 }">
+                    <span v-if="row.isWinner && row.paymentFormula" style="font-size:0.7rem;opacity:0.8;display:block">{{ row.paymentFormula }}</span>
                     <span :style="{ fontWeight: 800 }">{{ row.scoreLabel }}</span>
                   </td>
                 </tr>
