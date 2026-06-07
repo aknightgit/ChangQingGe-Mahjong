@@ -311,8 +311,8 @@
                   <th style="min-width:60px">牌型</th>
                   <th style="width:24px">花</th>
                   <th style="width:32px">番</th>
-                  <th style="width:36px">门清</th>
-                  <th style="width:36px">百搭</th>
+                  <th style="width:52px">门清</th>
+                  <th style="width:52px">百搭</th>
                   <th style="min-width:80px">三四口</th>
                   <th style="min-width:80px">算式</th>
                   <th style="min-width:60px">方式</th>
@@ -5774,13 +5774,17 @@ const forceDiscard = async (p: Player) => {
 .layout--mobile-landscape .settle-round-table--compact th:nth-child(4),
 .layout--mobile-landscape .settle-round-table--compact td:nth-child(4),
 .layout--mobile-landscape .settle-round-table--compact th:nth-child(5),
-.layout--mobile-landscape .settle-round-table--compact td:nth-child(5),
+.layout--mobile-landscape .settle-round-table--compact td:nth-child(5) {
+  width: auto;
+  max-width: 36px;
+}
+
 .layout--mobile-landscape .settle-round-table--compact th:nth-child(6),
 .layout--mobile-landscape .settle-round-table--compact td:nth-child(6),
 .layout--mobile-landscape .settle-round-table--compact th:nth-child(7),
 .layout--mobile-landscape .settle-round-table--compact td:nth-child(7) {
   width: auto;
-  max-width: 36px;
+  max-width: 56px;
 }
 
 .layout--mobile-landscape .settle-round-table--compact th:nth-child(8),
