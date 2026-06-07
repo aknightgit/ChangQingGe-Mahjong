@@ -1301,7 +1301,14 @@ function scoreTileForDiscard(
         }
       }
     } else if (rs === 'ALL_PUNGS') {
-      // 碰碰胡：路线已锁定，弃牌为路线服务！
+      // ★ K哥铁律(2026-06-07): 碰碰胡路线，出牌优先级：
+      // 1. 刻子绝不拆 → 2. 对子保留 → 3. 单张按安全性+对手门数排序
+      //    安全性：熟张(弃牌区已出现) > 生张
+      //    对手门数：打对手在做的门的单张 > 保留无人做的门的生张
+      //    风向：熟张风向优先打掉
+      //    大吊：保留百搭+百搭相邻牌，努力做单张大吊
+
+      // === 刻子/对子 基础评分 ===
       if (sameTypeCount >= 3) {
         score -= 12.0 * routeBiasFactor  // 刻子：绝不拆
       } else if (sameTypeCount >= 2) {
@@ -1311,15 +1318,79 @@ function scoreTileForDiscard(
           score -= 8.0 * routeBiasFactor   // 长门对子：坚决保留
         }
       } else {
-        score += 5.0 * routeBiasFactor   // 单张：优先打掉
+        score += 5.0 * routeBiasFactor   // 单张：基础打分
+
+        // === 1. 安全性加分：熟张优先打 ===
+        const tileInDiscard = (game.discardPile || []).some(d => tilesMatch(d, tile))
+        if (tileInDiscard) {
+          score += 3.5 * routeBiasFactor  // 熟张：加分，优先打
+        } else {
+          score -= 1.5 * routeBiasFactor  // 生张：扣分，保留
+        }
+
+        // === 2. 风向熟张：主动打掉 ===
+        if (isHonor(tile) && tileInDiscard) {
+          score += 4.0 * routeBiasFactor  // 风向熟张：额外加分，最优先打
+        }
+
+        // === 3. 对手门数分析：打对手在做的门 ===
+        if (isNumberTile(tile)) {
+          // 统计对手弃牌中各门数量（弃牌多=不做该门，弃牌少=在做该门）
+          let suitCollectingOpponents = 0  // 在做这门的对手数
+          let suitDiscardingOpponents = 0  // 不做这门的对手数
+          for (const opp of game.players || []) {
+            if (opp.id === player.id) continue
+            const oppDiscards = opp.hand.discardedTiles || []
+            const sameSuitDiscards = oppDiscards.filter(d => d.suit === tile.suit).length
+            const totalOppDiscards = oppDiscards.length
+            if (totalOppDiscards >= 3) {
+              // 弃牌中该门占比低 → 在做这门
+              if (sameSuitDiscards / totalOppDiscards < 0.25) {
+                suitCollectingOpponents++
+              } else {
+                suitDiscardingOpponents++
+              }
+            }
+          }
+          // 对手在做的门：加分，优先打（帮对手做牌不如抢先打掉）
+          if (suitCollectingOpponents >= 2) {
+            score += 3.0 * routeBiasFactor  // 多个对手在做这门，优先打
+          } else if (suitCollectingOpponents >= 1) {
+            score += 1.5 * routeBiasFactor
+          }
+          // 无人做的门：扣分，保留（生张留着做大吊）
+          if (suitDiscardingOpponents >= 2 && !tileInDiscard) {
+            score -= 2.5 * routeBiasFactor  // 无人做的门生张，坚决保留
+          }
+        }
       }
-      // 顺子搭子：碰碰胡不需要，果断拆
+
+      // === 4. 顺子搭子：碰碰胡不需要，果断拆 ===
       if (!isHonor(tile) && sameTypeCount < 2) {
         const adjacentCount = hand.filter(t => t.id !== tile.id && t.suit === tile.suit && Math.abs(t.value - tile.value) <= 2).length
         if (adjacentCount >= 2) {
           score += 6.0 * routeBiasFactor  // 有多个相邻牌（顺子核心），拆掉
         } else if (adjacentCount === 1) {
           score += 3.0 * routeBiasFactor  // 有1个相邻牌，也拆
+        }
+      }
+
+      // === 5. 大吊策略：保留百搭+百搭相邻牌 ===
+      const wildTiles = hand.filter(t => isWildTile(t, game))
+      const wildCount = wildTiles.length
+      if (wildCount >= 1) {
+        // 有百搭：保留百搭相邻牌（做大吊用）
+        if (isNumberTile(tile) && !isWildTile(tile, game)) {
+          for (const wt of wildTiles) {
+            if (wt.suit === tile.suit && Math.abs(wt.value - tile.value) <= 1) {
+              score -= 4.0 * routeBiasFactor  // 百搭相邻牌：坚决保留，做大吊
+              break
+            }
+          }
+        }
+        // 百搭本身：绝不打（除非只剩百搭）
+        if (isWildTile(tile, game)) {
+          score -= 100  // 百搭不打
         }
       }
     } else if (rs === 'HONOR_HEAVY') {
@@ -2956,9 +3027,15 @@ export async function shouldClaimPendingAction(
           pengTune += (policy.pengWildBoost || 0)
         }
 
-        // === 碰碰胡路线（allPungsPursuit > 0 → 碰牌加分）===
+        // ★ K哥铁律(2026-06-07): 碰碰胡路线，碰牌要更积极
+        // 基础加成 × 0.6（比原来 × 0.3 翻倍）
+        // 额外加成：路线锁定后(lockLevel>=1)再加 0.4
         if ((policy.allPungsPursuit || 0) > 0) {
-          pengTune += (policy.allPungsPursuit || 0) * 0.3
+          pengTune += (policy.allPungsPursuit || 0) * 0.6
+          // 路线已锁定ALL_PUNGS → 额外鼓励碰牌
+          if (routeState?.current === 'ALL_PUNGS' && (routeState?.lockLevel || 0) >= 1) {
+            pengTune += 0.5  // 锁定后额外加成
+          }
         }
 
         // === 门清碰牌惩罚（比吃牌损失更大）===
