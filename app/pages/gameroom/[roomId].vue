@@ -350,9 +350,9 @@
 
 
 
-    <div class="settle-actions">
+    <div class="settle-actions" style="padding:0 4px">
       <!-- 第一阶段:本局输赢(独面板) -->
-      <div v-if="!settleFinalMode">
+      <div v-if="!settleFinalMode" style="width:100%">
         <div style="display:flex;align-items:center;justify-content:flex-end;width:100%;margin-bottom:8px;gap:8px">
           <div class="auto-next-countdown" style="display:flex;align-items:center;gap:8px;font-size:0.8rem;opacity:0.7;margin-right:auto">
             <span class="auto-next-spinner"></span>
