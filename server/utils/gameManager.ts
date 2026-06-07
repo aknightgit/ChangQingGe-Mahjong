@@ -4396,6 +4396,7 @@ class GameManager {
 
     // 记录本局统计
     if (!game.roundStats) game.roundStats = [];
+    // ★ 必须在 for (const w of roundWinners) 之前声明,避免 TDZ ReferenceError
     const roundWinners = game.players.filter(p => p.status === PlayerStatus.WON).sort((a, b) => (a.winOrder ?? 99) - (b.winOrder ?? 99));
 
     // 检查被聚义QJ线(每局刷新)
