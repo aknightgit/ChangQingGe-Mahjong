@@ -1209,9 +1209,10 @@ export function calculateSettlementBreakdownByRules(
   }
 
   if (discarderId !== undefined && allPlayerIndices.includes(discarderId)) {
-    // ★ K哥铁律：四口关系 → 无论谁放冲，四口伙伴赔2倍，放冲者不付
-    // ★ 三口关系 → 放冲者赔1倍 + 互包补赔1倍
-    // 先找赢家的互包伙伴（四口或三口）
+    // ★ K哥铁律：
+    // 四口关系 → 无论谁放冲，四口伙伴赔2倍，放冲者不付
+    // 三口关系 → 放冲者是伙伴时，放冲者赔2倍；否则放冲者赔1倍+伙伴补赔1倍
+    // 先找赢家的互包伙伴
     const bailoutLoser = allPlayerIndices.find(idx => {
       if (idx === winnerIndex) return false;
       const bailout = mutualBailout?.get(idx);
@@ -1224,8 +1225,12 @@ export function calculateSettlementBreakdownByRules(
         // 四口：伙伴赔2倍，放冲者不付
         addTransfer(bailoutLoser, winnerIndex, winnerFinalPoints * 2, '四口互包×2', '四口');
         return { deltas, transfers };
+      } else if (bailoutLoser === discarderId) {
+        // 三口 + 放冲者就是伙伴：放冲者直接赔2倍
+        addTransfer(discarderId, winnerIndex, winnerFinalPoints * 2, '三口放冲×2', '三口');
+        return { deltas, transfers };
       } else {
-        // 三口：放冲者赔1倍 + 伙伴补赔1倍
+        // 三口 + 放冲者不是伙伴：放冲者赔1倍 + 伙伴补赔1倍
         addTransfer(discarderId, winnerIndex, winnerFinalPoints, '放冲赔付');
         addTransfer(bailoutLoser, winnerIndex, winnerFinalPoints, '三口互包补赔×1', '三口');
         return { deltas, transfers };
