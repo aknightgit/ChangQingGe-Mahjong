@@ -4263,11 +4263,18 @@ class GameManager {
         const winnerIdx = game.players.findIndex(p => p.id === winner.id);
         if (winnerIdx < 0) continue;
         const currentWinOrder = winner.winOrder ?? Number.MAX_SAFE_INTEGER;
-        // ★ 所有玩家都参与结算（除了自己），确保自摸时3家都赔付
-        // 已胡牌的玩家也参与结算，因为赔付是互相对冲的
+        // ★ 自摸结算规则（K哥铁律）：
+        // 胡序小的先结算，找胡序大的+没胡的玩家收取
+        // 过滤掉胡序比自己小的（先胡的玩家不参与后胡的结算）
         const eligiblePlayerIndices = game.players
-          .map((_, index) => index)
-          .filter(index => index !== winnerIdx);
+          .map((player, index) => ({ player, index }))
+          .filter(({ player, index }) => {
+            if (index === winnerIdx) return false;
+            // 排除胡序比自己小的赢家（先胡的玩家）
+            if (player.status === PlayerStatus.WON && (player.winOrder ?? 0) < currentWinOrder) return false;
+            return true;
+          })
+          .map(({ index }) => index);
 
         // 捉冲时找放冲者index
         let discarderIdx: number | undefined;
