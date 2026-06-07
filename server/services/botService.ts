@@ -3394,9 +3394,10 @@ export async function shouldClaimPendingAction(
   // ★ 前3回合观察期：降低吃碰概率，先看牌再决定路线
   const claimEstimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
   if (claimEstimatedRound <= 3) {
-    const earlyPenalty = 0.4  // 前3回合吃碰概率降到40%
-    baseChances[ActionType.CHOW] *= earlyPenalty
-    baseChances[ActionType.PENG] *= earlyPenalty
+    // 早回合硬限制：chow 降到 0.18, peng 降到 0.25
+    // (0.18 vs 0.6正常 = -4.4 调it,软评分足以被tuneDelta=1.5-2.0压制)
+    baseChances[ActionType.CHOW] = Math.min(baseChances[ActionType.CHOW], 0.18)
+    baseChances[ActionType.PENG] = Math.min(baseChances[ActionType.PENG], 0.25)
   }
 
   // P0: 强制胡牌训练 —— 手牌只剩 1 张且能胡时，优先自摸胡牌

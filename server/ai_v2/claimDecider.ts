@@ -162,6 +162,10 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
   } = input
   const policy = routeState.policy || null
 
+  // ★ K哥铁律(2026-06-07): 前3回合观察期，障低吃碰tune（全局tuneDelta -0.5）
+  const v2EstimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
+  const v2EarlyRounds = v2EstimatedRound <= 3
+
   const afterRouteState = evaluateRouteStateV2({
     game,
     player,
@@ -316,8 +320,15 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       return false
     })()
     const hunPengReady = claimSuitCount >= 2 && handPairs >= 2 && hasHonorTripletOrPair
+    // ★ K哥铁律(2026-06-07): 前3回合观察期, 混碰buff也降低加成(只+0.5而非+1.5)
+    const claimEstimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
+    const isEarlyRounds = claimEstimatedRound <= 3
     if (hunPengReady) {
-      return { allowed: true, tuneDelta: 1.5, reason: 'hun_peng_potential_boost' }
+      return {
+        allowed: true,
+        tuneDelta: isEarlyRounds ? 0.5 : 1.5,
+        reason: isEarlyRounds ? 'hun_peng_potential_boost_early' : 'hun_peng_potential_boost'
+      }
     }
   }
 
@@ -595,5 +606,10 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
   if (isNumberSuit(claimTile.suit)) {
     return { allowed: true, tuneDelta: routeGain * 0.03, reason: 'default_number_claim' }
   }
-  return { allowed: true, tuneDelta: routeGain * 0.02, reason: 'default_claim' }
+  const finalTune = routeGain * 0.02
+  return {
+    allowed: true,
+    tuneDelta: v2EarlyRounds ? finalTune - 0.5 : finalTune,
+    reason: v2EarlyRounds ? 'default_claim_early' : 'default_claim',
+  }
 }
