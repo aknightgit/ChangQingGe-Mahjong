@@ -75,6 +75,16 @@ function evaluateSelfKong(
             return { shouldKong: false, type: 'concealed', reason: 'kge_honor_kong_forbidden' };
           }
         }
+        // ★ K哥铁律：如果此牌是顺子核心（相邻有牌），禁止暗杠
+        // 例：有4万+6万时，五万是4-5-6顺子核心，杠掉断顺
+        const kongTile = tiles[0]
+        if (!isHonorTile(kongTile)) {
+          const hasLeft = player.hand.concealedTiles.some(t => t.suit === kongTile.suit && t.value === kongTile.value - 1)
+          const hasRight = player.hand.concealedTiles.some(t => t.suit === kongTile.suit && t.value === kongTile.value + 1)
+          if (hasLeft || hasRight) {
+            return { shouldKong: false, type: 'concealed', reason: 'kong_breaks_sequence' };
+          }
+        }
         // ★ K哥铁律：有4张一样的牌必须暗杠（碰碰胡路线刻子/杠是核心）
         return { shouldKong: true, type: 'concealed', reason: 'must-concealed-kong' };
       }
