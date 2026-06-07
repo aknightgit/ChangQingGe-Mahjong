@@ -52,7 +52,13 @@ function evaluateSelfKong(
 
   // 检查暗杠
   if (availableActions.includes(ActionType.CONCEALED_KONG)) {
-    // 找到可暗杠的4张牌
+    // 找到可暗杠的4张牌（排除已经暗杠过的牌型）
+    const existingKongs = new Set<string>();
+    for (const meld of player.hand.exposedMelds) {
+      if (meld.type === MeldType.CONCEALED_KONG && meld.tiles.length > 0) {
+        existingKongs.add(`${meld.tiles[0].suit}-${meld.tiles[0].value}`);
+      }
+    }
     const counts = new Map<string, Tile[]>();
     for (const t of player.hand.concealedTiles) {
       const key = `${t.suit}-${t.value}`;
@@ -60,7 +66,7 @@ function evaluateSelfKong(
       counts.get(key)!.push(t);
     }
     for (const [key, tiles] of counts) {
-      if (tiles.length === 4) {
+      if (tiles.length === 4 && !existingKongs.has(key)) {
         // ★ K哥铁律(2026-06-05): 做风一色/风碰时严禁暗杠风箭牌
         if (isHonorTile(tiles[0]) && (game as any).winnersCount === 0) {
           const honorCount = player.hand.concealedTiles.filter(t => isHonorTile(t)).length +
@@ -443,11 +449,20 @@ export class BotController {
         }
       } catch (err: any) {
         console.error('[bot-discard] Error:', err);
-        // 犹豫期冻结导致摸牌失败 → 等待冻结结束后重试
+        // 犹豫期冻结导致摸牌失败 → 等待冻结过期后重试（不要短间隔重试，避免死循环）
         if (err?.message?.includes('Draw is locked') || err?.message?.includes('hesitation freeze')) {
-          const retryDelay = 800;
-          console.log(`[bot-discard] Retrying draw in ${retryDelay}ms after hesitation freeze...`);
-          setTimeout(() => this.scheduleBotDiscard(gameId, playerId), retryDelay);
+          try {
+            const freshGame = await getGameFn(gameId);
+            const freezeUntil = Number((freshGame as any)?._freezeUntil ?? 0);
+            const waitMs = Math.max(freezeUntil - Date.now(), 500);
+            console.log(`[bot-discard] Freeze active, waiting ${waitMs}ms until expiry...`);
+            setTimeout(() => this.scheduleBotDiscard(gameId, playerId), waitMs + 200);
+          } catch {
+            // fallback: 用 hesitationWindow 作为等待时间
+            const fallbackMs = 3000;
+            console.log(`[bot-discard] Cannot read freeze, fallback retry in ${fallbackMs}ms`);
+            setTimeout(() => this.scheduleBotDiscard(gameId, playerId), fallbackMs);
+          }
           return;
         }
       }

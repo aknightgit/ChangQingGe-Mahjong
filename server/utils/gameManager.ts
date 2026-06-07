@@ -2511,15 +2511,15 @@ class GameManager {
             break;
           }
         }
-        this.handleKong(game, player, tileId!);
+        await this.handleKong(game, player, tileId!);
         break;
 
       case ActionType.CONCEALED_KONG:
-        this.handleConcealedKong(game, player, tileIds!);
+        await this.handleConcealedKong(game, player, tileIds!);
         break;
 
       case ActionType.EXTENDED_KONG:
-        this.handleExtendedKong(game, player, tileId!);
+        await this.handleExtendedKong(game, player, tileId!);
         break;
 
       case ActionType.HU:
