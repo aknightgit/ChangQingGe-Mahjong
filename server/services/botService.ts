@@ -3426,7 +3426,11 @@ export async function shouldClaimPendingAction(
 
   for (const [action, s] of actionScores.entries()) {
     if (action === ActionType.PASS) continue
-    if (!softScoreWins(s, best, baseChances[action] ?? 0.5, 0.75)) continue
+    const won = softScoreWins(s, best, baseChances[action] ?? 0.5, 0.75)
+    if (action === ActionType.PENG || action === ActionType.CHOW) {
+      console.log(`[softScore] ${player.name} ${action === ActionType.PENG ? 'PENG' : 'CHOW'} tune=${s.tune.toFixed(2)} shanten=${s.shanten} effective=${s.effective} baseChance=${(baseChances[action] ?? 0.5).toFixed(2)} vs PASS tune=${best.tune.toFixed(2)} won=${won}`)
+    }
+    if (!won) continue
     bestAction = action
     best = s
   }
