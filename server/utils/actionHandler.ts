@@ -269,6 +269,11 @@ export class ActionHandler {
       throw new Error('异门吃碰互斥：不能吃不同门的牌');
     }
 
+    // ★ 门口上限检查：最多4组面子（含杠）
+    if (player.hand.exposedMelds.length >= 4) {
+      throw new Error('已满4组门口面子，不能再吃');
+    }
+
     // 找到吃的组合
     const sequences = this.findChowSequences(player.hand.concealedTiles, lastDiscard, game);
     if (sequences.length === 0) {
@@ -466,6 +471,11 @@ export class ActionHandler {
     const matchingTiles = player.hand.concealedTiles.filter(t => tilesEqual(t, lastDiscard));
     if (matchingTiles.length < 3) return;
 
+    // ---- 吃碰排斥检查（明杠=杠他人弃牌，等同于碰，需更新排斥状态） ----
+    if (!game.chowPongExclusion) game.chowPongExclusion = {};
+    const kongPrevState = game.chowPongExclusion[player.id] || { firstActionSuit: null, firstActionType: null };
+    game.chowPongExclusion[player.id] = updateChowPongExclusion(kongPrevState, 'pong', lastDiscard.suit);
+
     // 互包记录
     const sourcePlayerId = getLastDiscardPlayerId(game);
     this.deps.recordBailoutAction(game.gameId, player.id, sourcePlayerId, MeldType.KONG);
@@ -538,8 +548,25 @@ export class ActionHandler {
   /**
    * 处理暗杠
    */
-  async handleConcealedKong(game: GameState, player: Player, tileIds: string[]): Promise<void> {
+  async handleConcealedKong(game: GameState, player: Player, tileIds?: string[]): Promise<void> {
     const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, beginCurrentPlayerTurn } = this.deps;
+
+    // 如果没有传 tileIds，自动找手牌中4张相同的牌
+    if (!tileIds || tileIds.length === 0) {
+      const groups = new Map<string, Tile[]>();
+      for (const tile of player.hand.concealedTiles) {
+        const key = `${tile.suit}-${tile.value}`;
+        const arr = groups.get(key) || [];
+        arr.push(tile);
+        groups.set(key, arr);
+      }
+      const quad = [...groups.values()].find(g => g.length >= 4);
+      if (!quad) {
+        console.warn(`[ConcealedKong] ${player.name} has no 4-of-a-kind in hand`);
+        return;
+      }
+      tileIds = quad.slice(0, 4).map(t => t.id);
+    }
 
     // 找到手牌中相同的牌
     const tiles = tileIds.map(id => findTileById(player.hand.concealedTiles, id)).filter(Boolean) as Tile[];
@@ -1272,10 +1299,10 @@ export class ActionHandler {
         availableActions.push(ActionType.KONG);
       }
 
-      // 检查是否可以吃（只有下家可以吃）
+      // 检查是否可以吃（只有下家可以吃，且门口不能满4组）
       const nextPlayerIndex = (discarderIndex + 1) % game.players.length;
       let chowOptions: string[][] | undefined;
-      if (game.players[nextPlayerIndex]?.id === player.id) {
+      if (game.players[nextPlayerIndex]?.id === player.id && player.hand.exposedMelds.length < 4) {
         if (checkChowPongExclusion(exclusionState, 'chow', discardedTile.suit)) {
           const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile, game);
           if (sequences.length > 0) {

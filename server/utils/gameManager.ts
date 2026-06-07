@@ -3670,30 +3670,35 @@ class GameManager {
 
     const chowPlayer = this.getNextActivePlayer(game, discarderIndex);
     if (chowPlayer) {
-      const sequences = tileHelper.findChowSequences(chowPlayer.hand.concealedTiles, discardedTile, game);
-      if (sequences.length > 0) {
-        const chowOptions = tileHelper.buildChowOptionIds(sequences, discardedTile);
-        // 检查该玩家是否已有碰/杠/胡的pending(如果有,追加吃选项)
-        const existing = game.pendingActions.find(pa => pa.playerId === chowPlayer.id);
-        if (existing) {
-          if (!existing.availableActions.includes(ActionType.CHOW)) {
-            existing.availableActions.push(ActionType.CHOW);
-          }
-          existing.chowOptions = chowOptions;
-          existing.selectedChowTileIds = this.isPlayerBotControlled(chowPlayer)
-            ? selectBotChowTileIds(chowPlayer, game, discardedTile, chowOptions)
-            : undefined;
-        } else {
-          game.pendingActions.push({
-            playerId: chowPlayer.id,
-            availableActions: [ActionType.CHOW, ActionType.PASS],
-            tile: discardedTile,
-            chowOptions,
-            selectedChowTileIds: this.isPlayerBotControlled(chowPlayer)
+      // ★ 门口上限检查：已满4组门口面子时不生成吃牌选项
+      if (chowPlayer.hand.exposedMelds.length >= 4) {
+        // ★ 已满4组门口面子，不生成吃牌选项
+      } else {
+        const sequences = tileHelper.findChowSequences(chowPlayer.hand.concealedTiles, discardedTile, game);
+        if (sequences.length > 0) {
+          const chowOptions = tileHelper.buildChowOptionIds(sequences, discardedTile);
+          // 检查该玩家是否已有碰/杠/胡的pending(如果有,追加吃选项)
+          const existing = game.pendingActions.find(pa => pa.playerId === chowPlayer.id);
+          if (existing) {
+            if (!existing.availableActions.includes(ActionType.CHOW)) {
+              existing.availableActions.push(ActionType.CHOW);
+            }
+            existing.chowOptions = chowOptions;
+            existing.selectedChowTileIds = this.isPlayerBotControlled(chowPlayer)
               ? selectBotChowTileIds(chowPlayer, game, discardedTile, chowOptions)
-              : undefined,
-            expiresAt: Date.now() + this.timerManager.getHumanClaimDecisionTimeoutMs(game, chowPlayer, [ActionType.CHOW, ActionType.PASS])
-          });
+              : undefined;
+          } else {
+            game.pendingActions.push({
+              playerId: chowPlayer.id,
+              availableActions: [ActionType.CHOW, ActionType.PASS],
+              tile: discardedTile,
+              chowOptions,
+              selectedChowTileIds: this.isPlayerBotControlled(chowPlayer)
+                ? selectBotChowTileIds(chowPlayer, game, discardedTile, chowOptions)
+                : undefined,
+              expiresAt: Date.now() + this.timerManager.getHumanClaimDecisionTimeoutMs(game, chowPlayer, [ActionType.CHOW, ActionType.PASS])
+            });
+          }
         }
       }
     }
