@@ -4610,8 +4610,8 @@ const checkOtherPlayerSounds = (newState: any) => {
     _flowerVoicePlayed.clear()
     _flowerVoicePlayedTurnKey = turnKey
   }
-  const pendingMeldVoices: Array<'kong' | 'pong' | 'chow'> = []
-  const pendingDiscards: Array<{ suit: string; value: number; sound: boolean }> = []
+  // ★ 统一语音队列：按玩家动作顺序排列（碰/吃 → 出牌），严格对应动作发生时间
+  const pendingVoices: Array<{ type: 'meld'; action: 'kong' | 'pong' | 'chow' } | { type: 'discard'; suit: string; value: number; sound: boolean }> = []
   for (const player of newState.players) {
     const prev = prevOtherPlayerState.get(player.id)
     const meldCount = getOtherMeldCount(player)
@@ -4623,42 +4623,37 @@ const checkOtherPlayerSounds = (newState: any) => {
       const isBotCtrl = !!(player as any).isBotControlled || isBotPlayer(player)
       // 所有玩家(包括自己)的碰/吃/出牌语音都由socket state更新统一播放，确保顺序正确
       const shouldPlayVoice = true
-      // 补花语音也排队,确保出牌语音先于补花语音
-      if (replacedFlowerCount > prev.replacedFlowerCount) {
-        if (!_flowerVoicePlayed.has(player.id)) {
-          _flowerVoicePlayed.add(player.id)
-          pendingDiscards.push({ suit: 'flower', value: 0, sound: false })  // 占位,稍后播放补花语音
-        }
-      }
-      // 先收集出牌,稍后播放语音(确保吃碰杠语音先于出牌语音)
-      if (shouldPlayVoice && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
-        const newDiscards = (player.hand?.discardedTiles || []).slice(prev.discardCount)
-        const lastNew = newDiscards[newDiscards.length - 1]
-        if (!recentlyPlayedDiscardAudio(lastNew)) {
-          pendingDiscards.push({ suit: lastNew?.suit, value: lastNew?.value, sound: true })
-          markDiscardAudioPlayed(lastNew)
-        }
-      }
-      // ★ 修复放冲丢语音: discardCount 减少 = 放冲者的弃牌被吃走/搽走
-      // 这种情况说明放冲发生，弃牌语音已被捉冲出牌广播处理，无需补播
-      if (discardCount < prev.discardCount) {
-        // 同步 prev，让下一轮检查重新开始
-        // （不需要补播语音，因为捉冲广播会播放 "hu"）
-      }
+      // ★ 按玩家收集：先碰/吃（动作先发生），再出牌（动作后发生）
+      // 碰/吃/杠语音
       if (meldCount > prev.meldCount) {
         const newMelds = (player.hand?.exposedMelds || []).slice(prev.meldCount)
         for (const m of newMelds) {
           const firstTile = m.tiles?.[0]
           const isFlowerReplacementMeld = m.tiles?.length === 1 && firstTile?.suit === 'hua'
           if (isFlowerReplacementMeld) continue
-          console.log(`[MeldDetect] player=${player.name} m.type=${m.type} tiles=${m.tiles?.length} → ${m.type === 'kong' || m.tiles?.length === 4 ? 'kong' : m.type === 'triplet' ? 'pong' : 'chow'}`)
           if (m.type === 'kong' || m.tiles?.length === 4) {
-            if (shouldPlayVoice) pendingMeldVoices.push('kong')
+            if (shouldPlayVoice) pendingVoices.push({ type: 'meld', action: 'kong' })
           } else if (m.type === 'triplet') {
-            if (shouldPlayVoice) pendingMeldVoices.push('pong')
+            if (shouldPlayVoice) pendingVoices.push({ type: 'meld', action: 'pong' })
           } else {
-            if (shouldPlayVoice) pendingMeldVoices.push('chow')
+            if (shouldPlayVoice) pendingVoices.push({ type: 'meld', action: 'chow' })
           }
+        }
+      }
+      // 补花语音
+      if (replacedFlowerCount > prev.replacedFlowerCount) {
+        if (!_flowerVoicePlayed.has(player.id)) {
+          _flowerVoicePlayed.add(player.id)
+          pendingVoices.push({ type: 'discard', suit: 'flower', value: 0, sound: false })
+        }
+      }
+      // 出牌语音（碰/吃之后）
+      if (shouldPlayVoice && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
+        const newDiscards = (player.hand?.discardedTiles || []).slice(prev.discardCount)
+        const lastNew = newDiscards[newDiscards.length - 1]
+        if (!recentlyPlayedDiscardAudio(lastNew)) {
+          pendingVoices.push({ type: 'discard', suit: lastNew?.suit, value: lastNew?.value, sound: true })
+          markDiscardAudioPlayed(lastNew)
         }
       }
     }
@@ -4668,27 +4663,15 @@ const checkOtherPlayerSounds = (newState: any) => {
   for (const id of prevOtherPlayerState.keys()) {
     if (!currentIds.has(id)) prevOtherPlayerState.delete(id)
   }
-  // ★ 碰/吃/杠语音（先发生：对同一个玩家，碰/吃在前，出牌在后）
-  for (const action of pendingMeldVoices) {
-    if (action === 'kong') {
-      playSound('tile-kong')
-      playVoiceAction('kong')
-    } else if (action === 'pong') {
-      playSound('tile-pong')
-      playVoiceAction('pong')
+  // ★ 统一语音队列：按动作发生顺序播放（碰/吃 → 出牌）
+  for (const v of pendingVoices) {
+    if (v.type === 'meld') {
+      if (v.action === 'kong') { playSound('tile-kong'); playVoiceAction('kong') }
+      else if (v.action === 'pong') { playSound('tile-pong'); playVoiceAction('pong') }
+      else { playSound('tile-chow'); playVoiceAction('chow') }
     } else {
-      playSound('tile-chow')
-      playVoiceAction('chow')
-    }
-  }
-  // ★ 出牌语音（后发生：碰/吃后才轮到出牌）
-  for (const d of pendingDiscards) {
-    if (d.suit === 'flower') {
-      playSound('tile-draw')
-      playVoiceAction('flowerReplace')
-    } else {
-      playSound('tile-discard')
-      if (d.suit) playVoiceTile(d.suit, d.value)
+      if (v.suit === 'flower') { playSound('tile-draw'); playVoiceAction('flowerReplace') }
+      else { playSound('tile-discard'); if (v.suit) playVoiceTile(v.suit, v.value) }
     }
   }
 }
