@@ -4375,6 +4375,8 @@ class GameManager {
     }
     // ★ 详细日志：每个玩家的最终得分
     console.log(`[SETTLEMENT-FINAL] scores=${JSON.stringify(game.players.map(p => ({name: p.name, score: finalScores[p.id]})))}`);
+    // ★ 必须在 for (const w of roundWinners) 之前声明,避免 TDZ ReferenceError
+    const roundWinners = game.players.filter(p => p.status === PlayerStatus.WON).sort((a, b) => (a.winOrder ?? 99) - (b.winOrder ?? 99));
     // ★ 配对校验：赢家+放冲者应为0
     for (const w of roundWinners) {
       if (!w.isSelfDrawn && w.discarderId) {
@@ -4396,8 +4398,6 @@ class GameManager {
 
     // 记录本局统计
     if (!game.roundStats) game.roundStats = [];
-    // ★ 必须在 for (const w of roundWinners) 之前声明,避免 TDZ ReferenceError
-    const roundWinners = game.players.filter(p => p.status === PlayerStatus.WON).sort((a, b) => (a.winOrder ?? 99) - (b.winOrder ?? 99));
 
     // 检查被聚义QJ线(每局刷新)
     this.checkQJThresholdAlerts(game);
