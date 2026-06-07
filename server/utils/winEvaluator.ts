@@ -273,6 +273,9 @@ export class WinEvaluator {
         isFlower: suit === TileSuit.FLOWER && !isWildCandidate
       };
       const winCheck = canWin([...player.hand.concealedTiles, testTile], player.hand.exposedMelds, winWildArg, undefined, game.wildTileGroup);
+      if (winCheck.canWin) {
+        console.log(`[TingPreview] ✅ ${suit}-${value} CAN WIN! types=${winCheck.types} hand=${player.hand.concealedTiles.map(t=>`${t.suit}-${t.value}`).join(',')}`);
+      }
       if (!winCheck.canWin) continue;
 
       const discardOptions = this.getCachedWinOptions(game, player, 'discard', { extraTile: testTile, isRobbingKong: false });
