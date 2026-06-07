@@ -90,7 +90,8 @@ export class MatchHistoryService {
         rainScore: player.rainScore,
         finalScore:
           player.score ?? finalScores[player.id] ?? computedScores?.[player.id] ?? 0
-      }))
+      })),
+      isTraining: !!(game as any).allClaimMode
     };
 
     await collection.updateOne(
@@ -100,14 +101,19 @@ export class MatchHistoryService {
     );
   }
 
-  static async listMatches(options?: { userId?: string; playerId?: string; limit?: number }): Promise<MatchHistory[]> {
+  static async listMatches(options?: { userId?: string; playerId?: string; limit?: number; includeTraining?: boolean }): Promise<MatchHistory[]> {
     const collection = await getCollection<MatchHistory>(this.COLLECTION_NAME);
-    const { userId, playerId, limit = 20 } = options || {};
+    const { userId, playerId, limit = 20, includeTraining = false } = options || {};
     const targetPlayerId = playerId || userId;
 
-    const query = targetPlayerId
+    const query: any = targetPlayerId
       ? { 'results.playerId': targetPlayerId }
       : {};
+    
+    // 默认过滤掉训练数据
+    if (!includeTraining) {
+      query.isTraining = { $ne: true };
+    }
 
     return collection
       .find(query)

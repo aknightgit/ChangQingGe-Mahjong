@@ -176,6 +176,7 @@ export interface MatchHistory {
   durationMs: number;
   finalScores?: Record<string, number>;
   results: MatchHistoryResult[];
+  isTraining?: boolean;  // true = 训练模式(allClaimMode), false/undefined = 实战
 }
 
 export interface MatchHistoryResult {

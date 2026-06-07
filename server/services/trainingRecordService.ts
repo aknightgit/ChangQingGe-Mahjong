@@ -46,6 +46,7 @@ type TrainingRoundRecord = {
     byType: Record<string, number>;
     byPlayer: Record<string, Record<string, number>>;
   };
+  isTraining?: boolean;  // true = 训练模式(allClaimMode), false/undefined = 实战
 };
 
 const clonePlain = <T>(value: T): T => JSON.parse(JSON.stringify(value ?? null));
@@ -150,7 +151,8 @@ export class TrainingRecordService {
         total: actions.length,
         byType,
         byPlayer
-      }
+      },
+      isTraining: !!(game as any).allClaimMode
     };
 
     const collection = await getCollection<TrainingRoundRecord>(COLLECTION_NAME);

@@ -68,6 +68,7 @@ export async function initializeDatabase() {
     await trainingCollection.createIndex({ recordedAt: -1 });
     await trainingCollection.createIndex({ 'actionStats.byType.chow': -1 });
     await trainingCollection.createIndex({ 'actionStats.byType.peng': -1 });
+    await trainingCollection.createIndex({ isTraining: 1 });  // 训练/实战筛选
     console.log('✓ Created indexes for mahjongTrainingRounds collection');
 
     const matchHistoryCollection = db.collection('matchHistory');
@@ -76,7 +77,8 @@ export async function initializeDatabase() {
     await matchHistoryCollection.createIndex({ roomNumber: 1 });
     await matchHistoryCollection.createIndex({ 'results.playerId': 1 });
     await matchHistoryCollection.createIndex({ completedAt: -1 });
-    console.log('é‰?Created indexes for matchHistory collection');
+    await matchHistoryCollection.createIndex({ isTraining: 1 });  // 训练/实战筛选
+    console.log('✓ Created indexes for matchHistory collection');
 
     // Create indexes for sessions collection
     const sessionsCollection = db.collection('sessions');

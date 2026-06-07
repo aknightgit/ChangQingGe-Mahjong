@@ -28,9 +28,9 @@ export default defineEventHandler(async (event) => {
   const limit = Number.isFinite(limitParam) && limitParam! > 0 ? limitParam! : 60
 
   const collection = await getCollection<TrainingRoundRecord>('mahjongTrainingRounds')
-  const filter = playerId
-    ? { 'initialSnapshot.players.id': playerId }
-    : {}
+  const filter: any = playerId
+    ? { 'initialSnapshot.players.id': playerId, isTraining: { $ne: true } }
+    : { isTraining: { $ne: true } }
 
   const rounds = await collection
     .find(filter)
