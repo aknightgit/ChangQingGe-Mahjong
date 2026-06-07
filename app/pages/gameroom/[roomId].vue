@@ -1713,6 +1713,7 @@ onMounted(async () => {
     // 根据广播内容播放音效和语音
     const text = detail.text || ''
     const actionKind = detail.actionKind || ''
+    console.log(`[Broadcast-Voice] actionKind="${actionKind}" text="${text.slice(0, 40)}"`)
     // ★ 吃/碰/杠语音由 state watcher 统一排队播放（确保严格按动作顺序）
     // 广播处理器只处理胡牌/捉冲/补花等无法从 state 变化检测的语音
     if (actionKind === 'hu') {

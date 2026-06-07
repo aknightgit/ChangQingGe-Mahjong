@@ -908,6 +908,7 @@ function getFixedFanName(type: HandType, isSelfDrawn: boolean, isKongFlower: boo
       if (handTypes.includes(HandType.FENG_PENG)) return '大吊风碰';
       if (handTypes.includes(HandType.ALL_WIND)) return '大吊风一色';
       if (handTypes.includes(HandType.QING_PENG)) return '大吊清碰';
+      if (handTypes.includes(HandType.HUN_PENG)) return '大吊碰碰胡';
       if (handTypes.includes(HandType.ALL_TRIPLETS)) return '大吊碰碰胡';
       if (handTypes.includes(HandType.HALF_FLUSH)) return '大吊混一色';
       if (handTypes.includes(HandType.FULL_FLUSH)) return '大吊清一色';
