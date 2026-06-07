@@ -110,24 +110,44 @@ const getAudioEl = (): HTMLAudioElement => {
 }
 
 const speakTextFallback = (text?: string) => {
-  if (!process.client || !text || !('speechSynthesis' in window)) return
-  const now = Date.now()
-  if (now - _lastSpokenAt < 120) return
-  _lastSpokenAt = now
+  if (!process.client) return
+  // 优先用 speechSynthesis
+  if (text && 'speechSynthesis' in window) {
+    const now = Date.now()
+    if (now - _lastSpokenAt < 120) return
+    _lastSpokenAt = now
+    try {
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.lang = 'zh-CN'
+      utterance.rate = 1
+      utterance.pitch = 1
+      utterance.volume = _volume.value
+      window.speechSynthesis.speak(utterance)
+      console.info(`[VoiceTile] TTS fallback: "${text}"`)
+      return
+    } catch {}
+  }
+  // ★ 最终 fallback：Web Audio API beep（不依赖 speechSynthesis，所有浏览器都能响）
   try {
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = 'zh-CN'
-    utterance.rate = 1
-    utterance.pitch = 1
-    utterance.volume = _volume.value
-    // 不要 cancel，让队列自然排队
-    window.speechSynthesis.speak(utterance)
-  } catch {}
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.frequency.value = 600
+    gain.gain.value = _volume.value * 0.3
+    osc.start(ctx.currentTime)
+    osc.stop(ctx.currentTime + 0.15)
+    console.info(`[VoiceTile] beep fallback for "${text || '?'}"`)
+  } catch (e) {
+    console.warn(`[VoiceTile] ALL fallbacks failed for "${text}":`, e)
+  }
 }
 
 const playAudioQueued = (url: string, fallbackText?: string): Promise<void> => new Promise((resolve) => {
   // 无 URL 时直接用 speech fallback
   if (!url) {
+    console.warn(`[VoiceTile] No URL for "${fallbackText}", using TTS`)
     speakTextFallback(fallbackText)
     setTimeout(resolve, 200)
     return
@@ -158,8 +178,12 @@ const playAudioQueued = (url: string, fallbackText?: string): Promise<void> => n
     speakTextFallback(fallbackText)
   }
 
-  el.onended = finish
-  el.onerror = () => {
+  el.onended = () => {
+    console.info(`[VoiceTile] played OK: "${fallbackText}"`)
+    finish()
+  }
+  el.onerror = (ev) => {
+    console.warn(`[VoiceTile] audio error for "${fallbackText}":`, ev)
     fallback()
     finish()
   }
@@ -167,17 +191,21 @@ const playAudioQueued = (url: string, fallbackText?: string): Promise<void> => n
   el.src = url
   el.currentTime = 0
   timeoutId = setTimeout(() => {
+    console.warn(`[VoiceTile] TIMEOUT 15s for "${fallbackText}"`)
     fallback()
-    // 只在自己仍是当前播放序列时才 pause，避免杀掉后续新播放
     if (_playSeq === mySeq) {
       try { el.pause(); el.currentTime = 0 } catch {}
     }
     finish()
   }, 15000)
-  el.play().catch(() => {
-    fallback()
-    finish()
-  })
+  const playResult = el.play()
+  if (playResult) {
+    playResult.catch((err) => {
+      console.warn(`[VoiceTile] play() rejected for "${fallbackText}":`, err)
+      fallback()
+      finish()
+    })
+  }
 })
 
 const playAudio = (url: string, fallbackText?: string) => {
@@ -206,6 +234,7 @@ const playVoiceKey = (key: string, fallbackText: string) => {
     speakTextFallback(fallbackText)
     return
   }
+  console.info(`[VoiceTile] playVoiceKey key="${key}" url=${url ? 'OK' : 'MISSING'} text="${fallbackText}"`)
   playAudio(url, fallbackText)
 }
 
