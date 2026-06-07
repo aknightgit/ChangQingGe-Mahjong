@@ -3150,6 +3150,11 @@ export async function shouldClaimPendingAction(
             pengTune += (passEval.shanten - shanten) * 0.6
           }
           pengTune = Math.max(0.05, pengTune)
+          // ★ K哥铁律: 碰了直接听牌(shanten=0) → 硬碰，不走概率
+          if (shanten === 0 && passEval.shanten > 0) {
+            console.log(`[hardRule] ${player.name} PENG → ting (shanten 0), forcing PENG`)
+            return ActionType.PENG
+          }
           actionScores.set(ActionType.PENG, { shanten, effective, tune: pengTune })
         }
       }
@@ -3369,6 +3374,11 @@ export async function shouldClaimPendingAction(
           actionScores.set(ActionType.CHOW, { shanten: 99, effective: 0, tune: 0 })
         } else {
           bestChow.tune = Math.max(0.05, bestChow.tune)
+          // ★ K哥铁律: 吃了直接听牌(shanten=0) → 硬吃，不走概率
+          if (bestChow.shanten === 0 && passEval.shanten > 0) {
+            console.log(`[hardRule] ${player.name} CHOW → ting (shanten 0), forcing CHOW`)
+            return ActionType.CHOW
+          }
           actionScores.set(ActionType.CHOW, {
             shanten: bestChow.shanten,
             effective: bestChow.effective,
@@ -3426,11 +3436,7 @@ export async function shouldClaimPendingAction(
 
   for (const [action, s] of actionScores.entries()) {
     if (action === ActionType.PASS) continue
-    const won = softScoreWins(s, best, baseChances[action] ?? 0.5, 0.75)
-    if (action === ActionType.PENG || action === ActionType.CHOW) {
-      console.log(`[softScore] ${player.name} ${action === ActionType.PENG ? 'PENG' : 'CHOW'} tune=${s.tune.toFixed(2)} shanten=${s.shanten} effective=${s.effective} baseChance=${(baseChances[action] ?? 0.5).toFixed(2)} vs PASS tune=${best.tune.toFixed(2)} won=${won}`)
-    }
-    if (!won) continue
+    if (!softScoreWins(s, best, baseChances[action] ?? 0.5, 0.75)) continue
     bestAction = action
     best = s
   }
