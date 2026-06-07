@@ -4651,6 +4651,7 @@ const checkOtherPlayerSounds = (newState: any) => {
           const firstTile = m.tiles?.[0]
           const isFlowerReplacementMeld = m.tiles?.length === 1 && firstTile?.suit === 'hua'
           if (isFlowerReplacementMeld) continue
+          console.log(`[MeldDetect] player=${player.name} m.type=${m.type} tiles=${m.tiles?.length} → ${m.type === 'kong' || m.tiles?.length === 4 ? 'kong' : m.type === 'triplet' ? 'pong' : 'chow'}`)
           if (m.type === 'kong' || m.tiles?.length === 4) {
             if (shouldPlayVoice) pendingMeldVoices.push('kong')
           } else if (m.type === 'triplet') {
@@ -4667,17 +4668,7 @@ const checkOtherPlayerSounds = (newState: any) => {
   for (const id of prevOtherPlayerState.keys()) {
     if (!currentIds.has(id)) prevOtherPlayerState.delete(id)
   }
-  // ★ 先播出牌语音（动作先发生），再播碰/吃/杠语音（动作后发生）
-  for (const d of pendingDiscards) {
-    if (d.suit === 'flower') {
-      playSound('tile-draw')
-      playVoiceAction('flowerReplace')
-    } else {
-      playSound('tile-discard')
-      if (d.suit) playVoiceTile(d.suit, d.value)
-    }
-  }
-  // ★ 碰/吃/杠音效+语音排在出牌之后（动作后发生）
+  // ★ 碰/吃/杠语音（先发生：对同一个玩家，碰/吃在前，出牌在后）
   for (const action of pendingMeldVoices) {
     if (action === 'kong') {
       playSound('tile-kong')
@@ -4688,6 +4679,16 @@ const checkOtherPlayerSounds = (newState: any) => {
     } else {
       playSound('tile-chow')
       playVoiceAction('chow')
+    }
+  }
+  // ★ 出牌语音（后发生：碰/吃后才轮到出牌）
+  for (const d of pendingDiscards) {
+    if (d.suit === 'flower') {
+      playSound('tile-draw')
+      playVoiceAction('flowerReplace')
+    } else {
+      playSound('tile-discard')
+      if (d.suit) playVoiceTile(d.suit, d.value)
     }
   }
 }
