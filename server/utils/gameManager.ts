@@ -4286,7 +4286,8 @@ class GameManager {
           mutualBailout,
           discarderIdx
         );
-        console.log(`[SETTLEMENT] winner=${game.players[winnerIdx]?.name} wonFan=${winner.wonFan} isSelfDrawn=${winner.isSelfDrawn} bailoutSize=${mutualBailout.size} eligibleIndices=${JSON.stringify(eligiblePlayerIndices)}`);
+        console.log(`[SETTLEMENT] winner=${game.players[winnerIdx]?.name} wonFan=${winner.wonFan} isSelfDrawn=${winner.isSelfDrawn} discarderIdx=${discarderIdx} bailoutSize=${mutualBailout.size} eligibleIndices=${JSON.stringify(eligiblePlayerIndices)}`);
+        console.log(`[SETTLEMENT-BREAKDOWN] deltas=${JSON.stringify([...breakdown.deltas.entries()].map(([k,v]) => ({idx:k, name: game.players[k]?.name, delta: v})))} transfers=${JSON.stringify(breakdown.transfers.map(t => ({from: game.players[t.fromIndex]?.name, to: game.players[t.toIndex]?.name, amount: t.amount, reason: t.reason})))}`);
 
         for (const transfer of breakdown.transfers) {
           roundTransfers.push({
@@ -4366,6 +4367,19 @@ class GameManager {
     const scoreSum = Object.values(finalScores).reduce((s, v) => s + v, 0);
     if (scoreSum !== 0) {
       console.warn(`[endRound] ⚠️ finalScores 总和不为0: ${scoreSum}，scores=${JSON.stringify(finalScores)}`);
+    }
+    // ★ 详细日志：每个玩家的最终得分
+    console.log(`[SETTLEMENT-FINAL] scores=${JSON.stringify(game.players.map(p => ({name: p.name, score: finalScores[p.id]})))}`);
+    // ★ 配对校验：赢家+放冲者应为0
+    for (const w of roundWinners) {
+      if (!w.isSelfDrawn && w.discarderId) {
+        const wScore = finalScores[w.id] ?? 0;
+        const dScore = finalScores[w.discarderId] ?? 0;
+        const dName = game.players.find(p => p.id === w.discarderId)?.name ?? '?';
+        if (wScore + dScore !== 0) {
+          console.warn(`[SETTLEMENT-PAIR] ⚠️ ${w.name}(${wScore}) + ${dName}(${dScore}) = ${wScore + dScore} ≠ 0`);
+        }
+      }
     }
     // ★ player.score 是累计分，每局累加（不覆盖）
     for (const player of game.players) {
