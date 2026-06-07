@@ -13,6 +13,12 @@ export function isConcealedDiscardState(player: Player): boolean {
   if (concealedCount >= 2 && exposedMeldCount > 0 && concealedCount % 3 === 0) return true
   // 加杠后补牌可能让手牌变成 %3===1（如3张→加杠→补牌→4张），也应允许出牌
   if (concealedCount >= 2 && exposedMeldCount > 0 && concealedCount % 3 === 1) return true
+  // ★ 补花后只剩1张暗牌（门口副露多，总手牌>=14），也应允许出牌
+  if (concealedCount >= 1 && exposedMeldCount > 0) {
+    // 计算门口实际牌数（花牌meld只有1张，不能简单 ×3）
+    const exposedTileCount = player.hand.exposedMelds.reduce((s, m) => s + m.tiles.length, 0)
+    if (concealedCount + exposedTileCount >= 14) return true
+  }
   return concealedCount >= 2 && (concealedCount % 3 === 2 || concealedCount >= 14)
 }
 

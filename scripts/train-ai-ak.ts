@@ -41,6 +41,9 @@ import type { RouteState as LiveRouteState } from '../server/ai/route/types'
 import { evaluateRouteStateV2 } from '../server/ai_v2/pathSelector'
 import { evaluateRouteClaim as evaluateRouteClaimV2 } from '../server/ai_v2/claimDecider'
 import { scoreRouteDiscardCandidate as scoreRouteDiscardCandidateV2 } from '../server/ai_v2/discardDecider'
+// ★ 服务器端决策函数（与实战完全一致）
+import { shouldClaimPendingAction, selectDiscardTile } from '../server/services/botService'
+import { evaluateSelfKong } from '../server/utils/botController'
 import * as fs from 'fs'
 import * as path from 'path'
 import { fileURLToPath } from 'url'
@@ -210,7 +213,7 @@ const DEFAULT_POLICY: BotPolicy = {
   anKongAggression: 0.95, minkanAggression: 0.3, kakanAggression: 0.5, robKongAwareness: 0.6,
   noWildDoubleAwareness: 0.5, menqingDoubleAwareness: 0.5,
   flushVsPungsBalance: -0.45, honorVsSuitedBalance: -0.45, sequenceVsTripletBias: 1.3,
-  engineVersion: 'v1',
+  engineVersion: 'v2',
 }
 
 // ========== Mutatable parameters for AI-AK (长清阁规则) ==========
@@ -1397,6 +1400,284 @@ type TrainingPlannerContext = {
   playerIndex: number
 }
 
+// ========== 服务器端适配层 ==========
+// 把训练脚本的 BotPlayer/GameState 转为服务器端 Player/GameState，
+// 使 shouldClaimPendingAction/selectDiscardTile 能直接调用。
+function toServerPlayer(bp: BotPlayer): any {
+  return {
+    id: bp.id,
+    userId: bp.id,
+    name: bp.name,
+    position: bp.pos,
+    hand: {
+      concealedTiles: [...bp.hand],
+      exposedMelds: bp.exposedMelds.map(m => ({ ...m, tiles: [...m.tiles] })),
+      discardedTiles: [...bp.discardedTiles]
+    },
+    status: bp.status === 'won' ? PlayerStatus.WON : PlayerStatus.PLAYING,
+    isDealer: bp.pos === 0,
+    isTing: bp.isTing,
+    missingSuit: null,
+    score: bp.score,
+    windScore: 0,
+    rainScore: 0,
+    wonFan: bp.wonFan ?? 0,
+    winHandType: bp.winHandType,
+    winOrder: null,
+    winRound: null,
+    winTimestamp: null,
+    flowerTiles: [...bp.flowerTiles],
+    // 存 policy 供 getPolicyForPlayer 使用
+    __trainingPolicy: bp.policy
+  }
+}
+
+function toServerGame(g: GameState, pendingActions: any[] = []): any {
+  // 牌墙剩余 = deck.length - wallIdx（如果 deck 为空，用 0）
+  const wallRemaining = Math.max(0, (g.deck?.length || 0) - (g.wallIdx || 0))
+  // 生成虚拟 wall 张数（服务器只需要 wall.length 计数，不需要真实内容）
+  // 为了减少开销，生成空 tile 对象列表
+  const wallTiles: any[] = Array.from({ length: wallRemaining }, (_, i) => ({
+    suit: 'wall' as any,
+    value: 0,
+    id: `wall-${i}`,
+  }))
+  return {
+    gameId: 'training',
+    roomNumber: 'train',
+    phase: GamePhase.PLAYING,
+    endReason: null,
+    players: g.players.map(bp => toServerPlayer(bp)),
+    wall: wallTiles,
+    currentPlayerIndex: g.current,
+    dealerIndex: 0,
+    discardPile: [...g.discardPile],
+    actionHistory: [],
+    winnersCount: 0,
+    roundNumber: 1,
+    createdAt: Date.now(),
+    lastActionTime: Date.now(),
+    pendingActions,
+    customScoringMode: g.wildSuit && g.wildValue ? `${g.wildSuit}-${g.wildValue}` : null,
+    wildTileGroup: g.wildSuit && g.wildValue ? [`${g.wildSuit}-${g.wildValue}`] : undefined,
+    dice: [1, 1] as [number, number],
+    roundMultiplier: 1,
+    inheritMultiplier: g.gameMultiplier,
+    inheritedGlobalMultiplier: g.gameMultiplier,
+    hesitationWindow: 0,
+    liangShanThreshold: 4000,
+    thinkChances: 3,
+    settlementMultiplier: SETTLEMENT_MULT,
+    maxBots: 4,
+    minPlayers: 4,
+    discardPileSize: g.discardPile.length
+  }
+}
+
+function makePendingAction(playerId: string, tile: Tile, availableActions: any[]): any {
+  return {
+    playerId,
+    availableActions,
+    tile,
+    expiresAt: Date.now() + 5000
+  }
+}
+
+// ========== 服务器端决策封装（与实战同源）==========
+// 这些包装器把训练脚本的 BotPlayer/GameState 转换为服务器端格式，
+// 调用服务器决策函数，再把结果回写训练脚本的字段。
+
+/**
+ * 服务器端出牌：调 selectDiscardTile 返回待打牌的 tileId
+ * 把 tileId 转回训练脚本的 Tile 对象。
+ */
+export function serverDiscardTile(
+  player: BotPlayer,
+  game: GameState,
+  claimTile: Tile | null = null,
+  availableActions: ActionType[] = []
+): Tile {
+  // 把对手的出牌分摊到 server 的 player.hand.discardedTiles（已经做过）
+  const serverPlayer = toServerPlayer(player)
+  // 同步其他玩家的丢弃（从 playerDiscards → serverPlayer.hand.discardedTiles）
+  const serverGame = toServerGame(game, [])
+
+  // 重要：服务器要看到所有玩家的 exposedMelds 和 discardedTiles
+  // toServerPlayer 已经映射了当前玩家；其他玩家也要映射
+  for (let i = 0; i < game.players.length; i++) {
+    const bp = game.players[i]
+    const sp = serverGame.players[i]
+    sp.hand.discardedTiles = [...bp.discardedTiles]
+    // 同步 exposure
+    sp.hand.exposedMelds = bp.exposedMelds.map(m => ({ ...m, tiles: [...m.tiles] }))
+  }
+
+  // 处理 pendingActions：如果传入了 claimTile（吃/碰场景），包装为 pending action
+  if (claimTile) {
+    const pa = makePendingAction(player.id, claimTile, availableActions)
+    serverGame.pendingActions = [pa]
+  }
+
+  const tileId = selectDiscardTile(serverPlayer, serverGame)
+  if (!tileId) {
+    // 服务器没选出牌：返回第一张手牌作为兜底
+    return player.hand.find(t => t) || player.hand[0]
+  }
+
+  // 同步 route memory 回训练 player（让后续的吃碰决策用同一个路线）
+  const routeMem = (serverPlayer as any).__routeStateMemory
+  if (routeMem) {
+    player._routeMemory = routeMem
+  }
+
+  // 把 tileId 转回 train 的 Tile
+  const found = player.hand.find(t => t.id === tileId)
+  return found || player.hand.find(t => t) || player.hand[0]
+}
+
+/**
+ * 服务器端吃/碰决策：调 shouldClaimPendingAction
+ * 返回服务器决策出的 ActionType（PASS/PENG/CHOW/KONG/HU）
+ */
+export async function serverClaimAction(
+  player: BotPlayer,
+  game: GameState,
+  claimTile: Tile,
+  availableActions: ActionType[]
+): Promise<ActionType> {
+  const serverPlayer = toServerPlayer(player)
+  const serverGame = toServerGame(game, [])
+  // 同步其他玩家的出牌
+  for (let i = 0; i < game.players.length; i++) {
+    const bp = game.players[i]
+    const sp = serverGame.players[i]
+    sp.hand.discardedTiles = [...bp.discardedTiles]
+    sp.hand.exposedMelds = bp.exposedMelds.map(m => ({ ...m, tiles: [...m.tiles] }))
+  }
+  // 同步 route memory
+  if (player._routeMemory) {
+    ;(serverPlayer as any).__routeStateMemory = player._routeMemory
+  }
+  // 同步 chowPongExclusion（服务器内部自己也会查 game.chowPongExclusion，但 train 自己有该字段）
+  if (player.chowPongExclusion) {
+    serverGame.chowPongExclusion = serverGame.chowPongExclusion || {}
+    serverGame.chowPongExclusion[player.id] = { ...player.chowPongExclusion }
+  }
+
+  const pa = makePendingAction(player.id, claimTile, availableActions)
+  serverGame.pendingActions = [pa]
+
+  const action = await shouldClaimPendingAction(serverPlayer, availableActions, serverGame)
+
+  // 同步 route memory 回训练 player
+  const routeMem = (serverPlayer as any).__routeStateMemory
+  if (routeMem) {
+    player._routeMemory = routeMem
+  }
+
+  return action
+}
+
+/**
+ * 服务器端自摸胡决策：调 shouldClaimPendingAction（availableActions=[HU]）
+ * 返回 true=胡, false=不胡
+ */
+export async function serverSelfDrawHu(
+  player: BotPlayer,
+  game: GameState
+): Promise<boolean> {
+  const serverPlayer = toServerPlayer(player)
+  const serverGame = toServerGame(game, [])
+  for (let i = 0; i < game.players.length; i++) {
+    const bp = game.players[i]
+    const sp = serverGame.players[i]
+    sp.hand.discardedTiles = [...bp.discardedTiles]
+    sp.hand.exposedMelds = bp.exposedMelds.map(m => ({ ...m, tiles: [...m.tiles] }))
+  }
+  if (player._routeMemory) {
+    ;(serverPlayer as any).__routeStateMemory = player._routeMemory
+  }
+
+  // 同步 chowPongExclusion
+  if (player.chowPongExclusion) {
+    serverGame.chowPongExclusion = serverGame.chowPongExclusion || {}
+    serverGame.chowPongExclusion[player.id] = { ...player.chowPongExclusion }
+  }
+
+  // 自摸场景：pendingActions 为空，但 availableActions 包含 HU
+  serverGame.pendingActions = []
+
+  const action = await shouldClaimPendingAction(serverPlayer, [ActionType.HU], serverGame)
+
+  // 同步 route memory
+  const routeMem = (serverPlayer as any).__routeStateMemory
+  if (routeMem) {
+    player._routeMemory = routeMem
+  }
+
+  return action === ActionType.HU
+}
+
+/**
+ * 服务器端放炮胡决策：调 shouldClaimPendingAction（availableActions=[HU]）
+ * 用 pendingAction.tile 模拟"我被别人出牌"的场景
+ */
+export async function serverDiscardClaimHu(
+  player: BotPlayer,
+  game: GameState,
+  discardTile: Tile
+): Promise<boolean> {
+  const serverPlayer = toServerPlayer(player)
+  const serverGame = toServerGame(game, [])
+  for (let i = 0; i < game.players.length; i++) {
+    const bp = game.players[i]
+    const sp = serverGame.players[i]
+    sp.hand.discardedTiles = [...bp.discardedTiles]
+    sp.hand.exposedMelds = bp.exposedMelds.map(m => ({ ...m, tiles: [...m.tiles] }))
+  }
+  if (player._routeMemory) {
+    ;(serverPlayer as any).__routeStateMemory = player._routeMemory
+  }
+  if (player.chowPongExclusion) {
+    serverGame.chowPongExclusion = serverGame.chowPongExclusion || {}
+    serverGame.chowPongExclusion[player.id] = { ...player.chowPongExclusion }
+  }
+
+  // 放炮场景：pendingAction 携带弃牌 tile，player 刚出牌等待响应
+  // 服务器 shouldClaimPendingAction 会查 pendingAction 找到 claimTile
+  const pa = makePendingAction(player.id, discardTile, [ActionType.HU])
+  serverGame.pendingActions = [pa]
+
+  const action = await shouldClaimPendingAction(serverPlayer, [ActionType.HU], serverGame)
+
+  const routeMem = (serverPlayer as any).__routeStateMemory
+  if (routeMem) {
+    player._routeMemory = routeMem
+  }
+
+  return action === ActionType.HU
+}
+
+/**
+ * 服务器端自杠决策：调 evaluateSelfKong
+ */
+export function serverSelfKong(
+  player: BotPlayer,
+  game: GameState,
+  availableActions: ActionType[]
+): { shouldKong: boolean; type: 'extended' | 'concealed'; reason: string } {
+  const serverPlayer = toServerPlayer(player)
+  const serverGame = toServerGame(game, [])
+  for (let i = 0; i < game.players.length; i++) {
+    const bp = game.players[i]
+    const sp = serverGame.players[i]
+    sp.hand.discardedTiles = [...bp.discardedTiles]
+    sp.hand.exposedMelds = bp.exposedMelds.map(m => ({ ...m, tiles: [...m.tiles] }))
+  }
+  return evaluateSelfKong(serverPlayer, serverGame, availableActions)
+}
+
+
 function buildDeck(): Tile[] {
   const d: Tile[] = []
   for (const s of [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS])
@@ -2086,11 +2367,32 @@ function evalWildDeployment(hand: Tile[], meldCount: number, wildCount: number,
 }
 
 // ========== AI Discard (长清阁规则) ==========
-function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[] = [],
+export function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[] = [],
   wallIdx: number = 0, deckLen: number = 144, allPlayers: BotPlayer[] = [], myPos: number = 0,
   turnNumber: number = 0, gameIdx: number = -1): Tile {
   // 铁律：hand可能含undefined，在计算前先normalize
   p.hand = normalizeHand(p.hand)
+  // ★ V2：直接调用服务器端 selectDiscardTile（与实战同源）
+  // 构造一个伪 deck 长度为 deckLen，wallIdx 处开始是牌墙剩余
+  const fakeDeck: Tile[] = Array.from({ length: deckLen }, (_, i) => ({
+    suit: 'dots' as any,
+    value: 0,
+    id: `deck-${i}`,
+  }))
+  const gameForServer: GameState = {
+    deck: fakeDeck,
+    wallIdx,
+    players: allPlayers.length > 0 ? allPlayers : [p],
+    current: myPos,
+    wildSuit: p.wildSuit,
+    wildValue: p.wildValue,
+    discardPile: [...discardPile],
+    gameMultiplier,
+    playerDiscards: allPlayers.map(pp => [...pp.discardedTiles])
+  }
+  return serverDiscardTile(p, gameForServer, null, [])
+  /* ========== 以下是 legacy local logic（已停用，保留以备回退） ========== */
+  /*
   const policy = p.policy
   const hand = p.hand
   const shouldTraceAkDiscard = AK_DISCARD_TRACE && p.name === 'AI-AK' && gameIdx === 0
@@ -2678,6 +2980,7 @@ function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile: Tile[]
     return allTiles[0]
   }
   return validTile
+  */
 }
 
 export function chooseTrainingDiscardTileForTest(
@@ -3087,12 +3390,12 @@ function getWinningHandInvariant(concealedCount: number, meldCount: number, conc
 
 // ========== 血战到最后一人 ==========
 // 每局有人胡牌后，已胡玩家退出，剩余玩家继续打，直到最后1人
-function runGameWithFightToLast(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): {
+async function runGameWithFightToLast(akPolicy: BotPolicy, otherPolicies: BotPolicy[]): Promise<{
   winners: { idx: number; selfDraw: boolean; score: number }[]
   finalScores: number[]
   totalGames: number  // 实际打了几局（含血战续局）
   events: GameEvent[]
-} | null {
+} | null> {
   // 简化实现：每局结束后，赢家退出，剩余玩家重开新局
   // （真实血战应延续牌局，但重开局也能近似模拟）
   const activePolicies = AI_NAMES.map((_, i) => i === 0 ? akPolicy : otherPolicies[i-1])
@@ -3111,7 +3414,7 @@ function runGameWithFightToLast(akPolicy: BotPolicy, otherPolicies: BotPolicy[])
     const g = setupGame(policies[0], policies.slice(1))
     // ... 这里需要完整运行一局游戏
     // 简化：直接调用runGame，然后处理赢家
-    const result = runGame(policies[0], policies.slice(1))
+    const result = await runGame(policies[0], policies.slice(1))
     if (!result) {
       // 流局，所有人还在
       console.error(`[runGameWithFightToLast] game=${gameNum} result=null active=${active.length} players`)
@@ -3140,7 +3443,7 @@ function runGameWithFightToLast(akPolicy: BotPolicy, otherPolicies: BotPolicy[])
 // ========== Game Loop ==========
 // 血战到底模式：有人胡牌后继续打，直到流局或只剩1人
 // 所有赢家都记录到 winnersThisGame，最后一起 return
-export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: number = 0): GameResult | null {
+export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx: number = 0): Promise<GameResult | null> {
   TRACE_DETAIL_GAME = DETAIL_MODE && gameIdx === 0
   const runGameStart = performance.now()
   let discardEvalMs = 0
@@ -3564,13 +3867,9 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       console.error(`[DEBUG round=${round} curr=${curr} ${player.name}] drawn=${tileStr(drawn)} hand=${normalizedHand.length} exposed=${player.exposedMelds.length} wild=${makeWT(player)} canWin=${winCheck.canWin} types=${winCheck.types.join(',')}`)
     }
     if (winCheck.canWin) {
-      let winChance = player.policy.selfWinChance
-      const wildCount = player.hand.filter(t => isWT(t, player)).length
-      winChance += wildCount * player.policy.selfWinWildBoost
-      winChance -= player.exposedMelds.length * player.policy.meldPenalty
-      winChance = Math.max(0, Math.min(1, winChance))
-      const selfWinRoll = Math.random()
-      if (selfWinRoll < winChance) {
+      // ★ V2：调服务器端 shouldClaimPendingAction([HU]) 决定自摸
+      const shouldHu = await serverSelfDrawHu(player, g)
+      if (shouldHu) {
         markCanWinOpportunity(player.name, 'self', false)
         if (shouldTraceDetailGame) console.error(`[SELF-WIN! round=${round} curr=${curr} ${player.name}] hand=${normalizedHand.length} exposed=${player.exposedMelds.length} canWin=${winCheck.canWin}`)
         const { finalPoints: baseScore, baseFan, handTypeName } = calcScore(player, true, false, g.gameMultiplier)
@@ -3592,59 +3891,73 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
         continue
       } else {
         markCanWinOpportunity(player.name, 'self', true)
-        if (shouldTraceDetailGame) console.error(`[WIN_DECLINED] type=self player=${player.name} roll=${selfWinRoll.toFixed(3)} threshold=${winChance.toFixed(3)} round=${round}`)
+        if (shouldTraceDetailGame) console.error(`[WIN_DECLINED] type=self player=${player.name} serverDecided=PASS round=${round}`)
       }
     }
 
-    // AnKong / JiaGang (policy-driven)
-    for (const ak of canAnKong(player)) {
-      if (Math.random() < player.policy.anKongChance) {
-        applyAnKong(player, ak)
-        const extra = drawTile(g, player)
-        if (extra && !isFlower(extra)) {
-          if (canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player), SKIP_WILD).canWin) {
-            const { finalPoints: baseScore, baseFan, handTypeName } = calcScore(player, true, true, g.gameMultiplier)
-            applyEngineSettlement(g, curr, true, baseScore, null)
-            for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore, '杠上自摸', baseFan, g.gameMultiplier) }
-            log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
-            player.wonFan = baseScore
-            player.winHandType = handTypeName || '普通杠开'
-            player.status = 'won'
-            finishedPlayers.add(curr)
-            recordWinner(player, curr, true, baseScore, baseFan, turn)
-            log(player.name, '胡牌(血战)', `暗杠自摸 [${baseScore}×3]`)
-            if (finishedPlayers.size >= 3) {
-              return buildResult(curr, '杠上自摸', baseScore, player.winHandType || '杠上自摸', baseScore, undefined)
+    // AnKong / JiaGang (服务器端决策)
+    // 服务器 evaluateSelfKong 会根据 current Player's hand 检查可加杠/暗杠
+    const anKongTiles = canAnKong(player)
+    const jiaGangTiles = canJiaGang(player)
+    if (anKongTiles.length > 0 || jiaGangTiles.length > 0) {
+      const kongActions: ActionType[] = []
+      if (jiaGangTiles.length > 0) kongActions.push(ActionType.EXTENDED_KONG)
+      if (anKongTiles.length > 0) kongActions.push(ActionType.CONCEALED_KONG)
+      const kongDecision = serverSelfKong(player, g, kongActions)
+      if (kongDecision.shouldKong) {
+        if (kongDecision.type === 'concealed' && anKongTiles.length > 0) {
+          // 暗杠：选第一张可杠牌
+          const ak = anKongTiles[0]
+          applyAnKong(player, ak)
+          if (shouldTraceDetailGame) console.error(`[V2_AN_KONG] ${player.name} tile=${tileStr(ak)} reason=${kongDecision.reason}`)
+          const extra = drawTile(g, player)
+          if (extra && !isFlower(extra)) {
+            if (canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player), SKIP_WILD).canWin) {
+              const { finalPoints: baseScore, baseFan, handTypeName } = calcScore(player, true, true, g.gameMultiplier)
+              applyEngineSettlement(g, curr, true, baseScore, null)
+              for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore, '杠上自摸', baseFan, g.gameMultiplier) }
+              log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
+              player.wonFan = baseScore
+              player.winHandType = handTypeName || '普通杠开'
+              player.status = 'won'
+              finishedPlayers.add(curr)
+              recordWinner(player, curr, true, baseScore, baseFan, turn)
+              log(player.name, '胡牌(血战)', `暗杠自摸 [${baseScore}×3]`)
+              if (finishedPlayers.size >= 3) {
+                return buildResult(curr, '杠上自摸', baseScore, player.winHandType || '杠上自摸', baseScore, undefined)
+              }
+              g.current = nextActivePlayer(curr) ?? ((curr + 1) % 4)
+              continue
             }
-            g.current = nextActivePlayer(curr) ?? ((curr + 1) % 4)
-            continue
+          }
+        } else if (kongDecision.type === 'extended' && jiaGangTiles.length > 0) {
+          // 加杠：选第一张可加杠牌
+          const jg = jiaGangTiles[0]
+          applyJiaGang(player, jg)
+          if (shouldTraceDetailGame) console.error(`[V2_JIA_GANG] ${player.name} tile=${tileStr(jg)} reason=${kongDecision.reason}`)
+          const extra = drawTile(g, player)
+          if (extra && !isFlower(extra)) {
+            if (canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player), SKIP_WILD).canWin) {
+              const { finalPoints: baseScore, baseFan, handTypeName } = calcScore(player, true, true, g.gameMultiplier)
+              applyEngineSettlement(g, curr, true, baseScore, null)
+              for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore, '杠上自摸', baseFan, g.gameMultiplier) }
+              log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
+              player.wonFan = baseScore
+              player.winHandType = handTypeName || '普通杠开'
+              player.status = 'won'
+              finishedPlayers.add(curr)
+              recordWinner(player, curr, true, baseScore, baseFan, turn)
+              log(player.name, '胡牌(血战)', `加杠自摸 [${baseScore}×3]`)
+              if (finishedPlayers.size >= 3) {
+                return buildResult(curr, '杠上自摸', baseScore, player.winHandType || '杠上自摸', baseScore, undefined)
+              }
+              g.current = nextActivePlayer(curr) ?? ((curr + 1) % 4)
+              continue
+            }
           }
         }
-      }
-    }
-    for (const jg of canJiaGang(player)) {
-      if (Math.random() < player.policy.kakanAggression) {
-        applyJiaGang(player, jg)
-        const extra = drawTile(g, player)
-        if (extra && !isFlower(extra)) {
-          if (canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player), SKIP_WILD).canWin) {
-            const { finalPoints: baseScore, baseFan, handTypeName } = calcScore(player, true, true, g.gameMultiplier)
-            applyEngineSettlement(g, curr, true, baseScore, null)
-            for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore, '杠上自摸', baseFan, g.gameMultiplier) }
-            log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
-            player.wonFan = baseScore
-            player.winHandType = handTypeName || '普通杠开'
-            player.status = 'won'
-            finishedPlayers.add(curr)
-            recordWinner(player, curr, true, baseScore, baseFan, turn)
-            log(player.name, '胡牌(血战)', `加杠自摸 [${baseScore}×3]`)
-            if (finishedPlayers.size >= 3) {
-              return buildResult(curr, '杠上自摸', baseScore, player.winHandType || '杠上自摸', baseScore, undefined)
-            }
-            g.current = nextActivePlayer(curr) ?? ((curr + 1) % 4)
-            continue
-          }
-        }
+      } else if (shouldTraceDetailGame) {
+        console.error(`[V2_KONG_SKIP] ${player.name} reason=${kongDecision.reason}`)
       }
     }
 
@@ -3704,13 +4017,9 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       const opp = g.players[other]
       const testHand = [...opp.hand.filter(t => t !== undefined), discard]
       if (canWin(testHand, opp.exposedMelds, makeWT(opp), SKIP_WILD).canWin) {
-        let huChance = opp.policy.discardHuChance
-        const wildCount = opp.hand.filter(t => isWT(t, opp)).length
-        huChance -= wildCount * opp.policy.discardHuWildPenalty
-        if (opp.exposedMelds.length === 0) huChance -= opp.policy.discardHuMenQingPenalty
-        huChance = Math.max(0, Math.min(1, huChance))
-        const discardWinRoll = Math.random()
-        if (discardWinRoll < huChance) {
+        // ★ V2：调服务器端 shouldClaimPendingAction([HU]) 决定放炮胡
+        const shouldHu = await serverDiscardClaimHu(opp, g, discard)
+        if (shouldHu) {
           markCanWinOpportunity(opp.name, 'discard', false)
           opp.hand = normalizeHand(testHand)
           const { finalPoints: score, baseFan, handTypeName } = calcScore(opp, false, false, g.gameMultiplier)
@@ -3736,7 +4045,7 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
           continue
         } else {
           markCanWinOpportunity(opp.name, 'discard', true)
-          if (shouldTraceDetailGame) console.error(`[WIN_DECLINED] type=discard player=${opp.name} roll=${discardWinRoll.toFixed(3)} threshold=${huChance.toFixed(3)} round=${round} tile=${tileStr(discard)}`)
+          if (shouldTraceDetailGame) console.error(`[WIN_DECLINED] type=discard player=${opp.name} serverDecided=PASS round=${round} tile=${tileStr(discard)}`)
         }
       }
     }
@@ -3752,7 +4061,12 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       if (opp.exposedMelds.length >= 4) continue  // 最多4组牌
       // 碰之前先检查明杠：已有3张碰了，打出的第4张可以直接明杠（优先级高于碰）
       if (canMingKong(opp, discard)) {
-        if (Math.random() < (opp.policy.minkanAggression ?? opp.policy.kongChance)) {
+        // ★ V2：调服务器端 shouldClaimPendingAction 决定是否明杠
+        const minkanActions: any[] = [ActionType.KONG]
+        const minkanServerAction = await serverClaimAction(opp, g, discard, minkanActions)
+        const doMinkan = minkanServerAction === ActionType.KONG
+        if (shouldTraceDetailGame) console.error(`[V2_MINGKANG_DECISION] ${opp.name} tile=${tileStr(discard)} server=${minkanServerAction} final=${doMinkan}`)
+        if (doMinkan) {
           applyMingKong(opp, discard, curr)
           const extra = drawTile(g, opp)
           if (!extra) {
@@ -3808,48 +4122,47 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
       const canP = canPeng(opp, discard)
       if (canP) {
         // K哥铁律：吃碰排斥检查必须在 pipeline 决策之前做，不受 REWARD_MODE 影响
-        if (usesSharedTrainingRouteBot(opp.name)) {
-          if (!canAkPengSafely(opp, discard, buildTrainingPlannerContext(g, otherIdx))) continue
-        } else {
-          if (!checkChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)) continue;
-        }
+        if (!checkChowPongExclusion(opp.chowPongExclusion, 'pong', discard.suit)) continue;
 
-        let akPassEval: AkPostDiscardEvaluation | null = null
-        let akPengEval: AkPostDiscardEvaluation | null = null
-        if (usesSharedTrainingRouteBot(opp.name)) {
-          akPassEval = evaluateAkPostDiscardState(opp.hand, opp.exposedMelds, makeWT(opp), opp, buildTrainingPlannerContext(g, otherIdx))
-          akPengEval = evaluateAkPengClaim(opp.hand, discard, opp.exposedMelds, makeWT(opp))
-          const improvesByClaim = shouldAkTakeClaim(opp, discard, akPassEval, akPengEval, 'peng', buildTrainingPlannerContext(g, otherIdx))
-          if (!improvesByClaim) {
-            console.error(
-              `[AK_SKIP_PENG] tile=${tileStr(discard)} pass=${akPassEval.score.toFixed(2)}/${akPassEval.shantenLike}/${akPassEval.improvingDraws} ` +
-              `peng=${akPengEval.score.toFixed(2)}/${akPengEval.shantenLike}/${akPengEval.improvingDraws}`
-            )
-            continue
+        // ★ V2：调服务器端 shouldClaimPendingAction 决定是否碰
+        // availableActions: [PENG, HU]（明杠 由 上方 canMingKong 块独立处理）
+        const pengActions: any[] = [ActionType.PENG, ActionType.HU]
+        const serverAction = await serverClaimAction(opp, g, discard, pengActions)
+        if (serverAction === ActionType.HU) {
+          // 服务器决定胡牌（碰后状态能胡牌）
+          markCanWinOpportunity(opp.name, 'discard', false)
+          opp.hand = normalizeHand([...opp.hand.filter(t => t !== undefined), discard])
+          const { finalPoints: score, baseFan, handTypeName } = calcScore(opp, false, false, g.gameMultiplier)
+          applyEngineSettlement(g, otherIdx, false, score, curr)
+          recordPayment(player.name, opp.name, score, '放炮', baseFan, g.gameMultiplier)
+          log(opp.name, '放炮胡', `${player.name}出${tileStr(discard)}→${opp.hand.map(t => tileStr(t)).join(' ')} [${score}]`)
+          recordTurnSnapshot(otherIdx, '-', '-', { actionType: 'discard-win', claimTile: tileStr(discard), claimFrom: player.name, winType: '放冲', winTile: tileStr(discard), wallBefore: g.wallIdx })
+          opp.wonFan = score
+          opp.winHandType = handTypeName || '普通放冲'
+          opp.status = 'won'
+          finishedPlayers.add(otherIdx)
+          recordWinner(opp, otherIdx, false, score, baseFan, turn, discard, player.name)
+          log(opp.name, '胡牌(血战)', `放冲 [${score}]`)
+          if (finishedPlayers.size >= 3) {
+            return buildResult(otherIdx, '放冲', score, opp.winHandType || '放冲', score, curr)
           }
-          if (shouldTraceDetailGame) console.error(
-            `[AK_TAKE_PENG] tile=${tileStr(discard)} pass=${akPassEval.score.toFixed(2)}/${akPassEval.shantenLike}/${akPassEval.improvingDraws} ` +
-            `peng=${akPengEval.score.toFixed(2)}/${akPengEval.shantenLike}/${akPengEval.improvingDraws}`
-          )
+          g.current = nextActivePlayer(otherIdx) ?? ((otherIdx + 1) % 4)
+          continue
         }
-
-        let shouldPeng = false
-        if (usesSharedTrainingRouteBot(opp.name)) {
-          const takeByShape = !!akPassEval && !!akPengEval && shouldAkTakeClaim(opp, discard, akPassEval, akPengEval, 'peng', buildTrainingPlannerContext(g, otherIdx))
-          shouldPeng = takeByShape && Math.random() < opp.policy.pengChance
-          if (shouldTraceDetailGame) console.error(`[AK_PENG_DECISION] tile=${tileStr(discard)} takeByShape=${takeByShape} final=${shouldPeng}`)
-        } else {
-          const pengRoll = Math.random()
-          console.error(`[PENG_CHECK] ${opp.name} CAN_PENG ${tileStr(discard)} hand=${opp.hand.map(t=>tileStr(t)).join(' ')} roll=${pengRoll.toFixed(3)}`)
-          let pengChance = opp.policy.pengChance
-          if (opp.wildSuit && opp.wildValue && discard.suit === opp.wildSuit && discard.value === opp.wildValue)
-            pengChance += opp.policy.pengWildBoost
-          shouldPeng = pengRoll < pengChance
+        const shouldPeng = serverAction === ActionType.PENG
+        if (shouldTraceDetailGame) console.error(`[V2_PENG_DECISION] ${opp.name} tile=${tileStr(discard)} server=${serverAction} final=${shouldPeng}`)
+        if (!shouldPeng) {
+          // 服务器说不要碰，跳过
+          if (shouldTraceDetailGame) console.error(`[AK_SKIP_PENG] tile=${tileStr(discard)} serverAction=${serverAction}`)
+          continue
         }
-        if (shouldPeng) {
-          const akRouteBeforeOpen = usesSharedTrainingRouteBot(opp.name)
-            ? inferTrainingRouteSignal(opp.hand, opp.exposedMelds, makeWT(opp), buildTrainingPlannerContext(g, otherIdx), opp)
-            : null
+        // 保留诊断变量（供后续 if 块使用）
+        const akPassEval: AkPostDiscardEvaluation | null = null
+        const akPengEval: AkPostDiscardEvaluation | null = null
+        const akRouteBeforeOpen: any = usesSharedTrainingRouteBot(opp.name)
+          ? inferTrainingRouteSignal(opp.hand, opp.exposedMelds, makeWT(opp), buildTrainingPlannerContext(g, otherIdx), opp)
+          : null
+        {
           if (opp.name === 'AI-AK') {
             diagnosticsState.akOpenCount++
             if (isForcedOpenPressure(otherIdx) && isTrainingForcedOpenCausal(akRouteBeforeOpen, akPassEval, akPengEval, 'peng')) diagnosticsState.akForcedOpenCount++
@@ -3910,39 +4223,19 @@ export function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], gameIdx
 
     // Check chow (only next player)
     const nextP = g.players[nextPlayer]
-    // AI-AK 使用 pipeline scorer 决定是否吃
-    let shouldChow = false
     // K哥铁律：吃碰排斥检查必须在 pipeline 决策之前做
     const chowExcluded = !checkChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)
+    let shouldChow = false
     let akPassEval: AkPostDiscardEvaluation | null = null
     let akChowEval: AkPostDiscardEvaluation | null = null
-    const akCanChowSafely = usesSharedTrainingRouteBot(nextP.name) ? canAkChowSafely(nextP, discard, buildTrainingPlannerContext(g, nextPlayer)) : false
-    if (usesSharedTrainingRouteBot(nextP.name) && akCanChowSafely) {
-      akPassEval = evaluateAkPostDiscardState(nextP.hand, nextP.exposedMelds, makeWT(nextP), nextP, buildTrainingPlannerContext(g, nextPlayer))
-      akChowEval = evaluateAkChowClaim(nextP.hand, discard, nextP.exposedMelds, makeWT(nextP))
-      const improvesByClaim = shouldAkTakeClaim(nextP, discard, akPassEval, akChowEval, 'chow', buildTrainingPlannerContext(g, nextPlayer))
-      if (!improvesByClaim) {
-        console.error(
-          `[AK_SKIP_CHOW] tile=${tileStr(discard)} pass=${akPassEval.score.toFixed(2)}/${akPassEval.shantenLike}/${akPassEval.improvingDraws} ` +
-          `chow=${akChowEval.score.toFixed(2)}/${akChowEval.shantenLike}/${akChowEval.improvingDraws}`
-        )
-      } else {
-        if (shouldTraceDetailGame) console.error(
-          `[AK_TAKE_CHOW] tile=${tileStr(discard)} pass=${akPassEval.score.toFixed(2)}/${akPassEval.shantenLike}/${akPassEval.improvingDraws} ` +
-          `chow=${akChowEval.score.toFixed(2)}/${akChowEval.shantenLike}/${akChowEval.improvingDraws}`
-        )
-      }
-      if (!improvesByClaim) shouldChow = false
-      else shouldChow = !chowExcluded && !!akPassEval && !!akChowEval && shouldAkTakeClaim(nextP, discard, akPassEval, akChowEval, 'chow', buildTrainingPlannerContext(g, nextPlayer)) && Math.random() < nextP.policy.chowChance
-      if (shouldTraceDetailGame) console.error(`[AK_CHOW_DECISION] tile=${tileStr(discard)} excluded=${chowExcluded} final=${shouldChow}`)
-    } else {
-      shouldChow = canChow(nextP, discard) && Math.random() < nextP.policy.chowChance
-    }
-    if (usesSharedTrainingRouteBot(nextP.name) && shouldChow) {
-      if (akPassEval && akChowEval) {
-        const stillGood = shouldAkTakeClaim(nextP, discard, akPassEval, akChowEval, 'chow', buildTrainingPlannerContext(g, nextPlayer))
-        if (!stillGood) shouldChow = false
-      }
+    if (chowExcluded) {
+      shouldChow = false
+    } else if (canChow(nextP, discard)) {
+      // ★ V2：调服务器端 shouldClaimPendingAction 决定是否吃
+      const chowActions: any[] = [ActionType.CHOW]
+      const serverAction = await serverClaimAction(nextP, g, discard, chowActions)
+      shouldChow = serverAction === ActionType.CHOW
+      if (shouldTraceDetailGame) console.error(`[V2_CHOW_DECISION] ${nextP.name} tile=${tileStr(discard)} server=${serverAction} final=${shouldChow}`)
     }
     const akRouteBeforeChow = usesSharedTrainingRouteBot(nextP.name) && shouldChow
       ? inferTrainingRouteSignal(nextP.hand, nextP.exposedMelds, makeWT(nextP), buildTrainingPlannerContext(g, nextPlayer), nextP)
@@ -4219,7 +4512,7 @@ function formatRoundMarkdown(roundNo: number, evalResult: EvalResult, bestPolicy
   return lines.join('\n')
 }
 
-function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: number): EvalResult {
+async function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: number): Promise<EvalResult> {
   const scores: Record<string, number> = {}
   const wins: Record<string, number> = {}
   for (const n of AI_NAMES) { scores[n] = 0; wins[n] = 0 }
@@ -4271,7 +4564,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
   let totalPot = 0
 
   for (let g = 0; g < games; g++) {
-    const result = runGame(akPolicy, otherPolicies, g)  // 传入 gameIdx 供 snapshot 使用
+    const result = await runGame(akPolicy, otherPolicies, g)  // 传入 gameIdx 供 snapshot 使用
     if (result) {
       totalRounds += result.roundNum || 0
       totalPot += getTotalSettlementAmount(result)
@@ -4433,7 +4726,7 @@ function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], games: 
 }
 
 // ========== Main Training Loop ==========
-function main() {
+async function main() {
   try {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
   const mdFile = path.join(OUT_DIR, `ai-ak-training-${timestamp}.md`)
@@ -4473,7 +4766,7 @@ function main() {
   // Round 0: baseline evaluation（仅多轮或多局时有意义）
   let baseline: EvalResult
   try {
-    baseline = evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
+    baseline = await evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
   } catch (e) {
     console.error('[BASELINE_ERROR] 基线评估崩溃:', e)
     _savePartialReport()
@@ -4545,7 +4838,7 @@ function main() {
     for (let c = 0; c < candidates.length; c++) {
       let result: EvalResult | null = null
       try {
-        result = evaluatePolicy(candidates[c], fixedPolicies, GAMES_PER_ROUND)
+        result = await evaluatePolicy(candidates[c], fixedPolicies, GAMES_PER_ROUND)
       } catch (e) {
         console.error(`[CANDIDATE_ERROR] candidate ${c}:`, e)
         continue
@@ -4630,7 +4923,7 @@ let finalEvalLines: string[] = []
 
     let finalEval: EvalResult
     try {
-      finalEval = evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
+      finalEval = await evaluatePolicy(bestPolicy, fixedPolicies, GAMES_PER_ROUND)
     } catch (e) {
       console.error('[FINAL_EVAL_ERROR] 最终评估崩溃:', e)
       finalEval = {

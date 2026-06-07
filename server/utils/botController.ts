@@ -13,7 +13,7 @@ function isHonorTile(tile: Tile): boolean {
  * AI 自杠决策：加杠/暗杠是否值得执行
  * 考虑因素：牌是否有用（对子/顺子）、杠后损失、政策偏好
  */
-function evaluateSelfKong(
+export function evaluateSelfKong(
   player: Player,
   game: GameState,
   availableActions: ActionType[]

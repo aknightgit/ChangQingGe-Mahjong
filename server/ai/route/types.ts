@@ -85,4 +85,12 @@ export interface RouteDiscardInput {
   winningTiles: number
   baselineScore: number
   afterRouteState: RouteState
+  riskAssessment?: {
+    dangerousSuits: Map<string, number>
+    selfStrength: number
+    riskTolerance: number
+    maxThreat: number
+    nextPlayerDanger: Map<string, number>
+    nextPlayerId: string | null
+  }
 }
