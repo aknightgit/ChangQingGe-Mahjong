@@ -2334,7 +2334,7 @@ function evaluateChowValue(
   // 第二口第三口不限制（已开门）
   const chowSuitTiles = hand.filter(t => t.suit === chowTile.suit && !isWildTile(t, game)).length
   if (meldCount === 0 && chowSuitTiles < 5) {
-    return 0  // 第一口开门，此门不足5张，禁止吃
+    return -999  // 第一口开门，此门不足5张，硬拒绝（tune=-999 让 softScoreWins 必输）
   }
 
   // === 基础分 ===
