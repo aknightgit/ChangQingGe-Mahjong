@@ -710,11 +710,24 @@ export class ActionHandler {
       throw new Error('Cannot win');
     }
 
+    // ★ 杠开检测：自摸 + 最近动作是杠牌/补花后摸牌（必须在 getCachedWinOptions 之前）
+    let isKongFlower = false;
+    if (huIsSelfDraw) {
+      for (let i = game.actionHistory.length - 1; i >= 0; i--) {
+        const act = game.actionHistory[i];
+        if (act.type === ActionType.DRAW || act.type === 'flowerReplace') continue;
+        if (act.type === ActionType.KONG || act.type === ActionType.KONG_CONCEALED || act.type === ActionType.KONG_SUPPLEMENT) {
+          isKongFlower = true;
+        }
+        break;
+      }
+    }
+
     // 获取胡牌选项（捉冲用 discard context + extraTile）
     const context = huIsSelfDraw ? 'self_draw' : 'discard';
     const winOptions = getCachedWinOptions(game, player, context, {
       extraTile: huPendingTile,
-      isKongFlower: false,
+      isKongFlower,
       isRobbingKong: !!huPendingAction?.tile && !!(game as any).pendingKongClaim
     });
     if (winOptions.length === 0) {
@@ -762,7 +775,6 @@ export class ActionHandler {
     // 【修复】计算番数和最终点数（老代码 _handleHu_original 有，新代码漏了）
     // ★ 先声明变量, 再用 recordWinImmediately (TDZ fix)
     const isSelfDrawn = huIsSelfDraw;
-    const isKongFlower = isSelfDrawn && !!(player as any).isSelfDrawn;
     const isRobbingKong = !!huPendingAction?.tile && !!(game as any).pendingKongClaim;
 
     // ★ K哥铁律: 胡牌成功的瞬间立即记录 winner 数据, 不依赖 endRound

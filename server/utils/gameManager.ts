@@ -4110,32 +4110,20 @@ class GameManager {
     transfers: Array<{ amount: number; bailoutType?: string; reason: string }>,
     isSelfDrawn: boolean,
     totalPlayers: number,
-    isBotPenalty: boolean = false
+    isBotPenalty: boolean = false,
+    breakdown?: { baseFan?: number; extraMultipliers?: number; globalMultiplier?: number; settlementMultiplier?: number }
   ): string {
     if (!transfers || transfers.length === 0) return '';
-    // 补齐全部玩家：未参与的玩家计为0
-    const filled: Array<{ amount: number; bailoutType?: string; reason: string }> = [...transfers];
-    if (filled.length < totalPlayers - 1) {
-      // 补 0 的位置（未参与赔付的玩家）
-      while (filled.length < totalPlayers - 1) {
-        filled.push({ amount: 0, reason: '不参与' });
-      }
-    }
-    const parts = filled.map(t => {
-      if (t.amount === 0) return '0';
-      let term: string;
-      if (t.bailoutType && (t.reason.includes('互包') || t.bailoutType === '三口' || t.bailoutType === '四口')) {
-        const bailoutMultiplier = t.bailoutType === '四口' ? 5 : 3;
-        term = `${t.amount / bailoutMultiplier}*${bailoutMultiplier}`;
-      } else {
-        term = String(t.amount);
-      }
-      if (isBotPenalty) term = `(${term})/2`;
-      return term;
-    });
+    const baseFan = breakdown?.baseFan ?? 0;
+    const extra = breakdown?.extraMultipliers ?? 1;
+    const global = breakdown?.globalMultiplier ?? 1;
+    const settle = breakdown?.settlementMultiplier ?? 1;
     const total = transfers.reduce((s, t) => s + t.amount, 0);
     const finalTotal = isBotPenalty ? Math.ceil(total / 2) : total;
-    return `${parts.join('+')}=${finalTotal}`;
+    // ★ 格式: 番数*额外倍数*全局倍数*膨胀系数=总点数
+    let formula = `${baseFan}*${extra}*${global}*${settle}=${finalTotal}`;
+    if (isBotPenalty) formula = `(${formula})/2`;
+    return formula;
   }
 
   public endRound(game: GameState, reason: GameEndReason): void {
@@ -4307,7 +4295,7 @@ class GameManager {
           });
         }
 
-        // ★ 生成赔付算式明细 (例：自摸 三口时输出 160+160+160*3=800)
+        // ★ 生成赔付算式明细: 番数*额外倍数*全局倍数*膨胀系数=总点数
         (winner as any)._paymentFormula = GameManager.formatPaymentFormula(
           breakdown.transfers.map(t => ({
             amount: t.amount,
@@ -4316,7 +4304,13 @@ class GameManager {
           })),
           winner.isSelfDrawn ?? false,
           game.players.length,
-          BOT_PENALTY_ENABLED && botTakeovers.includes(winner.id)
+          BOT_PENALTY_ENABLED && botTakeovers.includes(winner.id),
+          {
+            baseFan: winner.winningScoreBreakdown?.baseFan,
+            extraMultipliers: winner.winningScoreBreakdown?.extraMultipliers,
+            globalMultiplier: winner.winningScoreBreakdown?.effectiveMultiplier,
+            settlementMultiplier: winner.winningScoreBreakdown?.settlementMultiplier
+          }
         );
 
         for (const [idx, delta] of breakdown.deltas) {
