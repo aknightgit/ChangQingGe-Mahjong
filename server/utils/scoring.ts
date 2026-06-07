@@ -123,6 +123,8 @@ export function calculateScore(params: {
     if (fixedName && FIXED_FAN[fixedName]) {
       baseFan = FIXED_FAN[fixedName];
       details.push(`${fixedName} = ${baseFan}番`);
+    } else {
+      console.log(`[Scoring-DIAG] topType=${topType} isDaDiao=${isDaDiao} isSelfDrawn=${isSelfDrawn} handTypes=${JSON.stringify(handTypes)} fixedName=${fixedName}`)
     }
   }
 
@@ -1164,10 +1166,12 @@ export function calculateSettlementBreakdownByRules(
     toIndex: number,
     amount: number,
     reason: string,
+    bailoutType?: string
   ) => {
     if (amount <= 0) return;
     addDelta(fromIndex, -amount);
     addDelta(toIndex, amount);
+    transfers.push({ fromIndex, toIndex, amount, reason, bailoutType });
   };
 
   if (isSelfDrawn) {
