@@ -1153,20 +1153,7 @@ const onToggleTingPreview = async () => {
 }
 
 // ★ 听牌提示自动刷新:开启后随游戏状态变化自动更新
-let _tingRefreshTimer: ReturnType<typeof setTimeout> | null = null
-watch(isMyTurn, (myTurn) => {
-  if (myTurn && tingPreviewEnabled.value) {
-    // 轮到我时自动刷新听牌
-    if (_tingRefreshTimer) clearTimeout(_tingRefreshTimer)
-    _tingRefreshTimer = setTimeout(() => { refreshTingPreview() }, 300)
-  }
-})
-watch(() => gameState.value?.phase, (phase) => {
-  if (phase === 'playing' && tingPreviewEnabled.value) {
-    if (_tingRefreshTimer) clearTimeout(_tingRefreshTimer)
-    _tingRefreshTimer = setTimeout(() => { refreshTingPreview() }, 500)
-  }
-})
+
 
 const {
     gameState,
@@ -2629,6 +2616,21 @@ watch([isMyTurn, currentFreezeUntil], ([myTurn, freezeUntil]) => {
       refreshState()
     }
   }, Math.max(delay, 0))
+})
+
+// ★ 听牌提示自动刷新:轮到我时自动更新
+let _tingRefreshTimer: ReturnType<typeof setTimeout> | null = null
+watch(isMyTurn, (myTurn) => {
+  if (myTurn && tingPreviewEnabled.value) {
+    if (_tingRefreshTimer) clearTimeout(_tingRefreshTimer)
+    _tingRefreshTimer = setTimeout(() => { refreshTingPreview() }, 300)
+  }
+})
+watch(() => gameState.value?.phase, (phase) => {
+  if (phase === 'playing' && tingPreviewEnabled.value) {
+    if (_tingRefreshTimer) clearTimeout(_tingRefreshTimer)
+    _tingRefreshTimer = setTimeout(() => { refreshTingPreview() }, 500)
+  }
 })
 
 const turnMessage = computed(() => {
