@@ -3391,6 +3391,14 @@ export async function shouldClaimPendingAction(
     [ActionType.HU]: 1.0,    // 胡牌100%（已在HU分支处理）
   }
 
+  // ★ 前3回合观察期：降低吃碰概率，先看牌再决定路线
+  const claimEstimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
+  if (claimEstimatedRound <= 3) {
+    const earlyPenalty = 0.4  // 前3回合吃碰概率降到40%
+    baseChances[ActionType.CHOW] *= earlyPenalty
+    baseChances[ActionType.PENG] *= earlyPenalty
+  }
+
   // P0: 强制胡牌训练 —— 手牌只剩 1 张且能胡时，优先自摸胡牌
   const singleTileHand = player.hand.concealedTiles.length === 1
   // 获取刚摸的牌（手牌最后一张）或吃碰杠得到的牌
