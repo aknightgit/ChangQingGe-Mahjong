@@ -4667,7 +4667,17 @@ const checkOtherPlayerSounds = (newState: any) => {
   for (const id of prevOtherPlayerState.keys()) {
     if (!currentIds.has(id)) prevOtherPlayerState.delete(id)
   }
-  // ★ 碰/吃/杠音效+语音由state watcher统一排队播放（严格按动作时间顺序）
+  // ★ 先播出牌语音（动作先发生），再播碰/吃/杠语音（动作后发生）
+  for (const d of pendingDiscards) {
+    if (d.suit === 'flower') {
+      playSound('tile-draw')
+      playVoiceAction('flowerReplace')
+    } else {
+      playSound('tile-discard')
+      if (d.suit) playVoiceTile(d.suit, d.value)
+    }
+  }
+  // ★ 碰/吃/杠音效+语音排在出牌之后（动作后发生）
   for (const action of pendingMeldVoices) {
     if (action === 'kong') {
       playSound('tile-kong')
@@ -4678,15 +4688,6 @@ const checkOtherPlayerSounds = (newState: any) => {
     } else {
       playSound('tile-chow')
       playVoiceAction('chow')
-    }
-  }
-  for (const d of pendingDiscards) {
-    if (d.suit === 'flower') {
-      playSound('tile-draw')
-      playVoiceAction('flowerReplace')
-    } else {
-      playSound('tile-discard')
-      if (d.suit) playVoiceTile(d.suit, d.value)
     }
   }
 }
