@@ -4260,11 +4260,13 @@ class GameManager {
         const currentWinOrder = winner.winOrder ?? Number.MAX_SAFE_INTEGER;
         // ★ K哥铁律(2026-06-07): 胡牌玩家只跟当时还在活跃(PLAYING)的其他玩家结算
         // 已胡牌(winOrder已设)的玩家不参与结算，避免总分不为0
+        // 注意：非赢家此时已是LOST状态，不能过滤PLAYING！
         const eligiblePlayerIndices = game.players
           .map((player, index) => ({ player, index }))
           .filter(({ player, index }) => {
             if (index === winnerIdx) return true;
-            return player.status === PlayerStatus.PLAYING;
+            // 只排除其他赢家（已胡的不参与结算），LOST的正常参与赔付
+            return player.status !== PlayerStatus.WON;
           })
           .map(({ index }) => index);
 
