@@ -326,7 +326,9 @@ function resolveTileKey(suit: string, value: number): string {
 export const playVoiceAction = (action: keyof typeof VOICE_ACTION_MAP): void => {
   if (!process.client) return
   const key = VOICE_ACTION_MAP[action]
-  if (!key) return
+  if (!key) { console.warn(`[VoiceTile] playVoiceAction: unknown action="${action}"`); return }
+  const url = _audioMap.value.get(key)
+  console.info(`[VoiceTile] playVoiceAction action="${action}" key="${key}" hasUrl=${!!url} mapSize=${_audioMap.value.size}`)
   playVoiceKey(key, VOICE_ACTION_TEXT_MAP[action] || action)
 }
 
