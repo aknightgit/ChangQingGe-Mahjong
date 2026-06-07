@@ -1217,22 +1217,7 @@ export function calculateSettlementBreakdownByRules(
       return { deltas, transfers };
     }
 
-    // 再检查其他玩家是否有互包关系（第三方互包补赔）
-    // 规则：第三方放冲 → 放冲者赔1倍 + 互包输家补赔1倍
-    // ★ 三口只跟活跃玩家结算，已胡牌的不参与
-    const bailoutLoser = allPlayerIndices.find(idx => {
-      if (idx === winnerIndex || idx === discarderId) return false;
-      const bailout = mutualBailout?.get(idx);
-      return bailout?.partnerIndex === winnerIndex;
-    });
-
-    if (bailoutLoser !== undefined) {
-      const bailoutInfo = mutualBailout!.get(bailoutLoser)!;
-      addTransfer(discarderId, winnerIndex, winnerFinalPoints, '放冲赔付');
-      addTransfer(bailoutLoser, winnerIndex, winnerFinalPoints, '互包补赔×1', bailoutInfo.type);
-      return { deltas, transfers };
-    }
-
+    // ★ 捉冲是1对1赔付：放冲者独自全额赔付，不牵连第三方
     addTransfer(discarderId, winnerIndex, winnerFinalPoints, '放冲赔付');
     return { deltas, transfers };
   }
