@@ -103,7 +103,7 @@ if (SEED !== null) {
   Math.random = rng
 }
 
-// SETTLEMENT_MULT 已移除，与引擎一致，calculateScore 已包含所有倍数
+const SETTLEMENT_MULT = 10  // 结算膨胀倍数（与实际游戏建房参数一致）
 
 // 6 个候选 AI（必须与 AI_policies/characters/ 下的 JSON 文件名一致）
 const CANDIDATES = ['AI-AK', 'AI-小猪', 'AI-小胖', 'AI-老蒋', 'AI-老赵', 'AI-阿水'] as const
@@ -688,7 +688,7 @@ async function main() {
     endedAt: new Date().toISOString(),
     totalMs: Date.now() - startTime,
     games: GAMES,
-    settlementMult: 1,
+    settlementMult: SETTLEMENT_MULT,
     candidates: CANDIDATES,
     detail: DETAIL,
     detailMax: DETAIL_MAX,

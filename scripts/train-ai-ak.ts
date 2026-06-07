@@ -57,7 +57,7 @@ const AK_DISCARD_TRACE = process.argv.includes('--ak-discard-trace')
 const PERF_TRACE = process.argv.includes('--perf-trace')
 const SKIP_WILD = process.argv.includes('--skip-wild')  // 跳过百搭分配进行胜负判断
 const REWARD_MODE = process.argv.includes('--reward-mode')  // 阶段奖励模式
-// SETTLEMENT_MULT 已移除，与引擎一致，calculateScore 已包含所有倍数
+const SETTLEMENT_MULT = 10  // 结算膨胀倍数（与实际游戏建房参数一致）
 const CHAR_DIR = path.resolve(__dirname, '..', 'AI_policies', 'characters')
 const OUT_DIR = path.resolve(__dirname, '..', 'training-output')
 let TRACE_DETAIL_GAME = false
@@ -1896,7 +1896,8 @@ function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean, gameMu
     isSelfDrawn: isSelfDraw, isKongFlower: isKongWin,
     isRobbingKong: false, isMenQing: p.exposedMelds.filter(m => !m.isConcealed).length === 0,
     wildTileSuit: p.wildSuit, wildTileValue: p.wildValue,
-    rawRoundMultiplier: 1, rawInheritMultiplier: gameMultiplier
+    rawRoundMultiplier: 1, rawInheritMultiplier: gameMultiplier,
+    settlementMultiplier: SETTLEMENT_MULT
   })
   return { finalPoints: result.finalPoints, baseFan: result.baseFan, handTypeName: result.handTypeName }
 }
