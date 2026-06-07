@@ -1375,22 +1375,22 @@ function scoreTileForDiscard(
         }
       }
 
-      // === 5. 大吊策略：保留百搭+百搭相邻牌 ===
+      // === 5. 大吊策略：利益最大化驱动 ===
+      // ★ K哥铁律(2026-06-07): 百搭可以打！
+      // 场景：手牌2张百搭+已碰3组，打1张百搭 → 剩1张百搭大吊，随便摸啥都自摸
+      // 核心：多百搭时打1张留1张做单张大吊 > 握着2张百搭等自摸
       const wildTiles = hand.filter(t => isWildTile(t, game))
       const wildCount = wildTiles.length
-      if (wildCount >= 1) {
-        // 有百搭：保留百搭相邻牌（做大吊用）
-        if (isNumberTile(tile) && !isWildTile(tile, game)) {
-          for (const wt of wildTiles) {
-            if (wt.suit === tile.suit && Math.abs(wt.value - tile.value) <= 1) {
-              score -= 4.0 * routeBiasFactor  // 百搭相邻牌：坚决保留，做大吊
-              break
-            }
-          }
-        }
-        // 百搭本身：绝不打（除非只剩百搭）
-        if (isWildTile(tile, game)) {
-          score -= 100  // 百搭不打
+      if (isWildTile(tile, game)) {
+        if (wildCount >= 2 && exposedCount >= 3) {
+          // 多百搭+多组门口 → 打1张百搭，留1张做大吊（利益最大化）
+          score += 8.0 * routeBiasFactor  // 鼓励打掉多余的百搭
+        } else if (wildCount >= 2) {
+          // 多百搭但门口少 → 打1张百搭降门数也可以接受
+          score += 2.0 * routeBiasFactor
+        } else {
+          // 只剩1张百搭 → 打不得，这是大吊核心
+          score -= 100
         }
       }
     } else if (rs === 'HONOR_HEAVY') {
