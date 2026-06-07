@@ -1713,11 +1713,9 @@ onMounted(async () => {
     // 根据广播内容播放音效和语音
     const text = detail.text || ''
     const actionKind = detail.actionKind || ''
-    // 吃碰杠胡:所有玩家都播放语音(包括操作者)
-    if (actionKind === 'chow') { playVoiceAction('chow') }
-    else if (actionKind === 'pong') { playVoiceAction('pong') }
-    else if (actionKind === 'kong' || actionKind === 'kongSupplement') { playVoiceAction('kong') }
-    else if (actionKind === 'hu') {
+    // ★ 吃/碰/杠语音由 state watcher 统一排队播放（确保严格按动作顺序）
+    // 广播处理器只处理胡牌/捉冲/补花等无法从 state 变化检测的语音
+    if (actionKind === 'hu') {
       // 捉冲:先念出放冲的牌名,再播胡语音
       const huText = detail?.text || ''
       const tileMatch = huText.match(/捉冲\[.*?\]-(.*?)(?:·|$)/)
@@ -4669,14 +4667,17 @@ const checkOtherPlayerSounds = (newState: any) => {
   for (const id of prevOtherPlayerState.keys()) {
     if (!currentIds.has(id)) prevOtherPlayerState.delete(id)
   }
-  // ★ 碰/吃/杠音效由state watcher播放（语音由广播处理器播放）
+  // ★ 碰/吃/杠音效+语音由state watcher统一排队播放（严格按动作时间顺序）
   for (const action of pendingMeldVoices) {
     if (action === 'kong') {
       playSound('tile-kong')
+      playVoiceAction('kong')
     } else if (action === 'pong') {
       playSound('tile-pong')
+      playVoiceAction('pong')
     } else {
       playSound('tile-chow')
+      playVoiceAction('chow')
     }
   }
   for (const d of pendingDiscards) {
