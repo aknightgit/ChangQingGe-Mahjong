@@ -181,6 +181,12 @@ export function calculateScore(params: {
     baseFan = formulaResult.fan;
     details.push(...formulaResult.details);
   }
+  // ★ K哥铁律(2026-06-07): baseFan 最小为1，任何胡牌至少值1番
+  // 防止 STANDARD 牌型+无花无组合时 baseFan=0 导致所有分数为0
+  if (baseFan <= 0) {
+    baseFan = 1;
+    details.push('保底 = 1番');
+  }
 
   // 7. 番数上限（仅公式计算受上限，固定番数不受限）
   // baseFan 可能 > 10（如风碰=40），这是允许的
