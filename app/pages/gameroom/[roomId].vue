@@ -1713,6 +1713,7 @@ onMounted(async () => {
     // 根据广播内容播放音效和语音
     const text = detail.text || ''
     const actionKind = detail.actionKind || ''
+    console.log(`[Broadcast] text="${text}" actionKind="${actionKind}"`)
     // 广播处理器直接播放碰/吃/杠语音（确保不丢失）
     if (actionKind === 'chow') { playVoiceAction('chow') }
     else if (actionKind === 'pong') { playVoiceAction('pong') }

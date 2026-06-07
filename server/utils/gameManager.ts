@@ -4263,17 +4263,11 @@ class GameManager {
         const winnerIdx = game.players.findIndex(p => p.id === winner.id);
         if (winnerIdx < 0) continue;
         const currentWinOrder = winner.winOrder ?? Number.MAX_SAFE_INTEGER;
-        // ★ K哥铁律(2026-06-07): 胡牌玩家只跟当时还在活跃(PLAYING)的其他玩家结算
-        // 已胡牌(winOrder已设)的玩家不参与结算，避免总分不为0
-        // 注意：非赢家此时已是LOST状态，不能过滤PLAYING！
+        // ★ 所有玩家都参与结算（除了自己），确保自摸时3家都赔付
+        // 已胡牌的玩家也参与结算，因为赔付是互相对冲的
         const eligiblePlayerIndices = game.players
-          .map((player, index) => ({ player, index }))
-          .filter(({ player, index }) => {
-            if (index === winnerIdx) return true;
-            // 只排除其他赢家（已胡的不参与结算），LOST的正常参与赔付
-            return player.status !== PlayerStatus.WON;
-          })
-          .map(({ index }) => index);
+          .map((_, index) => index)
+          .filter(index => index !== winnerIdx);
 
         // 捉冲时找放冲者index
         let discarderIdx: number | undefined;
