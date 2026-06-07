@@ -4592,6 +4592,7 @@ let _flowerVoicePlayedTurnKey = ''  // roundNumber-turnCounter
 let _flowerVoiceTurnCounter = 0
 let _flowerVoicePrevPlayerIndex = -1
 let _lastActionTimestamp = 0  // 上一轮 state 更新时 actionHistory 最后时间戳
+let _prevHistoryLength = 0  // 上一轮 state 更新时 actionHistory 长度（增量检测）
 const prevBailoutMap = new Map<string, Map<number, number>>()
 const getOtherMeldCount = (player: any) => (player?.hand?.exposedMelds?.length ?? 0)
 const getOtherDiscardCount = (player: any) => (player?.hand?.discardedTiles?.length ?? 0)
@@ -4612,15 +4613,15 @@ const checkOtherPlayerSounds = (newState: any) => {
     _flowerVoicePlayed.clear()
     _flowerVoicePlayedTurnKey = turnKey
   }
-  // ★ 按 actionHistory 扫描所有动作，按时间戳顺序收集语音
-  for (let i = 0; i < history.length; i++) {
-    const act = history[i]
-    const actTime = act.timestamp || 0
+  // ★ 按 actionHistory 扫描新动作，用 history.length 增量检测（避免时间戳溢出）
+  const prevHistoryLength = _prevHistoryLength
+  // 按时间戳排序（服务端 push 顺序可能与实际时间戳不一致）
+  const newActions = history.slice(prevHistoryLength).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+  for (let i = 0; i < newActions.length; i++) {
+    const act = newActions[i]
     const pid = act.playerId
     if (!pid) continue
-    // 只取本轮新增的动作（时间戳 > prevState 的最后时间戳）
-    const lastTs = _lastActionTimestamp
-    if (actTime <= lastTs) continue
+    const actTime = act.timestamp || (prevHistoryLength + i)
     const key = `${actTime}-${pid}-${act.type}-${act.tileId || ''}`
     if (playedKeys.has(key)) continue
     playedKeys.add(key)
@@ -4642,9 +4643,7 @@ const checkOtherPlayerSounds = (newState: any) => {
       pendingVoices.push({ type: 'discard', suit: 'flower', value: 0, sound: false, playerId: pid })
     }
   }
-  if (history.length > 0) {
-    _lastActionTimestamp = history[history.length - 1].timestamp || _lastActionTimestamp
-  }
+  _prevHistoryLength = history.length
   for (const player of newState.players) {
     const prev = prevOtherPlayerState.get(player.id)
     if (!prev) continue
