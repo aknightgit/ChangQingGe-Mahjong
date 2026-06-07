@@ -11,8 +11,7 @@
  *    - 仍然调用 runGame()（它自己负责出牌/吃碰杠/胡/算分）
  *    - 候选 6 个 AI 随机抽 4 个，把策略塞进 runGame 的 4 个位置
  *    - 报告层维护 "座位 → 实际 AI 名" 的映射，最终报告用真实名字呈现
- * 3. 真实结算：完全沿用引擎内的 calculateScore() 路径，
- *    SETTLEMENT_MULT = 10。
+ * 3. 真实结算：完全沿用引擎内的 calculateScore() 路径。
  * 4. 跳过冷冻时间：不等待 hes，冷启动直接开打。
  *
  * 用法：
@@ -104,7 +103,7 @@ if (SEED !== null) {
   Math.random = rng
 }
 
-const SETTLEMENT_MULT = 10
+// SETTLEMENT_MULT 已移除，与引擎一致，calculateScore 已包含所有倍数
 
 // 6 个候选 AI（必须与 AI_policies/characters/ 下的 JSON 文件名一致）
 const CANDIDATES = ['AI-AK', 'AI-小猪', 'AI-小胖', 'AI-老蒋', 'AI-老赵', 'AI-阿水'] as const
@@ -125,7 +124,7 @@ interface GameRecord {
   seats: SeatAssignment[]   // 4 个座位的真实 AI 分配
   winner: number             // 引擎记录的赢家 pos（-1 = 流局）
   winnerAiName: AIName | null
-  scores: number[]           // 4 个引擎座位的得分（实际× SETTLEMENT_MULT）
+  scores: number[]           // 4 个引擎座位的得分
   netScores: number[]        // 与 0 起始点的差值
   scoresByAi: Record<AIName, number>  // 按真实 AI 名汇总
   totalPot: number           // 本局总输赢（绝对值合计 / 2）
@@ -215,7 +214,7 @@ function toGameRecord(
   }
   const scoresByAi: Record<string, number> = {}
   for (const s of seats) {
-    // 引擎得分已经包含 SETTLEMENT_MULT（runGame 内部就是用这个值）
+    // 引擎得分已包含所有倍数
     scoresByAi[s.aiName] = result.scores[s.enginePos]
   }
   // 引擎的 result.winner 可能是 -1（已知 bug：流局也走非零分数路径）
@@ -402,7 +401,7 @@ function formatSummary(stats: Map<AIName, AiStats>, records: GameRecord[]): stri
   lines.push(`- 有效局（有赢家）: **${winGames}**`)
   lines.push(`- 流局: **${drawGames}** (${(drawGames / Math.max(1, totalGames) * 100).toFixed(1)}%)`)
   lines.push(`- 总输赢（绝对值合计）: **${totalPot}**`)
-  lines.push(`- SETTLEMENT_MULT: **${SETTLEMENT_MULT}**`)
+  lines.push(`- 结算倍数: 与引擎一致`)
   lines.push('')
 
   // 排名榜（按平均得分降序）
@@ -689,7 +688,7 @@ async function main() {
     endedAt: new Date().toISOString(),
     totalMs: Date.now() - startTime,
     games: GAMES,
-    settlementMult: SETTLEMENT_MULT,
+    settlementMult: 1,
     candidates: CANDIDATES,
     detail: DETAIL,
     detailMax: DETAIL_MAX,
