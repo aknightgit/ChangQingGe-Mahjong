@@ -644,8 +644,9 @@ function detectTypes(
   }
 
   // ---- 大吊时碰碰胡检测 ----
-  // 大吊（1张手牌）：门口4组面子全为刻子/杠时，算碰碰胡
-  if (concealedNonFlower.length === 1) {
+  // 大吊（1张手牌 或 2张手牌且1张是捉冲牌）：门口4组面子全为刻子/杠时，算碰碰胡
+  const isDaDiaoLikeState = concealedNonFlower.length === 1 || concealedNonFlower.length === 2
+  if (isDaDiaoLikeState) {
     const exposedAllTriplets = exposed.every(m =>
       m.type === MeldType.TRIPLET ||
       m.type === MeldType.KONG ||
@@ -687,8 +688,8 @@ function detectTypes(
 
   // ★ 大吊垃圾胡检查：complete hand（concealed+exposed）多门+顺子 = 垃圾胡，不允许大吊
   // 检查 complete hand 的 exposed melds 是否含垃圾（多门+顺子）
-  // 因为 concealed 只有1张，isGarbageMultiSuitsWithSequence 永远返回 false
-  if (concealedNonFlower.length === 1) {
+  // 捉冲状态 concealed=2（1张原手牌+1张捉冲牌）也算大吊
+  if (concealedNonFlower.length === 1 || concealedNonFlower.length === 2) {
     // 完整牌 = exposed melds + concealed 1张
     // 如果 exposed 中有 >= 2 门数牌的顺子，且没有风箭刻 → 垃圾胡，不放大吊
     const exposedSequences = exposed.filter(m => m.type === MeldType.SEQUENCE);
@@ -1512,9 +1513,9 @@ export function canWin(
   const exactCanWin = wildTileId
     ? canWinByProjectRuleWithWildExact(concealed, exposed, wildTileId)
     : canWinByProjectRuleNoWild(concealed, exposed);
-  // 大吊（1张手牌）：即使 detectTypes 返回空，只要 exactCanWin 就应该允许胡
+  // 大吊（1张手牌 或 2张手牌含1张捉冲牌）：即使 detectTypes 返回空，只要 exactCanWin 就应该允许胡
   // ★ 但必须通过垃圾胡检查：exposed 中有多门+顺子+无风箭 → 垃圾胡，不允许
-  const isDaDiaoState = concealedNonFlower.length === 1;
+  const isDaDiaoState = concealedNonFlower.length === 1 || concealedNonFlower.length === 2;
   let daDiaoBlockedByGarbage = false;
   if (isDaDiaoState && types.length === 0) {
     const exposedSequences = exposed.filter(m => m.type === MeldType.SEQUENCE);

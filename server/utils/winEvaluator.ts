@@ -115,7 +115,11 @@ export class WinEvaluator {
     const wildParts = game.customScoringMode?.split('-');
     const wildSuit = wildParts?.[0] ? wildParts[0] as TileSuit : undefined;
     const wildValue = wildParts?.[1] ? parseInt(wildParts[1], 10) : undefined;
-    const isDaDiao = player.hand.concealedTiles.filter(t => !isFlower(t)).length === 1;
+    // ★ 大吊检测：必须用原手牌（不含 extraTile），否则捉冲会被误判为非大吊
+    const isDaDiao = (flags?.extraTile
+      ? player.hand.concealedTiles.filter(t => t.id !== flags.extraTile!.id)
+      : player.hand.concealedTiles
+    ).filter(t => !isFlower(t)).length === 1;
     const allOptions = generateWinOptions({
       handTiles,
       exposedMelds: player.hand.exposedMelds,
