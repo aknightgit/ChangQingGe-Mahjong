@@ -1204,10 +1204,10 @@ function scoreTileForDiscard(
       if (honorFocus && (policy.allHonorsPungsPursuit || 0) > 0) {
         score -= (policy.allHonorsPungsPursuit || 0) * 2.0
       }
-      // ★ 清一色/混一色路线：非目标门的单张风箭，提高打出生张的勇气
-      // 当某门数牌>=6且在做清一色时，风箭是障碍牌，应该果断打掉
-      if (routeState?.current === 'HALF_FLUSH' && dominantNumberSuitCount >= 6) {
-        score += 5.0 * routeBiasFactor
+      // ★ 混一色路线：单张风箭是障碍牌，始终应该优先打掉
+      // 比目标门数牌更容易打出（目标门要保留）
+      if (routeState?.current === 'HALF_FLUSH') {
+        score += 8.0 * routeBiasFactor
       }
     }
     return score
