@@ -4590,6 +4590,7 @@ let _flowerVoicePlayedTurnKey = ''  // roundNumber-turnCounter
 
 let _flowerVoiceTurnCounter = 0
 let _flowerVoicePrevPlayerIndex = -1
+let _lastActionTimestamp = 0  // 上一轮 state 更新时 actionHistory 最后时间戳
 const prevBailoutMap = new Map<string, Map<number, number>>()
 const getOtherMeldCount = (player: any) => (player?.hand?.exposedMelds?.length ?? 0)
 const getOtherDiscardCount = (player: any) => (player?.hand?.discardedTiles?.length ?? 0)
@@ -4610,54 +4611,48 @@ const checkOtherPlayerSounds = (newState: any) => {
     _flowerVoicePlayed.clear()
     _flowerVoicePlayedTurnKey = turnKey
   }
-  // ★ 统一语音队列：按玩家动作顺序排列（碰/吃 → 出牌），严格对应动作发生时间
-  const pendingVoices: Array<{ type: 'meld'; action: 'kong' | 'pong' | 'chow' } | { type: 'discard'; suit: string; value: number; sound: boolean }> = []
+  // ★ 按 actionHistory 扫描所有动作，按时间戳顺序收集语音
+  for (let i = 0; i < history.length; i++) {
+    const act = history[i]
+    const actTime = act.timestamp || 0
+    const pid = act.playerId
+    if (!pid) continue
+    // 只取本轮新增的动作（时间戳 > prevState 的最后时间戳）
+    const lastTs = _lastActionTimestamp
+    if (actTime <= lastTs) continue
+    const key = `${actTime}-${pid}-${act.type}-${act.tileId || ''}`
+    if (playedKeys.has(key)) continue
+    playedKeys.add(key)
+    if (act.type === 'kong' || act.type === ActionType.KONG || act.type === ActionType.KONG_CONCEALED || act.type === ActionType.KONG_SUPPLEMENT) {
+      pendingVoices.push({ type: 'meld', action: 'kong' })
+    } else if (act.type === 'triplet' || act.type === ActionType.PENG) {
+      pendingVoices.push({ type: 'meld', action: 'pong' })
+    } else if (act.type === 'sequence' || act.type === ActionType.CHOW) {
+      pendingVoices.push({ type: 'meld', action: 'chow' })
+    } else if (act.type === ActionType.DISCARD) {
+      const tile = act.tile
+      if (tile) {
+        if (!recentlyPlayedDiscardAudio(tile)) {
+          pendingVoices.push({ type: 'discard', suit: tile.suit, value: tile.value, sound: true, playerId: pid })
+          markDiscardAudioPlayed(tile)
+        }
+      }
+    } else if (act.type === 'flowerReplace' || act.type === ActionType.FLOWER_REPLACE) {
+      pendingVoices.push({ type: 'discard', suit: 'flower', value: 0, sound: false, playerId: pid })
+    }
+  }
+  if (history.length > 0) {
+    _lastActionTimestamp = history[history.length - 1].timestamp || _lastActionTimestamp
+  }
   for (const player of newState.players) {
     const prev = prevOtherPlayerState.get(player.id)
-    const meldCount = getOtherMeldCount(player)
-    const discardCount = getOtherDiscardCount(player)
-    const replacedFlowerMelds = getReplacedFlowerMelds(player)
-    const replacedFlowerCount = replacedFlowerMelds.length
-    if (prev) {
-      const isSelf = player.id === playerId.value
-      const isBotCtrl = !!(player as any).isBotControlled || isBotPlayer(player)
-      // 所有玩家(包括自己)的碰/吃/出牌语音都由socket state更新统一播放，确保顺序正确
-      const shouldPlayVoice = true
-      // ★ 按玩家收集：先碰/吃（动作先发生），再出牌（动作后发生）
-      // 碰/吃/杠语音
-      if (meldCount > prev.meldCount) {
-        const newMelds = (player.hand?.exposedMelds || []).slice(prev.meldCount)
-        for (const m of newMelds) {
-          const firstTile = m.tiles?.[0]
-          const isFlowerReplacementMeld = m.tiles?.length === 1 && firstTile?.suit === 'hua'
-          if (isFlowerReplacementMeld) continue
-          if (m.type === 'kong' || m.tiles?.length === 4) {
-            if (shouldPlayVoice) pendingVoices.push({ type: 'meld', action: 'kong' })
-          } else if (m.type === 'triplet') {
-            if (shouldPlayVoice) pendingVoices.push({ type: 'meld', action: 'pong' })
-          } else {
-            if (shouldPlayVoice) pendingVoices.push({ type: 'meld', action: 'chow' })
-          }
-        }
-      }
-      // 补花语音
-      if (replacedFlowerCount > prev.replacedFlowerCount) {
-        if (!_flowerVoicePlayed.has(player.id)) {
-          _flowerVoicePlayed.add(player.id)
-          pendingVoices.push({ type: 'discard', suit: 'flower', value: 0, sound: false })
-        }
-      }
-      // 出牌语音（碰/吃之后）
-      if (shouldPlayVoice && discardCount > prev.discardCount && Date.now() - lastFastDiscardAt.value > 250) {
-        const newDiscards = (player.hand?.discardedTiles || []).slice(prev.discardCount)
-        const lastNew = newDiscards[newDiscards.length - 1]
-        if (!recentlyPlayedDiscardAudio(lastNew)) {
-          pendingVoices.push({ type: 'discard', suit: lastNew?.suit, value: lastNew?.value, sound: true })
-          markDiscardAudioPlayed(lastNew)
-        }
-      }
-    }
-    prevOtherPlayerState.set(player.id, { meldCount, discardCount, replacedFlowerCount })
+    if (!prev) continue
+    // 只更新 prev，不在 here 生成语音（语音已由 actionHistory 时间戳统一排队）
+    prevOtherPlayerState.set(player.id, {
+      meldCount: getOtherMeldCount(player),
+      discardCount: getOtherDiscardCount(player),
+      replacedFlowerCount: getReplacedFlowerMelds(player).length
+    })
   }
   const currentIds = new Set(newState.players.map((p: any) => p.id))
   for (const id of prevOtherPlayerState.keys()) {

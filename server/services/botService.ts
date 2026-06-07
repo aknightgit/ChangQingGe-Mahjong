@@ -2164,6 +2164,37 @@ export function selectBotChowTileIds(
  * Count how many tiles from the remaining wall would complete the hand (听牌总张数).
  * Tests each tile type (4 suits × 9 values + honors) against the player's concealed tiles.
  */
+/**
+ * 模拟听牌检测：给定手牌+exposedMelds，检查是否听牌，返回听牌张数
+ */
+function tryCheckTingState(hand: Tile[], exposedMelds: any[], game: GameState): { isTing: boolean; remainingCount: number } {
+  if (hand.length === 0) return { isTing: false, remainingCount: 99 }
+  const wildTileId = game.customScoringMode || null
+  let count = 0
+  const suits: TileSuit[] = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
+  for (const suit of suits) {
+    for (let v = 1; v <= 9; v++) {
+      const testTile: Tile = { suit, value: v, id: `ting-test-${suit}-${v}` }
+      const testHand = [...hand, testTile]
+      const result = canWin(testHand, exposedMelds, wildTileId, undefined, game.wildTileGroup)
+      if (result.canWin) count++
+    }
+  }
+  for (let v = 1; v <= 4; v++) {
+    const testTile: Tile = { suit: TileSuit.WIND, value: v, id: `ting-test-w-${v}` }
+    const testHand = [...hand, testTile]
+    const result = canWin(testHand, exposedMelds, wildTileId, undefined, game.wildTileGroup)
+    if (result.canWin) count++
+  }
+  for (let v = 1; v <= 3; v++) {
+    const testTile: Tile = { suit: TileSuit.DRAGON, value: v, id: `ting-test-d-${v}` }
+    const testHand = [...hand, testTile]
+    const result = canWin(testHand, exposedMelds, wildTileId, undefined, game.wildTileGroup)
+    if (result.canWin) count++
+  }
+  return { isTing: count > 0, remainingCount: count }
+}
+
 function countWinningTilesForHand(hand: Tile[], exposedCount: number, game: GameState): number {
   if (hand.length === 0) return 0
 
@@ -2520,6 +2551,20 @@ function evaluateChowValue(
     if (winningCount <= 8) {
       score += 0.4 // 听牌张少，吃牌搏一把
     }
+  }
+
+  // ★ K. 听牌感知评估：检查吃牌后是否听牌，或听牌张数显著增加
+  // 模拟吃牌后的手牌结构，计算是否能听牌
+  const simulatedHand = hand.filter(t => t.id !== chowTile.id)
+  // 组成顺子 chowTile + 相邻两张
+  if (hasLeft) simulatedHand.splice(simulatedHand.findIndex(t => t.suit === suit && t.value === v - 1), 1)
+  if (hasRight) simulatedHand.splice(simulatedHand.findIndex(t => t.suit === suit && t.value === v + 1), 1)
+  // 重新检查听牌可能性
+  const simulatedTingResult = tryCheckTingState(simulatedHand, player.hand.exposedMelds, game)
+  if (simulatedTingResult.isTing) {
+    score += 1.2  // 吃牌后听牌，大幅加分
+  } else if (simulatedTingResult.remainingCount < 4) {
+    score += 0.6  // 接近听牌，加分
   }
 
   // === K. chowWildPenalty — 替代硬编码0.5 ===
