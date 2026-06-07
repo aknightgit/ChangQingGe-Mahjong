@@ -123,6 +123,11 @@ export function calculateScore(params: {
     if (fixedName && FIXED_FAN[fixedName]) {
       baseFan = FIXED_FAN[fixedName];
       details.push(`${fixedName} = ${baseFan}番`);
+    } else if (isDaDiao) {
+      // ★ K哥铁律: 大吊状态下,如果没有匹配到固定番名,默认“大吊=10番”
+      baseFan = FIXED_FAN['大吊'] || 10;
+      details.push(`大吊 = ${baseFan}番`);
+      console.log(`[Scoring-DIAG] topType=${topType} isDaDiao=${isDaDiao} isSelfDrawn=${isSelfDrawn} handTypes=${JSON.stringify(handTypes)} fixedName=${fixedName} → fallback 大吊=10`)
     } else {
       console.log(`[Scoring-DIAG] topType=${topType} isDaDiao=${isDaDiao} isSelfDrawn=${isSelfDrawn} handTypes=${JSON.stringify(handTypes)} fixedName=${fixedName}`)
     }
