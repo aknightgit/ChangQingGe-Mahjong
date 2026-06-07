@@ -88,8 +88,7 @@ export class MatchHistoryService {
         wonFan: player.wonFan,
         windScore: player.windScore,
         rainScore: player.rainScore,
-        finalScore:
-          player.score ?? finalScores[player.id] ?? computedScores?.[player.id] ?? 0
+        finalScore: finalScores[player.id] ?? computedScores?.[player.id] ?? 0
       })),
       isTraining: !!(game as any).allClaimMode
     };
