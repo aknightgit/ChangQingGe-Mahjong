@@ -2321,7 +2321,8 @@ function evaluateChowValue(
   const hand = player.hand.concealedTiles
   const policy = getPolicyForPlayer(player)
   const routeMetricPolicy = getLiveRouteMetricPolicy(policy)
-  const meldCount = player.hand.exposedMelds.length
+  // ★ 花牌碰不算门口：只有非花牌门口才算
+  const meldCount = player.hand.exposedMelds.filter(m => !m.tiles?.some(t => isFlower(t))).length
   const effectiveGlobalMultiplier = Math.min(
     ((game as any).inheritMultiplier ?? (game as any).inheritedGlobalMultiplier ?? 1) *
     ((game as any).roundMultiplier ?? 1),
@@ -2576,7 +2577,8 @@ export async function shouldClaimPendingAction(
   const policy = getPolicyForPlayer(player)
   const routeMetricPolicy = getLiveRouteMetricPolicy(policy)
   const hand = player.hand.concealedTiles
-  const exposedCount = player.hand.exposedMelds.length
+  // ★ 花牌碰不算门口
+  const exposedCount = player.hand.exposedMelds.filter(m => !m.tiles?.some(t => isFlower(t))).length
   const pendingAction = game.pendingActions.find(pa => pa.playerId === player.id)
   const claimTile = pendingAction?.tile
 

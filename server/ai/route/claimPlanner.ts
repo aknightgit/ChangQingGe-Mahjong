@@ -1,5 +1,5 @@
 import { ActionType, TileSuit, type GameState, type Player, type Tile } from '../../types/game'
-import { groupTiles, isHonor } from '../../utils/tiles'
+import { groupTiles, isHonor, isFlower } from '../../utils/tiles'
 import { evaluateRouteState } from './routeEvaluator'
 import type { RouteState } from './types'
 
@@ -173,7 +173,9 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     return { allowed: false, tuneDelta: -1.6, reason: 'off_route_open_suit_chow' }
   }
 
-  if (action === ActionType.CHOW && player.hand.exposedMelds.length === 0) {
+  // ★ 花牌碰不算"已开门"：只有非花牌门口才算第一口判断
+  const nonFlowerExposed = player.hand.exposedMelds.filter(m => !m.tiles?.some(t => isFlower(t))).length;
+  if (action === ActionType.CHOW && nonFlowerExposed === 0) {
     const bestSuit = getBestNumberSuit(player.hand.concealedTiles, routeState)
     const bestSuitCount = bestSuit ? getNumberSuitCount(player.hand.concealedTiles, bestSuit) : 0
     const claimSuitCount = isNumberSuit(claimTile.suit) ? getNumberSuitCount(player.hand.concealedTiles, claimTile.suit) : 0
