@@ -2733,6 +2733,34 @@ export async function shouldClaimPendingAction(
     const isSelfDraw = !claimTile
     console.log(`[shouldClaim-HU] ${player.name} HU available! isSelfDraw=${isSelfDraw} concealed=${player.hand.concealedTiles.length} exposed=${player.hand.exposedMelds.length} tile=${claimTile?.suit}-${claimTile?.value}`);
 
+    // ★ K哥铁律(2026-06-08): 碰+胡都有时，检查碰了能否进全听
+    // 如果碰了能进全听(或接近全听)，且当前番数不高 → 优先碰，不急着胡
+    // 例: 碰南风后打9万 → 全听(4面子+百搭) → 等自摸 > 捉冲小番
+    if (!isSelfDraw && availableActions.includes(ActionType.PENG) && claimTile) {
+      const pengTestHand = hand.filter(t => {
+        const matchIdx = hand.findIndex(o => o.suit === claimTile.suit && o.value === claimTile.value && o.id !== t.id)
+        return true // 保留所有牌，碰后减少的是同值的2张
+      })
+      // 模拟碰后手牌: 去掉2张同值牌 + claimTile加入(碰后门口多1组，手牌少2张)
+      const pengSimHand = hand.filter(t => !(t.suit === claimTile.suit && t.value === claimTile.value)).slice(0, -1) // 去掉2张同值，保留其余
+      const pengSimExposed = [...player.hand.exposedMelds, { type: 'triplet' as any, tiles: [claimTile, claimTile, claimTile], isConcealed: false }]
+      const pengQT = detectQuanTing({ ...player, hand: { ...player.hand, concealedTiles: pengSimHand, exposedMelds: pengSimExposed } } as any, game)
+      // 碰后全听或差1步全听 → 优先碰
+      if (pengQT.isQuanTing || pengQT.distance <= 1) {
+        // 当前番数不高(无花自摸=10点以下) → 碰了等更大牌
+        const currentHandTypes = findBestHandTypes(hand, player.hand.exposedMelds, game.customScoringMode || null)
+        const isNoFlowerSelfDraw = currentHandTypes.some(t => [HandType.HALF_FLUSH, HandType.FULL_FLUSH, HandType.ALL_TRIPLETS, HandType.HUN_PENG, HandType.QING_PENG, HandType.FENG_PENG, HandType.ALL_WIND].includes(t))
+        // 如果不是无花自摸(10点固定)的高番场景 → 碰了进全听更优
+        if (!isNoFlowerSelfDraw) {
+          traceClaim(player, game, 'hu-skip-for-peng-quenting', `碰${traceTile(claimTile)}后全听(distance=${pengQT.distance}), 当前非无花自摸 → 碰了等更大牌`)
+          // 不 return HU, 让后续 PENG 逻辑处理
+        } else {
+          // 无花自摸=10点，已经够大，直接胡
+          traceClaim(player, game, 'hu-no-flower-high-value', `无花自摸=10点，直接胡`)
+        }
+      }
+    }
+
     // 自摸：利益最大化评估 - 评估能否几手后做更大的牌
     if (isSelfDraw) {
       const selfExposedMelds = player.hand.exposedMelds
