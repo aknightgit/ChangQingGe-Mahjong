@@ -22,7 +22,20 @@
           <div class="room-info">
             <div class="room-title-line">
               <h1 class="mahjong-title">长清阁麻将</h1>
-              <span class="round-info-header" v-if="currentRound > 0">{{ roundDisplay }}</span>
+              <span class="round-info-header" v-if="currentRound > 0" @click="availableRounds.length > 1 && (roundHistoryDropdown = !roundHistoryDropdown)" :style="availableRounds.length > 1 ? 'cursor:pointer;user-select:none' : ''">{{ roundDisplay }}<span v-if="availableRounds.length > 1" style="font-size:0.65em;margin-left:2px;opacity:0.7">▼</span></span>
+              <!-- 历史局数下拉 -->
+              <div v-if="roundHistoryDropdown" class="round-history-backdrop" @click="roundHistoryDropdown = false"></div>
+              <div v-if="roundHistoryDropdown && availableRounds.length > 1" class="round-history-dropdown" @click.stop>
+                <div
+                  v-for="n in availableRounds"
+                  :key="'rh-' + n"
+                  class="round-history-item"
+                  :class="{ 'round-history-item--active': n === currentRound }"
+                  @click="viewRoundSettlement(n)"
+                >
+                  第 {{n}} 局
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1858,6 +1871,27 @@ const playerDiscards = computed(() => {
   return getVisiblePlayerDiscards(currentPlayer.value)
 })
 const roundDisplay = computed(() => `第${currentRound.value}局`)
+const roundHistoryDropdown = ref(false)
+const availableRounds = computed(() => {
+  const stats = gameState.value?.roundStats
+  if (!Array.isArray(stats) || stats.length === 0) return []
+  return stats.map((_: any, idx: number) => idx + 1).reverse()
+})
+const viewRoundSettlement = (roundNum: number) => {
+  const stats = gameState.value?.roundStats
+  if (!Array.isArray(stats) || roundNum < 1 || roundNum > stats.length) return
+  const round = stats[roundNum - 1]
+  settlementData.value = {
+    playerStats: (gameState.value?.players || []).map((p: any) => ({
+      playerId: p.id,
+      playerName: p.name,
+      totalScore: p.totalScore ?? p.score ?? 0
+    })),
+    roundDetails: [round]
+  }
+  showSettlement.value = true
+  roundHistoryDropdown.value = false
+}
 const getDiceRoundMultiplier = (dice1: number, dice2: number, dice3?: number, dice4?: number) => {
   const isDouble = dice1 === dice2
   const isOneFourCombo = (dice1 === 1 && dice2 === 4) || (dice1 === 4 && dice2 === 1)
@@ -6478,6 +6512,43 @@ const forceDiscard = async (p: Player) => {
   border-radius: 999px;
   margin-left: 12px;
   white-space: nowrap;
+  position: relative;
+}
+.round-history-backdrop {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 99998;
+}
+.round-history-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: rgba(20, 30, 25, 0.96);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 215, 0, 0.25);
+  border-radius: 8px;
+  padding: 4px 0;
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: 99999;
+  min-width: 90px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+}
+.round-history-item {
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  color: rgba(255,255,255,0.8);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.round-history-item:hover {
+  background: rgba(255, 215, 0, 0.12);
+  color: #ffd700;
+}
+.round-history-item--active {
+  color: #ffd700;
+  font-weight: 700;
 }
 
 /* 十字定位标志 */
