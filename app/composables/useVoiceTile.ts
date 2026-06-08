@@ -98,6 +98,26 @@ let _voiceQueue: Promise<void> = Promise.resolve()
 let _voicePrimed = false
 let _lastSpokenAt = 0
 let _playSeq = 0
+let _isPageHidden = false
+let _backgroundEnteredAt = 0
+
+// ★ 后台检测：页面不可见时跳过语音，回来时清掉积压队列
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      _isPageHidden = true
+      _backgroundEnteredAt = Date.now()
+    } else {
+      _isPageHidden = false
+      // 回前台：丢弃积压的语音队列，避免一次性播报全部积压
+      const timeInBackground = Date.now() - _backgroundEnteredAt
+      if (timeInBackground > 2000) {
+        _voiceQueue = Promise.resolve()
+        console.log(`[VoiceTile] 回前台，清掉积压语音队列 (后台${Math.round(timeInBackground / 1000)}秒)`)
+      }
+    }
+  })
+}
 
 const getAudioEl = (): HTMLAudioElement => {
   // 不 pause 旧音频：覆盖 src 时浏览器自动 stop 旧的 → 触发 onended → 队列正常推进
@@ -145,6 +165,11 @@ const speakTextFallback = (text?: string) => {
 }
 
 const playAudioQueued = (url: string, fallbackText?: string): Promise<void> => new Promise((resolve) => {
+  // ★ 后台时跳过播放，避免积压
+  if (_isPageHidden) {
+    resolve()
+    return
+  }
   // 无 URL 时直接用 speech fallback
   if (!url) {
     console.warn(`[VoiceTile] No URL for "${fallbackText}", using TTS`)
