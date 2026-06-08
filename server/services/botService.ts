@@ -2404,6 +2404,32 @@ function evaluateChowValue(
     score -= 0.3
   }
 
+  // === B2. K哥铁律(2026-06-08): 已有顺子时降低吃【自有牌】概率 ===
+  //    例: 手牌有3万4万，上家出5万 → 不应吃3-4-5万（5万已经能凑成顺子了）
+  //    吃后4万变死牌（4-5-6? 4缺了3凑不齐5-6-7了）
+  if (meldCount === 0) {
+    const cv = chowTile.value
+    const cs = chowTile.suit
+    const handInSuit = hand.filter(t => t.suit === cs && !isWildTile(t, game))
+    // 吃后3-4-5万这种：手牌已有 v-2 和 v-1（吃后保留v-2和v-1=3万4万，丢掉v=5万）
+    //   实际是吃 4-5-6万 用 3万4万 做，但 3万4万已经在手里了
+    //   真正有害情形：吃v用v-2+v-1，但吃了之后v变成"已凑成顺子的牌"=废牌
+    //   更准确: 如果 handInSuit 已经含 v-2 和 v-1 (如345中的3-4)，吃v吃成345，v变废牌
+    if (handInSuit.some(t => t.value === cv - 2) && handInSuit.some(t => t.value === cv - 1)) {
+      // 手里有 3-4万 + 上家5万 → 吃成345，5万变废牌
+      score -= 0.35
+    }
+    // 吃v-1+v+v+1用v-1+v+1：手里有4万6万+上家5万 → 吃成456，5万插入现成顺子
+    else if (handInSuit.some(t => t.value === cv - 1) && handInSuit.some(t => t.value === cv + 1)) {
+      // 手里有4-6万 + 上家5万 → 吃456（5万插在中间），不一定是废牌
+      // 但5万本来就可以和4-6万中的任一张凑出其他顺子
+      // 适度降低，不算严重
+      score -= 0.12
+    }
+    // 吃v-2+v-1+v用v-1：手里有4万+上家5万 → 吃345，丢掉4万? 不对，保留4万
+    // 实际不计入
+  }
+
   // === C. 死牌检测 ===
   if (!isChowBeneficial(player, game, chowTile)) {
     score -= 0.8 // 吃了也是死牌，大幅惩罚

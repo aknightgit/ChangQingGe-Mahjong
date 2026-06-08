@@ -446,14 +446,14 @@ function tryFormMelds(n: number, wildLeft: number, map: Map<string, number>): bo
 function isGarbageHand(tiles: Tile[]): boolean {
   const nonFlower = tiles.filter(t => !isFlower(t));
   if (nonFlower.length < 2) return false;
-  // ★ K哥铁律(2026-06-08 v3): 多门判断 = 总门数(数字门+风+箭) ≥ 2
-  // 旧逻辑只看数字门≥2, 漏判"风+箭+筒"这种"有字牌+1门数牌"的垃圾胡
-  const suitSet = new Set(nonFlower.map(t => t.suit));
-  if (suitSet.size < 2) return false;  // 单门,不是垃圾胡
+  // 检查数字门数（只看数字门，风/箭不算门）
+  const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+  const numSuitSet = new Set(nonFlower.filter(t => numSuits.includes(t.suit)).map(t => t.suit));
+  if (numSuitSet.size < 2) return false;  // 单门或无数字门，不是垃圾胡
   // 检查是否能全刻子+对子
   const m = (nonFlower.length - 2) / 3;
-  if (!Number.isInteger(m) || m < 0) return true;  // 张数不对,视为垃圾
-  if (canFormOnlyTripletsFrom(nonFlower, m, () => false)) return false;  // 能全刻子,不是垃圾
+  if (!Number.isInteger(m) || m < 0) return true;  // 张数不对，视为垃圾
+  if (canFormOnlyTripletsFrom(nonFlower, m, () => false)) return false;  // 能全刻子，不是垃圾
   return true;  // 多门+不能全刻子 = 垃圾胡
 }
 
@@ -752,6 +752,12 @@ function detectTypes(
 function _isGarbageMultiSuitsWithSequenceModuleLevel(concealedTiles: Tile[]): boolean {
     const suits = getSuits(concealedTiles);
     if (suits.size < 2) return false;
+    const hasHonor = concealedTiles.some(t => isWind(t) || isDragon(t));
+    if (hasHonor) {
+      const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+      const numSuitSet = new Set(concealedTiles.filter(t => numSuits.includes(t.suit)).map(t => t.suit));
+      if (numSuitSet.size <= 1) return false;
+    }
     const nonFlower = concealedTiles.filter(t => !isFlower(t));
     const m = (nonFlower.length - 2) / 3;
     if (!Number.isInteger(m) || m < 0) return false;
@@ -1215,21 +1221,18 @@ function findBestAssignmentByPriority(
       const tile = alloc[i];
       virtualHand.push({ suit: tile.suit as TileSuit, value: tile.value, id: `vhp-${i}`, isFlower: false });
     }
-    // ★ K哥铁律(2026-06-08 v2): 垃圾胡检查必须用【原始 naturals】
-    // 因为百搭可以补成同门让多门变成单门,绕过垃圾胡检查
-    // 原始 naturals 多门 → 任意百搭分配后还是多门 → 垃圾胡
-    const naturalIsGarbage = naturals.length >= 2 && isGarbageHand(naturals);
     const result = detectTypes(virtualHand, exposed);
-    // ★ 统一垃圾胡检查：多数字门 + 不能全刻子 = 垃圾胡
-    if (result.includes(HandType.ALL_TRIPLETS) && (isGarbageHand(virtualHand) || naturalIsGarbage)) {
+    // ★ K哥铁律(2026-06-08 v3): 垃圾胡检查用【完整 hand=虚拟手+exposed melds】
+    // 旧逻辑只看 concealedTiles(naturals 或 virtualHand),漏掉了 exposed melds 里
+    // 的多门(如 exposed=万杠+条刻+concealed=筒 → 完整3门,纯concealed只1门)
+    const completeHand = [...virtualHand, ...exposed.flatMap(m => m.tiles).filter(t => !isFlower(t))];
+    const completeIsGarbage = isGarbageHand(completeHand);
+    if (result.includes(HandType.ALL_TRIPLETS) && completeIsGarbage) {
       return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
     }
     // ★ STANDARD 也要检查垃圾胡（百搭分配后可能得到含顺子的多门 STANDARD）
-    if (result.includes(HandType.STANDARD)) {
-      const completeHand = [...virtualHand, ...exposed.flatMap(m => m.tiles).filter(t => !isFlower(t))];
-      if (_isGarbageMultiSuitsWithSequenceModuleLevel(completeHand)) {
-        return result.filter(t => t !== HandType.STANDARD);
-      }
+    if (result.includes(HandType.STANDARD) && _isGarbageMultiSuitsWithSequenceModuleLevel(completeHand)) {
+      return result.filter(t => t !== HandType.STANDARD);
     }
     return result;
   };
@@ -1557,8 +1560,10 @@ export function canWin(
           return t.suit === wParts[0] && String(t.value) === wParts[1];
         };
     const naturalTiles = concealedNonFlower.filter(t => !wildCheckerFn(t));
-    // ★ 统一垃圾胡检查：多数字门 + 不能全刻子 = 垃圾胡
-    if (naturalTiles.length >= 2 && isGarbageHand(naturalTiles)) {
+    // ★ K哥铁律(2026-06-08 v3): 垃圾胡检查用完整 hand(naturals + exposed melds)
+    // 旧逻辑只看 naturals 单独,漏判 exposed 有多门(万杠+条刻+concealed=筒)
+    const naturalCompleteHand = [...naturalTiles, ...exposed.flatMap(m => m.tiles).filter(t => !isFlower(t))];
+    if (naturalTiles.length >= 2 && isGarbageHand(naturalCompleteHand)) {
       naturalTilesBlockedByGarbage = true;
     }
   }
