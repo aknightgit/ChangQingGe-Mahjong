@@ -2180,6 +2180,24 @@ export function selectBotChowTileIds(
       tune += routeDecision.tuneDelta
     }
 
+    // ★ K哥铁律(2026-06-08): 边张吃牌加分 + 目标门孤张吃牌加分
+    // 边张: 八九吃七(claimTile=7,手牌有8+9) 或 一二吃三(claimTile=3,手牌有1+2)
+    const cv = claimTile.value
+    const cs = claimTile.suit
+    const isEdgeChow = (cv === 7 && candidateHand.some(t => t.suit === cs && t.value === 8) && candidateHand.some(t => t.suit === cs && t.value === 9))
+      || (cv === 3 && candidateHand.some(t => t.suit === cs && t.value === 1) && candidateHand.some(t => t.suit === cs && t.value === 2))
+    if (isEdgeChow) tune += 3.0
+
+    // 目标门孤张吃牌: 混一色/清一色路线时,吃目标门的最后一张已知牌
+    const targetSuit = routeState?.targetSuit
+    if (targetSuit && cs === targetSuit) {
+      const visibleCopies = countVisibleCopies(claimTile, game)
+      // visibleCopies=1(弃牌区1张) + claimTile本身 = 已知2张, 如果手牌没有同值牌 → 这是孤张
+      const hasInHand = hand.some(t => t.suit === cs && t.value === cv && t.id !== claimTile.id)
+      if (!hasInHand && visibleCopies <= 1) tune += 4.0  // 目标门孤张:大幅加分
+      else if (!hasInHand) tune += 2.0  // 目标门未知张:适度加分
+    }
+
     if (
       !best ||
       shanten < best.shanten ||
