@@ -3884,12 +3884,21 @@ class GameManager {
           const livePlayer = freshGame.players[freshGame.currentPlayerIndex];
           if (!livePlayer || livePlayer.id !== nextPlayer.id || livePlayer.status !== PlayerStatus.PLAYING) return;
           if (freshGame.pendingActions.length > 0) {
-            const botLogMsg = (freshGame as any).hasTriggeredAction
-              ? '[bot-freeze] hasTriggeredAction=true, clearing expired claims after freeze'
-              : '[bot-freeze] No action triggered, clearing CD claims (B preserved)';
-            console.log(`[bot-freeze] Freeze expired for ${livePlayer.name}, ${botLogMsg}`);
-            // ★ 犹豫期到期后，不管 hasTriggeredAction，都要清除过期 claims
-            // 否则其他玩家的过期 pending action 永远不清除，游戏卡住
+            // ★ K哥铁律(2026-06-08): 有真实玩家时，AI必须严格遵守犹豫决策期
+            // 只清除bot自己的pending，保留人类玩家的claim，让hesitation timer处理
+            const hasHumanClaims = freshGame.pendingActions.some(pa => {
+              const p = freshGame.players.find(pl => pl.id === pa.playerId);
+              return p && !this.isPlayerBotControlled(p);
+            });
+            if (hasHumanClaims) {
+              // 有人类玩家的claim → 不清除，等hesitation timer到期
+              console.log(`[bot-freeze] ${livePlayer.name} freeze expired, but human claims pending → waiting for hesitation timer`);
+              await this.persistGame(freshGame);
+              this.broadcastGameState(game.gameId);
+              return;
+            }
+            // 只有bot的claim → 可以清除
+            console.log(`[bot-freeze] ${livePlayer.name} freeze expired, clearing bot-only claims`);
             delete (freshGame as any).hasTriggeredAction;
             this.clearExpiredClaimsForDecisionWindow(freshGame);
             if (freshGame.pendingActions.length > 0 && !this.canExecuteCurrentTurnPlayerDrawDuringPending(freshGame, livePlayer.id)) {
