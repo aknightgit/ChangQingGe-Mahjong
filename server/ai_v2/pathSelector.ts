@@ -552,12 +552,13 @@ export function evaluateRouteStateV2(input: {
   // lockLevel=2(坚决执行): 90%不摇摆，仅极端情况+保守转向才允许
   // lockLevel=1(锁定): 需要3次反面证据+高出5分才切换
   // 未锁定但稳定2回合: 需要2次反面证据+高出3分才切换
-  const requiredEvidenceToFlip = previousRouteState?.lockLevel === 2 ? 5 : previousRouteState?.lockLevel === 1 ? 3 : (previousRouteState?.stableTurns || 0) >= 2 ? 2 : 1
+  // ★ K哥铁律(2026-06-08): 提高路线切换门槛，AI不轻易换方向
+  const requiredEvidenceToFlip = previousRouteState?.lockLevel === 2 ? 8 : previousRouteState?.lockLevel === 1 ? 5 : (previousRouteState?.stableTurns || 0) >= 2 ? 3 : 2
   // ★ 路线清晰度加成：方向越明确，切换门槛越高
   // 清晰度 = top score - second score，越大说明方向越明确
   const routeClarity = previousCandidate && topCandidate ? Math.abs(topCandidate.score - (routeScores[1]?.score ?? 0)) : 0
-  const clarityBoost = routeClarity > 5 ? 1.5 : routeClarity > 3 ? 0.8 : 0
-  const flipThreshold = (previousRouteState?.lockLevel === 2 ? 7.0 : previousRouteState?.lockLevel === 1 ? 5.0 : (previousRouteState?.stableTurns || 0) >= 2 ? 3.0 : 1.4) + clarityBoost
+  const clarityBoost = routeClarity > 5 ? 2.0 : routeClarity > 3 ? 1.2 : 0
+  const flipThreshold = (previousRouteState?.lockLevel === 2 ? 10.0 : previousRouteState?.lockLevel === 1 ? 7.0 : (previousRouteState?.stableTurns || 0) >= 2 ? 4.5 : 2.0) + clarityBoost
   // lockLevel=2时：仅极端情况+保守转向才允许切换
   const locked2CanSwitch = previousRouteState?.lockLevel === 2
     ? (extremeThreat && isConservativeSwitch) || (extremeThreat && topCandidate.score >= previousCandidate!.score + 8)

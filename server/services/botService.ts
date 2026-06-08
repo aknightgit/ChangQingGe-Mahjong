@@ -2997,6 +2997,9 @@ export async function shouldClaimPendingAction(
       else if (wallRemaining <= 20) boost += 0.2
       if (tingTilesCount <= 1) boost += 0.8
       else if (tingTilesCount <= 3) boost += 0.4
+      // ★ K哥铁律(2026-06-08): 听牌剩余张数多→降低捉冲概率，等自摸
+      else if (tingTilesCount > 10) boost -= 0.6  // 大幅降低：10+张可胡，自摸概率高
+      else if (tingTilesCount > 6) boost -= 0.3   // 适度降低：6+张可胡，自摸机会不错
       const tableThreat = estimateTableThreat(game, player.id)
       if (tableThreat >= 0.8) boost += 0.4
       else if (tableThreat >= 0.5) boost += 0.2
