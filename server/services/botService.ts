@@ -1321,6 +1321,13 @@ function scoreTileForDiscard(
       //    风向：熟张风向优先打掉
       //    大吊：保留百搭+百搭相邻牌，努力做单张大吊
 
+      // ★ K哥铁律(2026-06-08): 碰碰胡也要保留最长门(targetSuit)
+      if (isTarget && sameTypeCount >= 2) {
+        score -= 6.0 * routeBiasFactor  // 最长门对子：坚决保留
+      } else if (isTarget && sameTypeCount === 1) {
+        score -= 2.0 * routeBiasFactor  // 最长门单张：适度保留
+      }
+
       // === 刻子/对子 基础评分 ===
       if (sameTypeCount >= 3) {
         score -= 12.0 * routeBiasFactor  // 刻子：绝不拆
