@@ -198,7 +198,8 @@ const _total = Date.now() - startTime;
         bailoutRelations,
         currentRound: getCurrentRoundNumber(game),
         globalMultiplier: getEffectiveGlobalMultiplier(game),
-        players: maskedPlayers
+        players: maskedPlayers,
+        roundStats: Array.isArray(game.roundStats) ? game.roundStats : []
       },
       playerView: player.hand,
       availableActions,

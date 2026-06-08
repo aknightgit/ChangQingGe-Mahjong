@@ -8847,10 +8847,10 @@ const forceDiscard = async (p: Player) => {
 
 /* ===== [2026-05-29] 验牌阶段(牌桌中央毛玻璃条) ===== */
 .reveal-phase-banner {
-  /* ★ K哥铁律: 相对牌桌定位,对准中心圆圈 */
+  /* ★ K哥铁律: 相对牌桌定位,对准中心圆圈左移10% */
   position: absolute;
   top: 50%;
-  left: 50%;
+  left: 40%;
   transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
