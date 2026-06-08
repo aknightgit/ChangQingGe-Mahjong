@@ -188,6 +188,13 @@ function usesOfficialRouteStrategy(_botName: string): boolean {
 }
 
 function resolvePolicyBotName(botName: string): string {
+  // ★ K哥铁律(2026-06-08): 托管玩家(无 AI- 前缀)也要能匹配 AI 策略文件
+  // 例: "AK" → 查找 AI-AK.json, "SK" → 查找 AI-SK.json
+  if (!botName.startsWith('AI-') && !botName.startsWith('电脑')) {
+    const aiPrefixed = `AI-${botName}`
+    const aiPath = path.resolve(process.cwd(), `AI_policies/characters/${aiPrefixed}.json`)
+    if (fs.existsSync(aiPath)) return aiPrefixed
+  }
   return botName
 }
 
