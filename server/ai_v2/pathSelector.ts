@@ -375,6 +375,25 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       if (_apRound <= 10 && (features.honorCount + _apExposedHonor + features.wildCount) >= 10) { reasons.push('kge_ap_round10'); score += 15 }
       score += getPolicyValue(policy, 'flushVsPungsBalance') * ((qingPengReady ? 2.4 : 0) - (features.secondSuitCount > 0 ? 0.8 : 0))
       if (earlyPairHeavy) { reasons.push('early_four_pairs_push'); score += 8.5 }
+
+      // ★ K哥铁律(2026-06-08): 开局早期三门数牌都有对子 → 大幅加碰碰胡概率
+      // 检查 concealed tiles 里三种数牌是否都有对子
+      const _concealedNonFlower = input.player.hand.concealedTiles.filter((t: any) => t.suit !== 'flower' && !isWildTile(t, input.game))
+      const _suitPairMap = new Map<string, number>()
+      for (const t of _concealedNonFlower) {
+        if (t.suit === 'wind' || t.suit === 'dragon') continue
+        const key = `${t.suit}-${t.value}`
+        _suitPairMap.set(key, (_suitPairMap.get(key) || 0) + 1)
+      }
+      const _suitsWithPairs = new Set<string>()
+      for (const [key, cnt] of _suitPairMap) {
+        if (cnt >= 2) _suitsWithPairs.add(key.split('-')[0])
+      }
+      const _threeSuitPairs = _suitsWithPairs.size >= 3
+      if (_threeSuitPairs && _apRound <= 8) {
+        reasons.push('three_suit_pairs_early'); score += 15
+      }
+
       // ★ V2: 4+对子/刻子坚决做碰碰胡（90%概率直接锁定）
       // 碰了一对到门口后 pairCount 降但 tripletCount 升，总数仍算
       if (features.pairCount >= 4 || features.pairCount + features.tripletCount >= 4) { reasons.push('four_pairs_commit'); score += 25 }
@@ -604,7 +623,7 @@ export function evaluateRouteStateV2(input: {
     phase === 'RUSH' && gap >= 4 ? 2 :
     _honorLock2 ? 2 :
     _honorLock1 ? 1 :
-    _apLockByPairs ? 1 :
+    _apLockByPairs ? 2 :  // ★ K哥铁律(2026-06-08): 4+对子/刻子 → lockLevel=2 坚决锁死碰碰胡
     estimatedRound >= 7 && stableTurns >= 2 && gap >= 2.0 ? 1 :
     stableTurns >= 2 && stableOnPrevious && previousRouteState && previousRouteState.lockLevel >= 1 && gap >= 1.1 ? 1 :
     (phase === 'COMMIT' || phase === 'RUSH') && gap >= 2.5 ? 1 : 0

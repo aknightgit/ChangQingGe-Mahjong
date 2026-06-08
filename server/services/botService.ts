@@ -1265,7 +1265,11 @@ function scoreTileForDiscard(
         const key = `${suit}-${v}`
         if (groups.has(key)) {
           if (isShortOrSecond) {
-            score += policy.nearWeight * nearWeightFactor  // 短门/次短门：鼓励拆顺子
+            // ★ K哥铁律(2026-06-08): 短门顺子更坚决打掉，系数翻倍
+            score += policy.nearWeight * nearWeightFactor * 2.0  // 短门/次短门：坚决拆顺子
+            // 熟张额外加分：弃牌区已出现过的短门牌，最优先打
+            const shortInDiscard = (game.discardPile || []).some(d => tilesMatch(d, tile))
+            if (shortInDiscard) score += 2.0 * routeBiasFactor
           } else {
             score -= policy.nearWeight * nearWeightFactor  // 长门：保留顺子
           }
@@ -2998,8 +3002,10 @@ export async function shouldClaimPendingAction(
       if (tingTilesCount <= 1) boost += 0.8
       else if (tingTilesCount <= 3) boost += 0.4
       // ★ K哥铁律(2026-06-08): 听牌剩余张数多→降低捉冲概率，等自摸
-      else if (tingTilesCount > 10) boost -= 0.6  // 大幅降低：10+张可胡，自摸概率高
-      else if (tingTilesCount > 6) boost -= 0.3   // 适度降低：6+张可胡，自摸机会不错
+      // 听的牌外面保有量越大，越不要捉冲（别人手里还有，等自摸更安全）
+      if (tingTilesCount > 10) boost -= 0.8  // 大幅降低：10+张可胡
+      else if (tingTilesCount > 6) boost -= 0.5  // 较大降低：6+张可胡
+      else if (tingTilesCount > 4) boost -= 0.2  // 适度降低：4+张可胡
       const tableThreat = estimateTableThreat(game, player.id)
       if (tableThreat >= 0.8) boost += 0.4
       else if (tableThreat >= 0.5) boost += 0.2
