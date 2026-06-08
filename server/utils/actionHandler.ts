@@ -117,6 +117,7 @@ export class ActionHandler {
       type: ActionType.DISCARD,
       playerId: player.id,
       tileId: tile.id,
+      tile,
       timestamp: Date.now()
     });
 
