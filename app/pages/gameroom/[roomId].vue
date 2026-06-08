@@ -1751,6 +1751,7 @@ onMounted(async () => {
     else if (actionKind === 'selfHu') { /* 由 game state watcher 统一播放 */ }
     else if (actionKind === 'flowerReplace') {
       console.log(`[Broadcast-Voice] 🌸 flowerReplace detected, calling playVoiceAction`)
+      addBroadcast(`🔊 补花语音触发中...`, 'info')
       playVoiceAction('flowerReplace')
     }
   }) as EventListener)
