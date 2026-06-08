@@ -3490,8 +3490,7 @@ const onKong = () => {
   hideActionButtonsNow()
   resetAutoCount()
   selfPendingSupplementHighlight.value = true
-  playSound('tile-kong')
-  playVoiceAction('kong')
+  // ★ 语音由广播处理器统一播放，避免重复
   executeAction(ActionType.KONG)
 }
 const onRebel = () => { resetAutoCount(); playSound('tile-rebel'); playVoiceAction('rebel'); executeAction(ActionType.REBEL) }
