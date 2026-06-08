@@ -4078,9 +4078,16 @@ class GameManager {
         (player as any).lastDrawnTile = replacement;
       }
     }
-    // 有补花时广播一条消息
+    // 有补花时广播一条消息 + 写入 actionHistory（让客户端 state watcher 播放语音）
     if (flowerMelds.length > 0) {
       this.broadcastService.broadcastFlowerReplacement(game, player, flowerMelds.length);
+      // ★ K哥铁律(2026-06-08): 补花写入 actionHistory,和吃/碰/杠走同一路径
+      // 旧逻辑只走 broadcast,客户端收不到(原因不明),写入 actionHistory 后 state watcher 可靠播放
+      game.actionHistory.push({
+        playerId: player.id,
+        type: 'flowerReplace' as any,
+        timestamp: Date.now()
+      });
     }
 
     player.hand.concealedTiles = this.sortHandWithWildFront(player.hand.concealedTiles, game);
