@@ -3165,6 +3165,8 @@ class GameManager {
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
     this.replaceInitialFlowers(game, player);
     game.drawnThisTurn = true;
+    // ★ K哥铁律(2026-06-08): 吃后刷新路线记忆(包括人类玩家托管)
+    refreshRouteMemoryAfterClaim(player, game);
     if (this.isPlayerBotControlled(player)) {
       this.scheduleBotDiscard(game.gameId, player.id);
 }
@@ -3314,6 +3316,8 @@ class GameManager {
     game.pendingActions = [];
     game.pengChowConflict = null;
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+    // ★ K哥铁律(2026-06-08): 杠后刷新路线记忆(包括人类玩家托管)
+    refreshRouteMemoryAfterClaim(player, game);
     this.handleDraw(game, player, { allowFullHand: true });
     game.drawnThisTurn = true;
     if (this.isPlayerBotControlled(player)) {
