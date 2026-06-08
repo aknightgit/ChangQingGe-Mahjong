@@ -220,6 +220,7 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
 
   switch (route) {
     case 'MENQING_SPEED':
+      targetSuit = features.longestSuit
       score += 9
       score += Math.max(0, 10 - input.shanten * 3.5)
       score += input.effectiveTiles * 0.28
@@ -248,6 +249,7 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       break
 
     case 'OPEN_SPEED':
+      targetSuit = features.longestSuit
       score += 8
       score += Math.max(0, 8 - input.shanten * 2.5)
       score += input.effectiveTiles * 0.22
@@ -341,6 +343,8 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       break
 
     case 'ALL_PUNGS':
+      // ★ K哥铁律(2026-06-08): ALL_PUNGS 也要设 targetSuit,否则弃牌时不知道保留哪门
+      targetSuit = features.longestSuit
       // ★ V2.5: 已破门清不适用纯碰碰胡(需要全刻子),但可走混碰/边张
       // K哥: 1-2 听 3、8-9 听 7 这种边张吃牌仍合法(中间顺子不是冲碰碰胡的)
       // 不再硬性 -30, 仅轻微抑制让 v2 选择 OPEN_SPEED
