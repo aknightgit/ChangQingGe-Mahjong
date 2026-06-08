@@ -8772,9 +8772,9 @@ const forceDiscard = async (p: Player) => {
 
 /* ===== [2026-05-29] 验牌阶段(牌桌中央毛玻璃条) ===== */
 .reveal-phase-banner {
-  /* ★ K哥铁律: 固定在 viewport 中心偏上(牌桌中心圆圈附近) */
-  position: fixed;
-  top: 45%;
+  /* ★ K哥铁律: 相对牌桌定位,对准中心圆圈 */
+  position: absolute;
+  top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   display: flex;
@@ -8805,7 +8805,6 @@ const forceDiscard = async (p: Player) => {
 }
 /* ★ K哥铁律: mobile landscape 模式验牌条适配 */
 .layout--mobile-landscape .reveal-phase-banner {
-  top: 40%;
   padding: 10px 24px;
   font-size: 0.9rem;
 }
