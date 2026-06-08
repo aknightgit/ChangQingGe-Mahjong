@@ -333,16 +333,18 @@ class GameManager {
   }
 
   private clearExpiredClaimsForDecisionWindow(game: GameState, now = Date.now()): void {
-    if ((game as any).hasTriggeredAction) return;
+    const gameId8 = game.gameId.substring(0, 8);
     const currentPlayerId = game.players[game.currentPlayerIndex]?.id;
+    const hasTriggered = (game as any).hasTriggeredAction;
+    const allPending = game.pendingActions.map((pa: any) => ({ playerId: pa.playerId?.substring(0, 8), type: pa.actionType, expired: pa.expiresAt ? pa.expiresAt <= now : 'no-exp' }));
+    console.log(`[clearExpired] game=${gameId8} hasTriggered=${hasTriggered} currentPlayer=${currentPlayerId?.substring(0, 8)} pendingCount=${game.pendingActions.length} details=${JSON.stringify(allPending)} now=${now}`);
+    if (hasTriggered) return;
     const before = game.pendingActions.length;
-    game.pendingActions = game.pendingActions.filter(pendingAction => {
+    game.pendingActions = game.pendingActions.filter((pendingAction: any) => {
       if (!pendingAction.expiresAt || pendingAction.expiresAt > now) return true;
       return pendingAction.playerId === currentPlayerId;
     });
-    if (before !== game.pendingActions.length) {
-      console.log(`[clearExpiredClaims] game=${game.gameId.substring(0,8)} before=${before} after=${game.pendingActions.length} currentPlayer=${currentPlayerId?.substring(0,8)} hasTriggered=${(game as any).hasTriggeredAction}`);
-    }
+    console.log(`[clearExpired] game=${gameId8} BEFORE_CLEAR=${before} AFTER_CLEAR=${game.pendingActions.length} cleared=${before - game.pendingActions.length}`);
     game.pengChowConflict = null;
     if (game.pendingActions.length === 0) {
       this.timerManager.clearPendingActionTimer(game.gameId);
