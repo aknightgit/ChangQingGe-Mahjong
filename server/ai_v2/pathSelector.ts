@@ -364,6 +364,20 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       score -= Math.max(0, features.secondSuitCount - 3) * 0.6
       // ★ V2: 上家压制 3.2→8.0
       if (upstreamRejectedLongSuit) { reasons.push('upstream_rejected_long_suit_push_to_pungs'); score += 8.0 /* was: 3.2 */ }
+      // ★ K哥铁律(2026-06-08): 风箭牌少于2对+碰过 → 考虑转清一色
+      // 仅剩≤2对风箭牌且已碰过(有3+组)→ 锁定ALL_PUNGS，反之增强清一色
+      const _honorPairs = (input.player.hand.exposedMelds || []).filter((m: any) =>
+        m.tiles?.length === 3 && (m.tiles[0].suit === 'wind' || m.tiles[0].suit === 'dragon')
+      ).length
+      if (_honorPairs >= 2) {
+        // 2对+风箭牌已碰 → 锁碰碰胡
+        score += 10
+        reasons.push('ap_2plus_honor_pairs_locked')
+      } else {
+        // ≤1对风箭牌 → 增强清一色动力
+        if (qingPengReady) score += 4
+        score += (2 - _honorPairs) * 2  // 0对+8, 1对+4
+      }
       if (qingPengReady) score += getPolicyValue(policy, 'qingPengPursuit') * (6.2 + pureFlushBucketBoost * 0.9)
       if (hunPengReady) score += getPolicyValue(policy, 'hunPengPursuit') * (5.4 + features.honorPairCount * 0.8)
       if (features.honorCount >= 6) score += getPolicyValue(policy, 'allHonorsPursuit') * 2.2

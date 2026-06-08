@@ -4665,7 +4665,7 @@ const checkOtherPlayerSounds = (newState: any) => {
     const key = `${actTime}-${pid}-${act.type}-${act.tileId || ''}`
     if (playedKeys.has(key)) continue
     playedKeys.add(key)
-    if (act.type === 'kong' || act.type === ActionType.KONG || act.type === ActionType.KONG_CONCEALED || act.type === ActionType.KONG_SUPPLEMENT) {
+    if (act.type === 'kong' || act.type === ActionType.KONG || act.type === 'concealed_kong' || act.type === 'extended_kong') {
       pendingVoices.push({ type: 'meld', action: 'kong' })
     } else if (act.type === 'triplet' || act.type === ActionType.PENG) {
       pendingVoices.push({ type: 'meld', action: 'pong' })
