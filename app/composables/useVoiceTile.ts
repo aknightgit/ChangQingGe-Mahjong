@@ -326,7 +326,8 @@ function resolveTileKey(suit: string, value: number): string {
 export const playVoiceAction = (action: keyof typeof VOICE_ACTION_MAP): void => {
   if (!process.client) return
   const key = VOICE_ACTION_MAP[action]
-  if (!key) return
+  if (!key) { console.warn(`[VoiceTile] playVoiceAction: no key for action="${action}"`); return }
+  console.log(`[VoiceTile] playVoiceAction action="${action}" key="${key}"`)
   playVoiceKey(key, VOICE_ACTION_TEXT_MAP[action] || action)
 }
 
