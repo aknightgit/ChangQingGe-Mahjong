@@ -242,8 +242,12 @@ export function refreshRouteMemoryAfterClaim(player: Player, game: GameState): v
   if (allPairTriplet >= 4 && routeState) {
     // 4+对子/刻子 → 确保路线是ALL_PUNGS且lockLevel >= 1
     routeState.current = 'ALL_PUNGS'
-    routeState.lockLevel = Math.max(routeState.lockLevel || 0, 1) as 0 | 1 | 2
-    routeState.stableTurns = Math.max(routeState.stableTurns || 0, 3)
+  }
+  // ★ K哥铁律(2026-06-08): 碰/吃后 lockLevel 直接升到 2（坚决执行）
+  // 不管有多少对子/刻子,碰了就是定了方向,绝不允许 HALF_FLUSH 抢走
+  if (routeState) {
+    routeState.lockLevel = 2
+    routeState.stableTurns = Math.max(routeState.stableTurns || 0, 5)
   }
   setPlayerRouteMemory(player, routeState)
   console.log(`[RouteMemory] ${player.name} refreshed after claim → route=${routeState?.current} lock=${routeState?.lockLevel} stable=${routeState?.stableTurns} pairTriplet=${allPairTriplet}`)
