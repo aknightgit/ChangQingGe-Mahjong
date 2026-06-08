@@ -4533,9 +4533,24 @@ class GameManager {
     // 处理下局移除/替换请求
     this.applyPendingChanges(game);
 
-    // 🔄 自动进入下一局（正常结束/流局）
-    // 延迟一小段时间让客户端展示结算画面，然后自动进入掷骰子阶段
-    if (
+    // ★ K哥铁律(2026-06-08 bug:9588): applyPendingChanges 之后如果人数不足4人,applyPendingChanges
+    // 会把 phase 改回 WAITING。此时不应该 autoStartNextRound(beginGame 看到 <4人会抛错)。
+    // 先 broadcastGameState 让客户端收到结算+等待加入状态,再广播 AI 移除和等待加入消息。
+    if (game.phase === GamePhase.WAITING) {
+      // 重新广播一次结算状态,确保客户端 phase 同步到 WAITING 并展示结算面板
+      this.broadcastGameState(game.gameId);
+      // 广播 AI 已被移除消息
+      const removedNames = ((game as any)._lastRemovedNames as string[] | undefined) || [];
+      for (const name of removedNames) {
+        this.broadcastQuickMessage(game.gameId, `🚪 [${name}] 已被移除,等待其他玩家加入`, 'warn', 'playerRemoved');
+      }
+      (game as any)._lastRemovedNames = [];
+      // 广播等待其他玩家加入
+      this.broadcastQuickMessage(game.gameId, `⏳ 当前 ${game.players.length} 人,等待其他玩家加入后重新开局`, 'info', 'waitingForPlayers');
+      this.store.flushGameNow(game.gameId, game).catch(() => {});
+      console.log(`[endRound] → WAITING (${game.players.length} players, < 4) — 跳过 autoStartNextRound`);
+      // 不进 autoStartNextRound,客户端会收到 phase=WAITING 回到房间视图
+    } else if (
       finalReason === GameEndReason.LAST_PLAYER ||
       finalReason === GameEndReason.WALL_EXHAUSTED
     ) {
@@ -4626,6 +4641,8 @@ class GameManager {
 
     // 处理移除请求
     if (game.pendingRemovals?.length) {
+      // ★ K哥铁律(2026-06-08 bug:9588): 记录被移除玩家名,供 endRound 广播给客户端
+      const removedNames: string[] = (game as any)._lastRemovedNames || [];
       for (const removeId of game.pendingRemovals) {
         const idx = game.players.findIndex(p => p.id === removeId);
         if (idx === -1) continue;
@@ -4633,8 +4650,10 @@ class GameManager {
         game.players.splice(idx, 1);
         // 更新位置
         game.players.forEach((p, i) => { p.position = i; });
+        removedNames.push(name);
         console.log(`[ApplyChanges] ${name} 已移除`);
       }
+      (game as any)._lastRemovedNames = removedNames;
       game.pendingRemovals = [];
 
       // 人数不足 → 回到等待状态(麻将需要4人满桌)

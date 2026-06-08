@@ -528,6 +528,19 @@ function canWinByProjectRuleNoWild(concealed: Tile[], exposed: Meld[]): boolean 
     return true;
   }
 
+  // ★ K哥铁律(2026-06-08 bug:9588): 捉冲大吊(concealed=2,1张原+1张捉冲牌)如果完整手牌多门
+  // (numSuitCount>=2),即使 isGarbageMultiSuitsWithSequenceProjectRule 因长度=2 兜不住,
+  // 完整手牌也不是任何目标牌型(清/混一色/碰碰胡/混碰),不允许胡
+  // 例: 万+风 exposed + concealed 9万 → 捉冲 6条 → 完整牌{万,条,风} 三门 → 禁胡
+  if (concealedNonFlower.length === 2 && numSuitCount >= 2) {
+    return false;
+  }
+
+  // ★ 用完整 hand(concealed+exposed) 做多门垃圾胡检查,避免 2 张 concealed 误判
+  const completeHand = [...concealedNonFlower, ...exposed.flatMap(m => m.tiles).filter(t => !isFlower(t))];
+  if (numSuitCount >= 2 && isGarbageMultiSuitsWithSequenceProjectRule(completeHand)) {
+    return false;
+  }
   return !isGarbageMultiSuitsWithSequenceProjectRule(concealedNonFlower);
 }
 
@@ -706,6 +719,12 @@ function detectTypes(
         // 多门+顺子+无风箭 → 垃圾胡，不放大吊，直接返回
         return [];
       }
+    }
+    // ★ K哥铁律(2026-06-08 bug:9588): concealed 自身多门 = 垃圾胡, 禁止大吊
+    // 例: 混一色门牌+等 9万 -> 对方弃 6 条 -> concealed [9万, 6条] 自身多门
+    //     完整手牌不是任何目标牌型(不是清/混一色/碰碰胡), 不可放大吊
+    if (getSuits(concealedNonFlower).size >= 2) {
+      return [];
     }
     if (!types.includes(HandType.DA_DIAO)) {
       types.push(HandType.DA_DIAO);
@@ -1554,9 +1573,16 @@ export function canWin(
       exactWinBlockedByGarbage = true;
     }
   }
-  const finalCanWin = types.length > 0 || (exactCanWin && !daDiaoBlockedByGarbage && !naturalTilesBlockedByGarbage && !exactWinBlockedByGarbage) || (isDaDiaoState && !daDiaoBlockedByGarbage);
+  // ★ K哥铁律(2026-06-08 bug:9588): concealed 自身多门(1~2张多门) → 垃圾胡
+  // 完整手牌多门(万+条+...) + 1~2张手牌 不可能是清/混一色/碰碰胡/混碰等任何目标牌型
+  // 必须同时拦住 detectTypes 兑底和 isDaDiaoState 兑底
+  let concealedMultiSuitBlockedByGarbage = false;
+  if (isDaDiaoState && getSuits(concealedNonFlower).size >= 2) {
+    concealedMultiSuitBlockedByGarbage = true;
+  }
+  const finalCanWin = types.length > 0 || (exactCanWin && !daDiaoBlockedByGarbage && !naturalTilesBlockedByGarbage && !exactWinBlockedByGarbage && !concealedMultiSuitBlockedByGarbage) || (isDaDiaoState && !daDiaoBlockedByGarbage && !concealedMultiSuitBlockedByGarbage);
   const validTypes = finalCanWin
-    ? (types.length > 0 ? types : (isDaDiaoState && !daDiaoBlockedByGarbage) ? [HandType.DA_DIAO] : [HandType.STANDARD])
+    ? (types.length > 0 ? types : (isDaDiaoState && !daDiaoBlockedByGarbage && !concealedMultiSuitBlockedByGarbage) ? [HandType.DA_DIAO] : [HandType.STANDARD])
     : [];
 
   const result = { canWin: finalCanWin, types: validTypes }
