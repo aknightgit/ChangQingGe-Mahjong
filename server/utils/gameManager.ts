@@ -282,7 +282,9 @@ class GameManager {
     }
     const currentPlayerId = game.players[game.currentPlayerIndex]?.id;
     game.pendingActions = game.pendingActions.filter(pendingAction => {
-      if (!pendingAction.expiresAt || pendingAction.expiresAt > now) return true; // 未过期保留
+      // ★ 没有expiresAt视为过期
+      if (!pendingAction.expiresAt) return false;
+      if (pendingAction.expiresAt > now) return true; // 未过期保留
       if (pendingAction.playerId === currentPlayerId) return true; // 下家B永远保留
       // 【修复】人类玩家的过期claim也保留——玩家可能在犹豫或操作选择中
       const player = game.players.find(p => p.id === pendingAction.playerId);
@@ -336,15 +338,17 @@ class GameManager {
     const gameId8 = game.gameId.substring(0, 8);
     const currentPlayerId = game.players[game.currentPlayerIndex]?.id;
     const hasTriggered = (game as any).hasTriggeredAction;
-    const allPending = game.pendingActions.map((pa: any) => ({ playerId: pa.playerId?.substring(0, 8), type: pa.actionType, expired: pa.expiresAt ? pa.expiresAt <= now : 'no-exp' }));
-    console.log(`[clearExpired] game=${gameId8} hasTriggered=${hasTriggered} currentPlayer=${currentPlayerId?.substring(0, 8)} pendingCount=${game.pendingActions.length} details=${JSON.stringify(allPending)} now=${now}`);
     if (hasTriggered) return;
     const before = game.pendingActions.length;
     game.pendingActions = game.pendingActions.filter((pendingAction: any) => {
-      if (!pendingAction.expiresAt || pendingAction.expiresAt > now) return true;
+      // ★ K哥铁律(2026-06-08): 没有expiresAt的pending action视为过期，直接清除
+      if (!pendingAction.expiresAt) return false;
+      if (pendingAction.expiresAt > now) return true; // 未过期保留
       return pendingAction.playerId === currentPlayerId;
     });
-    console.log(`[clearExpired] game=${gameId8} BEFORE_CLEAR=${before} AFTER_CLEAR=${game.pendingActions.length} cleared=${before - game.pendingActions.length}`);
+    if (before !== game.pendingActions.length) {
+      console.log(`[clearExpired] game=${gameId8} BEFORE=${before} AFTER=${game.pendingActions.length} cleared=${before - game.pendingActions.length} currentPlayer=${currentPlayerId?.substring(0, 8)}`);
+    }
     game.pengChowConflict = null;
     if (game.pendingActions.length === 0) {
       this.timerManager.clearPendingActionTimer(game.gameId);
