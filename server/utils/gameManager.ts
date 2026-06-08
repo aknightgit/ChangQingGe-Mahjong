@@ -4191,6 +4191,30 @@ class GameManager {
           player.status = PlayerStatus.LOST;
         }
       }
+
+    // ★ K哥铁律(2026-06-08 bug:9588-v2): 先选 nextDealerId(必须用清理后的 winners)
+      // 然后重置所有 status 为 LOST,避免下一局误判
+    const finalReasonForDealer = (reason === GameEndReason.WALL_EXHAUSTED && winners.length > 0)
+      ? GameEndReason.LAST_PLAYER
+      : reason;
+    if (!game.nextDealerId && winners.length > 0 && finalReasonForDealer !== GameEndReason.WALL_EXHAUSTED) {
+      const sortedW = [...winners].sort((a, b) => (a.winOrder ?? 99) - (b.winOrder ?? 99));
+      const firstWinner = sortedW[0];
+      if (sortedW.length > 1) {
+        // 一炮多响: 放冲者坐庄
+        const discarder = game.players.find(p => p.id === firstWinner.discarderId)
+        if (discarder) {
+          game.nextDealerId = discarder.id
+          console.log(`[endRound] 一炮多响，放冲者坐庄: ${discarder.name}`)
+        } else {
+          game.nextDealerId = firstWinner.id
+          console.log(`[endRound] 首胡者坐庄 (放冲者未找到): ${firstWinner.name}`)
+        }
+      } else {
+        game.nextDealerId = firstWinner.id
+        console.log(`[endRound] 首胡者坐庄: ${firstWinner.name}`)
+      }
+    }
     let finalScores: Record<string, number>;
     const roundTransfers: Array<{
       fromPlayerId: string;
@@ -4401,27 +4425,7 @@ class GameManager {
       ? GameEndReason.LAST_PLAYER
       : reason;
 
-    // ★ K哥铁律(2026-06-05): 下一局庄家 = 本局首胡者(一炮多响则放冲者坐庄)
-    // 流局时庄家不变(已处理)。跳走这个逻辑让上局赢家中 winner=1 当庄。
-    if (!game.nextDealerId && roundWinners.length > 0 && finalReason !== GameEndReason.WALL_EXHAUSTED) {
-      const firstWinner = roundWinners[0];
-      // 检查是否一炮多响（多个 winner 同一时间胡）
-      const isMultipleWinners = roundWinners.length > 1
-      if (isMultipleWinners) {
-        // 一炮多响: 放冲者坐庄（winner.discarderId）
-        const discarder = game.players.find(p => p.id === firstWinner.discarderId)
-        if (discarder) {
-          game.nextDealerId = discarder.id
-          console.log(`[endRound] 一炮多响，放冲者坐庄: ${discarder.name}`)
-        } else {
-          game.nextDealerId = firstWinner.id
-          console.log(`[endRound] 首胡者坐庄 (放冲者未找到): ${firstWinner.name}`)
-        }
-      } else {
-        game.nextDealerId = firstWinner.id
-        console.log(`[endRound] 首胡者坐庄: ${firstWinner.name}`)
-      }
-    }
+    // ★ nextDealerId 已在上面设置(清理后的 winners),这里不重复
 
     // 倍数继承链:溢出倍数继承(超过8倍封顶的部分传递给下一把)
     // 规则:effective = inheritMultiplier × roundMultiplier,封顶8,超出部分 = effective/8 继承给下把

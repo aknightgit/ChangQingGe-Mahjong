@@ -230,7 +230,7 @@ const playAudioImmediate = (url: string, fallbackText?: string) => {
 const playVoiceKey = (key: string, fallbackText: string) => {
   const url = _audioMap.value.get(key)
   if (!url) {
-    console.warn(`[VoiceTile] No audio for key="${key}" scheme="${_currentScheme.value}"`)
+    console.warn(`[VoiceTile] No audio for key="${key}" scheme="${_currentScheme.value}", _audioMap.size=${_audioMap.value.size}`)
     speakTextFallback(fallbackText)
     return
   }
