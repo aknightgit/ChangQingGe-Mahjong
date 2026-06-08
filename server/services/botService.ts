@@ -1035,7 +1035,7 @@ function getDiscardDangerScore(tile: Tile, game: GameState, player: Player): num
   const wallRemaining = game.wall?.length || 0
   let baseDanger = 0.55
 
-  if (isHonor(tile)) baseDanger = 0.42
+  if (isHonor(tile)) baseDanger = 0.32  // ★ K哥铁律(2026-06-08): 风箭危险评估从0.42降为0.32
   else if (tile.value === 1 || tile.value === 9) baseDanger = 0.3
   else if (tile.value === 2 || tile.value === 8) baseDanger = 0.48
   else baseDanger = 0.68

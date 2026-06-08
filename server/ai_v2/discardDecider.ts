@@ -146,7 +146,7 @@ function getObserveBucketScore(input: RouteDiscardInput): number {
     input.routeState.current !== 'HONOR_HEAVY' &&
     input.routeState.current !== 'HALF_FLUSH' &&
     input.routeState.current !== 'ALL_PUNGS'
-      ? -2.5
+      ? -1.0  // ★ K哥铁律(2026-06-08): 生张风箭危险评估从-2.5降为-1.0, 目标门和风箭生张之间, 风箭生张微弱胜出
       : 0
   const exhaustedHonorPair =
     isHonor(input.tile) &&
