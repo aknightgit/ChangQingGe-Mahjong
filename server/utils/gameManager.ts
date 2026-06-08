@@ -3235,6 +3235,9 @@ class GameManager {
     game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
     this.replaceInitialFlowers(game, player);
     game.drawnThisTurn = true;
+    // ★ K哥铁律(2026-06-08): 碰后必须刷新路线记忆(包括人类玩家托管)
+    // 旧逻辑只在 bot 路径调 refreshRouteMemoryAfterClaim，人类玩家碰后路线不更新
+    refreshRouteMemoryAfterClaim(player, game);
     if (this.isPlayerBotControlled(player)) {
       this.scheduleBotDiscard(game.gameId, player.id);
     }
