@@ -696,6 +696,11 @@ export class ActionHandler {
   async handleHu(game: GameState, player: Player, selectedWinOptionLabel?: string): Promise<void> {
     const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode } = this.deps;
 
+    // ★ K哥铁律(2026-06-08 bug:7243): 设 currentPlayerIndex 为赢家
+    // 碰/吃/杠都设了，胡牌漏了 → 捉冲后 currentPlayerIndex 还是弃牌者
+    // → handleHu-advance 从弃牌者开始找下家，轮次错乱
+    game.currentPlayerIndex = game.players.findIndex(p => p.id === player.id);
+
     // 判断是自摸还是捉冲（有pendingAction且含HU = 捉冲）
     const huPendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
     const huIsSelfDraw = !huPendingAction;
