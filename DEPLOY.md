@@ -20,15 +20,16 @@
 ### 当前生产端口拓扑（2026-05-05已核实）
 
 #### 应用实际监听
-- **Mahjong 服务本体**：`127.0.0.1:8888`
-  - 进程：`node /home/ak/myworkspace/ChangQingGe-Mahjong/.output/server/index.mjs`（ak 账号运行）
-- **MyIsland 服务本体**：`127.0.0.1:3100`
+- **Mahjong 服务本体**：`0.0.0.0:8888`（外网可直接访问）
+  - 进程：`node /home/.output/server/index.mjs`（ak 账号运行，pm2 管理）
+  - 外网入口：`http://<外网IP>:8888/mahjong/`
+- **MyIsland 服务本体**：`127.0.0.1:3100`（仅 nginx 反代访问）
 
 #### Nginx 入口
 - **HTTP**：`0.0.0.0:8080`
 - **HTTPS**：`0.0.0.0:8888`
 
-#### Nginx 路由规则（修复后）
+#### Nginx 路由规则（仅用于 MyIsland 等非麻将服务）
 ```nginx
 upstream myisland {
     server 127.0.0.1:3100;
@@ -43,15 +44,18 @@ location / {
 }
 
 location /mahjong/ {
-    proxy_pass http://mahjong;
+    proxy_pass http://mahjong;  # 麻将服务也可通过外网 8888 直接访问
 }
 ```
+- **麻将服务**：外网直接访问 `http://<外网IP>:8888/mahjong/`
+- **MyIsland**：通过 nginx（8080）访问
 
-#### 外网访问现状
-- **当前实际外网入口**：`443 -> 8080`
-- **8888 仍在 Ubuntu 内部 nginx 监听，但花生壳 8888 映射已取消，不作为当前外网入口**
-- **8888 不需要直接映射到 NAS host**，因为它是 nginx 的后端服务端口，仅供同机反代访问
-- **当前可访问地址**：`https://cv388xr9771.vicp.fun/mahjong/`
+#### 外网访问现状（2026-06-08 更新）
+- **当前外网入口**：外网 IP 直接转发 8888 端口到 NAS 的 8888 端口
+- **不走 nginx（8080）和花生壳子路径**，直接访问 mahjong 服务
+- **Nginx（8080）仅用于 MyIsland 等其他服务**
+- **访问方式**：`http://<外网IP>:8888/mahjong/`
+- **NUXT_APP_BASE_URL**：`/mahjong/`（保持不变）
 
 #### 2026-05-05 子路径部署问题总结
 **现象**
@@ -194,6 +198,7 @@ node .output/server/index.mjs
   - NUXT_APP_BASE_URL=/mahjong/
   - MONGODB_URI=mongodb://admin:%24%249myHome@192.168.3.241:27017/changqingge?authSource=admin
   - MONGODB_DB=changqingge
+外网访问：http://<外网IP>:8888/mahjong/
 ```
 
 ### 部署步骤（手动上传模式）
