@@ -1749,7 +1749,9 @@ onMounted(async () => {
       playVoiceAction('hu')
     }
     else if (actionKind === 'selfHu') { /* 由 game state watcher 统一播放 */ }
-    // 补花语音由 state watcher 的 pendingDiscards 统一播放（确保按动作顺序排队）
+    else if (actionKind === 'flowerReplace') {
+      playVoiceAction('flowerReplace')
+    }
   }) as EventListener)
 
   if (process.client) {
