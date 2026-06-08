@@ -3684,6 +3684,8 @@ class GameManager {
 
       if (actions.length > 0) {
         actions.push(ActionType.PASS);
+        const _expiresAt = Date.now() + this.timerManager.getHumanClaimDecisionTimeoutMs(game, player, actions);
+        console.log(`[checkPendingActions] player=${player.name.substring(0,8)} actions=${actions} expiresAt=${_expiresAt} now=${Date.now()} diff=${_expiresAt - Date.now()}ms`);
         game.pendingActions.push({
           playerId: player.id,
           availableActions: actions,
