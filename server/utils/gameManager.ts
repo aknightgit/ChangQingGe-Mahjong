@@ -4198,22 +4198,15 @@ class GameManager {
       ? GameEndReason.LAST_PLAYER
       : reason;
     if (!game.nextDealerId && winners.length > 0 && finalReasonForDealer !== GameEndReason.WALL_EXHAUSTED) {
+      // ★ K哥铁律(2026-06-08 v3): 永远是首胡者(winOrder=1)做庄,不管一炮多响
       const sortedW = [...winners].sort((a, b) => (a.winOrder ?? 99) - (b.winOrder ?? 99));
       const firstWinner = sortedW[0];
       if (sortedW.length > 1) {
-        // 一炮多响: 放冲者坐庄
-        const discarder = game.players.find(p => p.id === firstWinner.discarderId)
-        if (discarder) {
-          game.nextDealerId = discarder.id
-          console.log(`[endRound] 一炮多响，放冲者坐庄: ${discarder.name}`)
-        } else {
-          game.nextDealerId = firstWinner.id
-          console.log(`[endRound] 首胡者坐庄 (放冲者未找到): ${firstWinner.name}`)
-        }
+        console.log(`[endRound] 一炮多响，首胡者(${firstWinner.name})坐庄`)
       } else {
-        game.nextDealerId = firstWinner.id
         console.log(`[endRound] 首胡者坐庄: ${firstWinner.name}`)
       }
+      game.nextDealerId = firstWinner.id
     }
     let finalScores: Record<string, number>;
     const roundTransfers: Array<{
