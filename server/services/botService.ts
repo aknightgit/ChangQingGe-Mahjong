@@ -1211,10 +1211,11 @@ function scoreTileForDiscard(
       if (honorFocus && (policy.allHonorsPungsPursuit || 0) > 0) {
         score -= (policy.allHonorsPungsPursuit || 0) * 2.0
       }
-      // ★ 混一色路线：单张风箭是障碍牌，始终应该优先打掉
-      // 比目标门数牌更容易打出（目标门要保留）
+      // ★ 混一色路线：单张风箭是障碍牌，适度优先打掉
+      // 但实战中不要过于激进：陌生风箭容易被碰，目标门单张也要考虑保留
+      // ★ K哥铁律(2026-06-08): 降低风箭优先级，不要远超目标门单张
       if (routeState?.current === 'HALF_FLUSH') {
-        score += 8.0 * routeBiasFactor
+        score += 4.0 * routeBiasFactor
       }
     }
     return score
@@ -1302,7 +1303,7 @@ function scoreTileForDiscard(
       if (isTarget && sameTypeCount >= 2) {
         score -= 4.0 * routeBiasFactor  // 长门对子：坚决保留
       } else if (isTarget && sameTypeCount === 1) {
-        score -= 2.0 * routeBiasFactor  // 长门单张：保留
+        score -= 3.0 * routeBiasFactor  // 长门单张：保留（实战中目标门单张比风箭更有价值）
       } else if (!isHonor(tile) && !isTarget) {
         // 短门/次短门：无论对子还是单张，都优先打掉
         const _suitBonus = isShortSuit ? 1.5 : 0  // 最短门额外加成
@@ -1839,10 +1840,11 @@ export function selectDiscardTile(player: Player, game: GameState): string {
           routeState.current === 'HALF_FLUSH'
         )
 
+      // ★ K哥铁律(2026-06-08): 降低风箭单张优先级，实战中不要过于激进打风箭
       if (tilePairCount <= 1 && exposedMeldCount >= 2 && routeWantsCommittedSuit) {
-        composite += 12 + visibleCopies * 6 + honorSingletons * 2.5
+        composite += 6 + visibleCopies * 3 + honorSingletons * 1.5
       } else if (tilePairCount <= 1 && routeWantsCommittedSuit) {
-        composite += 5 + visibleCopies * 3
+        composite += 3 + visibleCopies * 2
       }
     }
 
