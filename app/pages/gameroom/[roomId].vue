@@ -4604,6 +4604,8 @@ const getReplacedFlowerMelds = (player: any) =>
 const checkOtherPlayerSounds = (newState: any) => {
   if (!gameState.value?.players) return
   const history = Array.isArray((newState as any)?.actionHistory) ? (newState as any).actionHistory : []
+  const playedKeys = new Set<string>()
+  const pendingVoices: Array<{ type: 'meld'; action: 'kong' | 'pong' | 'chow' } | { type: 'discard'; suit: string; value: number; sound: boolean; playerId?: string }> = []
   const cpIdx = newState?.currentPlayerIndex ?? 0
   if (cpIdx !== _flowerVoicePrevPlayerIndex) {
     _flowerVoiceTurnCounter++
