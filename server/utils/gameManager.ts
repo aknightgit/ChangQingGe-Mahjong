@@ -282,7 +282,15 @@ class GameManager {
     }
     const currentPlayerId = game.players[game.currentPlayerIndex]?.id;
     game.pendingActions = game.pendingActions.filter(pendingAction => {
-      if (!pendingAction.expiresAt || pendingAction.expiresAt > now) return true; // 无expiresAt或未过期保留
+      if (!pendingAction.expiresAt) {
+        const fallbackExpiry = (game.lastActionTime || 0) + 10000;
+        if (fallbackExpiry > now) return true;
+        if (pendingAction.playerId === currentPlayerId) return true;
+        const player = game.players.find(p => p.id === pendingAction.playerId);
+        if (player && !this.isPlayerBotControlled(player)) return true;
+        return false;
+      }
+      if (pendingAction.expiresAt > now) return true; // 未过期保留
       if (pendingAction.playerId === currentPlayerId) return true; // 下家B永远保留
       // 【修复】人类玩家的过期claim也保留——玩家可能在犹豫或操作选择中
       const player = game.players.find(p => p.id === pendingAction.playerId);
@@ -339,7 +347,13 @@ class GameManager {
     if (hasTriggered) return;
     const before = game.pendingActions.length;
     game.pendingActions = game.pendingActions.filter((pendingAction: any) => {
-      if (!pendingAction.expiresAt || pendingAction.expiresAt > now) return true; // 未过期保留
+      if (!pendingAction.expiresAt) {
+        // ★ 保底: 没有expiresAt的pending action，用game.lastActionTime+10s作为超时
+        const fallbackExpiry = (game.lastActionTime || 0) + 10000;
+        if (fallbackExpiry > now) return true; // 还在保底窗口内
+        return pendingAction.playerId === currentPlayerId; // 超时了，保留下家
+      }
+      if (pendingAction.expiresAt > now) return true; // 未过期保留
       return pendingAction.playerId === currentPlayerId;
     });
     if (before !== game.pendingActions.length) {
