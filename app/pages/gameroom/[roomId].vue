@@ -3419,7 +3419,13 @@ const onThinkPopup = () => {
 }
 const onThinkOption = async (action: string) => {
   showThinkOptions.value = false
-  if (action === 'cancel') return // 纯关闭,不执行任何操作
+  if (action === 'cancel') {
+    // ★ K哥铁律(2026-06-08 bug:6472): 算了=PASS,必须通知服务器清除pending action
+    // 旧逻辑只关闭弹窗不通知服务器 → pending action 残留 → 上家无法摸牌
+    replacePendingAction(ActionType.PASS)
+    await executeAction(ActionType.PASS)
+    return
+  }
   // 执行对应的action
   if (action === 'hu') await onHu()
   else if (action === 'kong') handleCircularAction('kong')
