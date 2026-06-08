@@ -131,6 +131,11 @@ export class ActionHandler {
       broadcastQuickMessage(game.gameId, `🃏 [${player.name}]打出了百搭，本轮不能吃碰捉冲！`, 'warn');
       await persistGame(game);
       broadcastGameState(game.gameId);
+      // ★ K哥铁律(2026-06-08): 必须先推进到下家再beginTurn，否则打出百搭的玩家自己又摸牌
+      const nextPlayer = getNextActivePlayer(game, discarderIndex);
+      if (nextPlayer) {
+        game.currentPlayerIndex = game.players.findIndex(p => p.id === nextPlayer.id);
+      }
       await beginCurrentPlayerTurn(game);
       return;
     }

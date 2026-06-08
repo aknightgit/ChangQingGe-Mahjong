@@ -282,9 +282,7 @@ class GameManager {
     }
     const currentPlayerId = game.players[game.currentPlayerIndex]?.id;
     game.pendingActions = game.pendingActions.filter(pendingAction => {
-      // ★ 没有expiresAt视为过期
-      if (!pendingAction.expiresAt) return false;
-      if (pendingAction.expiresAt > now) return true; // 未过期保留
+      if (!pendingAction.expiresAt || pendingAction.expiresAt > now) return true; // 无expiresAt或未过期保留
       if (pendingAction.playerId === currentPlayerId) return true; // 下家B永远保留
       // 【修复】人类玩家的过期claim也保留——玩家可能在犹豫或操作选择中
       const player = game.players.find(p => p.id === pendingAction.playerId);
@@ -341,9 +339,7 @@ class GameManager {
     if (hasTriggered) return;
     const before = game.pendingActions.length;
     game.pendingActions = game.pendingActions.filter((pendingAction: any) => {
-      // ★ K哥铁律(2026-06-08): 没有expiresAt的pending action视为过期，直接清除
-      if (!pendingAction.expiresAt) return false;
-      if (pendingAction.expiresAt > now) return true; // 未过期保留
+      if (!pendingAction.expiresAt || pendingAction.expiresAt > now) return true; // 未过期保留
       return pendingAction.playerId === currentPlayerId;
     });
     if (before !== game.pendingActions.length) {
@@ -2560,7 +2556,15 @@ class GameManager {
         break;
     }
 
-    game.actionHistory.push(gameAction);
+    // ★ K哥铁律(2026-06-08): DISCARD/DRAW/CHOW/PENG/KONG/CONCEALED_KONG/EXTENDED_KONG/HU
+    // 已在 actionHandler 中记录 actionHistory，此处跳过避免重复（语音播两次）
+    const alreadyRecordedInHandler = new Set([
+      ActionType.DISCARD, ActionType.DRAW, ActionType.CHOW, ActionType.PENG,
+      ActionType.KONG, ActionType.CONCEALED_KONG, ActionType.EXTENDED_KONG, ActionType.HU
+    ]);
+    if (!alreadyRecordedInHandler.has(action)) {
+      game.actionHistory.push(gameAction);
+    }
     game.lastActionTime = Date.now();
 
     // Claim/杠动作执行后,当前玩家接管回合。
@@ -3917,10 +3921,17 @@ class GameManager {
               this.clearCurrentTurnPendingActions(freshGame, livePlayer.id);
             }
             if (freshGame.pendingActions.length > 0) {
-              // 🔴 修复：bot freeze到期后还有pending残留 → 视为bot没反应 → auto-pass
-              // 直接清除pending继续推进，而不是renew超时导致死循环
-              console.log(`[bot-freeze] ${livePlayer.name} no response, clearing pending actions`);
-              freshGame.pendingActions = [];
+              // ★ K哥铁律(2026-06-08): 只清除bot自己的pending action，保留其他玩家的claim
+              // 旧代码 freshGame.pendingActions = [] 会把人类玩家的碰/吃claim也清掉
+              freshGame.pendingActions = freshGame.pendingActions.filter(pa => pa.playerId !== livePlayer.id);
+              if (freshGame.pendingActions.length > 0) {
+                console.log(`[bot-freeze] ${livePlayer.name} no response, cleared own pending, ${freshGame.pendingActions.length} other pending remaining`);
+                await this.persistGame(freshGame);
+                this.broadcastGameState(game.gameId);
+                // 还有其他玩家的pending，不要继续摸牌，让timer继续处理
+                return;
+              }
+              console.log(`[bot-freeze] ${livePlayer.name} no response, all pending cleared`);
               await this.persistGame(freshGame);
               this.broadcastGameState(game.gameId);
             }
