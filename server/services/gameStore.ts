@@ -131,14 +131,13 @@ export class GameStore {
       liangShanSuccess: game.liangShanSuccess,
       liangShanVotes: game.liangShanVotes
     };
-    // REVEAL/ENDED 阶段：发送完整 players 数据（含手牌），前端需要展示亮牌
+    // ★ K哥铁律: 任何阶段都推送 players + roundStats
+    // 旧逻辑只在 REVEAL/ENDED 推 players，导致 STARTING/PLAYING 阶段客户端
+    // 看不到新的 isDealer 标记（庄家指示器不更新）
+    payload.players = game.players;
+    payload.roundStats = game.roundStats;
     if (game.phase === GamePhase.REVEAL || game.phase === GamePhase.ENDED) {
-      payload.players = game.players;
       payload.endReason = game.endReason;
-      payload.roundStats = game.roundStats;
-    } else {
-      // ★ K哥铁律(2026-06-07): 任何阶段都推送roundStats，前端战绩榜需累加各局分数
-      payload.roundStats = game.roundStats;
     }
     this.wsManager.broadcast(gameId, 'gameStateUpdate', payload);
   }
