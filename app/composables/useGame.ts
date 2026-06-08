@@ -391,6 +391,8 @@ export const useGame = () => {
         // 避免等 HTTP poll 延迟导致亮牌/结算不显示
         if (data?.phase === 'reveal' || data?.phase === 'ended') {
           if (gameState.value) {
+            const rsLen = Array.isArray(data?.roundStats) ? data.roundStats.length : 0
+            console.log(`[Socket] phase=${data?.phase} roundStats=${rsLen}`)
             gameState.value = { ...gameState.value, ...data }
           }
         }

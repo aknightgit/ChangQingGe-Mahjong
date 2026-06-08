@@ -1878,6 +1878,8 @@ const roundDisplay = computed(() => `第${currentRound.value}局`)
 const roundHistoryDropdown = ref(false)
 const availableRounds = computed(() => {
   const stats = gameState.value?.roundStats
+  const len = Array.isArray(stats) ? stats.length : 0
+  if (len > 0) console.log(`[RoundHistory] roundStats len=${len} availableRounds=${len}`)
   if (!Array.isArray(stats) || stats.length === 0) return []
   return stats.map((_: any, idx: number) => idx + 1).reverse()
 })
