@@ -335,10 +335,14 @@ class GameManager {
   private clearExpiredClaimsForDecisionWindow(game: GameState, now = Date.now()): void {
     if ((game as any).hasTriggeredAction) return;
     const currentPlayerId = game.players[game.currentPlayerIndex]?.id;
+    const before = game.pendingActions.length;
     game.pendingActions = game.pendingActions.filter(pendingAction => {
       if (!pendingAction.expiresAt || pendingAction.expiresAt > now) return true;
       return pendingAction.playerId === currentPlayerId;
     });
+    if (before !== game.pendingActions.length) {
+      console.log(`[clearExpiredClaims] game=${game.gameId.substring(0,8)} before=${before} after=${game.pendingActions.length} currentPlayer=${currentPlayerId?.substring(0,8)} hasTriggered=${(game as any).hasTriggeredAction}`);
+    }
     game.pengChowConflict = null;
     if (game.pendingActions.length === 0) {
       this.timerManager.clearPendingActionTimer(game.gameId);
