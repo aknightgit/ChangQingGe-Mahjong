@@ -4687,6 +4687,7 @@ const checkOtherPlayerSounds = (newState: any) => {
         }
       }
     } else if (act.type === 'flowerReplace' || act.type === ActionType.FLOWER_REPLACE) {
+      console.log(`[FlowerVoice] detected flowerReplace in actionHistory, pid=${pid?.substring(0,8)}`)
       pendingVoices.push({ type: 'discard', suit: 'flower', value: 0, sound: false, playerId: pid })
     }
   }
