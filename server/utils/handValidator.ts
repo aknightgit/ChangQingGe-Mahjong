@@ -1490,16 +1490,13 @@ export function canWin(
   }
 
   // 风一色/箭一色：全风箭牌可胡，不受手牌数限制（特殊牌型）
-  // ★ 百搭可以当任意牌：如果所有自然牌(非百搭)都是风/箭，百搭也可以当风/箭 → 风一色
   const exposedNonFlower = exposed.flatMap(m => m.tiles).filter(t => !isFlower(t) && !isWildTileFn(t));
   const concealedWilds = concealedNonFlower.filter(t => isWildTileFn(t));
   const concealedNaturals = concealedNonFlower.filter(t => !isWildTileFn(t));
   const combinedNaturalOnly = [...concealedNaturals, ...exposedNonFlower];
-  const allNaturalWind = combinedNaturalOnly.length > 0 &&
+  const allWind = combinedNaturalOnly.length > 0 &&
     combinedNaturalOnly.every(t => isWind(t) || isDragon(t));
-  // 有百搭+自然牌全风箭 → 百搭当风/箭 → 风一色
-  // 无百搭+所有牌全风箭 → 风一色
-  if (allNaturalWind) {
+  if (allWind) {
     return { canWin: true, types: [HandType.ALL_WIND] };
   }
 
