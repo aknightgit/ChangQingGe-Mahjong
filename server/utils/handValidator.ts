@@ -639,6 +639,22 @@ function detectTypes(
     if (!Number.isInteger(remainingMelds) || remainingMelds < 0) return [];
   }
 
+  // ★ K哥铁律(2026-06-09): 垃圾胡前置检查
+  // 八花/四百搭/风一色已处理。其他所有牌型，先检查：多数字门+不满足碰碰胡 → 垃圾胡直接返回
+  // 所有胡牌检查都必须先过这一关，再去判断具体牌型
+  if (types.length === 0 && allTilesNonFlower.length >= 2) {
+    const _numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+    const _numSuitSet = new Set(allTilesNonFlower.filter(t => _numSuits.includes(t.suit)).map(t => t.suit));
+    if (_numSuitSet.size >= 2) {
+      const _m = (allTilesNonFlower.length - 2) / 3;
+      if (Number.isInteger(_m) && _m >= 0) {
+        if (!canFormOnlyTripletsFrom(allTilesNonFlower, _m, () => false)) {
+          return [];  // 多数字门+不能全刻子 = 垃圾胡，直接判不能胡
+        }
+      }
+    }
+  }
+
   // ---- 统计已暴露面子 ----
   const hasExposedSequence = exposed.some(m => m.type === MeldType.SEQUENCE);
 
@@ -1013,39 +1029,8 @@ function findBestAssignmentHeuristic(
       const tile = alloc[i];
       virtualHand.push({ suit: tile.suit as TileSuit, value: tile.value, id: `vh-${i}`, isFlower: false });
     }
-    const result = detectTypes(virtualHand, exposed);
-    // ★ 统一垃圾胡检查：多数字门 + 不能全刻子 = 垃圾胡
-    if (result.includes(HandType.ALL_TRIPLETS) && isGarbageHand(virtualHand)) {
-      return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
-    }
-    // ★ STANDARD 也要检查垃圾胡（百搭分配后可能得到含顺子的多门 STANDARD）
-    if (result.includes(HandType.STANDARD)) {
-      const completeHand = [...virtualHand, ...exposed.flatMap(m => m.tiles).filter(t => !isFlower(t))];
-      if (_isGarbageMultiSuitsWithSequenceModuleLevel(completeHand)) {
-        return result.filter(t => t !== HandType.STANDARD);
-      }
-    }
-    // ★ 全牌型垃圾胡检查(2026-06-09): 任何牌型都要检查 complete hand 是否多门+顺子
-    // 例: 百搭分配后得到 HALF_FLUSH(混一色)，但 complete hand 实际是多门+顺子 → 垃圾胡
-    // 只有清一色/风一色/八花/四百搭 豁免（本身已保证单门或特殊结构）
-    const EXEMPT_TYPES = new Set([HandType.FULL_FLUSH, HandType.ALL_WIND, HandType.EIGHT_FLOWERS, HandType.FOUR_WILD]);
-    const hasExemptType = result.some(t => EXEMPT_TYPES.has(t));
-    if (!hasExemptType && result.length > 0) {
-      const completeHand = [...virtualHand, ...exposed.flatMap(m => m.tiles).filter(t => !isFlower(t))];
-      const completeSuits = getSuits(completeHand);
-      const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-      const numSuitCount = [...completeSuits].filter(s => numSuits.includes(s)).length;
-      if (numSuitCount >= 2) {
-        // 多数字门：检查是否能全刻子
-        const allNonFlower = completeHand.filter(t => !isFlower(t));
-        const m = (allNonFlower.length - 2) / 3;
-        if (Number.isInteger(m) && m >= 0 && !canFormOnlyTripletsFrom(allNonFlower, m, () => false)) {
-          // 多门+不能全刻子 = 垃圾胡，清空所有牌型
-          return [];
-        }
-      }
-    }
-    return result;
+    // detectTypes 内部已含垃圾胡前置检查（多数字门+不能全刻子 → 直接返回空）
+    return detectTypes(virtualHand, exposed);
   };
 
   // 3 张百搭时全量穷举仍在可控范围内，避免被启发式漏掉真实可胡解
