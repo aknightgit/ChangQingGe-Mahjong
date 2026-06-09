@@ -203,10 +203,14 @@ export class BotController {
 
         const filteredHigherActions = higherActions.filter((candidate) => {
           if (candidate !== ActionType.HU) return true;
-          const winOptions = getCachedWinOptions(game, player, 'discard', {
-            isRobbingKong: !!game.pendingKongClaim,
-            extraTile: pa.tile || undefined  // ★ 修复：传入弃牌 tile，否则 canWin 检查的是缺一张的手牌
-          });
+          // ★ 区分自摸和捉冲：自摸时手牌已含摸到的牌，用 'self_draw' context；捉冲时手牌缺一张，用 'discard' + extraTile
+          const isSelfDrawHu = !pa.tile;
+          const winOptions = isSelfDrawHu
+            ? getCachedWinOptions(game, player, 'self_draw')
+            : getCachedWinOptions(game, player, 'discard', {
+                isRobbingKong: !!game.pendingKongClaim,
+                extraTile: pa.tile || undefined
+              });
           // ★ 诊断: HU 被过滤时打印原因
           if (winOptions.length === 0) {
             console.log(`[BotHU-filtered] ${player.name} HU filtered out! concealed=${player.hand.concealedTiles.length} exposed=${player.hand.exposedMelds.length} tile=${pa.tile?.suit}-${pa.tile?.value}`);

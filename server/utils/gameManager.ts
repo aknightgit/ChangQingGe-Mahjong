@@ -758,11 +758,14 @@ class GameManager {
         this.handlePass(game, player);
       }
     } else if (action === ActionType.HU) {
-      // ★ 捉冲校验: 用 getCachedWinOptions + extraTile 严格检查能否胡
+      // ★ 区分自摸和捉冲：自摸时手牌已含摸到的牌，用 'self_draw' context；捉冲时手牌缺一张，用 'discard' + extraTile
       const huPendingTile = pa.tile;
-      const winOptions = this.winEvaluator.getCachedWinOptions(game, player, 'discard', {
-        extraTile: huPendingTile || undefined
-      });
+      const isSelfDrawHu = !huPendingTile;
+      const winOptions = isSelfDrawHu
+        ? this.winEvaluator.getCachedWinOptions(game, player, 'self_draw')
+        : this.winEvaluator.getCachedWinOptions(game, player, 'discard', {
+            extraTile: huPendingTile || undefined
+          });
       if (winOptions.length === 0) {
         console.log(`[resolvePendingAction] ${player.name} HU rejected: winOptions=0 (canWin=false with extraTile)`);
         this.handlePass(game, player);
