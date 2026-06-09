@@ -14,6 +14,8 @@ interface PlayerStat {
   vsAINet: number;            // 与AI净输赢（赢AI - 输AI）
   selfDrawCount: number;      // 自摸次数
   catchDiscardCount: number;  // 捉冲次数
+  winCount: number;           // 胡牌次数（自摸+接炮）
+  winRate: number;            // 胜率
   maxWin: number;             // 最大赢
   maxLoss: number;            // 最大输
 }
@@ -42,6 +44,8 @@ export default defineEventHandler(async (event) => {
         vsAINet: 0,
         selfDrawCount: 0,
         catchDiscardCount: 0,
+        winCount: 0,
+        winRate: 0,
         maxWin: 0,
         maxLoss: 0,
       });
@@ -77,6 +81,7 @@ export default defineEventHandler(async (event) => {
 
       // Win type stats (only for winners)
       if (p.status === 'won') {
+        stat.winCount++;
         if (p.winType === 'self_draw') stat.selfDrawCount++;
         else if (p.winType === 'catch_discard' || p.winType === 'rob_kong') stat.catchDiscardCount++;
       }
@@ -92,10 +97,11 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // Calculate net vs AI and effective score
+  // Calculate net vs AI, effective score, and win rate
   for (const stat of playerStats.values()) {
     stat.vsAINet = stat.vsAIWin - stat.vsAILose;
     stat.effectiveScore = stat.totalScore - stat.vsAINet;
+    stat.winRate = stat.totalGames > 0 ? Math.round((stat.winCount / stat.totalGames) * 1000) / 10 : 0;
   }
 
   // Sort by effective score descending, then total score

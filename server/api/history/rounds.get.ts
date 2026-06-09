@@ -54,6 +54,11 @@ export default defineEventHandler(async (event) => {
         return orderA - orderB
       })
       .map((winner: any) => winner.playerName)
+    // Build a map of playerId → handTypeName for winners
+    const winnerHandTypes = new Map<string, string>()
+    for (const w of winners) {
+      if (w.playerId && w.handTypeName) winnerHandTypes.set(w.playerId, w.handTypeName)
+    }
 
     return {
       gameId: round.gameId,
@@ -69,6 +74,7 @@ export default defineEventHandler(async (event) => {
         status: player.status,
         isWinner: winnerIds.has(player.id),
         score: Number(scores[player.id] ?? 0),
+        handTypeName: winnerHandTypes.get(player.id) || null,
       })),
     }
   })

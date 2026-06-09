@@ -68,7 +68,7 @@
                       :class="{ 'winner-row': player.isWinner, 'me-row': player.playerId === userIdCookie }"
                     >
                       <td>{{ player.name }}</td>
-                      <td>{{ player.isWinner ? '胡牌' : formatPlayerStatus(player.status) }}</td>
+                      <td>{{ player.isWinner ? (player.handTypeName || '胡牌') : formatPlayerStatus(player.status) }}</td>
                       <td :class="scoreClass(player.score)">{{ formatSigned(player.score) }}</td>
                     </tr>
                   </tbody>
@@ -102,8 +102,8 @@
                 <tr>
                   <th>玩家</th>
                   <th>总局数</th>
+                  <th>胜率</th>
                   <th>总分</th>
-                  <th class="highlight-col">有效分</th>
                   <th>自摸</th>
                   <th>单局最高</th>
                 </tr>
@@ -124,8 +124,8 @@
                     <span class="name">{{ stat.name }}</span>
                   </td>
                   <td>{{ stat.totalGames }}</td>
+                  <td>{{ stat.winRate > 0 ? stat.winRate + '%' : '-' }}</td>
                   <td :class="scoreClass(stat.totalScore)">{{ formatSigned(stat.totalScore) }}</td>
-                  <td class="highlight-col" :class="scoreClass(stat.effectiveScore)">{{ formatSigned(stat.effectiveScore) }}</td>
                   <td>{{ stat.selfDrawCount }}</td>
                   <td class="score-positive">{{ stat.maxWin > 0 ? `+${stat.maxWin}` : '-' }}</td>
                 </tr>
@@ -226,6 +226,8 @@ interface PlayerStat {
   vsAINet: number
   selfDrawCount: number
   catchDiscardCount: number
+  winCount: number
+  winRate: number
   maxWin: number
   maxLoss: number
 }
@@ -236,6 +238,7 @@ interface RoundReviewPlayer {
   status: string
   isWinner: boolean
   score: number
+  handTypeName?: string | null
 }
 
 interface RoundReviewItem {
