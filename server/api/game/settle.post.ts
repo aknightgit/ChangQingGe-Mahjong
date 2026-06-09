@@ -76,11 +76,34 @@ export default defineEventHandler(async (event) => {
         } else if (score < 0) {
           if (score < playerStats[pid].maxLoss) playerStats[pid].maxLoss = score;
         }
-        // 有效战绩 vs 与AI战绩
-        if (roundHasAI) {
-          playerStats[pid].vsAiScore += score;
-        } else {
-          playerStats[pid].effectiveScore += score;
+      }
+
+      // ★ 有效输赢: 用逐对 transfers 精确计算真人之间的输赢
+      // 只统计 fromPlayerId 和 toPlayerId 都是真人(非AI)的转账
+      const transfers = (round as any).transfers || [];
+      if (transfers.length > 0) {
+        for (const t of transfers) {
+          const fromIsAI = aiPlayerIds.has(t.fromPlayerId);
+          const toIsAI = aiPlayerIds.has(t.toPlayerId);
+          if (!fromIsAI && !toIsAI) {
+            // 真人→真人: from扣分, to加分
+            if (playerStats[t.fromPlayerId]) playerStats[t.fromPlayerId].effectiveScore -= t.amount;
+            if (playerStats[t.toPlayerId]) playerStats[t.toPlayerId].effectiveScore += t.amount;
+          } else {
+            // 涉及AI: 计入 vsAiScore
+            if (!fromIsAI && playerStats[t.fromPlayerId]) playerStats[t.fromPlayerId].vsAiScore -= t.amount;
+            if (!toIsAI && playerStats[t.toPlayerId]) playerStats[t.toPlayerId].vsAiScore += t.amount;
+          }
+        }
+      } else {
+        // 没有 transfers 数据的旧局: 回退到旧逻辑(按整局是否有AI判断)
+        for (const [pid, score] of Object.entries(round.scores)) {
+          if (!playerStats[pid]) continue;
+          if (roundHasAI) {
+            playerStats[pid].vsAiScore += score;
+          } else {
+            playerStats[pid].effectiveScore += score;
+          }
         }
       }
       for (const wid of round.winners) {
@@ -159,10 +182,30 @@ export default defineEventHandler(async (event) => {
         } else if (score < 0) {
           if (score < playerStatsMap[pid].maxLoss) playerStatsMap[pid].maxLoss = score;
         }
-        if (roundHasAI) {
-          playerStatsMap[pid].vsAiScore += score;
-        } else {
-          playerStatsMap[pid].effectiveScore += score;
+      }
+
+      // ★ 有效输赢: 用逐对 transfers 精确计算真人之间的输赢
+      const transfers = (round as any).transfers || [];
+      if (transfers.length > 0) {
+        for (const t of transfers) {
+          const fromIsAI = aiPlayerIds.has(t.fromPlayerId);
+          const toIsAI = aiPlayerIds.has(t.toPlayerId);
+          if (!fromIsAI && !toIsAI) {
+            if (playerStatsMap[t.fromPlayerId]) playerStatsMap[t.fromPlayerId].effectiveScore -= t.amount;
+            if (playerStatsMap[t.toPlayerId]) playerStatsMap[t.toPlayerId].effectiveScore += t.amount;
+          } else {
+            if (!fromIsAI && playerStatsMap[t.fromPlayerId]) playerStatsMap[t.fromPlayerId].vsAiScore -= t.amount;
+            if (!toIsAI && playerStatsMap[t.toPlayerId]) playerStatsMap[t.toPlayerId].vsAiScore += t.amount;
+          }
+        }
+      } else {
+        for (const [pid, score] of Object.entries(round.scores)) {
+          if (!playerStatsMap[pid]) continue;
+          if (roundHasAI) {
+            playerStatsMap[pid].vsAiScore += score;
+          } else {
+            playerStatsMap[pid].effectiveScore += score;
+          }
         }
       }
       for (const wid of round.winners) {

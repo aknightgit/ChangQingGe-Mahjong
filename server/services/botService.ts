@@ -3382,6 +3382,19 @@ export async function shouldClaimPendingAction(
           kongTune *= Math.max(0, 1.0 - (policy.baoSelfClaimCaution || 0) * 0.4)
         }
 
+        // ★ K哥铁律(2026-06-09): 做清一色/混一色时, 明杠会把自己目标门里的 3 张牌 + 别人出的 1 张
+        //     一起牌面化, 严重破坏清/混一色凑牌节奏 (K哥原话: "比较大的降低")
+        // 混碰/碰碰胡 (ALL_PUNGS) 不受影响 (K哥原话: "混碰和碰碰胡不影响, 想杠就杠")
+        // 适用: 路线是 PURE_FLUSH / HALF_FLUSH 且 claimTile 属于 targetSuit 且不是百搭
+        //   (百搭被杠走其实有利于清一色, 不在这里抑制)
+        if (routeState && routeState.targetSuit && !isWildTile(claimTile, game)) {
+          const flushRoute = routeState.current === 'PURE_FLUSH' || routeState.current === 'HALF_FLUSH'
+          if (flushRoute && claimTile.suit === routeState.targetSuit) {
+            kongTune *= 0.20
+            console.log(`[ClaimDecider] ${player.name} KONG targetSuit suppression: route=${routeState.current} targetSuit=${routeState.targetSuit} claimTile=${claimTile.suit}-${claimTile.value} kongTune * 0.20 → ${kongTune.toFixed(3)}`)
+          }
+        }
+
         kongTune = Math.max(0.05, Math.min(2.0, kongTune)) // 上限 2.0，防止 kongWildBoost 过大导致过度杠牌
         let kongBlockedByRoute = false
         if (useRoutePlanner && routeState) {

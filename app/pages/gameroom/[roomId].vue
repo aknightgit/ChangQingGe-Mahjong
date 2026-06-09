@@ -1732,6 +1732,12 @@ onMounted(async () => {
       // 捉冲:先念出放冲的牌名,再播胡语音
       const huText = detail?.text || ''
       const tileMatch = huText.match(/捉冲\[.*?\]-(.*?)(?:·|$)/)
+      // ★ 修复 Bug #1: 解析胡牌玩家ID,用去重防止 onConfirmHu 和 state watcher 三重播
+      const huPlayerId = (detail?.playerId as string) || ''
+      const huPlayerName = (detail?.playerName as string) || ''
+      const meName = currentPlayer.value?.name || ''
+      const isMyHu = !!(meName && huPlayerName && meName === huPlayerName)
+      const dedupeId = huPlayerId || (isMyHu ? currentPlayer.value?.id : '') || huPlayerName
       if (tileMatch) {
         const tileName = tileMatch[1]
         // 尝试从牌名解析花色和点数播放语音
@@ -1746,7 +1752,9 @@ onMounted(async () => {
           }
         }
       }
-      playVoiceAction('hu')
+      if (tryClaimHuVoice(dedupeId, 'hu')) {
+        playVoiceAction('hu')
+      }
     }
     else if (actionKind === 'selfHu') { /* 由 game state watcher 统一播放 */ }
     else if (actionKind === 'flowerReplace') {
@@ -3126,10 +3134,10 @@ const onConfirmHu = async (index: number) => {
   playSound('tile-hu')
   const selectedOption: any = displayWinOptions.value[index]
   // ★ K哥: 自摸用自摸语音，捉冲用胡了语音
-  if (selectedOption?.type === 'self_draw') {
-    playVoiceAction('selfHu')
-  } else {
-    playVoiceAction('hu')
+  const voiceKind: 'hu' | 'selfHu' = selectedOption?.type === 'self_draw' ? 'selfHu' : 'hu'
+  // ★ 修复 Bug #1: 胡牌语音去重,state watcher 和 broadcast 还会再播,这里先认领
+  if (tryClaimHuVoice(currentPlayer.value?.id || 'self', voiceKind)) {
+    playVoiceAction(voiceKind)
   }
   lastHuReviewOptions.value = displayWinOptions.value.map((option: any) => ({ ...option }))
   lastSelectedHuCombo.value = index
@@ -4194,9 +4202,55 @@ const handleCircularAction = (type: string) => {
 // For self-drawn Kong (Concealed or Extended)
 const showConcealedKong = computed(() => availableActions.value.includes(ActionType.CONCEALED_KONG))
 const showExtendedKong = computed(() => availableActions.value.includes(ActionType.EXTENDED_KONG))
+
+// ★ 胡牌语音去重: 同一玩家同一种胡牌语音在 2 秒窗口内只播一次
+// 修复 Bug: 真实玩家胡牌后 onConfirmHu / state watcher / broadcast 三个触发点都会播,导致重复
+// 用 window 级 Map 跨组件实例共享
+declare global {
+  interface Window {
+    _huVoicePlayedAt?: Record<string, number>
+  }
+}
+const HU_VOICE_DEDUPE_WINDOW_MS = 2000
+const tryClaimHuVoice = (playerId: string, voiceKind: 'hu' | 'selfHu'): boolean => {
+  if (!process.client) return true
+  if (!window._huVoicePlayedAt) window._huVoicePlayedAt = {}
+  const key = `${playerId}::${voiceKind}`
+  const now = Date.now()
+  const lastAt = window._huVoicePlayedAt[key] || 0
+  if (now - lastAt < HU_VOICE_DEDUPE_WINDOW_MS) {
+    console.log(`[HuVoiceDedup] 抑制重复胡牌语音 playerId=${playerId} kind=${voiceKind} (距上次 ${now - lastAt}ms)`)
+    return false
+  }
+  window._huVoicePlayedAt[key] = now
+  return true
+}
+
 // 自动摸牌:轮到自己且只能摸牌时自动执行(不检查聚义/造反)
 const canAutoDraw = computed(() => {
-  if (!isMyTurn.value || !autoDraw.value || !showDraw.value) return false
+  if (!isMyTurn.value || !autoDraw.value) return false
+  if (isAIControlled.value) return false
+  // ★ 兜底 Bug #2: 没有任何可用动作时(后端 availableActions=[]),自动摸牌
+  // 例如: 吃/碰后轮到下一家摸牌时,后端可能因状态机问题返回空 actions
+  const hasAnyAction = availableActions.value.some(a =>
+    a === ActionType.DRAW ||
+    a === ActionType.DISCARD ||
+    a === ActionType.CHOW ||
+    a === ActionType.PENG ||
+    a === ActionType.KONG ||
+    a === ActionType.HU ||
+    a === ActionType.CONCEALED_KONG ||
+    a === ActionType.EXTENDED_KONG ||
+    a === ActionType.REBEL ||
+    a === ActionType.LIANG_SHAN ||
+    a === ActionType.CHEAT_HU
+  )
+  if (availableActions.value.length === 0 && !hasAnyAction) {
+    // 没有任何动作 → 兜底自动摸牌(后端会正确处理)
+    return true
+  }
+  // 原有逻辑: 只能摸牌时自动摸
+  if (!showDraw.value) return false
   if (showChow.value || showPeng.value || showKong.value || showHu.value || showConcealedKong.value || showExtendedKong.value) return false
   return true
 })
@@ -4647,6 +4701,8 @@ const getReplacedFlowerMelds = (player: any) =>
   })
 const checkOtherPlayerSounds = (newState: any) => {
   if (!gameState.value?.players) return
+  // ★ 修复 Bug #2: 结算面板显示后不再播放AI打牌音效
+  if (showSettlement.value) return
   const history = Array.isArray((newState as any)?.actionHistory) ? (newState as any).actionHistory : []
   const playedKeys = new Set<string>()
   const pendingVoices: Array<{ type: 'meld'; action: 'kong' | 'pong' | 'chow' } | { type: 'discard'; suit: string; value: number; sound: boolean; playerId?: string }> = []
@@ -4723,8 +4779,12 @@ const activePlayerCount = (state: any) => (state?.players || []).filter((p: any)
 watch(() => gameState.value, (newState, oldState) => {
   if (!newState) return
 
+  // ★ 修复 Bug #2: 结算面板显示后,跳过新局开始/进行中的状态变化处理
+  // 但仍然允许 ENDED/REVEAL 阶段的数据更新(结算面板需要这些数据)
+  const _skipForSettlement = showSettlement.value && (newState.phase === 'starting' || newState.phase === 'playing')
+
   // 游戏开始
-  if (newState.phase === 'playing' && prevPhase.value === 'waiting') {
+  if (!_skipForSettlement && newState.phase === 'playing' && prevPhase.value === 'waiting') {
     addBroadcast('🎉 房间满员,正式开干啦!', 'info')
     playSound('game-start')
   }
@@ -4744,8 +4804,11 @@ watch(() => gameState.value, (newState, oldState) => {
     // 检测最新胡牌玩家是自摸还是捉冲,播放对应语音
     const newWinners = (newState.players || []).filter((p: any) => p.status === 'won' && !(oldState?.players || []).find((op: any) => op.id === p.id && op.status === 'won'))
     for (const w of newWinners) {
-      if (w.isSelfDrawn) { playVoiceAction('selfHu') }
-      else { playVoiceAction('hu') }
+      // ★ 修复 Bug #1: 去重胡牌语音,避免和 onConfirmHu / broadcast handler 重复
+      const kind: 'hu' | 'selfHu' = w.isSelfDrawn ? 'selfHu' : 'hu'
+      if (tryClaimHuVoice(w.id, kind)) {
+        playVoiceAction(kind)
+      }
     }
   }
 
@@ -4849,6 +4912,11 @@ watch(
   (newPhase, oldPhase) => {
     console.log('[DiceOverlay] phase changed:', oldPhase, '->', newPhase, 'showDiceOverlay was:', showDiceOverlay.value)
     if (newPhase === GamePhase.STARTING) {
+      // ★ 修复 Bug #2: 退房结算中，不要开启新局
+      if (isSettleRequested.value && showSettlement.value) {
+        console.log('[DiceOverlay] Skipping STARTING phase - settlement requested and panel is showing')
+        return
+      }
       // 如果本地已经触发了骰子动画(enterStartingPhaseWithDiceOverlay hasDicePreview提前设置了),跳过 watcher
       if (hasDicePreview.value) {
         console.log('[DiceOverlay] Already triggered locally (hasDicePreview), skipping watcher')
