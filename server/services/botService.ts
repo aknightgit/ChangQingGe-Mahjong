@@ -3441,6 +3441,17 @@ export async function shouldClaimPendingAction(
     !isHonor(claimTile)
   ) {
     const exclusionBlocked = !checkChowPongExclusion(exclusionState, 'chow', claimTile.suit)
+
+    // ★ K哥铁律硬规则：第一口开门吃，长门<5张 → 硬拒绝（不走软评分）
+    const exposedMeldCnt = player.hand.exposedMelds.filter(m => !m.tiles?.some(t => isFlower(t))).length
+    const chowSuitCnt = hand.filter(t => t.suit === claimTile.suit && !isWildTile(t, game)).length
+    let chowHardBlocked = false
+    if (exposedMeldCnt === 0 && chowSuitCnt < 5) {
+      console.log(`[hardRule] ${player.name} CHOW blocked: first-meld ${claimTile.suit} only ${chowSuitCnt} tiles (< 5)`)
+      actionScores.set(ActionType.CHOW, { shanten: 99, effective: 0, tune: -999 })
+      chowHardBlocked = true
+    }
+
     const v = claimTile.value
     const suit = claimTile.suit
 
@@ -3476,7 +3487,7 @@ export async function shouldClaimPendingAction(
       }
     }
 
-    if (bestChow) {
+    if (bestChow && !chowHardBlocked) {
       const candidateRouteState = useRoutePlanner
         ? getEvaluator(player).evaluate({
             game,
@@ -3560,7 +3571,7 @@ export async function shouldClaimPendingAction(
         if (exclusionBlocked) {
           actionScores.set(ActionType.CHOW, { shanten: 99, effective: 0, tune: 0 })
         } else {
-          bestChow.tune = Math.max(0.05, bestChow.tune)
+          bestChow.tune = bestChow.tune < 0 ? bestChow.tune : Math.max(0.05, bestChow.tune)
           // ★ K哥铁律: 吃了直接听牌(shanten=0) → 硬吃，不走概率
           if (bestChow.shanten === 0 && passEval.shanten > 0) {
             console.log(`[hardRule] ${player.name} CHOW → ting (shanten 0), forcing CHOW`)
