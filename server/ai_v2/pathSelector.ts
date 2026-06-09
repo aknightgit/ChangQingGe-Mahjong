@@ -600,14 +600,23 @@ export function evaluateRouteStateV2(input: {
 
   let current = isPostRound10Forced ? postRound10Top : (canHoldPreviousRoute ? previousCandidate : topCandidate)
   // ★ K哥铁律(2026-06-07): 碰碰胡路线一旦决定，不可转混一色，只能升级为混碰
-  // 如果之前是ALL_PUNGS且lockLevel>=1，绝不允许切到HALF_FLUSH/FULL_FLUSH
+  // 如果之前是ALL_PUNGS且lockLevel>=1，绝不允许切到HALF_FLUSH/FULL_FLUSH/OPEN_SPEED
   if (previousRouteState?.current === 'ALL_PUNGS' && (previousRouteState.lockLevel >= 1 || (previousRouteState.stableTurns || 0) >= 2)) {
-    if (current?.route === 'HALF_FLUSH' || current?.route === 'OPEN_SPEED') {
-      // 强制保持ALL_PUNGS，不可转混一色
+    if (current?.route === 'HALF_FLUSH' || current?.route === 'FULL_FLUSH' || current?.route === 'OPEN_SPEED') {
+      // 强制保持ALL_PUNGS，不可转混一色/清一色/开放速度
       const allPungsCandidate = routeScores.find(c => c.route === 'ALL_PUNGS')
       if (allPungsCandidate) {
         current = allPungsCandidate
       }
+    }
+  }
+  // ★ K哥铁律(2026-06-09): lockLevel=2 时，ALL_PUNGS 得分加成，确保不被 HALF_FLUSH 超越
+  if (previousRouteState?.current === 'ALL_PUNGS' && previousRouteState.lockLevel >= 2) {
+    const allPungsInScores = routeScores.find(c => c.route === 'ALL_PUNGS')
+    if (allPungsInScores) {
+      allPungsInScores.score += 15  // 强加成，确保 ALL_PUNGS 稳居第一
+      routeScores.sort((a, b) => b.score - a.score)
+      current = routeScores[0]  // 重新选最高分
     }
   }
   const secondary = routeScores.find(c => c.route !== current.route) || null

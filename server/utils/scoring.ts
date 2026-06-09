@@ -118,6 +118,16 @@ export function calculateScore(params: {
   if (topType) {
     handTypeName = getHandTypeDisplayName(topType);
 
+    // ★ 牌型后缀:杠开/大吊/无花自摸
+    const doorFlowerCount = exposedMelds.flatMap(m => m.tiles).filter(t => isFlower(t)).length;
+    if (isKongFlower) {
+      handTypeName += '（杠开）';
+    } else if (isDaDiao) {
+      handTypeName += '（大吊）';
+    } else if (isSelfDrawn && doorFlowerCount === 0) {
+      handTypeName += '（无花）';
+    }
+
     // 检查是否为固定番数牌型
     const fixedName = getFixedFanName(topType, isSelfDrawn, isKongFlower, handTypes, isDaDiao);
     if (fixedName && FIXED_FAN[fixedName]) {
