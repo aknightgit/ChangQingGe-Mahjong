@@ -4206,9 +4206,9 @@ class GameManager {
     // ★ K哥铁律(2026-06-06): 暂时关闭BotPenalty，观察AI真实战斗力
     const BOT_PENALTY_ENABLED = false;
     // 【2026-05-29 验牌阶段】如果还不是REVEAL阶段，先进入REVEAL并延迟5秒
-    // 梁山聚义成功：跳过验牌，直接结算
+    // 梁山聚义成功/造反成功：跳过验牌，直接结算
     // 流局（wall_exhausted）：跳过验牌阶段，直接结算（K哥要求）
-    const skipReveal = !!(game as any).liangShanSuccess || reason === GameEndReason.WALL_EXHAUSTED;
+    const skipReveal = !!(game as any).liangShanSuccess || !!(game as any).rebelSuccess || reason === GameEndReason.WALL_EXHAUSTED;
     if (game.phase !== GamePhase.REVEAL && !skipReveal) {
       game.phase = GamePhase.REVEAL;
       game.endReason = reason;

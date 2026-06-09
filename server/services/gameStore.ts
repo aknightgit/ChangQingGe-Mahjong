@@ -129,7 +129,10 @@ export class GameStore {
       winnersCount: game.winnersCount,
       _freezeUntil: (game as any)._freezeUntil || 0,
       liangShanSuccess: game.liangShanSuccess,
-      liangShanVotes: game.liangShanVotes
+      liangShanVotes: game.liangShanVotes,
+      rebelSuccess: (game as any).rebelSuccess,
+      rebelPlayerName: (game as any).rebelPlayerName,
+      rebelHand: (game as any).rebelHand
     };
     // ★ K哥铁律: 任何阶段都推送 players + roundStats
     // 旧逻辑只在 REVEAL/ENDED 推 players，导致 STARTING/PLAYING 阶段客户端
