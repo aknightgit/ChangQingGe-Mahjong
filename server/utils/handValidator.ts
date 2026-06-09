@@ -1025,6 +1025,26 @@ function findBestAssignmentHeuristic(
         return result.filter(t => t !== HandType.STANDARD);
       }
     }
+    // ★ 全牌型垃圾胡检查(2026-06-09): 任何牌型都要检查 complete hand 是否多门+顺子
+    // 例: 百搭分配后得到 HALF_FLUSH(混一色)，但 complete hand 实际是多门+顺子 → 垃圾胡
+    // 只有清一色/风一色/八花/四百搭 豁免（本身已保证单门或特殊结构）
+    const EXEMPT_TYPES = new Set([HandType.FULL_FLUSH, HandType.ALL_WIND, HandType.EIGHT_FLOWERS, HandType.FOUR_WILD]);
+    const hasExemptType = result.some(t => EXEMPT_TYPES.has(t));
+    if (!hasExemptType && result.length > 0) {
+      const completeHand = [...virtualHand, ...exposed.flatMap(m => m.tiles).filter(t => !isFlower(t))];
+      const completeSuits = getSuits(completeHand);
+      const numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
+      const numSuitCount = [...completeSuits].filter(s => numSuits.includes(s)).length;
+      if (numSuitCount >= 2) {
+        // 多数字门：检查是否能全刻子
+        const allNonFlower = completeHand.filter(t => !isFlower(t));
+        const m = (allNonFlower.length - 2) / 3;
+        if (Number.isInteger(m) && m >= 0 && !canFormOnlyTripletsFrom(allNonFlower, m, () => false)) {
+          // 多门+不能全刻子 = 垃圾胡，清空所有牌型
+          return [];
+        }
+      }
+    }
     return result;
   };
 
