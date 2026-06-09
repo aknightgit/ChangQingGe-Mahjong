@@ -4264,20 +4264,20 @@ watch(canAutoDraw, (can, old) => {
     }
   }, 500)
 })
-// ★ 修复: freeze 到期后 canAutoDraw 可能没变化(watcher 不触发),专门监听 freeze 到期
-let _prevFreezeUntil = 0
-watch(currentFreezeUntil, (freezeUntil) => {
-  const prev = _prevFreezeUntil
-  _prevFreezeUntil = freezeUntil
-  // freeze 从激活→到期(prev > now && freezeUntil <= now) 且轮到自己
-  if (prev > Date.now() && freezeUntil <= Date.now() && isMyTurn.value && autoDraw.value && !isAIControlled.value) {
-    console.log('[AutoDraw] freeze expired, checking if should auto-draw...')
-    setTimeout(() => {
+// ★ 修复: 兜底——每次 state 更新时检查是否该自动摸牌
+// canAutoDraw watcher 只在值变化时触发，但 freeze 到期后值可能没变化
+let _autoDrawCheckTimer: ReturnType<typeof setTimeout> | null = null
+watch(availableActions, (actions) => {
+  if (_autoDrawCheckTimer) { clearTimeout(_autoDrawCheckTimer); _autoDrawCheckTimer = null }
+  if (!isMyTurn.value || !autoDraw.value || isAIControlled.value) return
+  // 有 DRAW 可用且没有吃碰杠胡等优先动作 → 延迟触发
+  if (actions.includes(ActionType.DRAW) && !showChow.value && !showPeng.value && !showKong.value && !showHu.value && !showConcealedKong.value && !showExtendedKong.value) {
+    _autoDrawCheckTimer = setTimeout(() => {
       if (canAutoDraw.value) {
-        console.log('[AutoDraw] freeze-expired executing DRAW')
+        console.log('[AutoDraw] availableActions-watcher executing DRAW')
         void executeAction(ActionType.DRAW)
       }
-    }, 300)
+    }, 500)
   }
 })
 const hasPriorityActions = computed(
@@ -4717,8 +4717,10 @@ const getReplacedFlowerMelds = (player: any) =>
   })
 const checkOtherPlayerSounds = (newState: any) => {
   if (!gameState.value?.players) return
-  // ★ 修复 Bug #2: 结算面板显示后不再播放AI打牌音效
+  // ★ 结算面板显示后不再播放AI打牌音效
   if (showSettlement.value) return
+  // ★ ENDED 阶段不播放（防止关掉结算面板后重播上一局旧语音）
+  if (newState.phase === 'ended' || newState.phase === 'reveal') return
   const history = Array.isArray((newState as any)?.actionHistory) ? (newState as any).actionHistory : []
   const playedKeys = new Set<string>()
   const pendingVoices: Array<{ type: 'meld'; action: 'kong' | 'pong' | 'chow' } | { type: 'discard'; suit: string; value: number; sound: boolean; playerId?: string }> = []
@@ -4731,11 +4733,11 @@ const checkOtherPlayerSounds = (newState: any) => {
   if (turnKey !== _flowerVoicePlayedTurnKey) {
     _flowerVoicePlayed.clear()
     _flowerVoicePlayedTurnKey = turnKey
-    // ★ 新局/新回合: 重置 _prevHistoryLength, 防止旧局的 length 残留导致新局 action 被跳过
-    if (history.length < _prevHistoryLength) {
-      console.log(`[CheckSounds] reset _prevHistoryLength ${_prevHistoryLength} → 0 (history shrunk)`)
-      _prevHistoryLength = 0
-    }
+  }
+  // ★ 安全重置: actionHistory 被服务端清空(新局)时重置 _prevHistoryLength
+  if (history.length < _prevHistoryLength) {
+    console.log(`[CheckSounds] history shrunk ${_prevHistoryLength}→${history.length}, resetting prevLen`)
+    _prevHistoryLength = 0
   }
   // ★ 按 actionHistory 扫描新动作，严格按时间戳排序（K哥铁律: 必须按 action 发生时间排序）
   const prevHistoryLength = _prevHistoryLength
