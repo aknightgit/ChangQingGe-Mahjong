@@ -4714,7 +4714,19 @@ let _flowerVoiceTurnCounter = 0
 let _flowerVoicePrevPlayerIndex = -1
 let _lastActionTimestamp = 0  // 上一轮 state 更新时 actionHistory 最后时间戳
 let _prevHistoryLength = 0  // 上一轮 state 更新时 actionHistory 长度（增量检测）
+let _voiceGameId = ''  // ★ 强校验：当前 voice 缓存绑定的 gameId，避免跨房/跨局残留
 const prevBailoutMap = new Map<string, Map<number, number>>()
+
+// ★ 重置所有语音缓存（防止新局/换房时残留上一局的语音导致"幻觉"）
+const resetVoiceTracking = () => {
+  _flowerVoicePlayed.clear()
+  _flowerVoicePlayedTurnKey = ''
+  _flowerVoiceTurnCounter = 0
+  _flowerVoicePrevPlayerIndex = -1
+  _lastActionTimestamp = 0
+  _prevHistoryLength = 0
+  prevOtherPlayerState.clear()
+}
 const getOtherMeldCount = (player: any) => (player?.hand?.exposedMelds?.length ?? 0)
 const getOtherDiscardCount = (player: any) => (player?.hand?.discardedTiles?.length ?? 0)
 const getReplacedFlowerMelds = (player: any) =>
@@ -4728,6 +4740,20 @@ const checkOtherPlayerSounds = (newState: any) => {
   if (showSettlement.value) return
   // ★ ENDED 阶段不播放（防止关掉结算面板后重播上一局旧语音）
   if (newState.phase === 'ended' || newState.phase === 'reveal') return
+  // ★ 严格只播报本局：gameId 不匹配时（换房/异常推送）直接丢弃所有语音
+  const incomingGameId = (newState as any).gameId || ''
+  if (_voiceGameId && incomingGameId && incomingGameId !== _voiceGameId) {
+    console.log(`[CheckSounds] gameId changed ${_voiceGameId.substring(0,8)}→${incomingGameId.substring(0,8)}, resetting voice cache`)
+    resetVoiceTracking()
+    _voiceGameId = incomingGameId
+    return  // 本轮不播任何声音，让下一轮 state-changed 用全新的 _prevHistoryLength=0
+  }
+  if (_voiceGameId && !incomingGameId) {
+    return  // gameId 缺失时不播，防止跨房串音
+  }
+  if (!_voiceGameId && incomingGameId) {
+    _voiceGameId = incomingGameId
+  }
   const history = Array.isArray((newState as any)?.actionHistory) ? (newState as any).actionHistory : []
   const playedKeys = new Set<string>()
   const pendingVoices: Array<{ type: 'meld'; action: 'kong' | 'pong' | 'chow' } | { type: 'discard'; suit: string; value: number; sound: boolean; playerId?: string }> = []
@@ -4828,6 +4854,9 @@ watch(() => gameState.value, (newState, oldState) => {
     }
     // 重置 prevQjAlertIds,确保后续结算时能再次检测新增
     prevQjAlertIds.value = new Set<string>(existingAlerts.map((a: any) => a.playerId))
+    // ★ 严格只播报本局：新局开始时重置所有语音缓存，避免上局/上房间残留
+    resetVoiceTracking()
+    _voiceGameId = (newState as any).gameId || ''
   }
 
   // 有人胡牌 → 播放胡牌音效 + 语音
