@@ -4755,6 +4755,11 @@ const checkOtherPlayerSounds = (newState: any) => {
     _voiceGameId = incomingGameId
   }
   const history = Array.isArray((newState as any)?.actionHistory) ? (newState as any).actionHistory : []
+  // ★ 防重复：history 长度没变且时间戳没变 → 跳过（同一个 state 被多次触发）
+  const lastHistoryTs = history.length > 0 ? (history[history.length - 1]?.timestamp || 0) : 0
+  if (history.length === _prevHistoryLength && lastHistoryTs === _lastActionTimestamp) {
+    return
+  }
   const playedKeys = new Set<string>()
   const pendingVoices: Array<{ type: 'meld'; action: 'kong' | 'pong' | 'chow' } | { type: 'discard'; suit: string; value: number; sound: boolean; playerId?: string }> = []
   const cpIdx = newState?.currentPlayerIndex ?? 0
@@ -4771,6 +4776,7 @@ const checkOtherPlayerSounds = (newState: any) => {
   if (history.length < _prevHistoryLength) {
     console.log(`[CheckSounds] history shrunk ${_prevHistoryLength}→${history.length}, resetting prevLen`)
     _prevHistoryLength = 0
+    _lastActionTimestamp = 0
   }
   // ★ 按 actionHistory 扫描新动作，严格按时间戳排序（K哥铁律: 必须按 action 发生时间排序）
   const prevHistoryLength = _prevHistoryLength
@@ -4806,6 +4812,7 @@ const checkOtherPlayerSounds = (newState: any) => {
     console.log(`[CheckSounds] processed ${newActions.length} new actions (prevLen=${prevHistoryLength}→${history.length}), pendingVoices=${pendingVoices.length}`)
   }
   _prevHistoryLength = history.length
+  _lastActionTimestamp = lastHistoryTs
   for (const player of newState.players) {
     const prev = prevOtherPlayerState.get(player.id)
     if (!prev) continue
