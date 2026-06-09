@@ -4264,6 +4264,22 @@ watch(canAutoDraw, (can, old) => {
     }
   }, 500)
 })
+// ★ 修复: freeze 到期后 canAutoDraw 可能没变化(watcher 不触发),专门监听 freeze 到期
+let _prevFreezeUntil = 0
+watch(currentFreezeUntil, (freezeUntil) => {
+  const prev = _prevFreezeUntil
+  _prevFreezeUntil = freezeUntil
+  // freeze 从激活→到期(prev > now && freezeUntil <= now) 且轮到自己
+  if (prev > Date.now() && freezeUntil <= Date.now() && isMyTurn.value && autoDraw.value && !isAIControlled.value) {
+    console.log('[AutoDraw] freeze expired, checking if should auto-draw...')
+    setTimeout(() => {
+      if (canAutoDraw.value) {
+        console.log('[AutoDraw] freeze-expired executing DRAW')
+        void executeAction(ActionType.DRAW)
+      }
+    }, 300)
+  }
+})
 const hasPriorityActions = computed(
   () =>
     hasSharedDrawWindow.value ||
@@ -4715,10 +4731,14 @@ const checkOtherPlayerSounds = (newState: any) => {
   if (turnKey !== _flowerVoicePlayedTurnKey) {
     _flowerVoicePlayed.clear()
     _flowerVoicePlayedTurnKey = turnKey
+    // ★ 新局/新回合: 重置 _prevHistoryLength, 防止旧局的 length 残留导致新局 action 被跳过
+    if (history.length < _prevHistoryLength) {
+      console.log(`[CheckSounds] reset _prevHistoryLength ${_prevHistoryLength} → 0 (history shrunk)`)
+      _prevHistoryLength = 0
+    }
   }
-  // ★ 按 actionHistory 扫描新动作，用 history.length 增量检测（避免时间戳溢出）
+  // ★ 按 actionHistory 扫描新动作，严格按时间戳排序（K哥铁律: 必须按 action 发生时间排序）
   const prevHistoryLength = _prevHistoryLength
-  // 按时间戳排序（服务端 push 顺序可能与实际时间戳不一致）
   const newActions = history.slice(prevHistoryLength).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
   for (let i = 0; i < newActions.length; i++) {
     const act = newActions[i]
@@ -4743,9 +4763,12 @@ const checkOtherPlayerSounds = (newState: any) => {
         }
       }
     } else if (act.type === 'flowerReplace' || act.type === ActionType.FLOWER_REPLACE) {
-      console.log(`[FlowerVoice] detected flowerReplace in actionHistory, pid=${pid?.substring(0,8)}`)
+      console.log(`[FlowerVoice] detected flowerReplace in actionHistory, pid=${pid?.substring(0,8)} timestamp=${act.timestamp}`)
       pendingVoices.push({ type: 'discard', suit: 'flower', value: 0, sound: false, playerId: pid })
     }
+  }
+  if (newActions.length > 0) {
+    console.log(`[CheckSounds] processed ${newActions.length} new actions (prevLen=${prevHistoryLength}→${history.length}), pendingVoices=${pendingVoices.length}`)
   }
   _prevHistoryLength = history.length
   for (const player of newState.players) {
