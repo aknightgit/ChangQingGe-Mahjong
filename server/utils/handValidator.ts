@@ -1603,9 +1603,21 @@ export function canWin(
   if (isDaDiaoState && getSuits(concealedNonFlower).size >= 2) {
     concealedMultiSuitBlockedByGarbage = true;
   }
-  const finalCanWin = types.length > 0 || (exactCanWin && !daDiaoBlockedByGarbage && !naturalTilesBlockedByGarbage && !exactWinBlockedByGarbage && !concealedMultiSuitBlockedByGarbage) || (isDaDiaoState && !daDiaoBlockedByGarbage && !concealedMultiSuitBlockedByGarbage);
+  // ★ K哥铁律(2026-06-09): 大吊捉冲(concealed=2)必须检查两张手牌是否成对子
+  // 白板+红中 → 不是对子 → 不能胡！
+  let daDiaoTwoTilesNotPair = false;
+  if (isDaDiaoState && concealedNonFlower.length === 2 && types.length === 0) {
+    const [t1, t2] = concealedNonFlower;
+    const isWild1 = isWildTileFn(t1);
+    const isWild2 = isWildTileFn(t2);
+    const isPair = isWild1 || isWild2 || (t1.suit === t2.suit && t1.value === t2.value);
+    if (!isPair) {
+      daDiaoTwoTilesNotPair = true;
+    }
+  }
+  const finalCanWin = types.length > 0 || (exactCanWin && !daDiaoBlockedByGarbage && !naturalTilesBlockedByGarbage && !exactWinBlockedByGarbage && !concealedMultiSuitBlockedByGarbage) || (isDaDiaoState && !daDiaoBlockedByGarbage && !concealedMultiSuitBlockedByGarbage && !daDiaoTwoTilesNotPair);
   const validTypes = finalCanWin
-    ? (types.length > 0 ? types : (isDaDiaoState && !daDiaoBlockedByGarbage && !concealedMultiSuitBlockedByGarbage) ? [HandType.DA_DIAO] : [HandType.STANDARD])
+    ? (types.length > 0 ? types : (isDaDiaoState && !daDiaoBlockedByGarbage && !concealedMultiSuitBlockedByGarbage && !daDiaoTwoTilesNotPair) ? [HandType.DA_DIAO] : [HandType.STANDARD])
     : [];
 
   const result = { canWin: finalCanWin, types: validTypes }
