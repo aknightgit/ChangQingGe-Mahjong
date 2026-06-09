@@ -1067,6 +1067,17 @@ function checkAllTripletsWithoutWild(
 
 // ===== 结算函数 =====
 
+// ★ K哥铁律(2026-06-10): mutualBailout 改为1:N，一个玩家可同时和多个玩家互包
+type BailoutEntry = { partnerIndex: number; type: '三口' | '四口' };
+type MutualBailoutMap = Map<number, BailoutEntry[]>;
+
+/**
+ * 从互包数组中找与指定赢家配对的记录
+ */
+function findBailoutWithPartner(entries: BailoutEntry[] | undefined, winnerIndex: number): BailoutEntry | undefined {
+  return entries?.find(e => e.partnerIndex === winnerIndex);
+}
+
 /**
  * 计算最终结算
  * @param baseFan 基础番数（用于互包赔付计算）
@@ -1074,7 +1085,7 @@ function checkAllTripletsWithoutWild(
  * @param isSelfDrawn 是否自摸
  * @param winnerIndex 赢家位置
  * @param allPlayerIndices 所有存活玩家位置
- * @param mutualBailout 互包关系 Map<playerIndex, {partnerIndex, type: '三口'|'四口'}>
+ * @param mutualBailout 互包关系 Map<playerIndex, Array<{partnerIndex, type: '三口'|'四口'}>>
  * @param discarderId 放冲者ID（捉冲时传入，自摸时忽略）
  */
 export function calculateSettlement(
@@ -1082,7 +1093,7 @@ export function calculateSettlement(
   isSelfDrawn: boolean,
   winnerIndex: number,
   allPlayerIndices: number[],
-  mutualBailout?: Map<number, { partnerIndex: number; type: '三口' | '四口' }>,
+  mutualBailout?: MutualBailoutMap,
   discarderId?: number
 ): Map<number, number> {
   const deltas = new Map<number, number>();
@@ -1103,12 +1114,12 @@ export function calculateSettlement(
       
       // 检查互包：互包赔付使用 baseFan × 互包倍数
       // RULES.md: 赔付结算（settlementLog.fan = baseFan，不是finalPoints）
-      const bailout = mutualBailout?.get(idx);
+      const bailoutEntry = findBailoutWithPartner(mutualBailout?.get(idx), winnerIndex);
       let pay: number;
       
-      if (bailout && bailout.partnerIndex === winnerIndex) {
+      if (bailoutEntry) {
         // 互包自摸：输家支付 finalPoints × 互包倍数（三口×3，四口×5）
-        const multiplier = bailout.type === '四口' ? 5 : 3;
+        const multiplier = bailoutEntry.type === '四口' ? 5 : 3;
         pay = winnerFinalPoints * multiplier;
       } else {
         // 正常自摸：输家支付 finalPoints（已含 extraMultipliers × globalMultiplier）
@@ -1122,10 +1133,10 @@ export function calculateSettlement(
     // 捉冲（放冲）：只有放冲者全额赔付
     if (discarderId !== undefined && allPlayerIndices.includes(discarderId)) {
       // 有指定放冲者：仅放冲者赔付
-      const bailout = mutualBailout?.get(discarderId);
+      const bailoutEntry = findBailoutWithPartner(mutualBailout?.get(discarderId), winnerIndex);
       let pay: number;
       
-      if (bailout && bailout.partnerIndex === winnerIndex) {
+      if (bailoutEntry) {
         // 互包捉冲：输家支付 finalPoints × 2
         pay = winnerFinalPoints * 2;
       } else {
@@ -1140,10 +1151,10 @@ export function calculateSettlement(
       for (const idx of allPlayerIndices) {
         if (idx === winnerIndex) continue;
         
-        const bailout = mutualBailout?.get(idx);
+        const bailoutEntry = findBailoutWithPartner(mutualBailout?.get(idx), winnerIndex);
         let pay: number;
         
-        if (bailout && bailout.partnerIndex === winnerIndex) {
+        if (bailoutEntry) {
           // 互包捉冲 ×2
           pay = winnerFinalPoints * 2;
         } else {
@@ -1164,7 +1175,7 @@ export function calculateSettlementBreakdownByRules(
   isSelfDrawn: boolean,
   winnerIndex: number,
   allPlayerIndices: number[],
-  mutualBailout?: Map<number, { partnerIndex: number; type: '三口' | '四口' }>,
+  mutualBailout?: MutualBailoutMap,
   discarderId?: number
 ): SettlementBreakdown {
   const deltas = new Map<number, number>();
@@ -1193,15 +1204,14 @@ export function calculateSettlementBreakdownByRules(
     // ★ 三口只跟活跃玩家结算，已胡牌的不参与
     const bailoutLoser = allPlayerIndices.find(idx => {
       if (idx === winnerIndex) return false;
-      const bailout = mutualBailout?.get(idx);
-      return bailout?.partnerIndex === winnerIndex;
+      return !!findBailoutWithPartner(mutualBailout?.get(idx), winnerIndex);
     });
-    console.log(`[SETTLEMENT-BREAKDOWN] isSelfDrawn winnerIdx=${winnerIndex} all=${JSON.stringify(allPlayerIndices)} bailoutLoser=${bailoutLoser} mutualBailout=${JSON.stringify([...mutualBailout?.entries() || []].map(([k,v]) => ({key:k, partnerIndex:v.partnerIndex, type:v.type})))}`);
+    const bailoutEntry = bailoutLoser !== undefined ? findBailoutWithPartner(mutualBailout?.get(bailoutLoser), winnerIndex) : undefined;
+    console.log(`[SETTLEMENT-BREAKDOWN] isSelfDrawn winnerIdx=${winnerIndex} all=${JSON.stringify(allPlayerIndices)} bailoutLoser=${bailoutLoser} bailoutType=${bailoutEntry?.type}`);
 
-    if (bailoutLoser !== undefined) {
-      const bailout = mutualBailout!.get(bailoutLoser)!;
-      const bailoutMultiplier = bailout.type === '四口' ? 5 : 3;
-      const otherMultiplier = bailout.type === '四口' ? 0 : 1;
+    if (bailoutLoser !== undefined && bailoutEntry) {
+      const bailoutMultiplier = bailoutEntry.type === '四口' ? 5 : 3;
+      const otherMultiplier = bailoutEntry.type === '四口' ? 0 : 1;
 
       for (const idx of allPlayerIndices) {
         if (idx === winnerIndex) continue;
@@ -1214,7 +1224,7 @@ export function calculateSettlementBreakdownByRules(
           winnerIndex,
           pay,
           idx === bailoutLoser ? `自摸互包赔付×${bailoutMultiplier}` : '自摸赔付',
-          idx === bailoutLoser ? bailout.type : undefined
+          idx === bailoutLoser ? bailoutEntry.type : undefined
         );
       }
 
@@ -1232,16 +1242,15 @@ export function calculateSettlementBreakdownByRules(
     // ★ K哥铁律：
     // 四口关系 → 无论谁放冲，四口伙伴赔2倍，放冲者不付
     // 三口关系 → 放冲者是伙伴时，放冲者赔2倍；否则放冲者赔1倍+伙伴补赔1倍
-    // 先找赢家的互包伙伴
+    // ★ 2026-06-10: 1:N 结构，一个玩家可同时和多个玩家互包
     const bailoutLoser = allPlayerIndices.find(idx => {
       if (idx === winnerIndex) return false;
-      const bailout = mutualBailout?.get(idx);
-      return bailout?.partnerIndex === winnerIndex;
+      return !!findBailoutWithPartner(mutualBailout?.get(idx), winnerIndex);
     });
 
     if (bailoutLoser !== undefined) {
-      const bailoutInfo = mutualBailout!.get(bailoutLoser)!;
-      if (bailoutInfo.type === '四口') {
+      const bailoutEntry = findBailoutWithPartner(mutualBailout?.get(bailoutLoser), winnerIndex)!;
+      if (bailoutEntry.type === '四口') {
         // 四口：伙伴赔2倍，放冲者不付
         addTransfer(bailoutLoser, winnerIndex, winnerFinalPoints * 2, '四口互包×2', '四口');
         return { deltas, transfers };
@@ -1264,16 +1273,14 @@ export function calculateSettlementBreakdownByRules(
 
   for (const idx of allPlayerIndices) {
     if (idx === winnerIndex) continue;
-    const bailout = mutualBailout?.get(idx);
-    const pay = bailout && bailout.partnerIndex === winnerIndex
-      ? winnerFinalPoints * 2
-      : winnerFinalPoints;
+    const bailoutEntry = findBailoutWithPartner(mutualBailout?.get(idx), winnerIndex);
+    const pay = bailoutEntry ? winnerFinalPoints * 2 : winnerFinalPoints;
     addTransfer(
       idx,
       winnerIndex,
       pay,
-      bailout && bailout.partnerIndex === winnerIndex ? '互包赔付×2' : '赔付',
-      bailout && bailout.partnerIndex === winnerIndex ? bailout.type : undefined
+      bailoutEntry ? '互包赔付×2' : '赔付',
+      bailoutEntry?.type
     );
   }
 
@@ -1285,7 +1292,7 @@ export function calculateSettlementByRules(
   isSelfDrawn: boolean,
   winnerIndex: number,
   allPlayerIndices: number[],
-  mutualBailout?: Map<number, { partnerIndex: number; type: '三口' | '四口' }>,
+  mutualBailout?: MutualBailoutMap,
   discarderId?: number
 ): Map<number, number> {
   return calculateSettlementBreakdownByRules(

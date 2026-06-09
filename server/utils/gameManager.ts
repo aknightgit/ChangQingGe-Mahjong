@@ -4317,14 +4317,16 @@ class GameManager {
 
       const mutualBailoutRelations = this.bailoutTracker.getMutualBailoutRelations(game.gameId);
       console.log(`[SETTLEMENT] game=${game.gameId} bailoutRelations=${JSON.stringify(mutualBailoutRelations)} players=${game.players.map(p => p.name).join(',')}`);
-      // 构建 mutualBailout Map<playerIndex, {partnerIndex, type}>
-      const mutualBailout = new Map<number, { partnerIndex: number; type: '三口' | '四口' }>();
+      // ★ K哥铁律(2026-06-10): 1个玩家可同时和多个玩家互包，必须保留所有关系
+      const mutualBailout = new Map<number, Array<{ partnerIndex: number; type: '三口' | '四口' }>>();
       for (const rel of mutualBailoutRelations) {
         const p1Idx = game.players.findIndex(p => p.id === rel.player1);
         const p2Idx = game.players.findIndex(p => p.id === rel.player2);
         if (p1Idx >= 0 && p2Idx >= 0) {
-          mutualBailout.set(p1Idx, { partnerIndex: p2Idx, type: rel.type });
-          mutualBailout.set(p2Idx, { partnerIndex: p1Idx, type: rel.type });
+          if (!mutualBailout.has(p1Idx)) mutualBailout.set(p1Idx, []);
+          if (!mutualBailout.has(p2Idx)) mutualBailout.set(p2Idx, []);
+          mutualBailout.get(p1Idx)!.push({ partnerIndex: p2Idx, type: rel.type });
+          mutualBailout.get(p2Idx)!.push({ partnerIndex: p1Idx, type: rel.type });
         }
       }
 
