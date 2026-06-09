@@ -1289,22 +1289,45 @@ export function calculateSettlementByRules(
 }
 
 /**
+ * 计算单次掷骰子倍数（对子=2, 1+4=2, 1+1/4+4=4, 其他=1）
+ */
+function calculateSingleDiceMultiplier(d1: number, d2: number): number {
+  if (d1 === d2) {
+    return (d1 === 1 || d1 === 4) ? 4 : 2;
+  }
+  if ((d1 === 1 && d2 === 4) || (d1 === 4 && d2 === 1)) {
+    return 2;
+  }
+  return 1;
+}
+
+/**
  * 计算回合倍数
+ * @param dice1 第一次骰子1
+ * @param dice2 第一次骰子2
+ * @param dice3 第二次骰子1（可选）
+ * @param dice4 第二次骰子2（可选）
+ * @returns 回合倍数
+ *
+ * 规则:
+ * 1. 单次掷骰子：对子→2, 1+4→2, 1+1/4+4→4, 其他→1
+ * 2. 两次掷骰子：
+ *    a. 两次单次倍数取最大值
+ *    b. 两次组合完全相同 → ×4
+ *    c. 两次点数之和相同 → ×2
+ *    d. 取 a/b/c 中的最大值
  */
 export function calculateRoundMultiplier(dice1: number, dice2: number, dice3?: number, dice4?: number): number {
   // 单次掷骰子规则
-  const isDouble = dice1 === dice2;
-  const isOneFourCombo = (dice1 === 1 && dice2 === 4) || (dice1 === 4 && dice2 === 1);
+  const singleMultiplier1 = calculateSingleDiceMultiplier(dice1, dice2);
 
-  let singleMultiplier = 1;
-  if (isDouble) {
-    singleMultiplier = (dice1 === 1 || dice1 === 4) ? 4 : 2;
-  } else if (isOneFourCombo) {
-    singleMultiplier = 2;
-  }
-
-  // 两次掷骰子：比较两次结果
+  // 两次掷骰子：考虑第二次本身的倍数 + 两次对比
   if (dice3 !== undefined && dice4 !== undefined) {
+    const singleMultiplier2 = calculateSingleDiceMultiplier(dice3, dice4);
+    // ★ BUG修复(2026-06-09): 之前只算 singleMultiplier1 (第一次), 忽略了第二次本身的对子/1+4
+    // 例如 第一次5+6 + 第二次3+3 应该=2 (3+3对子), 之前错误=1
+    const bestSingle = Math.max(singleMultiplier1, singleMultiplier2);
+
     const sum1 = dice1 + dice2;
     const sum2 = dice3 + dice4;
     const combo1 = [Math.min(dice1, dice2), Math.max(dice1, dice2)];
@@ -1312,15 +1335,16 @@ export function calculateRoundMultiplier(dice1: number, dice2: number, dice3?: n
 
     // 完全相同组合（顺序无关）→ ×4
     if (combo1[0] === combo2[0] && combo1[1] === combo2[1]) {
-      return Math.max(singleMultiplier, 4);
+      return Math.max(bestSingle, 4);
     }
     // 点数之和相同 → ×2
     if (sum1 === sum2) {
-      return Math.max(singleMultiplier, 2);
+      return Math.max(bestSingle, 2);
     }
+    return bestSingle;
   }
 
-  return singleMultiplier;
+  return singleMultiplier1;
 }
 
 /**

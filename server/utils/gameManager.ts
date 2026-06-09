@@ -604,9 +604,18 @@ class GameManager {
 
         // 修复竞态:如果牌已被bot吃/碰消耗(discardPile变短),不要auto-pass
         // handleBotPendingActions已经处理了,此时pending是新的
-        const pendingTiles = game.pendingActions.map(pa => pa.tile?.id).filter(Boolean);
+        // ★ BUG修复(2026-06-09): 自摸胡的pending action的tile是从牌墙摸的(不在discardPile),不能误判为claimed
         const discardIds = new Set(game.discardPile.map(t => t.id));
-        const tileClaimed = pendingTiles.some(tid => tid && !discardIds.has(tid));
+        const tileClaimed = game.pendingActions.some(pa => {
+          if (!pa.tile?.id) return false;
+          // 自摸胡:玩家是当前玩家且只有HU+PASS → 不检查discardPile
+          const isSelfDrawHu = pa.playerId === currentPlayer?.id &&
+            pa.availableActions.length === 2 &&
+            pa.availableActions.includes(ActionType.HU) &&
+            pa.availableActions.includes(ActionType.PASS);
+          if (isSelfDrawHu) return false;
+          return !discardIds.has(pa.tile.id);
+        });
         if (tileClaimed) {
           // 牌已被claim,pending已过时,直接清除
           game.pendingActions = [];
