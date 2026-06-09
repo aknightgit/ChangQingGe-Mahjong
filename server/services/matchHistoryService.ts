@@ -100,9 +100,9 @@ export class MatchHistoryService {
     );
   }
 
-  static async listMatches(options?: { userId?: string; playerId?: string; limit?: number; includeTraining?: boolean }): Promise<MatchHistory[]> {
+  static async listMatches(options?: { userId?: string; playerId?: string; limit?: number; includeTraining?: boolean; since?: string }): Promise<MatchHistory[]> {
     const collection = await getCollection<MatchHistory>(this.COLLECTION_NAME);
-    const { userId, playerId, limit = 20, includeTraining = false } = options || {};
+    const { userId, playerId, limit = 20, includeTraining = false, since } = options || {};
     const targetPlayerId = playerId || userId;
 
     const query: any = targetPlayerId
@@ -112,6 +112,11 @@ export class MatchHistoryService {
     // 默认过滤掉训练数据
     if (!includeTraining) {
       query.isTraining = { $ne: true };
+    }
+
+    // 数据起始日期过滤
+    if (since) {
+      query.completedAt = { ...query.completedAt, $gte: new Date(since) };
     }
 
     return collection

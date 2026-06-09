@@ -4,10 +4,11 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event);
   const userId = typeof query.userId === 'string' ? query.userId : undefined;
   const playerId = typeof query.playerId === 'string' ? query.playerId : undefined;
+  const since = typeof query.since === 'string' ? query.since : undefined;
   const limitParam = typeof query.limit === 'string' ? parseInt(query.limit, 10) : undefined;
   const limit = Number.isFinite(limitParam) && limitParam! > 0 ? limitParam : 20;
 
-  const histories = await MatchHistoryService.listMatches({ userId, playerId, limit });
+  const histories = await MatchHistoryService.listMatches({ userId, playerId, limit, since });
 
   return {
     success: true,

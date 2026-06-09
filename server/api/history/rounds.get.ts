@@ -24,6 +24,7 @@ type TrainingRoundRecord = {
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const playerId = typeof query.playerId === 'string' ? query.playerId : undefined
+  const since = typeof query.since === 'string' ? query.since : undefined
   const limitParam = typeof query.limit === 'string' ? parseInt(query.limit, 10) : undefined
   const limit = Number.isFinite(limitParam) && limitParam! > 0 ? limitParam! : 60
 
@@ -31,6 +32,9 @@ export default defineEventHandler(async (event) => {
   const filter: any = playerId
     ? { 'initialSnapshot.players.id': playerId, isTraining: { $ne: true } }
     : { isTraining: { $ne: true } }
+  if (since) {
+    filter.recordedAt = { ...filter.recordedAt, $gte: new Date(since) }
+  }
 
   const rounds = await collection
     .find(filter)

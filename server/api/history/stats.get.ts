@@ -22,8 +22,9 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event);
   const limitParam = typeof query.limit === 'string' ? parseInt(query.limit, 10) : undefined;
   const limit = Number.isFinite(limitParam) && limitParam! > 0 ? limitParam : 100;
+  const sinceParam = typeof query.since === 'string' ? query.since : undefined;
 
-  const histories = await MatchHistoryService.listMatches({ limit });
+  const histories = await MatchHistoryService.listMatches({ limit, since: sinceParam });
   const playerStats = new Map<string, PlayerStat>();
 
   // Helper: get or create player stat

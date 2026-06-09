@@ -105,9 +105,7 @@
                   <th>总分</th>
                   <th class="highlight-col">有效分</th>
                   <th>自摸</th>
-                  <th>接炮</th>
                   <th>单局最高</th>
-                  <th>单局最低</th>
                 </tr>
               </thead>
               <tbody>
@@ -129,9 +127,7 @@
                   <td :class="scoreClass(stat.totalScore)">{{ formatSigned(stat.totalScore) }}</td>
                   <td class="highlight-col" :class="scoreClass(stat.effectiveScore)">{{ formatSigned(stat.effectiveScore) }}</td>
                   <td>{{ stat.selfDrawCount }}</td>
-                  <td>{{ stat.catchDiscardCount }}</td>
                   <td class="score-positive">{{ stat.maxWin > 0 ? `+${stat.maxWin}` : '-' }}</td>
-                  <td class="score-negative">{{ stat.maxLoss < 0 ? stat.maxLoss : '-' }}</td>
                 </tr>
               </tbody>
             </table>
@@ -253,6 +249,7 @@ interface RoundReviewItem {
   players: RoundReviewPlayer[]
 }
 
+const DEFAULT_SINCE = '2025-05-01'
 const histories = ref<MatchHistoryItem[]>([])
 const roundReviews = ref<RoundReviewItem[]>([])
 const playerStats = ref<PlayerStat[]>([])
@@ -279,6 +276,7 @@ const loadHistory = async () => {
     const response = await $fetch<{ success: boolean; data: MatchHistoryItem[] }>('/api/history/list', {
       query: {
         limit: 40,
+        since: DEFAULT_SINCE,
         ...(queryPlayerId.value ? { playerId: queryPlayerId.value } : {})
       },
       cache: 'no-cache'
@@ -298,6 +296,7 @@ const loadRoundReviews = async () => {
     const response = await $fetch<{ success: boolean; data: RoundReviewItem[] }>('/api/history/rounds', {
       query: {
         limit: 80,
+        since: DEFAULT_SINCE,
         ...(roundQueryPlayerId.value ? { playerId: roundQueryPlayerId.value } : {})
       },
       cache: 'no-cache'
@@ -314,7 +313,7 @@ const loadStats = async () => {
   statsLoading.value = true
   try {
     const response = await $fetch<{ success: boolean; data: PlayerStat[] }>('/api/history/stats', {
-      query: { limit: 100 },
+      query: { limit: 100, since: DEFAULT_SINCE },
       cache: 'no-cache'
     })
     playerStats.value = response?.success ? (response.data || []) : []
