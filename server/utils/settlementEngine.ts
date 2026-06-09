@@ -170,11 +170,9 @@ export class SettlementEngine {
 
   hasTenPointClaimExemption(handTypes: HandType[], isDaDiao: boolean): boolean {
     if (isDaDiao) return true;
-    // ★ 只有固定10番及以上的牌型才能豁免“门口无花不能捉冲”
-    // 混碰/清碰 不是固定10番（用公式计算，最低2点），不能豁免
     return handTypes.some(type => [
-      HandType.FENG_PENG, HandType.ALL_WIND,
-      HandType.EIGHT_FLOWERS, HandType.FOUR_WILD, HandType.FULL_FLUSH
+      HandType.FENG_PENG, HandType.ALL_WIND, HandType.QING_PENG,
+      HandType.HUN_PENG, HandType.EIGHT_FLOWERS, HandType.FOUR_WILD
     ].includes(type));
   }
 

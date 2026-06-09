@@ -640,17 +640,17 @@ function detectTypes(
   }
 
   // ★ K哥铁律(2026-06-09): 垃圾胡前置检查
-  // 八花/四百搭/风一色已处理。其他所有牌型，先检查：多数字门+手牌不能组成足够面子 → 垃圾胡直接返回
-  // 注意：门口已锁定的面子（顺子/刻子）不能重新组合，只检查手牌能否组成 remainingMelds 个面子
-  if (types.length === 0 && concealedNonFlower.length >= 2 && remainingMelds >= 0) {
+  // 八花/四百搭/风一色已处理。其他所有牌型，先检查：多数字门+不满足碰碰胡 → 垃圾胡直接返回
+  // 所有胡牌检查都必须先过这一关，再去判断具体牌型
+  if (types.length === 0 && allTilesNonFlower.length >= 2) {
     const _numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-    // 用 complete hand 判断是否多门（含门口）
     const _numSuitSet = new Set(allTilesNonFlower.filter(t => _numSuits.includes(t.suit)).map(t => t.suit));
     if (_numSuitSet.size >= 2) {
-      // 多门：检查手牌能否组成 remainingMelds 个面子 + 对子
-      // 门口面子已锁定，不参与检查
-      if (!canFormMelds(concealedNonFlower, remainingMelds, () => false)) {
-        return [];  // 多门+手牌不能组成足够面子 = 垃圾胡
+      const _m = (allTilesNonFlower.length - 2) / 3;
+      if (Number.isInteger(_m) && _m >= 0) {
+        if (!canFormOnlyTripletsFrom(allTilesNonFlower, _m, () => false)) {
+          return [];  // 多数字门+不能全刻子 = 垃圾胡，直接判不能胡
+        }
       }
     }
   }
