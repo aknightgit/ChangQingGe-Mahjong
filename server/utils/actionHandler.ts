@@ -800,11 +800,13 @@ export class ActionHandler {
       .filter((t: any) => isFlower(t));
     const concealedNonFlower = player.hand.concealedTiles.filter(t => !isFlower(t));
     const isDaDiao = concealedNonFlower.length === 1;
-    const isMenQing = !player.hand.exposedMelds.some((m: any) =>
-      m.type === MeldType.TRIPLET ||
-      m.type === MeldType.SEQUENCE ||
-      (m.type === MeldType.KONG && !m.isConcealed)
-    );
+    // ★ 门清判断:花牌不算门口牌，门口只有吃/碰/明杠才算非门清
+    const isMenQing = !player.hand.exposedMelds.some((m: any) => {
+      if (m.tiles?.length === 1 && isFlower(m.tiles[0])) return false; // 花牌跳过
+      return m.type === MeldType.TRIPLET ||
+        m.type === MeldType.SEQUENCE ||
+        (m.type === MeldType.KONG && !m.isConcealed);
+    });
     const handTypes = detectHandTypes(
       player.hand.concealedTiles,
       player.hand.exposedMelds,

@@ -998,7 +998,7 @@ class GameManager {
           tileFaces: [],
           baseFan: winner.wonFan || 0,
           finalPoints: winner.wonFan || 0,
-          isMenQing: !winner.hand?.exposedMelds?.length,
+          isMenQing: tileHelper.isPlayerMenQing(winner),
         }],
         finalScores: game.players.reduce((acc, p) => { acc[p.id] = 0; return acc }, {} as Record<string, number>),
       }

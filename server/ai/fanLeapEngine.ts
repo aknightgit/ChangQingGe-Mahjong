@@ -215,7 +215,11 @@ function estimateHandFan(
   if (handTypes.length === 0) return 0
 
   const hasType = (t: HandType) => handTypes.includes(t)
-  const isMenQing = exposedMelds.length === 0
+  // ★ 门清判断:花牌不算门口牌
+  const isMenQing = !exposedMelds.some(m => {
+    if (m.tiles?.length === 1 && isFlower(m.tiles[0])) return false;
+    return m.type === MeldType.TRIPLET || m.type === MeldType.SEQUENCE || (m.type === MeldType.KONG && !m.isConcealed);
+  })
   const wildId = game.customScoringMode || null
   const wildCount = wildId ? hand.filter(t => isWildTile(t, game)).length : 0
   const flowerCount = hand.filter(t => isFlower(t)).length +

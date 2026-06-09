@@ -51,11 +51,13 @@ export function getPlayerFlowerTiles(player: Player): Tile[] {
 
 /** 是否门清（无吃/碰/明杠，暗杠不破门清） */
 export function isPlayerMenQing(player: Player): boolean {
-  return !player.hand.exposedMelds.some(meld =>
-    meld.type === MeldType.TRIPLET ||
-    meld.type === MeldType.SEQUENCE ||
-    (meld.type === MeldType.KONG && !meld.isConcealed)
-  );
+  // ★ 门清判断:花牌不算门口牌，门口只有吃/碰/明杠才算非门清
+  return !player.hand.exposedMelds.some(meld => {
+    if (meld.tiles?.length === 1 && isFlower(meld.tiles[0])) return false; // 花牌跳过
+    return meld.type === MeldType.TRIPLET ||
+      meld.type === MeldType.SEQUENCE ||
+      (meld.type === MeldType.KONG && !meld.isConcealed);
+  });
 }
 
 // ==================== 牌数计算 ====================

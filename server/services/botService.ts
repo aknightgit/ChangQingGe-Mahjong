@@ -302,7 +302,9 @@ function shouldDeclineLowValueHu(game: GameState, player: Player): boolean {
   const scoreLead = (player.score ?? 0) - topOpponentScore
   const wildCount = player.hand.concealedTiles.filter(t => isWildTile(t, game)).length
   const isWildDiscard = isWildTile(discardTile, game)
-  const isMenQing = player.hand.exposedMelds.length === 0
+  // ★ 门清判断:花牌不算门口牌
+  const nonFlowerMelds = player.hand.exposedMelds.filter(m => !(m.tiles?.length === 1 && isFlower(m.tiles[0])))
+  const isMenQing = nonFlowerMelds.length === 0
   const flowerCount = player.hand.concealedTiles.filter(t => isFlower(t)).length +
     player.hand.exposedMelds.filter(m => m.tiles?.length === 1 && isFlower(m.tiles[0])).length
   // ★ K哥铁律: 路线=碰碰胡/混一色 + 门口无花/无风箭刻 → 无花自摸=10点固定番, 不捉冲
@@ -500,8 +502,10 @@ function estimateFutureReward(input: {
   const policy = routeState?.policy ?? getPolicyForPlayer(player)
   const wildCount = player.hand.concealedTiles.filter(t => isWildTile(t, game)).length
   const exposedMelds = player.hand.exposedMelds
+  // ★ 门清判断:花牌不算门口牌
+  const nonFlowerMeldCount = exposedMelds.filter(m => !(m.tiles?.length === 1 && isFlower(m.tiles[0]))).length
   const exposedCount = exposedMelds.length
-  const isMenQing = exposedCount === 0
+  const isMenQing = nonFlowerMeldCount === 0
   const concealed = player.hand.concealedTiles
 
   // 1. 估算当前路线的期望番数
@@ -2941,7 +2945,11 @@ export async function shouldClaimPendingAction(
     if (pendingDiscard) {
       const discardTile = (pendingDiscard as any).tile as Tile | undefined
       const isWildDiscard = discardTile ? isWildTile(discardTile, game) : false
-      const isMenQing = exposedCount === 0
+      // ★ 门清判断:花牌不算门口牌
+      const isMenQing = !player.hand.exposedMelds.some(m => {
+        if (m.tiles?.length === 1 && isFlower(m.tiles[0])) return false;
+        return m.type === MeldType.TRIPLET || m.type === MeldType.SEQUENCE || (m.type === MeldType.KONG && !m.isConcealed);
+      })
       const wildCount = hand.filter(t => isWildTile(t, game)).length
 
       // ★ K哥铁律: 利益最大化评估 - 期望收益 > 捉冲收益 → 等
