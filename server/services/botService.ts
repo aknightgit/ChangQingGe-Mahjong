@@ -305,20 +305,21 @@ function shouldDeclineLowValueHu(game: GameState, player: Player): boolean {
   // ★ 门清判断:花牌不算门口牌
   const nonFlowerMelds = player.hand.exposedMelds.filter(m => !(m.tiles?.length === 1 && isFlower(m.tiles[0])))
   const isMenQing = nonFlowerMelds.length === 0
-  const flowerCount = player.hand.concealedTiles.filter(t => isFlower(t)).length +
-    player.hand.exposedMelds.filter(m => m.tiles?.length === 1 && isFlower(m.tiles[0])).length
   // ★ K哥铁律: 路线=碰碰胡/混一色 + 门口无花/无风箭刻 → 无花自摸=10点固定番, 不捉冲
   // 注意：不要求门清！吃3口也能做无花自摸，只要门口干净
   const routeMem = getPlayerRouteMemory(player)
   const currentRoute = routeMem?.current as string | undefined
   const isPengOrHalfFlush = currentRoute === 'ALL_PUNGS' || currentRoute === 'HALF_FLUSH'
   const exposedMelds = player.hand.exposedMelds
+  // ★ K哥铁律(2026-06-10): 门口"花"只看门口，百搭花当作百搭不算花
+  const hasDoorFlower = exposedMelds.some(m =>
+    m.tiles?.length === 1 && isFlower(m.tiles[0]) && !isWildTile(m.tiles[0], game)
+  )
   const hasWindMeld = exposedMelds.some(m => m.tiles?.some(t => isWind(t)))
   const hasArrowMeld = exposedMelds.some(m => m.tiles?.some(t => isDragon(t)))
-  const hasFlower = flowerCount > 0
   const hasMingKong = exposedMelds.some(m => m.type === 'kong' || m.type === 'exposed_kong')
   const hasAnKong = exposedMelds.some(m => m.type === 'concealed_kong')
-  const isCleanExposure = !hasWindMeld && !hasArrowMeld && !hasFlower && !hasMingKong && !hasAnKong
+  const isCleanExposure = !hasWindMeld && !hasArrowMeld && !hasDoorFlower && !hasMingKong && !hasAnKong
   if (isPengOrHalfFlush && isCleanExposure) return true
 
   // ★★ K哥铁律（RULES.md 七、七）：
@@ -2962,14 +2963,16 @@ export async function shouldClaimPendingAction(
       })
 
       // 硬性禁止: 门口干净+碰碰胡/混一色 → 不捉冲
-      const flowerCount = hand.filter(t => isFlower(t)).length +
-        exposedMelds.filter(m => m.tiles?.length === 1 && isFlower(m.tiles[0])).length
+      // ★ K哥铁律(2026-06-10): 只看门口(exposedMelds)，不看手牌
+      // 百搭花当百搭处理，不作为普通花（不影响门口干净判定）
+      const hasDoorFlower = exposedMelds.some(m =>
+        m.tiles?.length === 1 && isFlower(m.tiles[0]) && !isWildTile(m.tiles[0], game)
+      )
       const hasWindMeld = exposedMelds.some(m => m.tiles?.some(t => isWind(t)))
       const hasArrowMeld = exposedMelds.some(m => m.tiles?.some(t => isDragon(t)))
-      const hasFlower = flowerCount > 0
       const hasMingKong = exposedMelds.some(m => m.type === 'kong' || m.type === 'exposed_kong')
       const hasAnKongMeld = exposedMelds.some(m => m.type === 'concealed_kong')
-      const isCleanExposure = !hasWindMeld && !hasArrowMeld && !hasFlower && !hasMingKong && !hasAnKongMeld
+      const isCleanExposure = !hasWindMeld && !hasArrowMeld && !hasDoorFlower && !hasMingKong && !hasAnKongMeld
       const currentRoute = routeMem?.current as string | undefined
       const isPengOrHalfFlush = currentRoute === 'ALL_PUNGS' || currentRoute === 'HALF_FLUSH'
       // ★ K哥铁律：门口干净+碰碰胡/混一色 → 不捉冲，只能自摸
@@ -3052,14 +3055,15 @@ export async function shouldClaimPendingAction(
 
     // ★ 即使 pendingDiscard 为 null（游戏状态异常），也要检查硬性禁止
     const fallbackExposedMelds = player.hand.exposedMelds
-    const fallbackFlowerCount = hand.filter(t => isFlower(t)).length +
-      fallbackExposedMelds.filter(m => m.tiles?.length === 1 && isFlower(m.tiles[0])).length
+    // ★ K哥铁律(2026-06-10): 只看门口，不看手牌里的花；百搭花当百搭处理
+    const fallbackHasDoorFlower = fallbackExposedMelds.some(m =>
+      m.tiles?.length === 1 && isFlower(m.tiles[0]) && !isWildTile(m.tiles[0], game)
+    )
     const fallbackHasWindMeld = fallbackExposedMelds.some(m => m.tiles?.some(t => isWind(t)))
     const fallbackHasArrowMeld = fallbackExposedMelds.some(m => m.tiles?.some(t => isDragon(t)))
-    const fallbackHasFlower = fallbackFlowerCount > 0
     const fallbackHasMingKong = fallbackExposedMelds.some(m => m.type === 'kong' || m.type === 'exposed_kong')
     const fallbackHasAnKong = fallbackExposedMelds.some(m => m.type === 'concealed_kong')
-    const fallbackIsClean = !fallbackHasWindMeld && !fallbackHasArrowMeld && !fallbackHasFlower && !fallbackHasMingKong && !fallbackHasAnKong
+    const fallbackIsClean = !fallbackHasWindMeld && !fallbackHasArrowMeld && !fallbackHasDoorFlower && !fallbackHasMingKong && !fallbackHasAnKong
     const fallbackWildId = game.customScoringMode || null
     const fallbackTestHand = claimTile ? [...hand, claimTile] : hand
     const fallbackHandTypes = findBestHandTypes(fallbackTestHand, fallbackExposedMelds, fallbackWildId)
