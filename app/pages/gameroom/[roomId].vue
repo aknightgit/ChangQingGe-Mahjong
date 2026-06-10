@@ -3517,15 +3517,15 @@ const showSettlement = ref(false)
 const showWinnerReveal = ref(false)
 const winnerRevealData = ref<any[]>([])
 const _revealPhaseStartedAt = ref(0)
-const revealCountdown = ref(5)
+const revealCountdown = ref(10)
 let _revealCountdownTimer: ReturnType<typeof setInterval> | null = null
 const _startRevealCountdown = () => {
-  revealCountdown.value = 5
+  revealCountdown.value = 10
   _revealPhaseStartedAt.value = Date.now()
   if (_revealCountdownTimer) clearInterval(_revealCountdownTimer)
   _revealCountdownTimer = setInterval(() => {
     const elapsed = Math.floor((Date.now() - _revealPhaseStartedAt.value) / 1000)
-    revealCountdown.value = Math.max(0, 5 - elapsed)
+    revealCountdown.value = Math.max(0, 10 - elapsed)
     if (revealCountdown.value <= 0) {
       if (_revealCountdownTimer) { clearInterval(_revealCountdownTimer); _revealCountdownTimer = null }
       showWinnerReveal.value = false
@@ -4716,6 +4716,9 @@ let _lastActionTimestamp = 0  // 上一轮 state 更新时 actionHistory 最后�
 let _prevHistoryLength = 0  // 上一轮 state 更新时 actionHistory 长度（增量检测）
 let _voiceGameId = ''  // ★ 强校验：当前 voice 缓存绑定的 gameId，避免跨房/跨局残留
 const prevBailoutMap = new Map<string, Map<number, number>>()
+// ★ 全局已播放 action 去重 Set（按 timestamp+pid+type 去重，防止重连后重播）
+const _playedActionKeys = new Set<string>()
+const PLAYED_ACTION_KEYS_MAX = 500  // 防止内存泄漏
 
 // ★ 重置所有语音缓存（防止新局/换房时残留上一局的语音导致"幻觉"）
 const resetVoiceTracking = () => {
@@ -4725,6 +4728,7 @@ const resetVoiceTracking = () => {
   _flowerVoicePrevPlayerIndex = -1
   _lastActionTimestamp = 0
   _prevHistoryLength = 0
+  _playedActionKeys.clear()
   prevOtherPlayerState.clear()
 }
 const getOtherMeldCount = (player: any) => (player?.hand?.exposedMelds?.length ?? 0)
@@ -4774,9 +4778,10 @@ const checkOtherPlayerSounds = (newState: any) => {
   }
   // ★ 安全重置: actionHistory 被服务端清空(新局)时重置 _prevHistoryLength
   if (history.length < _prevHistoryLength) {
-    console.log(`[CheckSounds] history shrunk ${_prevHistoryLength}→${history.length}, resetting prevLen`)
-    _prevHistoryLength = 0
-    _lastActionTimestamp = 0
+    console.log(`[CheckSounds] history shrunk ${_prevHistoryLength}→${history.length}, NOT resetting prevLen (防重播)`)
+    // ★ 修复: 不重置为0! 只更新长度,防止所有旧动作被当作新动作重播
+    _prevHistoryLength = history.length
+    _lastActionTimestamp = lastHistoryTs
   }
   // ★ 按 actionHistory 扫描新动作，严格按时间戳排序（K哥铁律: 必须按 action 发生时间排序）
   const prevHistoryLength = _prevHistoryLength
@@ -4787,8 +4792,16 @@ const checkOtherPlayerSounds = (newState: any) => {
     if (!pid) continue
     const actTime = act.timestamp || (prevHistoryLength + i)
     const key = `${actTime}-${pid}-${act.type}-${act.tileId || ''}`
-    if (playedKeys.has(key)) continue
+    // ★ 全局去重: 已播放过的 action 跳过（防止重连后重播）
+    if (playedKeys.has(key) || _playedActionKeys.has(key)) continue
     playedKeys.add(key)
+    _playedActionKeys.add(key)
+    // 防内存泄漏: 超过上限时清理最旧的一半
+    if (_playedActionKeys.size > PLAYED_ACTION_KEYS_MAX) {
+      const arr = [..._playedActionKeys]
+      _playedActionKeys.clear()
+      arr.slice(Math.floor(arr.length / 2)).forEach(k => _playedActionKeys.add(k))
+    }
     if (act.type === 'kong' || act.type === ActionType.KONG || act.type === 'concealed_kong' || act.type === 'extended_kong') {
       pendingVoices.push({ type: 'meld', action: 'kong' })
     } else if (act.type === 'triplet' || act.type === ActionType.PENG) {

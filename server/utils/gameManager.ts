@@ -769,11 +769,37 @@ class GameManager {
       if (winOptions.length === 0) {
         console.log(`[resolvePendingAction] ${player.name} HU rejected: winOptions=0 (canWin=false with extraTile)`);
         this.handlePass(game, player);
-      } else {
-        console.log(`[resolvePendingAction] ${player.name} HU before: currentPlayerIndex=${game.currentPlayerIndex} phase=${game.phase} wall=${game.wall?.length}`);
-        await this.handleHu(game, player);
-        console.log(`[resolvePendingAction] ${player.name} HU after: currentPlayerIndex=${game.currentPlayerIndex} phase=${game.phase} wall=${game.wall?.length} drawnThisTurn=${game.drawnThisTurn} pendingActions=${game.pendingActions?.length}`);
+        return action;
       }
+      // ★ 防御层：捉冲时二次检查“门口无番不能捉冲”（防 pending 创建时漏检）
+      if (!isSelfDrawHu && huPendingTile) {
+        const testHandForGuard = [...player.hand.concealedTiles, huPendingTile];
+        const wildIdForGuard = typeof game.customScoringMode === 'string' ? game.customScoringMode : null;
+        const guardWin = canWin(testHandForGuard, player.hand.exposedMelds, wildIdForGuard, undefined, game.wildTileGroup);
+        if (guardWin.canWin) {
+          const flowerCountGuard = player.hand.exposedMelds.flatMap(m => m.tiles).filter(t => isFlower(t)).length;
+          const handTypesGuard = detectHandTypes(testHandForGuard, player.hand.exposedMelds, false, flowerCountGuard, game.customScoringMode || null, game.wildTileGroup);
+          const concealedNonFlowerGuard = player.hand.concealedTiles.filter(t => !isFlower(t));
+          const isDaDiaoGuard = concealedNonFlowerGuard.length === 1;
+          const hasTenPointExemptionGuard = this.hasTenPointClaimExemption(handTypesGuard, isDaDiaoGuard);
+          const requiresFlowerGateGuard = !hasTenPointExemptionGuard;
+          const hasFlowerAtDoorGuard = flowerCountGuard > 0;
+          const hasWindDragonTripletGuard = player.hand.exposedMelds.some(m =>
+            (m.type === MeldType.TRIPLET || m.type === MeldType.KONG) &&
+            m.tiles[0] && (isWind(m.tiles[0]) || isDragon(m.tiles[0]))
+          );
+          const hasAnyKongGuard = player.hand.exposedMelds.some(m => m.type === MeldType.KONG);
+          const hasGatePassGuard = hasFlowerAtDoorGuard || hasWindDragonTripletGuard || hasAnyKongGuard;
+          if (requiresFlowerGateGuard && !hasGatePassGuard) {
+            console.log(`[resolvePendingAction] ${player.name} HU rejected: 门口无番不能捉冲(types=${handTypesGuard} cleanExposure=true)`);
+            this.handlePass(game, player);
+            return action;
+          }
+        }
+      }
+      console.log(`[resolvePendingAction] ${player.name} HU before: currentPlayerIndex=${game.currentPlayerIndex} phase=${game.phase} wall=${game.wall?.length}`);
+      await this.handleHu(game, player);
+      console.log(`[resolvePendingAction] ${player.name} HU after: currentPlayerIndex=${game.currentPlayerIndex} phase=${game.phase} wall=${game.wall?.length} drawnThisTurn=${game.drawnThisTurn} pendingActions=${game.pendingActions?.length}`);
     } else {
       this.handlePass(game, player);
     }
@@ -3656,9 +3682,9 @@ class GameManager {
       // Check for hu
       const testHand = [...player.hand.concealedTiles, discardedTile];
       // 传实际 melds 对象（非 length），确保 canWin 正确识别包含门口牌的完整牌型
+      // ★ 必须传 wildTileId 字符串（非函数），否则 canWin 内部 wildTileId=null 跳过百搭分配
       const wildTileId = typeof game.customScoringMode === 'string' ? game.customScoringMode : null;
-      const wildChecker = buildWildTileChecker(wildTileId, game.wildTileGroup);
-      const winCheck = canWin(testHand, player.hand.exposedMelds, wildChecker, undefined, game.wildTileGroup);
+      const winCheck = canWin(testHand, player.hand.exposedMelds, wildTileId, undefined, game.wildTileGroup);
       if (winCheck.canWin) {
         // 规则:门口无花不能捉冲(所有非豁免牌型);豁免:风碰/风一色/清碰/混碰/八花/四百搭/清一色/大吊
         const flowerCount = player.hand.exposedMelds
@@ -4208,7 +4234,7 @@ class GameManager {
     this.timerManager.clearPendingActionTimer(game.gameId);
     // ★ K哥铁律(2026-06-06): 暂时关闭BotPenalty，观察AI真实战斗力
     const BOT_PENALTY_ENABLED = false;
-    // 【2026-05-29 验牌阶段】如果还不是REVEAL阶段，先进入REVEAL并延迟5秒
+    // 【2026-05-29 验牌阶段】如果还不是REVEAL阶段，先进入REVEAL并延迟10秒
     // 梁山聚义成功/造反成功：跳过验牌，直接结算
     // 流局（wall_exhausted）：跳过验牌阶段，直接结算（K哥要求）
     const skipReveal = !!(game as any).liangShanSuccess || !!(game as any).rebelSuccess || reason === GameEndReason.WALL_EXHAUSTED;
@@ -4228,7 +4254,7 @@ class GameManager {
       const revealTimer = setTimeout(async () => {
         this.timerManager.revealTimers.delete(gameId);
         try {
-          console.log(`[enterReveal] 5s timer FIRED gameId=${gameId.substring(0,8)}`);
+          console.log(`[enterReveal] 10s timer FIRED gameId=${gameId.substring(0,8)}`);
           const fresh = await this.getGame(gameId);
           console.log(`[enterReveal] game=${!!fresh} phase=${fresh?.phase}`);
           if (!fresh || fresh.phase !== GamePhase.REVEAL) {
@@ -4239,7 +4265,7 @@ class GameManager {
         } catch (e) {
           console.warn("[enterReveal] end error:", e);
         }
-      }, 5000);
+      }, 10000);
       this.timerManager.revealTimers.set(gameId, revealTimer);
       this.timerManager.detachTimer(revealTimer);
       return;

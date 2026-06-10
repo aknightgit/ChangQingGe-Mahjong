@@ -219,7 +219,7 @@ function isValidTingHandSize(count: number): boolean {
 // ============================================================
 // [DEBUG] 记录canFormMelds失败的hand
 const _debugHandCache = new Set<string>();
-function canFormMelds(
+export function canFormMelds(
   tiles: Tile[],
   n: number,
   isWildTile: WildTileChecker

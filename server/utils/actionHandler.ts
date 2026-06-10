@@ -894,9 +894,9 @@ export class ActionHandler {
     // ★ 安全同步：用实际 WON 玩家数，防止跨局残留值导致误判
     game.winnersCount = game.players.filter(p => p.status === PlayerStatus.WON).length;
     const remainingActive = game.players.filter(p => p.status === PlayerStatus.PLAYING).length;
-    // ★ K哥铁律(2026-06-05): 仅3人胡+或牌墙摸光才进REVEAL→ENDED
-    // 1家胡后牌局继续，决不允许1家胡就endgame
-    if (game.winnersCount >= 3 || remainingActive <= 0) {
+    // ★ K哥铁律(2026-06-10): 每次胡牌都进 REVEAL 亮牌阶段
+    // 1家胡也亮牌，让玩家看到胡牌牌面
+    if (game.winnersCount >= 1 || remainingActive <= 0) {
       // 【修复】进入5秒亮牌阶段，再进入结算
       // 如果已处于REVEAL(前人胡已设), 推迟 1s 直接 endRound, 避免多个 5s setTimeout 抢跑
       // ★ V2.12: 去重 —— 只设一个 1s 定时器, 后续胡不再重复设
@@ -929,7 +929,7 @@ export class ActionHandler {
       const revealTimer = setTimeout(async () => {
         tm.revealTimers.delete(gameId)
         try {
-          console.log(`[handleHu-reveal] 5s timer FIRED gameId=${gameId.substring(0,8)}`);
+          console.log(`[handleHu-reveal] 10s timer FIRED gameId=${gameId.substring(0,8)}`);
           const fresh = await this.deps.getGame(gameId);
           console.log(`[handleHu-reveal] game=${!!fresh} phase=${fresh?.phase}`);
           if (!fresh || fresh.phase !== GamePhase.REVEAL) {
@@ -938,7 +938,7 @@ export class ActionHandler {
           }
           endRound(fresh, GameEndReason.LAST_PLAYER);
         } catch (e: any) { console.error('[handleHu] reveal end error:', e?.stack || e); }
-      }, 5000)
+      }, 10000)
       tm.revealTimers.set(gameId, revealTimer)
       tm.detachTimer(revealTimer)
       return;
@@ -955,12 +955,12 @@ export class ActionHandler {
       const wallRevealTimer = setTimeout(async () => {
         tm2.revealTimers.delete(wallGameId)
         try {
-          console.log(`[handleHu-wall] 5s timer FIRED gameId=${wallGameId.substring(0,8)}`);
+          console.log(`[handleHu-wall] 10s timer FIRED gameId=${wallGameId.substring(0,8)}`);
           const fresh = await this.deps.getGame(wallGameId);
           if (!fresh || fresh.phase !== GamePhase.REVEAL) return;
           endRound(fresh, GameEndReason.LAST_PLAYER);
         } catch (e) { console.warn('[handleHu] reveal end error', e); }
-      }, 5000)
+      }, 10000)
       tm2.revealTimers.set(wallGameId, wallRevealTimer)
       tm2.detachTimer(wallRevealTimer)
       return;

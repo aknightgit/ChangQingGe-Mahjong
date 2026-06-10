@@ -8,7 +8,7 @@
 
 import { Tile, Meld, MeldType, TileSuit, Player } from '../types/game';
 import { isFlower, isWind, isDragon, groupTiles, tilesEqual, getTileDisplayName } from './tiles';
-import { HandType, HAND_TYPE_PRIORITY, canWin } from './handValidator';
+import { HandType, HAND_TYPE_PRIORITY, canWin, canFormMelds } from './handValidator';
 
 // ===== 固定番数牌型 =====
 // RULES.md 固定番数规则:
@@ -747,25 +747,16 @@ function calculateFormulaFan(
     const wildTiles = wildTileSuit === TileSuit.FLOWER && wildTileGroup && wildTileGroup.length > 0
       ? handTiles.filter(t => t.suit === TileSuit.FLOWER && wildTileGroup.includes(String(t.value)))
       : handTiles.filter(t => t.suit === wildTileSuit && t.value === wildTileValue);
-    // 检查百搭是否已在自然位置形成顺子（与同门相邻牌组成连续序列）
-    const wildsInNaturalSequence = wildTiles.filter(wt => {
-      const sameSuit = handTiles.filter(t => t.suit === wt.suit && t.id !== wt.id);
-      const hasLower = sameSuit.some(t => t.value === wt.value - 1);
-      const hasUpper = sameSuit.some(t => t.value === wt.value + 1);
-      const hasLower2 = sameSuit.some(t => t.value === wt.value - 2);
-      const hasUpper2 = sameSuit.some(t => t.value === wt.value + 2);
-      // 百搭与同门相邻牌形成顺子搭子（如二万旁边有一万或三万）
-      return (hasLower && hasUpper) || (hasLower && hasLower2) || (hasUpper && hasUpper2);
-    });
     if (wildTiles.length > 0) {
       // ★ 花牌百搭组：排除所有属于 wildTileGroup 的花牌
       const isWild = wildTileSuit === TileSuit.FLOWER && wildTileGroup && wildTileGroup.length > 0
         ? (t: Tile) => t.suit === TileSuit.FLOWER && wildTileGroup.includes(String(t.value))
         : (t: Tile) => t.suit === wildTileSuit && t.value === wildTileValue;
       const nonWildTiles = handTiles.filter(t => !isWild(t));
-      // 只对不在自然顺子中的百搭做虚拟分配
-      let remainingWilds = wildTiles.length - wildsInNaturalSequence.length;
-      const virtualParts: Tile[] = [...nonWildTiles, ...wildsInNaturalSequence];
+      // ★ K哥铁律(2026-06-10): 不再锁定百搭到自然顺子，让虚拟分配尝试所有方案
+      // 由 canFormMelds 验证确保最终分配能胡牌
+      let remainingWilds = wildTiles.length;
+      const virtualParts: Tile[] = [...nonWildTiles];
 
       // 1. 优先配箭牌刻子（中发白 triplet = +2）
       // 去重：每种箭牌只处理一次
@@ -831,7 +822,23 @@ function calculateFormulaFan(
         }
       }
 
-      virtualHand = virtualParts;
+      // ★ K哥铁律(2026-06-10): 百搭虚拟分配后，必须验证手牌仍能胡牌
+      // 剩余百搭必须丢弃（不能加回原值，否则一张百搭干两件事）
+      // 只检查已分配的部分能否组成有效面子
+      const finalNonFlower = virtualParts.filter(t => !isFlower(t));
+      const finalRemainingMelds = (finalNonFlower.length - 2) / 3;
+      const isValidHand = finalNonFlower.length >= 2
+        && Number.isInteger(finalRemainingMelds) && finalRemainingMelds >= 0
+        && canFormMelds(finalNonFlower, finalRemainingMelds, () => false)
+        && remainingWilds === 0;  // 所有百搭都必须被分配完
+      if (isValidHand) {
+        virtualHand = virtualParts;
+      } else {
+        // 分配后不能胡牌，回退到原始手牌（百搭保持原值）
+        virtualHand = handTiles;
+        // 清除之前添加的百搭分配details
+        details.length = 0;
+      }
     }
   }
 
