@@ -2469,7 +2469,7 @@ const overlayMessage = computed(() => {
 })
 
 const isDrawOverlay = computed(() => overlayReason.value === GameEndReason.WALL_EXHAUSTED)
-const showApprovalOverlay = computed(() => false)
+const showApprovalOverlay = computed(() => !!actionApprovalEvent.value)
 const dealerPlayer = computed(() => {
   const players = gameState.value?.players || []
   return players.find(player => player.isDealer) || null

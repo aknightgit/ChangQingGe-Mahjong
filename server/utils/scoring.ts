@@ -863,21 +863,21 @@ function calculateFormulaFan(
         }
       }
 
-      // ★ K哥铁律(2026-06-10): 百搭虚拟分配后，必须验证手牌仍能胡牌
-      // 剩余百搭必须丢弃（不能加回原值，否则一张百搭干两件事）
-      // 只检查已分配的部分能否组成有效面子
-      const finalNonFlower = virtualParts.filter(t => !isFlower(t));
-      const finalRemainingMelds = (finalNonFlower.length - 2) / 3;
-      const isValidHand = finalNonFlower.length >= 2
-        && Number.isInteger(finalRemainingMelds) && finalRemainingMelds >= 0
-        && canFormMelds(finalNonFlower, finalRemainingMelds, () => false)
-        && remainingWilds === 0;  // 所有百搭都必须被分配完
-      if (isValidHand) {
-        virtualHand = virtualParts;
+      // ★ K哥铁律(2026-06-10): 穷举百搭所有分配方式，验证每个方案能否胡牌，选番数最大的
+      // 用 canWin 验证（而非 canFormMelds），确保完整的胡牌结构（对子+面子）
+      // 百搭被分配后已变成普通牌，所以 canWin 的 wildArg 传 null
+      if (remainingWilds === 0) {
+        const winCheck = canWin(virtualParts, exposedMelds, null);
+        if (winCheck.canWin) {
+          virtualHand = virtualParts;
+        } else {
+          // 分配后不能胡牌，回退到原始手牌（百搭保持原值）
+          virtualHand = handTiles;
+          details.length = 0;
+        }
       } else {
-        // 分配后不能胡牌，回退到原始手牌（百搭保持原值）
+        // 百搭未全部分配完，回退到原始手牌
         virtualHand = handTiles;
-        // 清除之前添加的百搭分配details
         details.length = 0;
       }
     }

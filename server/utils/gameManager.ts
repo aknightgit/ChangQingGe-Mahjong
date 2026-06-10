@@ -3153,6 +3153,21 @@ class GameManager {
   }
 
   private async handleChow(game: GameState, player: Player, tileIds?: string[]): Promise<void> {
+    // ★ K哥铁律(2026-06-10): 吃牌前检查高优先级候选人(胡>碰杠)，启动审批流程
+    const lastDiscard = game.discardPile[game.discardPile.length - 1];
+    if (lastDiscard) {
+      const { huCandidates, pengCandidates, kongCandidates } = this.checkHighPriorityCandidates(game, player.id, lastDiscard);
+      const candidates: Array<{ playerId: string; availableActions: ActionType[] }> = [];
+      for (const pid of huCandidates) candidates.push({ playerId: pid, availableActions: [ActionType.HU] });
+      for (const pid of pengCandidates) {
+        if (kongCandidates.includes(pid)) candidates.push({ playerId: pid, availableActions: [ActionType.PENG, ActionType.KONG] });
+        else candidates.push({ playerId: pid, availableActions: [ActionType.PENG] });
+      }
+      if (candidates.length > 0) {
+        await this.startApproval(game, player.id, 'chow', candidates, lastDiscard, tileIds);
+        return;
+      }
+    }
     return this.actionHandler.handleChow(game, player, tileIds);
   }
 
@@ -3482,6 +3497,16 @@ class GameManager {
   }
 
   private async handlePeng(game: GameState, player: Player): Promise<void> {
+    // ★ K哥铁律(2026-06-10): 碰牌前检查高优先级候选人(胡)，启动审批流程
+    const lastDiscard = game.discardPile[game.discardPile.length - 1];
+    if (lastDiscard) {
+      const { huCandidates } = this.checkHighPriorityCandidates(game, player.id, lastDiscard);
+      if (huCandidates.length > 0) {
+        const candidates = huCandidates.map(pid => ({ playerId: pid, availableActions: [ActionType.HU] as ActionType[] }));
+        await this.startApproval(game, player.id, 'peng', candidates, lastDiscard);
+        return;
+      }
+    }
     return this.actionHandler.handlePeng(game, player);
   }
 
