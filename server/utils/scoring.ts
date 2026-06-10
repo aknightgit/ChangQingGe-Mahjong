@@ -98,6 +98,9 @@ export function calculateScore(params: {
   let baseFan = 0;
   let extraMultipliers = 1;
 
+  // 保存最近一次公式计算结果，给“百搭最优分配”段读取 wildReturnFan
+  let formulaResultLocal: FormulaResult | null = null;
+
   // 牌型校验：必须有有效牌型（不允许"普通胡"）
   if (handTypes.length === 0) {
     return {
@@ -147,6 +150,7 @@ export function calculateScore(params: {
   if (baseFan === 0) {
     const formulaResult = calculateFormulaFan(handTiles, exposedMelds, flowerTiles, wildTileSuit, wildTileValue, wildTileGroup);
     baseFan = formulaResult.fan;
+    formulaResultLocal = formulaResult;
     details.push(...formulaResult.details);
   }
 
@@ -196,6 +200,7 @@ export function calculateScore(params: {
   if (baseFan === 0) {
     const formulaResult = calculateFormulaFan(handTiles, exposedMelds, flowerTiles, wildTileSuit, wildTileValue, wildTileGroup);
     baseFan = formulaResult.fan;
+    formulaResultLocal = formulaResult;
     details.push(...formulaResult.details);
   }
   // ★ K哥铁律(2026-06-07): baseFan 最小为1，任何胡牌至少值1番
@@ -224,29 +229,55 @@ export function calculateScore(params: {
       details.push('无百搭 ×2');
     } else if (wildCount > 0) {
       // ★ 方案A: 百搭归位检查
+      // RULES.md 铁律: 百搭归位后才能享受无百搭×2 翻倍。
+      // 但”百搭归位能胡“本身（不论牌型）是合法走法——只是不能享受×2。
+      // 区分：
+      //   - 风一色/风碰 且 百搭是风/箭 牌 → 归位后可享无百搭×2
+      //   - 其他牌型混一色/清一色等 → 归位后不能享无百搭×2
       let planA_baseFan = baseFan;
       let planA_extra = extraMultipliers;
       let planA_details: string[] = [];
-      let planA_valid = false;
+      let planA_valid = false;        // 归位走通（仅取用归位 fan）
+      let planA_noWildX2 = false;     // 归位后还能享无百搭×2（仅风一色/风碰）
 
       // 普通百搭归位: 去掉百搭功能后能否胡
       const noWildCheck = canWin(handTiles, exposedMelds, () => false);
       if (noWildCheck.canWin) {
         planA_valid = true;
-        planA_extra *= 2;
-        planA_details.push('无百搭(百搭归位) ×2');
+        // ★ 混一色/清一色/STANDARD 等普通牌型: 归位后不享无百搭×2
+        // K哥 铁律(2026-06-10): 番数计算前提是胡牌, 百搭归位当原牌用, 不算“纯无百搭”
+        // 只有风一色/风碰 才例外（百搭本身就是风/箭牌）
+        if (isWindOrDragonWild && isWindHand) {
+          planA_noWildX2 = true;
+        }
       } else if (isWindOrDragonWild && isWindHand) {
-        // 百搭是风/箭 + 风一色/风碰
+        // 百搭是风/箭 + 风一色/风碰: 使用专门的验证函数
         if (handTypes.includes(HandType.FENG_PENG)) {
           if (checkAllTripletsWithoutWild(handTiles, exposedMelds, wildTileSuit, wildTileValue)) {
             planA_valid = true;
-            planA_extra *= 2;
-            planA_details.push('无百搭(风碰,百搭归位) ×2');
+            planA_noWildX2 = true;
           }
         } else {
           planA_valid = true;
-          planA_extra *= 2;
+          planA_noWildX2 = true;
+        }
+      }
+
+      // ★ 方案A 归位后的 baseFan: 用归位 comboPoints 重算（不虚拟分配）
+      // wildReturnFan 来自 calculateFormulaFan: = 2 + flowerCount + wildReturnBonus
+      if (planA_valid && (formulaResultLocal?.wildReturnFan ?? -1) >= 0) {
+        planA_baseFan = formulaResultLocal.wildReturnFan!;
+      }
+
+      // 应用无百搭×2 (仅风一色/风碰)
+      if (planA_noWildX2) {
+        planA_extra *= 2;
+        if (isWindHand && handTypes.includes(HandType.FENG_PENG)) {
+          planA_details.push('无百搭(风碰,百搭归位) ×2');
+        } else if (isWindHand) {
           planA_details.push('无百搭(风一色,百搭归位) ×2');
+        } else {
+          planA_details.push('无百搭(百搭归位) ×2');
         }
       }
 
@@ -254,19 +285,27 @@ export function calculateScore(params: {
       const planB_baseFan = baseFan;  // 已含百搭虚拟分配的 comboPoints
       const planB_extra = extraMultipliers;
 
-      // 比较两个方案: baseFan × extra 取最大
+      // 比较两个方案: 
+      // - 风一色/风碰 时 planA 可能带 ×2，需要 baseFan×extra 比较
+      // - 普通牌型: 取 baseFan 较小者（K哥铁律 2026-06-10：百搭归位优先）
       if (planA_valid) {
-        const planA_total = planA_baseFan * planA_extra;
-        const planB_total = planB_baseFan * planB_extra;
-        if (planA_total > planB_total) {
-          // 方案A更优: 百搭归位，无百搭×2
+        let chooseA = false;
+        if (planA_noWildX2) {
+          // 归位+无百搭×2 可能胜出: baseFan×extra 比较
+          const planA_total = planA_baseFan * planA_extra;
+          const planB_total = planB_baseFan * planB_extra;
+          chooseA = planA_total >= planB_total;
+        } else {
+          // 普通牌型: 归位 baseFan 较小时采用
+          chooseA = planA_baseFan < planB_baseFan;
+        }
+        if (chooseA) {
+          // 方案A: 百搭归位
+          baseFan = planA_baseFan;
           extraMultipliers = planA_extra;
           details.push(...planA_details);
-          // ★ 百搭归位后需要重新计算 baseFan（用归位后的手牌）
-          // 但百搭归位意味着百搭当原牌用，牌型不变，comboPoints可能更高
-          // 这里不重算 baseFan（因为百搭归位只是 extra×2，baseFan 已经是正确的）
         } else {
-          // 方案B更优: 百搭给牌，保持当前 baseFan
+          // 方案B: 百搭给牌，保持当前 baseFan
           // extraMultipliers 不变（已是 planB_extra）
         }
       }
@@ -684,6 +723,8 @@ interface FormulaResult {
   fan: number;
   details: string[];
   wildReturnBonus?: number;  // 百搭归位方案的 comboPoints（用于方案比较）
+  wildReturnFan?: number;    // 百搭归位方案的 fan（包含 2+花+comboPoints）
+  wildReturnComboPoints?: number;  // 百搭归位方案的 comboPoints 数值
 }
 
 function calculateFormulaFan(
@@ -902,7 +943,14 @@ function calculateFormulaFan(
   details.unshift(`公式: 2 + ${flowerCount}花 + ${comboPoints}组合 = ${fan}番`);
   console.log(`[Scoring] calculateFormulaFan: flowers=${flowerCount} comboPoints=${comboPoints} fan=${fan} allMelds=${allMelds.length} details=${details.join('; ')}`);
 
-  return { fan, details };
+  // ★ K哥铁律(2026-06-10): 计算百搭归位方案的 fan（不虚拟分配，百搭当原牌用）
+  // 上层(calculateScore)在"百搭最优分配"段会比较 归位fan vs 分配fan，取对K哥最有利的方案
+  let wildReturnFan = -1;  // -1 表示无法百搭归位
+  if (wildReturnBonus >= 0) {
+    wildReturnFan = Math.min(2 + flowerCount + wildReturnBonus, MAX_FORMULA_FAN);
+  }
+
+  return { fan, details, wildReturnFan, wildReturnComboPoints: Math.max(0, wildReturnBonus) };
 }
 
 // ===== 辅助函数 =====

@@ -5350,8 +5350,9 @@ const forceDiscard = async (p: Player) => {
 .ai-takeover-btn {
   background: rgba(76, 175, 80, 0.8);
   border-color: rgba(255, 255, 255, 0.25);
-  min-width: auto;
-  padding: 2px 10px;
+  /* 大小与退房结算按钮完全一致 */
+  min-width: 108px;
+  padding: 2px 15px;
 }
 .ai-takeover-btn:hover {
   background: rgba(76, 175, 80, 1);
