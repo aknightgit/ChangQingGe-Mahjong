@@ -308,7 +308,7 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
   // ★ V2.8 K哥铁律: 成型混碰强碰buff (优先于 V2.7 第一口碰限制)
   // 牌型: 已有 1+ 副露(已破门清) + 数字门对子 >= 2 + 至少 1 个风/箭刻/对
   // 典型场景: 已碰 jian-2 刻 + tiao 2对 + 别人打 4万 → 碰 4万 凑混碰
-  // V2.7: 收紧条件 (手牌2对→3对) → 减少混碰 → 保留清/混一色
+  // V2.8: 适度收紧 (handPairs>=2, 但tuneDelta 1.5→0.7) → 减少不必要的混碰
   if (action === ActionType.PENG && !isHonor(claimTile) && player.hand.exposedMelds.length >= 1) {
     const claimSuitCount = getNumberSuitCount(player.hand.concealedTiles, claimTile.suit)
     const handPairs = countPairs(player.hand.concealedTiles)
@@ -322,14 +322,13 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       }
       return false
     })()
-    // V2.7: 收紧 (handPairs>=2 → >=3) → 减少不必要的混碰
-    const hunPengReady = claimSuitCount >= 2 && handPairs >= 3 && hasHonorTripletOrPair
+    const hunPengReady = claimSuitCount >= 2 && handPairs >= 2 && hasHonorTripletOrPair
     const claimEstimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
     const isEarlyRounds = claimEstimatedRound <= 3
     if (hunPengReady) {
       return {
         allowed: true,
-        tuneDelta: isEarlyRounds ? 0.3 : 1.0,
+        tuneDelta: isEarlyRounds ? 0.3 : 0.7,
         reason: isEarlyRounds ? 'hun_peng_potential_boost_early' : 'hun_peng_potential_boost'
       }
     }
@@ -551,15 +550,23 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
         }
       }
       if (hasHonorPairForClaim && !routeState.features.pureFlushUpgradeReady) {
-        // V2.7: 降低混碰倾向（1.5→0.8），优先做清一色
+        // V2.8: 降低混碰倾向(1.5→0.7) + 弱保留混碰能力
+        // 风牌<6张时倾向不碰(继续清/混一色), 风牌多时适度碰
+        const _exposedHonor = (routeState.features as any)._apExposedHonor || 0
+        const _honorTotal = routeState.features.honorCount + _exposedHonor
+        if (_honorTotal < 4) {
+          // 风牌太少, 不碰 (优先清/混一色)
+          return { allowed: false, tuneDelta: -1.0, reason: 'low_honor_skip_peng_for_flush' }
+        }
+        // 风牌多, 适度碰
         return {
           allowed: true,
           tuneDelta:
-            0.8 + // 基础: 适度碰（混碰是低概率, 不应执着）
+            0.7 + // 基础: 适度碰
             routeGain * 0.05 +
-            (routeState.features.honorPairCount >= 2 ? 0.3 : 0) +
+            (_honorTotal >= 6 ? 0.2 : 0) +
             deadTilePungBonus,
-          reason: 'half_flush_hun_peng_moderate_claim',
+          reason: 'hun_peng_moderate_claim',
         }
       }
       if (

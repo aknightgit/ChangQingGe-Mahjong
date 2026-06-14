@@ -310,9 +310,9 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       score += pureFlushBucketBoost * (features.secondSuitCount === 0 ? 2.2 : 1.1)
       score -= features.secondSuitCount * 2.5
       // ★ V2.2: （数字门+风箭）对子总共>=4 → 大幅提升混碰概率
-      // V2.7: 适度降低混碰加分（保持清一色+降混碰）
+      // V2.8: 降低混碰加分(2.8+0.25 → 1.5+0.15), 不完全关闭(AI仍可走混碰但弱化)
       const totalPairsHunPeng = features.pairCount >= 4 && features.longestSuitCount >= 4 && features.secondSuitCount <= 1
-      if (hunPengReady || totalPairsHunPeng) score += getPolicyValue(policy, 'hunPengPursuit') * (2.8 + suitedPairCount * 0.25) * (totalPairsHunPeng ? 1.3 : 1)
+      if (hunPengReady || totalPairsHunPeng) score += getPolicyValue(policy, 'hunPengPursuit') * (1.5 + suitedPairCount * 0.15) * (totalPairsHunPeng ? 1.0 : 1)
       if (qingPengReady) score += getPolicyValue(policy, 'qingPengPursuit') * (2.4 + pureFlushBucketBoost * 0.6)
       score += getPolicyValue(policy, 'pureFlushPursuit') * Math.max(0, features.longestSuitCount - 6) * 0.8
       if (features.longestSuitCount >= 9) { reasons.push('half_flush_nine_tiles'); score += 16 }
@@ -412,7 +412,9 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
         score += 12  // 几乎纯数字门+全刻子 → 清碰路线
         reasons.push('qing_peng_push')
       }
-      if (hunPengReady) score += getPolicyValue(policy, 'hunPengPursuit') * (5.4 + features.honorPairCount * 0.8)
+      // V2.8: ALL_PUNGS 路线适度保留混碰加分(5.4+0.8*honorPair → 2.5+0.3*honorPair)
+      // 不完全关闭, AI仍可走混碰但弱化, 避免过激导致全转混一色
+      if (hunPengReady) score += getPolicyValue(policy, 'hunPengPursuit') * (2.5 + features.honorPairCount * 0.3)
       if (features.honorCount >= 6) score += getPolicyValue(policy, 'allHonorsPursuit') * 2.2
       // ★ V2.10 K哥铁律: ALL_PUNGS 路线(风碰) buff(与HONOR_HEAVY同一逻辑)
       const _apRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
@@ -739,7 +741,16 @@ export function evaluateRouteStateV2(input: {
   const wildPureFlushUpgradeReady = (features as any).wildPureFlushReady
   const hunPengUpgradeReady = previousRouteState?.current === 'ALL_PUNGS' && features.honorPairCount >= 2 && features.honorCount >= 4
   const qingPengUpgradeReady = previousRouteState?.current === 'ALL_PUNGS' && features.pairCount + features.tripletCount >= 4 && features.secondSuitCount === 0 && features.honorCount === 0
+  // ★ V2.8 Phase 4: 风一色/风碰升级（ALL_PUNGS/HALF_FLUSH → HONOR_HEAVY）
+  // 条件：风向牌够多（8+） + 牌墙<20 → 应转风一色/风碰
+  const _exposedHonorCount = (playerExposedHonorCount(input.player) || 0)
+  const _totalHonorWithWild = features.honorCount + features.wildCount
+  const _honorWithExposed = features.honorCount + _exposedHonorCount + features.wildCount
+  const fengYiSeUpgradeReady =
+    (previousRouteState?.current === 'HALF_FLUSH' || previousRouteState?.current === 'ALL_PUNGS') &&
+    _honorWithExposed >= 8 && _totalHonorWithWild >= 8
   const upgradeTarget = pureFlushUpgradeReadyNow ? 'HALF_FLUSH' :
+                        fengYiSeUpgradeReady ? 'HONOR_HEAVY' :
                         qingPengUpgradeReady ? 'ALL_PUNGS' :
                         hunPengUpgradeReady ? 'ALL_PUNGS' :
                         null
@@ -765,7 +776,8 @@ export function evaluateRouteStateV2(input: {
   const clarityBoost = routeClarity > 5 ? 2.0 : routeClarity > 3 ? 1.2 : 0
   const flipThreshold = (previousRouteState?.lockLevel === 2 ? 10.0 : previousRouteState?.lockLevel === 1 ? 7.0 : (previousRouteState?.stableTurns || 0) >= 2 ? 4.5 : 2.0) + clarityBoost
   // ★ V2.7 Phase 3: 升级豁免时降低切换门槛
-  const effectiveFlipThreshold = upgradeExempt ? Math.min(flipThreshold, 3.0) : (wildUpgradeExempt ? Math.min(flipThreshold, 5.0) : flipThreshold)
+  // V2.8: 风一色升级也用更低的门槛(3.0)
+  const effectiveFlipThreshold = upgradeExempt ? Math.min(flipThreshold, 3.0) : (fengYiSeUpgradeReady ? Math.min(flipThreshold, 4.0) : (wildUpgradeExempt ? Math.min(flipThreshold, 5.0) : flipThreshold))
   // lockLevel=2时：仅极端情况+保守转向才允许切换，或风牌积累够时允许切换到风一色
   // ★ V2.2: HONOR_HEAVY分数远高于当前路线时，也允许切换（解决风一色绝迹问题）
   // ★ V2.7: 升级豁免（混一色→清一色，碰碰胡→混碰/清碰）允许直接切换
