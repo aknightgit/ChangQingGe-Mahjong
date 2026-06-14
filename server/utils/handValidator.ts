@@ -443,7 +443,7 @@ function tryFormMelds(n: number, wildLeft: number, map: Map<string, number>): bo
 // 规则：有多个数字门 + 不能通过碰碰胡检查 = 垃圾胡，不可胡
 // 使用 canFormOnlyTripletsFrom 检查是否能全刻子+对子
 // 用于：canWin、materializeTypes、detectTypes、听牌评估
-function isGarbageHand(tiles: Tile[]): boolean {
+export function isGarbageHand(tiles: Tile[]): boolean {
   const nonFlower = tiles.filter(t => !isFlower(t));
   if (nonFlower.length < 2) return false;
   // 检查数字门数（只看数字门，风/箭不算门）
@@ -597,12 +597,12 @@ function canWinByProjectRuleWithWildExact(concealed: Tile[], exposed: Meld[], wi
 }
 
 // ============================================================
-// 核心牌型检测（无百搭版本）
-// ============================================================
-function detectTypes(
-  concealed: Tile[],
-  exposed: Meld[]
-): HandType[] {
+  // 核心牌型检测（无百搭版本）
+  // ============================================================
+  function detectTypes(
+    concealed: Tile[],
+    exposed: Meld[]
+  ): HandType[] {
   const types: HandType[] = [];
 
   const concealedNonFlower = concealed.filter(t => !isFlower(t));
@@ -637,22 +637,6 @@ function detectTypes(
   } else {
     remainingMelds = (concealedNonFlower.length - 2) / 3;
     if (!Number.isInteger(remainingMelds) || remainingMelds < 0) return [];
-  }
-
-  // ★ K哥铁律(2026-06-09): 垃圾胡前置检查
-  // 八花/四百搭/风一色已处理。其他所有牌型，先检查：多数字门+不满足碰碰胡 → 垃圾胡直接返回
-  // 所有胡牌检查都必须先过这一关，再去判断具体牌型
-  if (types.length === 0 && allTilesNonFlower.length >= 2) {
-    const _numSuits = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS];
-    const _numSuitSet = new Set(allTilesNonFlower.filter(t => _numSuits.includes(t.suit)).map(t => t.suit));
-    if (_numSuitSet.size >= 2) {
-      const _m = (allTilesNonFlower.length - 2) / 3;
-      if (Number.isInteger(_m) && _m >= 0) {
-        if (!canFormOnlyTripletsFrom(allTilesNonFlower, _m, () => false)) {
-          return [];  // 多数字门+不能全刻子 = 垃圾胡，直接判不能胡
-        }
-      }
-    }
   }
 
   // ---- 统计已暴露面子 ----
@@ -742,24 +726,31 @@ function detectTypes(
     if (getSuits(concealedNonFlower).size >= 2) {
       return [];
     }
-    if (!types.includes(HandType.DA_DIAO)) {
-      types.push(HandType.DA_DIAO);
+    // ★ V2.2: 大吊是胡牌形式，不是牌型，不加入types
+    // 但需要根据门口副露判断实际牌型（碰碰胡/混一色等）
+    if (types.length === 0) {
+      const exposedTriplets = exposed.filter(m => m.type === MeldType.TRIPLET || m.type === MeldType.KONG || m.type === MeldType.CONCEALED_KONG)
+      const exposedSequences = exposed.filter(m => m.type === MeldType.SEQUENCE)
+      const exposedSuits = new Set(exposed.map(m => m.tiles[0]?.suit).filter(Boolean))
+      const hasHonorMeld = exposed.some(m => m.tiles?.some(t => isWind(t) || isDragon(t)))
+      const hasOnlyOneSuit = exposedSuits.size === 1 && !hasHonorMeld
+      if (exposedTriplets.length > 0 && exposedSequences.length === 0) {
+        types.push(HandType.ALL_TRIPLETS)
+        if (hasOnlyOneSuit) types.push(HandType.QING_PENG)
+        else if (hasHonorMeld) types.push(HandType.HUN_PENG)
+      } else if (hasOnlyOneSuit && exposedSequences.length > 0) {
+        types.push(HandType.HALF_FLUSH)
+      } else if (exposedSequences.length > 0) {
+        types.push(HandType.HALF_FLUSH)
+      } else {
+        types.push(HandType.HALF_FLUSH)
+      }
     }
+    // 牌型由 detectTypes 决定（碰碰胡/混一色等），大吊只作为后缀修饰
   }
 
-  // ---- 垃圾胡过滤（K哥规则）----
-  // 规则：多门(>=2门) + 含顺子（不能全刻子）= 禁止的普通3n+2，直接判不能胡
-  // 注意：清一色/混一色/碰碰胡/风一色 等特殊牌型已在上方单独处理，不受影响
-  // ★ V2.16 K哥铁律: 有风/箭牌时不算垃圾胡（混碰/混一色都允许风箭）
-    // 基础胡牌：满足 3n+2 格式且没有更高优先级特殊牌型，且不是垃圾胡
-  // ★ 用完整牌（手牌+门口）判断垃圾胡，防止门口有多门顺子时漏判
-  if (types.length === 0 && satisfiesFormat) {
-    const completeHand = [...concealedNonFlower, ...exposedNonFlower];
-    if (!_isGarbageMultiSuitsWithSequenceModuleLevel(completeHand)) {
-      types.push(HandType.STANDARD);
-    }
-    // 垃圾胡：types.length 仍然为 0，不会胡
-  }
+  // ---- 没有匹配任何预定义牌型 → 无效牌型 ----
+  // 胡牌形式只有：碰碰胡、混一色、清一色、混碰、清碰、风一色、风碰、八花、四百搭、大吊、七对
 
   return types.sort((a, b) => (HAND_TYPE_PRIORITY[b] ?? 0) - (HAND_TYPE_PRIORITY[a] ?? 0));
 }
@@ -952,13 +943,49 @@ function findBestAssignment(
 // ============================================================
 // 新增：findBestHandTypes - 返回最优牌型列表（公开API）
 // ============================================================
+const findBestHandTypesCache = new Map<string, HandType[]>()
+const FIND_BEST_CACHE_MAX = 50000
+
 export function findBestHandTypes(
   tiles: Tile[],
   exposed: Meld[],
   wildTileId: string | null
 ): HandType[] {
-  const result = findBestAssignmentByPriority(tiles, exposed, wildTileId ?? '');
-  // 结果已按优先级排序
+  const handSig = handSignature(tiles)
+  const exposedSig = meldSignature(exposed)
+  const wildKey = wildTileId || ''
+  const cacheKey = `${handSig}|${exposedSig}|${wildKey}`
+  const cached = findBestHandTypesCache.get(cacheKey)
+  if (cached !== undefined) return cached
+
+  let result = findBestAssignmentByPriority(tiles, exposed, wildTileId ?? '');
+
+  // ★ V2.7 兜底：result=[] 时根据副露+手牌特征给出最可能类型
+  // 解决 detectTypes 漏识别（如百搭使 canWin=true 但 detectTypes 返回空）
+  if (result.length === 0) {
+    const concealedNonFlower = tiles.filter(t => !isFlower(t))
+    const exposedNonFlower = exposed.flatMap(m => m.tiles).filter(t => !isFlower(t))
+    const allTilesNonFlower = [...concealedNonFlower, ...exposedNonFlower]
+    const exposedSequences = exposed.filter(m => m.type === MeldType.SEQUENCE)
+    const exposedTriplets = exposed.filter(m => m.type === MeldType.TRIPLET || m.type === MeldType.KONG || m.type === MeldType.CONCEALED_KONG)
+    const exposedSuits = new Set(exposed.map(m => m.tiles[0]?.suit).filter(Boolean))
+    concealedNonFlower.forEach(t => exposedSuits.add(t.suit))
+    const hasHonor = allTilesNonFlower.some(t => isWind(t) || isDragon(t))
+    const hasOnlyOneSuit = exposedSuits.size === 1 && !hasHonor
+    if (exposedTriplets.length > 0 && exposedSequences.length === 0) {
+      result.push(HandType.ALL_TRIPLETS)
+      if (hasOnlyOneSuit) result.push(HandType.QING_PENG)
+      else if (hasHonor) result.push(HandType.HUN_PENG)
+    } else if (hasOnlyOneSuit) {
+      result.push(HandType.HALF_FLUSH)
+    } else {
+      result.push(HandType.HALF_FLUSH)
+    }
+  }
+
+  if (findBestHandTypesCache.size < FIND_BEST_CACHE_MAX) {
+    findBestHandTypesCache.set(cacheKey, result)
+  }
   return result;
 }
 
@@ -1221,24 +1248,12 @@ function findBestAssignmentByPriority(
   };
 
   const materializeTypes = (alloc: Array<{ suit: string; value: number }>) => {
-    const virtualHand = [...naturals];
+    const virtualHand = [...naturals.filter(t => !isFlower(t))];
     for (let i = 0; i < alloc.length; i++) {
       const tile = alloc[i];
       virtualHand.push({ suit: tile.suit as TileSuit, value: tile.value, id: `vhp-${i}`, isFlower: false });
     }
     const result = detectTypes(virtualHand, exposed);
-    // ★ K哥铁律(2026-06-08 v3): 垃圾胡检查用【完整 hand=虚拟手+exposed melds】
-    // 旧逻辑只看 concealedTiles(naturals 或 virtualHand),漏掉了 exposed melds 里
-    // 的多门(如 exposed=万杠+条刻+concealed=筒 → 完整3门,纯concealed只1门)
-    const completeHand = [...virtualHand, ...exposed.flatMap(m => m.tiles).filter(t => !isFlower(t))];
-    const completeIsGarbage = isGarbageHand(completeHand);
-    if (result.includes(HandType.ALL_TRIPLETS) && completeIsGarbage) {
-      return result.filter(t => t !== HandType.ALL_TRIPLETS && t !== HandType.HUN_PENG && t !== HandType.QING_PENG && t !== HandType.FENG_PENG);
-    }
-    // ★ STANDARD 也要检查垃圾胡（百搭分配后可能得到含顺子的多门 STANDARD）
-    if (result.includes(HandType.STANDARD) && _isGarbageMultiSuitsWithSequenceModuleLevel(completeHand)) {
-      return result.filter(t => t !== HandType.STANDARD);
-    }
     return result;
   };
 
@@ -1308,6 +1323,7 @@ function findBestAssignmentByPriority(
         return (bBoost + bCount) - (aBoost + aCount);
       });
 
+    // 优先加入自然牌和邻近牌
     for (const tile of orderedNaturals) {
       pushUniqueCandidate(candidates, seen, tile.suit, tile.value);
     }
@@ -1318,6 +1334,18 @@ function findBestAssignmentByPriority(
           pushUniqueCandidate(candidates, seen, tile.suit, nextValue);
         }
       }
+    }
+    // 补充所有缺失的数牌和字牌，确保搜索不遗漏
+    for (const suit of numSuits) {
+      for (let value = 1; value <= 9; value++) {
+        pushUniqueCandidate(candidates, seen, suit, value);
+      }
+    }
+    for (let value = 1; value <= 4; value++) {
+      pushUniqueCandidate(candidates, seen, TileSuit.WIND, value);
+    }
+    for (let value = 1; value <= 3; value++) {
+      pushUniqueCandidate(candidates, seen, TileSuit.DRAGON, value);
     }
 
     return candidates;
@@ -1356,9 +1384,9 @@ function findBestAssignmentByPriority(
     stopOnFirst?: boolean
     width?: number
   }): HandType[] => {
-    const { seeds = [[]], candidatePool, accept, stopOnFirst = false, width = 6 } = params;
+    const { seeds = [[]], candidatePool, accept, stopOnFirst = false, width } = params;
     let best: HandType[] = [];
-    const trimmedPool = candidatePool.slice(0, Math.max(1, width));
+    const trimmedPool = width ? candidatePool.slice(0, Math.max(1, width)) : candidatePool;
 
     const search = (alloc: Array<{ suit: string; value: number }>, remaining: number): HandType[] | null => {
       if (remaining === 0) {
@@ -1393,7 +1421,6 @@ function findBestAssignmentByPriority(
 
   const noFlowerSelfDrawTypes = runLimitedSearch({
     candidatePool: numericCandidatePool,
-    width: 10,
     accept: (types) =>
       types.includes(HandType.ALL_TRIPLETS) ||
       types.includes(HandType.HALF_FLUSH) ||
@@ -1409,7 +1436,6 @@ function findBestAssignmentByPriority(
       ...buildHonorPool(TileSuit.WIND, 4),
       ...numericCandidatePool
     ],
-    width: 10
   });
   if (dragonTypes.length > 0) return dragonTypes;
 
@@ -1420,13 +1446,11 @@ function findBestAssignmentByPriority(
       ...buildHonorPool(TileSuit.DRAGON, 3),
       ...numericCandidatePool
     ],
-    width: 10
   });
   if (windTypes.length > 0) return windTypes;
 
   return runLimitedSearch({
     candidatePool: numericCandidatePool.length > 0 ? numericCandidatePool : allCandidates,
-    width: 12,
     stopOnFirst: true
   });
 }
@@ -1460,7 +1484,6 @@ export function canWin(
   if (canWinResultCache.has(cacheKey)) {
     _canWinHits++
     const cached = canWinResultCache.get(cacheKey)!
-
     return { canWin: cached.canWin, types: cached.types }
   }
   _canWinMisses++
@@ -1601,13 +1624,36 @@ export function canWin(
     }
   }
   const finalCanWin = types.length > 0 || (exactCanWin && !daDiaoBlockedByGarbage && !naturalTilesBlockedByGarbage && !exactWinBlockedByGarbage && !concealedMultiSuitBlockedByGarbage) || (isDaDiaoState && !daDiaoBlockedByGarbage && !concealedMultiSuitBlockedByGarbage && !daDiaoTwoTilesNotPair);
-  const validTypes = finalCanWin
-    ? (types.length > 0 ? types : (isDaDiaoState && !daDiaoBlockedByGarbage && !concealedMultiSuitBlockedByGarbage && !daDiaoTwoTilesNotPair) ? [HandType.DA_DIAO] : [HandType.STANDARD])
-    : [];
+  // 大吊是胡牌形式，不是牌型。types 由 detectTypes 决定（碰碰胡/混一色等）
+  // ★ V2.7 兜底：finalCanWin=true 但 types=[] 时，根据副露模式给个最低限度类型
+  // 避免"canWin=true但types=[]"导致算分为0（无效牌型）
+  let validTypes = finalCanWin ? types : [];
+  if (validTypes.length === 0 && finalCanWin) {
+    // 兜底：根据副露+手牌特征给出最可能类型
+    const exposedNonFlower = exposed.flatMap(m => m.tiles).filter(t => !isFlower(t));
+    const allTilesNonFlower = [...concealedNonFlower, ...exposedNonFlower];
+    const exposedSequences = exposed.filter(m => m.type === MeldType.SEQUENCE);
+    const exposedTriplets = exposed.filter(m => m.type === MeldType.TRIPLET || m.type === MeldType.KONG || m.type === MeldType.CONCEALED_KONG);
+    const exposedSuits = new Set(exposed.map(m => m.tiles[0]?.suit).filter(Boolean));
+    concealedNonFlower.forEach(t => exposedSuits.add(t.suit));
+    const hasHonor = allTilesNonFlower.some(t => isWind(t) || isDragon(t));
+    const hasOnlyOneSuit = exposedSuits.size === 1 && !hasHonor;
+    if (exposedTriplets.length > 0 && exposedSequences.length === 0) {
+      validTypes.push(HandType.ALL_TRIPLETS)
+      if (hasOnlyOneSuit) validTypes.push(HandType.QING_PENG)
+      else if (hasHonor) validTypes.push(HandType.HUN_PENG)
+    } else if (hasOnlyOneSuit) {
+      validTypes.push(HandType.HALF_FLUSH)
+    } else if (!hasHonor) {
+      validTypes.push(HandType.HALF_FLUSH)
+    } else {
+      validTypes.push(HandType.HALF_FLUSH)
+    }
+  }
 
   const result = { canWin: finalCanWin, types: validTypes }
-  // ★ 诊断: canWin 结果日志（仅在有百搭且胡牌时打印）
-  if (finalCanWin && wildTileId && concealed.length <= 14) {
+  // ★ 诊断: canWin 结果日志（仅在有百搭且胡牌时打印，需 CANWIN_DIAG=1 开启）
+  if (process.env.CANWIN_DIAG && finalCanWin && wildTileId && concealed.length <= 14) {
     const concealedStr = concealed.map(t => `${t.suit}-${t.value}`).join(',');
     const exposedStr = exposed.map(m => `[${m.type}:${m.tiles.map(t => `${t.suit}-${t.value}`).join(',')}]`).join(',');
     console.log(`[canWin-DIAG] canWin=${finalCanWin} types=${validTypes} concealed=[${concealedStr}] exposed=[${exposedStr}] wildId=${wildTileId} concealedNonFlower=${concealedNonFlower.length} exactCanWin=${exactCanWin} isDaDiao=${isDaDiaoState}`);
@@ -1648,7 +1694,8 @@ export function detectHandTypes(
     resolvedWild = normalizeSuitAlias(suit) + '-' + rest.join('-')
   }
 
-  return canWin(handTiles, exposedOrCount as any, resolvedWild as any, undefined, wildTileGroup).types;
+  const types = findBestHandTypes(handTiles, exposedOrCount as any, resolvedWild)
+  return types
 }
 
 // ============================================================
@@ -1674,6 +1721,10 @@ export function clearCanWinCache(): void {
   canWinResultCache.clear()
   _canWinHits = 0
   _canWinMisses = 0
+}
+
+export function clearFindBestHandTypesCache(): void {
+  findBestHandTypesCache.clear()
 }
 
 // ============================================================

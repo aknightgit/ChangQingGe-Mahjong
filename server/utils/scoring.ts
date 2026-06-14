@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 长清阁麻将 - 番数计算系统
  * 
  * 两种计算方式:
@@ -47,7 +47,8 @@ export interface ScoreResult {
   globalMultiplier: number;  // 综合全局倍数（继承倍数×回合倍数，封顶8）
   settlementMultiplier: number; // 结算膨胀倍数
   finalPoints: number;       // 最终点数
-  handTypeName: string;      // 牌型名称
+  handTypeName: string;      // 牌型名称（纯牌型，不含大吊/杠开/无花等后缀）
+  winForm: string;           // 胡牌形式：'' / '大吊' / '杠开' / '无花'
   details: string[];         // 计算明细
 }
 
@@ -94,7 +95,8 @@ export function calculateScore(params: {
   } = params;
 
   const details: string[] = [];
-  let handTypeName = '普通胡';
+  let handTypeName = '无效牌型';
+  let winForm = '';  // 胡牌形式：大吊/杠开/无花
   let baseFan = 0;
   let extraMultipliers = 1;
 
@@ -121,14 +123,14 @@ export function calculateScore(params: {
   if (topType) {
     handTypeName = getHandTypeDisplayName(topType);
 
-    // ★ 牌型后缀:杠开/大吊/无花自摸
+    // ★ 胡牌形式记录（大吊/杠开/无花），不作为牌型后缀
     const doorFlowerCount = exposedMelds.flatMap(m => m.tiles).filter(t => isFlower(t)).length;
     if (isKongFlower) {
-      handTypeName += '（杠开）';
+      winForm = '杠开';
     } else if (isDaDiao) {
-      handTypeName += '（大吊）';
+      winForm = '大吊';
     } else if (isSelfDrawn && doorFlowerCount === 0) {
-      handTypeName += '（无花）';
+      winForm = '无花';
     }
 
     // 检查是否为固定番数牌型
@@ -285,20 +287,11 @@ export function calculateScore(params: {
       const planB_baseFan = baseFan;  // 已含百搭虚拟分配的 comboPoints
       const planB_extra = extraMultipliers;
 
-      // 比较两个方案: 
-      // - 风一色/风碰 时 planA 可能带 ×2，需要 baseFan×extra 比较
-      // - 普通牌型: 取 baseFan 较小者（K哥铁律 2026-06-10：百搭归位优先）
+      // 比较两个方案: baseFan × extra 取最大
       if (planA_valid) {
-        let chooseA = false;
-        if (planA_noWildX2) {
-          // 归位+无百搭×2 可能胜出: baseFan×extra 比较
-          const planA_total = planA_baseFan * planA_extra;
-          const planB_total = planB_baseFan * planB_extra;
-          chooseA = planA_total >= planB_total;
-        } else {
-          // 普通牌型: 归位 baseFan 较小时采用
-          chooseA = planA_baseFan < planB_baseFan;
-        }
+        const planA_total = planA_baseFan * planA_extra;
+        const planB_total = planB_baseFan * planB_extra;
+        const chooseA = planA_total >= planB_total;
         if (chooseA) {
           // 方案A: 百搭归位
           baseFan = planA_baseFan;
@@ -350,6 +343,7 @@ export function calculateScore(params: {
     settlementMultiplier,
     finalPoints,
     handTypeName,
+    winForm,
     details
   };
 }
@@ -957,7 +951,7 @@ function calculateFormulaFan(
 
 function getHandTypeDisplayName(type: HandType): string {
   const names: Record<HandType, string> = {
-    [HandType.STANDARD]: '',
+    [HandType.STANDARD]: '无效牌型',
     [HandType.FENG_PENG]: '风碰',
     [HandType.ALL_WIND]: '风一色',
     [HandType.QING_PENG]: '清碰',

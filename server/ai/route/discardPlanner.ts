@@ -1,4 +1,4 @@
-﻿import { TileSuit } from '../../types/game'
+import { TileSuit } from '../../types/game'
 import { groupTiles, isHonor } from '../../utils/tiles'
 import type { RouteDiscardInput } from './types'
 
@@ -207,30 +207,34 @@ function scoreByRoute(input: RouteDiscardInput): number {
       ? 1.2 + nearby * 0.5 + Math.max(0, suitGap - 1) * 0.35
       : 0
 
-  switch (routeState.current) {
-    case 'MENQING_SPEED':
-      return (
-        (isShortestSuitTile ? 5.1 + suitGap * 0.6 : 0) +
-        shortestSuitSequenceBreakBias +
-        (isShortestSuitTile && count >= 2 ? 0 : 0) +
-        (count === 1 ? 1.2 : -2.6) +
-        (nearby === 0 ? 1.8 : -0.65 * nearby) +
-        (isLongestSuitTile ? -longestSuitSingletonKeepBias : 0) +
-        (isHonor(tile) && count === 1 ? (isOfficialOpening ? -2.4 : 1.2) : 0)
-      )
+  // ★ speedMode 分支（独立于 route）
+  if (routeState.speedMode === 'MENQING') {
+    return (
+      (isShortestSuitTile ? 5.1 + suitGap * 0.6 : 0) +
+      shortestSuitSequenceBreakBias +
+      (isShortestSuitTile && count >= 2 ? 0 : 0) +
+      (count === 1 ? 1.2 : -2.6) +
+      (nearby === 0 ? 1.8 : -0.65 * nearby) +
+      (isLongestSuitTile ? -longestSuitSingletonKeepBias : 0) +
+      (isHonor(tile) && count === 1 ? (isOfficialOpening ? -2.4 : 1.2) : 0)
+    )
+  }
 
-    case 'OPEN_SPEED':
-      return (
-        (count === 1 ? 2.2 : -1.6) +
-        (nearby === 0 ? 1.6 : -0.15 * nearby) +
-        (longestSuit && tile.suit !== longestSuit && !isHonor(tile) ? 2.2 : 0) +
-        (isShortestSuitTile ? 2.4 + shortestSuitSequenceBreakBias : 0) +
-        (isShortestSuitTile && count >= 2 ? 0 : 0) +
-        (isLongestSuitTile ? -Math.max(0.8, longestSuitSingletonKeepBias * 0.85) : 0) +
-        (routeState.targetSuit && tile.suit !== routeState.targetSuit && !isHonor(tile) ? 4.8 : 0) +
-        (routeState.targetSuit && tile.suit === routeState.targetSuit && !isHonor(tile) ? -2.6 : 0) +
-        (isHonor(tile) && count === 1 ? 0.4 : 0)
-      )
+  if (routeState.speedMode === 'OPEN') {
+    return (
+      (count === 1 ? 2.2 : -1.6) +
+      (nearby === 0 ? 1.6 : -0.15 * nearby) +
+      (longestSuit && tile.suit !== longestSuit && !isHonor(tile) ? 2.2 : 0) +
+      (isShortestSuitTile ? 2.4 + shortestSuitSequenceBreakBias : 0) +
+      (isShortestSuitTile && count >= 2 ? 0 : 0) +
+      (isLongestSuitTile ? -Math.max(0.8, longestSuitSingletonKeepBias * 0.85) : 0) +
+      (routeState.targetSuit && tile.suit !== routeState.targetSuit && !isHonor(tile) ? 4.8 : 0) +
+      (routeState.targetSuit && tile.suit === routeState.targetSuit && !isHonor(tile) ? -2.6 : 0) +
+      (isHonor(tile) && count === 1 ? 0.4 : 0)
+    )
+  }
+
+  switch (routeState.current) {
 
     case 'HALF_FLUSH':
       if (tile.suit === routeState.targetSuit) {

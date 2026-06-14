@@ -7,10 +7,11 @@ import type {
   RouteScore,
   RouteState,
   RouteKind,
+  SpeedMode,
 } from './types'
 
 const NUMBER_SUITS: TileSuit[] = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
-const ROUTES: RouteKind[] = ['MENQING_SPEED', 'OPEN_SPEED', 'HALF_FLUSH', 'ALL_PUNGS', 'HONOR_HEAVY']
+const ROUTES: RouteKind[] = ['HALF_FLUSH', 'ALL_PUNGS', 'HONOR_HEAVY']
 
 function getPolicyValue(policy: any, key: string, fallback = 0): number {
   const raw = Number(policy?.[key] ?? fallback)
@@ -278,66 +279,6 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
     features.longestSuitCount >= 6
 
   switch (route) {
-    case 'MENQING_SPEED':
-      score += 9
-      score += Math.max(0, 10 - input.shanten * 3.5)
-      score += input.effectiveTiles * 0.28
-      score += features.pairCount * 2.4
-      score += features.sequenceLikeCount * 0.45
-      score += Math.max(0, features.longestSuitCount - 4) * 0.7
-      score -= features.isolatedCount * 1.8
-      score -= input.player.hand.exposedMelds.length * 3.2
-      score -= Math.max(0, features.longestSuitCount - 6) * 1.1
-      score -= Math.max(0, features.pairCount - 3) * 1.3
-      score -= input.tableThreat * 4
-      score -= features.opponentOpenMelds * 1.35
-      score -= features.downstreamPressure * 2.2
-      score -= Math.max(0, effectiveGlobalMultiplier - 1) * 1.9
-      if (noWildOpenPush) score -= 2.6
-      if (oneWildLongSuitPivot) score -= 0.9
-      if (upstreamRejectedLongSuit) score -= 2.4
-      if (earlyPairHeavy) score -= 3.8
-      if (veryPairHeavy) score -= 6.0  // 5+对子无长门，门清路线不划算
-      if (multiWildMenqingPush) score += 2.8
-      if (input.player.hand.exposedMelds.length === 0) score += 3
-      if (input.shanten <= 2 && features.isolatedCount <= 2) score += 2.5
-      if (features.upstreamVoidSuit) {
-        reasons.push('upstream_void_suit')
-        score += 1.5
-      }
-      score += getPolicyValue(policy, 'wallEarlySpeedPush') * 0.8
-      break
-
-    case 'OPEN_SPEED':
-      score += 8
-      score += Math.max(0, 8 - input.shanten * 2.5)
-      score += input.effectiveTiles * 0.22
-      score += features.tripletCount * 2.2
-      score += features.pairCount * 1.4
-      score += Math.max(0, features.longestSuitCount - features.secondSuitCount) * 0.7
-      score += input.tableThreat * 8
-      score += features.downstreamPressure * 4.2
-      score += features.opponentOpenMelds * 1.4
-      score += input.player.hand.exposedMelds.length * 1.6
-      score += getWildRouteBoost(policy, features.wildCount, 'meld') * 3.5
-      score += getPolicyValue(policy, 'wallEarlySpeedPush') * 1.1
-      score += getPolicyValue(policy, 'wallMidBalance') * 0.8
-      score += Math.max(0, effectiveGlobalMultiplier - 1) * 2.1
-      if (noWildOpenPush) score += 2.4
-      if (oneWildLongSuitPivot) score += 1.2
-      if (upstreamRejectedLongSuit) {
-        reasons.push('upstream_rejected_long_suit')
-        score += 3.2
-      }
-      if (earlyPairHeavy) {
-        reasons.push('early_pair_heavy_open_push')
-        score += 2.1
-      }
-      if (multiWildMenqingPush) score -= 1.2
-      score -= Math.max(0, features.isolatedCount - 1) * 0.8
-      if (input.shanten <= 2) score += 2.4
-      break
-
     case 'HALF_FLUSH':
       targetSuit = features.longestSuit
       score += features.longestSuitCount * 4.1
@@ -485,12 +426,7 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       break
   }
 
-  if (input.wallRemaining <= 28 && route !== 'MENQING_SPEED') {
-    score += 1.5
-  }
-  if (input.tableThreat >= 0.8 && route === 'OPEN_SPEED') {
-    score += 2.5
-  }
+  return { route, score, targetSuit, reasons }
 
   return { route, score, targetSuit, reasons }
 }
@@ -589,7 +525,8 @@ export function evaluateRouteState(input: RouteEvaluationInput): RouteState {
   return {
     policy,
     phase,
-    current: current?.route || 'MENQING_SPEED',
+    current: current?.route || 'HALF_FLUSH',
+    speedMode: 'AUTO' as SpeedMode,
     secondary: secondary?.route || null,
     confidence: gap,
     lockLevel,

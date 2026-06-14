@@ -5,14 +5,19 @@ import { TileSuit, MeldType, type Tile } from '../types/game'
 import { groupTiles, isDragon, isHonor, isWind } from '../utils/tiles'
 import { buildWildTileChecker } from '../utils/handValidator'
 import { detectDecisionPhase } from '../ai/route/phaseDetector'
-import type { RouteFeatureSummary, RouteScore, RouteState, RouteKind, DecisionPhase } from './types'
+import type { RouteFeatureSummary, RouteScore, RouteState, RouteKind, DecisionPhase, SpeedMode } from './types'
 
 const NUMBER_SUITS: TileSuit[] = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
-const ROUTES: RouteKind[] = ['MENQING_SPEED', 'OPEN_SPEED', 'HALF_FLUSH', 'ALL_PUNGS', 'HONOR_HEAVY', 'STRIVE_DRAW']
+const ROUTES: RouteKind[] = ['HALF_FLUSH', 'ALL_PUNGS', 'HONOR_HEAVY', 'STRIVE_DRAW']
 
 function getPolicyValue(policy: any, key: string, fallback = 0): number {
   const raw = Number(policy?.[key] ?? fallback)
   return Number.isFinite(raw) ? raw : fallback
+}
+
+function isWildTile(tile: Tile, game: any): boolean {
+  const checker = buildWildTileChecker(game?.customScoringMode || null, game?.wildTileGroup)
+  return checker(tile)
 }
 
 function getRouteBucketBoost(policy: any, handQuality: number, isHighMult: boolean, route: RouteKind): number {
@@ -157,9 +162,71 @@ export function buildFeatureSummary(input: {
 
   const effectiveGlobalMultiplier = getEffectiveGlobalMultiplier(game)
   const estimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
-  // ★ V2.12: weakHonorPairCount <= 1 — 开掉两对风向(4张牌)难度大增,清一色最多才10番
-  // 门口花+有效番数越多,风险回报率越低,不允许为清一色开两对
-  const pureFlushUpgradeReady = longestSuitCount >= 10 && secondSuitCount === 0 && honorPairCount >= 1 && honorCount <= 2 && weakHonorPairCount >= 1 && weakHonorPairCount <= 1 && estimatedRound <= 15 && input.tableThreat <= 0.58 && opponentOpenMelds <= 3 && downstreamPressure <= 0.75 && oneSuitOpponentCount === 0 && effectiveGlobalMultiplier <= 3
+  // ★ V2.2: 混一色转清一色 — 结合动态形势判断
+  // 放宽条件：只要打掉1对风向就能升级(weakHonorPairCount <= 1)
+  // 但需要考虑：
+  // 1. 牌局是否尚早（越早越值得升级）
+  // 2. 手牌是否有百搭（百搭越多越容易升级）
+  // 3. 其他玩家是否快胡牌（快胡时不要升级，赶紧胡）
+  // 4. 是否有三口关系（有的话赶紧胡，不升级）
+  const doorFlowerCount = (input.player.hand.exposedMelds || []).reduce(
+    (cnt: number, m: any) => cnt + (m.tiles || []).filter((t: any) => t.suit === 'hua' || t.isFlower).length, 0)
+  // 对手快胡检测：有对手副露>=3（用已计算的 opponentOpenMelds）
+  const opponentCloseToWin = opponentOpenMelds >= 3
+  // 三口关系检测（互包）
+  const hasMutualBailout = (input.player.hand.meldSources || []).some((v: number) => v >= 3)
+  // ★ V2.7 Phase 1: 百搭可替代弱风牌对子，有百搭时条件放宽
+  // 百搭当数牌补位 → 弱风牌对子可通过百搭消化
+  const hasWildWild = wildCount >= 1
+  // ★ V2.7 Phase 1.1: 门口副露单门检测 — 真正的清一色识别要算上门口已吃碰的数牌
+  // 例：门口吃 123万+456万+789万（9张万子），手牌 0张万子 → 已是清一色雏形
+  let exposedNumberSuit: string | null = null
+  let exposedNumberSuitSingleDoor = true
+  const exposedMelds = input.player.hand.exposedMelds || []
+  for (const meld of exposedMelds) {
+    const mTiles = meld.tiles || []
+    if (mTiles.length === 0) continue
+    const mSuit = mTiles[0].suit
+    if (!NUMBER_SUITS.includes(mSuit)) continue  // 风箭不计
+    if (exposedNumberSuit === null) {
+      exposedNumberSuit = mSuit
+    } else if (exposedNumberSuit !== mSuit) {
+      exposedNumberSuitSingleDoor = false
+      break
+    }
+  }
+  // 门口副露单门数牌 = exposedMelds 中只有 1 个 NUMBER_SUIT
+  // 这是清一色最强信号
+  const isExposedSingleSuit = exposedNumberSuitSingleDoor && exposedNumberSuit !== null
+  // 有效长门：手牌长门 + 门口已碰/吃的数牌
+  const effectiveLongestSuit = exposedNumberSuit && exposedNumberSuit === longestSuit
+    ? longestSuitCount
+    : (isExposedSingleSuit ? (suitCounts[exposedNumberSuit!] || 0) : longestSuitCount)
+  const _hasHonorPairOrWild = honorPairCount >= 1 || (hasWildWild && wildCount >= 1)
+  const _honorPairOk = honorPairCount >= 1 || (hasWildWild && honorCount <= 2)
+  // ★ V2.7: 升级条件放宽 - 门口已是单门 OR 手牌长门够强
+  // 关键：已吃碰2-3口且都一个花色 → 应该积极转清一色
+  const pureFlushUpgradeReady = (
+    // 条件A：门口副露已单门+门口吃了2口以上
+    (isExposedSingleSuit && exposedMelds.length >= 2 && honorCount <= 2) ||
+    // 条件B：手牌长门够强（8张以上）
+    (effectiveLongestSuit >= 8 && secondSuitCount === 0 && honorCount <= 3)
+  )
+    && (honorPairCount >= 1 || (hasWildWild && honorCount <= 2))
+    && (weakHonorPairCount >= 1 || hasWildWild || isExposedSingleSuit)
+    && weakHonorPairCount <= 1
+    && estimatedRound <= 18
+    && input.tableThreat <= 0.65
+    && opponentOpenMelds <= 4
+    && downstreamPressure <= 0.85
+    && oneSuitOpponentCount === 0
+    && effectiveGlobalMultiplier <= 4
+    && doorFlowerCount <= 3
+    && !opponentCloseToWin
+    && !hasMutualBailout
+  // ★ V2.7: 百搭+少风牌（<2对）时强力清一色倾向
+  // 关键：门口已单门 → 即使手牌还杂，也可积极转清一色
+  const wildPureFlushReady = (isExposedSingleSuit || (hasWildWild && honorPairCount <= 1)) && honorCount <= 4 && (effectiveLongestSuit >= 6)
 
   // ★ V2: 生张计数
   const rawTileCount = countRawTiles(hand, game.discardPile || [])
@@ -188,6 +255,7 @@ export function buildFeatureSummary(input: {
     pureFlushUpgradeReady, weakHonorPairCount, rawTileCount,
     blockedSuit, twoPlayerBlocking,
     hunPengReady, qingPengReady,
+    isExposedSingleSuit, effectiveLongestSuit, wildPureFlushReady,
   }
 }
 
@@ -219,89 +287,32 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
   const shouldStriveDraw = input.wallRemaining <= 20 && input.shanten > 2 && input.tableThreat >= 0.7 && features.rawTileCount >= 3
 
   switch (route) {
-    case 'MENQING_SPEED':
-      targetSuit = features.longestSuit
-      score += 9
-      score += Math.max(0, 10 - input.shanten * 3.5)
-      score += input.effectiveTiles * 0.28
-      score += features.pairCount * 2.4
-      score += features.sequenceLikeCount * 0.45
-      score += Math.max(0, features.longestSuitCount - 4) * 0.7
-      score -= features.isolatedCount * 1.8
-      score -= input.player.hand.exposedMelds.length * 3.2
-      score -= Math.max(0, features.longestSuitCount - 6) * 1.1
-      score -= Math.max(0, features.pairCount - 3) * 1.3
-      score -= input.tableThreat * 4
-      score -= features.opponentOpenMelds * 1.35
-      score -= features.downstreamPressure * 2.2
-      score -= Math.max(0, effectiveGlobalMultiplier - 1) * 1.9
-      if (noWildOpenPush) score -= 3.8  // ★ V2.2: 无百搭时门清更难成型，降低概率
-      if (oneWildLongSuitPivot) score -= 0.9
-      if (upstreamRejectedLongSuit) score -= 2.4
-      if (earlyPairHeavy) score -= 3.8
-      if (multiWildMenqingPush) score += 2.8
-      if (input.player.hand.exposedMelds.length === 0) score += 3
-      if (input.shanten <= 2 && features.isolatedCount <= 2) score += 2.5
-      if (features.upstreamVoidSuit) { reasons.push('upstream_void_suit'); score += 1.5 }
-      score += getPolicyValue(policy, 'wallEarlySpeedPush') * 0.8
-      // ★ V2: 如果应该争取流局，门清不再有价值
-      if (shouldStriveDraw) score -= 20
-      break
-
-    case 'OPEN_SPEED':
-      targetSuit = features.longestSuit
-      score += 8
-      score += Math.max(0, 8 - input.shanten * 2.5)
-      score += input.effectiveTiles * 0.22
-      score += features.tripletCount * 2.2
-      score += features.pairCount * 1.4
-      score += Math.max(0, features.longestSuitCount - features.secondSuitCount) * 0.7
-      score += input.tableThreat * 8
-      score += features.downstreamPressure * 4.2
-      score += features.opponentOpenMelds * 1.4
-      score += input.player.hand.exposedMelds.length * 1.6
-      // ★ K哥铁律(2026-06-06): 4+对子/刻子时OPEN_SPEED也要让步
-      if (features.pairCount + features.tripletCount >= 4) {
-        reasons.push('kge_pungs_priority_open_speed_punish')
-        score -= 35
-      }
-      score += getWildRouteBoost(policy, features.wildCount, 'meld') * 3.5
-      score += getPolicyValue(policy, 'wallEarlySpeedPush') * 1.1
-      score += getPolicyValue(policy, 'wallMidBalance') * 0.8
-      score += Math.max(0, effectiveGlobalMultiplier - 1) * 2.1
-      if (noWildOpenPush) score += 2.4
-      if (oneWildLongSuitPivot) score += 1.2
-      if (upstreamRejectedLongSuit) { reasons.push('upstream_rejected_long_suit'); score += 8.0 /* ★ V2: 3.2→8.0 */ }
-      if (earlyPairHeavy) { reasons.push('early_pair_heavy_open_push'); score += 2.1 }
-      if (multiWildMenqingPush) score -= 1.2
-      score -= Math.max(0, features.isolatedCount - 1) * 0.8
-      if (input.shanten <= 2) score += 2.4
-      if (shouldStriveDraw) score -= 15
-      break
-
     case 'HALF_FLUSH':
       targetSuit = features.longestSuit
       // ★ K哥铁律(2026-06-06): 4+对子/刻子时碰碰胡绝对优先,混一色拆对子损失巨大
       // room4472 场景: 5个对子/刻子(1刻子+4对子) AI却去混一色,反向PUNISH
+      // V2.2: -60不够，混一色加分后仍可反超，改为-90确保碰碰胡胜出
+      // V2.2: 3对子也惩罚，防止混一色抢走碰碰胡路线
       if (features.pairCount + features.tripletCount >= 4) {
         reasons.push('kge_pungs_priority_halfflush_punish')
-        score -= 60  // 强PUNISH,让ALL_PUNGS 100%胜出
+        score -= 90  // 足够大,确保 ALL_PUNGS 胜出(混一色最多加~55分)
       } else if (features.pairCount + features.tripletCount >= 3) {
         // 3对子也明显倾向碰碰胡
-        score -= 12
+        score -= 35  // 从中等惩罚提升到强惩罚
       }
       score += features.longestSuitCount * 4.1
       score += features.honorCount * 1.6
       score += features.honorPairCount * 1.5
-      score += features.wildCount * 2.2
+      score += features.wildCount * 3.0
       score += getPolicyValue(policy, 'halfFlushWeight') * 4.5
       score += getWildRouteBoost(policy, features.wildCount, 'flush') * 4.2
       score += routeBucketBoost * (2.6 + handRouteBias)
       score += pureFlushBucketBoost * (features.secondSuitCount === 0 ? 2.2 : 1.1)
       score -= features.secondSuitCount * 2.5
       // ★ V2.2: （数字门+风箭）对子总共>=4 → 大幅提升混碰概率
+      // V2.7: 适度降低混碰加分（保持清一色+降混碰）
       const totalPairsHunPeng = features.pairCount >= 4 && features.longestSuitCount >= 4 && features.secondSuitCount <= 1
-      if (hunPengReady || totalPairsHunPeng) score += getPolicyValue(policy, 'hunPengPursuit') * (3.8 + suitedPairCount * 0.35) * (totalPairsHunPeng ? 1.6 : 1)
+      if (hunPengReady || totalPairsHunPeng) score += getPolicyValue(policy, 'hunPengPursuit') * (2.8 + suitedPairCount * 0.25) * (totalPairsHunPeng ? 1.3 : 1)
       if (qingPengReady) score += getPolicyValue(policy, 'qingPengPursuit') * (2.4 + pureFlushBucketBoost * 0.6)
       score += getPolicyValue(policy, 'pureFlushPursuit') * Math.max(0, features.longestSuitCount - 6) * 0.8
       if (features.longestSuitCount >= 9) { reasons.push('half_flush_nine_tiles'); score += 16 }
@@ -336,8 +347,23 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       score += features.oneSuitOpponentCount * 0.8
       if (features.pureFlushUpgradeReady) {
         reasons.push('pure_flush_upgrade_ready')
-        // ★ V2: 动态评分 8.5 → 8.5+(20-round)*0.5
-        score += 8.5 + Math.max(0, (20 - estimatedRound) * 0.5)
+        // ★ V2.7 Phase 1: 升级评分大幅提高 8.5 → 14+(20-round)*0.6
+        score += 14.0 + Math.max(0, (20 - estimatedRound) * 0.6)
+      }
+      // ★ V2.7: 百搭+少风牌 → 强力清一色倾向（即使升级条件未满）
+      // 仅在已有清一色潜力时加分，避免空头奖励
+      if ((features as any).wildPureFlushReady && features.longestSuitCount >= 7) {
+        reasons.push('wild_pure_flush_ready')
+        // 大幅加分：有百搭当数牌补位，转清一色更可行
+        score += 14.0 + Math.max(0, (2 - (features.honorPairCount || 0)) * 3.5)
+      }
+      // ★ V2.7 Phase 1.1: 门口副露已单门 → 强力清一色倾向
+      // 关键洞察：吃碰2-3口后门口已是一个花色，手牌里其它花色必须坚决打掉
+      if ((features as any).isExposedSingleSuit) {
+        reasons.push('exposed_single_suit_flush_ready')
+        // 强力加分：门口已单门是清一色最可靠的信号
+        const exposedMeldsCount = (input.player.hand.exposedMelds || []).length
+        score += 15.0 + exposedMeldsCount * 5.0
       }
       if (shouldStriveDraw) score -= 10
       break
@@ -354,7 +380,8 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       const _ap_isAgg = _ap_pursuitVal >= 1.2
       score += features.pairCount * (5.2 + (_ap_isAgg ? 4.0 : 0))
       score += features.tripletCount * (5.8 + (_ap_isAgg ? 3.5 : 0))
-      score += features.honorPairCount * (2.5 + (_ap_isAgg ? 3.0 : 0))
+      // V2.7: 降低风牌对子加分(1.5+2.0=3.5)→ 减少混碰 → 转向清/混一色
+      score += features.honorPairCount * (1.2 + (_ap_isAgg ? 1.8 : 0))
       score += features.wildCount * (2.8 + (_ap_isAgg ? 3.5 : 0))
       score += _ap_pursuitVal * 8.5
       score += getWildRouteBoost(policy, features.wildCount, 'allPungs') * 4.8
@@ -379,6 +406,12 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
         score += (2 - _honorPairs) * 2  // 0对+8, 1对+4
       }
       if (qingPengReady) score += getPolicyValue(policy, 'qingPengPursuit') * (6.2 + pureFlushBucketBoost * 0.9)
+      // ★ V2.2: 清碰额外加分 — 当可以做清碰时，大幅提高ALL_PUNGS路线竞争力
+      // 清碰是清一色+全刻子，番数高但难做，给足够激励
+      if (qingPengReady && features.honorCount <= 1) {
+        score += 12  // 几乎纯数字门+全刻子 → 清碰路线
+        reasons.push('qing_peng_push')
+      }
       if (hunPengReady) score += getPolicyValue(policy, 'hunPengPursuit') * (5.4 + features.honorPairCount * 0.8)
       if (features.honorCount >= 6) score += getPolicyValue(policy, 'allHonorsPursuit') * 2.2
       // ★ V2.10 K哥铁律: ALL_PUNGS 路线(风碰) buff(与HONOR_HEAVY同一逻辑)
@@ -412,10 +445,18 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       // 碰了一对到门口后 pairCount 降但 tripletCount 升，总数仍算
       if (features.pairCount >= 4 || features.pairCount + features.tripletCount >= 4) { reasons.push('four_pairs_commit'); score += 25 }
       // ★ K哥铁律(2026-06-06): 5+对子/刻子(含门口刻子)绝对锁定碰碰胡 40→60
-      // room4472 场景: 1刻子+4对子=5个对子/刻子 却跑混一色
       if (features.pairCount + features.tripletCount >= 5) { reasons.push('five_pairs_triplets_lock'); score += 60 }
-      // ★ K哥铁律(2026-06-06): 开局3对子走碰碰胡路线(中等强度,避免硬锁)
-      if (features.pairCount + features.tripletCount === 3 && !_hasExposedSequence) { reasons.push('opening_three_pairs_pungs'); score += 9 }
+      // ★ V2.2: 放宽碰碰胡准入门槛 — 3对子+无明显优势门 → 坚决碰碰胡
+      // 场景：手牌3对子但没有一门明显多(最长门<=5)，不做混一色，做碰碰胡
+      if (features.pairCount + features.tripletCount >= 3 && features.longestSuitCount <= 5 && !_hasExposedSequence) {
+        reasons.push('three_pairs_no_flush_advantage')
+        score += 18  // 从中等强度提升到强锁定
+      }
+      // ★ V2.2: 3对子+有风牌对子 → 碰碰胡(风牌碰后直接成型)
+      if (features.pairCount + features.tripletCount >= 3 && features.honorPairCount >= 1) {
+        reasons.push('three_pairs_with_honor')
+        score += 14
+      }
       if (_ap_isAgg && features.pairCount + features.tripletCount >= 3) { reasons.push('aggressive_pungs_commit'); score += 12 }
       if (_ap_isAgg && features.wildCount > 0 && features.pairCount + features.tripletCount >= 2) { reasons.push('wild_pungs_push'); score += 7 }
       if (noWildOpenPush) score += 1.4
@@ -443,6 +484,17 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       }
       // ★ V2: liveHonorCount 权重 0.4→1.2
       score += features.liveHonorCount * 1.2 /* was: 0.4 */
+      // ★ V2.2: honorCount=6-7时给额外加分，让风一色路线更有竞争力
+      // 让AI更愿意尝试风一色，而不是只在honorCount>=8时才考虑
+      if (features.honorCount >= 6 && features.honorCount <= 7) {
+        score += 20  // 强加分，让HONOR_HEAVY能竞争过HALF_FLUSH
+        reasons.push('honor_count_6_7_push')
+      }
+      // ★ V2.2: honorCount>=8时额外强加分，确保风一色路线被选中
+      if (features.honorCount >= 8) {
+        score += 10  // 已经很强了，再加一点确保
+        reasons.push('honor_count_8_plus_push')
+      }
       score += getPolicyValue(policy, 'allHonorsPursuit') * 8.2
       score += getPolicyValue(policy, 'allHonorsPungsPursuit') * (features.tripletCount + features.honorPairCount) * 1.6
       score += getWildRouteBoost(policy, features.wildCount, 'honors') * 4.6
@@ -508,10 +560,84 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       break
   }
 
-  if (input.wallRemaining <= 28 && route !== 'MENQING_SPEED') score += 1.5
-  if (input.tableThreat >= 0.8 && route === 'OPEN_SPEED') score += 2.5
-
   return { route, score, targetSuit, reasons }
+}
+
+// ═══════════════════════════════════════════════
+// ★ speedMode 评估 — 独立于 route 的速度维度
+// ═══════════════════════════════════════════════
+function evaluateSpeedMode(input: any, features: RouteFeatureSummary): { speedMode: SpeedMode; score: number } {
+  const policy = input.policy ?? null
+  const effectiveGlobalMultiplier = getEffectiveGlobalMultiplier(input.game)
+  const noWildOpenPush = features.wildCount === 0
+  const multiWildMenqingPush = features.wildCount >= 2
+  const oneWildLongSuitPivot = features.wildCount === 1 && features.longestSuitCount >= 6
+  const earlyPairHeavy = estimatedRoundOf(input) <= 5 && features.pairCount >= 4
+
+  // MENQING 评分：保持门清（不吃不碰）
+  let menqingScore = 0
+  menqingScore += 9
+  menqingScore += Math.max(0, 10 - input.shanten * 3.5)
+  menqingScore += input.effectiveTiles * 0.28
+  menqingScore += features.pairCount * 2.4
+  menqingScore += features.sequenceLikeCount * 0.45
+  menqingScore += Math.max(0, features.longestSuitCount - 4) * 0.7
+  menqingScore -= features.isolatedCount * 1.8
+  menqingScore -= input.player.hand.exposedMelds.length * 3.2
+  menqingScore -= Math.max(0, features.longestSuitCount - 6) * 1.1
+  menqingScore -= Math.max(0, features.pairCount - 3) * 1.3
+  menqingScore -= input.tableThreat * 4
+  menqingScore -= features.opponentOpenMelds * 1.35
+  menqingScore -= features.downstreamPressure * 2.2
+  menqingScore -= Math.max(0, effectiveGlobalMultiplier - 1) * 1.9
+  if (noWildOpenPush) menqingScore -= 3.8
+  if (oneWildLongSuitPivot) menqingScore -= 0.9
+  if (earlyPairHeavy) menqingScore -= 3.8
+  if (multiWildMenqingPush) menqingScore += 2.8
+  if (input.player.hand.exposedMelds.length === 0) menqingScore += 3
+  if (input.shanten <= 2 && features.isolatedCount <= 2) menqingScore += 2.5
+  if (features.upstreamVoidSuit) menqingScore += 1.5
+  menqingScore += getPolicyValue(policy, 'wallEarlySpeedPush') * 0.8
+  const shouldStriveDraw = input.wallRemaining <= 20 && input.shanten > 2 && input.tableThreat >= 0.7 && features.rawTileCount >= 3
+  if (shouldStriveDraw) menqingScore -= 20
+
+  // OPEN 评分：积极吃碰（开放打法）
+  let openScore = 0
+  openScore += 8
+  openScore += Math.max(0, 8 - input.shanten * 2.5)
+  openScore += input.effectiveTiles * 0.22
+  openScore += features.tripletCount * 2.2
+  openScore += features.pairCount * 1.4
+  openScore += Math.max(0, features.longestSuitCount - features.secondSuitCount) * 0.7
+  openScore += input.tableThreat * 8
+  openScore += features.downstreamPressure * 4.2
+  openScore += features.opponentOpenMelds * 1.4
+  openScore += input.player.hand.exposedMelds.length * 1.6
+  if (features.pairCount + features.tripletCount >= 4) openScore -= 35
+  openScore += getWildRouteBoost(policy, features.wildCount, 'meld') * 3.5
+  openScore += getPolicyValue(policy, 'wallEarlySpeedPush') * 1.1
+  openScore += getPolicyValue(policy, 'wallMidBalance') * 0.8
+  openScore += Math.max(0, effectiveGlobalMultiplier - 1) * 2.1
+  if (noWildOpenPush) openScore += 2.4
+  if (oneWildLongSuitPivot) openScore += 1.2
+  const upstreamRejectedLongSuit = !!features.upstreamRejectedSuit && features.longestSuit === features.upstreamRejectedSuit && features.longestSuitCount >= 6
+  if (upstreamRejectedLongSuit) openScore += 8.0
+  if (earlyPairHeavy) openScore += 2.1
+  if (multiWildMenqingPush) openScore -= 1.2
+  openScore -= Math.max(0, features.isolatedCount - 1) * 0.8
+  if (input.shanten <= 2) openScore += 2.4
+  if (shouldStriveDraw) openScore -= 15
+
+  // AUTO 评分：中立，由 route 逻辑自行决定
+  const autoScore = (menqingScore + openScore) / 2
+
+  if (menqingScore >= openScore && menqingScore >= autoScore) return { speedMode: 'MENQING', score: menqingScore }
+  if (openScore >= menqingScore && openScore >= autoScore) return { speedMode: 'OPEN', score: openScore }
+  return { speedMode: 'AUTO', score: autoScore }
+}
+
+function estimatedRoundOf(input: any): number {
+  return Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
 }
 
 // ═══════════════════════════════════════════════
@@ -537,13 +663,26 @@ export function evaluateRouteStateV2(input: {
   const routeScores = ROUTES.map(r => evaluateSingleRoute(r, input, features)).sort((a, b) => b.score - a.score)
   const previousRouteState = input.previousRouteState || null
 
+  // ★ V2.2: 风牌积累够了 → 给HONOR_HEAVY额外加分，让它能竞争过HALF_FLUSH
+  // 当前路线是HALF_FLUSH + 风牌数>=4(含对子和单张) → HONOR_HEAVY加分
+  const _currentIsHalfFlush = previousRouteState?.current === 'HALF_FLUSH'
+  const _honorReadyForSwitch = features.honorCount >= 4  // 风牌总数>=4就考虑转风一色
+  if (_currentIsHalfFlush && _honorReadyForSwitch) {
+    const honorHeavyScore = routeScores.find(r => r.route === 'HONOR_HEAVY')
+    if (honorHeavyScore) {
+      // 风牌越多加分越大：4张+10, 5张+15, 6张+20, 7张+25, 8张+30
+      const honorBonus = Math.min(30, 10 + (features.honorCount - 4) * 5)
+      honorHeavyScore.score += honorBonus
+      routeScores.sort((a, b) => b.score - a.score)
+    }
+  }
+
   // ★ V2.16 风险感知：对手威胁高时，加速路线加分
-  // 对手快胡了（多副露/听牌） → 碰碰胡/门清速度加分，慢路线扣分
+  // 对手快胡了（多副露/听牌） → 碰碰胡速度加分，慢路线扣分
   if (input.tableThreat > 0.6) {
     const threatBoost = input.tableThreat * 6 // 最高 6 分加成
     for (const rs of routeScores) {
       if (rs.route === 'ALL_PUNGS') rs.score += threatBoost * 0.8        // 碰碰胡：快成型
-      if (rs.route === 'MENQING_SPEED') rs.score += threatBoost * 0.6    // 门清：不碰不吃最快
       if (rs.route === 'STRIVE_DRAW') rs.score += threatBoost * 0.4      // 搏命：倍数高时搏一把
       if (rs.route === 'HALF_FLUSH') rs.score -= threatBoost * 0.3       // 混一色：慢
       if (rs.route === 'HONOR_HEAVY') rs.score -= threatBoost * 0.2      // 风箭重：中等
@@ -554,7 +693,7 @@ export function evaluateRouteStateV2(input: {
   const HIGH_VALUE_ROUTES: RouteKind[] = ['ALL_PUNGS', 'HALF_FLUSH', 'HONOR_HEAVY']
   const isPostRound10Forced = estimatedRound >= 10
   let postRound10Top: RouteScore | null = null
-  const topCandidate = routeScores[0]
+  let topCandidate = routeScores[0]
   const previousCandidate = previousRouteState ? routeScores.find((c: RouteScore) => c.route === previousRouteState.current) || null : null
 
   if (isPostRound10Forced) {
@@ -570,6 +709,20 @@ export function evaluateRouteStateV2(input: {
   const evidenceAgainstPrevious = previousRouteState && previousRouteState.current !== topCandidate.route ? (previousRouteState.evidenceCounter || 0) + 1 : 0
   const softLockedPrevious = !!previousRouteState && (previousRouteState.lockLevel > 0 || (previousRouteState.stableTurns || 0) >= 2)
 
+  // ★ V2.2: 碰后惯性 — 碰前路线已锁定时，给前一路线加分，防止手牌微变导致路线切换
+  // 场景：碰前 ALL_PUNGS lockLevel=2，碰后 pairCount-1 但仍支持碰碰胡 → 保持路线
+  if (previousRouteState && previousRouteState.lockLevel >= 1 && previousRouteState.current) {
+    const prevRouteInScores = routeScores.find(c => c.route === previousRouteState.current)
+    if (prevRouteInScores) {
+      // 碰后惯性加分：lockLevel=2 加 8 分，lockLevel=1 加 5 分
+      const inertiaBonus = previousRouteState.lockLevel >= 2 ? 8.0 : 5.0
+      prevRouteInScores.score += inertiaBonus
+      routeScores.sort((a, b) => b.score - a.score)
+      // 重新确定 topCandidate
+      topCandidate = routeScores[0]
+    }
+  }
+
   // ★ V2.1: 方向意识强化 — 10巡内验证，10巡后坚决执行
   // 极端情况检测：两口关系、对手大牌（风一色/清碰/风碰）
   const extremeThreat =
@@ -577,6 +730,25 @@ export function evaluateRouteStateV2(input: {
     features.bigOpenOpponentCount >= 2 ||
     (features.downstreamPressure >= 1.2 && features.fastOpenOpponentCount >= 2) ||
     features.oneSuitOpponentCount >= 2
+  // ★ V2.2: 风牌积累够时允许从HALF_FLUSH切换到HONOR_HEAVY
+  // 场景：混一色阶段保留风牌，风牌积累到4+张时转风一色
+  const honorReadyForSwitch = previousRouteState?.current === 'HALF_FLUSH' && features.honorCount >= 4
+  // ★ V2.7 Phase 3: 升级检测（混一色→清一色/风一色，碰碰胡→混碰/清碰）
+  // 升级条件：手牌已经形成目标牌型的关键特征，允许在 lockLevel=2 时切换
+  const pureFlushUpgradeReadyNow = features.pureFlushUpgradeReady
+  const wildPureFlushUpgradeReady = (features as any).wildPureFlushReady
+  const hunPengUpgradeReady = previousRouteState?.current === 'ALL_PUNGS' && features.honorPairCount >= 2 && features.honorCount >= 4
+  const qingPengUpgradeReady = previousRouteState?.current === 'ALL_PUNGS' && features.pairCount + features.tripletCount >= 4 && features.secondSuitCount === 0 && features.honorCount === 0
+  const upgradeTarget = pureFlushUpgradeReadyNow ? 'HALF_FLUSH' :
+                        qingPengUpgradeReady ? 'ALL_PUNGS' :
+                        hunPengUpgradeReady ? 'ALL_PUNGS' :
+                        null
+  // 百搭清一色升级目标：当前路线不是 HALF_FLUSH 时也可作为升级目标
+  const upgradeTargetWild = wildPureFlushUpgradeReady && previousRouteState?.current !== 'HALF_FLUSH' ? 'HALF_FLUSH' : null
+  // 升级豁免：当前路线不在升级目标，但 topCandidate 是升级目标 → 允许切换
+  const upgradeExempt = upgradeTarget && previousRouteState && previousRouteState.current !== upgradeTarget && topCandidate?.route === upgradeTarget
+  // 百搭升级豁免：仅当严格条件不满足但百搭条件满足
+  const wildUpgradeExempt = upgradeTargetWild && !upgradeExempt && topCandidate?.route === 'HALF_FLUSH'
   // 允许的保守转向：碰碰胡/争取流局（不胡不放冲）
   const conservativeRoutes: RouteKind[] = ['ALL_PUNGS', 'STRIVE_DRAW']
   const isConservativeSwitch = previousRouteState && conservativeRoutes.includes(topCandidate.route as RouteKind) && !conservativeRoutes.includes(previousRouteState.current as RouteKind)
@@ -592,18 +764,33 @@ export function evaluateRouteStateV2(input: {
   const routeClarity = previousCandidate && topCandidate ? Math.abs(topCandidate.score - (routeScores[1]?.score ?? 0)) : 0
   const clarityBoost = routeClarity > 5 ? 2.0 : routeClarity > 3 ? 1.2 : 0
   const flipThreshold = (previousRouteState?.lockLevel === 2 ? 10.0 : previousRouteState?.lockLevel === 1 ? 7.0 : (previousRouteState?.stableTurns || 0) >= 2 ? 4.5 : 2.0) + clarityBoost
-  // lockLevel=2时：仅极端情况+保守转向才允许切换
+  // ★ V2.7 Phase 3: 升级豁免时降低切换门槛
+  const effectiveFlipThreshold = upgradeExempt ? Math.min(flipThreshold, 3.0) : (wildUpgradeExempt ? Math.min(flipThreshold, 5.0) : flipThreshold)
+  // lockLevel=2时：仅极端情况+保守转向才允许切换，或风牌积累够时允许切换到风一色
+  // ★ V2.2: HONOR_HEAVY分数远高于当前路线时，也允许切换（解决风一色绝迹问题）
+  // ★ V2.7: 升级豁免（混一色→清一色，碰碰胡→混碰/清碰）允许直接切换
   const locked2CanSwitch = previousRouteState?.lockLevel === 2
-    ? (extremeThreat && isConservativeSwitch) || (extremeThreat && topCandidate.score >= previousCandidate!.score + 8)
+    ? (extremeThreat && isConservativeSwitch) || (extremeThreat && topCandidate.score >= previousCandidate!.score + 8) || honorReadyForSwitch || upgradeExempt || wildUpgradeExempt || (topCandidate.route === 'HONOR_HEAVY' && previousCandidate && topCandidate.score >= previousCandidate.score + 15)
     : true
-  const canHoldPreviousRoute = isPostRound10Forced && previousRouteState && !HIGH_VALUE_ROUTES.includes(previousRouteState.current as RouteKind) ? false : !!previousRouteState && !!previousCandidate && softLockedPrevious && locked2CanSwitch && (previousCandidate.score >= topCandidate.score - flipThreshold || evidenceAgainstPrevious < requiredEvidenceToFlip)
+  const canHoldPreviousRoute = isPostRound10Forced && previousRouteState && !HIGH_VALUE_ROUTES.includes(previousRouteState.current as RouteKind) ? false : !!previousRouteState && !!previousCandidate && softLockedPrevious && locked2CanSwitch && (previousCandidate.score >= topCandidate.score - effectiveFlipThreshold || evidenceAgainstPrevious < requiredEvidenceToFlip)
 
   let current = isPostRound10Forced ? postRound10Top : (canHoldPreviousRoute ? previousCandidate : topCandidate)
+
+  // ★ V2.2: 4+对子/刻子时强制ALL_PUNGS，无论当前路线是什么
+  // 场景：手牌有4+对子/刻子，但HALF_FLUSH评分更高 → 强制ALL_PUNGS
+  if (features.pairCount + features.tripletCount >= 4 && current?.route !== 'ALL_PUNGS') {
+    const forcedAllPungs = routeScores.find(c => c.route === 'ALL_PUNGS')
+    if (forcedAllPungs && forcedAllPungs.score > -20) {  // 只要不是太差就强制
+      if (forcedAllPungs.reasons) forcedAllPungs.reasons.push('force_all_pungs_by_pairs')
+      current = forcedAllPungs
+    }
+  }
+
   // ★ K哥铁律(2026-06-07): 碰碰胡路线一旦决定，不可转混一色，只能升级为混碰
-  // 如果之前是ALL_PUNGS且lockLevel>=1，绝不允许切到HALF_FLUSH/FULL_FLUSH/OPEN_SPEED
+  // 如果之前是ALL_PUNGS且lockLevel>=1，绝不允许切到HALF_FLUSH
   if (previousRouteState?.current === 'ALL_PUNGS' && (previousRouteState.lockLevel >= 1 || (previousRouteState.stableTurns || 0) >= 2)) {
-    if (current?.route === 'HALF_FLUSH' || current?.route === 'FULL_FLUSH' || current?.route === 'OPEN_SPEED') {
-      // 强制保持ALL_PUNGS，不可转混一色/清一色/开放速度
+    if (current?.route === 'HALF_FLUSH') {
+      // 强制保持ALL_PUNGS，不可转混一色
       const allPungsCandidate = routeScores.find(c => c.route === 'ALL_PUNGS')
       if (allPungsCandidate) {
         current = allPungsCandidate
@@ -627,12 +814,14 @@ export function evaluateRouteStateV2(input: {
   const evidenceCounter = canHoldPreviousRoute && previousRouteState && previousRouteState.current !== topCandidate.route ? evidenceAgainstPrevious : 0
   // ★ V2: 4+对子/刻子碰碰胡路线直接锁定（含门口碰/杠的刻子）
   const _apLockByPairs = current?.route === 'ALL_PUNGS' && (features.pairCount + features.tripletCount) >= 4
+  // ★ V2.2: 3对子+无明显优势门 → 也锁定碰碰胡
+  const _apLockBy3Pairs = current?.route === 'ALL_PUNGS' && (features.pairCount + features.tripletCount) >= 3 && features.longestSuitCount <= 5
   // ★ V2.1: 10巡后方向确定，压缩摇摆
   // 10巡+稳定2回合 → lockLevel=2（坚决执行）
   // 10巡+有方向 → lockLevel=1（锁定）
   // 5-9巡+稳定3回合+gap大 → lockLevel=1
-  // ★ 风一色/风碰 锁定: 5巡内 honorCount>=8 (含百搭) → lockLevel=1 坚定做风一色
-  // 5巡内 honorCount+wildCount>=9 → lockLevel=2 坚决执行
+  // ★ 风一色/风碰 锁定: 5巡内 honorCount>=8 (含百搭) → lockLevel=1
+  // 5巡内 honorCount+wildCount>=9 → lockLevel=2
   const _honorRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
   const _honorWithWild = features.honorCount + features.wildCount
   const _honorLock2 = _honorRound <= 5 && _honorWithWild >= 9
@@ -647,13 +836,29 @@ export function evaluateRouteStateV2(input: {
     _honorLock2 ? 2 :
     _honorLock1 ? 1 :
     _apLockByPairs ? 2 :  // ★ K哥铁律(2026-06-08): 4+对子/刻子 → lockLevel=2 坚决锁死碰碰胡
+    _apLockBy3Pairs ? 1 :  // ★ V2.2: 3对子+无优势门 → lockLevel=1 锁定碰碰胡
+    // ★ V2.2: 碰后惯性 — 碰前路线已锁定时，碰后保持路线稳定
+    // 场景：碰前 ALL_PUNGS lockLevel=2，碰后 pairCount 减1 但路线仍支持 → 保持 lockLevel=2
+    (previousRouteState && previousRouteState.lockLevel >= 2 && stableOnPrevious && gap >= -2.0) ? 2 :
+    (previousRouteState && previousRouteState.lockLevel >= 1 && stableOnPrevious && gap >= -1.5) ? 1 :
     estimatedRound >= 7 && stableTurns >= 2 && gap >= 2.0 ? 1 :
     stableTurns >= 2 && stableOnPrevious && previousRouteState && previousRouteState.lockLevel >= 1 && gap >= 1.1 ? 1 :
     (phase === 'COMMIT' || phase === 'RUSH') && gap >= 2.5 ? 1 : 0
 
+  // 评估 speedMode（独立于 route 的速度维度）
+  const speedModeResult = evaluateSpeedMode(input, features)
+
+  // ★ V2.2 调试：输出HONOR_HEAVY路线得分
+  if (features.honorCount >= 5) {
+    const honorHeavyScore = routeScores.find(r => r.route === 'HONOR_HEAVY')
+    const halfFlushScore = routeScores.find(r => r.route === 'HALF_FLUSH')
+    console.error(`[ROUTE-DIAG] honorCount=${features.honorCount} honorPairCount=${features.honorPairCount} wildCount=${features.wildCount} HONOR_HEAVY=${honorHeavyScore?.score?.toFixed(1)} HALF_FLUSH=${halfFlushScore?.score?.toFixed(1)} current=${current?.route}`)
+  }
+
   return {
     policy, phase,
-    current: current?.route || 'MENQING_SPEED',
+    current: current?.route || 'HALF_FLUSH',
+    speedMode: speedModeResult.speedMode,
     secondary: secondary?.route || null,
     confidence: gap, lockLevel, stableTurns, switchCount, evidenceCounter,
     targetSuit: current?.targetSuit || null,

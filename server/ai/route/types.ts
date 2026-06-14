@@ -2,12 +2,13 @@ import type { GameState, Player, Tile, TileSuit } from '../../types/game'
 
 export type DecisionPhase = 'OBSERVE' | 'COMMIT' | 'RUSH' | 'DEFENSE'
 
+export type SpeedMode = 'MENQING' | 'OPEN' | 'AUTO'
+
 export type RouteKind =
-  | 'MENQING_SPEED'
-  | 'OPEN_SPEED'
   | 'HALF_FLUSH'
   | 'ALL_PUNGS'
   | 'HONOR_HEAVY'
+  | 'STRIVE_DRAW'
 
 export interface RouteFeatureSummary {
   longestSuit: TileSuit | null
@@ -37,6 +38,11 @@ export interface RouteFeatureSummary {
   rawTileCount?: number
   blockedSuit?: TileSuit | null
   twoPlayerBlocking?: boolean
+  isExposedSingleSuit?: boolean
+  effectiveLongestSuit?: number
+  wildPureFlushReady?: boolean
+  hunPengReady?: boolean
+  qingPengReady?: boolean
 }
 
 export interface RouteEvaluationInput {
@@ -62,6 +68,7 @@ export interface RouteState {
   policy?: any
   phase: DecisionPhase
   current: RouteKind
+  speedMode: SpeedMode
   secondary: RouteKind | null
   confidence: number
   lockLevel: 0 | 1 | 2

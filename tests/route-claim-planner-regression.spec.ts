@@ -405,7 +405,7 @@ console.log('\n=== Regression: route claim planner ===\n')
     tile(TileSuit.WIND, 1, 'east-2'),
   ])
   const game = makeGame([ai, makePlayer('p2', 'B', []), makePlayer('p3', 'C', []), makePlayer('p4', 'D', [])], [])
-  const routeState = buildRouteState(ai, game, 2, 14)
+  const routeState = { ...buildRouteState(ai, game, 2, 14), speedMode: 'MENQING' as const }
   const decision = evaluateRouteClaim({
     action: ActionType.CHOW,
     player: ai,
@@ -423,8 +423,8 @@ console.log('\n=== Regression: route claim planner ===\n')
 
   ok(
     'menqing speed blocks early chow that does not improve speed',
-    routeState.current === 'MENQING_SPEED' && !decision.allowed,
-    `route=${routeState.current}, allowed=${decision.allowed}, reason=${decision.reason}`
+    routeState.speedMode === 'MENQING' && !decision.allowed,
+    `speedMode=${routeState.speedMode}, allowed=${decision.allowed}, reason=${decision.reason}`
   )
 }
 

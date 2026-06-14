@@ -220,67 +220,69 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     return { allowed: false, tuneDelta: -1.7, reason: 'off_route_chow_from_long_suit_hand' }
   }
 
-  switch (routeState.current) {
-    case 'MENQING_SPEED': {
-      if (
-        honorPengPush &&
-        candidateShanten <= passShanten &&
-        candidateEffective + 2 >= passEffective
-      ) {
-        return { allowed: true, tuneDelta: 0.65 + routeGain * 0.05, reason: 'honor_peng_push' }
-      }
-
-      const canBreakForSpeed =
-        candidateShanten < passShanten ||
-        (phase === 'RUSH' && candidateShanten <= passShanten && candidateEffective >= passEffective - 1) ||
-        (tableThreat >= 0.82 && candidateShanten <= passShanten && speedGain >= 0) ||
-        (effectiveGlobalMultiplier >= 4 && candidateShanten <= passShanten && candidateEffective + 1 >= passEffective) ||
-        (noWildOpenPush && candidateShanten <= passShanten && candidateEffective + (action === ActionType.CHOW ? 1 : 0) >= passEffective) ||
-        (upstreamRejectedOpenPush && candidateShanten <= passShanten && candidateEffective + 1 >= passEffective) ||
-        (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG)) ||
-        (veryPairHeavy && action === ActionType.PENG)  // 5+对子无长门，坚决碰
-
-      const openingBreakNeeds =
-        candidateShanten < passShanten ||
-        candidateEffective >= passEffective + (action === ActionType.CHOW ? 3 : 6) ||
-        speedGain >= (action === ActionType.CHOW ? 0.8 : 1.5) ||
-        routeGain >= (isHonorTile ? 1.0 : 0.65) ||
-        effectiveGlobalMultiplier >= 4 ||
-        (noWildOpenPush && (action === ActionType.PENG || candidateEffective >= passEffective + 1)) ||
-        upstreamRejectedOpenPush ||
-        (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG)) ||
-        (veryPairHeavy && action === ActionType.PENG)  // 5+对子无长门，坚决碰
-
-      const canBreakOpeningMenqing = openingMenqing
-        ? (multiWildMenqingPush ? openingBreakNeeds && effectiveGlobalMultiplier >= 4 : openingBreakNeeds)
-        : canBreakForSpeed
-
-      if (action === ActionType.CHOW && player.hand.exposedMelds.length === 0 && !canBreakOpeningMenqing) {
-        return { allowed: false, tuneDelta: -1.5, reason: 'menqing_hold_chow' }
-      }
-      if ((action === ActionType.PENG || action === ActionType.KONG) && player.hand.exposedMelds.length === 0 && !canBreakOpeningMenqing) {
-        return { allowed: false, tuneDelta: -1.2, reason: 'menqing_hold_pung' }
-      }
-      let tuneDelta = canBreakOpeningMenqing ? 0.35 + routeGain * 0.04 : -0.15
-      if (effectiveGlobalMultiplier >= 4) tuneDelta += 0.4 + (effectiveGlobalMultiplier - 4) * 0.08
-      if (noWildOpenPush) tuneDelta += 0.28
-      if (upstreamRejectedOpenPush) tuneDelta += 0.32
-      if (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG)) tuneDelta += 0.5
-      if (multiWildMenqingPush && openingMenqing) tuneDelta -= 0.18
-      return { allowed: true, tuneDelta, reason: 'menqing_speed' }
+  // ★ speedMode 分支（独立于 route）
+  if (routeState.speedMode === 'MENQING') {
+    if (
+      honorPengPush &&
+      candidateShanten <= passShanten &&
+      candidateEffective + 2 >= passEffective
+    ) {
+      return { allowed: true, tuneDelta: 0.65 + routeGain * 0.05, reason: 'honor_peng_push' }
     }
 
-    case 'OPEN_SPEED':
-      return {
-        allowed: true,
-        tuneDelta:
-          0.48 +
-          Math.max(0, speedGain) * 0.1 +
-          (action === ActionType.CHOW ? 0.2 : 0.12) +
-          (committedOpenSuit && claimTile.suit === committedOpenSuit ? 0.35 : 0),
-        reason: 'open_speed_push',
-      }
+    const canBreakForSpeed =
+      candidateShanten < passShanten ||
+      (phase === 'RUSH' && candidateShanten <= passShanten && candidateEffective >= passEffective - 1) ||
+      (tableThreat >= 0.82 && candidateShanten <= passShanten && speedGain >= 0) ||
+      (effectiveGlobalMultiplier >= 4 && candidateShanten <= passShanten && candidateEffective + 1 >= passEffective) ||
+      (noWildOpenPush && candidateShanten <= passShanten && candidateEffective + (action === ActionType.CHOW ? 1 : 0) >= passEffective) ||
+      (upstreamRejectedOpenPush && candidateShanten <= passShanten && candidateEffective + 1 >= passEffective) ||
+      (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG)) ||
+      (veryPairHeavy && action === ActionType.PENG)
 
+    const openingBreakNeeds =
+      candidateShanten < passShanten ||
+      candidateEffective >= passEffective + (action === ActionType.CHOW ? 3 : 6) ||
+      speedGain >= (action === ActionType.CHOW ? 0.8 : 1.5) ||
+      routeGain >= (isHonorTile ? 1.0 : 0.65) ||
+      effectiveGlobalMultiplier >= 4 ||
+      (noWildOpenPush && (action === ActionType.PENG || candidateEffective >= passEffective + 1)) ||
+      upstreamRejectedOpenPush ||
+      (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG)) ||
+      (veryPairHeavy && action === ActionType.PENG)
+
+    const canBreakOpeningMenqing = openingMenqing
+      ? (multiWildMenqingPush ? openingBreakNeeds && effectiveGlobalMultiplier >= 4 : openingBreakNeeds)
+      : canBreakForSpeed
+
+    if (action === ActionType.CHOW && player.hand.exposedMelds.length === 0 && !canBreakOpeningMenqing) {
+      return { allowed: false, tuneDelta: -1.5, reason: 'menqing_hold_chow' }
+    }
+    if ((action === ActionType.PENG || action === ActionType.KONG) && player.hand.exposedMelds.length === 0 && !canBreakOpeningMenqing) {
+      return { allowed: false, tuneDelta: -1.2, reason: 'menqing_hold_pung' }
+    }
+    let tuneDelta = canBreakOpeningMenqing ? 0.35 + routeGain * 0.04 : -0.15
+    if (effectiveGlobalMultiplier >= 4) tuneDelta += 0.4 + (effectiveGlobalMultiplier - 4) * 0.08
+    if (noWildOpenPush) tuneDelta += 0.28
+    if (upstreamRejectedOpenPush) tuneDelta += 0.32
+    if (pairHeavyPungsPush && (action === ActionType.PENG || action === ActionType.KONG)) tuneDelta += 0.5
+    if (multiWildMenqingPush && openingMenqing) tuneDelta -= 0.18
+    return { allowed: true, tuneDelta, reason: 'menqing_speed' }
+  }
+
+  if (routeState.speedMode === 'OPEN') {
+    return {
+      allowed: true,
+      tuneDelta:
+        0.48 +
+        Math.max(0, speedGain) * 0.1 +
+        (action === ActionType.CHOW ? 0.2 : 0.12) +
+        (committedOpenSuit && claimTile.suit === committedOpenSuit ? 0.35 : 0),
+      reason: 'open_speed_push',
+    }
+  }
+
+  switch (routeState.current) {
     case 'HALF_FLUSH':
       if (!isHonorTile && routeState.targetSuit && claimTile.suit !== routeState.targetSuit) {
         return { allowed: false, tuneDelta: -1.6, reason: 'off_route_half_flush' }

@@ -468,9 +468,6 @@ function estimateRouteExpectedFan(routeState: any, player: Player, game: GameSta
       fan += (policy?.allHonorsPursuit || 0) * 2.8
       fan += (policy?.allHonorsPungsPursuit || 0) * Math.max(1, honorPairCount + tripletCount * 0.6)
       break
-    case 'OPEN_SPEED':
-      fan += 1.4
-      break
     default:
       fan += 1.8
       break
@@ -1324,7 +1321,7 @@ function scoreTileForDiscard(
     const isShortOrSecond = isShortSuit || isSecondShortSuit
     const isTarget = targetSuit && tile.suit === targetSuit
 
-    if (rs === 'HALF_FLUSH' || rs === 'OPEN_SPEED') {
+    if (rs === 'HALF_FLUSH') {
       // 清混一色/开放速度：拆短门对子，保留长门
       if (isTarget && sameTypeCount >= 2) {
         score -= 4.0 * routeBiasFactor  // 长门对子：坚决保留
@@ -1692,6 +1689,28 @@ export function computeShanten(
 const calculateShanten = computeShanten
 
 /**
+ * ★ V2.2: 计算孤张数量（连贯性指标）
+ * 孤张 = 没有相邻牌的单张（不考虑花牌和百搭）
+ */
+function countIsolatedTiles(tiles: Tile[], isWildTileChecker: (tile: Tile) => boolean): number {
+  const nonWild = tiles.filter(t => !isWildTileChecker(t) && !isFlower(t))
+  let isolated = 0
+  for (const tile of nonWild) {
+    if (isHonor(tile)) {
+      // 风牌/箭牌：单张就是孤张
+      const sameCount = nonWild.filter(t => t.suit === tile.suit && t.value === tile.value).length
+      if (sameCount === 1) isolated++
+    } else {
+      // 数牌：检查是否有相邻牌
+      const hasLower = nonWild.some(t => t.suit === tile.suit && t.value === tile.value - 1)
+      const hasUpper = nonWild.some(t => t.suit === tile.suit && t.value === tile.value + 1)
+      if (!hasLower && !hasUpper) isolated++
+    }
+  }
+  return isolated
+}
+
+/**
  * 计算有效进张数：加入一张后能使向听数下降的牌总剩余张数
  */
 export function countEffectiveTiles(
@@ -1869,7 +1888,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         !!routeState &&
         (
           routeState.targetSuit === committedOpenSuit ||
-          routeState.current === 'OPEN_SPEED' ||
+          routeState.speedMode === 'OPEN' ||
           routeState.current === 'HALF_FLUSH'
         )
 
@@ -1973,7 +1992,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         }
       }
       // ★ 清混一色坚决执行：拆短门对子，保留长门
-      if ((routeState.current === 'HALF_FLUSH' || routeState.current === 'OPEN_SPEED') && routeState.targetSuit) {
+      if ((routeState.current === 'HALF_FLUSH' || routeState.speedMode === 'OPEN') && routeState.targetSuit) {
         const _isTarget = tile.suit === routeState.targetSuit
         const _isShort = routeState.features.shortestSuit && tile.suit === routeState.features.shortestSuit
         if (!_isTarget && isNumberTile(tile)) {
@@ -2036,9 +2055,9 @@ export function selectDiscardTile(player: Player, game: GameState): string {
       const overdueMenqingHold =
         exposedCount === 0 &&
         estimatedRound > routeMetricPolicy.menqingHoldTurns &&
-        routeState.current === 'MENQING_SPEED'
+        routeState.speedMode === 'MENQING'
       const deadHandPressure =
-        routeState.current === 'MENQING_SPEED' &&
+        routeState.speedMode === 'MENQING' &&
         currentShanten >= 2 &&
         routeState.features.isolatedCount >= 3
       const weakObserveTile =
@@ -2065,7 +2084,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         composite += timingValue * (3.2 + routeMetricPolicy.tingQuality * 0.2)
         composite += tingDecisionValue * (1.15 + routeMetricPolicy.tingQuality * 0.08)
         composite += expectedFan * 1.4
-      } else if (routeState.phase === 'OBSERVE' && routeState.current === 'MENQING_SPEED') {
+      } else if (routeState.phase === 'OBSERVE' && routeState.speedMode === 'MENQING') {
         composite += (effective - currentEffective) * 0.4
       } else if (shanten === 1) {
         composite += effective * (routeMetricPolicy.tingQuality * 0.03)
@@ -2086,7 +2105,7 @@ export function selectDiscardTile(player: Player, game: GameState): string {
         bestTingValue = timingValue
         bestTile = tile
       }
-      if (hand.length <= 14) {
+      if (hand.length <= 14 && process.env.AI_DISCARD_TRACE) {
         const longestSuit = routeState?.features?.longestSuit
         const targetSuit = routeState?.targetSuit
         const isLongest = longestSuit && tile.suit === longestSuit
@@ -2128,21 +2147,25 @@ export function selectBotChowTileIds(
   const tableThreat = estimateTableThreat(game, player.id)
   const useRoutePlanner = usesOfficialRouteStrategy(player.name)
 
-  const evaluateResultingHand = (candidateHand: Tile[]): { shanten: number; effective: number } => {
+  const evaluateResultingHand = (candidateHand: Tile[]): { shanten: number; effective: number; isolated: number } => {
     let bestShanten = Infinity
     let bestEffective = -1
+    let bestIsolated = Infinity
 
     for (let i = 0; i < candidateHand.length; i++) {
       const remain = candidateHand.filter((_, idx) => idx !== i)
       const shanten = calculateShanten(remain, exposedCount + 1, wildChecker)
       const effective = countEffectiveTiles(remain, exposedCount + 1, wildChecker)
-      if (shanten < bestShanten || (shanten === bestShanten && effective > bestEffective)) {
+      // ★ V2.2: 评估孤张数量（连贯性指标）— 孤张越少越好
+      const isolated = countIsolatedTiles(remain, wildChecker)
+      if (shanten < bestShanten || (shanten === bestShanten && effective > bestEffective) || (shanten === bestShanten && effective === bestEffective && isolated < bestIsolated)) {
         bestShanten = shanten
         bestEffective = effective
+        bestIsolated = isolated
       }
     }
 
-    return { shanten: bestShanten, effective: bestEffective }
+    return { shanten: bestShanten, effective: bestEffective, isolated: bestIsolated }
   }
 
   const passShanten = calculateShanten(hand, exposedCount, wildChecker)
@@ -2150,7 +2173,7 @@ export function selectBotChowTileIds(
   // ★ K哥铁律：用摸牌时存好的路线，不重新评估
   const routeState = useRoutePlanner ? getPlayerRouteMemory(player) : null
 
-  let best: { tileIds: string[]; shanten: number; effective: number; tune: number } | null = null
+  let best: { tileIds: string[]; shanten: number; effective: number; isolated: number; tune: number } | null = null
 
   for (const option of chowOptions) {
     const optionIds = option.filter(id => id !== claimTile.id)
@@ -2163,7 +2186,7 @@ export function selectBotChowTileIds(
     })
     if (candidateHand.length === 0) continue
 
-    const { shanten, effective } = evaluateResultingHand(candidateHand)
+    const { shanten, effective, isolated } = evaluateResultingHand(candidateHand)
     let tune = evaluateChowValue(player, game, claimTile)
 
     if (useRoutePlanner && routeState) {
@@ -2207,9 +2230,10 @@ export function selectBotChowTileIds(
       !best ||
       shanten < best.shanten ||
       (shanten === best.shanten && effective > best.effective) ||
-      (shanten === best.shanten && effective === best.effective && tune > best.tune)
+      (shanten === best.shanten && effective === best.effective && isolated < best.isolated) ||
+      (shanten === best.shanten && effective === best.effective && isolated === best.isolated && tune > best.tune)
     ) {
-      best = { tileIds: optionIds, shanten, effective, tune }
+      best = { tileIds: optionIds, shanten, effective, isolated, tune }
     }
   }
 
@@ -2822,6 +2846,7 @@ export async function shouldClaimPendingAction(
         selfHandTypes.includes(HandType.FENG_PENG) ||
         selfHandTypes.includes(HandType.ALL_WIND)
       if ((selfIsPengOrHalfFlush || selfHasPengOrFlush) && selfIsCleanExposure) {
+        // V2.7: 去掉随机PASS等清一色（用户明确：随机性PASS不可取）→ 直接胡无花自摸
         traceClaim(player, game, 'hu-self-no-flower', `route=${selfCurrentRoute} types=[${selfHandTypes}] cleanExposure=true → 无花自摸=10点`)
         return ActionType.HU
       }
@@ -2990,8 +3015,14 @@ export async function shouldClaimPendingAction(
         claimHandTypes.includes(HandType.ALL_WIND)
       const claimIsDaDiao = hand.filter(t => !isFlower(t)).length === 1
       if ((isPengOrHalfFlush || claimHasPengOrFlush) && isCleanExposure && !claimIsDaDiao) {
-        traceClaim(player, game, 'hu-no-flower-block', `route=${currentRoute} types=[${claimHandTypes}] cleanExposure=true → decline, wait for 无花自摸`)
-        return ActionType.PASS
+        // V2.7: 听牌>=8张才PASS等自摸, 否则捉冲
+        const _tingTilesForNoFlower = countWinningTilesForHand(hand, exposedMelds.length, game)
+        if (_tingTilesForNoFlower >= 8) {
+          traceClaim(player, game, 'hu-no-flower-block', `route=${currentRoute} types=[${claimHandTypes}] cleanExposure=true tingTiles=${_tingTilesForNoFlower} → decline, wait for 无花自摸`)
+          return ActionType.PASS
+        }
+        // 听牌少时直接胡
+        traceClaim(player, game, 'hu-no-flower-low-ting', `route=${currentRoute} types=[${claimHandTypes}] cleanExposure=true tingTiles=${_tingTilesForNoFlower} → accept discard win (low ting)`)
       }
 
       // 利益最大化: 期望收益高于捉冲 → 放弃捉冲

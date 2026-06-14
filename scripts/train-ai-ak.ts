@@ -1,4 +1,4 @@
-﻿/**
+/**
  * AI-AK 策略迭代训练器
  * 4个bot: AI-AK(优化目标), AI-小胖, AI-阿水, AI-老赵(固定)
  * 运行 10 rounds × 500 games
@@ -10,9 +10,11 @@ import {
 } from '../server/utils/tiles'
 import {
   canWin, buildWildTileChecker,
-  detectHandTypes, HandType, isTing, clearIsTingCache, clearCanWinCache,
+  detectHandTypes, findBestHandTypes, HandType, isTing, clearIsTingCache, clearCanWinCache,
+  clearFindBestHandTypesCache,
   getIsTingCacheStats, getCanWinCacheStats, resetIsTingCacheStats,
   checkChowPongExclusion, updateChowPongExclusion,
+  isGarbageHand,
   type ChowPongExclusionState
 } from '../server/utils/handValidator'
 import {
@@ -101,11 +103,12 @@ process.on('unhandledRejection', (reason, promise) => {
 })
 
 // ========== Bot Policy (长清阁规则) ==========
+// 9种胡牌牌型（大吊/杠开/无花自摸只是固定番数条件，不是牌型）
 const HAND_TYPE_NAMES: Record<string, string> = {
-  [HandType.FENG_PENG]: '风碰', [HandType.ALL_WIND]: '风一色', [HandType.QING_PENG]: '清碰',
-  [HandType.HUN_PENG]: '混碰', [HandType.EIGHT_FLOWERS]: '八花', [HandType.FULL_FLUSH]: '清一色',
-  [HandType.HALF_FLUSH]: '混一色', [HandType.FOUR_WILD]: '四百搭', [HandType.ALL_TRIPLETS]: '碰碰胡',
-  [HandType.DA_DIAO]: '大吊'
+  [HandType.ALL_TRIPLETS]: '碰碰胡', [HandType.HALF_FLUSH]: '混一色', [HandType.FULL_FLUSH]: '清一色',
+  [HandType.HUN_PENG]: '混碰', [HandType.QING_PENG]: '清碰',
+  [HandType.ALL_WIND]: '风一色', [HandType.FENG_PENG]: '风碰',
+  [HandType.EIGHT_FLOWERS]: '八花自摸', [HandType.FOUR_WILD]: '四百搭自摸',
 }
 
 interface BotPolicy {
@@ -379,7 +382,8 @@ export function loadCharacter(name: string): BotPolicy {
   const filePath = path.join(CHAR_DIR, `${name}.json`)
   try {
     const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
-    return { ...DEFAULT_POLICY, ...data.policy, id: data.policy?.id || name }
+    // 始终用文件名作为ID，忽略JSON里的id字段（防止策略文件被覆盖后ID错乱）
+    return { ...DEFAULT_POLICY, ...data.policy, id: name }
   } catch (e) {
     console.warn(`[Character] Failed to load ${name}, using default`)
     return { ...DEFAULT_POLICY, id: name }
@@ -1079,7 +1083,7 @@ export function shouldAkTakeClaim(
     }
   }
 
-  if (routeSignal.route === 'MENQING_SPEED' && keepsMenqing) {
+  if (routeSignal.speedMode === 'MENQING' && keepsMenqing) {
     const canBreakMenqing =
       lowerShanten ||
       moreWaits ||
@@ -1179,7 +1183,7 @@ function evaluateAkDiscardDecision(
     let plannerComposite = -candidateShanten * 100 + candidateEffective * 2.5 + routeScore * 2 + score * 0.04
     if (candidateShanten === 0) {
       plannerComposite += timingValue * 4
-    } else if (routeState.phase === 'OBSERVE' && routeState.current === 'MENQING_SPEED') {
+    } else if (routeState.phase === 'OBSERVE' && routeState.speedMode === 'MENQING') {
       plannerComposite += (candidateEffective - currentEffective) * 0.4
     }
     plannerCost = -plannerComposite
@@ -1382,7 +1386,8 @@ interface BotPlayer {
   _routeMemory?: LiveRouteState | null
   // 胡牌得分信息
   wonFan?: number
-  winHandType?: string
+  winHandType?: string  // 纯牌型（碰碰胡/混一色等）
+  winForm?: string      // 胡牌形式（大吊/杠开/无花）
 }
 
 interface GameState {
@@ -1435,13 +1440,8 @@ function toServerPlayer(bp: BotPlayer): any {
 function toServerGame(g: GameState, pendingActions: any[] = []): any {
   // 牌墙剩余 = deck.length - wallIdx（如果 deck 为空，用 0）
   const wallRemaining = Math.max(0, (g.deck?.length || 0) - (g.wallIdx || 0))
-  // 生成虚拟 wall 张数（服务器只需要 wall.length 计数，不需要真实内容）
-  // 为了减少开销，生成空 tile 对象列表
-  const wallTiles: any[] = Array.from({ length: wallRemaining }, (_, i) => ({
-    suit: 'wall' as any,
-    value: 0,
-    id: `wall-${i}`,
-  }))
+  // 服务器只读 wall.length，不需要真实 tile 对象。用稀疏数组避免每次创建 N 个对象
+  const wallTiles = new Array(wallRemaining)
   return {
     gameId: 'training',
     roomNumber: 'train',
@@ -1716,11 +1716,6 @@ function drawTile(g: GameState, p: BotPlayer): Tile | null {
   if (!tile) return drawTile(g, p)
   if (isFlower(tile)) { p.flowerTiles.push(tile); return drawTile(g, p) }
   p.hand.push(tile)
-  // 诊断：追踪手牌，摸牌后手牌长度
-  // const kongC = p.exposedMelds.filter(m => m.type === MeldType.KONG).length
-  // const exp = 14 - (p.exposedMelds.length - kongC) * 3 - kongC * 4
-  // if (p.hand.length !== exp) console.error(`DRAW: ${p.name} hand=${p.hand.length} expected=${exp} melds=${p.exposedMelds.length} kongs=${kongC}`)
-  if (process.env.DEBUG_DISCARD === '1') console.error(`[DISCARD_RET] ${p.name} returns=${tileStr(tile)} hand_before=${p.hand.length}`)
   return tile
 }
 
@@ -2168,7 +2163,7 @@ function nextGameMultiplier(meta: GameMeta): number {
   return globalMult
 }
 
-function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean, gameMultiplier: number): { finalPoints: number; baseFan: number; handTypeName: string } {
+function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean, gameMultiplier: number): { finalPoints: number; baseFan: number; handTypeName: string; winForm: string } {
   const wildTileId = p.wildSuit && p.wildValue ? `${p.wildSuit}-${p.wildValue}` : null
   const types = detectHandTypes(p.hand, p.exposedMelds, isSelfDraw, p.flowerTiles.length, wildTileId)
   const result = calculateScore({
@@ -2180,7 +2175,7 @@ function calcScore(p: BotPlayer, isSelfDraw: boolean, isKongWin: boolean, gameMu
     rawRoundMultiplier: 1, rawInheritMultiplier: gameMultiplier,
     settlementMultiplier: SETTLEMENT_MULT
   })
-  return { finalPoints: result.finalPoints, baseFan: result.baseFan, handTypeName: result.handTypeName }
+  return { finalPoints: result.finalPoints, baseFan: result.baseFan, handTypeName: result.handTypeName, winForm: result.winForm }
 }
 
 // ========== 结算引擎（与游戏引擎 calculateSettlementBreakdownByRules 一致）==========
@@ -2196,13 +2191,15 @@ function applyEngineSettlement(
   }
 
   // 构建互包关系 Map（从 meldSources 推导）
-  const mutualBailout = new Map<number, { partnerIndex: number; type: '三口' | '四口' }>()
+  const mutualBailout = new Map<number, Array<{ partnerIndex: number; type: '三口' | '四口' }>>()
   for (let ci = 0; ci < 4; ci++) {
     if (ci === winnerIdx) continue
     const meldCount = g.players[ci].meldSources[winnerIdx]
     if (meldCount >= 3) {
       const type = meldCount >= 4 ? '四口' : '三口'
-      mutualBailout.set(ci, { partnerIndex: winnerIdx, type })
+      const arr = mutualBailout.get(ci) || []
+      arr.push({ partnerIndex: winnerIdx, type })
+      mutualBailout.set(ci, arr)
     }
   }
 
@@ -2373,12 +2370,8 @@ export function aiDiscard(p: BotPlayer, gameMultiplier: number = 1, discardPile:
   // 铁律：hand可能含undefined，在计算前先normalize
   p.hand = normalizeHand(p.hand)
   // ★ V2：直接调用服务器端 selectDiscardTile（与实战同源）
-  // 构造一个伪 deck 长度为 deckLen，wallIdx 处开始是牌墙剩余
-  const fakeDeck: Tile[] = Array.from({ length: deckLen }, (_, i) => ({
-    suit: 'dots' as any,
-    value: 0,
-    id: `deck-${i}`,
-  }))
+  // 服务器只读 wall.length，不需要真实 deck 对象。用稀疏数组避免每次创建 144 个对象
+  const fakeDeck = new Array(deckLen)
   const gameForServer: GameState = {
     deck: fakeDeck,
     wallIdx,
@@ -3007,7 +3000,7 @@ export function chooseTrainingDiscardTileForTest(
 interface GameEvent { turn: number; player: string; action: string; detail: string }
 interface SettlementEntry { from: string; to: string; amount: number; reason: string; mult?: number }
 interface PlayerSnapshot { name: string; hand: string; melds: string[]; flowers: string[]; meldSources: number[]; wildCount: number; wildTile: string; wonFan?: number; winHandType?: string; status: string }
-interface WinnerInfo { playerIndex: number; name: string; hand: string; melds: string[]; flowers: string[]; isSelfDraw: boolean; wonFan: number; baseFan: number; winHandType: string; roundNum: number; wildTile: string; wildTileValue?: number; isMenQing: boolean; winningTile?: string; winningFrom?: string; handTypes: string[] }
+interface WinnerInfo { playerIndex: number; name: string; hand: string; melds: string[]; flowers: string[]; isSelfDraw: boolean; wonFan: number; baseFan: number; winHandType: string; winForm: string; roundNum: number; wildTile: string; wildTileValue?: number; isMenQing: boolean; winningTile?: string; winningFrom?: string; handTypes: string[] }
 interface GameDiagnostics {
   selfWinOpportunities: number
   selfWinDeclines: number
@@ -3099,14 +3092,18 @@ interface WinningGameRecord {
 }
 
 type TrainingRouteKind =
-  | 'MENQING_SPEED'
-  | 'OPEN_SPEED'
   | 'HALF_FLUSH'
   | 'ALL_PUNGS'
   | 'HONOR_HEAVY'
 
+type TrainingSpeedMode =
+  | 'MENQING'
+  | 'OPEN'
+  | 'AUTO'
+
 interface TrainingRouteSignal {
   route: TrainingRouteKind
+  speedMode: TrainingSpeedMode
   confidence: number
   targetSuit: TileSuit | null
 }
@@ -3202,7 +3199,7 @@ function isTrainingBadOpen(
     return true
   }
 
-  if (routeSignal.route === 'MENQING_SPEED' || routeSignal.confidence < 2.5) {
+  if (routeSignal.speedMode === 'MENQING' || routeSignal.confidence < 2.5) {
     if (!passEval || !claimEval) return true
   }
 
@@ -3226,7 +3223,7 @@ function isTrainingBadOpen(
     if (harmsTingQuality && !lowersShanten && !strongScoreGain) return true
   }
 
-  return routeSignal.route === 'MENQING_SPEED' || routeSignal.confidence < 2.5
+  return routeSignal.speedMode === 'MENQING' || routeSignal.confidence < 2.5
 }
 
 function isTrainingForcedOpenCausal(
@@ -3236,7 +3233,7 @@ function isTrainingForcedOpenCausal(
   mode: 'peng' | 'chow' = 'peng'
 ): boolean {
   if (!routeSignal || !passEval || !claimEval) return false
-  const pressuredMenqing = routeSignal.route === 'MENQING_SPEED' || routeSignal.confidence < 2.5
+  const pressuredMenqing = routeSignal.speedMode === 'MENQING' || routeSignal.confidence < 2.5
   if (!pressuredMenqing) return false
   const lowersShanten = claimEval.shantenLike < passEval.shantenLike
   const improvesWaits = claimEval.directWaits > passEval.directWaits
@@ -3323,15 +3320,20 @@ function inferTrainingRouteSignal(
     .sort((a, b) => b.count - a.count)
   const longestSuit = orderedSuits[0]?.suit || null
   const scores: Array<{ route: TrainingRouteKind; score: number }> = [
-    { route: 'MENQING_SPEED', score: 10 + pairCount * 2.2 + sequenceLikeCount * 0.5 - exposedMelds.length * 3 },
-    { route: 'OPEN_SPEED', score: 6 + exposedMelds.length * 3.2 + pairCount * 1.5 + tripletCount * 2.4 },
     { route: 'HALF_FLUSH', score: (orderedSuits[0]?.count || 0) * 3.2 + honorCount * 2.8 + honorPairCount * 2.2 + wildCount * 1.8 },
     { route: 'ALL_PUNGS', score: pairCount * 4.2 + tripletCount * 5.3 + honorPairCount * 2.3 - sequenceLikeCount * 1.2 },
     { route: 'HONOR_HEAVY', score: honorCount * 4.1 + honorPairCount * 3.2 + wildCount * 2 },
   ].sort((a, b) => b.score - a.score)
 
+  // Evaluate speedMode separately
+  const menqingScore = 10 + pairCount * 2.2 + sequenceLikeCount * 0.5 - exposedMelds.length * 3
+  const openScore = 6 + exposedMelds.length * 3.2 + pairCount * 1.5 + tripletCount * 2.4
+  const autoScore = (menqingScore + openScore) / 2
+  const speedMode: TrainingSpeedMode = menqingScore >= openScore && menqingScore >= autoScore ? 'MENQING' : openScore >= menqingScore ? 'OPEN' : 'AUTO'
+
   return {
-    route: scores[0]?.route || 'MENQING_SPEED',
+    route: scores[0]?.route || 'HALF_FLUSH',
+    speedMode,
     confidence: (scores[0]?.score || 0) - (scores[1]?.score || 0),
     targetSuit: scores[0]?.route === 'HALF_FLUSH' ? longestSuit : null,
   }
@@ -3354,9 +3356,6 @@ function estimateTrainingExpectedFan(route: TrainingRouteSignal, exposedMelds: M
       return 4.4 - openPenalty
     case 'HONOR_HEAVY':
       return 5.2 - openPenalty
-    case 'OPEN_SPEED':
-      return 2.1 - openPenalty
-    case 'MENQING_SPEED':
     default:
       return 2.8 - openPenalty * 0.5
   }
@@ -3448,9 +3447,10 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
   const runGameStart = performance.now()
   let discardEvalMs = 0
   let discardEvalCount = 0
-  // 每局开始时清空 isTing 缓存（不同局wild牌不同）
+  // 每局开始时清空缓存（不同局wild牌不同）
   clearIsTingCache()
   clearCanWinCache()
+  clearFindBestHandTypesCache()
   const gameStart = performance.now()
   const gameMeta: GameMeta = {}
   const g = setupGame(akPolicy, otherPolicies, gameMeta)
@@ -3648,7 +3648,11 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
     // 手牌记录完整胡牌手（含放冲牌）；副露仍单独记录，reporter 不再自行补牌重建
     const wildSuit = p.wildSuit, wildVal = p.wildValue
     const isWT2 = (t: Tile) => wildSuit && wildVal ? t.suit === wildSuit && t.value === wildVal : false
-    const concealedTiles = normalizeHand(p.hand)
+    // 捉冲时 p.hand 已被恢复为不含冲牌的状态，需要手动加回冲牌才能得到完整胡牌手
+    let concealedTiles = normalizeHand(p.hand)
+    if (!isSelfDraw && winningTile) {
+      concealedTiles = [...concealedTiles, winningTile]
+    }
     const invariant = getWinningHandInvariant(concealedTiles.length, p.exposedMelds.length)
     if (!invariant.valid) {
       console.error(
@@ -3668,15 +3672,18 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
     const handStr = suitGroups.join(' ; ')
     // 门口牌分组（百搭不在这里重复显示，手牌里已标(*)）
     const meldStrs = formatMelds(p.exposedMelds, wildTiles.length)
-    // 【新增】计算牌型中文名（用于玩家明细显示）
+    // 【新增】计算牌型中文名（用于玩家明细显示）—— 剥离（无花）（杠开）（大吊）后缀
     const typeStrs = p.winHandType ? p.winHandType.split(',').filter(t => t.length > 0 && t !== HandType.STANDARD) : []
-    const typeNames = typeStrs.map(t => HAND_TYPE_NAMES[t as HandType] || t).filter(t => t)
+    const typeNames = typeStrs.map(t => {
+      const base = t.replace(/（[^）]*）/g, '').trim()
+      return HAND_TYPE_NAMES[base as HandType] || HAND_TYPE_NAMES[t as HandType] || base
+    }).filter(t => t)
     winnersThisGame.push({
       playerIndex: idx, name: p.name,
       hand: handStr,
       melds: meldStrs,
       flowers: p.flowerTiles.map(t => tileStr(t)),
-      isSelfDraw, wonFan, baseFan, winHandType: p.winHandType || '', roundNum,
+      isSelfDraw, wonFan, baseFan, winHandType: p.winHandType || '', winForm: p.winForm || '', roundNum,
       wildTile: (wildSuit && wildVal) ? tileStr({suit: wildSuit, value: wildVal, id: '' }) : '(无百搭)', wildTileValue: wildVal ?? 0,
       isMenQing: p.exposedMelds.length === 0,
       winningTile: winningTile ? tileStr(winningTile) : undefined,
@@ -3872,14 +3879,15 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
       if (shouldHu) {
         markCanWinOpportunity(player.name, 'self', false)
         if (shouldTraceDetailGame) console.error(`[SELF-WIN! round=${round} curr=${curr} ${player.name}] hand=${normalizedHand.length} exposed=${player.exposedMelds.length} canWin=${winCheck.canWin}`)
-        const { finalPoints: baseScore, baseFan, handTypeName } = calcScore(player, true, false, g.gameMultiplier)
+        const { finalPoints: baseScore, baseFan, handTypeName, winForm } = calcScore({ ...player, hand: [...normalizedHand] } as any, true, false, g.gameMultiplier)
         // 自摸：用引擎结算（与 calculateSettlementBreakdownByRules 一致）
         applyEngineSettlement(g, curr, true, baseScore, null)
         for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore, '自摸', baseFan, g.gameMultiplier) }
         log(player.name, '自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3×${g.gameMultiplier}=${baseScore*3*g.gameMultiplier}] [手牌${normalizedHand.length}张+副露${player.exposedMelds.length}]`)
         // 【修复】直接用 calcScore 返回的 handTypeName，绝不再调 detectHandTypes（避免参数状态不同导致误判）
         player.wonFan = baseScore
-        player.winHandType = handTypeName || '普通自摸'
+        player.winHandType = handTypeName || '无效牌型'
+        player.winForm = winForm || ''
         player.status = 'won'
         finishedPlayers.add(curr)
         recordWinner(player, curr, true, baseScore, baseFan, turn)
@@ -3913,12 +3921,12 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
           const extra = drawTile(g, player)
           if (extra && !isFlower(extra)) {
             if (canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player), SKIP_WILD).canWin) {
-              const { finalPoints: baseScore, baseFan, handTypeName } = calcScore(player, true, true, g.gameMultiplier)
+              const { finalPoints: baseScore, baseFan, handTypeName } = calcScore({ ...player, hand: [...normalizeHand(player.hand)] } as any, true, true, g.gameMultiplier)
               applyEngineSettlement(g, curr, true, baseScore, null)
               for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore, '杠上自摸', baseFan, g.gameMultiplier) }
               log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
               player.wonFan = baseScore
-              player.winHandType = handTypeName || '普通杠开'
+              player.winHandType = handTypeName || '杠开'
               player.status = 'won'
               finishedPlayers.add(curr)
               recordWinner(player, curr, true, baseScore, baseFan, turn)
@@ -3938,12 +3946,12 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
           const extra = drawTile(g, player)
           if (extra && !isFlower(extra)) {
             if (canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player), SKIP_WILD).canWin) {
-              const { finalPoints: baseScore, baseFan, handTypeName } = calcScore(player, true, true, g.gameMultiplier)
+              const { finalPoints: baseScore, baseFan, handTypeName } = calcScore({ ...player, hand: [...normalizeHand(player.hand)] } as any, true, true, g.gameMultiplier)
               applyEngineSettlement(g, curr, true, baseScore, null)
               for (let i = 0; i < 4; i++) { if (i !== curr) recordPayment(g.players[i].name, player.name, baseScore, '杠上自摸', baseFan, g.gameMultiplier) }
               log(player.name, '杠上自摸', `${player.hand.map(t => tileStr(t)).join(' ')} [${baseScore}×3=${baseScore*3}]`)
               player.wonFan = baseScore
-              player.winHandType = handTypeName || '普通杠开'
+              player.winHandType = handTypeName || '杠开'
               player.status = 'won'
               finishedPlayers.add(curr)
               recordWinner(player, curr, true, baseScore, baseFan, turn)
@@ -3978,11 +3986,16 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
     player.discardedTiles.push(discard)
     g.discardPile.push(discard)
     g.playerDiscards[curr].push(discard)
-    const actualWaits = listWinningTilesForReadyHand(normalizeHand(player.hand), player.exposedMelds, makeWT(player))
-    const futureDraws = estimateAkFutureDrawStats(normalizeHand(player.hand), player.exposedMelds, makeWT(player))
+    log(player.name, '出牌', `${tileStr(discard)} [手牌: ${player.hand.map(t => tileStr(t)).join(' ')}]`)
+    recordTurnSnapshot(curr, tileStr(drawn), tileStr(discard), { actionType: 'draw-discard', wallBefore: wallBeforeAction })
+    // 快速听牌检测：仅在听牌/接近听牌时做完整枚举（省去每次 34 次 canWin DFS）
     const wasTing = player.isTing
-    player.isTing = actualWaits.length > 0
-    if (!wasTing && player.isTing) {
+    const quickTingCheck = canWin(normalizeHand(player.hand), player.exposedMelds, makeWT(player), SKIP_WILD)
+    const isNowTing = quickTingCheck.canWin
+    player.isTing = isNowTing
+    if (isNowTing && !wasTing) {
+      const actualWaits = listWinningTilesForReadyHand(normalizeHand(player.hand), player.exposedMelds, makeWT(player))
+      const futureDraws = estimateAkFutureDrawStats(normalizeHand(player.hand), player.exposedMelds, makeWT(player))
       const routeSignal = inferTrainingRouteSignal(player.hand, player.exposedMelds, makeWT(player), buildTrainingPlannerContext(g, curr), player)
       markTingEntry(
         player.name,
@@ -3993,10 +4006,8 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
         estimateTrainingRiskCost(g, curr, player.exposedMelds)
       )
     }
-    log(player.name, '出牌', `${tileStr(discard)} [手牌: ${player.hand.map(t => tileStr(t)).join(' ')}]`)
-    recordTurnSnapshot(curr, tileStr(drawn), tileStr(discard), { actionType: 'draw-discard', wallBefore: wallBeforeAction })
     if (shouldTraceAkPath) {
-      console.error(`[AK_PATH_DISC] round=${round} discarded=${tileStr(discard)} hand=${sortTiles(normalizeHand(player.hand)).map(tileStr).join(' ')} waits=${formatWaitTiles(actualWaits)}`)
+      console.error(`[AK_PATH_DISC] round=${round} discarded=${tileStr(discard)} hand=${sortTiles(normalizeHand(player.hand)).map(tileStr).join(' ')} ting=${isNowTing}`)
     }
     if (shouldTraceDetailGame && (player.name === 'AI-AK' || player.name === 'AI-阿水')) {
       const h = player.hand.length, m = player.exposedMelds.length
@@ -4015,14 +4026,18 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
     for (let other = 0; other < 4; other++) {
       if (other === curr) continue
       const opp = g.players[other]
-      const testHand = [...opp.hand.filter(t => t !== undefined), discard]
+      if (opp.status === 'won') continue
+      const correctHand = normalizeHand(opp.hand)
+      const expectedHandLen = expectedHandCountForPhase(opp.exposedMelds.length, 'discard', opp.exposedMelds.filter(m => m.type === MeldType.CONCEALED_KONG).length)
+      if (correctHand.length > expectedHandLen) correctHand.length = expectedHandLen
+      const testHand = [...correctHand, discard]
       if (canWin(testHand, opp.exposedMelds, makeWT(opp), SKIP_WILD).canWin) {
         // ★ V2：调服务器端 shouldClaimPendingAction([HU]) 决定放炮胡
         const shouldHu = await serverDiscardClaimHu(opp, g, discard)
         if (shouldHu) {
           markCanWinOpportunity(opp.name, 'discard', false)
-          opp.hand = normalizeHand(testHand)
-          const { finalPoints: score, baseFan, handTypeName } = calcScore(opp, false, false, g.gameMultiplier)
+          const { finalPoints: score, baseFan, handTypeName, winForm } = calcScore({ ...opp, hand: [...testHand] } as any, false, false, g.gameMultiplier)
+          opp.hand = correctHand
           // 捉冲：用引擎结算（与 calculateSettlementBreakdownByRules 一致）
           applyEngineSettlement(g, other, false, score, curr)
           // score = finalPoints = baseFan × extraMultipliers × globalMultiplier，已包含全局倍数，recordPayment直接用score
@@ -4033,7 +4048,8 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
           // 根因：canWin 已在游戏循环中以 normalizedHand（player.hand 的 shallow copy）调用过，
           // 导致 opp.hand 被 JS 引用污染，后续 detectHandTypes 参数状态与 calcScore 内部不一致
           opp.wonFan = score
-          opp.winHandType = handTypeName || '普通放冲'
+          opp.winHandType = handTypeName || '无效牌型'
+          opp.winForm = winForm || ''
           opp.status = 'won'
           finishedPlayers.add(other)
           recordWinner(opp, other, false, score, baseFan, turn, discard, player.name)
@@ -4058,6 +4074,7 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
     let meldTaken = false
     for (const otherIdx of [nextPlayer, prevPlayer, oppositePlayer]) {
       const opp = g.players[otherIdx]
+      if (opp.status === 'won') continue
       if (opp.exposedMelds.length >= 4) continue  // 最多4组牌
       // 碰之前先检查明杠：已有3张碰了，打出的第4张可以直接明杠（优先级高于碰）
       if (canMingKong(opp, discard)) {
@@ -4080,12 +4097,12 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
           checkHandInvariant(opp, 'draw')  // 杠后摸牌
           if (extra && !isFlower(extra)) {
             if (canWin(normalizeHand(opp.hand), opp.exposedMelds, makeWT(opp), SKIP_WILD).canWin) {
-              const { finalPoints: kongBaseScore, baseFan, handTypeName: htn1 } = calcScore(opp, true, true, g.gameMultiplier)
+              const { finalPoints: kongBaseScore, baseFan, handTypeName: htn1 } = calcScore({ ...opp, hand: [...normalizeHand(opp.hand)] } as any, true, true, g.gameMultiplier)
               applyEngineSettlement(g, otherIdx, true, kongBaseScore, null)
               for (let i = 0; i < 4; i++) { if (i !== otherIdx) recordPayment(g.players[i].name, opp.name, kongBaseScore, '明杠自摸', baseFan, g.gameMultiplier) }
               log(opp.name, '明杠自摸', `${opp.hand.map(t => tileStr(t)).join(' ')} [${kongBaseScore}×3]（杠开）`)
               opp.wonFan = kongBaseScore
-              opp.winHandType = htn1 || '普通杠开'
+              opp.winHandType = htn1 || '杠开'
               opp.status = 'won'
               finishedPlayers.add(otherIdx)
               recordWinner(opp, otherIdx, true, kongBaseScore, baseFan, turn)
@@ -4126,19 +4143,24 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
 
         // ★ V2：调服务器端 shouldClaimPendingAction 决定是否碰
         // availableActions: [PENG, HU]（明杠 由 上方 canMingKong 块独立处理）
-        const pengActions: any[] = [ActionType.PENG, ActionType.HU]
+        // ★ 修复: 用 findBestHandTypes 检查完整手牌(副露+手牌)能否组成合法牌型
+        // 替代 isGarbageHand（只检查多门垃圾胡，漏掉单门但组不了面子的手牌）
+        const pengTestHand = [...normalizeHand(opp.hand), discard]
+        const pengHandTypes = findBestHandTypes(pengTestHand, opp.exposedMelds, makeWT(opp))
+        const pengActions: any[] = pengHandTypes.length > 0 ? [ActionType.PENG, ActionType.HU] : [ActionType.PENG]
         const serverAction = await serverClaimAction(opp, g, discard, pengActions)
         if (serverAction === ActionType.HU) {
           // 服务器决定胡牌（碰后状态能胡牌）
           markCanWinOpportunity(opp.name, 'discard', false)
-          opp.hand = normalizeHand([...opp.hand.filter(t => t !== undefined), discard])
-          const { finalPoints: score, baseFan, handTypeName } = calcScore(opp, false, false, g.gameMultiplier)
+          const pengWinHand = normalizeHand([...opp.hand.filter(t => t !== undefined), discard])
+          const { finalPoints: score, baseFan, handTypeName } = calcScore({ ...opp, hand: [...pengWinHand] } as any, false, false, g.gameMultiplier)
+          opp.hand = pengWinHand
           applyEngineSettlement(g, otherIdx, false, score, curr)
           recordPayment(player.name, opp.name, score, '放炮', baseFan, g.gameMultiplier)
           log(opp.name, '放炮胡', `${player.name}出${tileStr(discard)}→${opp.hand.map(t => tileStr(t)).join(' ')} [${score}]`)
           recordTurnSnapshot(otherIdx, '-', '-', { actionType: 'discard-win', claimTile: tileStr(discard), claimFrom: player.name, winType: '放冲', winTile: tileStr(discard), wallBefore: g.wallIdx })
           opp.wonFan = score
-          opp.winHandType = handTypeName || '普通放冲'
+          opp.winHandType = handTypeName || '无效牌型'
           opp.status = 'won'
           finishedPlayers.add(otherIdx)
           recordWinner(opp, otherIdx, false, score, baseFan, turn, discard, player.name)
@@ -4221,8 +4243,11 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
     }
     if (meldTaken) continue
 
-    // Check chow (only next player)
-    const nextP = g.players[nextPlayer]
+    // Check chow (血战到底: 上家是动态的，胡牌走人后对家变新上家)
+    const chowTargetIdx = nextActivePlayer(curr)
+    if (chowTargetIdx != null) {
+    const nextP = g.players[chowTargetIdx]
+    if (nextP.status !== 'won') {
     // K哥铁律：吃碰排斥检查必须在 pipeline 决策之前做
     const chowExcluded = !checkChowPongExclusion(nextP.chowPongExclusion, 'chow', discard.suit)
     let shouldChow = false
@@ -4238,11 +4263,11 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
       if (shouldTraceDetailGame) console.error(`[V2_CHOW_DECISION] ${nextP.name} tile=${tileStr(discard)} server=${serverAction} final=${shouldChow}`)
     }
     const akRouteBeforeChow = usesSharedTrainingRouteBot(nextP.name) && shouldChow
-      ? inferTrainingRouteSignal(nextP.hand, nextP.exposedMelds, makeWT(nextP), buildTrainingPlannerContext(g, nextPlayer), nextP)
+      ? inferTrainingRouteSignal(nextP.hand, nextP.exposedMelds, makeWT(nextP), buildTrainingPlannerContext(g, chowTargetIdx), nextP)
       : null
     if (nextP.name === 'AI-AK' && shouldChow) {
       diagnosticsState.akOpenCount++
-      if (isForcedOpenPressure(nextPlayer) && isTrainingForcedOpenCausal(akRouteBeforeChow, akPassEval, akChowEval, 'chow')) diagnosticsState.akForcedOpenCount++
+      if (isForcedOpenPressure(chowTargetIdx) && isTrainingForcedOpenCausal(akRouteBeforeChow, akPassEval, akChowEval, 'chow')) diagnosticsState.akForcedOpenCount++
       if (akRouteBeforeChow && isTrainingBadOpen(nextP, discard, 'chow', akRouteBeforeChow, akPassEval, akChowEval)) {
         diagnosticsState.akBadOpenCount++
       }
@@ -4259,7 +4284,7 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
         console.error(`[CHOW_TRACE_ROOT] ${nextP.name} handBeforeChow=${handBeforeChow} meldsBefore=${beforeChowMelds} handAfter=${nextP.hand.length} meldsAfter=${nextP.exposedMelds.length} removed=${handBeforeChow - nextP.hand.length} expectedRemoved=2 tile=${tileStrWithId(discard)}`)
       }
       const chowDiscardEvalStart = PERF_TRACE ? performance.now() : 0
-      const chowDiscard = aiDiscard(nextP, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, nextPlayer, round * 4 + nextPlayer, gameIdx)
+      const chowDiscard = aiDiscard(nextP, g.gameMultiplier, g.discardPile, g.wallIdx, g.deck.length, g.players, chowTargetIdx, round * 4 + chowTargetIdx, gameIdx)
       if (PERF_TRACE) {
         discardEvalMs += performance.now() - chowDiscardEvalStart
         discardEvalCount++
@@ -4273,13 +4298,15 @@ export async function runGame(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
       checkHandInvariant(nextP, 'claim_discard')
       g.discardPile.push(chowDiscard)
       // 【修复】吃后出牌写入 snapshot（吃家无摸牌，drawnTile='-'）
-      recordTurnSnapshot(nextPlayer, '-', tileStr(chowDiscard), { actionType: 'chow-discard', claimTile: tileStr(discard), claimFrom: g.players[curr].name, wallBefore: g.wallIdx })
+      recordTurnSnapshot(chowTargetIdx, '-', tileStr(chowDiscard), { actionType: 'chow-discard', claimTile: tileStr(discard), claimFrom: g.players[curr].name, wallBefore: g.wallIdx })
       meldTaken = true
-      g.current = (nextPlayer + 1) % 4  // K哥铁律：吃后下家摸牌，不是吃家继续
+      g.current = nextActivePlayer(chowTargetIdx) ?? ((chowTargetIdx + 1) % 4)  // K哥铁律：吃后动态下家摸牌
       continue  // 吃后进入下一轮，防止其他家继续碰/杠
     }
+    } // end if (nextP.status !== 'won')
+    } // end if (chowTargetIdx != null)
 
-    g.current = nextPlayer
+    g.current = nextActivePlayer(curr) ?? ((curr + 1) % 4)
     consecutiveDraws++
     if (consecutiveDraws > MAX_ROUNDS * 4) {
       // 流局：返回已有赢家（如果有的话）
@@ -4629,8 +4656,11 @@ async function evaluatePolicy(akPolicy: BotPolicy, otherPolicies: BotPolicy[], g
           if (w.isSelfDraw) selfDrawGames++; else discardWinGames++;
           // winHandType 是逗号分隔的字符串枚举名（如 'all_triplets'、'half_flush'），不是数字
           const typeStrs = w.winHandType ? w.winHandType.split(',').filter(t => t.length > 0) : []
-          const typeNamesRaw = typeStrs.filter(t => t !== HandType.STANDARD).map(t => HAND_TYPE_NAMES[t as HandType] || t)
-          const typeNames = typeNamesRaw.length > 0 ? typeNamesRaw : ['普通']  // '普通' 仅作 display fallback
+          const typeNamesRaw = typeStrs.filter(t => t !== HandType.STANDARD).map(t => {
+            const base = t.replace(/（[^）]*）/g, '').trim()
+            return HAND_TYPE_NAMES[base as HandType] || HAND_TYPE_NAMES[t as HandType] || base
+          })
+          const typeNames = typeNamesRaw.length > 0 ? typeNamesRaw : ['无效']  // 无有效牌型时标记为无效
           const bigTypes = [HandType.FENG_PENG, HandType.ALL_WIND, HandType.QING_PENG]
           if (typeStrs.some(t => bigTypes.includes(t as HandType))) bigWinGames++
           if (w.melds.length === 0) menqingWinGames++

@@ -1,4 +1,4 @@
-﻿import { TileSuit } from '../types/game'
+import { TileSuit } from '../types/game'
 import { groupTiles, isHonor } from '../utils/tiles'
 import type { RouteDiscardInput } from './types'
 
@@ -320,8 +320,8 @@ function scoreByRoute(input: RouteDiscardInput): number {
     }
   }
 
-  switch (routeState.current) {
-    case 'MENQING_SPEED':
+  // ★ speedMode 分支（独立于 route）
+  if (routeState.speedMode === 'MENQING') {
       return (
         (isShortestSuitTile ? 5.1 + suitGap * 0.6 : 0) +
         shortestSuitSequenceBreakBias +
@@ -337,8 +337,9 @@ function scoreByRoute(input: RouteDiscardInput): number {
         (count >= 2 ? -globalPairProtection : 0) +
         pungsPriorityScore(input)
       )
+  }
 
-    case 'OPEN_SPEED':
+  if (routeState.speedMode === 'OPEN') {
       return (
         (count === 1 ? 2.2 : -1.6) +
         (longestSuit && tile.suit !== longestSuit && !isHonor(tile) ? 2.2 : 0) +
@@ -353,32 +354,60 @@ function scoreByRoute(input: RouteDiscardInput): number {
         (count >= 2 ? -globalPairProtection : 0) +
         pungsPriorityScore(input)
       )
+  }
 
+  switch (routeState.current) {
     case 'HALF_FLUSH':
       // ★ V2.6 K哥铁律(真正版): 做清/混一色时
       // - 优先保留 targetSuit 数字牌(核心资源, 凑清一色)
-      // - 优先打掉 风/箭单张(凑清一色必须去除)
-      // - 有百搭时, 甚至可以打掉 风/箭对子 保留 targetSuit 单张无邻(因为百搭能补位, 对子反成资源浪费)
+      // - ★ V2.2: 保留风牌(等风牌积累够了转风一色)
       if (tile.suit === routeState.targetSuit) {
         // targetSuit 数字牌: 强保留, 包括单张(凑清一色)
-        // 单张: -2.5 保留(可做清一色, 百搭可补), 对子: -4.4 强保留
         return (count >= 2 ? -4.4 : -2.5) + (nearby > 0 ? -1.2 : 0) + (count >= 2 ? -globalPairProtection : 0)
       }
       if (isHonor(tile)) {
-        // 风/箭: 优先打(K哥铁律: 凑清一色必须去除)
+        // ★ V2.7 Phase 1: 已接近清一色(可升级), 坚决打掉风/箭
         if (routeState.features.pureFlushUpgradeReady) {
-          // 已接近清一色(可升级), 坚决打掉风/箭
-          return count >= 2 ? 5.6 : 4.2
+          // 升级时大幅鼓励打风牌(无论对子还是单张)
+          const _isExposedSingleSuit = (routeState.features as any).isExposedSingleSuit === true
+          if (_isExposedSingleSuit) {
+            // 门口已单门 → 风牌坚决打掉(+9.0/+7.5)
+            return count >= 2 ? 9.0 : 7.5
+          }
+          return count >= 2 ? 7.0 : 5.5
         }
-        // ★ K哥铁律 v2:
-        // - 风/箭对子: +0.8 (比单张弱, 仍鼓励打)
-        // - 风/箭对子 + 有百搭: +1.5 (百搭能补位, 对子成刻反浪费清一色潜力, 更鼓励打)
-        const _wildCount = (input.routeState?.features?.wildCount ?? 0)
+        // ★ V2.7: 有百搭时，风牌可以被百搭替代 → 积极打风牌转清一色
+        // 百搭当数牌用，风牌是累赘
+        const wildCount = input.routeState?.features?.wildCount ?? 0
+        if (wildCount >= 1) {
+          // ★ V2.7: 有百搭+风牌<2对时，更激进地打风牌转清一色
+          const honorPairCount = routeState.features.honorPairCount || 0
+          if (honorPairCount <= 1) {
+            // 风牌少，百搭当数牌补位 → 大幅鼓励打风牌
+            return count >= 2 ? 4.0 : 3.0
+          }
+          // 风牌≥2对时适度鼓励
+          return count >= 2 ? 2.5 : 1.5
+        }
+        // 无百搭时保留风牌(等积累够了转风一色)
+        // V2.7: 但门口已单门时，应更激进打风牌转清一色
+        const _exposedSingleSuitHonor = (routeState.features as any).isExposedSingleSuit === true
         if (count >= 2) {
-          return _wildCount >= 1 ? 1.5 : 0.8
+          if (_exposedSingleSuitHonor) {
+            return 1.0  // 门口已单门时, 风牌对子也要打
+          }
+          return -3.0  // 风牌对子强保留(等碰或转风一色)
         }
-        // 单张风/箭: 鼓励打 (凑清一色必须去除)
-        return count === 1 ? 3.2 : 1.8
+        if (_exposedSingleSuitHonor) {
+          return 0.5  // 门口已单门时, 风牌单张也要打
+        }
+        return -1.0  // 风牌单张轻保留(等积累)
+      }
+      // ★ V2.7 Phase 1.1: 门口已单门时，非 targetSuit 数牌要更坚决打掉
+      const _isExposedSingleSuit = (routeState.features as any).isExposedSingleSuit === true
+      if (_isExposedSingleSuit && tile.suit !== routeState.targetSuit && tile.suit !== 'hua') {
+        // 门口已单门 → 非清一色花色的数牌坚决打掉 (+9.0 远超普通 +5.8)
+        return 9.0 + (tile.suit === shortestSuit ? 1.5 : 0)
       }
       return 5.8 + (tile.suit === shortestSuit ? 1.1 : 0)
 
@@ -386,28 +415,31 @@ function scoreByRoute(input: RouteDiscardInput): number {
       // ★ 碰碰胡坚决执行:4+对子时单张一律高正分打掉
       const _pairTripletTotal = routeState.features.pairCount + routeState.features.tripletCount
       const _firmCommit = _pairTripletTotal >= 4
-      const _discardScore = count >= 2 ? -4.4 : (_firmCommit ? 4.5 : 2.8)
+      const _discardScore = count >= 2 ? -4.4 : (_firmCommit ? 5.5 : 3.5)
       // 单张在短门且有熟张 → 最高优先打
       const _shortSuit_seen_single =
-        count === 1 && isShortestSuitTile && visibleCopies >= 1 ? (_firmCommit ? 6.0 : 4.0) : 0
+        count === 1 && isShortestSuitTile && visibleCopies >= 1 ? (_firmCommit ? 7.0 : 5.0) : 0
       // 单张在短门 → 优先打
       const _shortSuit_single =
-        count === 1 && isShortestSuitTile ? (_firmCommit ? 4.0 : 2.4) : 0
+        count === 1 && isShortestSuitTile ? (_firmCommit ? 5.0 : 3.2) : 0
       // 单张有邻牌(潜在的顺子)→ 拆了不影响对子
       const _adjacent_single =
-        count === 1 && nearby > 0 ? (_firmCommit ? 3.0 : 1.8) : 0
+        count === 1 && nearby > 0 ? (_firmCommit ? 3.5 : 2.2) : 0
       // 对子在短门 → 额外保留
       const _shortSuit_pair =
         count >= 2 && isShortestSuitTile ? -2.2 : 0
       // 对子所属花色短门缺口大 → 更应保留
       const _gap_pair =
         count >= 2 && isShortestSuitTile && suitGap >= 3 ? -1.6 : 0
-      // 风箭单张:坚定执行时也要打(不再保留)
+      // ★ V2.2: 风箭单张坚决打(碰碰胡不需要风牌单张)
       const _honor_single_keep =
-        count === 1 && isHonor(tile) ? (_firmCommit ? 1.5 : -1.2) : 0
-      // 熟张额外加分(坚决执行时优先打熟张)
+        count === 1 && isHonor(tile) ? (_firmCommit ? 2.5 : 1.0) : 0
+      // ★ V2.2: 熟张额外加分(碰碰胡优先打熟张,降低放炮风险)
       const _seen_bonus =
-        count === 1 && visibleCopies >= 2 && _firmCommit ? 2.5 : 0
+        count === 1 && visibleCopies >= 1 ? (_firmCommit ? 3.5 : 2.0) : 0
+      // ★ V2.2: 多人做的数字门单张 → 坚决打(别留)
+      const _others_doing_single =
+        count === 1 && !isHonor(tile) && visibleCopies >= 2 ? 2.0 : 0
       return (
         _discardScore +
         _shortSuit_seen_single +
@@ -417,6 +449,7 @@ function scoreByRoute(input: RouteDiscardInput): number {
         _gap_pair +
         _honor_single_keep +
         _seen_bonus +
+        _others_doing_single +
         (isHonor(tile) && count >= 2 ? -1 : 0)
       )
     }
@@ -425,7 +458,9 @@ function scoreByRoute(input: RouteDiscardInput): number {
       if (isHonor(tile)) {
         return count >= 2 ? -4.2 : -1.4
       }
-      return 3.8 + (longestSuit && tile.suit !== longestSuit ? 0.6 : 0) + (count >= 2 ? -globalPairProtection : 0)
+      // ★ V2.2: 风一色路线坚决打数牌，分数越高越积极
+      // 数牌单张: 10.0 (最高优先), 数牌对子: 7.0 (仍鼓励打)
+      return (count >= 2 ? 7.0 : 10.0) + (longestSuit && tile.suit !== longestSuit ? 1.5 : 0)
 
     case 'STRIVE_DRAW':
       // ★ V2: 争取流局 → 打熟张优先,留安全牌
@@ -484,15 +519,21 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
     input.routeState.phase === 'RUSH' ? 2 :
     1
   )
+  // ★ V2.2: 听牌精度优化 — 提高ting权重，让AI更积极听牌
+  // shanten=0: 听牌多→强烈保留（自摸概率高），危险牌惩罚适度降低
+  // shanten=1: 向听推进→中等奖励（差1步到听牌）
+  // shanten=2: 结构优化→小奖励（保留对子/刻子）
   const tingBonus =
     input.candidateShanten === 0
-      ? input.winningTiles * 0.18 - input.discardDanger * 2
+      ? input.winningTiles * 0.35 - input.discardDanger * 1.5
       : input.candidateShanten === 1
-        ? input.candidateEffective * 0.04
-        : 0
-  // ★ V2.12: 混一色转清一色意愿调整
-  // 开掉两对风向(4张牌)难度大增,清一色最多才10番,风险回报率太低
-  // 门口花+有效番数越多,越降低意愿(已有价值不值得冒险)
+        ? input.candidateEffective * 0.12 + 0.8
+        : input.candidateShanten === 2
+          ? (input.routeState.features.pairCount + input.routeState.features.tripletCount) * 0.15
+          : 0
+  // ★ V2.2: 混一色转清一色 — 结合动态形势
+  // 打掉一对风向可以升级清一色
+  // 动态调整：早局+有百搭+对手不快 → 更积极升级
   let pureFlushUpgradeBonus = 0
   if (
     input.routeState.current === 'HALF_FLUSH' &&
@@ -500,14 +541,17 @@ export function scoreRouteDiscardCandidate(input: RouteDiscardInput): number {
     isHonor(input.tile) &&
     sameTypeCount(input) >= 2
   ) {
-    pureFlushUpgradeBonus = 7.5
-    // 门口花越多,已有番数越高,转清一色越不值
     const doorFlowers = (input.player.hand.exposedMelds || []).reduce(
       (cnt: number, m: any) => cnt + (m.tiles || []).filter((t: any) => t.suit === 'hua' || t.isFlower).length, 0)
     const exposedMeldCount = (input.player.hand.exposedMelds || []).length
-    // 每朵门口花减1.5, 每个门口牌组减0.3 (已有价值越高,升级越不值)
-    pureFlushUpgradeBonus -= doorFlowers * 1.5
-    pureFlushUpgradeBonus -= exposedMeldCount * 0.3
+    // 基础bonus：打掉一对风向升级清一色
+    pureFlushUpgradeBonus = 10.0
+    // 百搭越多 → 越值得升级（百搭可以补风向的空缺）
+    if (input.routeState.features.wildCount >= 2) pureFlushUpgradeBonus += 3.0
+    else if (input.routeState.features.wildCount >= 1) pureFlushUpgradeBonus += 1.5
+    // 门口花越多,已有番数越高,转清一色越不值
+    pureFlushUpgradeBonus -= doorFlowers * 1.0
+    pureFlushUpgradeBonus -= exposedMeldCount * 0.2
     pureFlushUpgradeBonus = Math.max(pureFlushUpgradeBonus, 0)
   }
 

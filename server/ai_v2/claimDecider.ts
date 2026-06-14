@@ -308,6 +308,7 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
   // ★ V2.8 K哥铁律: 成型混碰强碰buff (优先于 V2.7 第一口碰限制)
   // 牌型: 已有 1+ 副露(已破门清) + 数字门对子 >= 2 + 至少 1 个风/箭刻/对
   // 典型场景: 已碰 jian-2 刻 + tiao 2对 + 别人打 4万 → 碰 4万 凑混碰
+  // V2.7: 收紧条件 (手牌2对→3对) → 减少混碰 → 保留清/混一色
   if (action === ActionType.PENG && !isHonor(claimTile) && player.hand.exposedMelds.length >= 1) {
     const claimSuitCount = getNumberSuitCount(player.hand.concealedTiles, claimTile.suit)
     const handPairs = countPairs(player.hand.concealedTiles)
@@ -321,14 +322,14 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       }
       return false
     })()
-    const hunPengReady = claimSuitCount >= 2 && handPairs >= 2 && hasHonorTripletOrPair
-    // ★ K哥铁律(2026-06-07): 前3回合观察期, 混碰buff也降低加成(只+0.5而非+1.5)
+    // V2.7: 收紧 (handPairs>=2 → >=3) → 减少不必要的混碰
+    const hunPengReady = claimSuitCount >= 2 && handPairs >= 3 && hasHonorTripletOrPair
     const claimEstimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
     const isEarlyRounds = claimEstimatedRound <= 3
     if (hunPengReady) {
       return {
         allowed: true,
-        tuneDelta: isEarlyRounds ? 0.5 : 1.5,
+        tuneDelta: isEarlyRounds ? 0.3 : 1.0,
         reason: isEarlyRounds ? 'hun_peng_potential_boost_early' : 'hun_peng_potential_boost'
       }
     }
@@ -346,6 +347,26 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       const eligibleByPairs = handPairs >= 3
       if (!eligibleByCount && !eligibleByPairs) {
         return { allowed: false, tuneDelta: -1.4, reason: 'first_peng_requires_four_tiles_or_three_pairs' }
+      }
+    }
+  }
+
+  // ★ V2.2: 碰牌前检查是否会破坏顺子潜力
+  // 例：手牌一二三三筒，别人打三筒 → 不碰（碰了破坏一二三顺子）
+  if (action === ActionType.PENG && isNumberSuit(claimTile)) {
+    const hand = player.hand.concealedTiles
+    const suit = claimTile.suit
+    const v = claimTile.value
+    const hasLower = hand.some(t => t.suit === suit && t.value === v - 1)
+    const hasLower2 = hand.some(t => t.suit === suit && t.value === v - 2)
+    const hasUpper = hand.some(t => t.suit === suit && t.value === v + 1)
+    const hasUpper2 = hand.some(t => t.suit === suit && t.value === v + 2)
+    const sameCount = hand.filter(t => t.suit === suit && t.value === v).length
+    // 如果碰了会破坏顺子（有相邻牌可以组顺子），且不是碰碰胡路线
+    if (sameCount >= 2 && (hasLower || hasUpper) && (hasLower2 || hasUpper2)) {
+      const isAllPungsRoute = routeState?.current === 'ALL_PUNGS'
+      if (!isAllPungsRoute) {
+        return { allowed: false, tuneDelta: -1.0, reason: 'peng_breaks_sequence_potential' }
       }
     }
   }
@@ -374,8 +395,8 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
     return { allowed: false, tuneDelta: -1.7, reason: 'off_route_chow_from_long_suit_hand' }
   }
 
-  switch (routeState.current) {
-    case 'MENQING_SPEED': {
+  // ★ speedMode 分支（独立于 route）
+  if (routeState.speedMode === 'MENQING') {
       if (
         honorPengPush &&
         candidateShanten <= passShanten &&
@@ -474,9 +495,9 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
         else if (strongChow === 'gap') tuneDelta += 0.8  // 坎张(2-4吃3),高概率吃
       }
       return { allowed: true, tuneDelta, reason: 'menqing_speed' }
-    }
+  }
 
-    case 'OPEN_SPEED':
+  if (routeState.speedMode === 'OPEN') {
       // ★ V2.5: 多对子+多副露时碰牌强力 buff (K哥铁律: 适合碰碰胡的牌必碰)
       const exposedTripletCount = player.hand.exposedMelds.filter((m: any) => m.type === 'triplet' || m.type === 'kong').length
       const handPairCount = countPairs(player.hand.concealedTiles)
@@ -499,7 +520,9 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
           (action === ActionType.CHOW && exposedMeldCount >= 1 ? 0.4 : 0),
         reason: 'open_speed_push',
       }
+  }
 
+  switch (routeState.current) {
     case 'HALF_FLUSH':
       if (!isHonorTile && routeState.targetSuit && claimTile.suit !== routeState.targetSuit) {
         return { allowed: false, tuneDelta: -1.6, reason: 'off_route_half_flush' }
@@ -528,14 +551,15 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
         }
       }
       if (hasHonorPairForClaim && !routeState.features.pureFlushUpgradeReady) {
+        // V2.7: 降低混碰倾向（1.5→0.8），优先做清一色
         return {
           allowed: true,
           tuneDelta:
-            1.5 + // 基础: 强力碰(K哥铁律: 混碰是高分, 必碰)
-            routeGain * 0.1 +
-            (routeState.features.honorPairCount >= 2 ? 0.6 : 0) + // 多个风对额外加分
+            0.8 + // 基础: 适度碰（混碰是低概率, 不应执着）
+            routeGain * 0.05 +
+            (routeState.features.honorPairCount >= 2 ? 0.3 : 0) +
             deadTilePungBonus,
-          reason: 'half_flush_hun_peng_must_claim',
+          reason: 'half_flush_hun_peng_moderate_claim',
         }
       }
       if (
@@ -567,16 +591,17 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       }
       const _apPursuit = (policy?.allPungsPursuit || 0)
       const _apAgg = _apPursuit >= 1.2
+      // ★ V2.2: 碰碰胡路线碰牌必须积极，tuneDelta 从 0.55 提高到 1.5
       return {
         allowed: true,
         tuneDelta:
-          (_apAgg ? 1.2 : 0.55) +
-          (action === ActionType.KONG ? 0.25 : 0.15) +
-          routeGain * 0.05 +
-          ((policy?.qingPengPursuit || 0) * (routeState.features.secondSuitCount === 0 ? 0.18 : 0)) +
-          ((policy?.hunPengPursuit || 0) * (routeState.features.honorPairCount >= 1 ? 0.20 : 0)) +
-          (_apAgg && isHonorTile && routeState.features.honorPairCount >= 1 ? 0.4 : 0) +
-          (_apAgg && routeState.features.wildCount > 0 ? 0.35 : 0) +
+          (_apAgg ? 2.0 : 1.5) +
+          (action === ActionType.KONG ? 0.4 : 0.2) +
+          routeGain * 0.08 +
+          ((policy?.qingPengPursuit || 0) * (routeState.features.secondSuitCount === 0 ? 0.25 : 0)) +
+          ((policy?.hunPengPursuit || 0) * (routeState.features.honorPairCount >= 1 ? 0.30 : 0)) +
+          (_apAgg && isHonorTile && routeState.features.honorPairCount >= 1 ? 0.5 : 0) +
+          (_apAgg && routeState.features.wildCount > 0 ? 0.45 : 0) +
           deadTilePungBonus,
         reason: 'all_pungs_claim',
       }
@@ -588,13 +613,14 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       if (!isHonorTile) {
         return { allowed: false, tuneDelta: -1.4, reason: 'number_claim_breaks_honor_heavy' }
       }
+      // ★ V2.2: 风一色碰牌积极度提升（不需要门清，可以碰）
       return {
         allowed: true,
         tuneDelta:
-          0.7 +
-          routeGain * 0.05 +
-          (policy?.allHonorsPursuit || 0) * 0.18 +
-          (policy?.allHonorsPungsPursuit || 0) * 0.12 +
+          1.2 +
+          routeGain * 0.08 +
+          (policy?.allHonorsPursuit || 0) * 0.25 +
+          (policy?.allHonorsPungsPursuit || 0) * 0.18 +
           deadTilePungBonus,
         reason: 'honor_claim_push',
       }

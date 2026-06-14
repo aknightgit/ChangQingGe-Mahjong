@@ -45,6 +45,15 @@ export function evaluateSelfKong(
         }
 
         // ★ K哥铁律：碰了就杠（碰碰胡路线从不拆刻子，加杠是必选项）
+        // ★ V2.2: 但要检查杠后是否会破坏顺子潜力
+        // 如果手牌中有与杠牌相邻的牌（可以组顺子），则不杠
+        const adjacentTiles = player.hand.concealedTiles.filter(t =>
+          t.suit === fourth.suit && Math.abs(t.value - fourth.value) <= 2 && t.id !== fourth.id
+        );
+        if (adjacentTiles.length >= 2) {
+          // 有2+张相邻牌，杠了会破坏顺子潜力
+          return { shouldKong: false, type: 'extended', reason: 'kong_breaks_sequence_potential' };
+        }
         return { shouldKong: true, type: 'extended', reason: 'peng-peng-hu-must-kong' };
       }
     }
