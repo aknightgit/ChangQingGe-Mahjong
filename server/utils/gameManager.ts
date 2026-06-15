@@ -2146,6 +2146,7 @@ class GameManager {
 
     // Check pending actions (peng, kong, hu from another player's discard)
     const pendingAction = game.pendingActions.find(pa => pa.playerId === playerId);
+    console.log(`[getAvailActions] player=${player.name.substring(0,8)} pending=${game.pendingActions.length} found=${!!pendingAction} actions=${pendingAction?.availableActions?.join(',')} phase=${game.phase}`);
     if (pendingAction) {
       // 冷冻期间不响应其他玩家的弃牌(吃/碰/杠/胡),但自摸胡不受影响
       // 自摸胡在玩家自己的回合通过 turn actions 处理
