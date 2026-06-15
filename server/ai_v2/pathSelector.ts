@@ -210,14 +210,14 @@ export function buildFeatureSummary(input: {
   // V2.9: 放宽 honorCount 限制(2/3→4/5张), 4张风向也可升级清一色
   // V2.13: 放宽 pureFlushUpgradeReady 条件 → 更容易触发清一色升级
   const pureFlushUpgradeReady = (
-    // 条件A：门口副露已单门+门口吃了2口以上 (风向放宽到5)
-    (isExposedSingleSuit && exposedMelds.length >= 2 && honorCount <= 5) ||
-    // 条件B：手牌长门够强（7张以上）(风向放宽到5)
-    (effectiveLongestSuit >= 7 && secondSuitCount <= 1 && honorCount <= 5)
+    // 条件A：门口副露已单门+门口吃了2口以上 (风向放宽到6)
+    (isExposedSingleSuit && exposedMelds.length >= 2 && honorCount <= 6) ||
+    // 条件B：手牌长门够强（6张以上）(风向放宽到6)
+    (effectiveLongestSuit >= 6 && secondSuitCount <= 2 && honorCount <= 6)
   )
-    && (honorPairCount <= 2 || (hasWildWild && honorCount <= 4))
-    && honorCount <= 7
-    && estimatedRound <= 18
+    && (honorPairCount <= 3 || (hasWildWild && honorCount <= 5))
+    && honorCount <= 8
+    && estimatedRound <= 20
   // ★ V2.7: 百搭+少风牌（<2对）时强力清一色倾向
   // V2.9: 进一步放宽 - 门口已单门+长门>=6即可积极转清一色
   // V2.10: 关键 - 百搭≥2时放宽, 但不要太激进
