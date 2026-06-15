@@ -383,14 +383,15 @@ function scoreByRoute(input: RouteDiscardInput): number {
         if (_isExposedSingleSuit) {
           return count >= 2 ? 3.0 : 2.0
         }
+        // ★ V2.14: 百搭>=2时→清一色强动力,风牌坚决打掉
         const wildCount = input.routeState?.features?.wildCount ?? 0
         if (wildCount >= 2) {
-          if (_honorPairCount <= 2) return count >= 2 ? 4.5 : 3.5
-          return count >= 2 ? 3.0 : 2.0
+          // 2百搭+万子长门 → 清一色几乎确定,风牌是累赘
+          return count >= 2 ? 6.5 : 5.5  // 大幅鼓励打风牌
         }
         if (wildCount >= 1) {
-          if (_honorPairCount <= 1) return count >= 2 ? 4.0 : 3.0
-          return count >= 2 ? 2.5 : 1.5
+          if (_honorPairCount <= 1) return count >= 2 ? 4.5 : 3.5
+          return count >= 2 ? 3.0 : 2.0
         }
         if (count >= 2) return -3.0
         return -1.0

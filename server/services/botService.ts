@@ -3025,6 +3025,17 @@ export async function shouldClaimPendingAction(
         traceClaim(player, game, 'hu-no-flower-low-ting', `route=${currentRoute} types=[${claimHandTypes}] cleanExposure=true tingTiles=${_tingTilesForNoFlower} → accept discard win (low ting)`)
       }
 
+      // ★ V2.14: 有2+百搭+长门≥5 → 不捉冲混一色, 等清一色
+      // 用户铁律: 百搭+万子手牌不应该捉冲混一色, 而应该打风牌转清一色
+      if (wildCount >= 2 && claimHasPengOrFlush && claimHandTypes.includes(HandType.HALF_FLUSH)) {
+        const _targetSuit = routeState?.targetSuit || 'wan'
+        const _claimLongestSuitCount = hand.filter(t => t.suit === _targetSuit && !isWildTile(t, game)).length
+        if (_claimLongestSuitCount >= 5 && wallRemaining > 10) {
+          traceClaim(player, game, 'hu-wait-pure-flush', `wild=${wildCount} longSuit=${_claimLongestSuitCount} → PASS, aim for 清一色`)
+          return ActionType.PASS
+        }
+      }
+
       // 利益最大化: 期望收益高于捉冲 → 放弃捉冲
       if (futureReward.shouldWait && wallRemaining > 8) {
         traceClaim(player, game, 'hu-future-reward', `futureValue=${futureReward.expectedFan.toFixed(1)} selfDrawProb=${futureReward.selfDrawProb.toFixed(2)} reason=${futureReward.reason} → wait`)

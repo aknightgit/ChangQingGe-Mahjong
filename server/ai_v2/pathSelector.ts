@@ -304,14 +304,16 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       }
       // V2.13: 恢复longestSuitCount系数(3.0), 改用风牌惩罚区分混一色和清一色
       score += features.longestSuitCount * 3.0
-      // V2.14: honorCount系数适中(0.8→1.0), honorPairCount(0.5→0.8)
-      score += features.honorCount * 1.0
-      score += features.honorPairCount * 0.8
+      // V2.14: honorCount系数(0.5), honorPairCount(0.3) → 进一步降混一色
+      score += features.honorCount * 0.5
+      score += features.honorPairCount * 0.3
       score += features.wildCount * 3.0
-      // V2.13: 有风牌→扣分(混一色扣分,但清一色不扣) → 混一色→50%
-      // 无风牌→加分(纯清一色加分) → 清一色→20%
+      // V2.14: 有风牌→扣分(混一色扣分,但清一色不扣) → 混一色→50%
+      // 无风牌→大幅加分(纯清一色加分) → 清一色→20%
       if (features.honorCount >= 1) {
-        score -= features.honorCount * 2.0  // 每张风牌扣2.0分(更激进)
+        score -= features.honorCount * 2.5  // 每张风牌扣2.5分
+      } else {
+        score += 12.0  // 无风牌→清一色大加分
       }
       // ★ V2.13: 门清bonus — 无副露时鼓励门清
       const _exposedCount = (input.player.hand.exposedMelds || []).length
