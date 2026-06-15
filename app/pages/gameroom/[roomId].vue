@@ -86,22 +86,12 @@
           <span class="reconnect-spinner">🔌</span>
           丢失连接,轮询中…
         </div>
-        <!-- 造反成功弹窗（显示手牌） -->
-        <div v-if="rebelEvent" class="rebel-overlay">
-          <div class="rebel-card">
-            <div class="rebel-icon">⚔️🀄</div>
-            <p class="rebel-title">{{ rebelEvent.playerName }} 造反了!</p>
-            <p class="rebel-hand-label">手牌:</p>
-            <div class="rebel-hand-tiles">
-              <span v-for="t in rebelEvent.hand" :key="t.id" class="rebel-tile" :class="'tile-' + t.suit + '-' + t.value">
-                {{ t.suit === 'wan' ? '万' : t.suit === 'dots' ? '筒' : t.suit === 'tiao' ? '条' : t.suit === 'feng' ? ['东','南','西','北'][t.value-1] : ['中','发','白'][t.value-1] }}{{ t.suit === 'wan' || t.suit === 'dots' || t.suit === 'tiao' ? t.value : "" }}
-              </span>
-            </div>
-            <div class="rebel-multiplier">翻倍! 即将开始下一局</div>
-            <div class="rebel-countdown-wrap">
-              <div class="rebel-countdown-bar" :style="{ width: rebelCountdownPercent + '%' }"></div>
-              <span class="rebel-countdown-text">{{ rebelCountdownSec }}s</span>
-            </div>
+        <!-- 造反成功弹窗（复用聚义样式） -->
+        <div v-if="rebelEvent" class="liang-shan-overlay">
+          <div class="liang-shan-card">
+            <div class="liang-shan-icon">⚔️⚔️⚔️</div>
+            <p class="liang-shan-title">造反成功,共上梁山!</p>
+            <p class="liang-shan-sub">本局结束 · 下把翻倍</p>
           </div>
         </div>
         <!-- 谢谢带头大哥弹窗 -->
@@ -3253,29 +3243,6 @@ const isMyApprovalWaiting = computed(() => {
 })
 
 // 审批弹窗倒计时(3秒)
-let rebelTimer_ = null
-const rebelCountdownSec = ref(3)
-const rebelCountdownPercent = ref(100)
-watch(rebelEvent, (event) => {
-  if (rebelTimer_) { clearInterval(rebelTimer_); rebelTimer_ = null }
-  if (!event) return
-  const totalMs = event.rebelEndTime - Date.now()
-  rebelCountdownSec.value = Math.ceil(totalMs / 1000)
-  rebelCountdownPercent.value = 100
-  const end = event.rebelEndTime
-  const tick = () => {
-    const remaining = Math.max(0, end - Date.now())
-    rebelCountdownSec.value = Math.ceil(remaining / 1000)
-    rebelCountdownPercent.value = (remaining / totalMs) * 100
-    if (remaining <= 0 && rebelTimer_) {
-      clearInterval(rebelTimer_)
-      rebelTimer_ = null
-    }
-  }
-  tick()
-  rebelTimer_ = setInterval(tick, 100)
-})
-
 const approvalCountdownRatio = computed(() => {
   const expiresAt = actionApprovalEvent.value?.expiresAt
   if (!expiresAt) return 1
@@ -4945,17 +4912,12 @@ watch(() => gameState.value, (newState, oldState) => {
 
   // 造反成功检测（跟聚义一样的流程）
   if ((newState as any).rebelSuccess && !showLiangShanOverlay.value) {
-    rebelEvent.value = {
-      playerId: '',
-      playerName: (newState as any).rebelPlayerName || '',
-      hand: (newState as any).rebelHand || [],
-      rebelEndTime: Date.now() + 3000
-    }
+    rebelEvent.value = { playerId: '', playerName: '' }
     showSettlement.value = false
     setTimeout(() => {
       rebelEvent.value = null
       void startNextRound()
-    }, 3000)
+    }, 1800)
   }
 
   // 被聚义QJ线突破提醒(红色高亮)

@@ -1350,6 +1350,7 @@ class GameManager {
     game.customScoringMode = null;
     game.liangShanSuccess = undefined;
     game.liangShanVotes = [];
+    game.rebelVotes = [];
     game.discardPile = [];
     game.actionHistory = [];
     game.pendingActions = [];
@@ -1785,6 +1786,7 @@ class GameManager {
     }
     game.liangShanSuccess = undefined;  // 清除聚义成功标记
     game.liangShanVotes = [];  // 重置聚义投票，新局允许再次发起
+    game.rebelVotes = [];  // 重置造反投票
     // 清空上一局残留状态
     game.discardPile = [];
     game.pendingActions = [];
@@ -2180,17 +2182,20 @@ class GameManager {
       return pendingAction.availableActions;
     }
 
-    // 梁山聚义:前三巡(出牌轮次)可投票,没投过+活跃+倍数未达8倍上限
+    // 梁山聚义/造反:前三巡(出牌轮次)可投票,没投过+活跃+倍数未达8倍上限
     // 巡数 = 出牌次数(DISCARD action)，三巡以内(=0,1,2)可投
     const discardCount = game.actionHistory.filter(a => a.type === ActionType.DISCARD).length;
     if (game.phase === GamePhase.PLAYING && player.status === PlayerStatus.PLAYING && discardCount < 3) {
-      // 全局倍数已达8倍上限时,禁止梁山聚义
       const effectiveGlobal = Math.min((game.inheritMultiplier ?? 1) * (game.roundMultiplier ?? 1), 8);
       const atMultiplierCap = effectiveGlobal >= 8;
       if (!atMultiplierCap) {
-        const votes = game.liangShanVotes || [];
-        if (!votes.includes(playerId)) {
+        const liangVotes = game.liangShanVotes || [];
+        if (!liangVotes.includes(playerId)) {
           actions.push(ActionType.LIANG_SHAN);
+        }
+        const rebelVotes = game.rebelVotes || [];
+        if (!rebelVotes.includes(playerId)) {
+          actions.push(ActionType.REBEL);
         }
       }
     }
@@ -2599,7 +2604,7 @@ class GameManager {
 
       case ActionType.REBEL:
         console.log(`[executeAction] ${player.name} REBEL → handleRebel`);
-        await this.handleRebel(game, player);
+        this.handleRebel(game, player);
         break;
 
       case ActionType.LIANG_SHAN:
@@ -3594,8 +3599,8 @@ class GameManager {
    * 触发条件: 五毒散(见 isFivePoison)
    * 效果: 本局结束,下局倍数×2,造反者成为庄家
    */
-  private async handleRebel(game: GameState, player: Player): Promise<void> {
-    return this.actionHandler.handleRebel(game, player);
+  private handleRebel(game: GameState, player: Player): void {
+    this.actionHandler.handleRebel(game, player);
   }
 
   /**
