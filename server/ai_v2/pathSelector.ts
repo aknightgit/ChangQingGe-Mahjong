@@ -304,8 +304,9 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       }
       // V2.13: 恢复longestSuitCount系数(3.0), 改用风牌惩罚区分混一色和清一色
       score += features.longestSuitCount * 3.0
-      score += features.honorCount * 1.2
-      score += features.honorPairCount * 1.0
+      // V2.14: 降低honorCount系数(1.2→0.8) + honorPairCount(1.0→0.5) → 混一色→50%
+      score += features.honorCount * 0.8
+      score += features.honorPairCount * 0.5
       score += features.wildCount * 3.0
       // V2.13: 有风牌→扣分(混一色扣分,但清一色不扣) → 混一色→50%
       // 无风牌→加分(纯清一色加分) → 清一色→20%

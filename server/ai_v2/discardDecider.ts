@@ -366,51 +366,39 @@ function scoreByRoute(input: RouteDiscardInput): number {
         return (count >= 2 ? -4.4 : -2.5) + (nearby > 0 ? -1.2 : 0) + (count >= 2 ? -globalPairProtection : 0)
       }
       if (isHonor(tile)) {
-        // ★ V2.7 Phase 1: 已接近清一色(可升级), 坚决打掉风/箭
+        // ★ V2.14: 核心改动 — 混一色阶段积极打风牌转清一色
+        // 不再依赖pureFlushUpgradeReady, 只要长门够强+风牌少→坚决打风牌
+        const _longestSuit = routeState.features.longestSuitCount || 0
+        const _secondSuit = routeState.features.secondSuitCount || 0
+        const _honorPairCount = routeState.features.honorPairCount || 0
+        const _isExposedSingleSuit = (routeState.features as any).isExposedSingleSuit === true
+        
+        // 场景1: 已接近清一色(可升级)
         if (routeState.features.pureFlushUpgradeReady) {
-          // 升级时大幅鼓励打风牌(无论对子还是单张)
-          const _isExposedSingleSuit = (routeState.features as any).isExposedSingleSuit === true
-          if (_isExposedSingleSuit) {
-            // 门口已单门 → 风牌坚决打掉(+9.0/+7.5)
-            return count >= 2 ? 9.0 : 7.5
-          }
+          if (_isExposedSingleSuit) return count >= 2 ? 9.0 : 7.5
           return count >= 2 ? 7.0 : 5.5
         }
-        // ★ V2.7: 有百搭时，风牌可以被百搭替代 → 积极打风牌转清一色
-        // 百搭当数牌用，风牌是累赘
-        // V2.10: 百搭≥2时温和鼓励打风牌
+        // 场景2: 长门>=7 + 风牌对子<=1 → 打风牌转清一色（即使未升级）
+        if (_longestSuit >= 7 && _honorPairCount <= 1 && _secondSuit <= 2) {
+          return count >= 2 ? 5.5 : 4.5  // 积极打风牌
+        }
+        // 场景3: 门口已单门 → 无条件打风牌
+        if (_isExposedSingleSuit) {
+          return count >= 2 ? 3.0 : 2.0
+        }
+        // 场景4: 有百搭时，风牌可以被百搭替代
         const wildCount = input.routeState?.features?.wildCount ?? 0
         if (wildCount >= 2) {
-          // 百搭≥2时适度鼓励
-          const honorPairCount = routeState.features.honorPairCount || 0
-          if (honorPairCount <= 2) {
-            return count >= 2 ? 4.5 : 3.5
-          }
+          if (_honorPairCount <= 2) return count >= 2 ? 4.5 : 3.5
           return count >= 2 ? 3.0 : 2.0
         }
         if (wildCount >= 1) {
-          // ★ V2.7: 有百搭+风牌<2对时，更激进地打风牌转清一色
-          const honorPairCount = routeState.features.honorPairCount || 0
-          if (honorPairCount <= 1) {
-            // 风牌少，百搭当数牌补位 → 大幅鼓励打风牌
-            return count >= 2 ? 4.0 : 3.0
-          }
-          // 风牌≥2对时适度鼓励
+          if (_honorPairCount <= 1) return count >= 2 ? 4.0 : 3.0
           return count >= 2 ? 2.5 : 1.5
         }
-        // 无百搭时保留风牌(等积累够了转风一色)
-        // V2.7: 但门口已单门时，应更激进打风牌转清一色
-        const _exposedSingleSuitHonor = (routeState.features as any).isExposedSingleSuit === true
-        if (count >= 2) {
-          if (_exposedSingleSuitHonor) {
-            return 1.0  // 门口已单门时, 风牌对子也要打
-          }
-          return -3.0  // 风牌对子强保留(等碰或转风一色)
-        }
-        if (_exposedSingleSuitHonor) {
-          return 0.5  // 门口已单门时, 风牌单张也要打
-        }
-        return -1.0  // 风牌单张轻保留(等积累)
+        // 无百搭 + 无清一色倾向 → 保留风牌
+        if (count >= 2) return -3.0  // 风牌对子强保留
+        return -1.0  // 风牌单张轻保留
       }
       // ★ V2.7 Phase 1.1: 门口已单门时，非 targetSuit 数牌要更坚决打掉
       const _isExposedSingleSuit = (routeState.features as any).isExposedSingleSuit === true
