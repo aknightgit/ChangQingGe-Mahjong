@@ -372,13 +372,36 @@ function scoreByRoute(input: RouteDiscardInput): number {
           if (_isExposedSingleSuit) return count >= 2 ? 9.0 : 7.5
           return count >= 2 ? 7.0 : 5.5
         }
-        // ★ V2.14: 长门>=8 + 风牌对子<=1 → 适度打风牌转清一色
+        // ★ V2.14: 长门>=7 + 风牌对子<=1 → 打风牌转清一色(温和)
         const _longestSuit = routeState.features.longestSuitCount || 0
         const _honorPairCount = routeState.features.honorPairCount || 0
         const _secondSuit = routeState.features.secondSuitCount || 0
         const _isExposedSingleSuit = (routeState.features as any).isExposedSingleSuit === true
         if (_longestSuit >= 8 && _honorPairCount <= 1 && _secondSuit <= 1) {
-          return count >= 2 ? 3.5 : 2.5  // 适度打风牌(比保留强)
+          return count >= 2 ? 3.5 : 2.5
+        }
+        if (_isExposedSingleSuit) {
+          return count >= 2 ? 3.0 : 2.0
+        }
+        const wildCount = input.routeState?.features?.wildCount ?? 0
+        if (wildCount >= 2) {
+          if (_honorPairCount <= 2) return count >= 2 ? 4.5 : 3.5
+          return count >= 2 ? 3.0 : 2.0
+        }
+        if (wildCount >= 1) {
+          if (_honorPairCount <= 1) return count >= 2 ? 4.0 : 3.0
+          return count >= 2 ? 2.5 : 1.5
+        }
+        if (count >= 2) return -3.0
+        return -1.0
+      }
+        // ★ V2.14: 长门>=7 + 风牌对子<=1 → 适度打风牌转清一色
+        const _longestSuit = routeState.features.longestSuitCount || 0
+        const _honorPairCount = routeState.features.honorPairCount || 0
+        const _secondSuit = routeState.features.secondSuitCount || 0
+        const _isExposedSingleSuit = (routeState.features as any).isExposedSingleSuit === true
+        if (_longestSuit >= 7 && _honorPairCount <= 1 && _secondSuit <= 1) {
+          return count >= 2 ? 4.5 : 3.5  // 适度打风牌
         }
         // 门口已单门 → 打风牌
         if (_isExposedSingleSuit) {
