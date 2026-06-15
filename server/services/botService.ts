@@ -2846,15 +2846,6 @@ export async function shouldClaimPendingAction(
         selfHandTypes.includes(HandType.FENG_PENG) ||
         selfHandTypes.includes(HandType.ALL_WIND)
       if ((selfIsPengOrHalfFlush || selfHasPengOrFlush) && selfIsCleanExposure) {
-        // ★ V2.15: 牌局未过半+有百搭(>=1)+数牌长门够→自摸混一色不胡,等清一色
-        const _selfWallRemaining = game.wall?.length || 0
-        const _selfNumSuitCount = selfConcealed.filter(t => t.suit !== 'feng' && t.suit !== 'jian' && t.suit !== 'hua' && !isWildTile(t, game)).length
-        const _selfHonorCount = selfConcealed.filter(t => (isWind(t) || isDragon(t)) && !isWildTile(t, game)).length
-        // 牌墙>50% + 百搭>=1 + 数牌>=5 + 风牌<=2 → 不胡等清一色
-        if (_selfWallRemaining > 50 && selfWildCount >= 1 && _selfNumSuitCount >= 5 && _selfHonorCount <= 2) {
-          traceClaim(player, game, 'hu-self-wait-pure-flush', `wild=${selfWildCount} numSuit=${_selfNumSuitCount} honor=${_selfHonorCount} wall=${_selfWallRemaining} → PASS, aim for 清一色 (early game)`)
-          return ActionType.PASS
-        }
         traceClaim(player, game, 'hu-self-no-flower', `route=${selfCurrentRoute} types=[${selfHandTypes}] cleanExposure=true → 无花自摸=10点`)
         return ActionType.HU
       }
@@ -3023,17 +3014,7 @@ export async function shouldClaimPendingAction(
         claimHandTypes.includes(HandType.ALL_WIND)
       const claimIsDaDiao = hand.filter(t => !isFlower(t)).length === 1
       if ((isPengOrHalfFlush || claimHasPengOrFlush) && isCleanExposure && !claimIsDaDiao) {
-        // ★ V2.15: 牌局未过半+有百搭(>=1)+数牌长门够→捉冲混一色应PASS等清一色
-        // 但不能太激进PASS → 流局率不能高于4%
-        const _claimWallRemaining = game.wall?.length || 0
-        const _numSuitCount = hand.filter(t => t.suit !== 'feng' && t.suit !== 'jian' && t.suit !== 'hua' && !isWildTile(t, game)).length
-        const _honorCount = hand.filter(t => (isWind(t) || isDragon(t)) && !isWildTile(t, game)).length
-        // 牌墙>50%(未过半) + 百搭>=1 + 数牌>=6 + 风牌<=1 → 放弃混一色,等清一色(严格条件)
-        if (_claimWallRemaining > 50 && wildCount >= 1 && _numSuitCount >= 6 && _honorCount <= 1) {
-          traceClaim(player, game, 'hu-wait-pure-flush-early', `wild=${wildCount} numSuit=${_numSuitCount} honor=${_honorCount} wall=${_claimWallRemaining} → PASS, aim for 清一色 (early game)`)
-          return ActionType.PASS
-        }
-        // V2.15: 听牌>=6张才PASS等自摸(降流局+降1人胡)
+        // V2.15: 听牌>=6张才PASS等自摸, 否则直接胡(降流局+降1人胡)
         const _tingTilesForNoFlower = countWinningTilesForHand(hand, exposedMelds.length, game)
         if (_tingTilesForNoFlower >= 6) {
           traceClaim(player, game, 'hu-no-flower-block', `route=${currentRoute} types=[${claimHandTypes}] cleanExposure=true tingTiles=${_tingTilesForNoFlower} → decline, wait for 无花自摸`)
