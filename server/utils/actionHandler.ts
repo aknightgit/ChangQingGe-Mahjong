@@ -1347,6 +1347,7 @@ export class ActionHandler {
 
       if (availableActions.length > 0) {
         availableActions.push(ActionType.PASS);
+        console.log(`[checkPending] ${player.name.substring(0,8)} actions=${availableActions.join(',')} tile=${discardedTile.suit}-${discardedTile.value}`);
         game.pendingActions.push({
           playerId: player.id,
           availableActions,
