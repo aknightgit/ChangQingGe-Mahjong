@@ -3024,42 +3024,23 @@ export async function shouldClaimPendingAction(
       const claimIsDaDiao = hand.filter(t => !isFlower(t)).length === 1
       if ((isPengOrHalfFlush || claimHasPengOrFlush) && isCleanExposure && !claimIsDaDiao) {
         // ★ V2.15: 牌局未过半+有百搭(>=1)+数牌长门够→捉冲混一色应PASS等清一色
+        // 但不能太激进PASS → 流局率不能高于4%
         const _claimWallRemaining = game.wall?.length || 0
         const _numSuitCount = hand.filter(t => t.suit !== 'feng' && t.suit !== 'jian' && t.suit !== 'hua' && !isWildTile(t, game)).length
         const _honorCount = hand.filter(t => (isWind(t) || isDragon(t)) && !isWildTile(t, game)).length
-        // 牌墙>50%(未过半) + 百搭>=1 + 数牌>=5 + 风牌<=2 → 放弃混一色,等清一色
-        if (_claimWallRemaining > 50 && wildCount >= 1 && _numSuitCount >= 5 && _honorCount <= 2) {
+        // 牌墙>50%(未过半) + 百搭>=1 + 数牌>=6 + 风牌<=1 → 放弃混一色,等清一色(严格条件)
+        if (_claimWallRemaining > 50 && wildCount >= 1 && _numSuitCount >= 6 && _honorCount <= 1) {
           traceClaim(player, game, 'hu-wait-pure-flush-early', `wild=${wildCount} numSuit=${_numSuitCount} honor=${_honorCount} wall=${_claimWallRemaining} → PASS, aim for 清一色 (early game)`)
           return ActionType.PASS
         }
-        // V2.13: 听牌>=10张才PASS等自摸, 否则捉冲 → 降流局
+        // V2.15: 听牌>=6张才PASS等自摸(从10→6, 让更多局胡牌降流局)
         const _tingTilesForNoFlower = countWinningTilesForHand(hand, exposedMelds.length, game)
-        if (_tingTilesForNoFlower >= 10) {
+        if (_tingTilesForNoFlower >= 6) {
           traceClaim(player, game, 'hu-no-flower-block', `route=${currentRoute} types=[${claimHandTypes}] cleanExposure=true tingTiles=${_tingTilesForNoFlower} → decline, wait for 无花自摸`)
           return ActionType.PASS
         }
         // 听牌少时直接胡
         traceClaim(player, game, 'hu-no-flower-low-ting', `route=${currentRoute} types=[${claimHandTypes}] cleanExposure=true tingTiles=${_tingTilesForNoFlower} → accept discard win (low ting)`)
-      }
-        // 听牌少时直接胡
-        traceClaim(player, game, 'hu-no-flower-low-ting', `route=${currentRoute} types=[${claimHandTypes}] cleanExposure=true tingTiles=${_tingTilesForNoFlower} → accept discard win (low ting)`)
-      }
-
-      // ★ V2.15: 牌局未过半+百搭>=2 → 捉冲混一色应PASS等清一色
-      // 牌墙>50%时，清一色潜力大→放弃当前混一色胡牌等更大的牌
-      if (wildCount >= 2 && claimHasPengOrFlush && claimHandTypes.includes(HandType.HALF_FLUSH)) {
-        const _numSuitCount = hand.filter(t => t.suit !== 'feng' && t.suit !== 'jian' && t.suit !== 'hua' && !isWildTile(t, game)).length
-        const _honorCount = hand.filter(t => (isWind(t) || isDragon(t)) && !isWildTile(t, game)).length
-        // 牌墙>50%(未过半) + 百搭>=2 + 数牌长门>=4 → 放弃混一色捉冲, 等清一色
-        if (wallRemaining > 50 && _numSuitCount >= 4 && _honorCount <= 3) {
-          traceClaim(player, game, 'hu-wait-pure-flush-early', `wild=${wildCount} numSuit=${_numSuitCount} honor=${_honorCount} wall=${wallRemaining} → PASS, aim for 清一色 (early game)`)
-          return ActionType.PASS
-        }
-        // 牌墙>30% + 百搭>=3 + 数牌长门>=5 → 也等清一色
-        if (wallRemaining > 30 && wildCount >= 3 && _numSuitCount >= 5 && _honorCount <= 2) {
-          traceClaim(player, game, 'hu-wait-pure-flush-3wild', `wild=${wildCount} numSuit=${_numSuitCount} honor=${_honorCount} wall=${wallRemaining} → PASS, aim for 清一色 (3+ wilds)`)
-          return ActionType.PASS
-        }
       }
 
       // 利益最大化: 期望收益高于捉冲 → 放弃捉冲
