@@ -2956,11 +2956,7 @@ class GameManager {
     for (const candidate of stage) {
       const candidatePlayer = game.players.find(p => p.id === candidate.playerId);
       if (!candidatePlayer) continue;
-      const expiresAt = Date.now() + this.timerManager.getHumanClaimDecisionTimeoutMs(
-        game,
-        candidatePlayer,
-        candidate.availableActions as ActionType[]
-      );
+      const expiresAt = Date.now() + 60000; // ★ K哥铁律: claim pending持续60秒
       const existingPending = game.pendingActions.find(pa => pa.playerId === candidate.playerId);
       if (existingPending) {
         const previousHadHu = existingPending.availableActions.includes(ActionType.HU);
@@ -3106,7 +3102,7 @@ class GameManager {
       const existingPending = game.pendingActions.find(pa => pa.playerId === c.playerId);
       if (!existingPending) {
         const label = requesterAction === 'chow' ? '吃' : requesterAction === 'peng' ? '碰' : '杠';
-        const expiresAt = Date.now() + this.timerManager.getHumanClaimDecisionTimeoutMs(game, candPlayer, c.availableActions);
+        const expiresAt = Date.now() + 60000 // ★ K哥铁律: claim pending持续60秒 // this.timerManager.getHumanClaimDecisionTimeoutMs(game, candPlayer, c.availableActions);
         game.pendingActions.push({
           playerId: c.playerId,
           availableActions: c.availableActions,
@@ -3755,13 +3751,13 @@ class GameManager {
 
       if (actions.length > 0) {
         actions.push(ActionType.PASS);
-        const _expiresAt = Date.now() + this.timerManager.getHumanClaimDecisionTimeoutMs(game, player, actions);
+        const _expiresAt = Date.now() + 60000 // ★ K哥铁律: claim pending持续60秒 // this.timerManager.getHumanClaimDecisionTimeoutMs(game, player, actions);
         console.log(`[checkPendingActions] player=${player.name.substring(0,8)} actions=${actions} expiresAt=${_expiresAt} now=${Date.now()} diff=${_expiresAt - Date.now()}ms`);
         game.pendingActions.push({
           playerId: player.id,
           availableActions: actions,
           tile: discardedTile,
-          expiresAt: Date.now() + this.timerManager.getHumanClaimDecisionTimeoutMs(game, player, actions)
+          expiresAt: Date.now() + 60000 // ★ K哥铁律: claim pending持续60秒
         });
       }
     }
@@ -3804,7 +3800,7 @@ class GameManager {
               selectedChowTileIds: this.isPlayerBotControlled(chowPlayer)
                 ? selectBotChowTileIds(chowPlayer, game, discardedTile, chowOptions)
                 : undefined,
-              expiresAt: Date.now() + this.timerManager.getHumanClaimDecisionTimeoutMs(game, chowPlayer, [ActionType.CHOW, ActionType.PASS])
+              expiresAt: Date.now() + 60000 // ★ K哥铁律: claim pending持续60秒
             });
           }
         }
