@@ -395,35 +395,8 @@ function scoreByRoute(input: RouteDiscardInput): number {
         if (count >= 2) return -3.0
         return -1.0
       }
-        // ★ V2.14: 长门>=7 + 风牌对子<=1 → 适度打风牌转清一色
-        const _longestSuit = routeState.features.longestSuitCount || 0
-        const _honorPairCount = routeState.features.honorPairCount || 0
-        const _secondSuit = routeState.features.secondSuitCount || 0
-        const _isExposedSingleSuit = (routeState.features as any).isExposedSingleSuit === true
-        if (_longestSuit >= 7 && _honorPairCount <= 1 && _secondSuit <= 1) {
-          return count >= 2 ? 4.5 : 3.5  // 适度打风牌
-        }
-        // 门口已单门 → 打风牌
-        if (_isExposedSingleSuit) {
-          return count >= 2 ? 3.0 : 2.0
-        }
-        // 有百搭时，风牌可以被百搭替代
-        const wildCount = input.routeState?.features?.wildCount ?? 0
-        if (wildCount >= 2) {
-          if (_honorPairCount <= 2) return count >= 2 ? 4.5 : 3.5
-          return count >= 2 ? 3.0 : 2.0
-        }
-        if (wildCount >= 1) {
-          if (_honorPairCount <= 1) return count >= 2 ? 4.0 : 3.0
-          return count >= 2 ? 2.5 : 1.5
-        }
-        // 无百搭 + 无清一色倾向 → 保留风牌
-        if (count >= 2) return -3.0
-        return -1.0
-      }
       // ★ V2.7 Phase 1.1: 门口已单门时，非 targetSuit 数牌要更坚决打掉
-      const _isExposedSingleSuit = (routeState.features as any).isExposedSingleSuit === true
-      if (_isExposedSingleSuit && tile.suit !== routeState.targetSuit && tile.suit !== 'hua') {
+      if ((routeState.features as any).isExposedSingleSuit === true && tile.suit !== routeState.targetSuit && tile.suit !== 'hua') {
         // 门口已单门 → 非清一色花色的数牌坚决打掉 (+9.0 远超普通 +5.8)
         return 9.0 + (tile.suit === shortestSuit ? 1.5 : 0)
       }
