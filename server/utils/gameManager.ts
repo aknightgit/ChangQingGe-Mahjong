@@ -351,10 +351,10 @@ class GameManager {
         // ★ 保底: 没有expiresAt的pending action，用game.lastActionTime+10s作为超时
         const fallbackExpiry = (game.lastActionTime || 0) + 10000;
         if (fallbackExpiry > now) return true; // 还在保底窗口内
-        return pendingAction.playerId === currentPlayerId; // 超时了，保留下家
+        return false; // 超时了，过期清除（K哥6565房：test玩家犹豫期结束必须清)
       }
       if (pendingAction.expiresAt > now) return true; // 未过期保留
-      return pendingAction.playerId === currentPlayerId;
+      return false; // 过期清除(原逻辑保留下家错误，导致currentPlayer位置卡住)
     });
     if (before !== game.pendingActions.length) {
       console.log(`[clearExpired] game=${gameId8} BEFORE=${before} AFTER=${game.pendingActions.length} cleared=${before - game.pendingActions.length} currentPlayer=${currentPlayerId?.substring(0, 8)}`);
@@ -605,6 +605,8 @@ class GameManager {
         // 修复竞态:如果牌已被bot吃/碰消耗(discardPile变短),不要auto-pass
         // handleBotPendingActions已经处理了,此时pending是新的
         // ★ BUG修复(2026-06-09): 自摸胡的pending action的tile是从牌墙摸的(不在discardPile),不能误判为claimed
+        // ★ TDZ修复(2026-06-15 K哥6565房): currentPlayer 需提前声明供下方 lambda 引用
+        const currentPlayer = game.players[game.currentPlayerIndex];
         const discardIds = new Set(game.discardPile.map(t => t.id));
         const tileClaimed = game.pendingActions.some(pa => {
           if (!pa.tile?.id) return false;
@@ -625,7 +627,7 @@ class GameManager {
 
         const allClaimMode = (game as any).allClaimMode;
         const now = Date.now();
-        const currentPlayer = game.players[game.currentPlayerIndex];
+        // currentPlayer 已在 tileClaimed 检测前声明（避免下方 lambda TDZ）
         const expired = game.pendingActions.filter(pa =>
           (!pa.expiresAt || pa.expiresAt <= now)
         );
@@ -673,6 +675,12 @@ class GameManager {
             await this.persistGame(game);
             this.broadcastGameState(gameId);
             this.scheduleBotDiscard(gameId, currentPlayer.id);
+            return;
+          }
+          // ★ Bug修复(2026-06-15 K哥6565房)：人类玩家犹豫期结束后也要推进下家摸牌
+          if (currentPlayer && currentPlayer.status === PlayerStatus.PLAYING && this.autoDrawForCurrentPlayer(game)) {
+            await this.persistGame(game);
+            this.broadcastGameState(gameId);
             return;
           }
           await this.persistGame(game);

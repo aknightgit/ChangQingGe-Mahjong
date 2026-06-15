@@ -894,9 +894,10 @@ export class ActionHandler {
     // ★ 安全同步：用实际 WON 玩家数，防止跨局残留值导致误判
     game.winnersCount = game.players.filter(p => p.status === PlayerStatus.WON).length;
     const remainingActive = game.players.filter(p => p.status === PlayerStatus.PLAYING).length;
-    // ★ K哥铁律(2026-06-10): 每次胡牌都进 REVEAL 亮牌阶段
-    // 1家胡也亮牌，让玩家看到胡牌牌面
-    if (game.winnersCount >= 1 || remainingActive <= 0) {
+    // ★ K哥铁律(2026-06-05/6): 血战到底 — 至少3人胡+或剩余active<=0才进REVEAL→ENDED
+    // 1家胡后牌局继续，决不允许1家胡就endgame
+    // (6/10 误改为>=1导致1胡就结束，K哥6565房反馈后退回)
+    if (game.winnersCount >= 3 || remainingActive <= 0) {
       // 【修复】进入5秒亮牌阶段，再进入结算
       // 如果已处于REVEAL(前人胡已设), 推迟 1s 直接 endRound, 避免多个 5s setTimeout 抢跑
       // ★ V2.12: 去重 —— 只设一个 1s 定时器, 后续胡不再重复设
