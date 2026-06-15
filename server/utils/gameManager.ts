@@ -4074,23 +4074,12 @@ class GameManager {
           delete (freshGame as any)._freezeUntil;
 
           if (freshGame.pendingActions.length > 0) {
-            // ★ 修复: freeze到期时,当前玩家自己的claim pending应该自动PASS
-            // 玩家有整个freeze窗口(4秒)决定是否吃/碰/杠,freeze到期还没操作 → 自动PASS
-            const currentPid = freshGame.players[freezeCurrentIndex]?.id;
-            const myPending = freshGame.pendingActions.filter(pa => pa.playerId === currentPid);
-            if (myPending.length > 0) {
-              console.log(`[freeze] ${freshGame.players[freezeCurrentIndex]?.name} freeze expired, auto-PASSing own claim`);
-              freshGame.pendingActions = freshGame.pendingActions.filter(pa => pa.playerId !== currentPid);
-              freshGame.pengChowConflict = null;
-            }
-            // 还有其他玩家的claim pending → 等待他们决策
-            if (freshGame.pendingActions.length > 0) {
-              console.log(`[freeze] Pending actions active for other players, keeping claims (${freshGame.pendingActions.length} remaining)`);
-              await this.persistGame(freshGame);
-              this.broadcastGameState(game.gameId);
-              this.schedulePendingActionTimeout(game.gameId);
-              return;
-            }
+            // [Fix] hesitation/freeze expiry should not clear any player's claim options
+            console.log(`[freeze] Pending actions active for ${freshGame.players[freezeCurrentIndex]?.name}, keeping all claims`);
+            await this.persistGame(freshGame);
+            this.broadcastGameState(game.gameId);
+            this.schedulePendingActionTimeout(game.gameId);
+            return;
           }
 
           // 冻结窗口结束 → 人类玩家手动摸牌,AI自动摸牌
