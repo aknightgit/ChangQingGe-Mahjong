@@ -1470,6 +1470,8 @@ const evaluateViewport = () => {
 const isHiddenTile = (tile: any) => String(tile?.id || '').startsWith('hidden-') || tile?.value === 0
 const isOpponentHandRevealed = (player?: Player | null) => {
   if (!player || player.id === currentPlayer.value?.id) return false
+  // ★ 聚义/造反成功时不显示对手手牌
+  if ((gameState.value as any)?.liangShanSuccess || (gameState.value as any)?.rebelSuccess) return false
   // REVEAL 阶段:所有玩家手牌翻开
   if (gameState.value?.phase === GamePhase.REVEAL) return true
   const hand = player.hand?.concealedTiles || []
@@ -4296,8 +4298,8 @@ watch(() => gameState.value?.phase, (phase, oldPhase) => {
     // ★ 三家胡牌/验牌结束都进 ENDED，强制重置所有状态
     if (_revealCountdownTimer) { clearInterval(_revealCountdownTimer); _revealCountdownTimer = null }
     showWinnerReveal.value = false
-    // ★ 聚义不弹结算（但 liangShanSuccess 路径已被上面处理，这里是常规胡牌）
-    if (!(gameState.value as any)?.liangShanSuccess) {
+    // ★ 聚义/造反不弹结算，只显示成功弹窗
+    if (!(gameState.value as any)?.liangShanSuccess && !(gameState.value as any)?.rebelSuccess) {
       void fetchSettlement()
       showSettlement.value = true
       startWallExhaustedCountdown()
