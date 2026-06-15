@@ -121,8 +121,8 @@ export function buildFeatureSummary(input: {
   const secondSuitCount = orderedSuits[1]?.count || 0
   const shortestSuitEntry = [...orderedSuits].reverse().find(e => e.count > 0) || null
   // ★ V2.13: 碰碰胡潜质检测 (供 discardDecider 多路线感知使用)
-  // V2.9: 收紧 hunPengReady 条件 (longestSuit 6→7, honor 2→3) → 减少混碰 → 砍<10%
-  const hunPengReady = longestSuitCount >= 7 && honorCount >= 3 && secondSuitCount <= 1
+  // V2.9: 收紧 hunPengReady 条件 (longestSuit 7→8, honor 3→4) → 减少混碰 → 砍<10%
+  const hunPengReady = longestSuitCount >= 8 && honorCount >= 4 && secondSuitCount <= 1
   const qingPengReady = longestSuitCount >= 8 && secondSuitCount === 0 && honorCount <= 2
 
   // upstream analysis
@@ -434,7 +434,8 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
         reasons.push('qing_peng_push')
       }
       // V2.9: ALL_PUNGS 路线继续降权(2.5+0.3 → 1.2+0.2) → 减少混碰
-      if (hunPengReady) score += getPolicyValue(policy, 'hunPengPursuit') * (1.2 + features.honorPairCount * 0.2)
+      // V2.13: ALL_PUNGS hunPeng继续降权 → 混碰<10%
+      if (hunPengReady) score += getPolicyValue(policy, 'hunPengPursuit') * (0.8 + features.honorPairCount * 0.15)
       if (features.honorCount >= 6) score += getPolicyValue(policy, 'allHonorsPursuit') * 2.2
       // ★ V2.10 K哥铁律: ALL_PUNGS 路线(风碰) buff(与HONOR_HEAVY同一逻辑)
       const _apRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)

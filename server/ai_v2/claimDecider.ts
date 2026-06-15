@@ -555,22 +555,17 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
         }
       }
       if (hasHonorPairForClaim && !routeState.features.pureFlushUpgradeReady) {
-        // V2.8: 降低混碰倾向(1.5→0.7) + 弱保留混碰能力
-        // 风牌<6张时倾向不碰(继续清/混一色), 风牌多时适度碰
+        // V2.13: 进一步降混碰倾向, 仅风牌>=5张时碰(转风一色)
         const _exposedHonor = (routeState.features as any)._apExposedHonor || 0
         const _honorTotal = routeState.features.honorCount + _exposedHonor
-        if (_honorTotal < 4) {
-          // 风牌太少, 不碰 (优先清/混一色)
+        if (_honorTotal < 5) {
           return { allowed: false, tuneDelta: -1.0, reason: 'low_honor_skip_peng_for_flush' }
         }
-        // 风牌多, 适度碰
         return {
           allowed: true,
           tuneDelta:
-            0.7 + // 基础: 适度碰
-            routeGain * 0.05 +
-            (_honorTotal >= 6 ? 0.2 : 0) +
-            deadTilePungBonus,
+            0.5 + routeGain * 0.05 +
+            (_honorTotal >= 6 ? 0.2 : 0) + deadTilePungBonus,
           reason: 'hun_peng_moderate_claim',
         }
       }
@@ -586,11 +581,11 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       return {
         allowed: true,
         tuneDelta:
-          (isTargetSuit ? 0.52 : 0.18) +  // V2.13: 降低默认碰倾向 → 提高门清率
+          (isTargetSuit ? 0.38 : 0.12) +  // V2.13: 大幅降低默认碰倾向 → 提高门清率
           routeGain * 0.06 +
-          (routeState.features.pureFlushUpgradeReady && isTargetSuit ? 0.42 : 0) +
-          ((policy?.hunPengPursuit || 0) * (routeState.features.honorPairCount >= 1 && isTargetSuit ? 0.12 : 0)) +
-          ((policy?.qingPengPursuit || 0) * (routeState.features.secondSuitCount === 0 && isTargetSuit ? 0.08 : 0)),
+          (routeState.features.pureFlushUpgradeReady && isTargetSuit ? 0.38 : 0) +
+          ((policy?.hunPengPursuit || 0) * (routeState.features.honorPairCount >= 1 && isTargetSuit ? 0.10 : 0)) +
+          ((policy?.qingPengPursuit || 0) * (routeState.features.secondSuitCount === 0 && isTargetSuit ? 0.06 : 0)),
         reason: isTargetSuit
           ? (routeState.features.pureFlushUpgradeReady ? 'pure_flush_upgrade_target_claim' : 'target_suit_claim')
           : 'honor_support_claim',
