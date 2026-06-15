@@ -401,8 +401,9 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       const _ap_isAgg = _ap_pursuitVal >= 1.2
       score += features.pairCount * (5.2 + (_ap_isAgg ? 4.0 : 0))
       score += features.tripletCount * (5.8 + (_ap_isAgg ? 3.5 : 0))
-      // V2.7: 降低风牌对子加分(1.5+2.0=3.5)→ 减少混碰 → 转向清/混一色
-      score += features.honorPairCount * (1.2 + (_ap_isAgg ? 1.8 : 0))
+      // V2.7: 降低风牌对子加分 → 减少混碰 → 转向清/混一色
+      // V2.14: 进一步降权(1.2+1.8=3.0 → 0.5+0.5=1.0 per pair)
+      score += features.honorPairCount * (0.5 + (_ap_isAgg ? 0.5 : 0))
       score += features.wildCount * (2.8 + (_ap_isAgg ? 3.5 : 0))
       score += _ap_pursuitVal * 8.5
       score += getWildRouteBoost(policy, features.wildCount, 'allPungs') * 4.8
