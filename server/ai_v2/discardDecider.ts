@@ -383,19 +383,14 @@ function scoreByRoute(input: RouteDiscardInput): number {
         if (_isExposedSingleSuit) {
           return count >= 2 ? 3.0 : 2.0
         }
-        // ★ V2.15: 百搭>=2时→清一色强动力,风牌坚决打掉
+        // ★ V2.15: 有百搭(>=1)→清一色动力,风牌坚决打掉
         // 牌局未过半(牌墙>50%)时更激进
         const wildCount = input.routeState?.features?.wildCount ?? 0
         const wallRemaining = input.game?.wall?.length || 0
         const isEarlyGame = wallRemaining > 50  // 牌墙>50=未过半
-        if (wildCount >= 2) {
-          if (isEarlyGame) return count >= 2 ? 8.0 : 7.0  // 早期+2百搭→风牌坚决打
-          return count >= 2 ? 6.5 : 5.5  // 中后期→温和打风牌
-        }
         if (wildCount >= 1) {
-          if (isEarlyGame && _honorPairCount <= 1) return count >= 2 ? 5.5 : 4.5
-          if (_honorPairCount <= 1) return count >= 2 ? 4.5 : 3.5
-          return count >= 2 ? 3.0 : 2.0
+          if (isEarlyGame) return count >= 2 ? 7.5 : 6.5  // 早期+百搭→风牌坚决打
+          return count >= 2 ? 5.5 : 4.5  // 中后期→温和打风牌
         }
         if (count >= 2) return -3.0
         return -1.0
