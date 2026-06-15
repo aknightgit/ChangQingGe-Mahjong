@@ -348,13 +348,12 @@ class GameManager {
     const before = game.pendingActions.length;
     game.pendingActions = game.pendingActions.filter((pendingAction: any) => {
       if (!pendingAction.expiresAt) {
-        // ★ 保底: 没有expiresAt的pending action，用game.lastActionTime+10s作为超时
         const fallbackExpiry = (game.lastActionTime || 0) + 10000;
-        if (fallbackExpiry > now) return true; // 还在保底窗口内
-        return false; // 超时了，过期清除（K哥6565房：test玩家犹豫期结束必须清)
+        if (fallbackExpiry > now) return true;
+        return pendingAction.playerId === currentPlayerId; // 超时:保留当前玩家(下家),清除其他人
       }
       if (pendingAction.expiresAt > now) return true; // 未过期保留
-      return false; // 过期清除(原逻辑保留下家错误，导致currentPlayer位置卡住)
+      return pendingAction.playerId === currentPlayerId; // 过期:保留当前玩家(下家),清除其他人
     });
     if (before !== game.pendingActions.length) {
       console.log(`[clearExpired] game=${gameId8} BEFORE=${before} AFTER=${game.pendingActions.length} cleared=${before - game.pendingActions.length} currentPlayer=${currentPlayerId?.substring(0, 8)}`);
