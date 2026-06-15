@@ -366,27 +366,25 @@ function scoreByRoute(input: RouteDiscardInput): number {
         return (count >= 2 ? -4.4 : -2.5) + (nearby > 0 ? -1.2 : 0) + (count >= 2 ? -globalPairProtection : 0)
       }
       if (isHonor(tile)) {
-        // ★ V2.14: 核心改动 — 混一色阶段积极打风牌转清一色
-        // 不再依赖pureFlushUpgradeReady, 只要长门够强+风牌少→坚决打风牌
-        const _longestSuit = routeState.features.longestSuitCount || 0
-        const _secondSuit = routeState.features.secondSuitCount || 0
-        const _honorPairCount = routeState.features.honorPairCount || 0
-        const _isExposedSingleSuit = (routeState.features as any).isExposedSingleSuit === true
-        
-        // 场景1: 已接近清一色(可升级)
+        // ★ V2.7 Phase 1: 已接近清一色(可升级), 坚决打掉风/箭
         if (routeState.features.pureFlushUpgradeReady) {
+          const _isExposedSingleSuit = (routeState.features as any).isExposedSingleSuit === true
           if (_isExposedSingleSuit) return count >= 2 ? 9.0 : 7.5
           return count >= 2 ? 7.0 : 5.5
         }
-        // 场景2: 长门>=7 + 风牌对子<=1 → 打风牌转清一色（即使未升级）
-        if (_longestSuit >= 7 && _honorPairCount <= 1 && _secondSuit <= 2) {
-          return count >= 2 ? 5.5 : 4.5  // 积极打风牌
+        // ★ V2.14: 长门>=8 + 风牌对子<=1 → 适度打风牌转清一色
+        const _longestSuit = routeState.features.longestSuitCount || 0
+        const _honorPairCount = routeState.features.honorPairCount || 0
+        const _secondSuit = routeState.features.secondSuitCount || 0
+        const _isExposedSingleSuit = (routeState.features as any).isExposedSingleSuit === true
+        if (_longestSuit >= 8 && _honorPairCount <= 1 && _secondSuit <= 1) {
+          return count >= 2 ? 3.5 : 2.5  // 适度打风牌(比保留强)
         }
-        // 场景3: 门口已单门 → 无条件打风牌
+        // 门口已单门 → 打风牌
         if (_isExposedSingleSuit) {
           return count >= 2 ? 3.0 : 2.0
         }
-        // 场景4: 有百搭时，风牌可以被百搭替代
+        // 有百搭时，风牌可以被百搭替代
         const wildCount = input.routeState?.features?.wildCount ?? 0
         if (wildCount >= 2) {
           if (_honorPairCount <= 2) return count >= 2 ? 4.5 : 3.5
@@ -397,8 +395,8 @@ function scoreByRoute(input: RouteDiscardInput): number {
           return count >= 2 ? 2.5 : 1.5
         }
         // 无百搭 + 无清一色倾向 → 保留风牌
-        if (count >= 2) return -3.0  // 风牌对子强保留
-        return -1.0  // 风牌单张轻保留
+        if (count >= 2) return -3.0
+        return -1.0
       }
       // ★ V2.7 Phase 1.1: 门口已单门时，非 targetSuit 数牌要更坚决打掉
       const _isExposedSingleSuit = (routeState.features as any).isExposedSingleSuit === true
