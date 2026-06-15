@@ -242,7 +242,7 @@ export class ActionHandler {
           playerId: player.id,
           availableActions: [ActionType.HU, ActionType.PASS],
           tile: tile,
-          expiresAt: Date.now() + 60000 // ★ K哥铁律: 下家claim pending持续60秒,与autoTakeover超时一致
+          expiresAt: Date.now() + timerManager.getHesitationWindow(game) // 犹豫期到期后自动清除
         });
         this.deps.schedulePendingActionTimeout(game.gameId);
       }
@@ -1295,7 +1295,7 @@ export class ActionHandler {
             playerId: player.id,
             availableActions: [ActionType.HU, ActionType.PASS],
             tile: discardedTile,
-            expiresAt: Date.now() + 60000 // ★ K哥铁律: 下家claim pending持续60秒,与autoTakeover超时一致
+            expiresAt: Date.now() + timerManager.getHesitationWindow(game) // 犹豫期到期后自动清除
           });
         }
       }
@@ -1359,7 +1359,7 @@ export class ActionHandler {
               ? selectBotChowTileIds(player, game, discardedTile, chowOptions)
               : undefined
           } : {}),
-          expiresAt: Date.now() + 60000 // ★ K哥铁律: 下家claim pending持续60秒,与autoTakeover超时一致
+          expiresAt: Date.now() + timerManager.getHesitationWindow(game) // 犹豫期到期后自动清除
         });
       }
     }
