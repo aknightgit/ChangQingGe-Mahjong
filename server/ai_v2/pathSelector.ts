@@ -208,25 +208,16 @@ export function buildFeatureSummary(input: {
   // ★ V2.7: 升级条件放宽 - 门口已是单门 OR 手牌长门够强
   // 关键：已吃碰2-3口且都一个花色 → 应该积极转清一色
   // V2.9: 放宽 honorCount 限制(2/3→4/5张), 4张风向也可升级清一色
+  // V2.13: 放宽 pureFlushUpgradeReady 条件 → 更容易触发清一色升级
   const pureFlushUpgradeReady = (
-    // 条件A：门口副露已单门+门口吃了2口以上 (风向放宽到4)
-    (isExposedSingleSuit && exposedMelds.length >= 2 && honorCount <= 4) ||
-    // 条件B：手牌长门够强（8张以上）(风向放宽到4)
-    (effectiveLongestSuit >= 8 && secondSuitCount === 0 && honorCount <= 4)
+    // 条件A：门口副露已单门+门口吃了2口以上 (风向放宽到5)
+    (isExposedSingleSuit && exposedMelds.length >= 2 && honorCount <= 5) ||
+    // 条件B：手牌长门够强（7张以上）(风向放宽到5)
+    (effectiveLongestSuit >= 7 && secondSuitCount <= 1 && honorCount <= 5)
   )
-    // 风牌≤1对或全靠百搭补位时可升级
-    && (honorPairCount <= 1 || (hasWildWild && honorCount <= 3))
-    && (weakHonorPairCount <= 2 || hasWildWild || isExposedSingleSuit)
-    && honorCount <= 6  // 整体风向≤6张
+    && (honorPairCount <= 2 || (hasWildWild && honorCount <= 4))
+    && honorCount <= 7
     && estimatedRound <= 18
-    && input.tableThreat <= 0.65
-    && opponentOpenMelds <= 4
-    && downstreamPressure <= 0.85
-    && oneSuitOpponentCount === 0
-    && effectiveGlobalMultiplier <= 4
-    && doorFlowerCount <= 3
-    && !opponentCloseToWin
-    && !hasMutualBailout
   // ★ V2.7: 百搭+少风牌（<2对）时强力清一色倾向
   // V2.9: 进一步放宽 - 门口已单门+长门>=6即可积极转清一色
   // V2.10: 关键 - 百搭≥2时放宽, 但不要太激进
@@ -319,7 +310,7 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       // V2.13: 有风牌→扣分(混一色扣分,但清一色不扣) → 混一色→50%
       // 无风牌→加分(纯清一色加分) → 清一色→20%
       if (features.honorCount >= 1) {
-        score -= features.honorCount * 1.5  // 每张风牌扣1.5分
+        score -= features.honorCount * 2.0  // 每张风牌扣2.0分(更激进)
       }
       // ★ V2.13: 门清bonus — 无副露时鼓励门清
       const _exposedCount = (input.player.hand.exposedMelds || []).length
@@ -368,12 +359,6 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       if (features.allOpponentsAvoidSuit && features.allOpponentsAvoidSuit === targetSuit) { reasons.push('global_void_target'); score += 5 /* was: 2 */ }
       if (features.wildCount === 0) score += 1.1
       score += features.oneSuitOpponentCount * 0.8
-      // V2.13: 门清bonus — 无副露时鼓励门清
-      const _exposedCount = (input.player.hand.exposedMelds || []).length
-      if (_exposedCount === 0 && features.longestSuitCount >= 6) {
-        score += 10.0  // 门清大加分 → 鼓励不碰牌
-        reasons.push('menqing_flush_bonus')
-      }
       if (features.pureFlushUpgradeReady) {
         reasons.push('pure_flush_upgrade_ready')
         // ★ V2.13: 升级评分大幅提高 → 清一色目标20%
