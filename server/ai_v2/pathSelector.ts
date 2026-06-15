@@ -206,15 +206,17 @@ export function buildFeatureSummary(input: {
   const _honorPairOk = honorPairCount >= 1 || (hasWildWild && honorCount <= 2)
   // ★ V2.7: 升级条件放宽 - 门口已是单门 OR 手牌长门够强
   // 关键：已吃碰2-3口且都一个花色 → 应该积极转清一色
+  // V2.9: 放宽 honorCount 限制(2/3→4/5张), 4张风向也可升级清一色
   const pureFlushUpgradeReady = (
-    // 条件A：门口副露已单门+门口吃了2口以上
-    (isExposedSingleSuit && exposedMelds.length >= 2 && honorCount <= 2) ||
-    // 条件B：手牌长门够强（8张以上）
-    (effectiveLongestSuit >= 8 && secondSuitCount === 0 && honorCount <= 3)
+    // 条件A：门口副露已单门+门口吃了2口以上 (风向放宽到4)
+    (isExposedSingleSuit && exposedMelds.length >= 2 && honorCount <= 4) ||
+    // 条件B：手牌长门够强（8张以上）(风向放宽到4)
+    (effectiveLongestSuit >= 8 && secondSuitCount === 0 && honorCount <= 4)
   )
-    && (honorPairCount >= 1 || (hasWildWild && honorCount <= 2))
-    && (weakHonorPairCount >= 1 || hasWildWild || isExposedSingleSuit)
-    && weakHonorPairCount <= 1
+    // 风牌≤1对或全靠百搭补位时可升级
+    && (honorPairCount <= 1 || (hasWildWild && honorCount <= 3))
+    && (weakHonorPairCount <= 2 || hasWildWild || isExposedSingleSuit)
+    && honorCount <= 6  // 整体风向≤6张
     && estimatedRound <= 18
     && input.tableThreat <= 0.65
     && opponentOpenMelds <= 4
@@ -225,8 +227,8 @@ export function buildFeatureSummary(input: {
     && !opponentCloseToWin
     && !hasMutualBailout
   // ★ V2.7: 百搭+少风牌（<2对）时强力清一色倾向
-  // 关键：门口已单门 → 即使手牌还杂，也可积极转清一色
-  const wildPureFlushReady = (isExposedSingleSuit || (hasWildWild && honorPairCount <= 1)) && honorCount <= 4 && (effectiveLongestSuit >= 6)
+  // V2.9: 进一步放宽 - 门口已单门+长门>=6即可积极转清一色
+  const wildPureFlushReady = (isExposedSingleSuit || (hasWildWild && honorPairCount <= 2)) && honorCount <= 5 && (effectiveLongestSuit >= 6)
 
   // ★ V2: 生张计数
   const rawTileCount = countRawTiles(hand, game.discardPile || [])
@@ -310,9 +312,9 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       score += pureFlushBucketBoost * (features.secondSuitCount === 0 ? 2.2 : 1.1)
       score -= features.secondSuitCount * 2.5
       // ★ V2.2: （数字门+风箭）对子总共>=4 → 大幅提升混碰概率
-      // V2.8: 降低混碰加分(2.8+0.25 → 1.5+0.15), 不完全关闭(AI仍可走混碰但弱化)
+      // V2.9: 进一步降低混碰加分(1.5+0.15 → 0.8+0.1) → 混碰砍到<10%
       const totalPairsHunPeng = features.pairCount >= 4 && features.longestSuitCount >= 4 && features.secondSuitCount <= 1
-      if (hunPengReady || totalPairsHunPeng) score += getPolicyValue(policy, 'hunPengPursuit') * (1.5 + suitedPairCount * 0.15) * (totalPairsHunPeng ? 1.0 : 1)
+      if (hunPengReady || totalPairsHunPeng) score += getPolicyValue(policy, 'hunPengPursuit') * (0.8 + suitedPairCount * 0.1) * (totalPairsHunPeng ? 0.8 : 1)
       if (qingPengReady) score += getPolicyValue(policy, 'qingPengPursuit') * (2.4 + pureFlushBucketBoost * 0.6)
       score += getPolicyValue(policy, 'pureFlushPursuit') * Math.max(0, features.longestSuitCount - 6) * 0.8
       if (features.longestSuitCount >= 9) { reasons.push('half_flush_nine_tiles'); score += 16 }
@@ -347,23 +349,23 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       score += features.oneSuitOpponentCount * 0.8
       if (features.pureFlushUpgradeReady) {
         reasons.push('pure_flush_upgrade_ready')
-        // ★ V2.7 Phase 1: 升级评分大幅提高 8.5 → 14+(20-round)*0.6
-        score += 14.0 + Math.max(0, (20 - estimatedRound) * 0.6)
+        // ★ V2.9: 升级评分大幅提高 14→18+(20-round)*0.7 → 拉清一色
+        score += 18.0 + Math.max(0, (20 - estimatedRound) * 0.7)
       }
       // ★ V2.7: 百搭+少风牌 → 强力清一色倾向（即使升级条件未满）
       // 仅在已有清一色潜力时加分，避免空头奖励
-      if ((features as any).wildPureFlushReady && features.longestSuitCount >= 7) {
+      if ((features as any).wildPureFlushReady && features.longestSuitCount >= 6) {
         reasons.push('wild_pure_flush_ready')
-        // 大幅加分：有百搭当数牌补位，转清一色更可行
-        score += 14.0 + Math.max(0, (2 - (features.honorPairCount || 0)) * 3.5)
+        // V2.9: 大幅加分(14+3.5*dec → 16+4*dec)→ 拉清一色
+        score += 16.0 + Math.max(0, (2 - (features.honorPairCount || 0)) * 4.0)
       }
       // ★ V2.7 Phase 1.1: 门口副露已单门 → 强力清一色倾向
       // 关键洞察：吃碰2-3口后门口已是一个花色，手牌里其它花色必须坚决打掉
       if ((features as any).isExposedSingleSuit) {
         reasons.push('exposed_single_suit_flush_ready')
-        // 强力加分：门口已单门是清一色最可靠的信号
+        // V2.9: 强力加分(15+5*melds → 18+6*melds)→ 大幅拉清一色
         const exposedMeldsCount = (input.player.hand.exposedMelds || []).length
-        score += 15.0 + exposedMeldsCount * 5.0
+        score += 18.0 + exposedMeldsCount * 6.0
       }
       if (shouldStriveDraw) score -= 10
       break
@@ -412,9 +414,8 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
         score += 12  // 几乎纯数字门+全刻子 → 清碰路线
         reasons.push('qing_peng_push')
       }
-      // V2.8: ALL_PUNGS 路线适度保留混碰加分(5.4+0.8*honorPair → 2.5+0.3*honorPair)
-      // 不完全关闭, AI仍可走混碰但弱化, 避免过激导致全转混一色
-      if (hunPengReady) score += getPolicyValue(policy, 'hunPengPursuit') * (2.5 + features.honorPairCount * 0.3)
+      // V2.9: ALL_PUNGS 路线继续降权(2.5+0.3 → 1.2+0.2) → 减少混碰
+      if (hunPengReady) score += getPolicyValue(policy, 'hunPengPursuit') * (1.2 + features.honorPairCount * 0.2)
       if (features.honorCount >= 6) score += getPolicyValue(policy, 'allHonorsPursuit') * 2.2
       // ★ V2.10 K哥铁律: ALL_PUNGS 路线(风碰) buff(与HONOR_HEAVY同一逻辑)
       const _apRound = Math.max(1, Math.floor((input.game.discardPile?.length || 0) / 4) + 1)
