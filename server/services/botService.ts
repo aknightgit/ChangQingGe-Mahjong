@@ -3033,9 +3033,9 @@ export async function shouldClaimPendingAction(
           traceClaim(player, game, 'hu-wait-pure-flush-early', `wild=${wildCount} numSuit=${_numSuitCount} honor=${_honorCount} wall=${_claimWallRemaining} → PASS, aim for 清一色 (early game)`)
           return ActionType.PASS
         }
-        // V2.15: 听牌>=6张才PASS等自摸(从10→6, 让更多局胡牌降流局)
+        // V2.15: 听牌>=4张就胡(从6→4, 让更多局胡牌降1人胡率)
         const _tingTilesForNoFlower = countWinningTilesForHand(hand, exposedMelds.length, game)
-        if (_tingTilesForNoFlower >= 6) {
+        if (_tingTilesForNoFlower >= 4) {
           traceClaim(player, game, 'hu-no-flower-block', `route=${currentRoute} types=[${claimHandTypes}] cleanExposure=true tingTiles=${_tingTilesForNoFlower} → decline, wait for 无花自摸`)
           return ActionType.PASS
         }
