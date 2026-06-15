@@ -121,7 +121,8 @@ export function buildFeatureSummary(input: {
   const secondSuitCount = orderedSuits[1]?.count || 0
   const shortestSuitEntry = [...orderedSuits].reverse().find(e => e.count > 0) || null
   // ★ V2.13: 碰碰胡潜质检测 (供 discardDecider 多路线感知使用)
-  const hunPengReady = longestSuitCount >= 6 && honorCount >= 2 && secondSuitCount <= 1
+  // V2.9: 收紧 hunPengReady 条件 (longestSuit 6→7, honor 2→3) → 减少混碰 → 砍<10%
+  const hunPengReady = longestSuitCount >= 7 && honorCount >= 3 && secondSuitCount <= 1
   const qingPengReady = longestSuitCount >= 8 && secondSuitCount === 0 && honorCount <= 2
 
   // upstream analysis
@@ -228,7 +229,14 @@ export function buildFeatureSummary(input: {
     && !hasMutualBailout
   // ★ V2.7: 百搭+少风牌（<2对）时强力清一色倾向
   // V2.9: 进一步放宽 - 门口已单门+长门>=6即可积极转清一色
-  const wildPureFlushReady = (isExposedSingleSuit || (hasWildWild && honorPairCount <= 2)) && honorCount <= 5 && (effectiveLongestSuit >= 6)
+  // V2.10: 关键 - 百搭≥2时放宽, 但不要太激进
+  const _has2PlusWild = wildCount >= 2
+  const wildPureFlushReady =
+    (isExposedSingleSuit && effectiveLongestSuit >= 6) ||
+    (_has2PlusWild && effectiveLongestSuit >= 6 && honorCount <= 5 && honorPairCount <= 2) ||
+    (hasWildWild && honorPairCount <= 2 && effectiveLongestSuit >= 7 && honorCount <= 4)
+  // 百搭≥2时, 额外加成条件: 短门或门口单门
+  const wild2PlusFlushBonus = _has2PlusWild && effectiveLongestSuit >= 7 && secondSuitCount <= 2
 
   // ★ V2: 生张计数
   const rawTileCount = countRawTiles(hand, game.discardPile || [])
@@ -295,12 +303,13 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       // room4472 场景: 5个对子/刻子(1刻子+4对子) AI却去混一色,反向PUNISH
       // V2.2: -60不够，混一色加分后仍可反超，改为-90确保碰碰胡胜出
       // V2.2: 3对子也惩罚，防止混一色抢走碰碰胡路线
+      // V2.9: 4对子惩罚降低 (-90→-65), 让清一色在某些情况下能胜出
       if (features.pairCount + features.tripletCount >= 4) {
         reasons.push('kge_pungs_priority_halfflush_punish')
-        score -= 90  // 足够大,确保 ALL_PUNGS 胜出(混一色最多加~55分)
+        score -= 65  // 降低对混一色的强惩罚, 让清一色有机会胜出
       } else if (features.pairCount + features.tripletCount >= 3) {
         // 3对子也明显倾向碰碰胡
-        score -= 35  // 从中等惩罚提升到强惩罚
+        score -= 25  // 从-35降到-25
       }
       score += features.longestSuitCount * 4.1
       score += features.honorCount * 1.6
@@ -353,11 +362,18 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
         score += 18.0 + Math.max(0, (20 - estimatedRound) * 0.7)
       }
       // ★ V2.7: 百搭+少风牌 → 强力清一色倾向（即使升级条件未满）
-      // 仅在已有清一色潜力时加分，避免空头奖励
+      // V2.10: 百搭≥2时适度加分, 不要过分推
       if ((features as any).wildPureFlushReady && features.longestSuitCount >= 6) {
         reasons.push('wild_pure_flush_ready')
-        // V2.9: 大幅加分(14+3.5*dec → 16+4*dec)→ 拉清一色
-        score += 16.0 + Math.max(0, (2 - (features.honorPairCount || 0)) * 4.0)
+        // 基础分(16+4*dec) + 百搭≥2时温和加成(8→5)
+        const _wildCount = features.wildCount || 0
+        const _wildBonus = _wildCount >= 2 ? 5.0 : (_wildCount === 1 ? 2.5 : 0)
+        score += 16.0 + Math.max(0, (2 - (features.honorPairCount || 0)) * 4.0) + _wildBonus
+      }
+      // ★ V2.10: 百搭≥2时额外清一色加成(独立于wildPureFlushReady)
+      if ((features as any).wild2PlusFlushBonus) {
+        reasons.push('wild2plus_flush_bonus')
+        score += 6.0  // 从10降到6, 避免过激
       }
       // ★ V2.7 Phase 1.1: 门口副露已单门 → 强力清一色倾向
       // 关键洞察：吃碰2-3口后门口已是一个花色，手牌里其它花色必须坚决打掉

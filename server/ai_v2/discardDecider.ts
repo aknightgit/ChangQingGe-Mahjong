@@ -378,7 +378,16 @@ function scoreByRoute(input: RouteDiscardInput): number {
         }
         // ★ V2.7: 有百搭时，风牌可以被百搭替代 → 积极打风牌转清一色
         // 百搭当数牌用，风牌是累赘
+        // V2.10: 百搭≥2时温和鼓励打风牌
         const wildCount = input.routeState?.features?.wildCount ?? 0
+        if (wildCount >= 2) {
+          // 百搭≥2时适度鼓励
+          const honorPairCount = routeState.features.honorPairCount || 0
+          if (honorPairCount <= 2) {
+            return count >= 2 ? 4.5 : 3.5
+          }
+          return count >= 2 ? 3.0 : 2.0
+        }
         if (wildCount >= 1) {
           // ★ V2.7: 有百搭+风牌<2对时，更激进地打风牌转清一色
           const honorPairCount = routeState.features.honorPairCount || 0
