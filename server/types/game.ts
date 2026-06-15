@@ -267,7 +267,6 @@ export interface GameState {
   rebelEvent?: RebelEvent;
   liangShanVotes?: string[];  // 梁山聚义投票者ID列表
   liangShanSuccess?: boolean;  // 聚义成功标记（客户端据此显示弹窗而非结算）
-  rebelVotes?: string[];  // 造反投票者ID列表
   rebelSuccess?: boolean;  // 造反成功标记（客户端据此显示弹窗而非结算）
   rebelPlayerName?: string;  // 造反玩家姓名
   rebelHand?: Tile[];  // 造反玩家手牌（全员可见）

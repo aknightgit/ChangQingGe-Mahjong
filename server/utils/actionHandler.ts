@@ -995,106 +995,35 @@ export class ActionHandler {
    * 处理造反
    */
   handleRebel(game: GameState, player: Player): void {
-    const { games, endRound, broadcastGameState, broadcastQuickMessage, persistGame, handleDraw, replaceFlowers, isPlayerBotControlled, timerManager, getNextActivePlayer, isWildTile, sortHandWithWildFront, getPlayerFlowerTiles, getLastDiscardPlayerId, schedulePendingActionTimeout, clearAutoTakeover, store, getCachedWinOptions, getCachedWinCheck, invalidateWinEvaluationCache, recordBailoutAction, checkAndBroadcastBailout, getPlayerCumulativeScore, checkQJThresholdAlerts, enableBotMode } = this.deps;
+    const { endRound, broadcastQuickMessage } = this.deps;
 
-    if (game.phase !== GamePhase.PLAYING) return;
-    if (player.status !== PlayerStatus.PLAYING) return;
+    // 造反：广播消息
+    broadcastQuickMessage(game.gameId, `⚔️ [${player.name}] 发起了造反！`, 'special');
 
-    // 全局倍数已达8倍上限时,禁止造反
-    const effectiveGlobal = Math.min((game.inheritedGlobalMultiplier ?? game.inheritMultiplier ?? 1) * (game.roundMultiplier ?? 1), 8);
-    if (effectiveGlobal >= 8) return;
-
-    // 初始化投票列表
-    if (!game.rebelVotes) {
-      game.rebelVotes = [];
-    }
-
-    // 已投过票则忽略
-    if (game.rebelVotes.includes(player.id)) return;
-
-    // 记录投票
-    game.rebelVotes.push(player.id);
-
-    // 广播投票消息（第一个是发起，后续是响应）
-    const isFirst = game.rebelVotes.length === 1;
-    broadcastQuickMessage(game.gameId, isFirst
-      ? `⚔️ [${player.name}]发起了造反！`
-      : `⚔️ [${player.name}]响应了造反！`, 'special');
-
-    // 活跃玩家总数（只统计真人）
-    const activePlayers = game.players.filter(p => p.status === PlayerStatus.PLAYING);
-    const activeHumans = activePlayers.filter(p => !isPlayerBotControlled(p));
-
-    // 计算有效投票数:手动投票 + 超过QJ线的玩家自动同意
-    const threshold = game.liangShanThreshold ?? 4000;
-    let effectiveVoteCount = game.rebelVotes.length;
-
-    for (const ap of activeHumans) {
-      if (game.rebelVotes.includes(ap.id)) continue;
-      const cumulativeScore = getPlayerCumulativeScore(game.gameId, ap.id);
-      if (cumulativeScore > threshold) {
-        effectiveVoteCount++;
-        if (!game.rebelVotes.includes(ap.id)) {
-          game.rebelVotes.push(ap.id);
-          broadcastQuickMessage(game.gameId, `⚔️ [${ap.name}]响应了[${player.name}]的造反！`, 'special');
-        }
-        console.log(`[Rebel] ${ap.name} 累积赢分${cumulativeScore}超过QJ线${threshold},自动同意`);
+    // 所有未胡牌玩家标记为输
+    for (const p of game.players) {
+      if (p.status !== PlayerStatus.WON) {
+        p.status = PlayerStatus.LOST;
       }
     }
 
-    // 广播投票进度
-    broadcastGameState(game.gameId);
+    // 翻倍（×2）
+    const doubled = Math.min((game.inheritMultiplier ?? 1) * 2, 8);
+    const roundMul = game.roundMultiplier ?? 1;
+    const effective = doubled * roundMul;
+    game.inheritedGlobalMultiplier = Math.min(effective > 8 ? Math.floor(effective / 8) : doubled, 8);
 
-    console.log(`[Rebel] ${player.name} voted (${effectiveVoteCount}/${activeHumans.length}, threshold: ${threshold})`);
+    // 造反成功标记（客户端据此显示弹窗而非结算）
+    game.rebelSuccess = true;
 
-    // 全部真人投票 → 结束本局,下把翻倍
-    if (effectiveVoteCount >= activeHumans.length) {
-      console.log(`[Rebel] All players agreed! Ending round with ×2 multiplier.`);
+    // 结束本局
+    endRound(game, GameEndReason.LAST_PLAYER);
 
-      // ★ 广播全员响应造反消息
-      const voterNames = activeHumans
-        .filter(p => game.rebelVotes!.includes(p.id))
-        .map(p => p.name)
-        .join('、')
-      if (activeHumans.length === 1) {
-        broadcastQuickMessage(game.gameId,
-          `⚔️ 全员响应造反,本局结束!下局翻倍!`, 'special');
-      } else {
-        for (const p of activeHumans) {
-          if (game.rebelVotes!.includes(p.id)) {
-            broadcastQuickMessage(game.gameId,
-              `⚔️ [${p.name}]响应了造反!`, 'special');
-          }
-        }
-        broadcastQuickMessage(game.gameId,
-          `⚔️ 全员响应造反,本局结束!下局翻倍!`, 'special');
-      }
-
-      // 所有未胡牌玩家标记为输
-      for (const p of game.players) {
-        if (p.status !== PlayerStatus.WON) {
-          p.status = PlayerStatus.LOST;
-        }
-      }
-
-      // 下局全局倍数 ×2
-      const doubled = Math.min((game.inheritMultiplier ?? 1) * 2, 8);
-      const roundMul = game.roundMultiplier ?? 1;
-      const effective = doubled * roundMul;
-      game.inheritedGlobalMultiplier = Math.min(effective > 8 ? Math.floor(effective / 8) : doubled, 8);
-
-      // 造反成功标记（客户端据此显示弹窗而非结算）
-      game.rebelSuccess = true;
-
-      // 结束本局
-      endRound(game, GameEndReason.LAST_PLAYER);
-
-      // 造反成功：庄家不变
-      if (!game.nextDealerId) {
-        const currentDealer = game.players[game.dealerIndex];
-        if (currentDealer) {
-          game.nextDealerId = currentDealer.id;
-        }
+    // 造反成功：庄家不变
+    if (!game.nextDealerId) {
+      const currentDealer = game.players[game.dealerIndex];
+      if (currentDealer) {
+        game.nextDealerId = currentDealer.id;
       }
     }
   }
