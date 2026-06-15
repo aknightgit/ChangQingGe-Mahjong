@@ -3023,9 +3023,6 @@ export async function shouldClaimPendingAction(
         // 听牌少时直接胡
         traceClaim(player, game, 'hu-no-flower-low-ting', `route=${currentRoute} types=[${claimHandTypes}] cleanExposure=true tingTiles=${_tingTilesForNoFlower} → accept discard win (low ting)`)
       }
-        // 听牌少时直接胡
-        traceClaim(player, game, 'hu-no-flower-low-ting', `route=${currentRoute} types=[${claimHandTypes}] cleanExposure=true tingTiles=${_tingTilesForNoFlower} → accept discard win (low ting)`)
-      }
 
       // 利益最大化: 期望收益高于捉冲 → 放弃捉冲
       if (futureReward.shouldWait && wallRemaining > 8) {
