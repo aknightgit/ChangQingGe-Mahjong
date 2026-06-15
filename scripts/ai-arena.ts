@@ -1009,13 +1009,14 @@ function formatGameDetail(rec: GameRecord): string {
 
 function formatGamesCsv(records: GameRecord[]): string {
   const lines: string[] = []
-  lines.push('game_id,seat0_ai,seat1_ai,seat2_ai,seat3_ai,winner_ai,win_count,win_type,hand_type,fan,multiplier,rounds,total_pot,score_s0,score_s1,score_s2,score_s3,duration_ms,is_draw')
+  lines.push('game_id,seat0_ai,seat1_ai,seat2_ai,seat3_ai,winner_ai,win_count,win_type,hand_type,fan,multiplier,rounds,total_pot,score_s0,score_s1,score_s2,score_s3,duration_ms,is_draw,is_menqing')
   for (const rec of records) {
     const s = (i: number) => rec.seats[i]?.aiName || '-'
     const winner = rec.winnerAiName || (rec.isDraw ? '流局' : '-')
     const winType = rec.selfDraw === undefined ? '-' : (rec.selfDraw ? '自摸' : '放炮')
     const scores = [0, 1, 2, 3].map(i => rec.scores[i] ?? 0).join(',')
-    lines.push([rec.gameId, s(0), s(1), s(2), s(3), winner, rec.winCount, winType, rec.handTypeName || '-', rec.wonFan ?? '-', rec.multiplier, rec.roundNum, rec.totalPot, scores, rec.durationMs, rec.isDraw ? '1' : '0'].join(','))
+    const isMenQing = rec.winners && rec.winners[0]?.isMenQing ? '1' : '0'
+    lines.push([rec.gameId, s(0), s(1), s(2), s(3), winner, rec.winCount, winType, rec.handTypeName || '-', rec.wonFan ?? '-', rec.multiplier, rec.roundNum, rec.totalPot, scores, rec.durationMs, rec.isDraw ? '1' : '0', isMenQing].join(','))
   }
   return lines.join('\n')
 }

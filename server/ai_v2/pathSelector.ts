@@ -311,19 +311,31 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
         // 3对子也明显倾向碰碰胡
         score -= 25  // 从-35降到-25
       }
-      score += features.longestSuitCount * 4.1
-      score += features.honorCount * 1.6
-      score += features.honorPairCount * 1.5
+      // V2.13: 恢复longestSuitCount系数(3.0), 改用风牌惩罚区分混一色和清一色
+      score += features.longestSuitCount * 3.0
+      score += features.honorCount * 1.2
+      score += features.honorPairCount * 1.0
       score += features.wildCount * 3.0
+      // V2.13: 有风牌→扣分(混一色扣分,但清一色不扣) → 混一色→50%
+      // 无风牌→加分(纯清一色加分) → 清一色→20%
+      if (features.honorCount >= 1) {
+        score -= features.honorCount * 1.5  // 每张风牌扣1.5分
+      }
+      // ★ V2.13: 门清bonus — 无副露时鼓励门清
+      const _exposedCount = (input.player.hand.exposedMelds || []).length
+      if (_exposedCount === 0 && features.longestSuitCount >= 6) {
+        score += 10.0  // 门清大加分
+        reasons.push('menqing_flush_bonus')
+      }
       score += getPolicyValue(policy, 'halfFlushWeight') * 4.5
       score += getWildRouteBoost(policy, features.wildCount, 'flush') * 4.2
       score += routeBucketBoost * (2.6 + handRouteBias)
       score += pureFlushBucketBoost * (features.secondSuitCount === 0 ? 2.2 : 1.1)
       score -= features.secondSuitCount * 2.5
       // ★ V2.2: （数字门+风箭）对子总共>=4 → 大幅提升混碰概率
-      // V2.9: 进一步降低混碰加分(1.5+0.15 → 0.8+0.1) → 混碰砍到<10%
+      // V2.13: 降低混碰加分(0.8→0.4) → 混碰砍到<10%
       const totalPairsHunPeng = features.pairCount >= 4 && features.longestSuitCount >= 4 && features.secondSuitCount <= 1
-      if (hunPengReady || totalPairsHunPeng) score += getPolicyValue(policy, 'hunPengPursuit') * (0.8 + suitedPairCount * 0.1) * (totalPairsHunPeng ? 0.8 : 1)
+      if (hunPengReady || totalPairsHunPeng) score += getPolicyValue(policy, 'hunPengPursuit') * (0.4 + suitedPairCount * 0.05) * (totalPairsHunPeng ? 0.6 : 1)
       if (qingPengReady) score += getPolicyValue(policy, 'qingPengPursuit') * (2.4 + pureFlushBucketBoost * 0.6)
       score += getPolicyValue(policy, 'pureFlushPursuit') * Math.max(0, features.longestSuitCount - 6) * 0.8
       if (features.longestSuitCount >= 9) { reasons.push('half_flush_nine_tiles'); score += 16 }
@@ -356,10 +368,16 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       if (features.allOpponentsAvoidSuit && features.allOpponentsAvoidSuit === targetSuit) { reasons.push('global_void_target'); score += 5 /* was: 2 */ }
       if (features.wildCount === 0) score += 1.1
       score += features.oneSuitOpponentCount * 0.8
+      // V2.13: 门清bonus — 无副露时鼓励门清
+      const _exposedCount = (input.player.hand.exposedMelds || []).length
+      if (_exposedCount === 0 && features.longestSuitCount >= 6) {
+        score += 10.0  // 门清大加分 → 鼓励不碰牌
+        reasons.push('menqing_flush_bonus')
+      }
       if (features.pureFlushUpgradeReady) {
         reasons.push('pure_flush_upgrade_ready')
-        // ★ V2.9: 升级评分大幅提高 14→18+(20-round)*0.7 → 拉清一色
-        score += 18.0 + Math.max(0, (20 - estimatedRound) * 0.7)
+        // ★ V2.13: 升级评分大幅提高 → 清一色目标20%
+        score += 32.0 + Math.max(0, (20 - estimatedRound) * 1.0)
       }
       // ★ V2.7: 百搭+少风牌 → 强力清一色倾向（即使升级条件未满）
       // V2.10: 百搭≥2时适度加分, 不要过分推

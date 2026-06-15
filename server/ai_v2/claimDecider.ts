@@ -322,13 +322,14 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       }
       return false
     })()
-    const hunPengReady = claimSuitCount >= 2 && handPairs >= 2 && hasHonorTripletOrPair
+    // V2.10: 收紧(handPairs>=2 → >=3) + 降分(0.7 → 0.4) → 减少混碰
+    const hunPengReady = claimSuitCount >= 2 && handPairs >= 3 && hasHonorTripletOrPair
     const claimEstimatedRound = Math.max(1, Math.floor((game.discardPile?.length || 0) / 4) + 1)
     const isEarlyRounds = claimEstimatedRound <= 3
     if (hunPengReady) {
       return {
         allowed: true,
-        tuneDelta: isEarlyRounds ? 0.3 : 0.7,
+        tuneDelta: isEarlyRounds ? 0.2 : 0.4,
         reason: isEarlyRounds ? 'hun_peng_potential_boost_early' : 'hun_peng_potential_boost'
       }
     }
@@ -538,13 +539,17 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       // 原条件太严(candidateShanten===0), 改为 shanten 任何降低都触发
       const isShantenImproved = candidateShanten < passShanten
       if (isShantenImproved && !routeState.features.pureFlushUpgradeReady) {
-        const tingDelta = (passShanten - candidateShanten) * 0.8 // shanten 每降 1 级 +0.8
+        // V2.13: 降低碰牌tuneDelta(1.8→0.8) → 增加门清率
+        // 只有直接听牌(shanten=0→0)才给高分
+        const tingDelta = (passShanten - candidateShanten) * 0.5 // shanten 降幅越大越碰, 但更温和
+        const directTingBoost = candidateShanten === 0 ? 0.8 : 0  // 直接听牌额外加分
         return {
           allowed: true,
           tuneDelta:
-            1.8 + // 基础: 强力碰
-            tingDelta + // shanten 降幅越大越碰
-            routeGain * 0.15 +
+            0.8 + // 基础: 降低碰倾向
+            tingDelta +
+            directTingBoost +
+            routeGain * 0.1 +
             deadTilePungBonus,
           reason: candidateShanten === 0 ? 'half_flush_direct_ting_must_claim' : 'half_flush_shanten_improved',
         }
@@ -581,11 +586,11 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       return {
         allowed: true,
         tuneDelta:
-          (isTargetSuit ? 0.72 : 0.28) +
+          (isTargetSuit ? 0.52 : 0.18) +  // V2.13: 降低默认碰倾向 → 提高门清率
           routeGain * 0.06 +
           (routeState.features.pureFlushUpgradeReady && isTargetSuit ? 0.42 : 0) +
-          ((policy?.hunPengPursuit || 0) * (routeState.features.honorPairCount >= 1 && isTargetSuit ? 0.18 : 0)) +
-          ((policy?.qingPengPursuit || 0) * (routeState.features.secondSuitCount === 0 && isTargetSuit ? 0.12 : 0)),
+          ((policy?.hunPengPursuit || 0) * (routeState.features.honorPairCount >= 1 && isTargetSuit ? 0.12 : 0)) +
+          ((policy?.qingPengPursuit || 0) * (routeState.features.secondSuitCount === 0 && isTargetSuit ? 0.08 : 0)),
         reason: isTargetSuit
           ? (routeState.features.pureFlushUpgradeReady ? 'pure_flush_upgrade_target_claim' : 'target_suit_claim')
           : 'honor_support_claim',

@@ -62,6 +62,12 @@ for (const r of winRows) {
   else if (r.win_type === '放炮') discard += parseInt(r.win_count, 10) || 0
 }
 
+// 门清率 (基于首赢家 is_menqing)
+let menQingWins = 0
+for (const r of winRows) {
+  if (r.is_menqing === '1') menQingWins += parseInt(r.win_count, 10) || 0
+}
+
 // fan distribution
 const fanBuckets = { '0': 0, '1-49': 0, '50-99': 0, '100-199': 0, '200+': 0 }
 for (const r of winRows) {
@@ -128,6 +134,7 @@ for (const [name, count] of handEntries) {
 console.log('\n--- 胡牌方式 ---')
 console.log(`  自摸: ${selfDraw} (${(selfDraw / totalWinners * 100).toFixed(1)}%)`)
 console.log(`  放炮: ${discard} (${(discard / totalWinners * 100).toFixed(1)}%)`)
+console.log(`  门清: ${menQingWins} (${(menQingWins / totalWinners * 100).toFixed(1)}%)`)
 
 console.log('\n--- 番数分布 ---')
 for (const [bucket, count] of Object.entries(fanBuckets)) {

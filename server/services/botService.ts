@@ -3015,9 +3015,9 @@ export async function shouldClaimPendingAction(
         claimHandTypes.includes(HandType.ALL_WIND)
       const claimIsDaDiao = hand.filter(t => !isFlower(t)).length === 1
       if ((isPengOrHalfFlush || claimHasPengOrFlush) && isCleanExposure && !claimIsDaDiao) {
-        // V2.7: 听牌>=8张才PASS等自摸, 否则捉冲
+        // V2.13: 听牌>=10张才PASS等自摸, 否则捉冲 → 降流局
         const _tingTilesForNoFlower = countWinningTilesForHand(hand, exposedMelds.length, game)
-        if (_tingTilesForNoFlower >= 8) {
+        if (_tingTilesForNoFlower >= 10) {
           traceClaim(player, game, 'hu-no-flower-block', `route=${currentRoute} types=[${claimHandTypes}] cleanExposure=true tingTiles=${_tingTilesForNoFlower} → decline, wait for 无花自摸`)
           return ActionType.PASS
         }
