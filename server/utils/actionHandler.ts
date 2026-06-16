@@ -1324,9 +1324,10 @@ export class ActionHandler {
       }
 
       // 检查是否可以吃（只有下家可以吃，且门口不能满4组）
-      const nextPlayerIndex = (discarderIndex + 1) % game.players.length;
+      // ★ 用 getNextActivePlayer 跳过已出局玩家，否则只剩2人时下家指向出局者导致吃牌失效
+      const nextActivePlayer = getNextActivePlayer(game, discarderIndex);
       let chowOptions: string[][] | undefined;
-      if (game.players[nextPlayerIndex]?.id === player.id && player.hand.exposedMelds.length < 4) {
+      if (nextActivePlayer?.id === player.id && player.hand.exposedMelds.length < 4) {
         if (checkChowPongExclusion(exclusionState, 'chow', discardedTile.suit)) {
           const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile, game);
           if (sequences.length > 0) {
