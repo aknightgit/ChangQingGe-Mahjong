@@ -326,6 +326,9 @@ export const useGame = () => {
       }, 15000)
       // 在 connect 时刷新心跳
       socket.value.on('connect', () => { lastHeartbeat = Date.now() })
+      // ★ 收到任何服务端数据都刷新心跳（pong/事件/广播）
+      socket.value.on('pong', () => { lastHeartbeat = Date.now() })
+      socket.value.io.on('packet', () => { lastHeartbeat = Date.now() })
 
       // Room Events
       socket.value.on('room:user-joined', async (data) => {

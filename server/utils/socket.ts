@@ -159,7 +159,11 @@ export async function initializeSocketIO(server: HTTPServer) {
       methods: ['GET', 'POST'],
       credentials: true
     },
-    transports
+    transports,
+    // ★ 心跳配置：移动端网络抖动容忍度
+    pingInterval: 25000,   // 每25秒发一次 ping
+    pingTimeout: 60000,    // 60秒内没收到 pong 才断开（默认20s太激进）
+    connectTimeout: 45000  // 连接握手超时45秒
   })
 
   // ✅ Configure Redis adapter for horizontal scaling
