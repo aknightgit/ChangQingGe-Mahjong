@@ -169,7 +169,7 @@ export class ActionHandler {
    * 处理摸牌
    */
   handleDraw(game: GameState, player: Player, options?: { allowFullHand?: boolean }): void {
-    const { endRound, broadcastQuickMessage, replaceFlowers, isPlayerBotControlled, timerManager, isWildTile, sortHandWithWildFront, getLastDiscardPlayerId, schedulePendingActionTimeout, store, broadcastFlowerReplacement } = this.deps;
+    const { endRound, broadcastQuickMessage, replaceFlowers, isPlayerBotControlled, timerManager, isWildTile, sortHandWithWildFront, getLastDiscardPlayerId, schedulePendingActionTimeout, store, broadcastFlowerReplacement, invalidateWinEvaluationCache } = this.deps;
 
     console.log(`[handleDraw] ${player.name} drawnThisTurn=${game.drawnThisTurn} wall=${game.wall.length} concealed=${player.hand.concealedTiles.length} allowFull=${options?.allowFullHand}`);
 
@@ -231,6 +231,10 @@ export class ActionHandler {
       tileId: tile.id,
       timestamp: Date.now()
     });
+
+    // ★ 摸牌后必须清除该玩家的 win evaluation 缓存，否则会用过期的 canWin=true 状态
+    // 导致 handleDraw 误判可自摸胡，弹空胡牌选择面板
+    this.deps.invalidateWinEvaluationCache(game.gameId, [player.id]);
 
     // 检查是否可以自摸胡
     const winCheck = this.deps.getCachedWinCheck(game, player);
