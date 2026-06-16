@@ -1380,9 +1380,13 @@ export class ActionHandler {
       // ★ 用 getNextActivePlayer 跳过已出局玩家，否则只剩2人时下家指向出局者导致吃牌失效
       const nextActivePlayer = getNextActivePlayer(game, discarderIndex);
       let chowOptions: string[][] | undefined;
-      if (nextActivePlayer?.id === player.id && player.hand.exposedMelds.length < 4) {
-        if (checkChowPongExclusion(exclusionState, 'chow', discardedTile.suit)) {
+      const isNextActive = nextActivePlayer?.id === player.id;
+      const chowExclusionOk = isNextActive ? checkChowPongExclusion(exclusionState, 'chow', discardedTile.suit) : false;
+      console.log(`[checkPending-chow] ${player.name.substring(0,8)} discarder=${discarderIndex}(${game.players[discarderIndex]?.name?.substring(0,8)}) nextActive=${nextActivePlayer?.name?.substring(0,8) || 'NONE'} isNextActive=${isNextActive} melds=${player.hand.exposedMelds.length}/4 exclusionState=${JSON.stringify(exclusionState)} chowExclusionOk=${chowExclusionOk} tile=${discardedTile.suit}-${discardedTile.value}`);
+      if (isNextActive && player.hand.exposedMelds.length < 4) {
+        if (chowExclusionOk) {
           const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile, game);
+          console.log(`[checkPending-chow] ${player.name.substring(0,8)} sequences=${sequences.length}`);
           if (sequences.length > 0) {
             availableActions.push(ActionType.CHOW);
             chowOptions = tileHelper.buildChowOptionIds(sequences, discardedTile);
