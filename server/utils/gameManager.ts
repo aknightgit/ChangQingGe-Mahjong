@@ -2152,12 +2152,12 @@ class GameManager {
       // 自摸胡在玩家自己的回合通过 turn actions 处理
       // 冷冻规则：打出百搭后，一圈内其他玩家不能吃/碰/捉冲
       // 一圈 = 4个玩家各出一次牌（从打出百搭的玩家开始数）
-      if (game.freezePlayerId && game.freezePlayerId !== playerId) {
-        // 当前玩家不是打出百搭的人，检查是否过了一圈
-        if (!game.freezeComplete) {
-          return [];  // 冷冻中，不能响应其他玩家的弃牌
-        }
-        // freezeComplete = true 时表示已过完整一圈，解除冷冻
+      if (game.freezePlayerId && game.freezePlayerId !== playerId && !game.freezeComplete) {
+        // ★ 冷冻中：过滤掉吃/碰/杠/胡，仅保留 PASS（防止前端误显示）
+        const frozenActions = pendingAction.availableActions.filter(a =>
+          a === ActionType.PASS || a === ActionType.DRAW
+        );
+        return frozenActions;
       }
       // 等我想一想:有胡/碰/杠选项时可用,每局限定次数
       const pendingHasPriority = pendingAction.availableActions.some(a =>
