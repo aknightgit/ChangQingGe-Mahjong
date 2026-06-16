@@ -2788,6 +2788,8 @@ export async function shouldClaimPendingAction(
     // ★ K哥铁律(2026-06-08): 碰+胡都有时，检查碰了能否进全听
     // 如果碰了能进全听(或接近全听)，且当前番数不高 → 优先碰，不急着胡
     // 例: 碰南风后打9万 → 全听(4面子+百搭) → 等自摸 > 捉冲小番
+    // ★ 增强(2026-06-16 bug:房间2639第2局 AI-AK捉冲TEST发财): 碰后即使不能全听, 但能进多张听牌(>=4张) → 也优先碰
+    // 例: 碰发财后打1筒 → 听1-6筒 (>=4张) → 等自摸 > 捉冲小番
     if (!isSelfDraw && availableActions.includes(ActionType.PENG) && claimTile) {
       const pengTestHand = hand.filter(t => {
         const matchIdx = hand.findIndex(o => o.suit === claimTile.suit && o.value === claimTile.value && o.id !== t.id)
@@ -2809,6 +2811,17 @@ export async function shouldClaimPendingAction(
         } else {
           // 无花自摸=10点，已经够大，直接胡
           traceClaim(player, game, 'hu-no-flower-high-value', `无花自摸=10点，直接胡`)
+        }
+      } else {
+        // ★ 增强(2026-06-16): 碰后进听牌(>=4张) → 也优先碰, 等自摸
+        const pengTingResult = tryCheckTingState(pengSimHand, pengSimExposed, game)
+        if (pengTingResult.isTing && pengTingResult.remainingCount >= 4) {
+          const currentHandTypes = findBestHandTypes(hand, player.hand.exposedMelds, game.customScoringMode || null)
+          const isNoFlowerSelfDraw = currentHandTypes.some(t => [HandType.HALF_FLUSH, HandType.FULL_FLUSH, HandType.ALL_TRIPLETS, HandType.HUN_PENG, HandType.QING_PENG, HandType.FENG_PENG, HandType.ALL_WIND].includes(t))
+          if (!isNoFlowerSelfDraw) {
+            traceClaim(player, game, 'hu-skip-for-peng-multiting', `碰${traceTile(claimTile)}后听牌(${pengTingResult.remainingCount}张), 当前非无花自摸 → 碰了等自摸`)
+            // 不 return HU, 让后续 PENG 逻辑处理
+          }
         }
       }
     }
