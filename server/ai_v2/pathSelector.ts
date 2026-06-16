@@ -302,6 +302,14 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
         // 3对子也明显倾向碰碰胡
         score -= 25  // 从-35降到-25
       }
+      // ★ K哥铁律(2026-06-16): 已碰/已杠后，长门不够坚决惩罚转混一色
+      const _hf_exposedNumberMelds = (input.player.hand.exposedMelds || []).filter(
+        (m: any) => m.tiles?.some((t: any) => NUMBER_SUITS.includes(t.suit))
+      )
+      if (_hf_exposedNumberMelds.length > 0 && features.longestSuitCount <= 5) {
+        score -= 80  // 已开门+长门短 → 混一色不可行，强惩罚
+        reasons.push('exposed_meld_blocks_half_flush')
+      }
       // V2.13: 恢复longestSuitCount系数(3.0), 改用风牌惩罚区分混一色和清一色
       score += features.longestSuitCount * 3.0
       // V2.14: honorCount系数(0.5), honorPairCount(0.3) → 进一步降混一色

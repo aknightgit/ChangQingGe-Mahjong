@@ -3,7 +3,7 @@
  * 负责：bot pending 动作处理、吃牌决策、出牌调度、超时自动接管
  */
 import { GameState, Player, GamePhase, PlayerStatus, ActionType, PendingAction, MeldType, Tile, TileSuit } from '../types/game';
-import { shouldClaimPendingAction, selectBotChowTileIds, selectDiscardTile } from '../services/botService';
+import { shouldClaimPendingAction, selectBotChowTileIds, selectDiscardTile, refreshRouteMemoryAfterClaim } from '../services/botService';
 
 function isHonorTile(tile: Tile): boolean {
   return tile.suit === TileSuit.WINDS || tile.suit === TileSuit.DRAGONS;
@@ -255,6 +255,7 @@ export class BotController {
           const pengTotalCount = player.hand.concealedTiles.length + pengExposedCount;
           if (pengTotalCount - 2 + 3 <= 14) {
             handlePeng(game, player);
+            refreshRouteMemoryAfterClaim(player, game);
             claimedHigherPriority = true;
             hasBotAction = true;
           } else {
@@ -270,6 +271,7 @@ export class BotController {
           const kongTotalCount = player.hand.concealedTiles.length + kongExposedCount;
           if (kongTotalCount - 3 + 4 <= 14) {
             await handleKong(game, player, pa.tile?.id || '');
+            refreshRouteMemoryAfterClaim(player, game);
             claimedHigherPriority = true;
             hasBotAction = true;
           } else {

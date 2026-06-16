@@ -326,7 +326,7 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
         allowed: true,
         tuneDelta:
           (_apAgg ? 1.2 : 0.55) +
-          (action === ActionType.KONG ? 0.25 : 0.15) +
+          (action === ActionType.KONG ? 0.8 : 0.15) +  // ★ 杠对碰碰胡无损还加番，比碰更积极
           routeGain * 0.05 +
           ((policy?.qingPengPursuit || 0) * (routeState.features.secondSuitCount === 0 ? 0.18 : 0)) +
           ((policy?.hunPengPursuit || 0) * (routeState.features.honorPairCount >= 1 ? 0.20 : 0)) +

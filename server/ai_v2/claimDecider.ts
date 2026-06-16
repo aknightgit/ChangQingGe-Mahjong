@@ -599,11 +599,12 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       const _apPursuit = (policy?.allPungsPursuit || 0)
       const _apAgg = _apPursuit >= 1.2
       // ★ V2.2: 碰碰胡路线碰牌必须积极，tuneDelta 从 0.55 提高到 1.5
+      // ★ K哥铁律(2026-06-16): 杠牌对碰碰胡无损还加番，必须比碰更积极
       return {
         allowed: true,
         tuneDelta:
           (_apAgg ? 2.0 : 1.5) +
-          (action === ActionType.KONG ? 0.4 : 0.2) +
+          (action === ActionType.KONG ? 1.0 : 0.2) +  // 杠 +1.0（比碰 0.2 大幅提升）
           routeGain * 0.08 +
           ((policy?.qingPengPursuit || 0) * (routeState.features.secondSuitCount === 0 ? 0.25 : 0)) +
           ((policy?.hunPengPursuit || 0) * (routeState.features.honorPairCount >= 1 ? 0.30 : 0)) +

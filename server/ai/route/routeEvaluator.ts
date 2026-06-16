@@ -312,6 +312,16 @@ function evaluateSingleRoute(route: RouteKind, input: RouteEvaluationInput, feat
       } else if (features.pairCount >= 4) {
         score -= 8   // 4对子：混一色明显劣势
       }
+      // ★ K哥铁律(2026-06-16): 已碰/已杠后，长门不够坚决惩罚转混一色
+      // 碰完后门口有数字门刻子 → 已经对某门做了承诺
+      // 如果手牌长门≤5，混一色根本做不成，必须留在碰碰胡
+      const _hf_exposedNumberMelds = input.player.hand.exposedMelds.filter(
+        (m: any) => m.tiles?.some((t: any) => NUMBER_SUITS.includes(t.suit))
+      )
+      if (_hf_exposedNumberMelds.length > 0 && features.longestSuitCount <= 5) {
+        score -= 25  // 已开门+长门短 → 混一色不可行，强惩罚
+        reasons.push('exposed_meld_blocks_half_flush')
+      }
       if (features.upstreamVoidSuit && features.upstreamVoidSuit === targetSuit) {
         reasons.push('upstream_void_target')
         score += 3
