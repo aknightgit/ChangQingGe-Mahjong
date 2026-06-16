@@ -422,9 +422,14 @@ function scoreByRoute(input: RouteDiscardInput): number {
       // 对子所属花色短门缺口大 → 更应保留
       const _gap_pair =
         count >= 2 && isShortestSuitTile && suitGap >= 3 ? -1.6 : 0
-      // ★ V2.2: 风箭单张坚决打(碰碰胡不需要风牌单张)
+      // ★ V2.15 K哥铁律(2026-06-16): 风箭单张坚决打(碰碰胡不需要风牌单张)
+      // 加大力度: 1.0/2.5 → 3.0/5.0, 优先打孤张风箭
       const _honor_single_keep =
-        count === 1 && isHonor(tile) ? (_firmCommit ? 2.5 : 1.0) : 0
+        count === 1 && isHonor(tile) ? (_firmCommit ? 5.0 : 3.0) : 0
+      // ★ V2.15 K哥铁律(2026-06-16): 风箭孤张+台面出现过的熟张 → 最高优先打
+      // 已有 _seen_bonus 覆盖所有单张, 这里额外加分给风箭熟张
+      const _honor_seen_bonus =
+        count === 1 && isHonor(tile) && visibleCopies >= 1 ? (visibleCopies >= 2 ? 3.0 : 1.5) : 0
       // ★ V2.2: 熟张额外加分(碰碰胡优先打熟张,降低放炮风险)
       const _seen_bonus =
         count === 1 && visibleCopies >= 1 ? (_firmCommit ? 3.5 : 2.0) : 0
@@ -439,6 +444,7 @@ function scoreByRoute(input: RouteDiscardInput): number {
         _shortSuit_pair +
         _gap_pair +
         _honor_single_keep +
+        _honor_seen_bonus +
         _seen_bonus +
         _others_doing_single +
         (isHonor(tile) && count >= 2 ? -1 : 0)
