@@ -2020,25 +2020,26 @@ export function selectDiscardTile(player: Player, game: GameState): string {
           else composite += 50
         }
       }
+      // ★ K哥铁律(2026-06-16): 混一色坚定执行：开所有非目标门数字牌，留风向
+      // 移除 secondSuitCount <= 3 上限，无论次短门有几张都应开掉
       const shouldPurgeMinorSuitResidue =
         routeState.current === 'HALF_FLUSH' &&
         routeState.targetSuit &&
         routeState.features.longestSuitCount >= 6 &&
         routeState.features.honorCount >= 3 &&
         routeState.features.secondSuitCount > 0 &&
-        routeState.features.secondSuitCount <= 3 &&
         routeState.secondary !== 'ALL_PUNGS' &&
         !isHonor(tile) &&
         isNumberTile(tile) &&
         tile.suit !== routeState.targetSuit &&
         discardDanger <= 0.38
+      // 保留风向：只要在混一色路线且风向单张/对子，无论次短门大小都应保留
       const shouldKeepHonorStackDuringMinorSuitPurge =
         routeState.current === 'HALF_FLUSH' &&
         routeState.targetSuit &&
         routeState.features.longestSuitCount >= 6 &&
         routeState.features.honorCount >= 3 &&
         routeState.features.secondSuitCount > 0 &&
-        routeState.features.secondSuitCount <= 3 &&
         routeState.secondary !== 'ALL_PUNGS' &&
         isHonor(tile) &&
         discardDanger <= 0.38
