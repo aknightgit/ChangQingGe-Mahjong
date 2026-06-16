@@ -1613,8 +1613,10 @@ export function canWin(
   }
   // ★ K哥铁律(2026-06-09): 大吊捉冲(concealed=2)必须检查两张手牌是否成对子
   // 白板+红中 → 不是对子 → 不能胡！
+  // ★ 修复(2026-06-16 bug:房间2639第1局 AI-AK大吊三条摸到二条能自摸): 不管types是否非空都要检查
+  // 因为detectTypes对大吊状态会无脑push牌型(根据副露模式),导致不是对子的两张牌也能胡
   let daDiaoTwoTilesNotPair = false;
-  if (isDaDiaoState && concealedNonFlower.length === 2 && types.length === 0) {
+  if (isDaDiaoState && concealedNonFlower.length === 2) {
     const [t1, t2] = concealedNonFlower;
     const isWild1 = isWildTileFn(t1);
     const isWild2 = isWildTileFn(t2);
