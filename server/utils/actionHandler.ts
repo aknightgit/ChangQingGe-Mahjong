@@ -678,7 +678,51 @@ export class ActionHandler {
     // 【修复】杠牌广播（牌局快讯）
     this.deps.broadcastKongSupplement(game, player, 'jia');
 
-    // 加杠后补牌（allowFullHand=true）
+    // ★ 抢杠检查：加杠的牌是否可以被其他人胡
+    const robCandidates: Player[] = [];
+    for (const other of game.players) {
+      if (other.status !== PlayerStatus.PLAYING) continue;
+      if (other.id === player.id) continue;
+      const handWithKongTile = [...other.hand.concealedTiles, tile];
+      const winCheck = canWin(handWithKongTile, other.hand.exposedMelds, game.customScoringMode || null, undefined, game.wildTileGroup);
+      if (winCheck.canWin) {
+        robCandidates.push(other);
+      }
+    }
+
+    if (robCandidates.length > 0) {
+      // 有玩家可以抢杠胡 → 暂不补牌，等响应
+      game.pendingKongClaim = {
+        playerId: player.id,
+        tile: tile,
+        timestamp: Date.now(),
+      } as any;
+
+      for (const candidate of robCandidates) {
+        const winOptions = this.deps.getCachedWinOptions(game, candidate, 'discard', { extraTile: tile });
+        if (winOptions.length > 0) {
+          game.pendingActions.push({
+            playerId: candidate.id,
+            availableActions: [ActionType.HU, ActionType.PASS],
+            tile: tile,
+            expiresAt: Date.now() + timerManager.getHesitationWindow(game),
+          });
+        }
+      }
+
+      if (game.pendingActions.length > 0) {
+        console.log(`[RobKong] ${player.name} 加杠${tile.suit}-${tile.value}，${game.pendingActions.map(pa => pa.playerId).length}人可抢杠胡`);
+        schedulePendingActionTimeout(game.gameId);
+        await persistGame(game);
+        broadcastGameState(game.gameId);
+        return; // 等待响应，不补牌
+      }
+
+      // 没人有合法胡牌选项，清除 pendingKongClaim 继续
+      game.pendingKongClaim = undefined;
+    }
+
+    // 无人抢杠 → 正常补牌
     replaceFlowers(game, player);
     handleDraw(game, player, { allowFullHand: true });
     game.drawnThisTurn = true;
