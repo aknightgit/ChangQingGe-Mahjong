@@ -757,11 +757,16 @@ export class ActionHandler {
 
     // 判断是自摸还是捉冲（有pendingAction且含HU = 捉冲）
     const huPendingAction = game.pendingActions.find(pa => pa.playerId === player.id);
-    const huIsSelfDraw = !huPendingAction;
+    // ★ 修复(2026-06-16 bug:房间2639 TEST自摸到一条, 胡牌面板空): self-draw 也会推 pending action
+    // 区分自摸 vs 捉冲: 捉冲的 tile 来自别人弃牌（不在自己手牌），自摸的 tile 已在手牌中
     const huPendingTile = huPendingAction?.tile;
+    const tileInConcealed = huPendingTile
+      ? player.hand.concealedTiles.some(t => t.id === huPendingTile.id)
+      : false;
+    const huIsSelfDraw = !huPendingAction || tileInConcealed;
 
     // 用正确的手牌检测胡牌（捉冲时加入弃牌）
-    const handForCheck = huPendingTile
+    const handForCheck = (huPendingTile && !huIsSelfDraw)
       ? [...player.hand.concealedTiles, huPendingTile]
       : player.hand.concealedTiles;
     const winCheck = canWin(handForCheck, player.hand.exposedMelds, game.customScoringMode || null);
@@ -782,12 +787,12 @@ export class ActionHandler {
       }
     }
 
-    // 获取胡牌选项（捉冲用 discard context + extraTile）
+    // 获取胡牌选项（捉冲用 discard context + extraTile；自摸不传extraTile，因为牌已在手牌里）
     const context = huIsSelfDraw ? 'self_draw' : 'discard';
     const winOptions = getCachedWinOptions(game, player, context, {
-      extraTile: huPendingTile,
+      extraTile: huIsSelfDraw ? undefined : huPendingTile,
       isKongFlower,
-      isRobbingKong: !!huPendingAction?.tile && !!(game as any).pendingKongClaim
+      isRobbingKong: !huIsSelfDraw && !!huPendingAction?.tile && !!(game as any).pendingKongClaim
     });
     if (winOptions.length === 0) {
       throw new Error('No win options available');
