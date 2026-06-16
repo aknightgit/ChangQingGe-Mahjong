@@ -1382,7 +1382,9 @@ export class ActionHandler {
       let chowOptions: string[][] | undefined;
       const isNextActive = nextActivePlayer?.id === player.id;
       const chowExclusionOk = isNextActive ? checkChowPongExclusion(exclusionState, 'chow', discardedTile.suit) : false;
-      console.log(`[checkPending-chow] ${player.name.substring(0,8)} discarder=${discarderIndex}(${game.players[discarderIndex]?.name?.substring(0,8)}) nextActive=${nextActivePlayer?.name?.substring(0,8) || 'NONE'} isNextActive=${isNextActive} melds=${player.hand.exposedMelds.length}/4 exclusionState=${JSON.stringify(exclusionState)} chowExclusionOk=${chowExclusionOk} tile=${discardedTile.suit}-${discardedTile.value}`);
+      const playerStatus = player.status;
+      const playerTiles = player.hand.concealedTiles.filter(t => t.suit === discardedTile.suit && !wildChecker(t)).map(t => t.value).sort((a,b) => a-b);
+      console.log(`[checkPending-chow] ${player.name.substring(0,8)} status=${playerStatus} discarder=${discarderIndex}(${game.players[discarderIndex]?.name?.substring(0,8)}) nextActive=${nextActivePlayer?.name?.substring(0,8) || 'NONE'}(${nextActivePlayer?.id?.substring(0,8) || 'N'}) playerId=${player.id.substring(0,8)} isNextActive=${isNextActive} melds=${player.hand.exposedMelds.length}/4 exclusionState=${JSON.stringify(exclusionState)} chowExclusionOk=${chowExclusionOk} tile=${discardedTile.suit}-${discardedTile.value} playerHasTiles=${JSON.stringify(playerTiles)}`);
       if (isNextActive && player.hand.exposedMelds.length < 4) {
         if (chowExclusionOk) {
           const sequences = this.findChowSequences(player.hand.concealedTiles, discardedTile, game);
