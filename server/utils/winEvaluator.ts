@@ -112,6 +112,10 @@ export class WinEvaluator {
     const winCheck = flags?.extraTile
       ? canWin(handTiles, player.hand.exposedMelds, this.getWinWildArg(game), undefined, game.wildTileGroup)
       : this.getCachedWinCheck(game, player);
+    // ★ DEBUG: 追踪空胡牌选项 bug
+    if (context === 'discard' && flags?.extraTile) {
+      console.log(`[DEBUG-winOptions] player=${player.name} concealed=${player.hand.concealedTiles.length} extraTile=${flags.extraTile.suit}-${flags.extraTile.value} handTiles=${handTiles.length} canWin=${winCheck.canWin} types=${winCheck.types} exposed=${player.hand.exposedMelds.length}`);
+    }
     const wildParts = game.customScoringMode?.split('-');
     const wildSuit = wildParts?.[0] ? wildParts[0] as TileSuit : undefined;
     const wildValue = wildParts?.[1] ? parseInt(wildParts[1], 10) : undefined;
