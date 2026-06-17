@@ -538,6 +538,25 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       // ★ V2.14 K哥铁律: 碰了 shanten 降低 → 大幅提升碰牌概率
       // 原条件太严(candidateShanten===0), 改为 shanten 任何降低都触发
       const isShantenImproved = candidateShanten < passShanten
+      // ★ K哥铁律(2026-06-16 bug:AI手牌4张=1对+百搭+某牌, 别人打该对牌不碰):
+      // 碰后剩1-2张, 含百搭 → 大吊百搭, 几乎必自摸 → 必碰
+      const _isPengAction = action === ActionType.PENG
+      const _handHasMatchingPair = _isPengAction && player.hand.concealedTiles.filter(
+        (t: any) => t.suit === claimTile.suit && t.value === claimTile.value
+      ).length >= 2
+      const _postPengTileCount = player.hand.concealedTiles.length - 2  // 碰后手牌数
+      // 碰后剩1-2张(大吊百搭) + 碰后有百搭 + 碰成后几乎必自摸 → 必碰
+      if (_isPengAction && _handHasMatchingPair && _postPengTileCount <= 2 && wildCount >= 1 && !routeState.features.pureFlushUpgradeReady) {
+        // 检查碰后手牌是否都是百搭 + 1张
+        const _remainingNonWildCount = _postPengTileCount - 1  // 假设有1张百搭
+        if (_remainingNonWildCount <= 1) {
+          return {
+            allowed: true,
+            tuneDelta: 2.5,  // 极高: 大吊百搭几乎必自摸
+            reason: 'peng_leaves_daDiao_with_wild_must_claim',
+          }
+        }
+      }
       if (isShantenImproved && !routeState.features.pureFlushUpgradeReady) {
         // V2.13: 降低碰牌tuneDelta(1.8→0.8) → 增加门清率
         // 只有直接听牌(shanten=0→0)才给高分
