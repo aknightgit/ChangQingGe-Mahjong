@@ -397,7 +397,7 @@ function scoreByRoute(input: RouteDiscardInput): number {
         // 仅在真正危险时(风牌完全没出现+牌局后期+其他玩家已经吃碰2-3口+手牌少)才保留
         // 危险条件: 全部满足
         //   - 风牌完全没出现(visibleCopies === 0)
-        //   - 牌局后期(wallRemaining <= 50)
+        //   - 牌局后期(wallRemaining <= 20) ★ 2026-06-17调整: 50→20, 更激进
         //   - 其他玩家已经吃碰2-3口(其他玩家副露>=2)
         //   - 手牌少(player.hand.concealedTiles.length <= 6)
         const _tileVisibleCopies = visibleCopies ?? 0
@@ -407,7 +407,7 @@ function scoreByRoute(input: RouteDiscardInput): number {
         const _myTileCount = input.player?.hand?.concealedTiles?.length || 0
         const _isDangerousHonor =
           _tileVisibleCopies === 0 &&
-          wallRemaining <= 50 &&
+          wallRemaining <= 20 &&
           _otherPlayersHighExposed >= 1 &&
           _myTileCount <= 6
         if (_isDangerousHonor) {
