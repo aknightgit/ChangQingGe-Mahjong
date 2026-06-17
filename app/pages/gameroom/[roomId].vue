@@ -5073,14 +5073,32 @@ if (typeof window !== 'undefined') {
 }
 
 // AI 接管检测(通过轮询检查 botModePlayers)
-const checkAITakeover = () => {
+// ★ 修复: 真人被误托管 → 自动调 comeback API 退出托管状态
+const checkAITakeover = async () => {
   if (!gameState.value?.players) return
   // ★ 修复：用自己(myPlayerId)查,不是 currentPlayer
   // 否则其他玩家回合时,自己托管状态会被重置
   const myId = (route.query.playerId as string) || sessionStorage.getItem('mahjong.playerId')
   if (!myId) return
-  const me = gameState.value.players.find(p => p.id === myId || p.userId === myId)
-  isAIControlled.value = !!(me as any)?.isBotControlled
+  const me: any = gameState.value.players.find(p => p.id === myId || p.userId === myId)
+  if (!me) return
+  const isBot = !!(me as any)?.isBotControlled
+  isAIControlled.value = isBot
+  // ★ 新增: 真人(非 AI 玩家)被误托管 → 自动调 comeback 退出托管
+  if (isBot && !me.name?.startsWith('AI-') && !me.name?.startsWith('电脑')) {
+    console.log('[checkAITakeover] Human player bot-controlled, auto-recovering...', me.name)
+    try {
+      await $fetch('/mahjong/api/game/comeback', {
+        method: 'POST',
+        body: { gameId: roomId.value, playerId: me.id }
+      })
+      isAIControlled.value = false
+      addBroadcast?.(`👋 [${me.name}] 已自动回到牌桌!`, 'success')
+      console.log('[checkAITakeover] comeback success for', me.name)
+    } catch (e: any) {
+      console.error('[checkAITakeover] comeback failed:', e?.message || e)
+    }
+  }
 }
 
 // ---- Admin / Debug Functions ----

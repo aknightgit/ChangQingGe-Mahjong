@@ -2418,6 +2418,12 @@ class GameManager {
       return;
     }
 
+    // ★ 修复: 玩家主动操作 → 自动退出 bot 托管模式(防止被永久托管)
+    if (this.botModePlayers.has(playerId)) {
+      this.disableBotMode(playerId);
+      console.log(`[executeAction] auto-disable bot mode for ${player.name} (${playerId})`);
+    }
+
     // 玩家已响应,取消当前自动超时推进
     this.timerManager.clearPendingActionTimer(gameId);
     // 取消超时自动接管(玩家已操作)

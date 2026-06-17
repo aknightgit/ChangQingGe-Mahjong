@@ -36,6 +36,8 @@ export class GameStore {
       set: (v: any) => { gm.wsManager = v; },
       configurable: true
     });
+    // 暴露 gameManager 引用以便 broadcastGameState 注入 isBotControlled
+    (self as any).gameManager = gm;
   }
 
   /** @internal Called by GameManager to restore pending timeouts on load */
@@ -137,7 +139,12 @@ export class GameStore {
     // ★ K哥铁律: 任何阶段都推送 players + roundStats
     // 旧逻辑只在 REVEAL/ENDED 推 players，导致 STARTING/PLAYING 阶段客户端
     // 看不到新的 isDealer 标记（庄家指示器不更新）
-    payload.players = game.players;
+    // ★ 修复: 给每个 player 注入 isBotControlled 字段，客户端可识别真人被误托管
+    const gm: any = (this as any).gameManager;
+    payload.players = game.players.map((p: any) => ({
+      ...p,
+      isBotControlled: !!(gm?.isPlayerInBotMode?.(p.id) || gm?.isPlayerBotControlled?.(p))
+    }));
     payload.roundStats = game.roundStats;
     if (game.phase === GamePhase.REVEAL || game.phase === GamePhase.ENDED) {
       payload.endReason = game.endReason;
