@@ -502,7 +502,18 @@ function scoreByRoute(input: RouteDiscardInput): number {
         _gap_pair +
         _shortSuit_single +
         _adjacent_single +
-        (isHonor(tile) && count >= 2 ? -1 : 0)
+        (isHonor(tile) && count >= 2 ? -1 : 0) +
+        // ★ K哥铁律(2026-06-18): 清碰升级路径 → 风牌对子积极打掉
+        // 条件: 数字门对子/刻子>=3 + 百搭>=1 + 风牌仅1对 → 风牌对子加分打掉
+        (isHonor(tile) && count >= 2 && (() => {
+          const _wildCount = routeState?.features?.wildCount ?? 0
+          const _honorPairCount = routeState?.features?.honorPairCount ?? 0
+          if (_wildCount >= 1 && _honorPairCount <= 1) {
+            // 仅剩1对风牌 + 有百搭 → 风牌对子要打掉升级清碰
+            return (_firmCommit ? 4.0 : 2.5)
+          }
+          return 0
+        })())
       )
     }
 

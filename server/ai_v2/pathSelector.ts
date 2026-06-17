@@ -449,6 +449,45 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
         score += 12  // 几乎纯数字门+全刻子 → 清碰路线
         reasons.push('qing_peng_push')
       }
+      // ★ K哥铁律(2026-06-18): 混碰→清碰升级路径
+      // 条件: 数字门对子/刻子>=3组 + 手上有百搭 + 风牌对子<=1
+      // 逻辑: 百搭可当数字牌补位, 把风牌对子打掉即可升级为清碰
+      // 例: 万子刻子2组+万子对子1组 + 1百搭 → 清碰Ready
+      {
+        const _suitedTriplets = (input.player.hand.exposedMelds || []).filter((m: any) =>
+          m.tiles?.length >= 3 && !m.tiles?.[0]?.suit?.match?.(/^(wind|dragon|flower)$/) &&
+          NUMBER_SUITS.includes(m.tiles[0]?.suit)
+        ).length
+        const _suitedPairTripletCount = suitedPairCount + _suitedTriplets
+        const _wildCount = features.wildCount || 0
+        const _canDiscardHonorPair = _honorPairs <= 1  // 风牌对子<=1, 可以扔掉升级清碰
+        const _wallRemaining = input.wallRemaining || 0
+        const _isEarly = _wallRemaining > 60  // 牌局早期: 牌墙>60
+        if (_suitedPairTripletCount >= 3 && _wildCount >= 1 && _canDiscardHonorPair) {
+          // 数字门>=3组+百搭+风牌可扔 → 推清碰升级
+          let _qingPengPush = 6.0 + _suitedPairTripletCount * 1.5 + _wildCount * 2.0
+          // 风牌对子=0 → 更激进(无代价)
+          if (_honorPairs === 0) _qingPengPush += 4.0
+          // 其他三家不做此数字门 + 牌局尚早 → 更奖励
+          const _tileSuit = features.longestSuit
+          if (_tileSuit) {
+            const _otherPlayersDoingThisSuit = (input.game.players || []).filter((p: any) =>
+              p.id !== input.player?.id && (p.hand?.exposedMelds || []).some((m: any) =>
+                m.tiles?.some((t: any) => t.suit === _tileSuit)
+              )
+            ).length
+            if (_otherPlayersDoingThisSuit === 0 && _isEarly) {
+              _qingPengPush += 5.0  // 全场没人做 + 牌局早期 → 强力升级
+              reasons.push('qing_peng_early_no_competition')
+            } else if (_otherPlayersDoingThisSuit <= 1 && _isEarly) {
+              _qingPengPush += 3.0  // 只有1家在做 + 牌局早期
+              reasons.push('qing_peng_early_low_competition')
+            }
+          }
+          score += _qingPengPush
+          reasons.push(`qing_peng_upgrade_suit${_suitedPairTripletCount}_wild${_wildCount}`)
+        }
+      }
       // V2.9: ALL_PUNGS 路线继续降权(2.5+0.3 → 1.2+0.2) → 减少混碰
       // V2.13: ALL_PUNGS hunPeng继续降权 → 混碰<10%
       if (hunPengReady) score += getPolicyValue(policy, 'hunPengPursuit') * (0.8 + features.honorPairCount * 0.15)
