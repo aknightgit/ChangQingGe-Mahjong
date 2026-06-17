@@ -527,6 +527,25 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       if (!isHonorTile && routeState.targetSuit && claimTile.suit !== routeState.targetSuit) {
         return { allowed: false, tuneDelta: -1.6, reason: 'off_route_half_flush' }
       }
+      // ★ K哥铁律(2026-06-17): 清混一色路线下, 吃牌(尤其单边吃)大幅加分
+      // 优先吃保留更多开口选择, 留下半张数字牌可以做更多组合
+      // 例: 上家出3筒, 手牌有1-2-4-5筒, 优先吃1-2筒(单边吃)而非4-5筒(单边吃另一边)
+      //     留下4-5筒还可做5-6筒(等6筒)或2-3-4(已吃)等组合
+      if (action === ActionType.CHOW && !isHonorTile && routeState.targetSuit && claimTile.suit === routeState.targetSuit) {
+        const _strongChow = isStrongChow(player.hand.concealedTiles, claimTile)
+        const _alreadyOpened = exposedMeldCount >= 1
+        let _chowBoost = 0
+        if (_strongChow === 'edge') _chowBoost = 1.5  // 单边吃: 强吃
+        else if (_strongChow === 'kant') _chowBoost = 1.0  // 两面吃
+        else if (_strongChow === 'gap') _chowBoost = 0.6  // 坎张吃
+        if (_chowBoost > 0 && _alreadyOpened) {
+          return {
+            allowed: true,
+            tuneDelta: _chowBoost + routeGain * 0.06,
+            reason: `half_flush_chow_${_strongChow}_preferred`,
+          }
+        }
+      }
       // ★ K哥铁律(2026-06-17): 混一色路线下, 杠数字门会破坏顺子成型冲动
       // 轻混一色(secondSuitCount>0): 长门>=6时, 杠会破坏潜在顺子, 严禁
       // 清混一色(secondSuitCount===0, targetSuit纯): 杠依然破坏顺子, 也不应杠
@@ -578,6 +597,13 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
         // 只有直接听牌(shanten=0→0)才给高分
         const tingDelta = (passShanten - candidateShanten) * 0.5 // shanten 降幅越大越碰, 但更温和
         const directTingBoost = candidateShanten === 0 ? 0.8 : 0  // 直接听牌额外加分
+        // ★ K哥铁律(2026-06-17): 同时能吃能碰时, 优先吃 → 降低碰牌tune
+        // 吃牌保留更多数字门开口选择, 不破坏对子/单张
+        // 条件: claimTile是数字门 + 手牌有2张相邻的牌可形成顺子 + 已经有副露(非门清)
+        const _tileIsNumber = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS].includes(claimTile.suit as TileSuit)
+        const _handHasChowPair = _tileIsNumber && isStrongChow(player.hand.concealedTiles, claimTile) !== null
+        const _alreadyOpened = exposedMeldCount >= 1
+        const _chowOverPengPenalty = (_handHasChowPair && _alreadyOpened) ? -0.6 : 0
         return {
           allowed: true,
           tuneDelta:
@@ -585,7 +611,8 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
             tingDelta +
             directTingBoost +
             routeGain * 0.1 +
-            deadTilePungBonus,
+            deadTilePungBonus +
+            _chowOverPengPenalty,
           reason: candidateShanten === 0 ? 'half_flush_direct_ting_must_claim' : 'half_flush_shanten_improved',
         }
       }
