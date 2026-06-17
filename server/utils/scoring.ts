@@ -741,34 +741,44 @@ function calculateFormulaFan(
   // 取 baseFan × extra 最大的方案
 
   // 先算方案A的 comboPoints（百搭归位，不虚拟分配）
+  // ★ K哥铁律(2026-06-17): 番数计算必须基于已经胡牌的条件之上
+  // 百搭归位后手牌(去掉百搭功能)必须能胡(canWin=true)才能计算comboPoints
+  // 否则wildReturnBonus=-1, 表示方案A不可用, 强制走方案B
   let wildReturnBonus = -1;  // -1 表示方案A不可用
   if (wildTileSuit !== undefined && wildTileValue !== undefined) {
     const wildCount = countWildTiles(handTiles, wildTileSuit, wildTileValue, wildTileGroup);
     if (wildCount > 0) {
-      // 用原手牌（百搭当原牌）算 comboPoints
-      const returnMelds = [...exposedMelds];
-      const returnGroups = groupTiles(handTiles);
-      for (const [, group] of returnGroups) {
-        if (group.length >= 3) {
-          returnMelds.push({ type: MeldType.TRIPLET, tiles: group.slice(0, 3), isConcealed: true });
+      // ★ 第一步: 检查百搭归位(去掉百搭功能)后能否胡牌
+      // 百搭归位 = 把百搭当原牌用 = 不用百搭能力 → canWin的wild参数=()=>false
+      const noWildCanWin = canWin(handTiles, exposedMelds, () => false);
+      if (noWildCanWin.canWin) {
+        // ★ 第二步: 归位后能胡, 才计算 comboPoints
+        // 用原手牌（百搭当原牌）算 comboPoints
+        const returnMelds = [...exposedMelds];
+        const returnGroups = groupTiles(handTiles);
+        for (const [, group] of returnGroups) {
+          if (group.length >= 3) {
+            returnMelds.push({ type: MeldType.TRIPLET, tiles: group.slice(0, 3), isConcealed: true });
+          }
         }
-      }
-      let returnCombo = 0;
-      for (const meld of returnMelds) {
-        const first = meld.tiles[0];
-        const isKong = meld.type === MeldType.KONG || meld.type === MeldType.CONCEALED_KONG;
-        const isConcealed = meld.type === MeldType.CONCEALED_KONG;
-        if (isWind(first)) {
-          if (isKong) { returnCombo += 2 + (isConcealed ? 1 : 0); }
-          else if (meld.type === MeldType.TRIPLET) { returnCombo += 1; }
-        } else if (isDragon(first)) {
-          if (isKong) { returnCombo += 3 + (isConcealed ? 1 : 0); }
-          else if (meld.type === MeldType.TRIPLET) { returnCombo += 2; }
-        } else {
-          if (isKong) { returnCombo += 1 + (isConcealed ? 1 : 0); }
+        let returnCombo = 0;
+        for (const meld of returnMelds) {
+          const first = meld.tiles[0];
+          const isKong = meld.type === MeldType.KONG || meld.type === MeldType.CONCEALED_KONG;
+          const isConcealed = meld.type === MeldType.CONCEALED_KONG;
+          if (isWind(first)) {
+            if (isKong) { returnCombo += 2 + (isConcealed ? 1 : 0); }
+            else if (meld.type === MeldType.TRIPLET) { returnCombo += 1; }
+          } else if (isDragon(first)) {
+            if (isKong) { returnCombo += 3 + (isConcealed ? 1 : 0); }
+            else if (meld.type === MeldType.TRIPLET) { returnCombo += 2; }
+          } else {
+            if (isKong) { returnCombo += 1 + (isConcealed ? 1 : 0); }
+          }
         }
+        wildReturnBonus = returnCombo;
       }
-      wildReturnBonus = returnCombo;
+      // 归位后不能胡 → wildReturnBonus保持-1, 方案A不可用
     }
   }
 
