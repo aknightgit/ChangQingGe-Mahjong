@@ -343,16 +343,20 @@ function evaluateSingleRoute(route: RouteKind, input: any, features: RouteFeatur
       if (features.longestSuitCount >= 9) { reasons.push('half_flush_nine_tiles'); score += 16 }
       else if (features.longestSuitCount >= 7) { reasons.push('half_flush_seven_tiles'); score += 10 }
       else if (features.longestSuitCount < 6) score -= 6
-      if (features.upstreamVoidSuit && features.upstreamVoidSuit === targetSuit) { reasons.push('upstream_void_target'); score += 3 }
+      if (features.upstreamVoidSuit && features.upstreamVoidSuit === targetSuit) { reasons.push('upstream_void_target'); score += 4.5 /* was: 3, 2026-06-17: 放大上家不要的门的影响 */ }
       // ★ K哥铁律(2026-06-05): 上家不要长门(打了2+张) + 自己长门够强(>=4张) → 允许同门
-      if (features.upstreamRejectedSuit && features.upstreamRejectedSuit === targetSuit && features.longestSuitCount >= 4) { reasons.push('upstream_rejected_target'); score += 3.0 }
+      // 2026-06-17: 放大到 3.0 → 4.5, 略微降低防守意识
+      if (features.upstreamRejectedSuit && features.upstreamRejectedSuit === targetSuit && features.longestSuitCount >= 4) { reasons.push('upstream_rejected_target'); score += 4.5 /* was: 3.0 */ }
       // ★ V2: 两门长度接近时，上家不做+下家做的门优先
+      // 2026-06-17: 放大上家不做的门的加分, 选上家不要的数字门
+      // 例: 上家做万不做条, 我方万=7条=6筒=0, 选条(targetSuit=条) + 加分
       if (features.secondSuitCount > 0 && Math.abs(features.longestSuitCount - features.secondSuitCount) <= 2) {
         const secondSuit = NUMBER_SUITS.find(s => s !== features.longestSuit && (features as any)[s + 'Count'] === features.secondSuitCount) || null
         if (secondSuit) {
-          // 上家不做第二门 → 第二门加分
-          if (features.upstreamVoidSuit === secondSuit) { reasons.push('upstream_void_second'); score += 4.5 }
-          if (features.upstreamRejectedSuit === secondSuit) { reasons.push('upstream_rejected_second'); score += 3.0 }
+          // 上家不做第二门 → 第二门加分(放大: 4.5 → 6.5)
+          if (features.upstreamVoidSuit === secondSuit) { reasons.push('upstream_void_second'); score += 6.5 /* was: 4.5 */ }
+          // 上家拒做第二门 → 第二门加分(放大: 3.0 → 5.0)
+          if (features.upstreamRejectedSuit === secondSuit) { reasons.push('upstream_rejected_second'); score += 5.0 /* was: 3.0 */ }
           // 下家做第二门 → 第二门加分（下家要的我也做，卡住他）
           const allPlayers = input.game.players || []
           const downstream = allPlayers.find((p: any) => p.position === ((input.player.position || 0) + 1) % 4)
