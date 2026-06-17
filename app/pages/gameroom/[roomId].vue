@@ -3087,6 +3087,7 @@ const fetchWinOptions = async () => {
     const res = await $fetch<any>('/api/game/win-options', {
       query: { gameId: roomId.value, playerId: currentPlayer.value?.id }
     })
+    console.log('[DEBUG-fetchWinOptions] API response:', JSON.stringify(res).slice(0, 500))
     const options = (res.winOptions || []).slice(0, 3)
     // 快照当前输家人数,避免后续牌局进展导致总赢变动
     const players = Array.isArray(gameState.value?.players) ? gameState.value.players : []

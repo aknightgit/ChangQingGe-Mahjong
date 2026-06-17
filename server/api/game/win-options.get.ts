@@ -58,6 +58,8 @@ export default defineEventHandler(async (event) => {
       label: buildDisplayLabel(option, winningTileName)
     }));
 
+    console.log(`[DEBUG-winPanel] gameId=${gameId} playerId=${playerId} pendingAction=${pendingAction ? `{tile=${pendingAction.tile?.suit}-${pendingAction.tile?.value}, actions=${pendingAction.availableActions}}` : 'null'} context=${!!pendingAction?.tile ? 'discard' : 'self_draw'} handTiles=${currentPlayer?.hand?.concealedTiles?.length} exposed=${currentPlayer?.hand?.exposedMelds?.length} options=${filteredWinOptions.length} result=${decoratedWinOptions.length}`);
+
     return { success: true, winOptions: decoratedWinOptions };
   } catch (error: any) {
     throw createError({ statusCode: 400, message: error.message || 'Failed to get win options' });
