@@ -31,6 +31,22 @@ function countVisibleCopies(input: RouteDiscardInput): number {
   return visible
 }
 
+// ★ K哥铁律(2026-06-17): 统计其他玩家在做的"数字门"花色集合
+// 在做 = 该玩家有该花色的副露(顺子/刻子/杠), 表示他在做该花色
+// 返回: 该数字门花色被多少个其他玩家同时在做
+function countOtherPlayersDoingSuit(input: RouteDiscardInput, suit: TileSuit): number {
+  if (![TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS].includes(suit)) return 0
+  let count = 0
+  for (const player of input.game.players || []) {
+    if (player.id === input.player?.id) continue
+    const hasThisSuit = (player.hand?.exposedMelds || []).some((m: any) =>
+      m.tiles?.some((t: any) => t.suit === suit)
+    )
+    if (hasThisSuit) count++
+  }
+  return count
+}
+
 function getSecondSuit(input: RouteDiscardInput): TileSuit | null {
   const ordered = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS]
     .map(suit => ({ suit, count: input.hand.filter(tile => tile.suit === suit).length }))
@@ -427,50 +443,65 @@ function scoreByRoute(input: RouteDiscardInput): number {
       return 5.8 + (tile.suit === shortestSuit ? 1.1 : 0)
 
     case 'ALL_PUNGS': {
-      // ★ 碰碰胡坚决执行:4+对子时单张一律高正分打掉
+      // ★ K哥铁律(2026-06-17): 碰碰胡路线弃牌优先级(从高到低)
+      //   P1. 外面出现2-3张的牌(已大量见, 几乎不可能成对子, 必打)
+      //   P2. 有2家同时在做的数字门牌(被多家需要, 放炮风险极高, 必打)
+      //   P3. 已经出现过1张的牌(熟张, 安全)
+      //   P4. 风牌单张(风牌不是碰碰胡需要的, 必打)
+      //   P5. 死对(手牌有对子但外面已出现2张, 碰不到, 该死)
+      // 越靠前越优先打
       const _pairTripletTotal = routeState.features.pairCount + routeState.features.tripletCount
       const _firmCommit = _pairTripletTotal >= 4
       const _discardScore = count >= 2 ? -4.4 : (_firmCommit ? 5.5 : 3.5)
-      // 单张在短门且有熟张 → 最高优先打
-      const _shortSuit_seen_single =
-        count === 1 && isShortestSuitTile && visibleCopies >= 1 ? (_firmCommit ? 7.0 : 5.0) : 0
-      // 单张在短门 → 优先打
-      const _shortSuit_single =
-        count === 1 && isShortestSuitTile ? (_firmCommit ? 5.0 : 3.2) : 0
-      // 单张有邻牌(潜在的顺子)→ 拆了不影响对子
-      const _adjacent_single =
-        count === 1 && nearby > 0 ? (_firmCommit ? 3.5 : 2.2) : 0
-      // 对子在短门 → 额外保留
-      const _shortSuit_pair =
-        count >= 2 && isShortestSuitTile ? -2.2 : 0
-      // 对子所属花色短门缺口大 → 更应保留
-      const _gap_pair =
-        count >= 2 && isShortestSuitTile && suitGap >= 3 ? -1.6 : 0
-      // ★ V2.15 K哥铁律(2026-06-16): 风箭单张坚决打(碰碰胡不需要风牌单张)
-      // 加大力度: 1.0/2.5 → 3.0/5.0, 优先打孤张风箭
+      // P1. 外面出现2-3张的牌(visibleCopies >= 2): 最高优先打(已大量见, 不可能成对)
+      const _heavySeen =
+        count === 1 && visibleCopies >= 2 ? (_firmCommit ? 7.5 : 5.5) :
+        (count === 1 && visibleCopies >= 3 ? (_firmCommit ? 8.5 : 6.5) : 0)
+      // P2. 有2家同时在做的数字门牌(其他玩家>=2个在做该花色): 最高优先打
+      const _tileIsNumber = [TileSuit.DOTS, TileSuit.CHARACTERS, TileSuit.BAMBOOS].includes(tile.suit as TileSuit)
+      const _otherPlayersDoingThisSuit = _tileIsNumber ? countOtherPlayersDoingSuit(input, tile.suit as TileSuit) : 0
+      const _multiPlayerDanger =
+        count === 1 && _otherPlayersDoingThisSuit >= 2 ? (_firmCommit ? 7.0 : 5.0) :
+        (count === 1 && _otherPlayersDoingThisSuit >= 1 && visibleCopies >= 1 ? (_firmCommit ? 5.5 : 3.8) : 0)
+      // P3. 已经出现过1张的牌(visibleCopies === 1): 熟张, 安全
+      const _seen_bonus =
+        count === 1 && visibleCopies === 1 ? (_firmCommit ? 4.5 : 3.0) :
+        (count === 1 && visibleCopies >= 2 ? 0 : 0)  // visibleCopies>=2 已被 _heavySeen 覆盖
+      // P4. 风牌单张(碰碰胡不需要风牌单张): 必打
       const _honor_single_keep =
-        count === 1 && isHonor(tile) ? (_firmCommit ? 5.0 : 3.0) : 0
-      // ★ V2.15 K哥铁律(2026-06-16): 风箭孤张+台面出现过的熟张 → 最高优先打
-      // 已有 _seen_bonus 覆盖所有单张, 这里额外加分给风箭熟张
+        count === 1 && isHonor(tile) ? (_firmCommit ? 5.0 : 3.0) :
+        (count === 1 && isHonor(tile) && visibleCopies >= 1 ? (_firmCommit ? 6.5 : 4.5) : 0)
       const _honor_seen_bonus =
         count === 1 && isHonor(tile) && visibleCopies >= 1 ? (visibleCopies >= 2 ? 3.0 : 1.5) : 0
-      // ★ V2.2: 熟张额外加分(碰碰胡优先打熟张,降低放炮风险)
-      const _seen_bonus =
-        count === 1 && visibleCopies >= 1 ? (_firmCommit ? 3.5 : 2.0) : 0
-      // ★ V2.2: 多人做的数字门单张 → 坚决打(别留)
-      const _others_doing_single =
-        count === 1 && !isHonor(tile) && visibleCopies >= 2 ? 2.0 : 0
+      // P5. 死对(手牌有对子, 外面已出现2张, 几乎碰不到) → 必打掉, 转单张
+      // 死对识别: count >= 2(对子) + visibleCopies >= 2(外面已出2张) → 剩1张, 无法凑3张碰
+      const _deadPair =
+        count >= 2 && visibleCopies >= 2 ? (_firmCommit ? 3.5 : 2.0) :
+        (count >= 2 && visibleCopies >= 3 ? (_firmCommit ? 4.5 : 3.0) : 0)
+      // 保留短门对子(对子本身有保留价值, 除非已死)
+      const _shortSuit_pair =
+        count >= 2 && isShortestSuitTile ? -2.2 : 0
+      // 短门缺口大的对子
+      const _gap_pair =
+        count >= 2 && isShortestSuitTile && suitGap >= 3 ? -1.6 : 0
+      // 单张在短门且有熟张(已有P1/P2/P3覆盖, 这里只处理visibleCopies=0)
+      const _shortSuit_single =
+        count === 1 && isShortestSuitTile && visibleCopies === 0 ? (_firmCommit ? 4.0 : 2.5) : 0
+      // 单张有邻牌(潜在的顺子)→ 拆了不影响对子(visibleCopies=0)
+      const _adjacent_single =
+        count === 1 && nearby > 0 && visibleCopies === 0 ? (_firmCommit ? 3.0 : 2.0) : 0
       return (
         _discardScore +
-        _shortSuit_seen_single +
-        _shortSuit_single +
-        _adjacent_single +
-        _shortSuit_pair +
-        _gap_pair +
+        _heavySeen +
+        _multiPlayerDanger +
+        _seen_bonus +
         _honor_single_keep +
         _honor_seen_bonus +
-        _seen_bonus +
-        _others_doing_single +
+        _deadPair +
+        _shortSuit_pair +
+        _gap_pair +
+        _shortSuit_single +
+        _adjacent_single +
         (isHonor(tile) && count >= 2 ? -1 : 0)
       )
     }
