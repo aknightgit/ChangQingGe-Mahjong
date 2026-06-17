@@ -527,6 +527,22 @@ export function evaluateRouteClaim(input: RouteClaimInput): RouteClaimDecision {
       if (!isHonorTile && routeState.targetSuit && claimTile.suit !== routeState.targetSuit) {
         return { allowed: false, tuneDelta: -1.6, reason: 'off_route_half_flush' }
       }
+      // ★ K哥铁律(2026-06-17): 混一色路线下, 杠数字门会破坏顺子成型冲动
+      // 轻混一色(secondSuitCount>0): 长门>=6时, 杠会破坏潜在顺子, 严禁
+      // 清混一色(secondSuitCount===0, targetSuit纯): 杠依然破坏顺子, 也不应杠
+      // 例: 手牌有1-2-3万 + 一对4万, 杠4万会浪费一对4万, 破坏1-2-3-4万顺子潜力
+      if (action === ActionType.KONG && !isHonorTile && routeState.targetSuit && claimTile.suit === routeState.targetSuit) {
+        const _longestSuit = routeState.features.longestSuitCount || 0
+        const _secondSuit = routeState.features.secondSuitCount || 0
+        // 轻混一色+长门>=6: 禁止杠(破坏顺子)
+        if (_secondSuit > 0 && _longestSuit >= 6) {
+          return { allowed: false, tuneDelta: -2.0, reason: 'half_flush_kong_breaks_sequence' }
+        }
+        // 清混一色(已纯单门)但还没听牌: 也不应杠
+        if (candidateShanten > 0) {
+          return { allowed: false, tuneDelta: -1.5, reason: 'half_flush_kong_premature' }
+        }
+      }
       // ★ V2.2: 绝张碰牌在混一色路线下也有价值
       if (isDeadTilePung && isHonorTile) {
         return { allowed: true, tuneDelta: 0.9 + routeGain * 0.06 + deadTilePungBonus, reason: 'half_flush_dead_tile_honor_peng' }

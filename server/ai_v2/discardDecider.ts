@@ -392,8 +392,32 @@ function scoreByRoute(input: RouteDiscardInput): number {
           if (isEarlyGame) return count >= 2 ? 7.5 : 6.5  // 早期+百搭→风牌坚决打
           return count >= 2 ? 5.5 : 4.5  // 中后期→温和打风牌
         }
-        if (count >= 2) return -3.0
-        return -1.0
+        // ★ V2.15.1 K哥铁律(2026-06-17): 降低生张风牌危险评分
+        // 默认: 打生张风牌(>0), 保留目标门数字牌
+        // 仅在真正危险时(风牌完全没出现+牌局后期+其他玩家已经吃碰2-3口+手牌少)才保留
+        // 危险条件: 全部满足
+        //   - 风牌完全没出现(visibleCopies === 0)
+        //   - 牌局后期(wallRemaining <= 50)
+        //   - 其他玩家已经吃碰2-3口(其他玩家副露>=2)
+        //   - 手牌少(player.hand.concealedTiles.length <= 6)
+        const _tileVisibleCopies = visibleCopies ?? 0
+        const _otherPlayersHighExposed = (input.game?.players || []).filter((p: any) =>
+          p.id !== input.player?.id && p.hand?.exposedMelds?.filter((m: any) => m.type !== 'flower').length >= 2
+        ).length
+        const _myTileCount = input.player?.hand?.concealedTiles?.length || 0
+        const _isDangerousHonor =
+          _tileVisibleCopies === 0 &&
+          wallRemaining <= 50 &&
+          _otherPlayersHighExposed >= 1 &&
+          _myTileCount <= 6
+        if (_isDangerousHonor) {
+          // 真正危险: 保留风牌 (负分)
+          if (count >= 2) return -2.0
+          return -1.5
+        }
+        // 默认: 打掉生张风牌 (正分), 保留目标门
+        if (count >= 2) return 1.5  // 对子: 仍可考虑留(转混碰), 但倾向打掉
+        return 2.5  // 单张: 积极打掉
       }
       // ★ V2.7 Phase 1.1: 门口已单门时，非 targetSuit 数牌要更坚决打掉
       if ((routeState.features as any).isExposedSingleSuit === true && tile.suit !== routeState.targetSuit && tile.suit !== 'hua') {
