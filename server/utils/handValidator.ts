@@ -1561,6 +1561,10 @@ export function canWin(
   const exactCanWin = wildTileId
     ? canWinByProjectRuleWithWildExact(concealed, exposed, wildTileId)
     : canWinByProjectRuleNoWild(concealed, exposed);
+  // ★ DEBUG: 同 detectTypes 的 satisfiesFormat 检查(用于诊断)
+  const daDiaoSatisfiesFormat = (concealedNonFlower.length === 1 || concealedNonFlower.length === 2)
+    ? canFormMelds(concealedNonFlower, 0, () => false)
+    : false;
   // 大吊（1张手牌 或 2张手牌含1张捉冲牌）：即使 detectTypes 返回空，只要 exactCanWin 就应该允许胡
   // ★ 但必须通过垃圾胡检查：exposed 中有多门+顺子+无风箭 → 垃圾胡，不允许
   const isDaDiaoState = concealedNonFlower.length === 1 || concealedNonFlower.length === 2;
@@ -1654,11 +1658,11 @@ export function canWin(
   }
 
   const result = { canWin: finalCanWin, types: validTypes }
-  // ★ 诊断: canWin 结果日志（仅在有百搭且胡牌时打印，需 CANWIN_DIAG=1 开启）
-  if (process.env.CANWIN_DIAG && finalCanWin && wildTileId && concealed.length <= 14) {
+  // ★ 诊断: canWin 结果日志
+  if (process.env.CANWIN_DIAG && concealed.length <= 14) {
     const concealedStr = concealed.map(t => `${t.suit}-${t.value}`).join(',');
     const exposedStr = exposed.map(m => `[${m.type}:${m.tiles.map(t => `${t.suit}-${t.value}`).join(',')}]`).join(',');
-    console.log(`[canWin-DIAG] canWin=${finalCanWin} types=${validTypes} concealed=[${concealedStr}] exposed=[${exposedStr}] wildId=${wildTileId} concealedNonFlower=${concealedNonFlower.length} exactCanWin=${exactCanWin} isDaDiao=${isDaDiaoState}`);
+    console.log(`[canWin-DIAG] canWin=${finalCanWin} types=${JSON.stringify(validTypes)} concealed=[${concealedStr}] exposed=[${exposedStr}] wildId=${wildTileId} concealedNonFlower=${concealedNonFlower.length} exactCanWin=${exactCanWin} isDaDiao=${isDaDiaoState} daDiaoTwoTilesNotPair=${daDiaoTwoTilesNotPair} daDiaoBlockedByGarbage=${daDiaoBlockedByGarbage} satisfiesFormat=${daDiaoSatisfiesFormat}`);
   }
   // 缓存结果（同时缓存 boolean 和 types）
   if (canWinResultCache.size < CAN_WIN_CACHE_MAX) {
