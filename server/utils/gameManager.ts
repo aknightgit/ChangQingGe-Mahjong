@@ -797,6 +797,10 @@ class GameManager {
           );
           const hasAnyKongGuard = player.hand.exposedMelds.some(m => m.type === MeldType.KONG);
           const hasGatePassGuard = hasFlowerAtDoorGuard || hasWindDragonTripletGuard || hasAnyKongGuard;
+          // ★ DEBUG: 防御层 gate 检查
+          if (process.env.GATE_DIAG) {
+            console.log(`[GATE-DEFENSE-DIAG] player=${player.name} huTile=${huPendingTile.suit}-${huPendingTile.value} handTypes=[${handTypesGuard.join(',')}] flowerCount=${flowerCountGuard} requiresFlowerGate=${requiresFlowerGateGuard} hasGatePass=${hasGatePassGuard}`);
+          }
           if (requiresFlowerGateGuard && !hasGatePassGuard) {
             console.log(`[resolvePendingAction] ${player.name} HU rejected: 门口无番不能捉冲(types=${handTypesGuard} cleanExposure=true)`);
             this.handlePass(game, player);
@@ -3753,8 +3757,17 @@ class GameManager {
         const hasAnyKong = player.hand.exposedMelds.some(m => m.type === MeldType.KONG);
         const hasGatePass = hasFlowerAtDoor || hasWindDragonTriplet || hasAnyKong;
 
+        // ★ DEBUG: 详绀记录捉冲 gate 检查状态
+        if (process.env.GATE_DIAG) {
+          const concealedStr = player.hand.concealedTiles.map(t => `${t.suit}-${t.value}`).join(',');
+          const meldsStr = player.hand.exposedMelds.map(m => `[${m.type}:${m.tiles.map(t => `${t.suit}-${t.value}`).join(',')}]`).join('|');
+          console.log(`[GATE-DIAG] player=${player.name} discardedTile=${discardedTile.suit}-${discardedTile.value} canWin=${winCheck.canWin} handTypes=[${handTypes.join(',')}] flowerCount=${flowerCount} requiresFlowerGate=${requiresFlowerGate} hasFlowerAtDoor=${hasFlowerAtDoor} hasWindDragonTriplet=${hasWindDragonTriplet} hasAnyKong=${hasAnyKong} hasGatePass=${hasGatePass} concealed=[${concealedStr}] melds=[${meldsStr}]`);
+        }
+
         if (!requiresFlowerGate || hasGatePass) {
           actions.push(ActionType.HU);
+        } else {
+          console.log(`[checkPendingActions] ${player.name} HU BLOCKED by flower gate: types=[${handTypes.join(',')}] flowers=${flowerCount}`);
         }
       }
 
