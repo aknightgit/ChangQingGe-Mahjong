@@ -59,6 +59,9 @@ export default defineEventHandler(async (event) => {
     }));
 
     console.log(`[DEBUG-winPanel] gameId=${gameId} playerId=${playerId} pendingAction=${pendingAction ? `{tile=${pendingAction.tile?.suit}-${pendingAction.tile?.value}, actions=${pendingAction.availableActions}}` : 'null'} context=${!!pendingAction?.tile ? 'discard' : 'self_draw'} handTiles=${currentPlayer?.hand?.concealedTiles?.length} exposed=${currentPlayer?.hand?.exposedMelds?.length} options=${filteredWinOptions.length} result=${decoratedWinOptions.length}`);
+    if (decoratedWinOptions.length === 0) {
+      console.log(`[win-options-API] EMPTY decoratedWinOptions. rawOptions=${JSON.stringify(filteredWinOptions).slice(0,800)} pending=${JSON.stringify({tile: pendingAction?.tile, availableActions: pendingAction?.availableActions})} lastDiscard=${lastDiscardAction ? `${lastDiscardAction.tile?.suit}-${lastDiscardAction.tile?.value} type=${lastDiscardAction.type}` : 'none'}`);
+    }
 
     return { success: true, winOptions: decoratedWinOptions };
   } catch (error: any) {

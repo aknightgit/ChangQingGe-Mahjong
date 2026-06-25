@@ -140,10 +140,24 @@ export class WinEvaluator {
       rawInheritMultiplier: game.inheritMultiplier ?? 1,
       settlementMultiplier: game.settlementMultiplier ?? 1
     });
-    const topOptions = allOptions
+    let topOptions = allOptions
       .filter(option => option.type === context)
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
+    // ★ 防御层(2026-06-26 bug:房间8652 TEST 胡牌面板空): 当 context 过滤后为空,
+    // 但实际手牌在另一个 context 下能胡时(如 self_draw 路径下 generateWinOptions 被
+    // 默认填了 self_draw 类型,而手牌仅在 discard+extraTile 下能成牌), 退回到另一 context
+    if (topOptions.length === 0 && allOptions.length > 0) {
+      const altContext: 'self_draw' | 'discard' = context === 'self_draw' ? 'discard' : 'self_draw';
+      const altOptions = allOptions
+        .filter(option => option.type === altContext)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3);
+      if (altOptions.length > 0) {
+        console.warn(`[winEvaluator-fallback] player=${player.name} requestedContext=${context} fellBackTo=${altContext} allOptions=${allOptions.length} originalEmpty=${topOptions.length} recovered=${altOptions.length}`);
+        topOptions = altOptions;
+      }
+    }
     pc.options.set(key, topOptions);
     return topOptions;
   }

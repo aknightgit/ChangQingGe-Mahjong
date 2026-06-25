@@ -2362,12 +2362,37 @@ class GameManager {
     // 自摸/捉冲判断：
     // 1. pending中带tile → 有人弃牌，这是捉冲
     // 2. 没有pending（自摸自己摸到的牌）→ 自摸
-    const isDiscardContext = !!pendingAction?.tile;
+    // ★ 修复(2026-06-26 bug:房间8652): 当pending不存在但最近一次动作是其他玩家弃牌且
+    //   玩家手牌刚好差一张能胡 → 退一步检查actionHistory最后一条discard, 重新判定为捉冲
+    let extraTile = pendingAction?.tile;
+    let isDiscardContext = !!pendingAction?.tile;
+    if (!isDiscardContext) {
+      const lastAction = (game.actionHistory || [])[(game.actionHistory || []).length - 1];
+      const lastIsDiscardByOther = lastAction
+        && lastAction.type === 'discard'
+        && lastAction.playerId !== playerId
+        && lastAction.tile;
+      // 必须是本轮的action（不能是跨局）
+      const inCurrentRound = lastIsDiscardByOther && (
+        (lastAction as any).roundNumber === game.roundNumber ||
+        (lastAction as any).roundNumber === undefined
+      );
+      if (inCurrentRound) {
+        // 验证: 加入这张弃牌后是否能胡
+        const testHand = [...player.hand.concealedTiles, lastAction.tile];
+        const canWinOnDiscard = canWin(testHand, player.hand.exposedMelds, this.winEvaluator.getWinWildArg(game), undefined, game.wildTileGroup);
+        if (canWinOnDiscard.canWin) {
+          isDiscardContext = true;
+          extraTile = lastAction.tile;
+          console.log(`[getWinOptionsForPlayer-fallback] ${player.name} no pending, but last action is discard by ${lastAction.playerId?.substring(0,8)} with tile ${lastAction.tile.suit}-${lastAction.tile.value}, canWin=true, treat as discard`);
+        }
+      }
+    }
     const context: 'self_draw' | 'discard' = isDiscardContext ? 'discard' : 'self_draw';
     return this.winEvaluator.getCachedWinOptions(game, player, context, {
       isKongFlower: false,
       isRobbingKong: !!pendingAction?.tile && !!game.pendingKongClaim,
-      extraTile: pendingAction?.tile
+      extraTile
     });
   }
 
