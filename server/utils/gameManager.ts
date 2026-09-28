@@ -45,6 +45,7 @@ class GameManager {
   private timerManager = new TimerManager();
   private isHydrated = false;
   private botModePlayers: Set<string> = new Set();
+  private _botExecutingAction = false; // ★ 标记当前 executeAction 是否由 bot 控制器触发(不自动退出托管)
 
   // ---- Public accessors for RoomGameBridge ----
   /** @internal */
@@ -89,7 +90,15 @@ class GameManager {
       schedulePendingActionTimeout: (id) => this.schedulePendingActionTimeout(id),
       clearCurrentTurnPendingActions: (g, pid) => this.clearCurrentTurnPendingActions(g, pid),
       moveToNextPlayer: (g) => this.moveToNextPlayer(g),
-      executeAction: (id, pid, a, t) => this.executeAction(id, pid, a, t),
+      executeAction: async (id, pid, a, t) => {
+        // ★ 修复(2026-09-28 bug:AI托管秒退): bot 自己触发的 executeAction 不应自动退出托管
+        this._botExecutingAction = true;
+        try {
+          await this.executeAction(id, pid, a, t);
+        } finally {
+          this._botExecutingAction = false;
+        }
+      },
       getAvailableActions: (id, pid) => this.getAvailableActions(id, pid),
       getGame: (id) => this.getGame(id),
       enableBotMode: (id, pid) => this.enableBotMode(id, pid),
@@ -2388,6 +2397,11 @@ class GameManager {
     // 正确判断: tile在玩家手牌中=自摸; 不在手牌=捉冲(弃牌来自别人)
     let isDiscardContext = !!pendingAction?.tile
       && !player.hand.concealedTiles.some(t => t.id === pendingAction!.tile!.id);
+    // ★ 修复(2026-09-28二次修复:4361房自摸九万面板空白): 自摸时 extraTile 必须清空
+    // 摸到的牌已在手牌, getCachedWinOptions 会 [...concealedTiles, extraTile] 加两遍 → 15张 → canWin=false → 空面板
+    if (!isDiscardContext) {
+      extraTile = undefined;
+    }
     if (!isDiscardContext) {
       const lastAction = (game.actionHistory || [])[(game.actionHistory || []).length - 1];
       const lastIsDiscardByOther = lastAction
@@ -2470,7 +2484,8 @@ class GameManager {
     }
 
     // ★ 修复: 玩家主动操作 → 自动退出 bot 托管模式(防止被永久托管)
-    if (this.botModePlayers.has(playerId)) {
+    // ★ 修复(2026-09-28): bot 控制器触发的 executeAction 不自动退出(否则托管秒退)
+    if (!this._botExecutingAction && this.botModePlayers.has(playerId)) {
       this.disableBotMode(playerId);
       console.log(`[executeAction] auto-disable bot mode for ${player.name} (${playerId})`);
     }
