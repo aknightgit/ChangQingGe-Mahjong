@@ -3815,8 +3815,40 @@ const currentSettlementRows = computed(() => {
 const isSettleRequested = ref(false)
 
 const sortedSettleStats = computed(() => {
-  const stats = settlementData.value?.playerStats || []
-  return [...stats].sort((a: any, b: any) => (b.totalScore ?? 0) - (a.totalScore ?? 0))
+  // ★ 修复(2026-09-28): 最终结算必须从 roundStats 累加所有局,而不是 settlementData.playerStats(只含单局分数)
+  const roundStats = Array.isArray((gameState.value as any)?.roundStats) ? (gameState.value as any).roundStats : []
+  const players = gameState.value?.players || []
+  if (roundStats.length === 0) {
+    // fallback: 无 roundStats 时用旧数据
+    const stats = settlementData.value?.playerStats || []
+    return [...stats].sort((a: any, b: any) => (b.totalScore ?? 0) - (a.totalScore ?? 0))
+  }
+  return players.map((p: any) => {
+    let totalScore = 0
+    let selfDraws = 0
+    let winCount = 0
+    let maxWin = 0
+    let maxLoss = 0
+    for (const round of roundStats) {
+      const score = Number(round?.scores?.[p.id] ?? 0)
+      totalScore += score
+      if (score > maxWin) maxWin = score
+      if (score < maxLoss) maxLoss = score
+      if (Array.isArray(round?.winners) && round.winners.includes(p.id)) winCount++
+      if (Array.isArray(round?.selfDraws) && round.selfDraws.includes(p.id)) selfDraws++
+    }
+    return {
+      id: p.id,
+      name: p.name,
+      totalScore,
+      effectiveScore: totalScore,
+      vsAiScore: 0,
+      selfDraws,
+      discards: Math.max(0, winCount - selfDraws),
+      maxWin,
+      maxLoss
+    }
+  }).sort((a: any, b: any) => (b.totalScore ?? 0) - (a.totalScore ?? 0))
 })
 
 const formatScoreSigned = (score: number) => score > 0 ? `+${score}` : `${score}`
