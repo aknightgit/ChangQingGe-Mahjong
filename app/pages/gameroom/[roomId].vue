@@ -881,7 +881,7 @@
                         v-for="item in tingPreviewItems"
                         :key="item.key"
                         class="ting-preview-tile"
-                        :class="{ 'ting-preview-tile--exhausted': item.isExhausted, 'ting-preview-tile--wild': item.key === 'wild' }"
+                        :class="{ 'ting-preview-tile--exhausted': item.isExhausted, 'ting-preview-tile--wild': item.key === 'wild', 'ting-preview-tile--green': item.remaining >= 2 && item.key !== 'wild' }"
                       >{{ item.label }}</span>
                     </template>
                     <span v-else class="ting-preview-label__hint">未听牌</span>
@@ -2327,18 +2327,20 @@ const tingPreviewItems = computed(() => {
   const isTing = !!currentPlayer.value?.isTing || !!tingPreview.value?.isTing || winningTiles.length > 0
   if (!isTing) return []
 
-  const deduped = new Map<string, { key: string; label: string; tile: Tile; isExhausted: boolean }>()
+  const deduped = new Map<string, { key: string; label: string; tile: Tile; isExhausted: boolean; remaining: number }>()
   for (const entry of winningTiles) {
     const tile = entry?.tile as Tile | undefined
     if (!tile || isWildPreviewTile(tile)) continue
     const key = tileCountKey(tile)
     if (!key || deduped.has(key)) continue
     const knownCount = knownVisibleTileCounts.value.get(key) || 0
+    const remaining = 4 - knownCount
     deduped.set(key, {
       key,
       label: tileLabel(tile),
       tile,
-      isExhausted: knownCount >= 4
+      isExhausted: remaining <= 0,
+      remaining
     })
   }
 
@@ -2351,7 +2353,8 @@ const tingPreviewItems = computed(() => {
       key: 'wild',
       label: wildLabel,
       tile: wt as Tile,
-      isExhausted: false
+      isExhausted: false,
+      remaining: 4
     })
   }
 
@@ -6261,7 +6264,7 @@ const forceDiscard = async (p: Player) => {
 }
 
 .ting-preview-tile {
-  color: #ff6b6b;
+  color: #ff6b6b; /* 默认红色=只剩1张 */
   font-size: 0.68rem;
   line-height: 1.2;
   flex-shrink: 0;
@@ -6272,8 +6275,12 @@ const forceDiscard = async (p: Player) => {
   pointer-events: none;
 }
 
+.ting-preview-tile--green {
+  color: #51cf66; /* 绿色=还剩2张以上 */
+}
+
 .ting-preview-tile--exhausted {
-  color: rgba(255, 255, 255, 0.38);
+  color: rgba(255, 255, 255, 0.38); /* 灰色=已没有 */
 }
 
 .ting-preview-tile--wild {
@@ -8991,7 +8998,7 @@ const forceDiscard = async (p: Player) => {
   /* ★ K哥铁律: 相对牌桌定位,对准中心圆圈左移10% */
   position: absolute;
   top: 50%;
-  left: 40%;
+  left: 36%;
   transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
