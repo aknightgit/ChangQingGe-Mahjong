@@ -2163,6 +2163,25 @@ class GameManager {
         }
         // freezeComplete = true 时表示已过完整一圈，解除冷冻
       }
+      // ★ 修复(2026-09-28 bug:3793房自摸胡后无法出牌被迫胡): 自摸胡pending时允许弃胡出牌
+      // 自摸胡pending特征: 当前玩家自己的回合 + 已摸牌 + pending含HU+PASS
+      const isSelfDrawWinPending = currentPlayer.id === playerId
+        && game.drawnThisTurn
+        && pendingAction.availableActions.includes(ActionType.HU)
+        && pendingAction.availableActions.includes(ActionType.PASS);
+      if (isSelfDrawWinPending) {
+        const selfDrawActions = [...pendingAction.availableActions];
+        if (!selfDrawActions.includes(ActionType.DISCARD)) {
+          selfDrawActions.push(ActionType.DISCARD);
+        }
+        const maxChances = game.thinkChances ?? 3;
+        const used = game.thinkUsage?.[playerId] ?? 0;
+        if (used < maxChances && !selfDrawActions.includes(ActionType.THINK)) {
+          selfDrawActions.push(ActionType.THINK);
+        }
+        return selfDrawActions;
+      }
+
       // 等我想一想:有胡/碰/杠选项时可用,每局限定次数
       const pendingHasPriority = pendingAction.availableActions.some(a =>
         a === ActionType.HU || a === ActionType.PENG || a === ActionType.KONG ||
@@ -2488,10 +2507,21 @@ class GameManager {
           }
 
           if (game.pendingActions.length > 0) {
-            console.warn(
-              `[DISCARD] Blocked: ${player.name} attempted discard with pending actions unresolved (${game.pendingActions.length})`
+            // ★ 修复(2026-09-28): 自摸胡pending时允许弃胡出牌(清除自己的pending后继续)
+            const selfDrawWinPending = game.pendingActions.find(pa =>
+              pa.playerId === player.id
+              && pa.availableActions.includes(ActionType.HU)
+              && pa.availableActions.includes(ActionType.PASS)
             );
-            throw new Error('Pending actions must resolve before discarding');
+            if (selfDrawWinPending && game.players[game.currentPlayerIndex]?.id === player.id) {
+              game.pendingActions = game.pendingActions.filter(pa => pa.playerId !== player.id);
+              console.log(`[DISCARD] ${player.name} 弃胡出牌(自摸胡pending已清除)`);
+            } else {
+              console.warn(
+                `[DISCARD] Blocked: ${player.name} attempted discard with pending actions unresolved (${game.pendingActions.length})`
+              );
+              throw new Error('Pending actions must resolve before discarding');
+            }
           }
 
           const concealedCount = player.hand.concealedTiles.length;
