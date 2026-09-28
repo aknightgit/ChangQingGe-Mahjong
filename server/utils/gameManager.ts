@@ -2384,7 +2384,10 @@ class GameManager {
     // ★ 修复(2026-06-26 bug:房间8652): 当pending不存在但最近一次动作是其他玩家弃牌且
     //   玩家手牌刚好差一张能胡 → 退一步检查actionHistory最后一条discard, 重新判定为捉冲
     let extraTile = pendingAction?.tile;
-    let isDiscardContext = !!pendingAction?.tile;
+    // ★ 修复(2026-09-28 bug:自摸九筒胡牌面板空白): 自摸pending也带tile(摸到的牌已在手牌),不能只凭tile判断捉冲
+    // 正确判断: tile在玩家手牌中=自摸; 不在手牌=捉冲(弃牌来自别人)
+    let isDiscardContext = !!pendingAction?.tile
+      && !player.hand.concealedTiles.some(t => t.id === pendingAction!.tile!.id);
     if (!isDiscardContext) {
       const lastAction = (game.actionHistory || [])[(game.actionHistory || []).length - 1];
       const lastIsDiscardByOther = lastAction

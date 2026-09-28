@@ -211,7 +211,16 @@ export class ActionHandler {
       tile = game.wall.pop()!;
     }
     // 摸牌时补花广播
-    if (flowerCount > 0) this.deps.broadcastFlowerReplacement(game, player, flowerCount);
+    if (flowerCount > 0) {
+      this.deps.broadcastFlowerReplacement(game, player, flowerCount);
+      // ★ 修复(2026-09-28 bug:补花语音只响一次): 摸牌补花也写入actionHistory,让state watcher播放语音
+      // (replaceFlowers已有此逻辑,handleDraw摸到花牌的内联补花漏了)
+      game.actionHistory.push({
+        playerId: player.id,
+        type: 'flowerReplace' as any,
+        timestamp: Date.now()
+      });
+    }
 
     // 花牌百搭 → 进手牌
     if (isFlower(tile) && isWildTile(game, tile)) {
